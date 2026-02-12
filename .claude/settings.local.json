@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --version:*)",
+      "Bash(docker:*)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet sln add:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet --list-sdks:*)",
+      "Bash(del \"c:\\\\Users\\\\lalon\\\\source\\\\repos\\\\TienditApp\\\\src\\\\FoodParkDigital.Domain\\\\Class1.cs\")",
+      "Bash(del \"c:\\\\Users\\\\lalon\\\\source\\\\repos\\\\TienditApp\\\\src\\\\FoodParkDigital.Application\\\\Class1.cs\")",
+      "Bash(del \"c:\\\\Users\\\\lalon\\\\source\\\\repos\\\\TienditApp\\\\src\\\\FoodParkDigital.Infrastructure\\\\Class1.cs\")",
+      "Bash(dotnet build:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: FoodPark Digital SaaS multi-tenant backend\n\nClean Architecture with DDD, CQRS \\(MediatR\\), Domain Events,\nmulti-tenant EF Core, SignalR, JWT auth, Docker support.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
