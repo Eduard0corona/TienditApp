@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -12,10 +13,12 @@ namespace FoodParkDigital.Infrastructure.Identity;
 public class JwtTokenService : IJwtTokenService
 {
     private readonly JwtSettings _settings;
+    private readonly IApplicationDbContext _context;
 
-    public JwtTokenService(IOptions<JwtSettings> settings)
+    public JwtTokenService(IOptions<JwtSettings> settings, IApplicationDbContext context)
     {
         _settings = settings.Value;
+        _context = context;
     }
 
     public string GenerateAccessToken(ApplicationUser user)
@@ -52,5 +55,85 @@ public class JwtTokenService : IJwtTokenService
         var expiresAt = DateTimeOffset.UtcNow.AddDays(_settings.RefreshTokenExpirationDays);
 
         return new RefreshToken(userId, token, expiresAt);
+    }
+
+    public async Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken)
+    {
+        var token = await _context.RefreshTokens
+            .FirstOrDefaultAsync(t => t.UserId == userId
+                && t.Token == refreshToken
+                && t.RevokedAt == null
+                && t.ExpiresAt > DateTimeOffset.UtcNow);
+
+        return token is not null;
+    }
+
+    public async Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null)
+    {
+        var token = await _context.RefreshTokens
+            .FirstOrDefaultAsync(t => t.Token == refreshToken);
+
+        if (token is null)
+            return;
+
+        token.Revoke(replacedByToken);
+        await _context.SaveChangesAsync(CancellationToken.None);
+    }
+
+    public async Task RevokeAllUserRefreshTokensAsync(Guid userId)
+    {
+        var tokens = await _context.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > DateTimeOffset.UtcNow)
+            .ToListAsync();
+
+        foreach (var token in tokens)
+        {
+            token.Revoke();
+        }
+
+        await _context.SaveChangesAsync(CancellationToken.None);
+    }
+
+    public async Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken)
+    {
+        var token = await _context.RefreshTokens
+            .FirstOrDefaultAsync(t => t.Token == refreshToken
+                && t.RevokedAt == null
+                && t.ExpiresAt > DateTimeOffset.UtcNow);
+
+        return token?.UserId;
+    }
+
+    public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
+    {
+        var tokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = true,
+            ValidateIssuer = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = _settings.Issuer,
+            ValidAudience = _settings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(_settings.Secret)),
+            ValidateLifetime = false
+        };
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        try
+        {
+            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var securityToken);
+
+            if (securityToken is not JwtSecurityToken jwtSecurityToken ||
+                !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+            {
+                return null;
+            }
+
+            return principal;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

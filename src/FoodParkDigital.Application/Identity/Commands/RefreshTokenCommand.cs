@@ -9,10 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
-public record RefreshTokenCommand : IRequest<Result<AuthResponse>>
-{
-    public string RefreshToken { get; init; } = null!;
-}
+public record RefreshTokenCommand(string? ExpiredToken, string RefreshToken) : IRequest<Result<AuthResponse>>;
 
 public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenCommand>
 {
@@ -40,25 +37,39 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 
     public async Task<Result<AuthResponse>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
-        var existingToken = await _context.RefreshTokens
-            .Include(r => r.User)
-            .FirstOrDefaultAsync(r => r.Token == request.RefreshToken, cancellationToken);
+        Guid? userId = null;
 
-        if (existingToken is null || !existingToken.IsActive)
-            return Result.Failure<AuthResponse>("Invalid or expired refresh token.");
+        // Si hay un JWT expirado, extraer el userId de ahí
+        if (!string.IsNullOrEmpty(request.ExpiredToken))
+        {
+            var principal = _jwtTokenService.GetPrincipalFromExpiredToken(request.ExpiredToken);
+            var userIdClaim = principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (Guid.TryParse(userIdClaim, out var parsedId))
+                userId = parsedId;
+        }
 
-        var user = existingToken.User;
-        if (!user.IsActive)
-            return Result.Failure<AuthResponse>("User is inactive.");
+        // Si no se pudo obtener el userId del JWT, buscarlo desde el refresh token
+        userId ??= await _jwtTokenService.GetUserIdFromRefreshTokenAsync(request.RefreshToken);
 
-        // Revoke old token
-        existingToken.Revoke();
+        if (userId is null)
+            return Result.Failure<AuthResponse>("Token inválido.");
 
-        // Generate new tokens
+        var user = await _userManager.FindByIdAsync(userId.Value.ToString());
+        if (user is null || !user.IsActive)
+            return Result.Failure<AuthResponse>("Usuario no encontrado o inactivo.");
+
+        // Validar refresh token
+        var isValid = await _jwtTokenService.ValidateRefreshTokenAsync(userId.Value, request.RefreshToken);
+        if (!isValid)
+            return Result.Failure<AuthResponse>("Refresh token inválido o expirado.");
+
+        // Generar nuevo par de tokens
         var newAccessToken = _jwtTokenService.GenerateAccessToken(user);
         var newRefreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
 
-        existingToken.Revoke(newRefreshToken.Token);
+        // Revocar el refresh token anterior
+        await _jwtTokenService.RevokeRefreshTokenAsync(request.RefreshToken, newRefreshToken.Token);
+
         _context.RefreshTokens.Add(newRefreshToken);
         await _context.SaveChangesAsync(cancellationToken);
 

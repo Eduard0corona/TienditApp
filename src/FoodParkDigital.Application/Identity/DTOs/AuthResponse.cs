@@ -1,11 +1,13 @@
 namespace FoodParkDigital.Application.Identity.DTOs;
 
-public class AuthResponse
+public record AuthResponse
 {
-    public string AccessToken { get; set; } = null!;
-    public string RefreshToken { get; set; } = null!;
-    public DateTimeOffset ExpiresAt { get; set; }
-    public UserDto User { get; set; } = null!;
+    public string? AccessToken { get; init; }
+    public string? RefreshToken { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+    public bool RequiresTwoFactor { get; init; }
+    public string? UserId { get; init; }
+    public UserDto? User { get; init; }
 }
 
 public class UserDto

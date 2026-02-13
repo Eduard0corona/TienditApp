@@ -8,6 +8,7 @@ using FoodParkDigital.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
@@ -40,6 +41,9 @@ public static class DependencyInjection
                 });
 
             options.AddInterceptors(auditInterceptor, tenantInterceptor, eventInterceptor);
+
+            options.ConfigureWarnings(w =>
+                w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
@@ -103,6 +107,9 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<ISignInService, SignInService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<ITwoFactorService, TwoFactorService>();
         services.AddHttpContextAccessor();
 
         return services;

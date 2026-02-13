@@ -27,15 +27,18 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
 public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISignInService _signInService;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
 
     public LoginCommandHandler(
         UserManager<ApplicationUser> userManager,
+        ISignInService signInService,
         IJwtTokenService jwtTokenService,
         IApplicationDbContext context)
     {
         _userManager = userManager;
+        _signInService = signInService;
         _jwtTokenService = jwtTokenService;
         _context = context;
     }
@@ -44,11 +47,27 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
     {
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null || !user.IsActive)
-            return Result.Failure<AuthResponse>("Invalid credentials.");
+            return Result.Failure<AuthResponse>("Credenciales inválidas.");
 
-        var isPasswordValid = await _userManager.CheckPasswordAsync(user, request.Password);
-        if (!isPasswordValid)
-            return Result.Failure<AuthResponse>("Invalid credentials.");
+        var signInResult = await _signInService.CheckPasswordSignInAsync(user.Id, request.Password, false);
+        if (!signInResult.Succeeded)
+        {
+            if (signInResult.IsLockedOut)
+                return Result.Failure<AuthResponse>("La cuenta está bloqueada. Intente más tarde.");
+
+            return Result.Failure<AuthResponse>("Credenciales inválidas.");
+        }
+
+        // Verificar si el usuario tiene 2FA habilitado
+        var is2FAEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+        if (is2FAEnabled)
+        {
+            return Result.Success(new AuthResponse
+            {
+                RequiresTwoFactor = true,
+                UserId = user.Id.ToString()
+            });
+        }
 
         var accessToken = _jwtTokenService.GenerateAccessToken(user);
         var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
@@ -61,6 +80,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
             AccessToken = accessToken,
             RefreshToken = refreshToken.Token,
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
+            RequiresTwoFactor = false,
             User = new UserDto
             {
                 Id = user.Id,

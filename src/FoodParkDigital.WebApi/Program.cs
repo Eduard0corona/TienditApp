@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using FoodParkDigital.Application;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Infrastructure;
@@ -22,6 +23,46 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // SignalR notification service
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        var message = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? $"{{\"error\": \"Demasiadas solicitudes. Intente de nuevo en {retryAfter.TotalSeconds} segundos.\"}}"
+            : "{\"error\": \"Demasiadas solicitudes. Por favor, espere antes de intentar de nuevo.\"}";
+        await context.HttpContext.Response.WriteAsync(message, token);
+    };
+
+    // Strict policy for auth endpoints - 10 requests per minute per IP
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 2
+            }));
+
+    // Sliding window for general API endpoints - 200 requests per minute per user
+    options.AddPolicy("api", httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: httpContext.User?.Identity?.Name ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 200,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 4,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 10
+            }));
+});
 
 // Controllers
 builder.Services.AddControllers();
@@ -89,6 +130,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
