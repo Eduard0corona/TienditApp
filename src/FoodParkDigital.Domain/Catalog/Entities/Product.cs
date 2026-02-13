@@ -39,8 +39,9 @@ public class Product : AuditableEntity, ITenantScoped
 
     public Category Category { get; private set; } = null!;
 
-    public void Update(string name, string? description, decimal priceAmount, string priceCurrency, string? imageUrl, int? preparationTimeMinutes)
+    public void Update(Guid categoryId, string name, string? description, decimal priceAmount, string priceCurrency, string? imageUrl, int? preparationTimeMinutes)
     {
+        CategoryId = categoryId;
         Name = name;
         Description = description;
         PriceAmount = priceAmount;

@@ -110,6 +110,8 @@ public static class DependencyInjection
         services.AddScoped<ISignInService, SignInService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
+        services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        services.AddSingleton<IImageProcessingService, ImageProcessingService>();
         services.AddHttpContextAccessor();
 
         return services;

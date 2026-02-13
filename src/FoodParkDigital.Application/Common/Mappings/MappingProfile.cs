@@ -21,7 +21,11 @@ public class MappingProfile : Profile
         CreateMap<OrderStatusHistory, OrderStatusHistoryDto>();
         CreateMap<Order, KitchenOrderDto>();
 
-        CreateMap<Product, ProductDto>();
+        CreateMap<Product, ProductDto>()
+            .ForMember(d => d.ImageUrl, opt => opt.MapFrom(s =>
+                string.IsNullOrEmpty(s.ImageUrl) ? null : $"{s.ImageUrl}_md.webp"))
+            .ForMember(d => d.Images, opt => opt.MapFrom(s =>
+                ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)));
         CreateMap<Category, CategoryDto>();
 
         CreateMap<Tenant, TenantDto>();
