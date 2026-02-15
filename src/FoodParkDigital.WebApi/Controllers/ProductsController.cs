@@ -37,6 +37,13 @@ public class ProductsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ProductDto>> GetById(Guid id)
+    {
+        var result = await _mediator.Send(new GetProductByIdQuery(id));
+        return Ok(result);
+    }
+
     [HttpPost]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductCommand command)
@@ -44,6 +51,63 @@ public class ProductsController : ControllerBase
         var result = await _mediator.Send(command);
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
-        return CreatedAtAction(nameof(GetAll), new { id = result.Value.Id }, result.Value);
+        return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<ProductDto>> Update(Guid id, [FromBody] UpdateProductCommand command)
+    {
+        if (id != command.Id)
+            return BadRequest(new { error = "Route ID and body ID mismatch." });
+
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var result = await _mediator.Send(new DeleteProductCommand(id));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return NoContent();
+    }
+
+    [HttpPatch("{id:guid}/availability")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<IActionResult> ToggleAvailability(Guid id, [FromBody] ToggleAvailabilityRequest request)
+    {
+        var result = await _mediator.Send(new ToggleProductAvailabilityCommand
+        {
+            Id = id,
+            IsAvailable = request.IsAvailable
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/image")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<ProductImageUrlsDto>> UploadImage(Guid id, IFormFile file)
+    {
+        var result = await _mediator.Send(new UploadProductImageCommand
+        {
+            ProductId = id,
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
     }
 }
+
+public record ToggleAvailabilityRequest(bool IsAvailable);

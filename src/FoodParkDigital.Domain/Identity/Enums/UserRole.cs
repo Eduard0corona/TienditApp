@@ -5,5 +5,6 @@ public enum UserRole
     SuperAdmin = 0,
     TenantAdmin = 1,
     Staff = 2,
-    Kitchen = 3
+    Kitchen = 3,
+    Customer = 4
 }

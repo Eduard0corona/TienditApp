@@ -26,6 +26,13 @@ public class CategoriesController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<CategoryDto>> GetById(Guid id)
+    {
+        var result = await _mediator.Send(new GetCategoryByIdQuery(id));
+        return Ok(result);
+    }
+
     [HttpPost]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
     public async Task<ActionResult<CategoryDto>> Create([FromBody] CreateCategoryCommand command)
@@ -33,6 +40,45 @@ public class CategoriesController : ControllerBase
         var result = await _mediator.Send(command);
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
-        return CreatedAtAction(nameof(GetAll), new { id = result.Value.Id }, result.Value);
+        return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    public async Task<ActionResult<CategoryDto>> Update(Guid id, [FromBody] UpdateCategoryCommand command)
+    {
+        if (id != command.Id)
+            return BadRequest(new { error = "Route ID and body ID mismatch." });
+
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var result = await _mediator.Send(new DeleteCategoryCommand(id));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return NoContent();
+    }
+
+    [HttpPatch("{id:guid}/active")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    public async Task<IActionResult> ToggleActive(Guid id, [FromBody] ToggleCategoryActiveRequest request)
+    {
+        var result = await _mediator.Send(new ToggleCategoryActiveCommand
+        {
+            Id = id,
+            IsActive = request.IsActive
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return NoContent();
     }
 }
+
+public record ToggleCategoryActiveRequest(bool IsActive);

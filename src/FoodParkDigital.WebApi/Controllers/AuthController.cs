@@ -1,6 +1,10 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Application.Identity.Queries;
+using FoodParkDigital.Application.Tenants.Commands;
+using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Application.Tenants.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -96,6 +100,36 @@ public class AuthController : ControllerBase
         return CreatedAtAction(nameof(Register), new { id = result.Value.Id }, result.Value);
     }
 
+    [HttpPost("register/business")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        var response = result.Value;
+        if (response.RefreshToken is not null)
+            SetRefreshTokenCookie(response.RefreshToken);
+
+        return Ok(response with { RefreshToken = null });
+    }
+
+    [HttpPost("register/customer")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponse>> RegisterCustomer([FromBody] RegisterCustomerCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        var response = result.Value;
+        if (response.RefreshToken is not null)
+            SetRefreshTokenCookie(response.RefreshToken);
+
+        return Ok(response with { RefreshToken = null });
+    }
+
     [HttpGet("confirm-email")]
     [AllowAnonymous]
     public async Task<ActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
@@ -112,6 +146,24 @@ public class AuthController : ControllerBase
     {
         await _mediator.Send(command);
         return Ok(new { message = "Si el email existe, recibirás un correo de confirmación." });
+    }
+
+    [HttpPost("confirm-phone")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ConfirmPhone([FromBody] ConfirmPhoneCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Número de teléfono confirmado exitosamente." });
+    }
+
+    [HttpPost("resend-phone-confirmation")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ResendPhoneConfirmation([FromBody] ResendPhoneConfirmationCommand command)
+    {
+        await _mediator.Send(command);
+        return Ok(new { message = "Si el número existe, recibirás un SMS de confirmación." });
     }
 
     [HttpPost("forgot-password")]
@@ -134,22 +186,142 @@ public class AuthController : ControllerBase
 
     [HttpGet("profile")]
     [Authorize]
-    public ActionResult GetProfile()
+    public async Task<ActionResult<UserProfileDto>> GetProfile()
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-        var name = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
-        var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-        var tenantId = User.FindFirst("tenant_id")?.Value;
+        var result = await _mediator.Send(new GetUserProfileQuery());
+        if (result.IsFailure)
+            return NotFound(new { error = result.Error });
+        return Ok(result.Value);
+    }
 
-        return Ok(new
+    [HttpPut("profile")]
+    [Authorize]
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile([FromBody] UpdateUserProfileCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("profile/avatar")]
+    [Authorize]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<AvatarImageUrlsDto>> UploadAvatar(IFormFile file)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "No se proporcionó un archivo." });
+
+        var result = await _mediator.Send(new UploadAvatarCommand
         {
-            UserId = userId,
-            Email = email,
-            Name = name,
-            Role = role,
-            TenantId = tenantId
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
         });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("profile/avatar")]
+    [Authorize]
+    public async Task<IActionResult> DeleteAvatar()
+    {
+        var result = await _mediator.Send(new DeleteAvatarCommand());
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return NoContent();
+    }
+
+    [HttpPost("profile/change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Contraseña actualizada exitosamente." });
+    }
+
+    [HttpGet("my-tenant")]
+    [Authorize]
+    public async Task<ActionResult<TenantProfileDto>> GetMyTenant()
+    {
+        var result = await _mediator.Send(new GetMyTenantQuery());
+        if (result.IsFailure)
+            return NotFound(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPut("my-tenant")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    public async Task<ActionResult<TenantProfileDto>> UpdateMyTenant([FromBody] UpdateMyTenantCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("my-tenant/logo")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantLogo(IFormFile file)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "No se proporcionó un archivo." });
+
+        var result = await _mediator.Send(new UploadTenantLogoCommand
+        {
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpDelete("my-tenant/logo")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    public async Task<IActionResult> DeleteTenantLogo()
+    {
+        var result = await _mediator.Send(new DeleteTenantLogoCommand());
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return NoContent();
+    }
+
+    [HttpGet("my-tenant/whatsapp")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    public async Task<ActionResult<WhatsAppConfigDto>> GetWhatsAppConfig()
+    {
+        var result = await _mediator.Send(new GetWhatsAppConfigQuery());
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPut("my-tenant/whatsapp")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    public async Task<ActionResult<WhatsAppConfigDto>> UpdateWhatsAppConfig([FromBody] UpdateWhatsAppConfigCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("my-tenant/whatsapp/send")]
+    [Authorize(Roles = "TENANT_ADMIN,STAFF")]
+    public async Task<IActionResult> SendWhatsAppMessage([FromBody] SendWhatsAppMessageCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Mensaje enviado exitosamente." });
     }
 
     private CookieOptions GetCookieOptions(DateTime? expires = null)

@@ -21,8 +21,9 @@ builder.Host.UseSerilog((ctx, config) =>
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// SignalR notification service
+// SignalR notification services
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
+builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
 // Rate Limiting
 builder.Services.AddRateLimiter(options =>
@@ -38,16 +39,17 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsync(message, token);
     };
 
-    // Strict policy for auth endpoints - 10 requests per minute per IP
+    // Auth endpoints rate limit per IP (relaxed in Development for hot-reload)
+    var isDev = builder.Environment.IsDevelopment();
     options.AddPolicy("auth", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = isDev ? 100 : 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 2
+                QueueLimit = isDev ? 10 : 2
             }));
 
     // Sliding window for general API endpoints - 200 requests per minute per user
@@ -130,12 +132,14 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
+app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.MapControllers();
 app.MapHub<OrderHub>("/hubs/orders");
+app.MapHub<ChatHub>("/hubs/chat");
 
 // Auto-migrate and seed in development
 if (app.Environment.IsDevelopment())

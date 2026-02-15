@@ -5,6 +5,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands.TwoFactor;
 
@@ -45,7 +46,10 @@ public class Login2FACommandHandler : IRequestHandler<Login2FACommand, Result<Au
 
     public async Task<Result<AuthResponse>> Handle(Login2FACommand request, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
+        var normalizedEmail = request.Email.ToUpperInvariant();
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
         if (user is null || !user.IsActive)
             return Result.Failure<AuthResponse>("Credenciales inválidas.");
 

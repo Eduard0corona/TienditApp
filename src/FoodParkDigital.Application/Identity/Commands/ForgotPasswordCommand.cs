@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
@@ -24,18 +25,24 @@ public class ForgotPasswordCommandHandler : IRequestHandler<ForgotPasswordComman
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IEmailService _emailService;
+    private readonly IApplicationDbContext _context;
 
     public ForgotPasswordCommandHandler(
         UserManager<ApplicationUser> userManager,
-        IEmailService emailService)
+        IEmailService emailService,
+        IApplicationDbContext context)
     {
         _userManager = userManager;
         _emailService = emailService;
+        _context = context;
     }
 
     public async Task<Result> Handle(ForgotPasswordCommand request, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
+        var normalizedEmail = request.Email.ToUpperInvariant();
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
         // Por seguridad, no revelamos si el email existe o no
         if (user is null || !user.EmailConfirmed)

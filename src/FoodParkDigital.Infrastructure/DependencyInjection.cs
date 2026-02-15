@@ -102,6 +102,9 @@ public static class DependencyInjection
 
         services.AddAuthorization();
 
+        // HTTP Clients
+        services.AddHttpClient("WhatsApp");
+
         // Services
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
@@ -109,7 +112,11 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ISignInService, SignInService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<ISmsService, SmsService>();
+        services.AddScoped<IWhatsAppService, WhatsAppService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
+        services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        services.AddSingleton<IImageProcessingService, ImageProcessingService>();
         services.AddHttpContextAccessor();
 
         return services;
