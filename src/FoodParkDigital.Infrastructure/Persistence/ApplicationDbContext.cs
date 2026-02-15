@@ -90,6 +90,19 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
 
+        // BaseEntity sets Id = Guid.NewGuid() in the constructor (client-generated keys).
+        // Tell EF the key is never DB-generated so it treats entities added via navigation
+        // collections as Added (not Unchanged/Modified based on the non-default key value).
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                modelBuilder.Entity(entityType.ClrType)
+                    .Property(nameof(BaseEntity.Id))
+                    .ValueGeneratedNever();
+            }
+        }
+
         // Apply global tenant query filters to all ITenantScoped entities
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
