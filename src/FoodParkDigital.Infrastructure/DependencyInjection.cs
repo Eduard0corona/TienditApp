@@ -1,5 +1,6 @@
 using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -23,14 +24,12 @@ public static class DependencyInjection
         // Interceptors
         services.AddScoped<AuditableEntityInterceptor>();
         services.AddScoped<TenantSaveChangesInterceptor>();
-        services.AddScoped<DomainEventDispatcherInterceptor>();
 
         // DbContext
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
             var auditInterceptor = sp.GetRequiredService<AuditableEntityInterceptor>();
             var tenantInterceptor = sp.GetRequiredService<TenantSaveChangesInterceptor>();
-            var eventInterceptor = sp.GetRequiredService<DomainEventDispatcherInterceptor>();
 
             options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
@@ -40,7 +39,7 @@ public static class DependencyInjection
                     sqlOptions.EnableRetryOnFailure(maxRetryCount: 3);
                 });
 
-            options.AddInterceptors(auditInterceptor, tenantInterceptor, eventInterceptor);
+            options.AddInterceptors(auditInterceptor, tenantInterceptor);
 
             options.ConfigureWarnings(w =>
                 w.Ignore(RelationalEventId.PendingModelChangesWarning));
@@ -108,6 +107,10 @@ public static class DependencyInjection
         // Services
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<ITenantAccessService, TenantAccessService>();
+        services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
+        services.AddScoped<ICustomerLookupService, CustomerLookupService>();
+        services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ISignInService, SignInService>();

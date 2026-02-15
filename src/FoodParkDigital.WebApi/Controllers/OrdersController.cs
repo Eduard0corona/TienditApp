@@ -66,7 +66,11 @@ public class OrdersController : ControllerBase
             NewStatus = request.NewStatus
         });
         if (result.IsFailure)
+        {
+            if (result.Error!.Contains("otro proceso"))
+                return Conflict(new { error = result.Error });
             return BadRequest(new { error = result.Error });
+        }
         return NoContent();
     }
 

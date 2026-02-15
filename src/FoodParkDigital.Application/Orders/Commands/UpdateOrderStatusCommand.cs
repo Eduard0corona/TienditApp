@@ -39,15 +39,39 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
 
     public async Task<Result> Handle(UpdateOrderStatusCommand request, CancellationToken cancellationToken)
     {
-        var order = await _context.Orders
-            .Include(o => o.StatusHistory)
-            .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
-            ?? throw new EntityNotFoundException("Order", request.OrderId);
+        const int maxAttempts = 3;
 
-        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType);
-        order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var order = await _context.Orders
+                .Include(o => o.StatusHistory)
+                .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
+                ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+            if (order.Status == request.NewStatus)
+                return Result.Success();
+
+            var stateMachine = OrderStateMachineFactory.Create(order.BusinessType);
+
+            if (!stateMachine.GetAllowedTransitions(order.Status).Contains(request.NewStatus))
+                return Result.Failure(
+                    $"No se puede cambiar de '{order.Status}' a '{request.NewStatus}'.");
+
+            order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (_context is DbContext dbContext)
+                    dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        return Result.Failure(
+            "La orden fue actualizada por otro proceso. Refresca la lista e intenta nuevamente.");
     }
 }
