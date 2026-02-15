@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
@@ -28,18 +29,23 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IApplicationDbContext _context;
 
     public ResetPasswordCommandHandler(
         UserManager<ApplicationUser> userManager,
-        IJwtTokenService jwtTokenService)
+        IJwtTokenService jwtTokenService,
+        IApplicationDbContext context)
     {
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
+        _context = context;
     }
 
     public async Task<Result> Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByIdAsync(request.UserId);
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id.ToString() == request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure("Usuario no encontrado.");
 

@@ -54,7 +54,9 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         if (userId is null)
             return Result.Failure<AuthResponse>("Token inválido.");
 
-        var user = await _userManager.FindByIdAsync(userId.Value.ToString());
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id == userId.Value, cancellationToken);
         if (user is null || !user.IsActive)
             return Result.Failure<AuthResponse>("Usuario no encontrado o inactivo.");
 

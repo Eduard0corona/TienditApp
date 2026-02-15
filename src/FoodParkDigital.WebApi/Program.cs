@@ -38,16 +38,17 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsync(message, token);
     };
 
-    // Strict policy for auth endpoints - 10 requests per minute per IP
+    // Auth endpoints rate limit per IP (relaxed in Development for hot-reload)
+    var isDev = builder.Environment.IsDevelopment();
     options.AddPolicy("auth", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = isDev ? 100 : 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 2
+                QueueLimit = isDev ? 10 : 2
             }));
 
     // Sliding window for general API endpoints - 200 requests per minute per user

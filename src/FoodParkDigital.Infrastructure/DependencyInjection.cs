@@ -109,6 +109,7 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ISignInService, SignInService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<ISmsService, SmsService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
         services.AddScoped<IFileStorageService, LocalFileStorageService>();
         services.AddSingleton<IImageProcessingService, ImageProcessingService>();

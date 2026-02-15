@@ -19,6 +19,7 @@ public class TenantResolutionMiddleware
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
         if (path.Contains("/auth/login") ||
             path.Contains("/auth/refresh") ||
+            path.Contains("/auth/register") ||
             path.Contains("/swagger") ||
             path.Contains("/health") ||
             path.Contains("/hubs/"))
@@ -48,7 +49,7 @@ public class TenantResolutionMiddleware
 
         // SUPER_ADMIN can override tenant via header
         var role = context.User.FindFirst(ClaimTypes.Role)?.Value;
-        if (role == "SUPERADMIN" &&
+        if (role == "SUPER_ADMIN" &&
             context.Request.Headers.TryGetValue("X-Tenant-Id", out var headerTenantId) &&
             Guid.TryParse(headerTenantId, out var overrideTenantId))
         {

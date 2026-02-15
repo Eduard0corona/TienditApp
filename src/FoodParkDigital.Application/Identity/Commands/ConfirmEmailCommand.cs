@@ -1,7 +1,9 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Identity.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
@@ -10,15 +12,21 @@ public record ConfirmEmailCommand(string UserId, string Token) : IRequest<Result
 public class ConfirmEmailCommandHandler : IRequestHandler<ConfirmEmailCommand, Result>
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IApplicationDbContext _context;
 
-    public ConfirmEmailCommandHandler(UserManager<ApplicationUser> userManager)
+    public ConfirmEmailCommandHandler(
+        UserManager<ApplicationUser> userManager,
+        IApplicationDbContext context)
     {
         _userManager = userManager;
+        _context = context;
     }
 
     public async Task<Result> Handle(ConfirmEmailCommand request, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByIdAsync(request.UserId);
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Id.ToString() == request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure("Usuario no encontrado.");
 

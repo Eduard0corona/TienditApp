@@ -11,6 +11,7 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
         builder.Property(u => u.FirstName).HasMaxLength(100).IsRequired();
         builder.Property(u => u.LastName).HasMaxLength(100).IsRequired();
         builder.Property(u => u.Role).HasConversion<int>().IsRequired();
+        builder.Property(u => u.AvatarUrl).HasMaxLength(500).IsRequired(false);
         builder.Property(u => u.TenantId).IsRequired();
 
         builder.HasIndex(u => u.TenantId);

@@ -1,0 +1,13 @@
+export default function Footer() {
+  return (
+    <footer className="footer">
+      <div className="container-fluid">
+        <div className="row">
+          <div className="col-md-6">
+            {new Date().getFullYear()} &copy; FoodPark Digital
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}

@@ -10,6 +10,7 @@ public class ApplicationUser : IdentityUser<Guid>, ITenantScoped
     public string FirstName { get; set; } = null!;
     public string LastName { get; set; } = null!;
     public UserRole Role { get; set; }
+    public string? AvatarUrl { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 

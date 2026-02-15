@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,7 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email!),
             new(ClaimTypes.Name, user.FullName),
-            new(ClaimTypes.Role, user.Role.ToString().ToUpperInvariant()),
+            new(ClaimTypes.Role, ToUpperSnakeCase(user.Role.ToString())),
             new("tenant_id", user.TenantId.ToString())
         };
 
@@ -103,6 +104,9 @@ public class JwtTokenService : IJwtTokenService
 
         return token?.UserId;
     }
+
+    private static string ToUpperSnakeCase(string value) =>
+        Regex.Replace(value, "(?<!^)([A-Z])", "_$1").ToUpperInvariant();
 
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {

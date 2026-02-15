@@ -15,6 +15,7 @@ public record RegisterUserCommand : IRequest<Result<UserDto>>
     public string Password { get; init; } = null!;
     public string FirstName { get; init; } = null!;
     public string LastName { get; init; } = null!;
+    public string PhoneNumber { get; init; } = null!;
     public UserRole Role { get; init; }
 }
 
@@ -27,6 +28,10 @@ public class RegisterUserCommandValidator : AbstractValidator<RegisterUserComman
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Role).IsInEnum();
+        RuleFor(x => x.PhoneNumber)
+            .NotEmpty()
+            .Matches(@"^\+[1-9]\d{6,14}$")
+            .WithMessage("El número de teléfono debe estar en formato E.164 (ej: +5215512345678).");
     }
 }
 
@@ -34,13 +39,19 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IEmailService _emailService;
+    private readonly ISmsService _smsService;
 
     public RegisterUserCommandHandler(
         UserManager<ApplicationUser> userManager,
-        ICurrentTenantService tenantService)
+        ICurrentTenantService tenantService,
+        IEmailService emailService,
+        ISmsService smsService)
     {
         _userManager = userManager;
         _tenantService = tenantService;
+        _emailService = emailService;
+        _smsService = smsService;
     }
 
     public async Task<Result<UserDto>> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
@@ -52,8 +63,9 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
             Email = request.Email,
             FirstName = request.FirstName,
             LastName = request.LastName,
+            PhoneNumber = request.PhoneNumber,
             Role = request.Role,
-            EmailConfirmed = true,
+            EmailConfirmed = false,
             IsActive = true
         };
 
@@ -70,19 +82,32 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
             UserRole.TenantAdmin => "TENANT_ADMIN",
             UserRole.Staff => "STAFF",
             UserRole.Kitchen => "KITCHEN",
+            UserRole.Customer => "CUSTOMER",
             _ => "STAFF"
         };
         await _userManager.AddToRoleAsync(user, roleName);
 
+        // Send email confirmation
+        var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
+
+        // Send SMS verification
+        var phoneCode = await _userManager.GenerateChangePhoneNumberTokenAsync(user, request.PhoneNumber);
+        await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
+
         return Result.Success(new UserDto
         {
             Id = user.Id,
-            Email = user.Email,
+            Email = user.Email!,
             FirstName = user.FirstName,
             LastName = user.LastName,
+            PhoneNumber = user.PhoneNumber,
+            PhoneNumberConfirmed = user.PhoneNumberConfirmed,
             Role = user.Role.ToString(),
             TenantId = user.TenantId,
-            IsActive = user.IsActive
+            IsActive = user.IsActive,
+            AvatarUrl = null,
+            AvatarImages = null
         });
     }
 }

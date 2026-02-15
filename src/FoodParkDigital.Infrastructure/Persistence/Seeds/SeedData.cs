@@ -16,7 +16,7 @@ public static class SeedData
         var roleManager = services.GetRequiredService<RoleManager<ApplicationRole>>();
 
         // Seed roles
-        string[] roles = ["SUPER_ADMIN", "TENANT_ADMIN", "STAFF", "KITCHEN"];
+        string[] roles = ["SUPER_ADMIN", "TENANT_ADMIN", "STAFF", "KITCHEN", "CUSTOMER"];
         foreach (var role in roles)
         {
             if (!await roleManager.RoleExistsAsync(role))

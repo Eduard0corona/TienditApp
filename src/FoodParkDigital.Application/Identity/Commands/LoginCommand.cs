@@ -45,9 +45,17 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
 
     public async Task<Result<AuthResponse>> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
+        // IgnoreQueryFilters: login happens before tenant is resolved (no JWT yet)
+        var normalizedEmail = request.Email.ToUpperInvariant();
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
+
         if (user is null || !user.IsActive)
             return Result.Failure<AuthResponse>("Credenciales inválidas.");
+
+        if (!user.EmailConfirmed && !user.PhoneNumberConfirmed)
+            return Result.Failure<AuthResponse>("Debe confirmar su cuenta por email o SMS antes de iniciar sesión.");
 
         var signInResult = await _signInService.CheckPasswordSignInAsync(user.Id, request.Password, false);
         if (!signInResult.Succeeded)
@@ -87,9 +95,13 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
                 Email = user.Email!,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
+                PhoneNumber = user.PhoneNumber,
+                PhoneNumberConfirmed = user.PhoneNumberConfirmed,
                 Role = user.Role.ToString(),
                 TenantId = user.TenantId,
-                IsActive = user.IsActive
+                IsActive = user.IsActive,
+                AvatarUrl = string.IsNullOrEmpty(user.AvatarUrl) ? null : $"{user.AvatarUrl}_md.webp",
+                AvatarImages = AvatarImageUrlsDto.FromBaseUrl(user.AvatarUrl)
             }
         });
     }
