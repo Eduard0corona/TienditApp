@@ -98,12 +98,20 @@ export default function LeftSidebar() {
           </li>
 
           {user?.role === 'TenantAdmin' && (
-            <li className={`side-nav-item ${isActive('/settings/business') ? 'menuitem-active' : ''}`}>
-              <Link to="/settings/business" className="side-nav-link">
-                <i className="ri-store-2-line"></i>
-                <span>Mi Empresa</span>
-              </Link>
-            </li>
+            <>
+              <li className={`side-nav-item ${isActive('/settings/business') ? 'menuitem-active' : ''}`}>
+                <Link to="/settings/business" className="side-nav-link">
+                  <i className="ri-store-2-line"></i>
+                  <span>Mi Empresa</span>
+                </Link>
+              </li>
+              <li className={`side-nav-item ${isActive('/settings/whatsapp') ? 'menuitem-active' : ''}`}>
+                <Link to="/settings/whatsapp" className="side-nav-link">
+                  <i className="ri-whatsapp-line"></i>
+                  <span>WhatsApp</span>
+                </Link>
+              </li>
+            </>
           )}
         </ul>
 

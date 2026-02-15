@@ -27,6 +27,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<TenantSettings> TenantSettings => Set<TenantSettings>();
+    public DbSet<WhatsAppConfig> WhatsAppConfigs => Set<WhatsAppConfig>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();

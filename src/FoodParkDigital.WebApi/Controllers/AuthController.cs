@@ -294,6 +294,36 @@ public class AuthController : ControllerBase
         return NoContent();
     }
 
+    [HttpGet("my-tenant/whatsapp")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    public async Task<ActionResult<WhatsAppConfigDto>> GetWhatsAppConfig()
+    {
+        var result = await _mediator.Send(new GetWhatsAppConfigQuery());
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPut("my-tenant/whatsapp")]
+    [Authorize(Roles = "TENANT_ADMIN")]
+    public async Task<ActionResult<WhatsAppConfigDto>> UpdateWhatsAppConfig([FromBody] UpdateWhatsAppConfigCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("my-tenant/whatsapp/send")]
+    [Authorize(Roles = "TENANT_ADMIN,STAFF")]
+    public async Task<IActionResult> SendWhatsAppMessage([FromBody] SendWhatsAppMessageCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Mensaje enviado exitosamente." });
+    }
+
     private CookieOptions GetCookieOptions(DateTime? expires = null)
     {
         return new CookieOptions

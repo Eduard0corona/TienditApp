@@ -1,5 +1,13 @@
 import api from './axios';
-import type { TenantProfileDto, UpdateTenantRequest, LogoImageUrlsDto } from '../types';
+import type {
+  TenantProfileDto,
+  UpdateTenantRequest,
+  LogoImageUrlsDto,
+  WhatsAppConfigDto,
+  UpdateWhatsAppConfigRequest,
+  SendWhatsAppMessageRequest,
+  ApiMessage,
+} from '../types';
 
 export const tenantApi = {
   getMyTenant: () =>
@@ -18,4 +26,13 @@ export const tenantApi = {
 
   deleteLogo: () =>
     api.delete('/auth/my-tenant/logo'),
+
+  getWhatsAppConfig: () =>
+    api.get<WhatsAppConfigDto>('/auth/my-tenant/whatsapp'),
+
+  updateWhatsAppConfig: (data: UpdateWhatsAppConfigRequest) =>
+    api.put<WhatsAppConfigDto>('/auth/my-tenant/whatsapp', data),
+
+  sendWhatsAppMessage: (data: SendWhatsAppMessageRequest) =>
+    api.post<ApiMessage>('/auth/my-tenant/whatsapp/send', data),
 };

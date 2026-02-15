@@ -123,6 +123,31 @@ export interface UpdateTenantRequest {
   state?: string;
 }
 
+// ==================== WhatsApp ====================
+
+export interface WhatsAppConfigDto {
+  id: string;
+  tenantId: string;
+  isEnabled: boolean;
+  phoneNumberId?: string;
+  wabaId?: string;
+  displayPhoneNumber?: string;
+  hasAccessToken: boolean;
+}
+
+export interface UpdateWhatsAppConfigRequest {
+  isEnabled: boolean;
+  accessToken?: string;
+  phoneNumberId?: string;
+  wabaId?: string;
+  displayPhoneNumber?: string;
+}
+
+export interface SendWhatsAppMessageRequest {
+  phoneNumber: string;
+  message: string;
+}
+
 // ==================== Registration ====================
 
 export enum BusinessType {

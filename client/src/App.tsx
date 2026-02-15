@@ -10,6 +10,7 @@ import ProductsList from './pages/products/ProductsList';
 import ProductForm from './pages/products/ProductForm';
 import CategoriesList from './pages/categories/CategoriesList';
 import BusinessSettings from './pages/settings/BusinessSettings';
+import WhatsAppSettings from './pages/settings/WhatsAppSettings';
 import Register from './pages/auth/Register';
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/products/:id/edit" element={<ProductForm />} />
           <Route path="/categories" element={<CategoriesList />} />
           <Route path="/settings/business" element={<BusinessSettings />} />
+          <Route path="/settings/whatsapp" element={<WhatsAppSettings />} />
         </Route>
 
         {/* Default redirect */}

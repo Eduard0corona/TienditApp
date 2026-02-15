@@ -11,6 +11,7 @@ public interface IApplicationDbContext
 {
     DbSet<Tenant> Tenants { get; }
     DbSet<TenantSettings> TenantSettings { get; }
+    DbSet<WhatsAppConfig> WhatsAppConfigs { get; }
     DbSet<Category> Categories { get; }
     DbSet<Product> Products { get; }
     DbSet<Order> Orders { get; }
