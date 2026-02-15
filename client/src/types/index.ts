@@ -133,6 +133,7 @@ export interface WhatsAppConfigDto {
   wabaId?: string;
   displayPhoneNumber?: string;
   hasAccessToken: boolean;
+  verifyToken?: string;
 }
 
 export interface UpdateWhatsAppConfigRequest {

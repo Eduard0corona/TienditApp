@@ -9,4 +9,5 @@ public class WhatsAppConfigDto
     public string? WabaId { get; set; }
     public string? DisplayPhoneNumber { get; set; }
     public bool HasAccessToken { get; set; }
+    public string? VerifyToken { get; set; }
 }

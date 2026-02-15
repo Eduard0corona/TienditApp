@@ -52,7 +52,8 @@ public class GetWhatsAppConfigQueryHandler : IRequestHandler<GetWhatsAppConfigQu
             PhoneNumberId = config.PhoneNumberId,
             WabaId = config.WabaId,
             DisplayPhoneNumber = config.DisplayPhoneNumber,
-            HasAccessToken = !string.IsNullOrEmpty(config.AccessToken)
+            HasAccessToken = !string.IsNullOrEmpty(config.AccessToken),
+            VerifyToken = config.VerifyToken
         });
     }
 }

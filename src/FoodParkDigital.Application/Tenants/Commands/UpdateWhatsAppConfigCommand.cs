@@ -71,12 +71,18 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
         if (request.IsEnabled && string.IsNullOrEmpty(request.AccessToken) && string.IsNullOrEmpty(config.AccessToken))
             return Result.Failure<WhatsAppConfigDto>("Se requiere un Access Token para habilitar WhatsApp.");
 
+        // Auto-generate verify token if none exists
+        var verifyToken = string.IsNullOrEmpty(config.VerifyToken)
+            ? Guid.NewGuid().ToString("N")[..24]
+            : null;
+
         config.Update(
             request.IsEnabled,
             request.AccessToken,
             request.PhoneNumberId,
             request.WabaId,
-            request.DisplayPhoneNumber);
+            request.DisplayPhoneNumber,
+            verifyToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -88,7 +94,8 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
             PhoneNumberId = config.PhoneNumberId,
             WabaId = config.WabaId,
             DisplayPhoneNumber = config.DisplayPhoneNumber,
-            HasAccessToken = !string.IsNullOrEmpty(config.AccessToken)
+            HasAccessToken = !string.IsNullOrEmpty(config.AccessToken),
+            VerifyToken = config.VerifyToken
         });
     }
 }

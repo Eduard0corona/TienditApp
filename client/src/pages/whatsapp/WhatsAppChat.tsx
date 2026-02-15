@@ -13,25 +13,36 @@ export default function WhatsAppChat() {
   const [search, setSearch] = useState('');
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatMessage, setNewChatMessage] = useState('');
+  const [startingChat, setStartingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { onNewMessage, onConversationUpdated } = useChatSignalR();
 
   const selectedConvo = conversations.find((c) => c.id === selectedId);
 
   // Load conversations
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const { data } = await chatApi.getConversations(1, 100, search || undefined);
-        setConversations(data.items);
-      } catch {
-        // silent
-      } finally {
-        setLoadingConvos(false);
-      }
-    };
-    load();
+  const loadConversations = useCallback(async () => {
+    try {
+      const { data } = await chatApi.getConversations(1, 100, search || undefined);
+      setConversations(data.items);
+      setError(null);
+    } catch (err: unknown) {
+      const errMsg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (err as { message?: string })?.message ||
+        'Error al cargar conversaciones';
+      setError(errMsg);
+    } finally {
+      setLoadingConvos(false);
+    }
   }, [search]);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
 
   // Load messages when selecting a conversation
   useEffect(() => {
@@ -105,6 +116,31 @@ export default function WhatsAppChat() {
     });
   }, [onConversationUpdated]);
 
+  // Start new conversation
+  const handleStartChat = async () => {
+    if (!newChatPhone.trim() || !newChatMessage.trim()) return;
+    setStartingChat(true);
+    try {
+      const { data: sentMsg } = await chatApi.sendMessage({
+        phoneNumber: newChatPhone.trim(),
+        message: newChatMessage.trim(),
+      });
+      setShowNewChat(false);
+      setNewChatPhone('');
+      setNewChatMessage('');
+      // Reload conversations and select the new one
+      await loadConversations();
+      setSelectedId(sentMsg.conversationId);
+    } catch (err: unknown) {
+      const errMsg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Error al iniciar conversación';
+      setError(errMsg);
+    } finally {
+      setStartingChat(false);
+    }
+  };
+
   // Send message
   const handleSend = async () => {
     if (!newMessage.trim() || !selectedConvo) return;
@@ -157,24 +193,84 @@ export default function WhatsAppChat() {
     <>
       <PageTitle title="Chat" subtitle="WhatsApp" />
 
+      {error && (
+        <div className="alert alert-danger alert-dismissible fade show">
+          {error}
+          <button type="button" className="btn-close" onClick={() => setError(null)} />
+        </div>
+      )}
+
+      {/* New conversation modal */}
+      {showNewChat && (
+        <div className="card mb-3">
+          <div className="card-body">
+            <h5 className="card-title mb-3">
+              <i className="ri-chat-new-line me-1"></i>
+              Nueva Conversación
+            </h5>
+            <div className="row g-3">
+              <div className="col-md-4">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Teléfono (+5215512345678)"
+                  value={newChatPhone}
+                  onChange={(e) => setNewChatPhone(e.target.value)}
+                />
+              </div>
+              <div className="col-md-6">
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Mensaje inicial..."
+                  value={newChatMessage}
+                  onChange={(e) => setNewChatMessage(e.target.value)}
+                />
+              </div>
+              <div className="col-md-2 d-flex gap-2">
+                <button
+                  className="btn btn-success flex-grow-1"
+                  onClick={handleStartChat}
+                  disabled={startingChat || !newChatPhone.trim() || !newChatMessage.trim()}
+                >
+                  {startingChat ? <span className="spinner-border spinner-border-sm" /> : 'Enviar'}
+                </button>
+                <button className="btn btn-light" onClick={() => setShowNewChat(false)}>
+                  <i className="ri-close-line"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="row">
         {/* Conversation List */}
         <div className="col-xl-4">
           <div className="card" style={{ height: 'calc(100vh - 200px)' }}>
             <div className="card-body p-0 d-flex flex-column h-100">
-              {/* Search */}
+              {/* Search + New */}
               <div className="p-3 border-bottom">
-                <div className="input-group">
-                  <span className="input-group-text bg-transparent border-end-0">
-                    <i className="ri-search-line"></i>
-                  </span>
-                  <input
-                    type="text"
-                    className="form-control border-start-0"
-                    placeholder="Buscar conversación..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
+                <div className="d-flex gap-2">
+                  <div className="input-group flex-grow-1">
+                    <span className="input-group-text bg-transparent border-end-0">
+                      <i className="ri-search-line"></i>
+                    </span>
+                    <input
+                      type="text"
+                      className="form-control border-start-0"
+                      placeholder="Buscar..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    className="btn btn-success btn-sm"
+                    title="Nueva conversación"
+                    onClick={() => setShowNewChat(!showNewChat)}
+                  >
+                    <i className="ri-add-line"></i>
+                  </button>
                 </div>
               </div>
 
@@ -188,6 +284,13 @@ export default function WhatsAppChat() {
                   <div className="text-center py-5 text-muted">
                     <i className="ri-chat-3-line fs-2 d-block mb-2"></i>
                     <p className="mb-0">No hay conversaciones</p>
+                    <button
+                      className="btn btn-sm btn-outline-success mt-2"
+                      onClick={() => setShowNewChat(true)}
+                    >
+                      <i className="ri-add-line me-1"></i>
+                      Iniciar chat
+                    </button>
                   </div>
                 ) : (
                   conversations.map((convo) => (
