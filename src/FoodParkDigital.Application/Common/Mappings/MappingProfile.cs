@@ -4,11 +4,13 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.WhatsApp.Entities;
 
 namespace FoodParkDigital.Application.Common.Mappings;
 
@@ -58,5 +60,10 @@ public class MappingProfile : Profile
                 AvatarImageUrlsDto.FromBaseUrl(s.AvatarUrl)));
 
         CreateMap<AuditLog, AuditLogDto>();
+
+        CreateMap<WhatsAppConversation, ConversationDto>();
+        CreateMap<WhatsAppMessage, ChatMessageDto>()
+            .ForMember(d => d.Direction, opt => opt.MapFrom(s => s.Direction.ToString()))
+            .ForMember(d => d.Status, opt => opt.MapFrom(s => s.Status.ToString()));
     }
 }

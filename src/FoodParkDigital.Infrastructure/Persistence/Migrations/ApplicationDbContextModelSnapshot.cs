@@ -699,6 +699,102 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("WhatsAppConfigs", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.WhatsApp.Entities.WhatsAppConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("CustomerPhone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTimeOffset>("LastMessageAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("LastMessageBody")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("UnreadCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CustomerPhone")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "LastMessageAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("WhatsAppConversations", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.WhatsApp.Entities.WhatsAppMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(200)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTimeOffset>("SentAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExternalMessageId");
+
+                    b.HasIndex("ConversationId", "SentAt");
+
+                    b.ToTable("WhatsAppMessages", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.Property<int>("Id")
@@ -928,6 +1024,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.WhatsApp.Entities.WhatsAppMessage", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.WhatsApp.Entities.WhatsAppConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationRole", null)
@@ -994,6 +1101,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.Tenant", b =>
                 {
                     b.Navigation("Settings");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.WhatsApp.Entities.WhatsAppConversation", b =>
+                {
+                    b.Navigation("Messages");
                 });
 #pragma warning restore 612, 618
         }

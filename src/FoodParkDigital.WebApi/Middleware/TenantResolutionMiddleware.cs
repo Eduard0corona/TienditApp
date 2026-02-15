@@ -20,6 +20,7 @@ public class TenantResolutionMiddleware
         if (path.Contains("/auth/login") ||
             path.Contains("/auth/refresh") ||
             path.Contains("/auth/register") ||
+            path.Contains("/whatsapp/webhook") ||
             path.Contains("/swagger") ||
             path.Contains("/health") ||
             path.Contains("/hubs/"))

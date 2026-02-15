@@ -21,8 +21,9 @@ builder.Host.UseSerilog((ctx, config) =>
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// SignalR notification service
+// SignalR notification services
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
+builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
 // Rate Limiting
 builder.Services.AddRateLimiter(options =>
@@ -138,6 +139,7 @@ app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.MapControllers();
 app.MapHub<OrderHub>("/hubs/orders");
+app.MapHub<ChatHub>("/hubs/chat");
 
 // Auto-migrate and seed in development
 if (app.Environment.IsDevelopment())

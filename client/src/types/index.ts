@@ -148,6 +148,32 @@ export interface SendWhatsAppMessageRequest {
   message: string;
 }
 
+// ==================== WhatsApp Chat ====================
+
+export interface ConversationDto {
+  id: string;
+  customerPhone: string;
+  customerName?: string;
+  lastMessageBody?: string;
+  lastMessageAt: string;
+  unreadCount: number;
+}
+
+export interface ChatMessageDto {
+  id: string;
+  conversationId: string;
+  direction: string;
+  body: string;
+  status: string;
+  sentAt: string;
+}
+
+export interface SendChatMessageRequest {
+  phoneNumber: string;
+  message: string;
+  conversationId?: string;
+}
+
 // ==================== Registration ====================
 
 export enum BusinessType {

@@ -27,7 +27,8 @@ public class WhatsAppConfig : AuditableEntity
         string? accessToken,
         string? phoneNumberId,
         string? wabaId,
-        string? displayPhoneNumber)
+        string? displayPhoneNumber,
+        string? verifyToken = null)
     {
         IsEnabled = isEnabled;
         PhoneNumberId = phoneNumberId;
@@ -37,5 +38,8 @@ public class WhatsAppConfig : AuditableEntity
         // Only update token if a new value is provided
         if (!string.IsNullOrEmpty(accessToken))
             AccessToken = accessToken;
+
+        if (!string.IsNullOrEmpty(verifyToken))
+            VerifyToken = verifyToken;
     }
 }

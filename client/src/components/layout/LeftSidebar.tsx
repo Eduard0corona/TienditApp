@@ -111,6 +111,12 @@ export default function LeftSidebar() {
                   <span>WhatsApp</span>
                 </Link>
               </li>
+              <li className={`side-nav-item ${isActive('/whatsapp/chat') ? 'menuitem-active' : ''}`}>
+                <Link to="/whatsapp/chat" className="side-nav-link">
+                  <i className="ri-chat-3-line"></i>
+                  <span>Chat WhatsApp</span>
+                </Link>
+              </li>
             </>
           )}
         </ul>
