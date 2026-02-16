@@ -13,7 +13,10 @@ public class TenantResolutionMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, ICurrentTenantService tenantService)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ICurrentTenantService tenantService,
+        ITenantAccessService tenantAccessService)
     {
         // Skip for unauthenticated paths
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
@@ -35,9 +38,16 @@ public class TenantResolutionMiddleware
             return;
         }
 
+        var tenantScopedPath = IsTenantScopedPath(path);
         var tenantClaim = context.User.FindFirst("tenant_id");
         if (tenantClaim is null || !Guid.TryParse(tenantClaim.Value, out var tenantId))
         {
+            if (!tenantScopedPath)
+            {
+                await _next(context);
+                return;
+            }
+
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new ProblemDetails
             {
@@ -57,7 +67,36 @@ public class TenantResolutionMiddleware
             tenantId = overrideTenantId;
         }
 
+        if (tenantScopedPath && role != "SUPER_ADMIN")
+        {
+            var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdClaim, out var userId) ||
+                !await tenantAccessService.HasActiveAccessAsync(userId, tenantId, context.RequestAborted))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Status = 403,
+                    Title = "Tenant access denied",
+                    Detail = "User does not belong to the requested tenant or membership is disabled."
+                });
+                return;
+            }
+        }
+
         tenantService.SetTenant(tenantId);
         await _next(context);
     }
+
+    private static bool IsTenantScopedPath(string path) =>
+        path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal);
 }

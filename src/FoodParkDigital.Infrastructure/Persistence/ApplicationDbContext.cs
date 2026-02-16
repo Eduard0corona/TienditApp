@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -79,6 +80,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AiAgent> AiAgents => Set<AiAgent>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

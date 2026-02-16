@@ -8,8 +8,11 @@ public class FoodOrderStateMachine : IOrderStateMachine
 {
     private static readonly Dictionary<OrderStatus, OrderStatus[]> Transitions = new()
     {
-        { OrderStatus.Pending, [OrderStatus.InPreparation, OrderStatus.Cancelled] },
-        { OrderStatus.InPreparation, [OrderStatus.Ready, OrderStatus.Cancelled] },
+        { OrderStatus.Pending, [OrderStatus.Confirmed, OrderStatus.Accepted, OrderStatus.InPreparation, OrderStatus.InProgress, OrderStatus.Ready, OrderStatus.Delivered, OrderStatus.Cancelled] },
+        { OrderStatus.Confirmed, [OrderStatus.Accepted, OrderStatus.InPreparation, OrderStatus.InProgress, OrderStatus.Ready, OrderStatus.Delivered, OrderStatus.Cancelled] },
+        { OrderStatus.Accepted, [OrderStatus.Confirmed, OrderStatus.InPreparation, OrderStatus.InProgress, OrderStatus.Ready, OrderStatus.Delivered, OrderStatus.Cancelled] },
+        { OrderStatus.InPreparation, [OrderStatus.InProgress, OrderStatus.Ready, OrderStatus.Delivered, OrderStatus.Cancelled] },
+        { OrderStatus.InProgress, [OrderStatus.InPreparation, OrderStatus.Ready, OrderStatus.Delivered, OrderStatus.Cancelled] },
         { OrderStatus.Ready, [OrderStatus.Delivered] },
         { OrderStatus.Delivered, [] },
         { OrderStatus.Cancelled, [] }
@@ -27,7 +30,7 @@ public class FoodOrderStateMachine : IOrderStateMachine
     }
 
     public bool CanCancel(OrderStatus currentStatus)
-        => currentStatus is OrderStatus.Pending or OrderStatus.InPreparation;
+        => currentStatus is OrderStatus.Pending or OrderStatus.Confirmed or OrderStatus.InPreparation;
 
     public OrderStatus GetInitialStatus() => OrderStatus.Pending;
 }

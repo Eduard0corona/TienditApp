@@ -11,6 +11,8 @@ export const productsApi = {
   getAll: (params?: {
     categoryId?: string;
     isAvailable?: boolean;
+    onlyAvailableNow?: boolean;
+    itemType?: 'Product' | 'Service';
     pageNumber?: number;
     pageSize?: number;
   }) =>
@@ -19,11 +21,11 @@ export const productsApi = {
   getById: (id: string) =>
     api.get<ProductDto>(`/products/${id}`),
 
-  create: (data: CreateProductRequest) =>
-    api.post<ProductDto>('/products', data),
+  create: (data: CreateProductRequest, itemType: 'Product' | 'Service' = 'Product') =>
+    api.post<ProductDto>('/products', data, { params: { itemType } }),
 
-  update: (id: string, data: UpdateProductRequest) =>
-    api.put<ProductDto>(`/products/${id}`, data),
+  update: (id: string, data: UpdateProductRequest, itemType: 'Product' | 'Service' = 'Product') =>
+    api.put<ProductDto>(`/products/${id}`, data, { params: { itemType } }),
 
   delete: (id: string) =>
     api.delete(`/products/${id}`),

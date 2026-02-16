@@ -16,6 +16,7 @@ public class CurrentUserService : ICurrentUserService
     public string? UserId => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
     public string? UserName => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Email);
     public string? Role => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Role);
+    public string? TenantRole => _httpContextAccessor.HttpContext?.User?.FindFirstValue("tenant_role");
     public Guid? TenantId
     {
         get

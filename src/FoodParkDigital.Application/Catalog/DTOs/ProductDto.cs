@@ -40,6 +40,8 @@ public class ProductDto
     public int? StockQuantity { get; set; }
     public int? LowStockThreshold { get; set; }
     public int? MaxQuantityPerOrder { get; set; }
+    public TimeSpan? AvailableFromTime { get; set; }
+    public TimeSpan? AvailableToTime { get; set; }
     public bool IsLowStock { get; set; }
 }
 

@@ -1,12 +1,16 @@
 using AutoMapper;
 using FoodParkDigital.Application.Audit.DTOs;
+using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Catalog.DTOs;
+using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -29,6 +33,7 @@ public class MappingProfile : Profile
             .ForMember(d => d.Images, opt => opt.MapFrom(s =>
                 ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)));
         CreateMap<Category, CategoryDto>();
+        CreateMap<Customer, CustomerDto>();
 
         CreateMap<Tenant, TenantDto>();
         CreateMap<Tenant, TenantProfileDto>()
@@ -47,6 +52,7 @@ public class MappingProfile : Profile
 
         CreateMap<ApplicationUser, UserDto>()
             .ForMember(d => d.Role, opt => opt.MapFrom(s => s.Role.ToString()))
+            .ForMember(d => d.TenantId, opt => opt.MapFrom(s => s.DefaultTenantId))
             .ForMember(d => d.AvatarUrl, opt => opt.MapFrom(s =>
                 string.IsNullOrEmpty(s.AvatarUrl) ? null : $"{s.AvatarUrl}_md.webp"))
             .ForMember(d => d.AvatarImages, opt => opt.MapFrom(s =>
@@ -54,12 +60,14 @@ public class MappingProfile : Profile
 
         CreateMap<ApplicationUser, UserProfileDto>()
             .ForMember(d => d.Role, opt => opt.MapFrom(s => s.Role.ToString()))
+            .ForMember(d => d.TenantId, opt => opt.MapFrom(s => s.DefaultTenantId))
             .ForMember(d => d.AvatarUrl, opt => opt.MapFrom(s =>
                 string.IsNullOrEmpty(s.AvatarUrl) ? null : $"{s.AvatarUrl}_md.webp"))
             .ForMember(d => d.AvatarImages, opt => opt.MapFrom(s =>
                 AvatarImageUrlsDto.FromBaseUrl(s.AvatarUrl)));
 
         CreateMap<AuditLog, AuditLogDto>();
+        CreateMap<AiAgent, AiAgentDto>();
 
         CreateMap<WhatsAppConversation, ConversationDto>();
         CreateMap<WhatsAppMessage, ChatMessageDto>()

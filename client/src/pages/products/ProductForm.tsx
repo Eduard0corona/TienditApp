@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
-import type { CreateProductRequest, CategoryDto, ProductDto } from '../../types';
+import type { CreateProductRequest, CategoryDto, ProductDto, UnitType } from '../../types';
 
 const UNIT_TYPE_OPTIONS = [
   { value: '', label: 'Sin unidad' },
@@ -23,9 +23,6 @@ const UNIT_TYPE_OPTIONS = [
   { value: '32', label: 'Ración' },
   { value: '40', label: 'Metro' },
   { value: '41', label: 'Rollo' },
-  { value: '50', label: 'Hora' },
-  { value: '51', label: 'Sesión' },
-  { value: '52', label: 'Servicio' },
 ];
 
 export default function ProductForm() {
@@ -67,6 +64,8 @@ export default function ProductForm() {
           maxQuantityPerOrder: product.maxQuantityPerOrder ?? undefined,
           unit: product.unit ?? undefined,
           preparationTimeMinutes: product.preparationTimeMinutes ?? undefined,
+          availableFromTime: product.availableFromTime ? product.availableFromTime.slice(0, 5) : undefined,
+          availableToTime: product.availableToTime ? product.availableToTime.slice(0, 5) : undefined,
         }
       : {
           categoryId: '',
@@ -80,6 +79,8 @@ export default function ProductForm() {
           isFeatured: false,
           tags: '',
           allergens: '',
+          availableFromTime: undefined,
+          availableToTime: undefined,
         },
   });
 
@@ -119,7 +120,7 @@ export default function ProductForm() {
     // Clean optional numeric fields
     const payload: CreateProductRequest = {
       ...data,
-      unit: data.unit != null && data.unit !== ('' as unknown) ? Number(data.unit) : undefined,
+      unit: data.unit != null && data.unit !== ('' as unknown) ? (Number(data.unit) as UnitType) : undefined,
       compareAtPrice: data.compareAtPrice ? Number(data.compareAtPrice) : undefined,
       taxRate: data.taxRate != null && data.taxRate !== ('' as unknown) ? Number(data.taxRate) : undefined,
       calories: data.calories ? Number(data.calories) : undefined,
@@ -127,6 +128,8 @@ export default function ProductForm() {
       lowStockThreshold: data.lowStockThreshold ? Number(data.lowStockThreshold) : undefined,
       maxQuantityPerOrder: data.maxQuantityPerOrder ? Number(data.maxQuantityPerOrder) : undefined,
       preparationTimeMinutes: data.preparationTimeMinutes ? Number(data.preparationTimeMinutes) : undefined,
+      availableFromTime: data.availableFromTime ? `${data.availableFromTime}:00` : undefined,
+      availableToTime: data.availableToTime ? `${data.availableToTime}:00` : undefined,
       priceAmount: Number(data.priceAmount),
       sortOrder: Number(data.sortOrder),
     };
@@ -135,9 +138,9 @@ export default function ProductForm() {
       let productId = id;
 
       if (isEditing && id) {
-        await productsApi.update(id, { ...payload, id });
+        await productsApi.update(id, { ...payload, id }, 'Product');
       } else {
-        const { data: created } = await productsApi.create(payload);
+        const { data: created } = await productsApi.create(payload, 'Product');
         productId = created.id;
       }
 
@@ -373,7 +376,26 @@ export default function ProductForm() {
             {/* Food Details */}
             <div className="card">
               <div className="card-body">
-                <h5 className="header-title mb-3">Detalles Alimentos</h5>
+                <h5 className="header-title mb-3">Detalles y Disponibilidad</h5>
+
+                <div className="row">
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">Disponible desde</label>
+                    <input
+                      type="time"
+                      className="form-control"
+                      {...register('availableFromTime')}
+                    />
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <label className="form-label">Disponible hasta</label>
+                    <input
+                      type="time"
+                      className="form-control"
+                      {...register('availableToTime')}
+                    />
+                  </div>
+                </div>
 
                 <div className="row">
                   <div className="col-md-4 mb-3">

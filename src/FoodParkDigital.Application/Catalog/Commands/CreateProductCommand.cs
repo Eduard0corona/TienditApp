@@ -33,6 +33,8 @@ public record CreateProductCommand : IRequest<Result<ProductDto>>
     public int? LowStockThreshold { get; init; }
     public int? MaxQuantityPerOrder { get; init; }
     public UnitType? Unit { get; init; }
+    public TimeSpan? AvailableFromTime { get; init; }
+    public TimeSpan? AvailableToTime { get; init; }
 }
 
 public class CreateProductCommandValidator : AbstractValidator<CreateProductCommand>
@@ -51,6 +53,9 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.Allergens).MaximumLength(500);
         RuleFor(x => x.CompareAtPrice)
             .GreaterThan(0).When(x => x.CompareAtPrice.HasValue);
+        RuleFor(x => x)
+            .Must(x => !x.CompareAtPrice.HasValue || x.CompareAtPrice.Value > x.PriceAmount)
+            .WithMessage("El precio anterior debe ser mayor al precio actual.");
         RuleFor(x => x.TaxRate)
             .InclusiveBetween(0, 100).When(x => x.TaxRate.HasValue);
         RuleFor(x => x.Calories)
@@ -63,7 +68,50 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
             .GreaterThan(0).When(x => x.MaxQuantityPerOrder.HasValue);
         RuleFor(x => x.PreparationTimeMinutes)
             .GreaterThan(0).When(x => x.PreparationTimeMinutes.HasValue);
+        RuleFor(x => x)
+            .Must(x => x.AvailableFromTime.HasValue == x.AvailableToTime.HasValue)
+            .WithMessage("Debes especificar hora de inicio y fin para disponibilidad por horario.");
+        RuleFor(x => x)
+            .Must(x => !x.AvailableFromTime.HasValue || x.AvailableFromTime.Value != x.AvailableToTime!.Value)
+            .WithMessage("La hora de inicio y fin no pueden ser iguales.");
+
+        When(x => IsServiceUnit(x.Unit), () =>
+        {
+            RuleFor(x => x.Sku)
+                .Must(string.IsNullOrWhiteSpace)
+                .WithMessage("Los servicios no admiten SKU.");
+            RuleFor(x => x.Barcode)
+                .Must(string.IsNullOrWhiteSpace)
+                .WithMessage("Los servicios no admiten código de barras.");
+            RuleFor(x => x.CompareAtPrice)
+                .Must(v => !v.HasValue)
+                .WithMessage("Los servicios no admiten precio anterior.");
+            RuleFor(x => x.TaxRate)
+                .Must(v => !v.HasValue)
+                .WithMessage("Los servicios no admiten tasa de impuesto.");
+            RuleFor(x => x.Calories)
+                .Must(v => !v.HasValue)
+                .WithMessage("Los servicios no admiten calorías.");
+            RuleFor(x => x.Allergens)
+                .Must(string.IsNullOrWhiteSpace)
+                .WithMessage("Los servicios no admiten alérgenos.");
+            RuleFor(x => x.StockQuantity)
+                .Must(v => !v.HasValue)
+                .WithMessage("Los servicios no admiten stock.");
+            RuleFor(x => x.LowStockThreshold)
+                .Must(v => !v.HasValue)
+                .WithMessage("Los servicios no admiten alerta de stock.");
+            RuleFor(x => x.MaxQuantityPerOrder)
+                .Must(v => !v.HasValue)
+                .WithMessage("Los servicios no admiten máximo por orden.");
+            RuleFor(x => x.IsFeatured)
+                .Equal(false)
+                .WithMessage("Los servicios no admiten la marca de destacado.");
+        });
     }
+
+    private static bool IsServiceUnit(UnitType? unit) =>
+        unit is UnitType.Hour or UnitType.Session or UnitType.Service;
 }
 
 public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand, Result<ProductDto>>
@@ -87,6 +135,9 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
         var category = await _context.Categories
             .FirstOrDefaultAsync(c => c.Id == request.CategoryId, cancellationToken)
             ?? throw new EntityNotFoundException("Category", request.CategoryId);
+
+        if (!category.IsActive)
+            return Result.Failure<ProductDto>("La categoria seleccionada no esta activa.");
 
         if (!string.IsNullOrEmpty(request.Sku))
         {
@@ -117,7 +168,9 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
             stockQuantity: request.StockQuantity,
             lowStockThreshold: request.LowStockThreshold,
             maxQuantityPerOrder: request.MaxQuantityPerOrder,
-            unit: request.Unit);
+            unit: request.Unit,
+            availableFromTime: request.AvailableFromTime,
+            availableToTime: request.AvailableToTime);
 
         _context.Products.Add(product);
         await _context.SaveChangesAsync(cancellationToken);

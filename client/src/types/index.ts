@@ -177,11 +177,12 @@ export interface SendChatMessageRequest {
 
 // ==================== Registration ====================
 
-export enum BusinessType {
-  Food = 0,
-  Retail = 1,
-  Service = 2,
-}
+export const BusinessType = {
+  Food: 0,
+  Retail: 1,
+  Service: 2,
+} as const;
+export type BusinessType = (typeof BusinessType)[keyof typeof BusinessType];
 
 export interface RegisterBusinessRequest {
   email: string;
@@ -215,26 +216,27 @@ export interface RegisterCustomerRequest {
 
 // ==================== Catalog ====================
 
-export enum UnitType {
-  Unit = 0,
-  Pack = 1,
-  Box = 2,
-  Pair = 3,
-  Kg = 10,
-  G = 11,
-  Lb = 12,
-  Oz = 13,
-  Liter = 20,
-  Ml = 21,
-  Portion = 30,
-  Slice = 31,
-  Serving = 32,
-  Meter = 40,
-  Roll = 41,
-  Hour = 50,
-  Session = 51,
-  Service = 52,
-}
+export const UnitType = {
+  Unit: 0,
+  Pack: 1,
+  Box: 2,
+  Pair: 3,
+  Kg: 10,
+  G: 11,
+  Lb: 12,
+  Oz: 13,
+  Liter: 20,
+  Ml: 21,
+  Portion: 30,
+  Slice: 31,
+  Serving: 32,
+  Meter: 40,
+  Roll: 41,
+  Hour: 50,
+  Session: 51,
+  Service: 52,
+} as const;
+export type UnitType = (typeof UnitType)[keyof typeof UnitType];
 
 export interface ProductImageUrlsDto {
   original: string;
@@ -269,6 +271,8 @@ export interface ProductDto {
   stockQuantity?: number;
   lowStockThreshold?: number;
   maxQuantityPerOrder?: number;
+  availableFromTime?: string;
+  availableToTime?: string;
   isLowStock: boolean;
 }
 
@@ -309,6 +313,8 @@ export interface CreateProductRequest {
   maxQuantityPerOrder?: number;
   unit?: UnitType;
   preparationTimeMinutes?: number;
+  availableFromTime?: string;
+  availableToTime?: string;
 }
 
 export interface UpdateProductRequest extends CreateProductRequest {
@@ -322,5 +328,171 @@ export interface CreateCategoryRequest {
 }
 
 export interface UpdateCategoryRequest extends CreateCategoryRequest {
+  id: string;
+}
+
+// ==================== Customers ====================
+
+export interface CustomerDto {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  isPublicGeneral: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateCustomerRequest {
+  name: string;
+  phone: string;
+  email?: string;
+}
+
+export interface UpdateCustomerRequest extends CreateCustomerRequest {
+  id: string;
+}
+
+// ==================== Orders ====================
+
+export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 99;
+
+export interface OrderItemDto {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  notes?: string;
+}
+
+export interface OrderStatusHistoryDto {
+  id: string;
+  previousStatus: OrderStatus;
+  newStatus: OrderStatus;
+  changedAt: string;
+  changedBy?: string;
+}
+
+export interface OrderDto {
+  id: string;
+  customerId?: string;
+  createdByBusiness: boolean;
+  orderNumber: string;
+  businessType: BusinessType;
+  status: OrderStatus;
+  canCancel: boolean;
+  allowedTransitions: OrderStatus[];
+  customerName: string;
+  customerPhone?: string;
+  customerNotes?: string;
+  tableNumber?: string;
+  subTotal: number;
+  tax: number;
+  total: number;
+  cancellationReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+  items: OrderItemDto[];
+  statusHistory: OrderStatusHistoryDto[];
+}
+
+export interface CreateOrderItemRequest {
+  productId: string;
+  quantity: number;
+  notes?: string;
+}
+
+export interface CreateOrderRequest {
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerNotes?: string;
+  tableNumber?: string;
+  items: CreateOrderItemRequest[];
+}
+
+export interface TopSellingItemDto {
+  productId: string;
+  productName: string;
+  itemType: 'Product' | 'Service';
+  quantitySold: number;
+  totalAmount: number;
+}
+
+export interface DashboardMetricsDto {
+  rangeFrom: string;
+  rangeTo: string;
+  totalOrders: number;
+  inProgressOrders: number;
+  pendingOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  uniqueCustomers: number;
+  activeProducts: number;
+  activeServices: number;
+  totalRevenue: number;
+  averageOrderValue: number;
+  ordersByStatus: Record<string, number>;
+  topSellingItems: TopSellingItemDto[];
+}
+
+// ==================== AI Agents ====================
+
+export interface AiAgentDto {
+  id: string;
+  name: string;
+  role: string;
+  personality: string;
+  language: string;
+  tone: string;
+  businessName?: string;
+  businessDescription?: string;
+  businessProductsAndServices?: string;
+  welcomeMessage: string;
+  fallbackMessage: string;
+  closingMessage: string;
+  askForName: boolean;
+  askForPhone: boolean;
+  askForEmail: boolean;
+  askForAddress: boolean;
+  customQuestions?: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  useConversationMemory: boolean;
+  strictMode: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateAiAgentRequest {
+  name: string;
+  role: string;
+  personality: string;
+  language: string;
+  tone: string;
+  businessName?: string;
+  businessDescription?: string;
+  businessProductsAndServices?: string;
+  welcomeMessage: string;
+  fallbackMessage: string;
+  closingMessage: string;
+  askForName: boolean;
+  askForPhone: boolean;
+  askForEmail: boolean;
+  askForAddress: boolean;
+  customQuestions?: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  useConversationMemory: boolean;
+  strictMode: boolean;
+}
+
+export interface UpdateAiAgentRequest extends CreateAiAgentRequest {
   id: string;
 }

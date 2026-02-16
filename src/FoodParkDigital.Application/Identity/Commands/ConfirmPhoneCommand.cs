@@ -1,6 +1,10 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -27,13 +31,16 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
+    private readonly ITemporaryCustomerClaimService _claimService;
 
     public ConfirmPhoneCommandHandler(
         UserManager<ApplicationUser> userManager,
-        IApplicationDbContext context)
+        IApplicationDbContext context,
+        ITemporaryCustomerClaimService claimService)
     {
         _userManager = userManager;
         _context = context;
+        _claimService = claimService;
     }
 
     public async Task<Result> Handle(ConfirmPhoneCommand request, CancellationToken cancellationToken)
@@ -48,12 +55,41 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
             return Result.Success();
 
         if (string.IsNullOrEmpty(user.PhoneNumber))
-            return Result.Failure("El usuario no tiene un número de teléfono registrado.");
+            return Result.Failure("El usuario no tiene un numero de telefono registrado.");
 
         var result = await _userManager.ChangePhoneNumberAsync(user, user.PhoneNumber, request.Code);
         if (!result.Succeeded)
-            return Result.Failure("Código inválido o expirado.");
+            return Result.Failure("Codigo invalido o expirado.");
+
+        if (user.Role == UserRole.Customer)
+            await _claimService.ClaimByPhoneAsync(user.PhoneNumber, user.Id, "MX", cancellationToken);
+        else
+            await EnsureTenantContextForUser(user, cancellationToken);
 
         return Result.Success();
+    }
+
+    private async Task EnsureTenantContextForUser(ApplicationUser user, CancellationToken cancellationToken)
+    {
+        var membership = await _context.TenantUsers
+            .IgnoreQueryFilters()
+            .Where(x => x.UserId == user.Id && x.Status == TenantUserStatus.Active)
+            .OrderBy(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (membership is null && user.DefaultTenantId.HasValue)
+        {
+            var role = user.Role == UserRole.TenantAdmin
+                ? TenantUserRole.Admin
+                : TenantUserRole.Staff;
+
+            membership = new TenantUser(user.DefaultTenantId.Value, user.Id, role, TenantUserStatus.Active);
+            _context.TenantUsers.Add(membership);
+        }
+
+        if (!user.DefaultTenantId.HasValue && membership is not null)
+            user.DefaultTenantId = membership.TenantId;
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

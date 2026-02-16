@@ -1,12 +1,11 @@
-using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Enums;
 using Microsoft.AspNetCore.Identity;
 
 namespace FoodParkDigital.Domain.Identity.Entities;
 
-public class ApplicationUser : IdentityUser<Guid>, ITenantScoped
+public class ApplicationUser : IdentityUser<Guid>
 {
-    public Guid TenantId { get; set; }
+    public Guid? DefaultTenantId { get; set; }
     public string FirstName { get; set; } = null!;
     public string LastName { get; set; } = null!;
     public UserRole Role { get; set; }

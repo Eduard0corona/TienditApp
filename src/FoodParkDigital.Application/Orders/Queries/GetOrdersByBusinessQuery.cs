@@ -48,8 +48,9 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
         query = query.OrderByDescending(o => o.CreatedAt);
 
         var projectedQuery = query.ProjectTo<OrderDto>(_mapper.ConfigurationProvider);
-
-        return await PaginatedList<OrderDto>.CreateAsync(
+        var result = await PaginatedList<OrderDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);
+        result.Items.ApplyStateMetadata();
+        return result;
     }
 }

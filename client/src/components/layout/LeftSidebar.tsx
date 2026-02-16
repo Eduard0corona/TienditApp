@@ -9,7 +9,6 @@ export default function LeftSidebar() {
 
   return (
     <div className="leftside-menu">
-      {/* Brand Logo Light */}
       <Link to="/dashboard" className="logo logo-light">
         <span className="logo-lg">
           <img src="/images/logo.png" alt="logo" />
@@ -19,7 +18,6 @@ export default function LeftSidebar() {
         </span>
       </Link>
 
-      {/* Brand Logo Dark */}
       <Link to="/dashboard" className="logo logo-dark">
         <span className="logo-lg">
           <img src="/images/logo-dark.png" alt="dark logo" />
@@ -29,7 +27,6 @@ export default function LeftSidebar() {
         </span>
       </Link>
 
-      {/* Sidebar Hover Menu Toggle Button */}
       <div
         className="button-sm-hover"
         data-bs-toggle="tooltip"
@@ -39,14 +36,11 @@ export default function LeftSidebar() {
         <i className="ri-checkbox-blank-circle-line align-middle"></i>
       </div>
 
-      {/* Full Sidebar Menu Close Button */}
       <div className="button-close-fullsidebar">
         <i className="ri-close-fill align-middle"></i>
       </div>
 
-      {/* Sidebar */}
       <div className="h-100" id="leftside-menu-container" data-simplebar>
-        {/* Leftbar User */}
         <div className="leftbar-user">
           <Link to="/profile">
             <img
@@ -61,7 +55,6 @@ export default function LeftSidebar() {
           </Link>
         </div>
 
-        {/* Sidemenu */}
         <ul className="side-nav">
           <li className="side-nav-title">Navigation</li>
 
@@ -72,7 +65,7 @@ export default function LeftSidebar() {
             </Link>
           </li>
 
-          <li className="side-nav-title">Catálogo</li>
+          <li className="side-nav-title">Catalogo</li>
 
           <li className={`side-nav-item ${isActive('/products') ? 'menuitem-active' : ''}`}>
             <Link to="/products" className="side-nav-link">
@@ -84,7 +77,30 @@ export default function LeftSidebar() {
           <li className={`side-nav-item ${isActive('/categories') ? 'menuitem-active' : ''}`}>
             <Link to="/categories" className="side-nav-link">
               <i className="ri-list-check-2"></i>
-              <span>Categorías</span>
+              <span>Categorias</span>
+            </Link>
+          </li>
+
+          <li className={`side-nav-item ${isActive('/services') ? 'menuitem-active' : ''}`}>
+            <Link to="/services" className="side-nav-link">
+              <i className="ri-service-line"></i>
+              <span>Servicios</span>
+            </Link>
+          </li>
+
+          <li className="side-nav-title">Operacion</li>
+
+          <li className={`side-nav-item ${isActive('/orders') ? 'menuitem-active' : ''}`}>
+            <Link to="/orders" className="side-nav-link">
+              <i className="ri-file-list-3-line"></i>
+              <span>Ordenes</span>
+            </Link>
+          </li>
+
+          <li className={`side-nav-item ${isActive('/customers') ? 'menuitem-active' : ''}`}>
+            <Link to="/customers" className="side-nav-link">
+              <i className="ri-team-line"></i>
+              <span>Clientes</span>
             </Link>
           </li>
 
@@ -97,8 +113,14 @@ export default function LeftSidebar() {
             </Link>
           </li>
 
-          {user?.role === 'TenantAdmin' && (
+          {(user?.role === 'TenantAdmin' || user?.role === 'SuperAdmin') && (
             <>
+              <li className={`side-nav-item ${isActive('/ai-agent') ? 'menuitem-active' : ''}`}>
+                <Link to="/ai-agent" className="side-nav-link">
+                  <i className="ri-robot-2-line"></i>
+                  <span>Agente IA</span>
+                </Link>
+              </li>
               <li className={`side-nav-item ${isActive('/settings/business') ? 'menuitem-active' : ''}`}>
                 <Link to="/settings/business" className="side-nav-link">
                   <i className="ri-store-2-line"></i>

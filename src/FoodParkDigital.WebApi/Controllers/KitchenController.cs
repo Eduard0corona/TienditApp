@@ -36,7 +36,7 @@ public class KitchenController : ControllerBase
             NewStatus = OrderStatus.InPreparation
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return Conflict(new { error = result.Error });
         return NoContent();
     }
 
@@ -49,7 +49,7 @@ public class KitchenController : ControllerBase
             NewStatus = OrderStatus.Ready
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return Conflict(new { error = result.Error });
         return NoContent();
     }
 }

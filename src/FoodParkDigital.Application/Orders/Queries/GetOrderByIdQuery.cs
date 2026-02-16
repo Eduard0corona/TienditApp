@@ -29,6 +29,8 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        return _mapper.Map<OrderDto>(order);
+        var dto = _mapper.Map<OrderDto>(order);
+        dto.ApplyStateMetadata();
+        return dto;
     }
 }

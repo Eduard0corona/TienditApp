@@ -16,6 +16,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     public Order(
         Guid tenantId,
+        Guid? customerUserId,
+        Guid? temporaryCustomerId,
+        bool createdByBusiness,
         string orderNumber,
         BusinessType businessType,
         string customerName,
@@ -24,6 +27,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string? tableNumber)
     {
         TenantId = tenantId;
+        CustomerUserId = customerUserId;
+        TemporaryCustomerId = temporaryCustomerId;
+        CreatedByBusiness = createdByBusiness;
+
+        if (CustomerUserId.HasValue == TemporaryCustomerId.HasValue)
+            throw new DomainException("Order must reference either a registered customer or a temporary customer.");
+
         OrderNumber = orderNumber;
         BusinessType = businessType;
         CustomerName = customerName;
@@ -38,6 +48,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     }
 
     public Guid TenantId { get; private set; }
+    public Guid? CustomerUserId { get; private set; }
+    public Guid? TemporaryCustomerId { get; private set; }
+    public bool CreatedByBusiness { get; private set; }
     public string OrderNumber { get; private set; } = null!;
     public BusinessType BusinessType { get; private set; }
     public OrderStatus Status { get; private set; }
@@ -88,6 +101,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public void MarkAsCreated()
     {
         AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total));
+    }
+
+    public void LinkToCustomerUser(Guid userId)
+    {
+        CustomerUserId = userId;
+        TemporaryCustomerId = null;
     }
 
     private void RecalculateTotals()

@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Catalog.Commands;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Catalog.Queries;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Domain.Catalog.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +25,8 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<PaginatedList<ProductDto>>> GetAll(
         [FromQuery] Guid? categoryId,
         [FromQuery] bool? isAvailable,
+        [FromQuery] ProductCatalogItemType? itemType = null,
+        [FromQuery] bool onlyAvailableNow = false,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -31,6 +34,8 @@ public class ProductsController : ControllerBase
         {
             CategoryId = categoryId,
             IsAvailable = isAvailable,
+            OnlyAvailableNow = onlyAvailableNow,
+            ItemType = itemType,
             PageNumber = pageNumber,
             PageSize = pageSize
         });
@@ -46,8 +51,18 @@ public class ProductsController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
-    public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductCommand command)
+    public async Task<ActionResult<ProductDto>> Create(
+        [FromBody] CreateProductCommand command,
+        [FromQuery] ProductCatalogItemType? itemType)
     {
+        if (!IsItemTypeConsistent(itemType, command.Unit))
+        {
+            return BadRequest(new
+            {
+                error = "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad."
+            });
+        }
+
         var result = await _mediator.Send(command);
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
@@ -56,10 +71,21 @@ public class ProductsController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
-    public async Task<ActionResult<ProductDto>> Update(Guid id, [FromBody] UpdateProductCommand command)
+    public async Task<ActionResult<ProductDto>> Update(
+        Guid id,
+        [FromBody] UpdateProductCommand command,
+        [FromQuery] ProductCatalogItemType? itemType)
     {
         if (id != command.Id)
             return BadRequest(new { error = "Route ID and body ID mismatch." });
+
+        if (!IsItemTypeConsistent(itemType, command.Unit))
+        {
+            return BadRequest(new
+            {
+                error = "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad."
+            });
+        }
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
@@ -107,6 +133,18 @@ public class ProductsController : ControllerBase
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
         return Ok(result.Value);
+    }
+
+    private static bool IsServiceUnit(UnitType? unit) =>
+        unit is UnitType.Hour or UnitType.Session or UnitType.Service;
+
+    private static bool IsItemTypeConsistent(ProductCatalogItemType? itemType, UnitType? unit)
+    {
+        if (!itemType.HasValue)
+            return true;
+
+        var isService = IsServiceUnit(unit);
+        return itemType.Value == ProductCatalogItemType.Service ? isService : !isService;
     }
 }
 

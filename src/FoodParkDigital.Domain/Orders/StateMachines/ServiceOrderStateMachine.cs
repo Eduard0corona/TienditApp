@@ -8,9 +8,10 @@ public class ServiceOrderStateMachine : IOrderStateMachine
 {
     private static readonly Dictionary<OrderStatus, OrderStatus[]> Transitions = new()
     {
-        { OrderStatus.Pending, [OrderStatus.Accepted, OrderStatus.Cancelled] },
-        { OrderStatus.Accepted, [OrderStatus.InProgress, OrderStatus.Cancelled] },
-        { OrderStatus.InProgress, [OrderStatus.Completed] },
+        { OrderStatus.Pending, [OrderStatus.Accepted, OrderStatus.Confirmed, OrderStatus.InProgress, OrderStatus.Completed, OrderStatus.Cancelled] },
+        { OrderStatus.Confirmed, [OrderStatus.Accepted, OrderStatus.InProgress, OrderStatus.Completed, OrderStatus.Cancelled] },
+        { OrderStatus.Accepted, [OrderStatus.Confirmed, OrderStatus.InProgress, OrderStatus.Completed, OrderStatus.Cancelled] },
+        { OrderStatus.InProgress, [OrderStatus.Completed, OrderStatus.Cancelled] },
         { OrderStatus.Completed, [] },
         { OrderStatus.Cancelled, [] }
     };
@@ -27,7 +28,7 @@ public class ServiceOrderStateMachine : IOrderStateMachine
     }
 
     public bool CanCancel(OrderStatus currentStatus)
-        => currentStatus is OrderStatus.Pending or OrderStatus.Accepted;
+        => currentStatus is OrderStatus.Pending or OrderStatus.Accepted or OrderStatus.Confirmed or OrderStatus.InProgress;
 
     public OrderStatus GetInitialStatus() => OrderStatus.Pending;
 }

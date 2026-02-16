@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -45,6 +46,14 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
 
         var settings = new TenantSettings(tenant.Id);
         _context.TenantSettings.Add(settings);
+
+        var publicGeneralCustomer = new Customer(
+            tenantId: tenant.Id,
+            name: "Publico en general",
+            phone: null,
+            email: null,
+            isPublicGeneral: true);
+        _context.Customers.Add(publicGeneralCustomer);
 
         await _context.SaveChangesAsync(cancellationToken);
 

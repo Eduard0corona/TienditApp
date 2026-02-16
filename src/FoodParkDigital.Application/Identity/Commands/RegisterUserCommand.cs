@@ -3,6 +3,8 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -39,17 +41,20 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IApplicationDbContext _context;
     private readonly IEmailService _emailService;
     private readonly ISmsService _smsService;
 
     public RegisterUserCommandHandler(
         UserManager<ApplicationUser> userManager,
         ICurrentTenantService tenantService,
+        IApplicationDbContext context,
         IEmailService emailService,
         ISmsService smsService)
     {
         _userManager = userManager;
         _tenantService = tenantService;
+        _context = context;
         _emailService = emailService;
         _smsService = smsService;
     }
@@ -58,7 +63,7 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
     {
         var user = new ApplicationUser
         {
-            TenantId = _tenantService.TenantId,
+            DefaultTenantId = _tenantService.TenantId,
             UserName = request.Email,
             Email = request.Email,
             FirstName = request.FirstName,
@@ -87,6 +92,10 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         };
         await _userManager.AddToRoleAsync(user, roleName);
 
+        var tenantUserRole = request.Role == UserRole.TenantAdmin ? TenantUserRole.Admin : TenantUserRole.Staff;
+        _context.TenantUsers.Add(new TenantUser(_tenantService.TenantId, user.Id, tenantUserRole, TenantUserStatus.Active));
+        await _context.SaveChangesAsync(cancellationToken);
+
         // Send email confirmation
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
@@ -104,7 +113,7 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
             PhoneNumber = user.PhoneNumber,
             PhoneNumberConfirmed = user.PhoneNumberConfirmed,
             Role = user.Role.ToString(),
-            TenantId = user.TenantId,
+            TenantId = user.DefaultTenantId,
             IsActive = user.IsActive,
             AvatarUrl = null,
             AvatarImages = null

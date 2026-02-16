@@ -32,6 +32,8 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
 
         // Food-specific
         builder.Property(p => p.Allergens).HasMaxLength(500);
+        builder.Property(p => p.AvailableFromTime).HasColumnType("time");
+        builder.Property(p => p.AvailableToTime).HasColumnType("time");
 
         // Tenant
         builder.Property(p => p.TenantId).IsRequired();

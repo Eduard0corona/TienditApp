@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -147,12 +148,20 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         var settings = new TenantSettings(tenant.Id);
         _context.TenantSettings.Add(settings);
 
+        var publicGeneralCustomer = new Customer(
+            tenantId: tenant.Id,
+            name: "Publico en general",
+            phone: null,
+            email: null,
+            isPublicGeneral: true);
+        _context.Customers.Add(publicGeneralCustomer);
+
         await _context.SaveChangesAsync(cancellationToken);
 
         // Create user as TenantAdmin
         var user = new ApplicationUser
         {
-            TenantId = tenant.Id,
+            DefaultTenantId = tenant.Id,
             UserName = request.Email,
             Email = request.Email,
             FirstName = request.FirstName,
@@ -172,6 +181,13 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
 
         await _userManager.AddToRoleAsync(user, "TENANT_ADMIN");
 
+        _context.TenantUsers.Add(new TenantUser(
+            tenantId: tenant.Id,
+            userId: user.Id,
+            role: TenantUserRole.Owner,
+            status: TenantUserStatus.Active));
+        await _context.SaveChangesAsync(cancellationToken);
+
         // Send confirmations
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
@@ -180,7 +196,9 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
 
         // Auto-login: generate tokens
-        var accessToken = _jwtTokenService.GenerateAccessToken(user);
+        var accessToken = _jwtTokenService.GenerateAccessToken(
+            user,
+            new TenantTokenContext(tenant.Id, TenantUserRole.Owner.ToString().ToUpperInvariant()));
         var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
 
         _context.RefreshTokens.Add(refreshToken);
@@ -202,7 +220,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
                 PhoneNumber = user.PhoneNumber,
                 PhoneNumberConfirmed = user.PhoneNumberConfirmed,
                 Role = user.Role.ToString(),
-                TenantId = user.TenantId,
+                TenantId = user.DefaultTenantId,
                 IsActive = user.IsActive,
                 AvatarUrl = null,
                 AvatarImages = null
