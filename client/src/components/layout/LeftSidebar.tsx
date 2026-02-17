@@ -12,6 +12,7 @@ export default function LeftSidebar() {
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/');
   const canUseCommerce = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
   const canUseInventory = hasCapability(capabilities, TenantCapability.Inventory);
+  const canUseAppointments = hasCapability(capabilities, TenantCapability.Appointments);
 
   return (
     <div className="leftside-menu">
@@ -111,6 +112,33 @@ export default function LeftSidebar() {
             </li>
           )}
 
+          {canUseInventory && (
+            <li className={`side-nav-item ${isActive('/suppliers') ? 'menuitem-active' : ''}`}>
+              <Link to="/suppliers" className="side-nav-link">
+                <i className="ri-truck-line"></i>
+                <span>Proveedores</span>
+              </Link>
+            </li>
+          )}
+
+          {canUseInventory && (
+            <li className={`side-nav-item ${isActive('/purchases') ? 'menuitem-active' : ''}`}>
+              <Link to="/purchases" className="side-nav-link">
+                <i className="ri-shopping-cart-2-line"></i>
+                <span>Compras</span>
+              </Link>
+            </li>
+          )}
+
+          {canUseCommerce && (
+            <li className={`side-nav-item ${isActive('/cash') ? 'menuitem-active' : ''}`}>
+              <Link to="/cash" className="side-nav-link">
+                <i className="ri-money-dollar-circle-line"></i>
+                <span>Caja</span>
+              </Link>
+            </li>
+          )}
+
           {canUseCommerce && (
             <li className={`side-nav-item ${isActive('/orders') ? 'menuitem-active' : ''}`}>
               <Link to="/orders" className="side-nav-link">
@@ -125,6 +153,24 @@ export default function LeftSidebar() {
               <Link to="/customers" className="side-nav-link">
                 <i className="ri-team-line"></i>
                 <span>Clientes</span>
+              </Link>
+            </li>
+          )}
+
+          {canUseAppointments && (
+            <li className={`side-nav-item ${isActive('/appointments') ? 'menuitem-active' : ''}`}>
+              <Link to="/appointments" className="side-nav-link">
+                <i className="ri-calendar-schedule-line"></i>
+                <span>Citas</span>
+              </Link>
+            </li>
+          )}
+
+          {canUseCommerce && (
+            <li className={`side-nav-item ${isActive('/reports') ? 'menuitem-active' : ''}`}>
+              <Link to="/reports" className="side-nav-link">
+                <i className="ri-bar-chart-box-line"></i>
+                <span>Reportes</span>
               </Link>
             </li>
           )}

@@ -17,6 +17,11 @@ const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
 const ServicesList = lazy(() => import('./pages/services/ServicesList'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
+const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
+const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
+const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
+const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsList'));
+const OperationalReports = lazy(() => import('./pages/reports/OperationalReports'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
@@ -95,6 +100,46 @@ export default function App() {
               element={(
                 <CapabilityRoute required={TenantCapability.Inventory}>
                   <InventoryManagement />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/suppliers"
+              element={(
+                <CapabilityRoute required={TenantCapability.Inventory}>
+                  <SuppliersList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/purchases"
+              element={(
+                <CapabilityRoute required={TenantCapability.Inventory}>
+                  <PurchaseOrdersList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/cash"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <CashManagement />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/appointments"
+              element={(
+                <CapabilityRoute required={TenantCapability.Appointments}>
+                  <AppointmentsList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/reports"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <OperationalReports />
                 </CapabilityRoute>
               )}
             />

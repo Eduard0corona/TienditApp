@@ -1,0 +1,76 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Purchasing.DTOs;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace FoodParkDigital.Application.Purchasing.Queries;
+
+public record GetSuppliersQuery : IRequest<PaginatedList<SupplierDto>>
+{
+    public string? Search { get; init; }
+    public bool? IsActive { get; init; }
+    public int PageNumber { get; init; } = 1;
+    public int PageSize { get; init; } = 20;
+}
+
+public class GetSuppliersQueryHandler : IRequestHandler<GetSuppliersQuery, PaginatedList<SupplierDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenantService;
+
+    public GetSuppliersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    {
+        _context = context;
+        _tenantService = tenantService;
+    }
+
+    public async Task<PaginatedList<SupplierDto>> Handle(GetSuppliersQuery request, CancellationToken cancellationToken)
+    {
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            _tenantService.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
+            return new PaginatedList<SupplierDto>([], 0, request.PageNumber, request.PageSize);
+
+        var query = _context.Suppliers
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(x =>
+                x.Name.ToLower().Contains(search) ||
+                (x.ContactName != null && x.ContactName.ToLower().Contains(search)) ||
+                (x.Phone != null && x.Phone.ToLower().Contains(search)) ||
+                (x.Email != null && x.Email.ToLower().Contains(search)));
+        }
+
+        if (request.IsActive.HasValue)
+            query = query.Where(x => x.IsActive == request.IsActive.Value);
+
+        var projected = query
+            .OrderBy(x => x.Name)
+            .Select(x => new SupplierDto
+            {
+                Id = x.Id,
+                Name = x.Name,
+                ContactName = x.ContactName,
+                Phone = x.Phone,
+                Email = x.Email,
+                TaxId = x.TaxId,
+                Address = x.Address,
+                Notes = x.Notes,
+                IsActive = x.IsActive
+            });
+
+        return await PaginatedList<SupplierDto>.CreateAsync(
+            projected,
+            request.PageNumber,
+            request.PageSize,
+            cancellationToken);
+    }
+}

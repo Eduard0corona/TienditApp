@@ -618,6 +618,233 @@ export interface InventoryAlertsDto {
   items: InventoryAlertItemDto[];
 }
 
+// ==================== Purchasing ====================
+
+export type PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99;
+
+export const PurchaseOrderStatus = {
+  Draft: 0,
+  Sent: 1,
+  PartiallyReceived: 2,
+  Received: 3,
+  Cancelled: 99,
+} as const;
+
+export interface SupplierDto {
+  id: string;
+  name: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  taxId?: string;
+  address?: string;
+  notes?: string;
+  isActive: boolean;
+}
+
+export interface CreateSupplierRequest {
+  name: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  taxId?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface UpdateSupplierRequest extends CreateSupplierRequest {
+  id: string;
+}
+
+export interface PurchaseOrderLineDto {
+  id: string;
+  supplyItemId: string;
+  supplyItemName: string;
+  inventoryLocationId: string;
+  inventoryLocationName: string;
+  quantity: number;
+  receivedQuantity: number;
+  pendingQuantity: number;
+  unitCost: number;
+  taxPercent: number;
+  subTotal: number;
+  taxAmount: number;
+  total: number;
+  notes?: string;
+}
+
+export interface PurchaseOrderDto {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  orderNumber: string;
+  status: PurchaseOrderStatus;
+  orderedAt: string;
+  expectedDeliveryAt?: string;
+  receivedAt?: string;
+  referenceNumber?: string;
+  notes?: string;
+  subTotal: number;
+  tax: number;
+  total: number;
+  lines: PurchaseOrderLineDto[];
+}
+
+export interface CreatePurchaseOrderLineRequest {
+  supplyItemId: string;
+  inventoryLocationId: string;
+  quantity: number;
+  unitCost: number;
+  taxPercent: number;
+  notes?: string;
+}
+
+export interface CreatePurchaseOrderRequest {
+  supplierId: string;
+  expectedDeliveryAt?: string;
+  referenceNumber?: string;
+  notes?: string;
+  markAsSent: boolean;
+  lines: CreatePurchaseOrderLineRequest[];
+}
+
+export interface ReceivePurchaseOrderLineRequest {
+  purchaseOrderLineId: string;
+  quantityReceived: number;
+}
+
+export interface ReceivePurchaseOrderRequest {
+  receivedAt?: string;
+  lines: ReceivePurchaseOrderLineRequest[];
+}
+
+// ==================== Cash ====================
+
+export type CashSessionStatus = 0 | 1;
+export type CashTransactionType = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export const CashSessionStatus = {
+  Open: 0,
+  Closed: 1,
+} as const;
+
+export const CashTransactionType = {
+  SalePayment: 0,
+  Refund: 1,
+  Expense: 2,
+  Withdrawal: 3,
+  Deposit: 4,
+  OpeningAdjustment: 5,
+  ClosingAdjustment: 6,
+} as const;
+
+export interface CashSessionDto {
+  id: string;
+  openedAt: string;
+  openedBy: string;
+  openingAmount: number;
+  closedAt?: string;
+  closedBy?: string;
+  closingAmount?: number;
+  status: CashSessionStatus;
+  notes?: string;
+  inflows: number;
+  outflows: number;
+  expectedBalance: number;
+}
+
+export interface CashTransactionDto {
+  id: string;
+  cashSessionId: string;
+  transactionType: CashTransactionType;
+  amount: number;
+  occurredAt: string;
+  paymentMethod?: OrderPaymentMethod;
+  orderId?: string;
+  reference?: string;
+  notes?: string;
+}
+
+export interface OpenCashSessionRequest {
+  openingAmount: number;
+  notes?: string;
+}
+
+export interface CloseCashSessionRequest {
+  closingAmount: number;
+  notes?: string;
+}
+
+export interface AddCashTransactionRequest {
+  cashSessionId: string;
+  transactionType: CashTransactionType;
+  amount: number;
+  occurredAt?: string;
+  paymentMethod?: OrderPaymentMethod;
+  orderId?: string;
+  reference?: string;
+  notes?: string;
+}
+
+// ==================== Appointments ====================
+
+export type AppointmentStatus = 0 | 1 | 2 | 3 | 4 | 99;
+
+export const AppointmentStatus = {
+  Scheduled: 0,
+  Confirmed: 1,
+  InService: 2,
+  Completed: 3,
+  NoShow: 4,
+  Cancelled: 99,
+} as const;
+
+export interface AppointmentDto {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  serviceName: string;
+  staffName?: string;
+  startAt: string;
+  endAt: string;
+  status: AppointmentStatus;
+  notes?: string;
+}
+
+export interface CreateAppointmentRequest {
+  customerName: string;
+  customerPhone: string;
+  serviceName: string;
+  staffName?: string;
+  startAt: string;
+  endAt: string;
+  notes?: string;
+}
+
+// ==================== Reports ====================
+
+export interface OperationalReportDto {
+  rangeFrom: string;
+  rangeTo: string;
+  totalRevenue: number;
+  totalOrderPayments: number;
+  totalPurchases: number;
+  totalCogs: number;
+  grossProfit: number;
+  ordersCompleted: number;
+  appointmentsCompleted: number;
+  appointmentsScheduled: number;
+  revenueByPaymentMethod: Record<string, number>;
+}
+
+// ==================== Marketing ====================
+
+export interface SendPromotionRequest {
+  message: string;
+  minimumCompletedOrders: number;
+  lastPurchaseFrom?: string;
+}
+
 // ==================== Customers ====================
 
 export interface CustomerDto {

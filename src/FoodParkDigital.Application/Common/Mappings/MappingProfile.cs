@@ -1,20 +1,26 @@
 using AutoMapper;
 using FoodParkDigital.Application.Audit.DTOs;
 using FoodParkDigital.Application.AiAgents.DTOs;
+using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Customers.DTOs;
+using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Application.Orders.DTOs;
+using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 
@@ -82,6 +88,12 @@ public class MappingProfile : Profile
         CreateMap<InventoryLocation, InventoryLocationDto>();
         CreateMap<InventoryMovement, InventoryMovementDto>();
         CreateMap<InventoryMovementLine, InventoryMovementLineDto>();
+        CreateMap<Supplier, SupplierDto>();
+        CreateMap<PurchaseOrder, PurchaseOrderDto>();
+        CreateMap<PurchaseOrderLine, PurchaseOrderLineDto>();
+        CreateMap<CashSession, CashSessionDto>();
+        CreateMap<CashTransaction, CashTransactionDto>();
+        CreateMap<Appointment, AppointmentDto>();
 
         CreateMap<WhatsAppConversation, ConversationDto>();
         CreateMap<WhatsAppMessage, ChatMessageDto>()

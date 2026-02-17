@@ -186,7 +186,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         TemporaryCustomerId = null;
     }
 
-    public void RegisterPayment(
+    public OrderPayment RegisterPayment(
         decimal amount,
         OrderPaymentMethod method,
         DateTimeOffset paidAt,
@@ -208,6 +208,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         _payments.Add(payment);
         PaidAmount = newPaidAmount;
+        return payment;
     }
 
     private void RecalculateTotals()

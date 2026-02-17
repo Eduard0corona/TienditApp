@@ -142,6 +142,69 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("AiAgents", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.Appointment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("CustomerPhone")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTimeOffset>("EndAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ServiceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("StaffName")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTimeOffset>("StartAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CustomerPhone");
+
+                    b.HasIndex("TenantId", "StartAt");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("Appointments", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Audit.Entities.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -494,6 +557,124 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("TemporaryCustomers", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ClosedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal?>("ClosingAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTimeOffset>("OpenedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("OpenedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("OpeningAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "OpenedAt");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("CashSessions", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid>("CashSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("TransactionType")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CashSessionId");
+
+                    b.HasIndex("TenantId", "CashSessionId");
+
+                    b.HasIndex("TenantId", "OccurredAt");
+
+                    b.HasIndex("TenantId", "OrderId");
+
+                    b.HasIndex("TenantId", "TransactionType");
+
+                    b.ToTable("CashTransactions", (string)null);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.ApplicationRole", b =>
@@ -1489,6 +1670,211 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("ServiceOrderPieces", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("ExpectedDeliveryAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTimeOffset>("OrderedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("ReceivedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ReferenceNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Tax")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("TenantId", "OrderNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "SupplierId");
+
+                    b.ToTable("PurchaseOrders", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("InventoryLocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("PurchaseOrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("ReceivedQuantity")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid>("SupplyItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("TaxPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InventoryLocationId");
+
+                    b.HasIndex("PurchaseOrderId");
+
+                    b.HasIndex("SupplyItemId");
+
+                    b.HasIndex("TenantId", "InventoryLocationId");
+
+                    b.HasIndex("TenantId", "PurchaseOrderId");
+
+                    b.HasIndex("TenantId", "SupplyItemId");
+
+                    b.ToTable("PurchaseOrderLines", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.Supplier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("TaxId")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "IsActive");
+
+                    b.HasIndex("TenantId", "Name");
+
+                    b.ToTable("Suppliers", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1924,6 +2310,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashTransaction", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Finance.Entities.CashSession", "CashSession")
+                        .WithMany("Transactions")
+                        .HasForeignKey("CashSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CashSession");
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.RefreshToken", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", "User")
@@ -2064,6 +2461,40 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Purchasing.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrderLine", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", "PurchaseOrder")
+                        .WithMany("Lines")
+                        .HasForeignKey("PurchaseOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.SupplyItem", null)
+                        .WithMany()
+                        .HasForeignKey("SupplyItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PurchaseOrder");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.Tenant", b =>
@@ -2235,6 +2666,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Products");
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>
+                {
+                    b.Navigation("Transactions");
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryMovement", b =>
                 {
                     b.Navigation("Lines");
@@ -2251,6 +2687,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("ServicePieces");
 
                     b.Navigation("StatusHistory");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.Tenant", b =>

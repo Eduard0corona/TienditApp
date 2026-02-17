@@ -1,10 +1,13 @@
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +34,12 @@ public interface IApplicationDbContext
     DbSet<OrderPayment> OrderPayments { get; }
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
+    DbSet<Appointment> Appointments { get; }
+    DbSet<Supplier> Suppliers { get; }
+    DbSet<PurchaseOrder> PurchaseOrders { get; }
+    DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }
+    DbSet<CashSession> CashSessions { get; }
+    DbSet<CashTransaction> CashTransactions { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<AiAgent> AiAgents { get; }
     DbSet<SupplyItem> SupplyItems { get; }

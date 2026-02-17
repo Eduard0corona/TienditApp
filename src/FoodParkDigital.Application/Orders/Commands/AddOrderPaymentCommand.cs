@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -37,15 +38,18 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IMapper _mapper;
+    private readonly IOrderCashService _orderCashService;
 
     public AddOrderPaymentCommandHandler(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
-        IMapper mapper)
+        IMapper mapper,
+        IOrderCashService? orderCashService = null)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
         _mapper = mapper;
+        _orderCashService = orderCashService ?? NoOpOrderCashService.Instance;
     }
 
     public async Task<Result<OrderDto>> Handle(AddOrderPaymentCommand request, CancellationToken cancellationToken)
@@ -58,12 +62,13 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
         if (order.Status == OrderStatus.Cancelled)
             return Result.Failure<OrderDto>("No se pueden registrar pagos en una orden cancelada.");
 
-        order.RegisterPayment(
+        var payment = order.RegisterPayment(
             amount: request.Amount,
             method: request.Method,
             paidAt: request.PaidAt ?? _dateTimeProvider.UtcNow,
             reference: request.Reference?.Trim(),
             notes: request.Notes?.Trim());
+        await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -20,6 +20,9 @@ public static class TenantCapabilityRules
     public static bool CanAccessKitchen(TenantCapability capabilities) =>
         (capabilities & TenantCapability.Kitchen) == TenantCapability.Kitchen;
 
+    public static bool CanAccessAppointments(TenantCapability capabilities) =>
+        (capabilities & TenantCapability.Appointments) == TenantCapability.Appointments;
+
     public static bool CanManageProductUnit(TenantCapability capabilities, UnitType? unit)
     {
         if (IsServiceUnit(unit))
