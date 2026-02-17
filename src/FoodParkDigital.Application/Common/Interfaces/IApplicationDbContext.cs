@@ -50,6 +50,7 @@ public interface IApplicationDbContext
     DbSet<InventoryMovementLine> InventoryMovementLines { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<ApplicationUser> Users { get; }
+    DbSet<OwnerWhatsAppConfig> OwnerWhatsAppConfigs { get; }
     DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

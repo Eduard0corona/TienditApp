@@ -25,10 +25,14 @@ public static class SeedData
                 await roleManager.CreateAsync(new ApplicationRole(role));
         }
 
-        // Seed system tenant
-        if (!await context.Tenants.IgnoreQueryFilters().AnyAsync())
+        // Ensure system tenant exists
+        var systemTenant = await context.Tenants
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.Slug == "system");
+
+        if (systemTenant is null)
         {
-            var systemTenant = new Tenant(
+            systemTenant = new Tenant(
                 name: "System",
                 slug: "system",
                 businessType: BusinessType.Food,
@@ -36,13 +40,18 @@ public static class SeedData
 
             context.Tenants.Add(systemTenant);
             await context.SaveChangesAsync();
+        }
 
-            // Seed super admin user
-            var admin = new ApplicationUser
+        // Ensure super admin user exists
+        var adminEmail = "admin@foodparkdigital.com";
+        var admin = await userManager.FindByEmailAsync(adminEmail);
+        if (admin is null)
+        {
+            admin = new ApplicationUser
             {
                 DefaultTenantId = systemTenant.Id,
-                UserName = "admin@foodparkdigital.com",
-                Email = "admin@foodparkdigital.com",
+                UserName = adminEmail,
+                Email = adminEmail,
                 FirstName = "System",
                 LastName = "Admin",
                 Role = UserRole.SuperAdmin,
@@ -51,16 +60,28 @@ public static class SeedData
             };
 
             var result = await userManager.CreateAsync(admin, "Admin123!");
-            if (result.Succeeded)
+            if (!result.Succeeded)
             {
-                await userManager.AddToRoleAsync(admin, "SUPER_ADMIN");
-                context.TenantUsers.Add(new TenantUser(
-                    systemTenant.Id,
-                    admin.Id,
-                    TenantUserRole.Owner,
-                    TenantUserStatus.Active));
-                await context.SaveChangesAsync();
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Could not seed super admin user: {errors}");
             }
+        }
+
+        if (!await userManager.IsInRoleAsync(admin, "SUPER_ADMIN"))
+            await userManager.AddToRoleAsync(admin, "SUPER_ADMIN");
+
+        var hasOwnerMembership = await context.TenantUsers
+            .IgnoreQueryFilters()
+            .AnyAsync(x => x.TenantId == systemTenant.Id && x.UserId == admin.Id);
+
+        if (!hasOwnerMembership)
+        {
+            context.TenantUsers.Add(new TenantUser(
+                systemTenant.Id,
+                admin.Id,
+                TenantUserRole.Owner,
+                TenantUserStatus.Active));
+            await context.SaveChangesAsync();
         }
 
         // Ensure every tenant has "Publico en general" customer

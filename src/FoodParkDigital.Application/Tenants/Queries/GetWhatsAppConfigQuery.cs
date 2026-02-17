@@ -26,7 +26,7 @@ public class GetWhatsAppConfigQueryHandler : IRequestHandler<GetWhatsAppConfigQu
 
     public async Task<Result<WhatsAppConfigDto>> Handle(GetWhatsAppConfigQuery request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role != "TENANT_ADMIN")
+        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
             return Result.Failure<WhatsAppConfigDto>("Solo el administrador puede ver la configuración de WhatsApp.");
 
         var tenantId = _tenantService.TenantId;

@@ -1,31 +1,43 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Net.Http.Headers;
-using System.Text;
 
 namespace FoodParkDigital.Infrastructure.Services;
 
 public class SmsService : ISmsService
 {
+    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
+
+    private readonly IApplicationDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SmsService> _logger;
 
     public SmsService(
+        IApplicationDbContext context,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
         ILogger<SmsService> logger)
     {
+        _context = context;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
-    public Task SendVerificationCodeAsync(string phoneNumber, string code)
+    public async Task SendVerificationCodeAsync(string phoneNumber, string code)
     {
-        var message = $"Tu código de verificación FoodPark Digital es: {code}";
-        return SendSmsAsync(phoneNumber, message);
+        if (await TrySendVerificationByOwnerWhatsAppAsync(phoneNumber, code))
+            return;
+
+        var message = $"Tu codigo de verificacion FoodPark Digital es: {code}";
+        await SendSmsAsync(phoneNumber, message);
     }
 
     public async Task SendSmsAsync(string phoneNumber, string message)
@@ -77,5 +89,92 @@ public class SmsService : ISmsService
             phoneNumber,
             response.StatusCode,
             body);
+    }
+
+    private async Task<bool> TrySendVerificationByOwnerWhatsAppAsync(string phoneNumber, string code)
+    {
+        var config = await _context.OwnerWhatsAppConfigs
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.IsEnabled && x.UseForOtp)
+            .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (config is null)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(config.AccessToken)
+            || string.IsNullOrWhiteSpace(config.PhoneNumberId)
+            || string.IsNullOrWhiteSpace(config.OtpTemplateName)
+            || string.IsNullOrWhiteSpace(config.OtpTemplateLanguageCode))
+        {
+            _logger.LogWarning("Owner WhatsApp config exists but is incomplete for OTP delivery.");
+            return false;
+        }
+
+        var toPhone = phoneNumber.StartsWith('+')
+            ? phoneNumber
+            : $"+{phoneNumber}";
+
+        var body = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhone,
+            type = "template",
+            template = new
+            {
+                name = config.OtpTemplateName,
+                language = new { code = config.OtpTemplateLanguageCode },
+                components = new[]
+                {
+                    new
+                    {
+                        type = "body",
+                        parameters = new[]
+                        {
+                            new
+                            {
+                                type = "text",
+                                text = code
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("WhatsApp");
+            var url = $"{GraphApiBaseUrl}/{config.PhoneNumberId}/messages";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.AccessToken);
+            request.Content = JsonContent.Create(body, options: new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            });
+
+            using var response = await client.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("OTP sent successfully via WhatsApp to {PhoneNumber}", toPhone);
+                return true;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            _logger.LogError(
+                "WhatsApp OTP send failed for {PhoneNumber}. Status: {StatusCode}. Body: {Body}",
+                toPhone,
+                response.StatusCode,
+                responseBody);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while sending OTP via owner WhatsApp config.");
+            return false;
+        }
     }
 }

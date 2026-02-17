@@ -258,6 +258,26 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Contraseña actualizada exitosamente." });
     }
 
+    [HttpGet("profile/whatsapp")]
+    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
+    public async Task<ActionResult<OwnerWhatsAppConfigDto>> GetOwnerWhatsAppConfig()
+    {
+        var result = await _mediator.Send(new GetOwnerWhatsAppConfigQuery());
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPut("profile/whatsapp")]
+    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
+    public async Task<ActionResult<OwnerWhatsAppConfigDto>> UpdateOwnerWhatsAppConfig([FromBody] UpdateOwnerWhatsAppConfigCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpGet("my-tenant")]
     [Authorize]
     public async Task<ActionResult<TenantProfileDto>> GetMyTenant()
@@ -309,7 +329,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("my-tenant/whatsapp")]
-    [Authorize(Roles = "TENANT_ADMIN")]
+    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<ActionResult<WhatsAppConfigDto>> GetWhatsAppConfig()
     {
         var result = await _mediator.Send(new GetWhatsAppConfigQuery());
@@ -319,7 +339,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("my-tenant/whatsapp")]
-    [Authorize(Roles = "TENANT_ADMIN")]
+    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<ActionResult<WhatsAppConfigDto>> UpdateWhatsAppConfig([FromBody] UpdateWhatsAppConfigCommand command)
     {
         var result = await _mediator.Send(command);
@@ -329,7 +349,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("my-tenant/whatsapp/send")]
-    [Authorize(Roles = "TENANT_ADMIN,STAFF")]
+    [Authorize(Roles = "TENANT_ADMIN,STAFF,SUPER_ADMIN")]
     public async Task<IActionResult> SendWhatsAppMessage([FromBody] SendWhatsAppMessageCommand command)
     {
         var result = await _mediator.Send(command);
@@ -340,10 +360,13 @@ public class AuthController : ControllerBase
 
     private CookieOptions GetCookieOptions(DateTime? expires = null)
     {
+        var isHttpsRequest = HttpContext?.Request?.IsHttps == true;
+        var secureCookie = !_env.IsDevelopment() && isHttpsRequest;
+
         return new CookieOptions
         {
             HttpOnly = true,
-            Secure = !_env.IsDevelopment(),
+            Secure = secureCookie,
             SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
             Expires = expires,
             Path = "/api/v1/auth"
