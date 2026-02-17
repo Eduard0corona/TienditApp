@@ -2,6 +2,7 @@ using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -44,6 +45,13 @@ public class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryComman
         var category = await _context.Categories
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Category", request.Id);
+
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            category.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return Result.Failure<CategoryDto>("El tenant no tiene habilitado el modulo de catalogo.");
 
         category.Update(request.Name, request.Description, request.SortOrder);
         await _context.SaveChangesAsync(cancellationToken);

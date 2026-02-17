@@ -12,5 +12,6 @@ public class TenantDto
     public string ContactEmail { get; set; } = null!;
     public string? ContactPhone { get; set; }
     public string? LogoUrl { get; set; }
+    public TenantCapability Capabilities { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

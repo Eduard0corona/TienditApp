@@ -6,7 +6,7 @@ public static class OrderDtoStateExtensions
 {
     public static void ApplyStateMetadata(this OrderDto order)
     {
-        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType);
+        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
         order.AllowedTransitions = stateMachine.GetAllowedTransitions(order.Status).ToList();
         order.CanCancel = stateMachine.CanCancel(order.Status);
     }

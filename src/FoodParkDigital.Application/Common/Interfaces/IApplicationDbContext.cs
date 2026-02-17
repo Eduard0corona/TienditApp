@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
@@ -27,8 +28,17 @@ public interface IApplicationDbContext
     DbSet<Order> Orders { get; }
     DbSet<OrderItem> OrderItems { get; }
     DbSet<OrderStatusHistory> OrderStatusHistories { get; }
+    DbSet<OrderPayment> OrderPayments { get; }
+    DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
+    DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<AiAgent> AiAgents { get; }
+    DbSet<SupplyItem> SupplyItems { get; }
+    DbSet<InventoryLocation> InventoryLocations { get; }
+    DbSet<InventoryStock> InventoryStocks { get; }
+    DbSet<ProductSupplyRequirement> ProductSupplyRequirements { get; }
+    DbSet<InventoryMovement> InventoryMovements { get; }
+    DbSet<InventoryMovementLine> InventoryMovementLines { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<ApplicationUser> Users { get; }
     DatabaseFacade Database { get; }

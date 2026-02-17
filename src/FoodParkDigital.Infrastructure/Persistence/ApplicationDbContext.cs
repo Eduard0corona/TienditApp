@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
@@ -79,8 +80,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
+    public DbSet<OrderPayment> OrderPayments => Set<OrderPayment>();
+    public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
+    public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<AiAgent> AiAgents => Set<AiAgent>();
+    public DbSet<SupplyItem> SupplyItems => Set<SupplyItem>();
+    public DbSet<InventoryLocation> InventoryLocations => Set<InventoryLocation>();
+    public DbSet<InventoryStock> InventoryStocks => Set<InventoryStock>();
+    public DbSet<ProductSupplyRequirement> ProductSupplyRequirements => Set<ProductSupplyRequirement>();
+    public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
+    public DbSet<InventoryMovementLine> InventoryMovementLines => Set<InventoryMovementLine>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -118,6 +128,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                 method.Invoke(this, [modelBuilder]);
             }
         }
+
+        // WhatsAppMessage is tenant-scoped through its parent conversation.
+        // Add an equivalent filter to avoid required-navigation/filter mismatch warnings.
+        modelBuilder.Entity<WhatsAppMessage>()
+            .HasQueryFilter(m => m.Conversation.TenantId == CurrentTenantId);
     }
 
     private void ApplyTenantQueryFilter<TEntity>(ModelBuilder modelBuilder)

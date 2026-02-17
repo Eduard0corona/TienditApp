@@ -11,6 +11,7 @@ public class OrderDto
     public bool CreatedByBusiness { get; set; }
     public string OrderNumber { get; set; } = null!;
     public BusinessType BusinessType { get; set; }
+    public OrderType OrderType { get; set; }
     public OrderStatus Status { get; set; }
     public string CustomerName { get; set; } = null!;
     public string? CustomerPhone { get; set; }
@@ -19,6 +20,8 @@ public class OrderDto
     public decimal SubTotal { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal Balance { get; set; }
     public string? CancellationReason { get; set; }
     public bool CanCancel { get; set; }
     public List<OrderStatus> AllowedTransitions { get; set; } = new();
@@ -26,6 +29,9 @@ public class OrderDto
     public DateTimeOffset? UpdatedAt { get; set; }
     public List<OrderItemDto> Items { get; set; } = new();
     public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
+    public ServiceOrderDetailDto? ServiceDetail { get; set; }
+    public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
+    public List<OrderPaymentDto> Payments { get; set; } = new();
 }
 
 public class OrderItemDto
@@ -46,6 +52,44 @@ public class OrderStatusHistoryDto
     public OrderStatus NewStatus { get; set; }
     public DateTimeOffset ChangedAt { get; set; }
     public string? ChangedBy { get; set; }
+}
+
+public class ServiceOrderDetailDto
+{
+    public Guid Id { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
+    public DateTimeOffset? PromisedAt { get; set; }
+    public int Priority { get; set; }
+    public string? IntakeNotes { get; set; }
+    public string? DeliveryNotes { get; set; }
+    public string? IntakeChecklistJson { get; set; }
+    public string? BeforePhotosJson { get; set; }
+    public string? AfterPhotosJson { get; set; }
+}
+
+public class ServiceOrderPieceDto
+{
+    public Guid Id { get; set; }
+    public string ItemName { get; set; } = null!;
+    public string? Brand { get; set; }
+    public string? Model { get; set; }
+    public string? Color { get; set; }
+    public string? Size { get; set; }
+    public string? Material { get; set; }
+    public string? ConditionNotes { get; set; }
+    public string? RequestedService { get; set; }
+    public string? InternalNotes { get; set; }
+    public ServiceOrderPieceStatus Status { get; set; }
+}
+
+public class OrderPaymentDto
+{
+    public Guid Id { get; set; }
+    public decimal Amount { get; set; }
+    public OrderPaymentMethod Method { get; set; }
+    public DateTimeOffset PaidAt { get; set; }
+    public string? Reference { get; set; }
+    public string? Notes { get; set; }
 }
 
 public class KitchenOrderDto

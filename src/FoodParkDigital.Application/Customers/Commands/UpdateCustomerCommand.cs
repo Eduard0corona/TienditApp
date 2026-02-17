@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
@@ -47,8 +48,15 @@ public class UpdateCustomerCommandHandler : IRequestHandler<UpdateCustomerComman
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Customer", request.Id);
 
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            customer.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return Result.Failure<CustomerDto>("El tenant no tiene habilitado el modulo de clientes.");
+
         if (customer.IsPublicGeneral)
-            return Result.Failure<CustomerDto>("No puedes editar el cliente público en general.");
+            return Result.Failure<CustomerDto>("No puedes editar el cliente publico en general.");
 
         var name = request.Name.Trim();
         var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();

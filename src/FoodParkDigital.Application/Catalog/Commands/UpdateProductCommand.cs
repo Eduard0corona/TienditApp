@@ -2,6 +2,7 @@ using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
@@ -130,6 +131,18 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         var product = await _context.Products
             .FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.Id);
+
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            product.TenantId,
+            cancellationToken);
+        var resultingUnit = request.Unit;
+
+        if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, resultingUnit))
+        {
+            return Result.Failure<ProductDto>(
+                "El tenant no tiene habilitado el modulo requerido para este tipo de item.");
+        }
 
         var category = await _context.Categories
             .AsNoTracking()

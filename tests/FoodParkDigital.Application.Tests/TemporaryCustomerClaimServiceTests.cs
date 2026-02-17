@@ -55,6 +55,7 @@ public class TemporaryCustomerClaimServiceTests
             createdByBusiness: false,
             orderNumber: "ORD-000001",
             businessType: tenant.BusinessType,
+            orderType: FoodParkDigital.Domain.Orders.Enums.OrderType.Retail,
             customerName: "Cliente Temporal",
             customerPhone: "+525512345678",
             customerNotes: null,

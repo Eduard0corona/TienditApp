@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
@@ -28,13 +29,16 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IOrderInventoryService _orderInventoryService;
 
     public UpdateOrderStatusCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IOrderInventoryService? orderInventoryService = null)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
     }
 
     public async Task<Result> Handle(UpdateOrderStatusCommand request, CancellationToken cancellationToken)
@@ -51,13 +55,17 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
             if (order.Status == request.NewStatus)
                 return Result.Success();
 
-            var stateMachine = OrderStateMachineFactory.Create(order.BusinessType);
+            var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
 
             if (!stateMachine.GetAllowedTransitions(order.Status).Contains(request.NewStatus))
                 return Result.Failure(
                     $"No se puede cambiar de '{order.Status}' a '{request.NewStatus}'.");
 
             order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
+            if (request.NewStatus == OrderStatus.Cancelled)
+                await _orderInventoryService.ReverseConsumptionForOrderAsync(order, null, cancellationToken);
+            else
+                await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
 
             try
             {

@@ -23,6 +23,7 @@ public class OrdersController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PaginatedList<OrderDto>>> GetAll(
+        [FromQuery] OrderType? orderType,
         [FromQuery] OrderStatus? status,
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
@@ -31,6 +32,7 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(new GetOrdersByBusinessQuery
         {
+            OrderTypeFilter = orderType,
             StatusFilter = status,
             FromDate = fromDate,
             ToDate = toDate,
@@ -87,6 +89,26 @@ public class OrdersController : ControllerBase
             return BadRequest(new { error = result.Error });
         return NoContent();
     }
+
+    [HttpPost("{id:guid}/payments")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<OrderDto>> AddPayment(Guid id, [FromBody] AddOrderPaymentRequest request)
+    {
+        var result = await _mediator.Send(new AddOrderPaymentCommand
+        {
+            OrderId = id,
+            Amount = request.Amount,
+            Method = request.Method,
+            PaidAt = request.PaidAt,
+            Reference = request.Reference,
+            Notes = request.Notes
+        });
+
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        return Ok(result.Value);
+    }
 }
 
 public record UpdateOrderStatusRequest
@@ -97,4 +119,13 @@ public record UpdateOrderStatusRequest
 public record CancelOrderRequest
 {
     public string? Reason { get; init; }
+}
+
+public record AddOrderPaymentRequest
+{
+    public decimal Amount { get; init; }
+    public OrderPaymentMethod Method { get; init; }
+    public DateTimeOffset? PaidAt { get; init; }
+    public string? Reference { get; init; }
+    public string? Notes { get; init; }
 }

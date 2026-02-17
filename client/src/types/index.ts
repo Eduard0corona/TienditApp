@@ -91,6 +91,7 @@ export interface TenantProfileDto {
   contactPhone?: string;
   logoUrl?: string;
   logoImages?: LogoImageUrlsDto;
+  capabilities: TenantCapability;
   createdAt: string;
   rfc?: string;
   legalName?: string;
@@ -110,6 +111,7 @@ export interface UpdateTenantRequest {
   name: string;
   contactEmail: string;
   contactPhone?: string;
+  capabilities?: TenantCapability;
   rfc?: string;
   legalName?: string;
   industry?: string;
@@ -183,6 +185,16 @@ export const BusinessType = {
   Service: 2,
 } as const;
 export type BusinessType = (typeof BusinessType)[keyof typeof BusinessType];
+
+export const TenantCapability = {
+  Retail: 1,
+  Service: 2,
+  Food: 4,
+  Inventory: 8,
+  Appointments: 16,
+  Kitchen: 32,
+} as const;
+export type TenantCapability = number;
 
 export interface RegisterBusinessRequest {
   email: string;
@@ -331,6 +343,281 @@ export interface UpdateCategoryRequest extends CreateCategoryRequest {
   id: string;
 }
 
+// ==================== Inventory ====================
+
+export const InventoryMovementType = {
+  Entry: 0,
+  Exit: 1,
+  AdjustmentIncrease: 2,
+  AdjustmentDecrease: 3,
+  TransferIn: 4,
+  TransferOut: 5,
+  ReturnFromProduction: 6,
+  ReturnToSupplier: 7,
+} as const;
+export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof InventoryMovementType];
+
+export const InventoryMovementReason = {
+  Purchase: 0,
+  Sale: 1,
+  Production: 2,
+  Consumption: 3,
+  Waste: 4,
+  Damaged: 5,
+  InventoryCount: 6,
+  InitialLoad: 7,
+  Return: 8,
+  ManualAdjustment: 9,
+  Other: 10,
+} as const;
+export type InventoryMovementReason = (typeof InventoryMovementReason)[keyof typeof InventoryMovementReason];
+
+export interface SupplyItemDto {
+  id: string;
+  name: string;
+  code?: string;
+  sku?: string;
+  barcode?: string;
+  description?: string;
+  brand?: string;
+  model?: string;
+  categoryName?: string;
+  unit: UnitType;
+  defaultCost: number;
+  lastCost: number;
+  averageCost: number;
+  minStock: number;
+  maxStock?: number;
+  reorderPoint: number;
+  trackBatches: boolean;
+  trackExpiration: boolean;
+  isPerishable: boolean;
+  taxRate?: number;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  totalOnHand: number;
+  totalReserved: number;
+  totalAvailable: number;
+  isLowStock: boolean;
+}
+
+export interface CreateSupplyItemRequest {
+  name: string;
+  code?: string;
+  sku?: string;
+  barcode?: string;
+  description?: string;
+  brand?: string;
+  model?: string;
+  categoryName?: string;
+  unit: UnitType;
+  defaultCost: number;
+  minStock: number;
+  maxStock?: number;
+  reorderPoint: number;
+  trackBatches: boolean;
+  trackExpiration: boolean;
+  isPerishable: boolean;
+  taxRate?: number;
+  notes?: string;
+}
+
+export interface UpdateSupplyItemRequest extends CreateSupplyItemRequest {
+  id: string;
+}
+
+export interface InventoryLocationDto {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  contactName?: string;
+  contactPhone?: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateInventoryLocationRequest {
+  name: string;
+  code: string;
+  description?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  contactName?: string;
+  contactPhone?: string;
+  isDefault: boolean;
+}
+
+export interface UpdateInventoryLocationRequest extends CreateInventoryLocationRequest {
+  id: string;
+}
+
+export interface InventoryStockDto {
+  stockId: string;
+  supplyItemId: string;
+  supplyItemName: string;
+  supplyCode?: string;
+  supplySku?: string;
+  supplyBarcode?: string;
+  unit: UnitType;
+  inventoryLocationId: string;
+  inventoryLocationName: string;
+  inventoryLocationCode: string;
+  onHandQuantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  minStock: number;
+  reorderPoint: number;
+  maxStock?: number;
+  lastCost: number;
+  lastMovementAt?: string;
+  isSupplyActive: boolean;
+  isLocationActive: boolean;
+  isLowStock: boolean;
+}
+
+export interface InventoryMovementLineDto {
+  id: string;
+  supplyItemId: string;
+  supplyItemName: string;
+  inventoryLocationId: string;
+  inventoryLocationName: string;
+  quantity: number;
+  unitCost?: number;
+  totalCost?: number;
+  quantityBefore: number;
+  quantityAfter: number;
+  lotNumber?: string;
+  expirationDate?: string;
+  notes?: string;
+}
+
+export interface InventoryMovementDto {
+  id: string;
+  movementNumber: string;
+  movementType: InventoryMovementType;
+  movementReason: InventoryMovementReason;
+  movementDate: string;
+  referenceNumber?: string;
+  externalReference?: string;
+  counterpartyName?: string;
+  documentNumber?: string;
+  notes?: string;
+  totalAmount: number;
+  createdAt: string;
+  lines: InventoryMovementLineDto[];
+}
+
+export interface CreateInventoryMovementLineRequest {
+  supplyItemId: string;
+  inventoryLocationId: string;
+  quantity: number;
+  unitCost?: number;
+  lotNumber?: string;
+  expirationDate?: string;
+  notes?: string;
+}
+
+export interface CreateInventoryMovementRequest {
+  movementType: InventoryMovementType;
+  movementReason: InventoryMovementReason;
+  movementDate?: string;
+  referenceNumber?: string;
+  externalReference?: string;
+  counterpartyName?: string;
+  documentNumber?: string;
+  notes?: string;
+  lines: CreateInventoryMovementLineRequest[];
+}
+
+export interface ProductRecipeLineDto {
+  requirementId: string;
+  supplyItemId: string;
+  supplyItemName: string;
+  supplyCode?: string;
+  inventoryLocationId?: string;
+  inventoryLocationName?: string;
+  quantity: number;
+  wastePercent: number;
+  effectiveQuantity: number;
+  notes?: string;
+  isActive: boolean;
+}
+
+export interface ProductRecipeDto {
+  productId: string;
+  productName: string;
+  productIsAvailable: boolean;
+  lines: ProductRecipeLineDto[];
+}
+
+export interface UpsertProductRecipeLineRequest {
+  requirementId?: string;
+  supplyItemId: string;
+  inventoryLocationId?: string;
+  quantity: number;
+  wastePercent: number;
+  notes?: string;
+}
+
+export interface UpsertProductRecipeRequest {
+  lines: UpsertProductRecipeLineRequest[];
+}
+
+export interface InventoryKardexEntryDto {
+  movementLineId: string;
+  movementId: string;
+  movementNumber: string;
+  movementDate: string;
+  movementType: InventoryMovementType;
+  movementReason: InventoryMovementReason;
+  referenceNumber?: string;
+  externalReference?: string;
+  supplyItemId: string;
+  supplyItemName: string;
+  inventoryLocationId: string;
+  inventoryLocationName: string;
+  quantityIn: number;
+  quantityOut: number;
+  signedQuantity: number;
+  quantityBefore: number;
+  quantityAfter: number;
+  unitCost?: number;
+  totalCost?: number;
+}
+
+export interface InventoryAlertItemDto {
+  supplyItemId: string;
+  supplyItemName: string;
+  inventoryLocationId: string;
+  inventoryLocationName: string;
+  onHandQuantity: number;
+  reorderPoint: number;
+  deficit: number;
+  isOutOfStock: boolean;
+}
+
+export interface InventoryAlertsDto {
+  lowStockCount: number;
+  outOfStockCount: number;
+  missingRecipeProductCount: number;
+  items: InventoryAlertItemDto[];
+}
+
 // ==================== Customers ====================
 
 export interface CustomerDto {
@@ -357,6 +644,33 @@ export interface UpdateCustomerRequest extends CreateCustomerRequest {
 // ==================== Orders ====================
 
 export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 99;
+export type OrderType = 0 | 1;
+export type ServiceOrderPieceStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 99;
+export type OrderPaymentMethod = 0 | 1 | 2 | 3 | 4;
+
+export const OrderType = {
+  Retail: 0,
+  Service: 1,
+} as const;
+
+export const OrderPaymentMethod = {
+  Cash: 0,
+  Card: 1,
+  Transfer: 2,
+  DigitalWallet: 3,
+  Other: 4,
+} as const;
+
+export const ServiceOrderPieceStatus = {
+  Received: 0,
+  Inspection: 1,
+  Washing: 2,
+  Drying: 3,
+  Detailing: 4,
+  Ready: 5,
+  Delivered: 6,
+  Cancelled: 99,
+} as const;
 
 export interface OrderItemDto {
   id: string;
@@ -376,12 +690,49 @@ export interface OrderStatusHistoryDto {
   changedBy?: string;
 }
 
+export interface ServiceOrderDetailDto {
+  id: string;
+  receivedAt: string;
+  promisedAt?: string;
+  priority: number;
+  intakeNotes?: string;
+  deliveryNotes?: string;
+  intakeChecklistJson?: string;
+  beforePhotosJson?: string;
+  afterPhotosJson?: string;
+}
+
+export interface ServiceOrderPieceDto {
+  id: string;
+  itemName: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+  size?: string;
+  material?: string;
+  conditionNotes?: string;
+  requestedService?: string;
+  internalNotes?: string;
+  status: ServiceOrderPieceStatus;
+}
+
+export interface OrderPaymentDto {
+  id: string;
+  amount: number;
+  method: OrderPaymentMethod;
+  paidAt: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface OrderDto {
   id: string;
-  customerId?: string;
+  customerUserId?: string;
+  temporaryCustomerId?: string;
   createdByBusiness: boolean;
   orderNumber: string;
   businessType: BusinessType;
+  orderType: OrderType;
   status: OrderStatus;
   canCancel: boolean;
   allowedTransitions: OrderStatus[];
@@ -392,11 +743,16 @@ export interface OrderDto {
   subTotal: number;
   tax: number;
   total: number;
+  paidAmount: number;
+  balance: number;
   cancellationReason?: string;
   createdAt: string;
   updatedAt?: string;
   items: OrderItemDto[];
   statusHistory: OrderStatusHistoryDto[];
+  serviceDetail?: ServiceOrderDetailDto;
+  servicePieces: ServiceOrderPieceDto[];
+  payments: OrderPaymentDto[];
 }
 
 export interface CreateOrderItemRequest {
@@ -411,7 +767,42 @@ export interface CreateOrderRequest {
   customerPhone?: string;
   customerNotes?: string;
   tableNumber?: string;
+  createdByBusiness?: boolean;
+  orderType?: OrderType;
+  serviceDetail?: CreateServiceOrderDetailRequest;
   items: CreateOrderItemRequest[];
+}
+
+export interface CreateServiceOrderPieceRequest {
+  itemName: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+  size?: string;
+  material?: string;
+  conditionNotes?: string;
+  requestedService?: string;
+  internalNotes?: string;
+}
+
+export interface CreateServiceOrderDetailRequest {
+  receivedAt?: string;
+  promisedAt?: string;
+  priority?: number;
+  intakeNotes?: string;
+  deliveryNotes?: string;
+  intakeChecklistJson?: string;
+  beforePhotosJson?: string;
+  afterPhotosJson?: string;
+  pieces: CreateServiceOrderPieceRequest[];
+}
+
+export interface AddOrderPaymentRequest {
+  amount: number;
+  method: OrderPaymentMethod;
+  paidAt?: string;
+  reference?: string;
+  notes?: string;
 }
 
 export interface TopSellingItemDto {

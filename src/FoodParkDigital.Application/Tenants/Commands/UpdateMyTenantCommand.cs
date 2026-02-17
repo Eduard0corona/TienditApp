@@ -1,8 +1,10 @@
 using System;
+using System.Text.Json;
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -27,12 +29,21 @@ public record UpdateMyTenantCommand : IRequest<Result<TenantProfileDto>>
     public string? ZipCode { get; init; }
     public string? City { get; init; }
     public string? State { get; init; }
+    public TenantCapability? Capabilities { get; init; }
 }
 
 public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCommand>
 {
     public UpdateMyTenantCommandValidator()
     {
+        const TenantCapability allowedCapabilities =
+            TenantCapability.Retail
+            | TenantCapability.Service
+            | TenantCapability.Food
+            | TenantCapability.Inventory
+            | TenantCapability.Appointments
+            | TenantCapability.Kitchen;
+
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ContactEmail).NotEmpty().EmailAddress();
         RuleFor(x => x.ContactPhone).MaximumLength(20);
@@ -50,6 +61,9 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.ZipCode).MaximumLength(10);
         RuleFor(x => x.City).MaximumLength(200);
         RuleFor(x => x.State).MaximumLength(100);
+        RuleFor(x => x.Capabilities)
+            .Must(c => !c.HasValue || (c.Value & ~allowedCapabilities) == 0)
+            .WithMessage("Las capacidades proporcionadas no son validas.");
     }
 }
 
@@ -142,9 +156,46 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
         tenant.SetBusinessInfo(request.Rfc, request.LegalName, request.Industry, request.TaxRegime, address);
 
+        var settings = await _context.TenantSettings
+            .FirstOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
+        var previousCapabilities = settings?.Capabilities;
+        var capabilitiesChanged = false;
+
+        if (settings is null)
+        {
+            var resolvedCapabilities = request.Capabilities ?? TenantCapabilityDefaults.FromBusinessType(tenant.BusinessType);
+            settings = new Domain.Tenants.Entities.TenantSettings(
+                tenant.Id,
+                resolvedCapabilities);
+            _context.TenantSettings.Add(settings);
+            capabilitiesChanged = request.Capabilities.HasValue;
+        }
+        else if (request.Capabilities.HasValue)
+        {
+            capabilitiesChanged = settings.Capabilities != request.Capabilities.Value;
+            settings.UpdateCapabilities(request.Capabilities.Value);
+        }
+
+        if (capabilitiesChanged)
+        {
+            var auditLog = new AuditLog(
+                tenantId: tenant.Id,
+                entityName: "TenantSettings",
+                entityId: tenant.Id.ToString(),
+                action: "TenantCapabilitiesUpdated",
+                performedBy: _currentUserService.UserName ?? "system",
+                metadata: JsonSerializer.Serialize(new
+                {
+                    PreviousCapabilities = previousCapabilities?.ToString(),
+                    NewCapabilities = settings.Capabilities.ToString()
+                }));
+            _context.AuditLogs.Add(auditLog);
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = _mapper.Map<TenantProfileDto>(tenant);
+        dto.Capabilities = settings.Capabilities;
         return Result.Success(dto);
     }
 }

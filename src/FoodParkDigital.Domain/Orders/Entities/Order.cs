@@ -11,6 +11,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 {
     private readonly List<OrderItem> _items = new();
     private readonly List<OrderStatusHistory> _statusHistory = new();
+    private readonly List<OrderPayment> _payments = new();
+    private readonly List<ServiceOrderPiece> _servicePieces = new();
 
     private Order() { }
 
@@ -21,6 +23,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         bool createdByBusiness,
         string orderNumber,
         BusinessType businessType,
+        OrderType orderType,
         string customerName,
         string? customerPhone,
         string? customerNotes,
@@ -36,12 +39,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         OrderNumber = orderNumber;
         BusinessType = businessType;
+        OrderType = orderType;
         CustomerName = customerName;
         CustomerPhone = customerPhone;
         CustomerNotes = customerNotes;
         TableNumber = tableNumber;
 
-        var stateMachine = OrderStateMachineFactory.Create(businessType);
+        var stateMachine = OrderStateMachineFactory.Create(businessType, orderType);
         Status = stateMachine.GetInitialStatus();
 
         _statusHistory.Add(new OrderStatusHistory(Id, Status, Status, null));
@@ -53,6 +57,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public bool CreatedByBusiness { get; private set; }
     public string OrderNumber { get; private set; } = null!;
     public BusinessType BusinessType { get; private set; }
+    public OrderType OrderType { get; private set; }
     public OrderStatus Status { get; private set; }
     public string CustomerName { get; private set; } = null!;
     public string? CustomerPhone { get; private set; }
@@ -61,11 +66,16 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }
     public decimal Total { get; private set; }
+    public decimal PaidAmount { get; private set; }
+    public decimal Balance => Total - PaidAmount;
     public string? CancellationReason { get; private set; }
     public byte[] Version { get; private set; } = null!;
+    public ServiceOrderDetail? ServiceDetail { get; private set; }
 
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
+    public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
+    public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
 
     public void AddItem(Guid productId, string productName, int quantity, decimal unitPrice, string? notes = null)
     {
@@ -75,6 +85,73 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var item = new OrderItem(Id, productId, productName, quantity, unitPrice, notes);
         _items.Add(item);
         RecalculateTotals();
+    }
+
+    public void SetServiceDetail(
+        DateTimeOffset receivedAt,
+        DateTimeOffset? promisedAt,
+        int priority,
+        string? intakeNotes,
+        string? deliveryNotes,
+        string? intakeChecklistJson,
+        string? beforePhotosJson,
+        string? afterPhotosJson)
+    {
+        if (OrderType != OrderType.Service)
+            throw new DomainException("Solo las ordenes de servicio pueden tener detalle de servicio.");
+
+        if (ServiceDetail is null)
+        {
+            ServiceDetail = new ServiceOrderDetail(
+                tenantId: TenantId,
+                orderId: Id,
+                receivedAt: receivedAt,
+                promisedAt: promisedAt,
+                priority: priority,
+                intakeNotes: intakeNotes,
+                deliveryNotes: deliveryNotes,
+                intakeChecklistJson: intakeChecklistJson,
+                beforePhotosJson: beforePhotosJson,
+                afterPhotosJson: afterPhotosJson);
+            return;
+        }
+
+        ServiceDetail.Update(
+            promisedAt: promisedAt,
+            priority: priority,
+            intakeNotes: intakeNotes,
+            deliveryNotes: deliveryNotes,
+            intakeChecklistJson: intakeChecklistJson,
+            beforePhotosJson: beforePhotosJson,
+            afterPhotosJson: afterPhotosJson);
+    }
+
+    public void AddServicePiece(
+        string itemName,
+        string? brand,
+        string? model,
+        string? color,
+        string? size,
+        string? material,
+        string? conditionNotes,
+        string? requestedService,
+        string? internalNotes)
+    {
+        if (OrderType != OrderType.Service)
+            throw new DomainException("Solo las ordenes de servicio pueden tener piezas.");
+
+        _servicePieces.Add(new ServiceOrderPiece(
+            tenantId: TenantId,
+            orderId: Id,
+            itemName: itemName,
+            brand: brand,
+            model: model,
+            color: color,
+            size: size,
+            material: material,
+            conditionNotes: conditionNotes,
+            requestedService: requestedService,
+            internalNotes: internalNotes));
     }
 
     public void TransitionTo(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
@@ -109,10 +186,36 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         TemporaryCustomerId = null;
     }
 
+    public void RegisterPayment(
+        decimal amount,
+        OrderPaymentMethod method,
+        DateTimeOffset paidAt,
+        string? reference,
+        string? notes)
+    {
+        var payment = new OrderPayment(
+            tenantId: TenantId,
+            orderId: Id,
+            amount: amount,
+            method: method,
+            paidAt: paidAt,
+            reference: reference,
+            notes: notes);
+
+        var newPaidAmount = PaidAmount + payment.Amount;
+        if (newPaidAmount > Total)
+            throw new DomainException("El pago excede el total de la orden.");
+
+        _payments.Add(payment);
+        PaidAmount = newPaidAmount;
+    }
+
     private void RecalculateTotals()
     {
         SubTotal = _items.Sum(i => i.TotalPrice);
         Tax = Math.Round(SubTotal * 0.16m, 2);
         Total = SubTotal + Tax;
+        if (PaidAmount > Total)
+            PaidAmount = Total;
     }
 }

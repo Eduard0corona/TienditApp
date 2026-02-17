@@ -13,6 +13,7 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
 
         builder.Property(s => s.Currency).HasMaxLength(3).IsRequired();
         builder.Property(s => s.TimeZone).HasMaxLength(50).IsRequired();
+        builder.Property(s => s.Capabilities).HasConversion<int>().IsRequired();
         builder.Property(s => s.SettingsJson).HasColumnType("nvarchar(max)");
 
         builder.HasIndex(s => s.TenantId).IsUnique();

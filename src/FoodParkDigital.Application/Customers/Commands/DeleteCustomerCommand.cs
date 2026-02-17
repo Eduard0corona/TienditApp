@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -32,8 +33,15 @@ public class DeleteCustomerCommandHandler : IRequestHandler<DeleteCustomerComman
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Customer", request.Id);
 
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            customer.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return Result.Failure("El tenant no tiene habilitado el modulo de clientes.");
+
         if (customer.IsPublicGeneral)
-            return Result.Failure("No puedes eliminar el cliente público en general.");
+            return Result.Failure("No puedes eliminar el cliente publico en general.");
 
         var inUse = await _context.Orders
             .AnyAsync(
@@ -41,7 +49,7 @@ public class DeleteCustomerCommandHandler : IRequestHandler<DeleteCustomerComman
                     && o.CustomerPhone == customer.Phone,
                 cancellationToken);
         if (inUse)
-            return Result.Failure("No puedes eliminar un cliente con órdenes relacionadas.");
+            return Result.Failure("No puedes eliminar un cliente con ordenes relacionadas.");
 
         _context.Customers.Remove(customer);
         await _context.SaveChangesAsync(cancellationToken);

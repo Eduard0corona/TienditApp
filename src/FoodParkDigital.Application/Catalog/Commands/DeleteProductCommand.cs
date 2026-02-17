@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -35,6 +36,15 @@ public class DeleteProductCommandHandler : IRequestHandler<DeleteProductCommand,
         var product = await _context.Products
             .FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.Id);
+
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            product.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, product.Unit))
+        {
+            return Result.Failure("El tenant no tiene habilitado el modulo requerido para este tipo de item.");
+        }
 
         if (!string.IsNullOrEmpty(product.ImageUrl))
             await _fileStorageService.DeleteVariantsAsync(product.ImageUrl, cancellationToken);

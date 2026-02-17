@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -52,6 +53,7 @@ public class CoreBusinessFlowSmokeTests
         Assert.Equal(OrderStatus.Confirmed, createResult.Value.Status);
         Assert.Equal(seeded.RegisteredCustomer.Id, createResult.Value.CustomerUserId);
         Assert.Null(createResult.Value.TemporaryCustomerId);
+        Assert.Single(await fixture.Context.InventoryMovements.ToListAsync());
 
         var persistedOrder = await fixture.Context.Orders
             .Include(o => o.StatusHistory)
@@ -78,6 +80,11 @@ public class CoreBusinessFlowSmokeTests
 
         Assert.Equal(OrderStatus.Delivered, deliveredOrder.Status);
         Assert.Equal(3, deliveredOrder.StatusHistory.Count);
+        Assert.Single(await fixture.Context.InventoryMovements.ToListAsync());
+
+        var stockAfterDelivery = await fixture.Context.InventoryStocks
+            .SingleAsync(x => x.SupplyItemId == seeded.Supply.Id && x.InventoryLocationId == seeded.Location.Id);
+        Assert.Equal(8m, stockAfterDelivery.OnHandQuantity);
 
         var dashboardHandler = fixture.CreateDashboardHandler();
         var metrics = await dashboardHandler.Handle(new GetDashboardMetricsQuery(), CancellationToken.None);
@@ -85,11 +92,69 @@ public class CoreBusinessFlowSmokeTests
         Assert.Equal(1, metrics.TotalOrders);
         Assert.Equal(1, metrics.CompletedOrders);
         Assert.Equal(1, metrics.ActiveProducts);
-        Assert.Equal(1, metrics.ActiveServices);
+        Assert.Equal(0, metrics.ActiveServices);
         Assert.Single(metrics.TopSellingItems);
         Assert.Equal(seeded.Product.Id, metrics.TopSellingItems[0].ProductId);
         Assert.Equal("Product", metrics.TopSellingItems[0].ItemType);
         Assert.True(metrics.TotalRevenue > 0);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke")]
+    public async Task FoodTenant_CancelOrder_ShouldReverseInventoryConsumption()
+    {
+        await using var fixture = await SmokeFixture.CreateAsync();
+        var seeded = await fixture.SeedAsync();
+        fixture.SetTenant(seeded.Tenant.Id);
+
+        var createHandler = fixture.CreateOrderHandler();
+        var createResult = await createHandler.Handle(
+            new CreateOrderCommand
+            {
+                CustomerPhone = "55 1111 2222",
+                CustomerName = "Cliente Smoke",
+                Items =
+                [
+                    new CreateOrderItemDto
+                    {
+                        ProductId = seeded.Product.Id,
+                        Quantity = 3
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(createResult.IsSuccess, createResult.Error);
+
+        var stockAfterCreate = await fixture.Context.InventoryStocks
+            .SingleAsync(x => x.SupplyItemId == seeded.Supply.Id && x.InventoryLocationId == seeded.Location.Id);
+        Assert.Equal(7m, stockAfterCreate.OnHandQuantity);
+
+        var cancelHandler = fixture.CreateCancelHandler();
+        var cancelResult = await cancelHandler.Handle(
+            new CancelOrderCommand
+            {
+                OrderId = createResult.Value.Id,
+                Reason = "Cancelacion de prueba"
+            },
+            CancellationToken.None);
+
+        Assert.True(cancelResult.IsSuccess, cancelResult.Error);
+
+        var cancelledOrder = await fixture.Context.Orders.FirstAsync(x => x.Id == createResult.Value.Id);
+        Assert.Equal(OrderStatus.Cancelled, cancelledOrder.Status);
+
+        var stockAfterCancel = await fixture.Context.InventoryStocks
+            .SingleAsync(x => x.SupplyItemId == seeded.Supply.Id && x.InventoryLocationId == seeded.Location.Id);
+        Assert.Equal(10m, stockAfterCancel.OnHandQuantity);
+
+        var movements = await fixture.Context.InventoryMovements
+            .OrderBy(x => x.MovementDate)
+            .ToListAsync();
+
+        Assert.Equal(2, movements.Count);
+        Assert.Contains(movements, x => x.ExternalReference == $"ORDER:{createResult.Value.Id:N}:CONSUMPTION");
+        Assert.Contains(movements, x => x.ExternalReference == $"ORDER:{createResult.Value.Id:N}:REVERSAL");
     }
 
     private sealed class SmokeFixture : IAsyncDisposable
@@ -136,6 +201,10 @@ public class CoreBusinessFlowSmokeTests
                 Context,
                 new PhoneNormalizationService(),
                 NullLogger<CustomerLookupService>.Instance);
+            var orderInventoryService = new OrderInventoryService(
+                Context,
+                _dateTimeProvider,
+                NullLogger<OrderInventoryService>.Instance);
 
             return new CreateOrderCommandHandler(
                 Context,
@@ -143,11 +212,27 @@ public class CoreBusinessFlowSmokeTests
                 _currentUserService,
                 Mapper,
                 customerLookup,
-                _dateTimeProvider);
+                _dateTimeProvider,
+                orderInventoryService);
         }
 
         public UpdateOrderStatusCommandHandler CreateUpdateStatusHandler()
-            => new(Context, _currentUserService);
+            => new(
+                Context,
+                _currentUserService,
+                new OrderInventoryService(
+                    Context,
+                    _dateTimeProvider,
+                    NullLogger<OrderInventoryService>.Instance));
+
+        public CancelOrderCommandHandler CreateCancelHandler()
+            => new(
+                Context,
+                _currentUserService,
+                new OrderInventoryService(
+                    Context,
+                    _dateTimeProvider,
+                    NullLogger<OrderInventoryService>.Instance));
 
         public GetDashboardMetricsQueryHandler CreateDashboardHandler()
             => new(Context, _tenantService, _dateTimeProvider);
@@ -158,7 +243,9 @@ public class CoreBusinessFlowSmokeTests
             Context.Tenants.Add(tenant);
             await Context.SaveChangesAsync();
 
-            Context.TenantSettings.Add(new TenantSettings(tenant.Id));
+            Context.TenantSettings.Add(new TenantSettings(
+                tenant.Id,
+                TenantCapabilityDefaults.FromBusinessType(tenant.BusinessType) | TenantCapability.Inventory));
             await Context.SaveChangesAsync();
 
             SetTenant(tenant.Id);
@@ -187,6 +274,11 @@ public class CoreBusinessFlowSmokeTests
 
             Context.Products.AddRange(product, service);
 
+            var supply = new SupplyItem(tenant.Id, "Detergente", UnitType.Liter, code: "SUP-001");
+            var location = new InventoryLocation(tenant.Id, "Almacen Principal", "MAIN", isDefault: true);
+            Context.SupplyItems.Add(supply);
+            Context.InventoryLocations.Add(location);
+
             var registeredCustomer = new ApplicationUser
             {
                 Id = Guid.NewGuid(),
@@ -211,7 +303,21 @@ public class CoreBusinessFlowSmokeTests
 
             await Context.SaveChangesAsync();
 
-            return new SeededData(tenant, product, service, registeredCustomer);
+            var stock = new InventoryStock(tenant.Id, supply.Id, location.Id);
+            stock.ApplyMovement(10, 50, _dateTimeProvider.UtcNow);
+            Context.InventoryStocks.Add(stock);
+
+            Context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(
+                tenantId: tenant.Id,
+                productId: product.Id,
+                supplyItemId: supply.Id,
+                quantity: 1,
+                inventoryLocationId: location.Id,
+                wastePercent: 0));
+
+            await Context.SaveChangesAsync();
+
+            return new SeededData(tenant, product, service, registeredCustomer, supply, location);
         }
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
@@ -221,7 +327,9 @@ public class CoreBusinessFlowSmokeTests
         Tenant Tenant,
         Product Product,
         Product Service,
-        ApplicationUser RegisteredCustomer);
+        ApplicationUser RegisteredCustomer,
+        SupplyItem Supply,
+        InventoryLocation Location);
 
     private sealed class TestApplicationDbContext : ApplicationDbContext
     {

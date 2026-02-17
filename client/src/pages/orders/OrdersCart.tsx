@@ -4,7 +4,14 @@ import PageTitle from '../../components/common/PageTitle';
 import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
-import type { CreateOrderRequest, CustomerDto, ProductDto } from '../../types';
+import type {
+  CreateOrderRequest,
+  CreateServiceOrderPieceRequest,
+  CustomerDto,
+  OrderType,
+  ProductDto,
+} from '../../types';
+import { OrderType as OrderTypeConst, UnitType } from '../../types';
 
 interface CartLine {
   productId: string;
@@ -13,25 +20,33 @@ interface CartLine {
   quantity: number;
 }
 
-type CatalogFilter = 'All' | 'Product' | 'Service';
-
 export default function OrdersCart() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [orderType, setOrderType] = useState<OrderType>(OrderTypeConst.Retail);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerNameOverride, setCustomerNameOverride] = useState('');
   const [customerPhoneOverride, setCustomerPhoneOverride] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
   const [productSearch, setProductSearch] = useState('');
-  const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>('All');
+  const [servicePromisedAt, setServicePromisedAt] = useState('');
+  const [servicePriority, setServicePriority] = useState(1);
+  const [serviceIntakeNotes, setServiceIntakeNotes] = useState('');
+  const [serviceDeliveryNotes, setServiceDeliveryNotes] = useState('');
+  const [servicePieces, setServicePieces] = useState<CreateServiceOrderPieceRequest[]>([
+    { itemName: '', requestedService: '' },
+  ]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const isService = (product: ProductDto) => product.unit === 50 || product.unit === 51 || product.unit === 52;
+  const isService = (product: ProductDto) =>
+    product.unit === UnitType.Hour ||
+    product.unit === UnitType.Session ||
+    product.unit === UnitType.Service;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -76,6 +91,32 @@ export default function OrdersCart() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setCart([]);
+    setError('');
+  }, [orderType]);
+
+  const updateServicePiece = (
+    index: number,
+    changes: Partial<CreateServiceOrderPieceRequest>,
+  ) => {
+    setServicePieces((current) =>
+      current.map((piece, currentIndex) =>
+        currentIndex === index ? { ...piece, ...changes } : piece,
+      ),
+    );
+  };
+
+  const addServicePiece = () => {
+    setServicePieces((current) => [...current, { itemName: '', requestedService: '' }]);
+  };
+
+  const removeServicePiece = (index: number) => {
+    setServicePieces((current) =>
+      current.length <= 1 ? current : current.filter((_, currentIndex) => currentIndex !== index),
+    );
+  };
 
   const addToCart = (product: ProductDto) => {
     setCart((current) => {
@@ -125,11 +166,9 @@ export default function OrdersCart() {
   const filteredProducts = useMemo(() => {
     const search = productSearch.trim().toLowerCase();
     return products.filter((product) => {
-      const matchesType = catalogFilter === 'All'
-        ? true
-        : catalogFilter === 'Service'
-          ? isService(product)
-          : !isService(product);
+      const matchesType = orderType === OrderTypeConst.Service
+        ? isService(product)
+        : !isService(product);
 
       if (!matchesType) return false;
       if (!search) return true;
@@ -137,7 +176,7 @@ export default function OrdersCart() {
       return product.name.toLowerCase().includes(search) ||
         (product.description || '').toLowerCase().includes(search);
     });
-  }, [catalogFilter, productSearch, products]);
+  }, [orderType, productSearch, products]);
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId),
@@ -169,16 +208,48 @@ export default function OrdersCart() {
       return;
     }
 
+    const cleanedServicePieces = servicePieces
+      .map((piece) => ({
+        ...piece,
+        itemName: piece.itemName.trim(),
+        brand: piece.brand?.trim() || undefined,
+        model: piece.model?.trim() || undefined,
+        color: piece.color?.trim() || undefined,
+        size: piece.size?.trim() || undefined,
+        material: piece.material?.trim() || undefined,
+        conditionNotes: piece.conditionNotes?.trim() || undefined,
+        requestedService: piece.requestedService?.trim() || undefined,
+        internalNotes: piece.internalNotes?.trim() || undefined,
+      }))
+      .filter((piece) => piece.itemName);
+
+    if (orderType === OrderTypeConst.Service && cleanedServicePieces.length === 0) {
+      setError('Debes agregar al menos una pieza para una orden de servicio.');
+      return;
+    }
+
     const payload: CreateOrderRequest = {
       customerId: selectedCustomerId || undefined,
       customerName: customerNameOverride.trim() || undefined,
       customerPhone: effectiveCustomerPhone,
       customerNotes: customerNotes.trim() || undefined,
       tableNumber: tableNumber.trim() || undefined,
+      orderType,
       items: cart.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
       })),
+      ...(orderType === OrderTypeConst.Service
+        ? {
+            serviceDetail: {
+              promisedAt: servicePromisedAt ? new Date(servicePromisedAt).toISOString() : undefined,
+              priority: servicePriority,
+              intakeNotes: serviceIntakeNotes.trim() || undefined,
+              deliveryNotes: serviceDeliveryNotes.trim() || undefined,
+              pieces: cleanedServicePieces,
+            },
+          }
+        : {}),
     };
 
     try {
@@ -221,7 +292,9 @@ export default function OrdersCart() {
           <div className="card">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-3 gap-2">
-                <h4 className="header-title mb-0">Productos y servicios disponibles</h4>
+                <h4 className="header-title mb-0">
+                  {orderType === OrderTypeConst.Service ? 'Servicios disponibles' : 'Productos disponibles'}
+                </h4>
                 <div style={{ minWidth: 280 }}>
                   <input
                     type="text"
@@ -231,29 +304,6 @@ export default function OrdersCart() {
                     onChange={(e) => setProductSearch(e.target.value)}
                   />
                 </div>
-              </div>
-              <div className="btn-group mb-3" role="group" aria-label="Filtro catalogo">
-                <button
-                  type="button"
-                  className={`btn btn-sm ${catalogFilter === 'All' ? 'btn-primary' : 'btn-light'}`}
-                  onClick={() => setCatalogFilter('All')}
-                >
-                  Todos
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${catalogFilter === 'Product' ? 'btn-primary' : 'btn-light'}`}
-                  onClick={() => setCatalogFilter('Product')}
-                >
-                  Productos
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${catalogFilter === 'Service' ? 'btn-primary' : 'btn-light'}`}
-                  onClick={() => setCatalogFilter('Service')}
-                >
-                  Servicios
-                </button>
               </div>
 
               {loading ? (
@@ -301,6 +351,26 @@ export default function OrdersCart() {
                 <Link to="/customers" className="btn btn-sm btn-soft-primary">
                   <i className="ri-user-add-line me-1"></i>Nuevo cliente
                 </Link>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label d-block">Tipo de orden</label>
+                <div className="btn-group w-100" role="group" aria-label="Tipo de orden">
+                  <button
+                    type="button"
+                    className={`btn ${orderType === OrderTypeConst.Retail ? 'btn-primary' : 'btn-light'}`}
+                    onClick={() => setOrderType(OrderTypeConst.Retail)}
+                  >
+                    Venta de productos
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${orderType === OrderTypeConst.Service ? 'btn-primary' : 'btn-light'}`}
+                    onClick={() => setOrderType(OrderTypeConst.Service)}
+                  >
+                    Servicio
+                  </button>
+                </div>
               </div>
 
               <div className="mb-2">
@@ -366,6 +436,101 @@ export default function OrdersCart() {
                 />
               </div>
 
+              {orderType === OrderTypeConst.Service && (
+                <div className="border rounded p-2 mb-2">
+                  <h5 className="font-15 mb-2">Detalle del servicio</h5>
+                  <div className="row g-2 mb-2">
+                    <div className="col-md-6">
+                      <label className="form-label">Fecha promesa</label>
+                      <input
+                        type="datetime-local"
+                        className="form-control"
+                        value={servicePromisedAt}
+                        onChange={(e) => setServicePromisedAt(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Prioridad</label>
+                      <select
+                        className="form-select"
+                        value={servicePriority}
+                        onChange={(e) => setServicePriority(Number(e.target.value))}
+                      >
+                        <option value={1}>Baja</option>
+                        <option value={2}>Media-baja</option>
+                        <option value={3}>Media</option>
+                        <option value={4}>Media-alta</option>
+                        <option value={5}>Alta</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mb-2">
+                    <label className="form-label">Notas de ingreso</label>
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      value={serviceIntakeNotes}
+                      onChange={(e) => setServiceIntakeNotes(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="mb-2">
+                    <label className="form-label">Notas de entrega</label>
+                    <textarea
+                      className="form-control"
+                      rows={2}
+                      value={serviceDeliveryNotes}
+                      onChange={(e) => setServiceDeliveryNotes(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <label className="form-label mb-0">Piezas</label>
+                      <button type="button" className="btn btn-sm btn-soft-primary" onClick={addServicePiece}>
+                        <i className="ri-add-line me-1"></i>Agregar pieza
+                      </button>
+                    </div>
+
+                    {servicePieces.map((piece, index) => (
+                      <div key={`piece-${index}`} className="border rounded p-2 mb-2">
+                        <div className="row g-2">
+                          <div className="col-md-6">
+                            <label className="form-label">Nombre de pieza *</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.itemName}
+                              onChange={(e) => updateServicePiece(index, { itemName: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label">Servicio solicitado</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.requestedService || ''}
+                              onChange={(e) => updateServicePiece(index, { requestedService: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-2 text-end">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-soft-danger"
+                            onClick={() => removeServicePiece(index)}
+                            disabled={servicePieces.length <= 1}
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mb-0">
                 <label className="form-label">Notas</label>
                 <textarea
@@ -389,7 +554,7 @@ export default function OrdersCart() {
                     <table className="table table-sm mb-2">
                       <thead>
                         <tr>
-                          <th>Producto</th>
+                          <th>{orderType === OrderTypeConst.Service ? 'Servicio' : 'Producto'}</th>
                           <th className="text-center">Cant.</th>
                           <th className="text-end">Subtotal</th>
                           <th></th>

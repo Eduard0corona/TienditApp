@@ -2,6 +2,9 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import CapabilityRoute from './components/common/CapabilityRoute';
+import { TenantCapability } from './types';
+import { COMMERCE_CAPABILITIES } from './utils/tenantCapabilities';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
@@ -13,6 +16,7 @@ const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
 const ServicesList = lazy(() => import('./pages/services/ServicesList'));
+const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
@@ -46,18 +50,103 @@ export default function App() {
           >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/products" element={<ProductsList />} />
-            <Route path="/products/new" element={<ProductForm />} />
-            <Route path="/products/:id/edit" element={<ProductForm />} />
-            <Route path="/categories" element={<CategoriesList />} />
-            <Route path="/services" element={<ServicesList />} />
-            <Route path="/orders" element={<OrdersList />} />
-            <Route path="/orders/cart" element={<OrdersCart />} />
-            <Route path="/customers" element={<CustomersList />} />
-            <Route path="/ai-agent" element={<AiAgentSettings />} />
+            <Route
+              path="/products"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <ProductsList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/products/new"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <ProductForm />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/products/:id/edit"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <ProductForm />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/categories"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <CategoriesList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/services"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <ServicesList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/inventory"
+              element={(
+                <CapabilityRoute required={TenantCapability.Inventory}>
+                  <InventoryManagement />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/orders"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <OrdersList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/orders/cart"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <OrdersCart />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/customers"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <CustomersList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/ai-agent"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <AiAgentSettings />
+                </CapabilityRoute>
+              )}
+            />
             <Route path="/settings/business" element={<BusinessSettings />} />
-            <Route path="/settings/whatsapp" element={<WhatsAppSettings />} />
-            <Route path="/whatsapp/chat" element={<WhatsAppChat />} />
+            <Route
+              path="/settings/whatsapp"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <WhatsAppSettings />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/whatsapp/chat"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <WhatsAppChat />
+                </CapabilityRoute>
+              )}
+            />
           </Route>
 
           {/* Default redirect */}

@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -145,7 +146,8 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         _context.Tenants.Add(tenant);
 
         // Create tenant settings with defaults
-        var settings = new TenantSettings(tenant.Id);
+        var capabilities = TenantCapabilityDefaults.FromBusinessType(request.BusinessType);
+        var settings = new TenantSettings(tenant.Id, capabilities);
         _context.TenantSettings.Add(settings);
 
         var publicGeneralCustomer = new Customer(
@@ -155,6 +157,13 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             email: null,
             isPublicGeneral: true);
         _context.Customers.Add(publicGeneralCustomer);
+
+        var defaultLocation = new InventoryLocation(
+            tenantId: tenant.Id,
+            name: "Almacen principal",
+            code: "MAIN",
+            isDefault: true);
+        _context.InventoryLocations.Add(defaultLocation);
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -57,6 +57,7 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
 
         var tenant = await _context.Tenants
             .AsNoTracking()
+            .Include(t => t.Settings)
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
 
         if (tenant is null && hasUserId)
@@ -68,6 +69,7 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
                 orderby tu.CreatedAt
                 select t)
                 .AsNoTracking()
+                .Include(t => t.Settings)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 

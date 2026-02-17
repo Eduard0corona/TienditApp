@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -36,12 +37,18 @@ public class SetCustomerActiveCommandHandler : IRequestHandler<SetCustomerActive
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Customer", request.Id);
 
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            customer.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return Result.Failure("El tenant no tiene habilitado el modulo de clientes.");
+
         if (customer.IsPublicGeneral && !request.IsActive)
-            return Result.Failure("No puedes desactivar el cliente público en general.");
+            return Result.Failure("No puedes desactivar el cliente publico en general.");
 
         customer.SetActive(request.IsActive);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }
-

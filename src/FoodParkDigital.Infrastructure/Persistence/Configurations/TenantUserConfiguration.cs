@@ -16,7 +16,7 @@ public class TenantUserConfiguration : IEntityTypeConfiguration<TenantUser>
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.UserId).IsRequired();
         builder.Property(x => x.Role).HasConversion<int>().IsRequired();
-        builder.Property(x => x.Status).HasConversion<int>().IsRequired().HasDefaultValue(TenantUserStatus.Active);
+        builder.Property(x => x.Status).HasConversion<int>().IsRequired();
 
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
         builder.HasIndex(x => x.TenantId);

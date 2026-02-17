@@ -108,6 +108,7 @@ public static class DependencyInjection
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ITenantAccessService, TenantAccessService>();
+        services.AddScoped<IOrderInventoryService, OrderInventoryService>();
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddScoped<ICustomerLookupService, CustomerLookupService>();
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();

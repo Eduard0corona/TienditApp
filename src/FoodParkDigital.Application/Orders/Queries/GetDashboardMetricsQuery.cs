@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -32,6 +33,13 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
 
     public async Task<DashboardMetricsDto> Handle(GetDashboardMetricsQuery request, CancellationToken cancellationToken)
     {
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            _tenantService.TenantId,
+            cancellationToken);
+        var canReadRetailOrders = TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, OrderType.Retail);
+        var canReadServiceOrders = TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, OrderType.Service);
+
         var timeZoneId = await _context.TenantSettings
             .AsNoTracking()
             .Where(x => x.TenantId == _tenantService.TenantId)
@@ -50,6 +58,13 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             .AsNoTracking()
             .Where(o => o.CreatedAt >= rangeFromUtc && o.CreatedAt <= rangeToUtc);
 
+        if (canReadRetailOrders && !canReadServiceOrders)
+            query = query.Where(o => o.OrderType == OrderType.Retail);
+        else if (!canReadRetailOrders && canReadServiceOrders)
+            query = query.Where(o => o.OrderType == OrderType.Service);
+        else if (!canReadRetailOrders && !canReadServiceOrders)
+            query = query.Where(_ => false);
+
         var orders = await query
             .Select(o => new
             {
@@ -67,34 +82,49 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
 
         var serviceUnits = new[] { UnitType.Hour, UnitType.Session, UnitType.Service };
 
-        var activeProducts = await _context.Products
-            .AsNoTracking()
-            .CountAsync(p => p.IsAvailable && (!p.Unit.HasValue || !serviceUnits.Contains(p.Unit.Value)), cancellationToken);
+        var activeProducts = canReadRetailOrders
+            ? await _context.Products
+                .AsNoTracking()
+                .CountAsync(p => p.IsAvailable && (!p.Unit.HasValue || !serviceUnits.Contains(p.Unit.Value)), cancellationToken)
+            : 0;
 
-        var activeServices = await _context.Products
-            .AsNoTracking()
-            .CountAsync(p => p.IsAvailable && p.Unit.HasValue && serviceUnits.Contains(p.Unit.Value), cancellationToken);
+        var activeServices = canReadServiceOrders
+            ? await _context.Products
+                .AsNoTracking()
+                .CountAsync(p => p.IsAvailable && p.Unit.HasValue && serviceUnits.Contains(p.Unit.Value), cancellationToken)
+            : 0;
 
-        var topSellingItems = await (
-            from oi in _context.OrderItems.AsNoTracking()
-            join o in _context.Orders.AsNoTracking() on oi.OrderId equals o.Id
-            join p in _context.Products.IgnoreQueryFilters().AsNoTracking() on oi.ProductId equals p.Id into productJoin
-            from p in productJoin.DefaultIfEmpty()
-            where o.CreatedAt >= rangeFromUtc
-                  && o.CreatedAt <= rangeToUtc
-                  && completedStatuses.Contains(o.Status)
-            group new { oi, p } by new { oi.ProductId, oi.ProductName, Unit = (UnitType?)p.Unit } into g
-            orderby g.Sum(x => x.oi.Quantity) descending
-            select new TopSellingItemDto
-            {
-                ProductId = g.Key.ProductId,
-                ProductName = g.Key.ProductName,
-                ItemType = g.Key.Unit.HasValue && serviceUnits.Contains(g.Key.Unit.Value) ? "Service" : "Product",
-                QuantitySold = g.Sum(x => x.oi.Quantity),
-                TotalAmount = g.Sum(x => x.oi.TotalPrice)
-            })
-            .Take(10)
-            .ToListAsync(cancellationToken);
+        List<TopSellingItemDto> topSellingItems;
+        if (!canReadRetailOrders && !canReadServiceOrders)
+        {
+            topSellingItems = [];
+        }
+        else
+        {
+            topSellingItems = await (
+                from oi in _context.OrderItems.AsNoTracking()
+                join o in _context.Orders.AsNoTracking() on oi.OrderId equals o.Id
+                join p in _context.Products.IgnoreQueryFilters().AsNoTracking() on oi.ProductId equals p.Id into productJoin
+                from p in productJoin.DefaultIfEmpty()
+                where o.CreatedAt >= rangeFromUtc
+                      && o.CreatedAt <= rangeToUtc
+                      && completedStatuses.Contains(o.Status)
+                      && (
+                          (canReadRetailOrders && o.OrderType == OrderType.Retail) ||
+                          (canReadServiceOrders && o.OrderType == OrderType.Service))
+                group new { oi, p } by new { oi.ProductId, oi.ProductName, Unit = (UnitType?)p.Unit } into g
+                orderby g.Sum(x => x.oi.Quantity) descending
+                select new TopSellingItemDto
+                {
+                    ProductId = g.Key.ProductId,
+                    ProductName = g.Key.ProductName,
+                    ItemType = g.Key.Unit.HasValue && serviceUnits.Contains(g.Key.Unit.Value) ? "Service" : "Product",
+                    QuantitySold = g.Sum(x => x.oi.Quantity),
+                    TotalAmount = g.Sum(x => x.oi.TotalPrice)
+                })
+                .Take(10)
+                .ToListAsync(cancellationToken);
+        }
 
         return new DashboardMetricsDto
         {

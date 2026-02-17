@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -33,8 +34,15 @@ public class DeleteCategoryCommandHandler : IRequestHandler<DeleteCategoryComman
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Category", request.Id);
 
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            category.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return Result.Failure("El tenant no tiene habilitado el modulo de catalogo.");
+
         if (category.Products.Any())
-            return Result.Failure("No se puede eliminar una categoría que tiene productos. Reasigne o elimine los productos primero.");
+            return Result.Failure("No se puede eliminar una categoria que tiene productos. Reasigne o elimine los productos primero.");
 
         category.Deactivate();
         await _context.SaveChangesAsync(cancellationToken);

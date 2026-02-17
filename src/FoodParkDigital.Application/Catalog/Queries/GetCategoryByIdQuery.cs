@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,13 @@ public class GetCategoryByIdQueryHandler : IRequestHandler<GetCategoryByIdQuery,
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Category", request.Id);
+
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            category.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            throw new EntityNotFoundException("Category", request.Id);
 
         return _mapper.Map<CategoryDto>(category);
     }

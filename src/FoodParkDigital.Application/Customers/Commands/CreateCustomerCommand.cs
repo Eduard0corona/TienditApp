@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
 using FluentValidation;
@@ -46,6 +47,13 @@ public class CreateCustomerCommandHandler : IRequestHandler<CreateCustomerComman
 
     public async Task<Result<CustomerDto>> Handle(CreateCustomerCommand request, CancellationToken cancellationToken)
     {
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            _tenantService.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return Result.Failure<CustomerDto>("El tenant no tiene habilitado el modulo de clientes.");
+
         var name = request.Name.Trim();
         var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();

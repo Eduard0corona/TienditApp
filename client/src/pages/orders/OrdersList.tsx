@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { ordersApi } from '../../api/ordersApi';
-import { tenantApi } from '../../api/tenantApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
-import type { BusinessType, OrderDto, OrderStatus, PaginatedList } from '../../types';
+import type { OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
+import { OrderPaymentMethod as OrderPaymentMethodConst, OrderType as OrderTypeConst } from '../../types';
 
 const STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
   { value: 0, label: 'Pendiente' },
@@ -22,8 +22,13 @@ const STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
 
 const STATUS_LABELS = new Map<number, string>(STATUS_OPTIONS.map((s) => [s.value, s.label]));
 
-const BUSINESS_STATUS_OPTIONS: Record<BusinessType, Array<{ value: OrderStatus; label: string }>> = {
-  0: [
+const ORDER_TYPE_LABELS: Record<OrderType, string> = {
+  [OrderTypeConst.Retail]: 'Retail',
+  [OrderTypeConst.Service]: 'Servicio',
+};
+
+const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; label: string }>> = {
+  [OrderTypeConst.Retail]: [
     { value: 0, label: 'Pendiente' },
     { value: 1, label: 'Confirmada' },
     { value: 2, label: 'En preparacion' },
@@ -31,19 +36,32 @@ const BUSINESS_STATUS_OPTIONS: Record<BusinessType, Array<{ value: OrderStatus; 
     { value: 6, label: 'Entregada' },
     { value: 99, label: 'Cancelada' },
   ],
-  1: [
-    { value: 0, label: 'Pendiente' },
-    { value: 1, label: 'Confirmada' },
-    { value: 6, label: 'Entregada' },
-    { value: 99, label: 'Cancelada' },
-  ],
-  2: [
+  [OrderTypeConst.Service]: [
     { value: 0, label: 'Pendiente' },
     { value: 4, label: 'Aceptada' },
     { value: 5, label: 'En progreso' },
     { value: 7, label: 'Completada' },
     { value: 99, label: 'Cancelada' },
   ],
+};
+
+const PAYMENT_METHOD_LABELS: Record<number, string> = {
+  [OrderPaymentMethodConst.Cash]: 'Efectivo',
+  [OrderPaymentMethodConst.Card]: 'Tarjeta',
+  [OrderPaymentMethodConst.Transfer]: 'Transferencia',
+  [OrderPaymentMethodConst.DigitalWallet]: 'Billetera',
+  [OrderPaymentMethodConst.Other]: 'Otro',
+};
+
+const SERVICE_PIECE_STATUS_LABELS: Record<number, string> = {
+  0: 'Recibida',
+  1: 'Inspeccion',
+  2: 'Lavado',
+  3: 'Secado',
+  4: 'Detallado',
+  5: 'Lista',
+  6: 'Entregada',
+  99: 'Cancelada',
 };
 
 const STATUS_BADGE_CLASS: Record<number, string> = {
@@ -60,6 +78,7 @@ const STATUS_BADGE_CLASS: Record<number, string> = {
 
 const COLUMNS = [
   { header: 'Orden' },
+  { header: 'Tipo', className: 'text-center' },
   { header: 'Cliente' },
   { header: 'Estado', className: 'text-center' },
   { header: 'Fecha', className: 'text-center' },
@@ -85,7 +104,12 @@ function getTodayInputDate(): string {
   return `${year}-${month}-${day}`;
 }
 
-function getStatusLabel(status: OrderStatus): string {
+function getStatusLabel(status: OrderStatus, orderType?: OrderType): string {
+  if (orderType !== undefined) {
+    const option = ORDER_TYPE_STATUS_OPTIONS[orderType].find((item) => item.value === status);
+    if (option) return option.label;
+  }
+
   return STATUS_LABELS.get(status) ?? String(status);
 }
 
@@ -101,13 +125,13 @@ export default function OrdersList() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedOrderType, setSelectedOrderType] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
-  const [businessType, setBusinessType] = useState<BusinessType | null>(null);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
 
@@ -121,6 +145,7 @@ export default function OrdersList() {
     setError('');
     try {
       const params: {
+        orderType?: OrderType;
         status?: OrderStatus;
         fromDate?: string;
         toDate?: string;
@@ -131,6 +156,7 @@ export default function OrdersList() {
         pageSize,
       };
 
+      if (selectedOrderType !== '') params.orderType = Number(selectedOrderType) as OrderType;
       if (selectedStatus !== '') params.status = Number(selectedStatus) as OrderStatus;
       if (fromDate) params.fromDate = new Date(`${fromDate}T00:00:00`).toISOString();
       if (toDate) params.toDate = new Date(`${toDate}T23:59:59`).toISOString();
@@ -142,24 +168,11 @@ export default function OrdersList() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, pageNumber, pageSize, selectedStatus, toDate]);
+  }, [fromDate, pageNumber, pageSize, selectedOrderType, selectedStatus, toDate]);
 
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
-
-  useEffect(() => {
-    if (data.items.length > 0) {
-      setBusinessType(data.items[0].businessType);
-      return;
-    }
-
-    if (businessType !== null) return;
-
-    tenantApi.getMyTenant()
-      .then(({ data: tenant }) => setBusinessType(tenant.businessType))
-      .catch(() => undefined);
-  }, [businessType, data.items]);
 
   useEffect(() => {
     const createdOff = onOrderCreated((payload) => {
@@ -210,6 +223,41 @@ export default function OrdersList() {
     }
   };
 
+  const handleAddPayment = async (order: OrderDto) => {
+    const pending = Number(order.balance.toFixed(2));
+    const amountInput = window.prompt(`Monto a registrar (saldo actual: ${pending}):`);
+    if (!amountInput) return;
+
+    const amount = Number(amountInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Monto de pago invalido.');
+      return;
+    }
+
+    const methodInput = window.prompt(
+      'Metodo de pago: 0=Efectivo, 1=Tarjeta, 2=Transferencia, 3=Billetera digital, 4=Otro',
+      String(OrderPaymentMethodConst.Cash),
+    );
+    if (methodInput === null) return;
+
+    const method = Number(methodInput) as OrderPaymentMethod;
+    if (!Object.values(OrderPaymentMethodConst).includes(method)) {
+      setError('Metodo de pago invalido.');
+      return;
+    }
+
+    try {
+      await ordersApi.addPayment(order.id, { amount, method });
+      await loadOrders();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
+        'No se pudo registrar el pago.';
+      setError(msg);
+    }
+  };
+
   return (
     <>
       <PageTitle title="Órdenes" subtitle="Operación" />
@@ -219,7 +267,23 @@ export default function OrdersList() {
           <div className="card">
             <div className="card-body">
               <div className="row mb-3">
-                <div className="col-md-3 mb-2">
+                <div className="col-md-2 mb-2">
+                  <label className="form-label">Tipo</label>
+                  <select
+                    className="form-select form-select-sm"
+                    value={selectedOrderType}
+                    onChange={(e) => {
+                      setSelectedOrderType(e.target.value);
+                      setSelectedStatus('');
+                      setPageNumber(1);
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value={OrderTypeConst.Retail}>{ORDER_TYPE_LABELS[OrderTypeConst.Retail]}</option>
+                    <option value={OrderTypeConst.Service}>{ORDER_TYPE_LABELS[OrderTypeConst.Service]}</option>
+                  </select>
+                </div>
+                <div className="col-md-2 mb-2">
                   <label className="form-label">Estado</label>
                   <select
                     className="form-select form-select-sm"
@@ -230,14 +294,16 @@ export default function OrdersList() {
                     }}
                   >
                     <option value="">Todos</option>
-                    {(businessType === null ? STATUS_OPTIONS : BUSINESS_STATUS_OPTIONS[businessType]).map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
+                    {(selectedOrderType === ''
+                      ? STATUS_OPTIONS
+                      : ORDER_TYPE_STATUS_OPTIONS[Number(selectedOrderType) as OrderType]).map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
                   </select>
                 </div>
-                <div className="col-md-3 mb-2">
+                <div className="col-md-2 mb-2">
                   <label className="form-label">Desde</label>
                   <input
                     type="date"
@@ -249,7 +315,7 @@ export default function OrdersList() {
                     }}
                   />
                 </div>
-                <div className="col-md-3 mb-2">
+                <div className="col-md-2 mb-2">
                   <label className="form-label">Hasta</label>
                   <input
                     type="date"
@@ -261,12 +327,13 @@ export default function OrdersList() {
                     }}
                   />
                 </div>
-                <div className="col-md-3 mb-2 d-flex align-items-end">
+                <div className="col-md-4 mb-2 d-flex align-items-end">
                   <div className="d-flex gap-2">
                     <button
                       type="button"
                       className="btn btn-light btn-sm"
                       onClick={() => {
+                        setSelectedOrderType('');
                         setSelectedStatus('');
                         setFromDate(today);
                         setToDate(today);
@@ -328,17 +395,27 @@ export default function OrdersList() {
                         </span>
                       </div>
                     </td>
+                    <td className="text-center">
+                      <span className={`badge ${order.orderType === OrderTypeConst.Service ? 'bg-info' : 'bg-secondary'}`}>
+                        {ORDER_TYPE_LABELS[order.orderType]}
+                      </span>
+                    </td>
                     <td>
                       <div>{order.customerName}</div>
                       {order.customerPhone && <small className="text-muted">{order.customerPhone}</small>}
                     </td>
                     <td className="text-center">
                       <span className={`badge ${STATUS_BADGE_CLASS[order.status] ?? 'bg-secondary'}`}>
-                        {getStatusLabel(order.status)}
+                        {getStatusLabel(order.status, order.orderType)}
                       </span>
                     </td>
                     <td className="text-center">{toLocalDateTime(order.createdAt)}</td>
-                    <td className="text-end fw-semibold">${order.total.toFixed(2)}</td>
+                    <td className="text-end fw-semibold">
+                      <div>${order.total.toFixed(2)}</div>
+                      <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>
+                        Saldo: ${order.balance.toFixed(2)}
+                      </small>
+                    </td>
                     <td className="text-center">
                       <div className="d-flex gap-1 justify-content-center flex-wrap">
                         <button
@@ -360,10 +437,19 @@ export default function OrdersList() {
                             (order.allowedTransitions ?? []).includes(status.value),
                           ).map((status) => (
                             <option key={status.value} value={status.value}>
-                              {getStatusLabel(status.value)}
+                              {getStatusLabel(status.value, order.orderType)}
                             </option>
                           ))}
                         </select>
+                        {order.balance > 0 && order.status !== 99 && (
+                          <button
+                            className="btn btn-sm btn-soft-success"
+                            onClick={() => handleAddPayment(order)}
+                            title="Registrar pago"
+                          >
+                            <i className="ri-money-dollar-circle-line"></i>
+                          </button>
+                        )}
                         {Boolean(order.canCancel) && (
                           <button
                             className="btn btn-sm btn-soft-danger"
@@ -393,15 +479,18 @@ export default function OrdersList() {
               <div className="row mb-3">
                 <div className="col-md-6">
                   <p className="mb-1"><strong>Orden:</strong> {selectedOrder.orderNumber}</p>
+                  <p className="mb-1"><strong>Tipo:</strong> {ORDER_TYPE_LABELS[selectedOrder.orderType]}</p>
                   <p className="mb-1"><strong>Cliente:</strong> {selectedOrder.customerName}</p>
                   <p className="mb-1"><strong>Teléfono:</strong> {selectedOrder.customerPhone || '-'}</p>
                   <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
                 </div>
                 <div className="col-md-6">
-                  <p className="mb-1"><strong>Estado:</strong> {getStatusLabel(selectedOrder.status)}</p>
+                  <p className="mb-1"><strong>Estado:</strong> {getStatusLabel(selectedOrder.status, selectedOrder.orderType)}</p>
                   <p className="mb-1"><strong>Fecha:</strong> {toLocalDateTime(selectedOrder.createdAt)}</p>
                   <p className="mb-1"><strong>Items:</strong> {selectedOrderTotalItems}</p>
                   <p className="mb-1"><strong>Total:</strong> ${selectedOrder.total.toFixed(2)}</p>
+                  <p className="mb-1"><strong>Pagado:</strong> ${selectedOrder.paidAmount.toFixed(2)}</p>
+                  <p className="mb-1"><strong>Saldo:</strong> ${selectedOrder.balance.toFixed(2)}</p>
                 </div>
               </div>
 
@@ -431,6 +520,62 @@ export default function OrdersList() {
                   </tbody>
                 </table>
               </div>
+
+              {selectedOrder.orderType === OrderTypeConst.Service && (
+                <div className="mt-3">
+                  <h5 className="mb-2">Piezas del servicio</h5>
+                  {selectedOrder.servicePieces.length === 0 ? (
+                    <p className="text-muted mb-0">No hay piezas registradas.</p>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-sm table-striped mb-0">
+                        <thead>
+                          <tr>
+                            <th>Pieza</th>
+                            <th>Servicio solicitado</th>
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedOrder.servicePieces.map((piece) => (
+                            <tr key={piece.id}>
+                              <td>{piece.itemName}</td>
+                              <td>{piece.requestedService || '-'}</td>
+                              <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] || piece.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedOrder.payments.length > 0 && (
+                <div className="mt-3">
+                  <h5 className="mb-2">Pagos</h5>
+                  <div className="table-responsive">
+                    <table className="table table-sm table-striped mb-0">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Metodo</th>
+                          <th className="text-end">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedOrder.payments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td>{toLocalDateTime(payment.paidAt)}</td>
+                            <td>{PAYMENT_METHOD_LABELS[payment.method] || payment.method}</td>
+                            <td className="text-end">${payment.amount.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {selectedOrder.customerNotes && (
                 <div className="mt-3">

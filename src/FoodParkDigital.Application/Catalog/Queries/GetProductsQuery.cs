@@ -3,6 +3,7 @@ using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Domain.Catalog.Enums;
 using MediatR;
@@ -47,6 +48,16 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
 
     public async Task<PaginatedList<ProductDto>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
     {
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            _tenantService.TenantId,
+            cancellationToken);
+        var canViewProducts = TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, UnitType.Unit);
+        var canViewServices = TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, UnitType.Service);
+
+        if (!canViewProducts && !canViewServices)
+            return new PaginatedList<ProductDto>([], 0, request.PageNumber, request.PageSize);
+
         var query = _context.Products.AsNoTracking().AsQueryable();
 
         if (request.CategoryId.HasValue)
@@ -80,6 +91,9 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
         {
             if (request.ItemType.Value == ProductCatalogItemType.Service)
             {
+                if (!canViewServices)
+                    return new PaginatedList<ProductDto>([], 0, request.PageNumber, request.PageSize);
+
                 query = query.Where(p =>
                     p.Unit == UnitType.Hour ||
                     p.Unit == UnitType.Session ||
@@ -87,11 +101,28 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
             }
             else
             {
+                if (!canViewProducts)
+                    return new PaginatedList<ProductDto>([], 0, request.PageNumber, request.PageSize);
+
                 query = query.Where(p =>
                     p.Unit != UnitType.Hour &&
                     p.Unit != UnitType.Session &&
                     p.Unit != UnitType.Service);
             }
+        }
+        else if (canViewProducts && !canViewServices)
+        {
+            query = query.Where(p =>
+                p.Unit != UnitType.Hour &&
+                p.Unit != UnitType.Session &&
+                p.Unit != UnitType.Service);
+        }
+        else if (!canViewProducts && canViewServices)
+        {
+            query = query.Where(p =>
+                p.Unit == UnitType.Hour ||
+                p.Unit == UnitType.Session ||
+                p.Unit == UnitType.Service);
         }
 
         var projectedQuery = query

@@ -2,6 +2,7 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -19,16 +20,25 @@ public record GetCustomersQuery : IRequest<PaginatedList<CustomerDto>>
 public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, PaginatedList<CustomerDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenantService;
     private readonly IMapper _mapper;
 
-    public GetCustomersQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetCustomersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IMapper mapper)
     {
         _context = context;
+        _tenantService = tenantService;
         _mapper = mapper;
     }
 
     public async Task<PaginatedList<CustomerDto>> Handle(GetCustomersQuery request, CancellationToken cancellationToken)
     {
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            _tenantService.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
+            return new PaginatedList<CustomerDto>([], 0, request.PageNumber, request.PageSize);
+
         var query = _context.Customers.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -55,4 +65,3 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
             cancellationToken);
     }
 }
-

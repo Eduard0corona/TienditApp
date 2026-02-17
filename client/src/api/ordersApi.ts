@@ -1,8 +1,16 @@
 import api from './axios';
-import type { CreateOrderRequest, OrderDto, OrderStatus, PaginatedList } from '../types';
+import type {
+  AddOrderPaymentRequest,
+  CreateOrderRequest,
+  OrderDto,
+  OrderStatus,
+  OrderType,
+  PaginatedList,
+} from '../types';
 
 export const ordersApi = {
   getAll: (params?: {
+    orderType?: OrderType;
     status?: OrderStatus;
     fromDate?: string;
     toDate?: string;
@@ -22,4 +30,7 @@ export const ordersApi = {
 
   cancel: (id: string, reason?: string) =>
     api.put(`/orders/${id}/cancel`, { reason }),
+
+  addPayment: (id: string, data: AddOrderPaymentRequest) =>
+    api.post<OrderDto>(`/orders/${id}/payments`, data),
 };
