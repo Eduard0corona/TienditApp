@@ -25,6 +25,9 @@ export function useOrderSignalR() {
   const connectionRef = useRef<HubConnection | null>(null);
 
   useEffect(() => {
+    let isDisposed = false;
+    let startTimeoutId: number | undefined;
+
     const connection = new HubConnectionBuilder()
       .withUrl('/hubs/orders', {
         accessTokenFactory: () => getAccessToken() || '',
@@ -35,12 +38,32 @@ export function useOrderSignalR() {
 
     connectionRef.current = connection;
 
-    connection.start().catch((err) => {
-      console.error('OrderHub connection error:', err);
-    });
+    const startConnection = async () => {
+      try {
+        await connection.start();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const stoppedDuringNegotiation = message.toLowerCase().includes('stopped during negotiation');
+
+        // In React StrictMode the effect is mounted/unmounted twice in dev.
+        // Ignore negotiation errors caused by intentional teardown.
+        if (!isDisposed && !stoppedDuringNegotiation) {
+          console.error('OrderHub connection error:', err);
+        }
+      }
+    };
+
+    // Delay start one tick to avoid StrictMode mount/unmount negotiation races in dev.
+    startTimeoutId = window.setTimeout(() => {
+      void startConnection();
+    }, 0);
 
     return () => {
-      connection.stop();
+      isDisposed = true;
+      if (startTimeoutId !== undefined) {
+        window.clearTimeout(startTimeoutId);
+      }
+      void connection.stop().catch(() => undefined);
     };
   }, []);
 

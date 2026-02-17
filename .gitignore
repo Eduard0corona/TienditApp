@@ -39,3 +39,6 @@ docker-compose.override.yml
 appsettings.*.local.json
 *.pfx
 *.key
+src/FoodParkDigital.WebApi/appsettings.Development.json
+src/FoodParkDigital.WebApi/Properties/PublishProfiles/
+src/FoodParkDigital.WebApi/Properties/ServiceDependencies/

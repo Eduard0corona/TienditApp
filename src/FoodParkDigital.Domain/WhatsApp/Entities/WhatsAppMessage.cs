@@ -29,4 +29,19 @@ public class WhatsAppMessage : BaseEntity
     public DateTimeOffset SentAt { get; private set; }
 
     public WhatsAppConversation Conversation { get; private set; } = null!;
+
+    public void UpdateStatus(MessageStatus status)
+    {
+        if (Status == MessageStatus.Failed)
+            return;
+
+        if (status == MessageStatus.Failed)
+        {
+            Status = status;
+            return;
+        }
+
+        if (status > Status)
+            Status = status;
+    }
 }

@@ -101,6 +101,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
     public DbSet<InventoryMovementLine> InventoryMovementLines => Set<InventoryMovementLine>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<OwnerWhatsAppConfig> OwnerWhatsAppConfigs => Set<OwnerWhatsAppConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

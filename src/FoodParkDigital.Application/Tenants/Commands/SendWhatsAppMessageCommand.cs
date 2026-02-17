@@ -43,7 +43,7 @@ public class SendWhatsAppMessageCommandHandler : IRequestHandler<SendWhatsAppMes
     public async Task<Result> Handle(SendWhatsAppMessageCommand request, CancellationToken cancellationToken)
     {
         var role = _currentUserService.Role;
-        if (role != "TENANT_ADMIN" && role != "STAFF")
+        if (role != "TENANT_ADMIN" && role != "STAFF" && role != "SUPER_ADMIN")
             return Result.Failure("No tiene permisos para enviar mensajes de WhatsApp.");
 
         var tenantId = _tenantService.TenantId;

@@ -799,6 +799,76 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.OwnerWhatsAppConfig", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AccessToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DisplayPhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("OtpTemplateLanguageCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasDefaultValue("es_MX");
+
+                    b.Property<string>("OtpTemplateName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasDefaultValue("otp_verification");
+
+                    b.Property<string>("PhoneNumberId")
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("UseForOtp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("WabaId")
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("OwnerWhatsAppConfigs", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2319,6 +2389,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("CashSession");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.OwnerWhatsAppConfig", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", "User")
+                        .WithOne()
+                        .HasForeignKey("FoodParkDigital.Domain.Identity.Entities.OwnerWhatsAppConfig", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Identity.Entities.RefreshToken", b =>

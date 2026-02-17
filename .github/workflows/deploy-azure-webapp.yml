@@ -1,0 +1,57 @@
+name: Deploy WebApp (API + SPA)
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Build frontend
+        working-directory: client
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore FoodParkDigital.sln
+
+      - name: Publish backend
+        run: dotnet publish src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj -c Release -o ${{ github.workspace }}/publish
+
+      - name: Verify publish output
+        run: |
+          test -f "${{ github.workspace }}/publish/FoodParkDigital.WebApi.dll"
+          test -f "${{ github.workspace }}/publish/wwwroot/index.html"
+          ls -la "${{ github.workspace }}/publish" | head -n 50
+
+      - name: Create deployment zip
+        run: |
+          cd "${{ github.workspace }}/publish"
+          zip -r "${{ github.workspace }}/webapp.zip" .
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ${{ github.workspace }}/webapp.zip

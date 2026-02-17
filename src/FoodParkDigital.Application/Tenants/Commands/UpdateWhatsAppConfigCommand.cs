@@ -54,7 +54,7 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
 
     public async Task<Result<WhatsAppConfigDto>> Handle(UpdateWhatsAppConfigCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role != "TENANT_ADMIN")
+        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
             return Result.Failure<WhatsAppConfigDto>("Solo el administrador puede configurar WhatsApp.");
 
         var tenantId = _tenantService.TenantId;
