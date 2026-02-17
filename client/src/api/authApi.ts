@@ -1,5 +1,12 @@
 import api from './axios';
-import type { AuthResponse, LoginRequest, ApiMessage, RegisterBusinessRequest, RegisterCustomerRequest } from '../types';
+import type {
+  AuthResponse,
+  LoginRequest,
+  ApiMessage,
+  RegisterBusinessRequest,
+  RegisterCustomerRequest,
+  MyTenantDto,
+} from '../types';
 
 export const authApi = {
   login: (data: LoginRequest) =>
@@ -28,4 +35,10 @@ export const authApi = {
 
   registerCustomer: (data: RegisterCustomerRequest) =>
     api.post<AuthResponse>('/auth/register/customer', data),
+
+  getMyTenants: () =>
+    api.get<MyTenantDto[]>('/me/tenants'),
+
+  switchTenant: (tenantId: string) =>
+    api.post<AuthResponse>('/auth/switch-tenant', { tenantId }),
 };

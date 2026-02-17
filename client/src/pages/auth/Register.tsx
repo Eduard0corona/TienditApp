@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import type { RegisterBusinessRequest, RegisterCustomerRequest } from '../../types';
 import { BusinessType } from '../../types';
+import './register.css';
 
 type AccountType = 'business' | 'customer' | null;
 
@@ -125,7 +126,7 @@ export default function Register() {
                       <div className="row g-3">
                         <div className="col-6">
                           <div
-                            className="card border border-primary shadow-none mb-0 h-100"
+                            className="card border border-primary shadow-none mb-0 h-100 register-account-card"
                             role="button"
                             onClick={() => setAccountType('business')}
                           >
@@ -140,7 +141,7 @@ export default function Register() {
                         </div>
                         <div className="col-6">
                           <div
-                            className="card border border-primary shadow-none mb-0 h-100"
+                            className="card border border-primary shadow-none mb-0 h-100 register-account-card"
                             role="button"
                             onClick={() => setAccountType('customer')}
                           >
@@ -252,7 +253,11 @@ export default function Register() {
                         </div>
 
                         <div className="mb-3 d-grid">
-                          <button type="submit" className="btn btn-primary" disabled={customerForm.formState.isSubmitting}>
+                          <button
+                            type="submit"
+                            className="btn btn-primary register-hover-btn"
+                            disabled={customerForm.formState.isSubmitting}
+                          >
                             {customerForm.formState.isSubmitting ? (
                               <>
                                 <span className="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -265,7 +270,11 @@ export default function Register() {
                         </div>
 
                         <div className="text-center">
-                          <button type="button" className="btn btn-link text-muted p-0" onClick={() => { setAccountType(null); setError(''); }}>
+                          <button
+                            type="button"
+                            className="btn btn-link text-muted p-0 register-hover-btn"
+                            onClick={() => { setAccountType(null); setError(''); }}
+                          >
                             <i className="ri-arrow-left-line me-1"></i>Cambiar tipo de cuenta
                           </button>
                         </div>
@@ -533,7 +542,11 @@ export default function Register() {
                         </div>
 
                         <div className="mb-3 d-grid">
-                          <button type="submit" className="btn btn-primary" disabled={businessForm.formState.isSubmitting}>
+                          <button
+                            type="submit"
+                            className="btn btn-primary register-hover-btn"
+                            disabled={businessForm.formState.isSubmitting}
+                          >
                             {businessForm.formState.isSubmitting ? (
                               <>
                                 <span className="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -546,7 +559,11 @@ export default function Register() {
                         </div>
 
                         <div className="text-center">
-                          <button type="button" className="btn btn-link text-muted p-0" onClick={() => { setAccountType(null); setError(''); }}>
+                          <button
+                            type="button"
+                            className="btn btn-link text-muted p-0 register-hover-btn"
+                            onClick={() => { setAccountType(null); setError(''); }}
+                          >
                             <i className="ri-arrow-left-line me-1"></i>Cambiar tipo de cuenta
                           </button>
                         </div>

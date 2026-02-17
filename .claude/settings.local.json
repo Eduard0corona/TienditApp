@@ -14,7 +14,30 @@
       "Bash(dotnet build:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: FoodPark Digital SaaS multi-tenant backend\n\nClean Architecture with DDD, CQRS \\(MediatR\\), Domain Events,\nmulti-tenant EF Core, SignalR, JWT auth, Docker support.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: FoodPark Digital SaaS multi-tenant backend\n\nClean Architecture with DDD, CQRS \\(MediatR\\), Domain Events,\nmulti-tenant EF Core, SignalR, JWT auth, Docker support.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(dotnet ef database update:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add complete auth system with 2FA, HttpOnly cookies, and rate limiting\n\nAdapted from Colonos project auth implementation:\n- Login with SignInService, 2FA detection, and HttpOnly cookie refresh tokens\n- Refresh token rotation via cookie \\(not request body\\)\n- Logout with token revocation\n- Email confirmation and resend confirmation flows\n- Forgot password and reset password with token revocation\n- Two-factor authentication \\(enable, verify, disable, login with 2FA\\)\n- Google Authenticator QR code generation\n- Rate limiting \\(10 req/min for auth, 200 req/min for API\\)\n- Enhanced JwtTokenService with revoke, validate, and GetPrincipalFromExpiredToken\n- SignInService, EmailService \\(simulated\\), TwoFactorService\n- TwoFactorController for 2FA management endpoints\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh auth status:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build:*)",
+      "Bash(ls:*)",
+      "Bash(wmic:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(dotnet build-server:*)",
+      "Bash(git status:*)",
+      "Bash(git reset:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet run:*)",
+      "Bash(dotnet ef dbcontext script:*)",
+      "Bash(dotnet tool list:*)",
+      "Bash(sqlcmd:*)"
     ]
   }
 }

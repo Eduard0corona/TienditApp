@@ -1,14 +1,26 @@
 using AutoMapper;
 using FoodParkDigital.Application.Audit.DTOs;
+using FoodParkDigital.Application.AiAgents.DTOs;
+using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Catalog.DTOs;
+using FoodParkDigital.Application.Customers.DTOs;
+using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Application.Orders.DTOs;
+using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 
@@ -21,6 +33,9 @@ public class MappingProfile : Profile
         CreateMap<Order, OrderDto>();
         CreateMap<OrderItem, OrderItemDto>();
         CreateMap<OrderStatusHistory, OrderStatusHistoryDto>();
+        CreateMap<ServiceOrderDetail, ServiceOrderDetailDto>();
+        CreateMap<ServiceOrderPiece, ServiceOrderPieceDto>();
+        CreateMap<OrderPayment, OrderPaymentDto>();
         CreateMap<Order, KitchenOrderDto>();
 
         CreateMap<Product, ProductDto>()
@@ -29,13 +44,15 @@ public class MappingProfile : Profile
             .ForMember(d => d.Images, opt => opt.MapFrom(s =>
                 ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)));
         CreateMap<Category, CategoryDto>();
+        CreateMap<Customer, CustomerDto>();
 
-        CreateMap<Tenant, TenantDto>();
         CreateMap<Tenant, TenantProfileDto>()
             .ForMember(d => d.LogoUrl, opt => opt.MapFrom(s =>
                 string.IsNullOrEmpty(s.LogoUrl) ? null : $"{s.LogoUrl}_md.webp"))
             .ForMember(d => d.LogoImages, opt => opt.MapFrom(s =>
                 LogoImageUrlsDto.FromBaseUrl(s.LogoUrl)))
+            .ForMember(d => d.Capabilities, opt => opt.MapFrom(s =>
+                s.Settings != null ? s.Settings.Capabilities : 0))
             .ForMember(d => d.Street, opt => opt.MapFrom(s => s.Address != null ? s.Address.Street : null))
             .ForMember(d => d.ExteriorNumber, opt => opt.MapFrom(s => s.Address != null ? s.Address.ExteriorNumber : null))
             .ForMember(d => d.InteriorNumber, opt => opt.MapFrom(s => s.Address != null ? s.Address.InteriorNumber : null))
@@ -45,8 +62,13 @@ public class MappingProfile : Profile
             .ForMember(d => d.State, opt => opt.MapFrom(s => s.Address != null ? s.Address.State : null))
             .ForMember(d => d.Country, opt => opt.MapFrom(s => s.Address != null ? s.Address.Country : null));
 
+        CreateMap<Tenant, TenantDto>()
+            .ForMember(d => d.Capabilities, opt => opt.MapFrom(s =>
+                s.Settings != null ? s.Settings.Capabilities : 0));
+
         CreateMap<ApplicationUser, UserDto>()
             .ForMember(d => d.Role, opt => opt.MapFrom(s => s.Role.ToString()))
+            .ForMember(d => d.TenantId, opt => opt.MapFrom(s => s.DefaultTenantId))
             .ForMember(d => d.AvatarUrl, opt => opt.MapFrom(s =>
                 string.IsNullOrEmpty(s.AvatarUrl) ? null : $"{s.AvatarUrl}_md.webp"))
             .ForMember(d => d.AvatarImages, opt => opt.MapFrom(s =>
@@ -54,12 +76,24 @@ public class MappingProfile : Profile
 
         CreateMap<ApplicationUser, UserProfileDto>()
             .ForMember(d => d.Role, opt => opt.MapFrom(s => s.Role.ToString()))
+            .ForMember(d => d.TenantId, opt => opt.MapFrom(s => s.DefaultTenantId))
             .ForMember(d => d.AvatarUrl, opt => opt.MapFrom(s =>
                 string.IsNullOrEmpty(s.AvatarUrl) ? null : $"{s.AvatarUrl}_md.webp"))
             .ForMember(d => d.AvatarImages, opt => opt.MapFrom(s =>
                 AvatarImageUrlsDto.FromBaseUrl(s.AvatarUrl)));
 
         CreateMap<AuditLog, AuditLogDto>();
+        CreateMap<AiAgent, AiAgentDto>();
+        CreateMap<SupplyItem, SupplyItemDto>();
+        CreateMap<InventoryLocation, InventoryLocationDto>();
+        CreateMap<InventoryMovement, InventoryMovementDto>();
+        CreateMap<InventoryMovementLine, InventoryMovementLineDto>();
+        CreateMap<Supplier, SupplierDto>();
+        CreateMap<PurchaseOrder, PurchaseOrderDto>();
+        CreateMap<PurchaseOrderLine, PurchaseOrderLineDto>();
+        CreateMap<CashSession, CashSessionDto>();
+        CreateMap<CashTransaction, CashTransactionDto>();
+        CreateMap<Appointment, AppointmentDto>();
 
         CreateMap<WhatsAppConversation, ConversationDto>();
         CreateMap<WhatsAppMessage, ChatMessageDto>()

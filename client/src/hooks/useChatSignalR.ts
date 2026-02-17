@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { HubConnectionBuilder, HubConnection, HubConnectionState, LogLevel } from '@microsoft/signalr';
+import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr';
 import { getAccessToken } from '../api/axios';
 import type { ConversationDto, ChatMessageDto } from '../types';
 

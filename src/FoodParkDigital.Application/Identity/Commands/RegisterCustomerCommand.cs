@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FluentValidation;
@@ -27,10 +29,7 @@ public class RegisterCustomerCommandValidator : AbstractValidator<RegisterCustom
         RuleFor(x => x.Password).NotEmpty().MinimumLength(6);
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.PhoneNumber)
-            .NotEmpty()
-            .Matches(@"^\+[1-9]\d{6,14}$")
-            .WithMessage("El número de teléfono debe estar en formato E.164 (ej: +5215512345678).");
+        RuleFor(x => x.PhoneNumber).NotEmpty();
     }
 }
 
@@ -39,6 +38,8 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
+    private readonly ITemporaryCustomerClaimService _claimService;
     private readonly IEmailService _emailService;
     private readonly ISmsService _smsService;
 
@@ -46,39 +47,40 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         UserManager<ApplicationUser> userManager,
         IJwtTokenService jwtTokenService,
         IApplicationDbContext context,
+        IPhoneNormalizationService phoneNormalizationService,
+        ITemporaryCustomerClaimService claimService,
         IEmailService emailService,
         ISmsService smsService)
     {
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
         _context = context;
+        _phoneNormalizationService = phoneNormalizationService;
+        _claimService = claimService;
         _emailService = emailService;
         _smsService = smsService;
     }
 
     public async Task<Result<AuthResponse>> Handle(RegisterCustomerCommand request, CancellationToken cancellationToken)
     {
-        // Check for duplicate email
         var normalizedEmail = request.Email.ToUpperInvariant();
         var existingUser = await _context.Users
             .IgnoreQueryFilters()
             .AnyAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
         if (existingUser)
-            return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electrónico.");
+            return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electronico.");
 
-        // Get system tenant (customers belong to the platform tenant)
-        var systemTenant = await _context.Tenants
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(t => t.Slug == "system", cancellationToken);
+        var phoneNormalized = _phoneNormalizationService.NormalizeToE164(request.PhoneNumber, "MX");
+        var existingProfile = await _context.CustomerProfiles
+            .AnyAsync(x => x.PhoneNormalized == phoneNormalized, cancellationToken);
 
-        if (systemTenant is null)
-            return Result.Failure<AuthResponse>("Error de configuración del sistema.");
+        if (existingProfile)
+            return Result.Failure<AuthResponse>("Ya existe una cuenta de cliente con este telefono.");
 
-        // Create customer user
         var user = new ApplicationUser
         {
-            TenantId = systemTenant.Id,
+            DefaultTenantId = null,
             UserName = request.Email,
             Email = request.Email,
             FirstName = request.FirstName,
@@ -98,14 +100,22 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
 
         await _userManager.AddToRoleAsync(user, "CUSTOMER");
 
-        // Send confirmations
+        _context.CustomerProfiles.Add(new CustomerProfile(
+            user.Id,
+            phoneNormalized,
+            $"{request.FirstName} {request.LastName}".Trim(),
+            request.FirstName,
+            request.LastName));
+        await _context.SaveChangesAsync(cancellationToken);
+
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
 
         var phoneCode = await _userManager.GenerateChangePhoneNumberTokenAsync(user, request.PhoneNumber);
         await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
 
-        // Auto-login: generate tokens
+        await _claimService.ClaimByPhoneAsync(request.PhoneNumber, user.Id, "MX", cancellationToken);
+
         var accessToken = _jwtTokenService.GenerateAccessToken(user);
         var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
 
@@ -128,7 +138,7 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
                 PhoneNumber = user.PhoneNumber,
                 PhoneNumberConfirmed = user.PhoneNumberConfirmed,
                 Role = user.Role.ToString(),
-                TenantId = user.TenantId,
+                TenantId = user.DefaultTenantId,
                 IsActive = user.IsActive,
                 AvatarUrl = null,
                 AvatarImages = null

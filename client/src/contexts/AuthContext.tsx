@@ -1,19 +1,9 @@
-import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authApi } from '../api/authApi';
 import { profileApi } from '../api/profileApi';
 import { setAccessToken } from '../api/axios';
-import type { UserProfileDto, LoginRequest } from '../types';
-
-interface AuthContextType {
-  user: UserProfileDto | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (data: LoginRequest) => Promise<{ requiresTwoFactor: boolean; userId?: string }>;
-  logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextType>(null!);
+import type { LoginRequest, UserProfileDto } from '../types';
+import { AuthContext } from './AuthContextDefinition';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfileDto | null>(null);
@@ -29,7 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // On mount: try to recover session via refresh token cookie
+  // On mount: try to recover session via refresh token cookie.
   useEffect(() => {
     const recoverSession = async () => {
       try {
@@ -39,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await refreshProfile();
         }
       } catch {
-        // No valid refresh cookie — user needs to log in
+        // No valid refresh cookie; user needs to log in.
         setUser(null);
       } finally {
         setIsLoading(false);
@@ -72,6 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const switchTenant = async (tenantId: string) => {
+    const { data } = await authApi.switchTenant(tenantId);
+    if (data.accessToken) {
+      setAccessToken(data.accessToken);
+      await refreshProfile();
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -81,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refreshProfile,
+        switchTenant,
       }}
     >
       {children}

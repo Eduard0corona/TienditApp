@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Exceptions;
 
 namespace FoodParkDigital.Domain.Catalog.Entities;
 
@@ -28,7 +29,9 @@ public class Product : AuditableEntity, ITenantScoped
         int? stockQuantity = null,
         int? lowStockThreshold = null,
         int? maxQuantityPerOrder = null,
-        UnitType? unit = null)
+        UnitType? unit = null,
+        TimeSpan? availableFromTime = null,
+        TimeSpan? availableToTime = null)
     {
         TenantId = tenantId;
         CategoryId = categoryId;
@@ -52,6 +55,7 @@ public class Product : AuditableEntity, ITenantScoped
         MaxQuantityPerOrder = maxQuantityPerOrder;
         Unit = unit;
         IsAvailable = true;
+        SetAvailabilitySchedule(availableFromTime, availableToTime);
     }
 
     // Identity & Tenant
@@ -89,6 +93,8 @@ public class Product : AuditableEntity, ITenantScoped
     public int? StockQuantity { get; private set; }
     public int? LowStockThreshold { get; private set; }
     public int? MaxQuantityPerOrder { get; private set; }
+    public TimeSpan? AvailableFromTime { get; private set; }
+    public TimeSpan? AvailableToTime { get; private set; }
 
     // Navigation
     public Category Category { get; private set; } = null!;
@@ -113,7 +119,9 @@ public class Product : AuditableEntity, ITenantScoped
         int? stockQuantity = null,
         int? lowStockThreshold = null,
         int? maxQuantityPerOrder = null,
-        UnitType? unit = null)
+        UnitType? unit = null,
+        TimeSpan? availableFromTime = null,
+        TimeSpan? availableToTime = null)
     {
         CategoryId = categoryId;
         Name = name;
@@ -135,9 +143,40 @@ public class Product : AuditableEntity, ITenantScoped
         LowStockThreshold = lowStockThreshold;
         MaxQuantityPerOrder = maxQuantityPerOrder;
         Unit = unit;
+        SetAvailabilitySchedule(availableFromTime, availableToTime);
     }
 
     public void SetAvailability(bool isAvailable) => IsAvailable = isAvailable;
+
+    public void SetAvailabilitySchedule(TimeSpan? from, TimeSpan? to)
+    {
+        if (from.HasValue != to.HasValue)
+            throw new DomainException("Debes especificar hora de inicio y fin para el horario de disponibilidad.");
+
+        if (from.HasValue && from.Value == to!.Value)
+            throw new DomainException("La hora de inicio y fin no pueden ser iguales.");
+
+        AvailableFromTime = from;
+        AvailableToTime = to;
+    }
+
+    public bool IsAvailableAt(TimeSpan localTimeOfDay)
+    {
+        if (!IsAvailable)
+            return false;
+
+        if (!AvailableFromTime.HasValue || !AvailableToTime.HasValue)
+            return true;
+
+        var from = AvailableFromTime.Value;
+        var to = AvailableToTime.Value;
+
+        if (from < to)
+            return localTimeOfDay >= from && localTimeOfDay <= to;
+
+        // Overnight windows (e.g. 22:00 -> 04:00)
+        return localTimeOfDay >= from || localTimeOfDay <= to;
+    }
 
     public bool IsLowStock => StockQuantity.HasValue
         && LowStockThreshold.HasValue

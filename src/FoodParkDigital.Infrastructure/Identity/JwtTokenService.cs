@@ -22,7 +22,7 @@ public class JwtTokenService : IJwtTokenService
         _context = context;
     }
 
-    public string GenerateAccessToken(ApplicationUser user)
+    public string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -32,9 +32,14 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email!),
             new(ClaimTypes.Name, user.FullName),
-            new(ClaimTypes.Role, ToUpperSnakeCase(user.Role.ToString())),
-            new("tenant_id", user.TenantId.ToString())
+            new(ClaimTypes.Role, ToUpperSnakeCase(user.Role.ToString()))
         };
+
+        if (tenantContext is not null)
+        {
+            claims.Add(new Claim("tenant_id", tenantContext.TenantId.ToString()));
+            claims.Add(new Claim("tenant_role", tenantContext.TenantRole));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _settings.Issuer,

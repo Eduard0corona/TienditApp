@@ -1,5 +1,6 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using MediatR;
@@ -26,9 +27,21 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
             .AsNoTracking()
             .Include(o => o.Items)
             .Include(o => o.StatusHistory)
+            .Include(o => o.ServiceDetail)
+            .Include(o => o.ServicePieces)
+            .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        return _mapper.Map<OrderDto>(order);
+        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
+            _context,
+            order.TenantId,
+            cancellationToken);
+        if (!TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, order.OrderType))
+            throw new EntityNotFoundException("Order", request.OrderId);
+
+        var dto = _mapper.Map<OrderDto>(order);
+        dto.ApplyStateMetadata();
+        return dto;
     }
 }

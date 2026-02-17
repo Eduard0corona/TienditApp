@@ -11,7 +11,7 @@ public class UserProfileDto
     public bool PhoneNumberConfirmed { get; set; }
     public bool EmailConfirmed { get; set; }
     public string Role { get; set; } = null!;
-    public Guid TenantId { get; set; }
+    public Guid? TenantId { get; set; }
     public bool IsActive { get; set; }
     public string? AvatarUrl { get; set; }
     public AvatarImageUrlsDto? AvatarImages { get; set; }

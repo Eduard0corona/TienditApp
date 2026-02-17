@@ -2,6 +2,9 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -77,7 +80,32 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
             });
         }
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(user);
+        var tenantMembership = await _context.TenantUsers
+            .IgnoreQueryFilters()
+            .Where(x => x.UserId == user.Id && x.Status == TenantUserStatus.Active)
+            .OrderByDescending(x => x.TenantId == user.DefaultTenantId)
+            .ThenBy(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tenantMembership is null && user.DefaultTenantId.HasValue)
+        {
+            var role = user.Role == UserRole.TenantAdmin
+                ? TenantUserRole.Admin
+                : TenantUserRole.Staff;
+
+            tenantMembership = new TenantUser(user.DefaultTenantId.Value, user.Id, role, TenantUserStatus.Active);
+            _context.TenantUsers.Add(tenantMembership);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        var tenantContext = tenantMembership is null
+            ? null
+            : new TenantTokenContext(tenantMembership.TenantId, tenantMembership.Role.ToString().ToUpperInvariant());
+
+        if (user.DefaultTenantId is null && tenantMembership is not null)
+            user.DefaultTenantId = tenantMembership.TenantId;
+
+        var accessToken = _jwtTokenService.GenerateAccessToken(user, tenantContext);
         var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
 
         _context.RefreshTokens.Add(refreshToken);
@@ -98,7 +126,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
                 PhoneNumber = user.PhoneNumber,
                 PhoneNumberConfirmed = user.PhoneNumberConfirmed,
                 Role = user.Role.ToString(),
-                TenantId = user.TenantId,
+                TenantId = tenantMembership?.TenantId ?? user.DefaultTenantId,
                 IsActive = user.IsActive,
                 AvatarUrl = string.IsNullOrEmpty(user.AvatarUrl) ? null : $"{user.AvatarUrl}_md.webp",
                 AvatarImages = AvatarImageUrlsDto.FromBaseUrl(user.AvatarUrl)

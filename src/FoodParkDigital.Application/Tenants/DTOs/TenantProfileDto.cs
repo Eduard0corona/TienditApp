@@ -37,6 +37,7 @@ public class TenantProfileDto
     public string? ContactPhone { get; set; }
     public string? LogoUrl { get; set; }
     public LogoImageUrlsDto? LogoImages { get; set; }
+    public TenantCapability Capabilities { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     // MX Business fields

@@ -12,6 +12,7 @@ const COLUMNS = [
   { header: 'Categoría' },
   { header: 'Precio', className: 'text-end' },
   { header: 'Stock', className: 'text-center' },
+  { header: 'Horario', className: 'text-center' },
   { header: 'Disponible', className: 'text-center' },
   { header: 'Acciones', className: 'text-center' },
 ];
@@ -49,6 +50,7 @@ export default function ProductsList() {
     setError('');
     try {
       const params: Record<string, unknown> = { pageNumber, pageSize };
+      params.itemType = 'Product';
       if (filterCategory) params.categoryId = filterCategory;
       if (filterAvailability) params.isAvailable = filterAvailability === 'true';
       const { data } = await productsApi.getAll(params as Parameters<typeof productsApi.getAll>[0]);
@@ -213,6 +215,11 @@ export default function ProductsList() {
                       ) : (
                         <span className="text-muted">-</span>
                       )}
+                    </td>
+                    <td className="text-center">
+                      {product.availableFromTime && product.availableToTime
+                        ? `${product.availableFromTime.slice(0, 5)} - ${product.availableToTime.slice(0, 5)}`
+                        : 'Todo el dia'}
                     </td>
                     <td className="text-center">
                       <div className="form-check form-switch d-inline-block">

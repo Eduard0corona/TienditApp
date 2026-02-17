@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import { tenantApi } from '../../api/tenantApi';
+import { TenantCapability } from '../../types';
+import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
 
 const BUSINESS_TYPE_LABELS: Record<number, string> = {
@@ -48,7 +50,51 @@ const MX_STATES = [
   'Sinaloa', 'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas',
 ];
 
+const CAPABILITY_OPTIONS = [
+  { value: TenantCapability.Retail, label: 'Productos retail' },
+  { value: TenantCapability.Service, label: 'Servicios' },
+  { value: TenantCapability.Food, label: 'Alimentos / cocina' },
+  { value: TenantCapability.Inventory, label: 'Inventario / insumos' },
+  { value: TenantCapability.Appointments, label: 'Citas / agenda' },
+  { value: TenantCapability.Kitchen, label: 'Pantalla de cocina' },
+];
+
+const CAPABILITY_PRESETS = [
+  {
+    id: 'laundry',
+    label: 'Lavanderia',
+    industry: 'Lavanderia',
+    capabilities:
+      TenantCapability.Service
+      | TenantCapability.Retail
+      | TenantCapability.Inventory
+      | TenantCapability.Appointments,
+  },
+  {
+    id: 'food',
+    label: 'Alimentos',
+    industry: 'Alimentos y Bebidas',
+    capabilities:
+      TenantCapability.Food
+      | TenantCapability.Retail
+      | TenantCapability.Inventory
+      | TenantCapability.Kitchen,
+  },
+  {
+    id: 'barber',
+    label: 'Barberia',
+    industry: 'Estetica y Spa',
+    capabilities:
+      TenantCapability.Service
+      | TenantCapability.Retail
+      | TenantCapability.Inventory
+      | TenantCapability.Appointments,
+  },
+];
+
 export default function BusinessSettings() {
+  const { refreshTenant } = useTenant();
+  const [capabilities, setCapabilities] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -61,6 +107,7 @@ export default function BusinessSettings() {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<UpdateTenantRequest>();
 
@@ -69,6 +116,7 @@ export default function BusinessSettings() {
       name: data.name,
       contactEmail: data.contactEmail,
       contactPhone: data.contactPhone || '',
+      capabilities: data.capabilities,
       rfc: data.rfc || '',
       legalName: data.legalName || '',
       industry: data.industry || '',
@@ -88,6 +136,7 @@ export default function BusinessSettings() {
       try {
         const { data } = await tenantApi.getMyTenant();
         setTenant(data);
+        setCapabilities(data.capabilities ?? 0);
         resetForm(data);
       } catch {
         setMsg({ type: 'danger', text: 'Error al cargar los datos de la empresa.' });
@@ -102,8 +151,15 @@ export default function BusinessSettings() {
   const onSubmit = async (data: UpdateTenantRequest) => {
     setMsg(null);
     try {
-      const { data: updated } = await tenantApi.updateMyTenant(data);
+      const payload: UpdateTenantRequest = {
+        ...data,
+        capabilities,
+      };
+
+      const { data: updated } = await tenantApi.updateMyTenant(payload);
       setTenant(updated);
+      setCapabilities(updated.capabilities ?? capabilities);
+      await refreshTenant();
       setEditMode(false);
       setMsg({ type: 'success', text: 'Datos de la empresa actualizados correctamente.' });
     } catch (err: unknown) {
@@ -227,7 +283,10 @@ export default function BusinessSettings() {
                       type="button"
                       className="btn btn-light"
                       onClick={() => {
-                        if (editMode && tenant) resetForm(tenant);
+                        if (editMode && tenant) {
+                          resetForm(tenant);
+                          setCapabilities(tenant.capabilities ?? 0);
+                        }
                         setEditMode(!editMode);
                       }}
                     >
@@ -298,6 +357,44 @@ export default function BusinessSettings() {
                       ))}
                     </select>
                   </div>
+                  <div className="mb-3">
+                    <label className="form-label d-block">Modulos habilitados</label>
+                    <div className="d-flex flex-wrap gap-2 mb-2">
+                      {CAPABILITY_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className="btn btn-soft-secondary btn-sm"
+                          onClick={() => {
+                            setCapabilities(preset.capabilities);
+                            setValue('industry', preset.industry);
+                          }}
+                        >
+                          Preset: {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="border rounded p-2">
+                      {CAPABILITY_OPTIONS.map((option) => (
+                        <div key={option.value} className="form-check mb-1">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            id={`capability-${option.value}`}
+                            checked={(capabilities & option.value) === option.value}
+                            onChange={(e) => {
+                              setCapabilities((current) =>
+                                e.target.checked ? current | option.value : current & ~option.value,
+                              );
+                            }}
+                          />
+                          <label className="form-check-label" htmlFor={`capability-${option.value}`}>
+                            {option.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
                     {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
                   </button>
@@ -323,6 +420,15 @@ export default function BusinessSettings() {
                   <p className="text-muted">
                     <strong>Giro:</strong>{' '}
                     <span className="ms-2">{tenant?.industry || 'No especificado'}</span>
+                  </p>
+                  <p className="text-muted">
+                    <strong>Modulos:</strong>{' '}
+                    <span className="ms-2">
+                      {CAPABILITY_OPTIONS
+                        .filter((option) => ((tenant?.capabilities ?? 0) & option.value) === option.value)
+                        .map((option) => option.label)
+                        .join(', ') || 'Sin modulos'}
+                    </span>
                   </p>
                   <p className="text-muted mb-0">
                     <strong>Miembro desde:</strong>{' '}

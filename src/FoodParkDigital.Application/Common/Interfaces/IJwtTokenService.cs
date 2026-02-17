@@ -5,7 +5,7 @@ namespace FoodParkDigital.Application.Common.Interfaces;
 
 public interface IJwtTokenService
 {
-    string GenerateAccessToken(ApplicationUser user);
+    string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null);
     RefreshToken GenerateRefreshToken(Guid userId);
     Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken);
     Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null);
@@ -13,3 +13,5 @@ public interface IJwtTokenService
     Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken);
     ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
 }
+
+public record TenantTokenContext(Guid TenantId, string TenantRole);

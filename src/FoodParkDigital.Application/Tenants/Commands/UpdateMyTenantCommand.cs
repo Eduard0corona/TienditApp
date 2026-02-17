@@ -1,8 +1,12 @@
+using System;
+using System.Text.Json;
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,18 +15,13 @@ namespace FoodParkDigital.Application.Tenants.Commands;
 
 public record UpdateMyTenantCommand : IRequest<Result<TenantProfileDto>>
 {
-    // General
     public string Name { get; init; } = null!;
     public string ContactEmail { get; init; } = null!;
     public string? ContactPhone { get; init; }
-
-    // MX Business fields
     public string? Rfc { get; init; }
     public string? LegalName { get; init; }
     public string? Industry { get; init; }
     public string? TaxRegime { get; init; }
-
-    // Address
     public string? Street { get; init; }
     public string? ExteriorNumber { get; init; }
     public string? InteriorNumber { get; init; }
@@ -30,19 +29,28 @@ public record UpdateMyTenantCommand : IRequest<Result<TenantProfileDto>>
     public string? ZipCode { get; init; }
     public string? City { get; init; }
     public string? State { get; init; }
+    public TenantCapability? Capabilities { get; init; }
 }
 
 public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCommand>
 {
     public UpdateMyTenantCommandValidator()
     {
+        const TenantCapability allowedCapabilities =
+            TenantCapability.Retail
+            | TenantCapability.Service
+            | TenantCapability.Food
+            | TenantCapability.Inventory
+            | TenantCapability.Appointments
+            | TenantCapability.Kitchen;
+
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ContactEmail).NotEmpty().EmailAddress();
         RuleFor(x => x.ContactPhone).MaximumLength(20);
         RuleFor(x => x.Rfc)
-            .Matches(@"^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$")
+            .Matches(@"^[A-ZN&]{3,4}\d{6}[A-Z0-9]{3}$")
             .When(x => !string.IsNullOrEmpty(x.Rfc))
-            .WithMessage("El RFC no tiene un formato válido.");
+            .WithMessage("El RFC no tiene un formato valido.");
         RuleFor(x => x.LegalName).MaximumLength(300);
         RuleFor(x => x.Industry).MaximumLength(200);
         RuleFor(x => x.TaxRegime).MaximumLength(200);
@@ -53,6 +61,9 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.ZipCode).MaximumLength(10);
         RuleFor(x => x.City).MaximumLength(200);
         RuleFor(x => x.State).MaximumLength(100);
+        RuleFor(x => x.Capabilities)
+            .Must(c => !c.HasValue || (c.Value & ~allowedCapabilities) == 0)
+            .WithMessage("Las capacidades proporcionadas no son validas.");
     }
 }
 
@@ -74,15 +85,56 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
     public async Task<Result<TenantProfileDto>> Handle(UpdateMyTenantCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role != "TENANT_ADMIN")
+        var canManageTenant =
+            _currentUserService.Role == "TENANT_ADMIN" ||
+            _currentUserService.Role == "SUPER_ADMIN" ||
+            string.Equals(_currentUserService.TenantRole, "OWNER", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(_currentUserService.TenantRole, "ADMIN", StringComparison.OrdinalIgnoreCase);
+
+        if (!canManageTenant)
             return Result.Failure<TenantProfileDto>("Solo el administrador del tenant puede modificar los datos de la empresa.");
 
         var tenantId = _currentUserService.TenantId;
+        var hasUserId = Guid.TryParse(_currentUserService.UserId, out var userId);
+
+        if (hasUserId)
+        {
+            if (tenantId is null)
+            {
+                tenantId = await _context.Users
+                    .IgnoreQueryFilters()
+                    .Where(u => u.Id == userId)
+                    .Select(u => u.DefaultTenantId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            if (tenantId is null)
+            {
+                tenantId = await _context.TenantUsers
+                    .IgnoreQueryFilters()
+                    .Where(tu => tu.UserId == userId && tu.Status == TenantUserStatus.Active)
+                    .OrderBy(tu => tu.CreatedAt)
+                    .Select(tu => (Guid?)tu.TenantId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
+
         if (tenantId is null)
-            return Result.Failure<TenantProfileDto>("No se encontró el tenant del usuario.");
+            return Result.Failure<TenantProfileDto>("No se encontro el tenant del usuario.");
 
         var tenant = await _context.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
+
+        if (tenant is null && hasUserId)
+        {
+            tenant = await (
+                from tu in _context.TenantUsers.IgnoreQueryFilters()
+                join t in _context.Tenants.IgnoreQueryFilters() on tu.TenantId equals t.Id
+                where tu.UserId == userId && tu.Status == TenantUserStatus.Active
+                orderby tu.CreatedAt
+                select t)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
         if (tenant is null)
             return Result.Failure<TenantProfileDto>("Tenant no encontrado.");
@@ -104,9 +156,46 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
         tenant.SetBusinessInfo(request.Rfc, request.LegalName, request.Industry, request.TaxRegime, address);
 
+        var settings = await _context.TenantSettings
+            .FirstOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
+        var previousCapabilities = settings?.Capabilities;
+        var capabilitiesChanged = false;
+
+        if (settings is null)
+        {
+            var resolvedCapabilities = request.Capabilities ?? TenantCapabilityDefaults.FromBusinessType(tenant.BusinessType);
+            settings = new Domain.Tenants.Entities.TenantSettings(
+                tenant.Id,
+                resolvedCapabilities);
+            _context.TenantSettings.Add(settings);
+            capabilitiesChanged = request.Capabilities.HasValue;
+        }
+        else if (request.Capabilities.HasValue)
+        {
+            capabilitiesChanged = settings.Capabilities != request.Capabilities.Value;
+            settings.UpdateCapabilities(request.Capabilities.Value);
+        }
+
+        if (capabilitiesChanged)
+        {
+            var auditLog = new AuditLog(
+                tenantId: tenant.Id,
+                entityName: "TenantSettings",
+                entityId: tenant.Id.ToString(),
+                action: "TenantCapabilitiesUpdated",
+                performedBy: _currentUserService.UserName ?? "system",
+                metadata: JsonSerializer.Serialize(new
+                {
+                    PreviousCapabilities = previousCapabilities?.ToString(),
+                    NewCapabilities = settings.Capabilities.ToString()
+                }));
+            _context.AuditLogs.Add(auditLog);
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var dto = _mapper.Map<TenantProfileDto>(tenant);
+        dto.Capabilities = settings.Capabilities;
         return Result.Success(dto);
     }
 }

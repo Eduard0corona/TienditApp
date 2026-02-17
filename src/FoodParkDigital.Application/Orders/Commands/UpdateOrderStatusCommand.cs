@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
@@ -28,26 +29,57 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IOrderInventoryService _orderInventoryService;
 
     public UpdateOrderStatusCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IOrderInventoryService? orderInventoryService = null)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
     }
 
     public async Task<Result> Handle(UpdateOrderStatusCommand request, CancellationToken cancellationToken)
     {
-        var order = await _context.Orders
-            .Include(o => o.StatusHistory)
-            .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
-            ?? throw new EntityNotFoundException("Order", request.OrderId);
+        const int maxAttempts = 3;
 
-        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType);
-        order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var order = await _context.Orders
+                .Include(o => o.StatusHistory)
+                .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
+                ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+            if (order.Status == request.NewStatus)
+                return Result.Success();
+
+            var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
+
+            if (!stateMachine.GetAllowedTransitions(order.Status).Contains(request.NewStatus))
+                return Result.Failure(
+                    $"No se puede cambiar de '{order.Status}' a '{request.NewStatus}'.");
+
+            order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
+            if (request.NewStatus == OrderStatus.Cancelled)
+                await _orderInventoryService.ReverseConsumptionForOrderAsync(order, null, cancellationToken);
+            else
+                await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (_context is DbContext dbContext)
+                    dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        return Result.Failure(
+            "La orden fue actualizada por otro proceso. Refresca la lista e intenta nuevamente.");
     }
 }

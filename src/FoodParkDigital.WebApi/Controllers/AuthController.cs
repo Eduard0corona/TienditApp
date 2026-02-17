@@ -130,6 +130,20 @@ public class AuthController : ControllerBase
         return Ok(response with { RefreshToken = null });
     }
 
+    [HttpPost("switch-tenant")]
+    [Authorize]
+    public async Task<ActionResult<AuthResponse>> SwitchTenant([FromBody] SwitchTenantCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        if (result.Value.RefreshToken is not null)
+            SetRefreshTokenCookie(result.Value.RefreshToken);
+
+        return Ok(result.Value with { RefreshToken = null });
+    }
+
     [HttpGet("confirm-email")]
     [AllowAnonymous]
     public async Task<ActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
@@ -255,7 +269,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("my-tenant")]
-    [Authorize(Roles = "TENANT_ADMIN")]
+    [Authorize]
     public async Task<ActionResult<TenantProfileDto>> UpdateMyTenant([FromBody] UpdateMyTenantCommand command)
     {
         var result = await _mediator.Send(command);

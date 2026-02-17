@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Orders.Enums;
 
 namespace FoodParkDigital.Domain.Orders.StateMachines;
 
@@ -7,6 +8,14 @@ public static class OrderStateMachineFactory
     private static readonly FoodOrderStateMachine Food = new();
     private static readonly RetailOrderStateMachine Retail = new();
     private static readonly ServiceOrderStateMachine Service = new();
+
+    public static IOrderStateMachine Create(BusinessType businessType, OrderType orderType)
+        => orderType switch
+        {
+            OrderType.Service => Service,
+            OrderType.Retail => businessType == BusinessType.Food ? Food : Retail,
+            _ => throw new ArgumentOutOfRangeException(nameof(orderType), orderType, "Unsupported order type.")
+        };
 
     public static IOrderStateMachine Create(BusinessType businessType) => businessType switch
     {
