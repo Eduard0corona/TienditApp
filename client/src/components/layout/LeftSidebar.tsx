@@ -13,6 +13,7 @@ export default function LeftSidebar() {
   const canUseCommerce = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
   const canUseInventory = hasCapability(capabilities, TenantCapability.Inventory);
   const canUseAppointments = hasCapability(capabilities, TenantCapability.Appointments);
+  const canUseKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
 
   return (
     <div className="leftside-menu">
@@ -148,6 +149,15 @@ export default function LeftSidebar() {
             </li>
           )}
 
+          {canUseKitchen && (
+            <li className={`side-nav-item ${isActive('/kitchen') ? 'menuitem-active' : ''}`}>
+              <Link to="/kitchen" className="side-nav-link">
+                <i className="ri-restaurant-2-line"></i>
+                <span>Cocina</span>
+              </Link>
+            </li>
+          )}
+
           {canUseCommerce && (
             <li className={`side-nav-item ${isActive('/customers') ? 'menuitem-active' : ''}`}>
               <Link to="/customers" className="side-nav-link">
@@ -208,6 +218,12 @@ export default function LeftSidebar() {
                 <Link to="/whatsapp/chat" className="side-nav-link">
                   <i className="ri-chat-3-line"></i>
                   <span>Chat WhatsApp</span>
+                </Link>
+              </li>
+              <li className={`side-nav-item ${isActive('/audit') ? 'menuitem-active' : ''}`}>
+                <Link to="/audit" className="side-nav-link">
+                  <i className="ri-shield-check-line"></i>
+                  <span>Auditoria</span>
                 </Link>
               </li>
             </>

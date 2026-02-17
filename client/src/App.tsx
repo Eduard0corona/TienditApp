@@ -22,6 +22,8 @@ const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersLi
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
 const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsList'));
 const OperationalReports = lazy(() => import('./pages/reports/OperationalReports'));
+const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
+const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
@@ -140,6 +142,22 @@ export default function App() {
               element={(
                 <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
                   <OperationalReports />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/kitchen"
+              element={(
+                <CapabilityRoute required={TenantCapability.Kitchen}>
+                  <KitchenBoard />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/audit"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <AuditLogs />
                 </CapabilityRoute>
               )}
             />

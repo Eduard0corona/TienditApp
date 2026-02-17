@@ -62,6 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const switchTenant = async (tenantId: string) => {
+    const { data } = await authApi.switchTenant(tenantId);
+    if (data.accessToken) {
+      setAccessToken(data.accessToken);
+      await refreshProfile();
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -71,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refreshProfile,
+        switchTenant,
       }}
     >
       {children}

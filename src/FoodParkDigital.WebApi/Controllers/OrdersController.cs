@@ -109,6 +109,26 @@ public class OrdersController : ControllerBase
 
         return Ok(result.Value);
     }
+
+    [HttpPut("{id:guid}/service-pieces/{pieceId:guid}/status")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<IActionResult> UpdateServicePieceStatus(
+        Guid id,
+        Guid pieceId,
+        [FromBody] UpdateServiceOrderPieceStatusRequest request)
+    {
+        var result = await _mediator.Send(new UpdateServiceOrderPieceStatusCommand
+        {
+            OrderId = id,
+            PieceId = pieceId,
+            NewStatus = request.NewStatus
+        });
+
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        return NoContent();
+    }
 }
 
 public record UpdateOrderStatusRequest
@@ -128,4 +148,9 @@ public record AddOrderPaymentRequest
     public DateTimeOffset? PaidAt { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
+}
+
+public record UpdateServiceOrderPieceStatusRequest
+{
+    public ServiceOrderPieceStatus NewStatus { get; init; }
 }

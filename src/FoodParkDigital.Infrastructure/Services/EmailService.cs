@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Net.Mail;
 
 namespace FoodParkDigital.Infrastructure.Services;
 
@@ -47,13 +49,58 @@ public class EmailService : IEmailService
         await SendEmailAsync(email, subject, body);
     }
 
-    public Task SendEmailAsync(string to, string subject, string body)
+    public async Task SendEmailAsync(string to, string subject, string body)
     {
-        // TODO: Integrar con un servicio de email real (SendGrid, Amazon SES, MailKit/SMTP)
-        _logger.LogInformation("Enviando email a {Email} con asunto: {Subject}", to, subject);
-        _logger.LogDebug("Cuerpo del email: {Body}", body);
-        _logger.LogInformation("Email enviado exitosamente a {Email}", to);
+        var provider = _configuration["EmailSettings:Provider"]?.Trim();
+        if (!string.Equals(provider, "Smtp", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Email provider not configured for runtime sending. Message logged for {Email}.", to);
+            _logger.LogInformation("Email subject: {Subject}", subject);
+            return;
+        }
 
-        return Task.CompletedTask;
+        var host = _configuration["EmailSettings:Smtp:Host"];
+        var portRaw = _configuration["EmailSettings:Smtp:Port"];
+        var username = _configuration["EmailSettings:Smtp:Username"];
+        var password = _configuration["EmailSettings:Smtp:Password"];
+        var fromEmail = _configuration["EmailSettings:FromEmail"];
+        var fromName = _configuration["EmailSettings:FromName"] ?? "FoodPark Digital";
+        var enableSsl = bool.TryParse(_configuration["EmailSettings:Smtp:EnableSsl"], out var ssl) && ssl;
+
+        if (string.IsNullOrWhiteSpace(host)
+            || string.IsNullOrWhiteSpace(portRaw)
+            || !int.TryParse(portRaw, out var port)
+            || string.IsNullOrWhiteSpace(fromEmail))
+        {
+            _logger.LogWarning("SMTP settings are incomplete. Email to {Email} was not sent.", to);
+            return;
+        }
+
+        using var smtp = new SmtpClient(host, port)
+        {
+            EnableSsl = enableSsl
+        };
+
+        if (!string.IsNullOrWhiteSpace(username))
+            smtp.Credentials = new NetworkCredential(username, password);
+
+        using var mail = new MailMessage
+        {
+            From = new MailAddress(fromEmail, fromName),
+            Subject = subject,
+            Body = body,
+            IsBodyHtml = true
+        };
+        mail.To.Add(to);
+
+        try
+        {
+            await smtp.SendMailAsync(mail);
+            _logger.LogInformation("Email sent successfully to {Email}", to);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SMTP send failed for {Email}", to);
+        }
     }
 }

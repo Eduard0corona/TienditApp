@@ -1,13 +1,89 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { authApi } from '../../api/authApi';
 import { useAuth } from '../../hooks/useAuth';
-import { useCallback } from 'react';
+import { useTenant } from '../../hooks/useTenant';
+import type { MyTenantDto } from '../../types';
 
 export default function Topbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, switchTenant } = useAuth();
+  const { tenant, refreshTenant } = useTenant();
+  const [availableTenants, setAvailableTenants] = useState<MyTenantDto[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [switchingTenant, setSwitchingTenant] = useState(false);
+  const [tenantError, setTenantError] = useState('');
+  const [autoSwitchAttempted, setAutoSwitchAttempted] = useState(false);
+
+  const selectedTenantId = useMemo(
+    () => tenant?.id ?? user?.tenantId ?? '',
+    [tenant?.id, user?.tenantId],
+  );
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
     await logout();
+  };
+
+  const loadTenants = useCallback(async () => {
+    if (!user) {
+      setAvailableTenants([]);
+      setAutoSwitchAttempted(false);
+      return;
+    }
+
+    setLoadingTenants(true);
+    try {
+      const { data } = await authApi.getMyTenants();
+      setAvailableTenants(data.filter((x) => x.status.toLowerCase() === 'active'));
+      setAutoSwitchAttempted(false);
+    } catch {
+      setAvailableTenants([]);
+    } finally {
+      setLoadingTenants(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadTenants();
+  }, [loadTenants]);
+
+  useEffect(() => {
+    const ensureTenantContext = async () => {
+      if (selectedTenantId || availableTenants.length === 0 || switchingTenant || autoSwitchAttempted) return;
+
+      setAutoSwitchAttempted(true);
+      setSwitchingTenant(true);
+      try {
+        await switchTenant(availableTenants[0].tenantId);
+        await refreshTenant();
+      } catch {
+        // User can still switch manually from the selector.
+      } finally {
+        setSwitchingTenant(false);
+      }
+    };
+
+    ensureTenantContext();
+  }, [autoSwitchAttempted, availableTenants, refreshTenant, selectedTenantId, switchTenant, switchingTenant]);
+
+  const handleSwitchTenant = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextTenantId = event.target.value;
+    if (!nextTenantId || nextTenantId === selectedTenantId) return;
+
+    setTenantError('');
+    setSwitchingTenant(true);
+    try {
+      await switchTenant(nextTenantId);
+      await refreshTenant();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.error ||
+        (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.detail ||
+        'No se pudo cambiar el tenant.';
+      setTenantError(msg);
+    } finally {
+      setSwitchingTenant(false);
+    }
   };
 
   const handleToggleSidebar = () => {
@@ -73,6 +149,24 @@ export default function Topbar() {
         </div>
 
         <ul className="topbar-menu d-flex align-items-center gap-3">
+          {availableTenants.length > 1 && (
+            <li className="d-none d-lg-inline-block" style={{ minWidth: 260 }}>
+              <select
+                className="form-select form-select-sm"
+                value={selectedTenantId}
+                onChange={handleSwitchTenant}
+                disabled={loadingTenants || switchingTenant}
+                title={tenantError || 'Cambiar tenant'}
+              >
+                {availableTenants.map((entry) => (
+                  <option key={entry.tenantId} value={entry.tenantId}>
+                    {entry.name} ({entry.role})
+                  </option>
+                ))}
+              </select>
+            </li>
+          )}
+
           {/* Notification Bell */}
           <li className="dropdown notification-list">
             <a

@@ -8,6 +8,7 @@ export interface AuthContextType {
   login: (data: LoginRequest) => Promise<{ requiresTwoFactor: boolean; userId?: string }>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  switchTenant: (tenantId: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType>(null!);

@@ -64,6 +64,17 @@ const SERVICE_PIECE_STATUS_LABELS: Record<number, string> = {
   99: 'Cancelada',
 };
 
+const SERVICE_PIECE_STATUS_OPTIONS = [
+  { value: 0, label: 'Recibida' },
+  { value: 1, label: 'Inspeccion' },
+  { value: 2, label: 'Lavado' },
+  { value: 3, label: 'Secado' },
+  { value: 4, label: 'Detallado' },
+  { value: 5, label: 'Lista' },
+  { value: 6, label: 'Entregada' },
+  { value: 99, label: 'Cancelada' },
+] as const;
+
 const STATUS_BADGE_CLASS: Record<number, string> = {
   0: 'bg-warning',
   1: 'bg-info',
@@ -170,6 +181,11 @@ export default function OrdersList() {
     }
   }, [fromDate, pageNumber, pageSize, selectedOrderType, selectedStatus, toDate]);
 
+  const refreshSelectedOrder = useCallback(async (orderId: string) => {
+    const { data: order } = await ordersApi.getById(orderId);
+    setSelectedOrder(order);
+  }, []);
+
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
@@ -254,6 +270,33 @@ export default function OrdersList() {
         (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
         (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
         'No se pudo registrar el pago.';
+      setError(msg);
+    }
+  };
+
+  const getPieceAllowedTransitions = (status: number): number[] => {
+    switch (status) {
+      case 0: return [1, 99];
+      case 1: return [2, 99];
+      case 2: return [3, 99];
+      case 3: return [4, 99];
+      case 4: return [5, 99];
+      case 5: return [6, 99];
+      default: return [];
+    }
+  };
+
+  const handleServicePieceStatusChange = async (orderId: string, pieceId: string, newStatus: string) => {
+    if (!newStatus) return;
+
+    try {
+      await ordersApi.updateServicePieceStatus(orderId, pieceId, Number(newStatus) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 99);
+      await Promise.all([loadOrders(), refreshSelectedOrder(orderId)]);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
+        'No se pudo actualizar el estado de la pieza.';
       setError(msg);
     }
   };
@@ -534,6 +577,7 @@ export default function OrdersList() {
                             <th>Pieza</th>
                             <th>Servicio solicitado</th>
                             <th>Estado</th>
+                            <th className="text-end">Accion</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -542,6 +586,25 @@ export default function OrdersList() {
                               <td>{piece.itemName}</td>
                               <td>{piece.requestedService || '-'}</td>
                               <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] || piece.status}</td>
+                              <td className="text-end" style={{ minWidth: 220 }}>
+                                <select
+                                  className="form-select form-select-sm"
+                                  value=""
+                                  disabled={getPieceAllowedTransitions(piece.status).length === 0}
+                                  onChange={(e) =>
+                                    handleServicePieceStatusChange(selectedOrder.id, piece.id, e.target.value)
+                                  }
+                                >
+                                  <option value="">Actualizar estado</option>
+                                  {SERVICE_PIECE_STATUS_OPTIONS
+                                    .filter((status) => getPieceAllowedTransitions(piece.status).includes(status.value))
+                                    .map((status) => (
+                                      <option key={status.value} value={status.value}>
+                                        {status.label}
+                                      </option>
+                                    ))}
+                                </select>
+                              </td>
                             </tr>
                           ))}
                         </tbody>

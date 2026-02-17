@@ -47,6 +47,14 @@ export interface UserProfileDto {
   createdAt: string;
 }
 
+export interface MyTenantDto {
+  tenantId: string;
+  name: string;
+  slug: string;
+  role: string;
+  status: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -837,6 +845,18 @@ export interface OperationalReportDto {
   revenueByPaymentMethod: Record<string, number>;
 }
 
+// ==================== Audit ====================
+
+export interface AuditLogDto {
+  id: string;
+  entityName: string;
+  entityId: string;
+  action: string;
+  performedBy: string;
+  timestamp: string;
+  metadata?: string;
+}
+
 // ==================== Marketing ====================
 
 export interface SendPromotionRequest {
@@ -1055,6 +1075,16 @@ export interface DashboardMetricsDto {
   averageOrderValue: number;
   ordersByStatus: Record<string, number>;
   topSellingItems: TopSellingItemDto[];
+}
+
+export interface KitchenOrderDto {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  customerName: string;
+  tableNumber?: string;
+  createdAt: string;
+  items: OrderItemDto[];
 }
 
 // ==================== AI Agents ====================

@@ -4,6 +4,7 @@ import type {
   CreateOrderRequest,
   OrderDto,
   OrderStatus,
+  ServiceOrderPieceStatus,
   OrderType,
   PaginatedList,
 } from '../types';
@@ -33,4 +34,7 @@ export const ordersApi = {
 
   addPayment: (id: string, data: AddOrderPaymentRequest) =>
     api.post<OrderDto>(`/orders/${id}/payments`, data),
+
+  updateServicePieceStatus: (orderId: string, pieceId: string, newStatus: ServiceOrderPieceStatus) =>
+    api.put(`/orders/${orderId}/service-pieces/${pieceId}/status`, { newStatus }),
 };
