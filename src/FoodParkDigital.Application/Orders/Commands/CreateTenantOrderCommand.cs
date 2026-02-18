@@ -46,7 +46,7 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
             item.RuleFor(i => i.Quantity).GreaterThan(0);
         });
 
-        When(x => x.OrderType == OrderType.Service, () =>
+        When(x => x.OrderType == OrderType.Service && !x.CreatedByBusiness, () =>
         {
             RuleFor(x => x.ServiceDetail).NotNull().WithMessage("El detalle del servicio es obligatorio.");
             RuleFor(x => x.ServiceDetail!.Priority).InclusiveBetween(1, 5);
@@ -149,7 +149,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             if (!product.IsAvailableAt(localTimeOfDay))
                 throw new DomainException($"Product '{product.Name}' is not available at this time.");
 
-            if (!OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
+            if (!request.CreatedByBusiness && !OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
             {
                 var expectedLabel = request.OrderType == OrderType.Service ? "servicio" : "producto";
                 return Result.Failure<OrderDto>(

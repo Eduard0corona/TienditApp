@@ -20,6 +20,7 @@ interface CartLine {
   productName: string;
   unitPrice: number;
   quantity: number;
+  isService: boolean;
 }
 
 export default function OrdersCart() {
@@ -27,8 +28,7 @@ export default function OrdersCart() {
   const { tenant } = useTenant();
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
-  const [retailCart, setRetailCart] = useState<CartLine[]>([]);
-  const [serviceCart, setServiceCart] = useState<CartLine[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [orderType, setOrderType] = useState<OrderType>(OrderTypeConst.Retail);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerNameOverride, setCustomerNameOverride] = useState('');
@@ -101,17 +101,6 @@ export default function OrdersCart() {
     setError('');
   }, [orderType]);
 
-  const cart = orderType === OrderTypeConst.Service ? serviceCart : retailCart;
-
-  const updateCurrentCart = (updater: (current: CartLine[]) => CartLine[]) => {
-    if (orderType === OrderTypeConst.Service) {
-      setServiceCart(updater);
-      return;
-    }
-
-    setRetailCart(updater);
-  };
-
   const updateServicePiece = (
     index: number,
     changes: Partial<CreateServiceOrderPieceRequest>,
@@ -134,7 +123,7 @@ export default function OrdersCart() {
   };
 
   const addToCart = (product: ProductDto) => {
-    updateCurrentCart((current) => {
+    setCart((current) => {
       const existing = current.find((line) => line.productId === product.id);
       if (existing) {
         return current.map((line) =>
@@ -151,6 +140,7 @@ export default function OrdersCart() {
           productName: product.name,
           unitPrice: product.priceAmount,
           quantity: 1,
+          isService: isService(product),
         },
       ];
     });
@@ -165,11 +155,11 @@ export default function OrdersCart() {
 
   const updateQuantity = (productId: string, quantity: number) => {
     if (quantity <= 0) {
-      updateCurrentCart((current) => current.filter((line) => line.productId !== productId));
+      setCart((current) => current.filter((line) => line.productId !== productId));
       return;
     }
 
-    updateCurrentCart((current) =>
+    setCart((current) =>
       current.map((line) =>
         line.productId === productId ? { ...line, quantity } : line,
       ),
@@ -177,13 +167,20 @@ export default function OrdersCart() {
   };
 
   const removeLine = (productId: string) => {
-    updateCurrentCart((current) => current.filter((line) => line.productId !== productId));
+    setCart((current) => current.filter((line) => line.productId !== productId));
   };
 
   const total = useMemo(
     () => cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [cart],
   );
+  const hasServiceItems = useMemo(() => cart.some((line) => line.isService), [cart]);
+  const hasProductItems = useMemo(() => cart.some((line) => !line.isService), [cart]);
+  const resolvedOrderType = useMemo(
+    () => (hasServiceItems && !hasProductItems ? OrderTypeConst.Service : OrderTypeConst.Retail),
+    [hasProductItems, hasServiceItems],
+  );
+  const isMixedCart = hasServiceItems && hasProductItems;
 
   const filteredProducts = useMemo(() => {
     const search = productSearch.trim().toLowerCase();
@@ -245,7 +242,7 @@ export default function OrdersCart() {
       }))
       .filter((piece) => piece.itemName);
 
-    if (orderType === OrderTypeConst.Service && cleanedServicePieces.length === 0) {
+    if (resolvedOrderType === OrderTypeConst.Service && cleanedServicePieces.length === 0) {
       setError('Debes agregar al menos una pieza para una orden de servicio.');
       return;
     }
@@ -256,12 +253,12 @@ export default function OrdersCart() {
       customerPhone: effectiveCustomerPhone,
       customerNotes: customerNotes.trim() || undefined,
       tableNumber: showsTableReferenceField ? tableNumber.trim() || undefined : undefined,
-      orderType,
+      orderType: resolvedOrderType,
       items: cart.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
       })),
-      ...(orderType === OrderTypeConst.Service
+      ...(resolvedOrderType === OrderTypeConst.Service
         ? {
             serviceDetail: {
               promisedAt: servicePromisedAt ? new Date(servicePromisedAt).toISOString() : undefined,
@@ -377,7 +374,7 @@ export default function OrdersCart() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label d-block">Tipo de orden</label>
+                <label className="form-label d-block">Filtro del catalogo</label>
                 <div className="order-type-toggle d-flex flex-column flex-sm-row gap-2" role="group" aria-label="Tipo de orden">
                   <button
                     type="button"
@@ -394,6 +391,11 @@ export default function OrdersCart() {
                     Servicio
                   </button>
                 </div>
+                {isMixedCart && (
+                  <div className="form-text">
+                    Tienes productos y servicios en el carrito. La orden se generara como venta mixta.
+                  </div>
+                )}
               </div>
 
               <div className="mb-2">
@@ -461,7 +463,7 @@ export default function OrdersCart() {
                 </div>
               )}
 
-              {orderType === OrderTypeConst.Service && (
+              {resolvedOrderType === OrderTypeConst.Service && (
                 <div className="border rounded p-2 mb-2">
                   <h5 className="font-15 mb-2">Detalle del servicio</h5>
                   <div className="row g-2 mb-2">
@@ -579,7 +581,7 @@ export default function OrdersCart() {
                     <table className="table table-sm mb-2">
                       <thead>
                         <tr>
-                          <th>{orderType === OrderTypeConst.Service ? 'Servicio' : 'Producto'}</th>
+                          <th>Item</th>
                           <th className="text-center">Cant.</th>
                           <th className="text-end">Subtotal</th>
                           <th></th>
@@ -588,7 +590,12 @@ export default function OrdersCart() {
                       <tbody>
                         {cart.map((line) => (
                           <tr key={line.productId}>
-                            <td>{line.productName}</td>
+                            <td>
+                              {line.productName}
+                              <span className={`badge ms-2 ${line.isService ? 'bg-info' : 'bg-secondary'}`}>
+                                {line.isService ? 'Servicio' : 'Producto'}
+                              </span>
+                            </td>
                             <td className="text-center" style={{ width: 90 }}>
                               <input
                                 type="number"
