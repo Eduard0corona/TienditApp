@@ -11,6 +11,7 @@ public class AzureBlobFileStorageService : IFileStorageService
         ["_original", "_lg", "_md", "_sm", "_xs"];
 
     private readonly BlobContainerClient _containerClient;
+    private readonly bool _autoCreateContainer;
 
     public AzureBlobFileStorageService(IConfiguration configuration)
     {
@@ -23,6 +24,8 @@ public class AzureBlobFileStorageService : IFileStorageService
         if (string.IsNullOrWhiteSpace(containerName))
             throw new InvalidOperationException("FileStorage:AzureBlob:ContainerName no esta configurado.");
 
+        _autoCreateContainer = configuration.GetValue<bool>("FileStorage:AzureBlob:AutoCreateContainer");
+
         var blobServiceClient = new BlobServiceClient(connectionString);
         _containerClient = blobServiceClient.GetBlobContainerClient(containerName);
     }
@@ -34,7 +37,8 @@ public class AzureBlobFileStorageService : IFileStorageService
         string folder,
         CancellationToken cancellationToken = default)
     {
-        await _containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
+        if (_autoCreateContainer)
+            await _containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
 
         var safeFolder = folder.Trim('/').Replace("\\", "/");
         var blobName = $"{safeFolder}/{fileName}";
