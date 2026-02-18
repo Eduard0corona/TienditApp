@@ -177,8 +177,8 @@ export default function OrdersCart() {
   const hasServiceItems = useMemo(() => cart.some((line) => line.isService), [cart]);
   const hasProductItems = useMemo(() => cart.some((line) => !line.isService), [cart]);
   const resolvedOrderType = useMemo(
-    () => (hasServiceItems && !hasProductItems ? OrderTypeConst.Service : OrderTypeConst.Retail),
-    [hasProductItems, hasServiceItems],
+    () => (hasServiceItems ? OrderTypeConst.Service : OrderTypeConst.Retail),
+    [hasServiceItems],
   );
   const isMixedCart = hasServiceItems && hasProductItems;
 
@@ -241,11 +241,6 @@ export default function OrdersCart() {
         internalNotes: piece.internalNotes?.trim() || undefined,
       }))
       .filter((piece) => piece.itemName);
-
-    if (resolvedOrderType === OrderTypeConst.Service && cleanedServicePieces.length === 0) {
-      setError('Debes agregar al menos una pieza para una orden de servicio.');
-      return;
-    }
 
     const payload: CreateOrderRequest = {
       customerId: selectedCustomerId || undefined,
@@ -393,7 +388,7 @@ export default function OrdersCart() {
                 </div>
                 {isMixedCart && (
                   <div className="form-text">
-                    Tienes productos y servicios en el carrito. La orden se generara como venta mixta.
+                    Tienes productos y servicios en el carrito. Se habilitara checklist para los servicios rastreables.
                   </div>
                 )}
               </div>

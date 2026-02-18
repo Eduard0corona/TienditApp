@@ -339,6 +339,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsFeatured")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsTrackable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<int?>("LowStockThreshold")
                         .HasColumnType("int");
 
@@ -349,6 +354,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("NotifyCustomer")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<int?>("PreparationTimeMinutes")
                         .HasColumnType("int");
@@ -1693,6 +1703,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<bool>("IsTrackable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("ItemName")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -1706,12 +1721,20 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
 
+                    b.Property<bool>("NotifyCustomer")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("RequestedService")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
+
+                    b.Property<Guid?>("ServiceProductId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Size")
                         .HasMaxLength(30)
@@ -1732,6 +1755,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("TenantId", "IsTrackable");
 
                     b.HasIndex("TenantId", "OrderId");
 

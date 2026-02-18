@@ -135,11 +135,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string? material,
         string? conditionNotes,
         string? requestedService,
-        string? internalNotes)
+        string? internalNotes,
+        Guid? serviceProductId = null,
+        bool isTrackable = true,
+        bool notifyCustomer = false)
     {
-        if (OrderType != OrderType.Service)
-            throw new DomainException("Solo las ordenes de servicio pueden tener piezas.");
-
         _servicePieces.Add(new ServiceOrderPiece(
             tenantId: TenantId,
             orderId: Id,
@@ -151,7 +151,10 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             material: material,
             conditionNotes: conditionNotes,
             requestedService: requestedService,
-            internalNotes: internalNotes));
+            internalNotes: internalNotes,
+            serviceProductId: serviceProductId,
+            isTrackable: isTrackable,
+            notifyCustomer: notifyCustomer));
     }
 
     public void TransitionTo(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)

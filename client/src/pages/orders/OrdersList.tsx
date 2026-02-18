@@ -54,24 +54,16 @@ const PAYMENT_METHOD_LABELS: Record<number, string> = {
 };
 
 const SERVICE_PIECE_STATUS_LABELS: Record<number, string> = {
-  0: 'Recibida',
-  1: 'Inspeccion',
-  2: 'Lavado',
-  3: 'Secado',
-  4: 'Detallado',
-  5: 'Lista',
-  6: 'Entregada',
+  0: 'Aceptada',
+  1: 'En progreso',
+  2: 'Completada',
   99: 'Cancelada',
 };
 
 const SERVICE_PIECE_STATUS_OPTIONS = [
-  { value: 0, label: 'Recibida' },
-  { value: 1, label: 'Inspeccion' },
-  { value: 2, label: 'Lavado' },
-  { value: 3, label: 'Secado' },
-  { value: 4, label: 'Detallado' },
-  { value: 5, label: 'Lista' },
-  { value: 6, label: 'Entregada' },
+  { value: 0, label: 'Aceptada' },
+  { value: 1, label: 'En progreso' },
+  { value: 2, label: 'Completada' },
   { value: 99, label: 'Cancelada' },
 ] as const;
 
@@ -148,6 +140,10 @@ export default function OrdersList() {
 
   const selectedOrderTotalItems = useMemo(
     () => selectedOrder?.items.reduce((acc, item) => acc + item.quantity, 0) ?? 0,
+    [selectedOrder],
+  );
+  const selectedOrderChecklist = useMemo(
+    () => selectedOrder?.servicePieces.filter((piece) => piece.isTrackable) ?? [],
     [selectedOrder],
   );
 
@@ -278,10 +274,6 @@ export default function OrdersList() {
     switch (status) {
       case 0: return [1, 99];
       case 1: return [2, 99];
-      case 2: return [3, 99];
-      case 3: return [4, 99];
-      case 4: return [5, 99];
-      case 5: return [6, 99];
       default: return [];
     }
   };
@@ -290,7 +282,7 @@ export default function OrdersList() {
     if (!newStatus) return;
 
     try {
-      await ordersApi.updateServicePieceStatus(orderId, pieceId, Number(newStatus) as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 99);
+      await ordersApi.updateServicePieceStatus(orderId, pieceId, Number(newStatus) as 0 | 1 | 2 | 99);
       await Promise.all([loadOrders(), refreshSelectedOrder(orderId)]);
     } catch (err: unknown) {
       const msg =
@@ -564,53 +556,49 @@ export default function OrdersList() {
                 </table>
               </div>
 
-              {selectedOrder.orderType === OrderTypeConst.Service && (
+              {selectedOrderChecklist.length > 0 && (
                 <div className="mt-3">
-                  <h5 className="mb-2">Piezas del servicio</h5>
-                  {selectedOrder.servicePieces.length === 0 ? (
-                    <p className="text-muted mb-0">No hay piezas registradas.</p>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-sm table-striped mb-0">
-                        <thead>
-                          <tr>
-                            <th>Pieza</th>
-                            <th>Servicio solicitado</th>
-                            <th>Estado</th>
-                            <th className="text-end">Accion</th>
+                  <h5 className="mb-2">Checklist de servicios rastreables</h5>
+                  <div className="table-responsive">
+                    <table className="table table-sm table-striped mb-0">
+                      <thead>
+                        <tr>
+                          <th>Servicio</th>
+                          <th>Notificar</th>
+                          <th>Estado</th>
+                          <th className="text-end">Accion</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedOrderChecklist.map((piece) => (
+                          <tr key={piece.id}>
+                            <td>{piece.itemName}</td>
+                            <td>{piece.notifyCustomer ? 'Si' : 'No'}</td>
+                            <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] || piece.status}</td>
+                            <td className="text-end" style={{ minWidth: 220 }}>
+                              <select
+                                className="form-select form-select-sm"
+                                value=""
+                                disabled={getPieceAllowedTransitions(piece.status).length === 0}
+                                onChange={(e) =>
+                                  handleServicePieceStatusChange(selectedOrder.id, piece.id, e.target.value)
+                                }
+                              >
+                                <option value="">Actualizar estado</option>
+                                {SERVICE_PIECE_STATUS_OPTIONS
+                                  .filter((status) => getPieceAllowedTransitions(piece.status).includes(status.value))
+                                  .map((status) => (
+                                    <option key={status.value} value={status.value}>
+                                      {status.label}
+                                    </option>
+                                  ))}
+                              </select>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {selectedOrder.servicePieces.map((piece) => (
-                            <tr key={piece.id}>
-                              <td>{piece.itemName}</td>
-                              <td>{piece.requestedService || '-'}</td>
-                              <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] || piece.status}</td>
-                              <td className="text-end" style={{ minWidth: 220 }}>
-                                <select
-                                  className="form-select form-select-sm"
-                                  value=""
-                                  disabled={getPieceAllowedTransitions(piece.status).length === 0}
-                                  onChange={(e) =>
-                                    handleServicePieceStatusChange(selectedOrder.id, piece.id, e.target.value)
-                                  }
-                                >
-                                  <option value="">Actualizar estado</option>
-                                  {SERVICE_PIECE_STATUS_OPTIONS
-                                    .filter((status) => getPieceAllowedTransitions(piece.status).includes(status.value))
-                                    .map((status) => (
-                                      <option key={status.value} value={status.value}>
-                                        {status.label}
-                                      </option>
-                                    ))}
-                                </select>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 

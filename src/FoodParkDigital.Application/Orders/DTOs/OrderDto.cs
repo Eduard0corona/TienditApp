@@ -71,6 +71,9 @@ public class ServiceOrderPieceDto
 {
     public Guid Id { get; set; }
     public string ItemName { get; set; } = null!;
+    public Guid? ServiceProductId { get; set; }
+    public bool IsTrackable { get; set; }
+    public bool NotifyCustomer { get; set; }
     public string? Brand { get; set; }
     public string? Model { get; set; }
     public string? Color { get; set; }

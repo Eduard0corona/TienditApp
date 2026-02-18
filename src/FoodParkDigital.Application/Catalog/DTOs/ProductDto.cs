@@ -43,6 +43,8 @@ public class ProductDto
     public TimeSpan? AvailableFromTime { get; set; }
     public TimeSpan? AvailableToTime { get; set; }
     public bool IsLowStock { get; set; }
+    public bool IsTrackable { get; set; }
+    public bool NotifyCustomer { get; set; }
 }
 
 public class ProductImageUrlsDto

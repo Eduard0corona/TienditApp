@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -50,11 +51,6 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         {
             RuleFor(x => x.ServiceDetail).NotNull().WithMessage("El detalle del servicio es obligatorio.");
             RuleFor(x => x.ServiceDetail!.Priority).InclusiveBetween(1, 5);
-            RuleFor(x => x.ServiceDetail!.Pieces).NotEmpty().WithMessage("Debes registrar al menos una pieza.");
-            RuleForEach(x => x.ServiceDetail!.Pieces).ChildRules(piece =>
-            {
-                piece.RuleFor(p => p.ItemName).NotEmpty().MaximumLength(120);
-            });
         });
     }
 }
@@ -138,6 +134,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             customerPhone: linkedCustomer.PhoneNormalized,
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber);
+        var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
 
         foreach (var itemDto in request.Items)
         {
@@ -157,6 +154,9 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             }
 
             order.AddItem(product.Id, product.Name, itemDto.Quantity, product.PriceAmount, itemDto.Notes);
+
+            if (OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
+                checklistCandidates.Add((product, itemDto));
         }
 
         if (request.OrderType == OrderType.Service && request.ServiceDetail is not null)
@@ -172,18 +172,29 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
                 beforePhotosJson: request.ServiceDetail.BeforePhotosJson,
                 afterPhotosJson: request.ServiceDetail.AfterPhotosJson);
 
-            foreach (var piece in request.ServiceDetail.Pieces)
+        }
+
+        foreach (var (product, item) in checklistCandidates)
+        {
+            for (var index = 0; index < item.Quantity; index++)
             {
+                var itemName = item.Quantity > 1
+                    ? $"{product.Name} #{index + 1}"
+                    : product.Name;
+
                 order.AddServicePiece(
-                    itemName: piece.ItemName.Trim(),
-                    brand: piece.Brand?.Trim(),
-                    model: piece.Model?.Trim(),
-                    color: piece.Color?.Trim(),
-                    size: piece.Size?.Trim(),
-                    material: piece.Material?.Trim(),
-                    conditionNotes: piece.ConditionNotes?.Trim(),
-                    requestedService: piece.RequestedService?.Trim(),
-                    internalNotes: piece.InternalNotes?.Trim());
+                    itemName: itemName,
+                    brand: null,
+                    model: null,
+                    color: null,
+                    size: null,
+                    material: null,
+                    conditionNotes: item.Notes?.Trim(),
+                    requestedService: product.Name,
+                    internalNotes: null,
+                    serviceProductId: product.Id,
+                    isTrackable: true,
+                    notifyCustomer: product.NotifyCustomer);
             }
         }
 

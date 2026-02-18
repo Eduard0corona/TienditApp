@@ -31,7 +31,9 @@ public class Product : AuditableEntity, ITenantScoped
         int? maxQuantityPerOrder = null,
         UnitType? unit = null,
         TimeSpan? availableFromTime = null,
-        TimeSpan? availableToTime = null)
+        TimeSpan? availableToTime = null,
+        bool isTrackable = false,
+        bool notifyCustomer = false)
     {
         TenantId = tenantId;
         CategoryId = categoryId;
@@ -54,6 +56,8 @@ public class Product : AuditableEntity, ITenantScoped
         LowStockThreshold = lowStockThreshold;
         MaxQuantityPerOrder = maxQuantityPerOrder;
         Unit = unit;
+        IsTrackable = isTrackable;
+        NotifyCustomer = notifyCustomer;
         IsAvailable = true;
         SetAvailabilitySchedule(availableFromTime, availableToTime);
     }
@@ -95,6 +99,8 @@ public class Product : AuditableEntity, ITenantScoped
     public int? MaxQuantityPerOrder { get; private set; }
     public TimeSpan? AvailableFromTime { get; private set; }
     public TimeSpan? AvailableToTime { get; private set; }
+    public bool IsTrackable { get; private set; }
+    public bool NotifyCustomer { get; private set; }
 
     // Navigation
     public Category Category { get; private set; } = null!;
@@ -121,7 +127,9 @@ public class Product : AuditableEntity, ITenantScoped
         int? maxQuantityPerOrder = null,
         UnitType? unit = null,
         TimeSpan? availableFromTime = null,
-        TimeSpan? availableToTime = null)
+        TimeSpan? availableToTime = null,
+        bool isTrackable = false,
+        bool notifyCustomer = false)
     {
         CategoryId = categoryId;
         Name = name;
@@ -143,6 +151,8 @@ public class Product : AuditableEntity, ITenantScoped
         LowStockThreshold = lowStockThreshold;
         MaxQuantityPerOrder = maxQuantityPerOrder;
         Unit = unit;
+        IsTrackable = isTrackable;
+        NotifyCustomer = notifyCustomer;
         SetAvailabilitySchedule(availableFromTime, availableToTime);
     }
 

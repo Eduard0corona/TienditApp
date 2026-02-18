@@ -294,6 +294,8 @@ export interface ProductDto {
   availableFromTime?: string;
   availableToTime?: string;
   isLowStock: boolean;
+  isTrackable: boolean;
+  notifyCustomer: boolean;
 }
 
 export interface CategoryDto {
@@ -359,6 +361,8 @@ export interface CreateProductRequest {
   preparationTimeMinutes?: number;
   availableFromTime?: string;
   availableToTime?: string;
+  isTrackable?: boolean;
+  notifyCustomer?: boolean;
 }
 
 export interface UpdateProductRequest extends CreateProductRequest {
@@ -916,7 +920,7 @@ export interface UpdateCustomerRequest extends CreateCustomerRequest {
 
 export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 99;
 export type OrderType = 0 | 1;
-export type ServiceOrderPieceStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 99;
+export type ServiceOrderPieceStatus = 0 | 1 | 2 | 99;
 export type OrderPaymentMethod = 0 | 1 | 2 | 3 | 4;
 
 export const OrderType = {
@@ -933,13 +937,9 @@ export const OrderPaymentMethod = {
 } as const;
 
 export const ServiceOrderPieceStatus = {
-  Received: 0,
-  Inspection: 1,
-  Washing: 2,
-  Drying: 3,
-  Detailing: 4,
-  Ready: 5,
-  Delivered: 6,
+  Accepted: 0,
+  InProgress: 1,
+  Completed: 2,
   Cancelled: 99,
 } as const;
 
@@ -976,6 +976,9 @@ export interface ServiceOrderDetailDto {
 export interface ServiceOrderPieceDto {
   id: string;
   itemName: string;
+  serviceProductId?: string;
+  isTrackable: boolean;
+  notifyCustomer: boolean;
   brand?: string;
   model?: string;
   color?: string;

@@ -22,9 +22,13 @@ public class ServiceOrderPieceConfiguration : IEntityTypeConfiguration<ServiceOr
         builder.Property(x => x.ConditionNotes).HasMaxLength(1000);
         builder.Property(x => x.RequestedService).HasMaxLength(300);
         builder.Property(x => x.InternalNotes).HasMaxLength(1000);
+        builder.Property(x => x.ServiceProductId);
+        builder.Property(x => x.IsTrackable).HasDefaultValue(true);
+        builder.Property(x => x.NotifyCustomer).HasDefaultValue(false);
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();
 
         builder.HasIndex(x => new { x.TenantId, x.OrderId });
         builder.HasIndex(x => new { x.TenantId, x.Status });
+        builder.HasIndex(x => new { x.TenantId, x.IsTrackable });
     }
 }
