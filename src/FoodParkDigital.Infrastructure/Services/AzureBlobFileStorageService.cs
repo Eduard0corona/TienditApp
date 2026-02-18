@@ -34,9 +34,7 @@ public class AzureBlobFileStorageService : IFileStorageService
         string folder,
         CancellationToken cancellationToken = default)
     {
-        await _containerClient.CreateIfNotExistsAsync(
-            PublicAccessType.Blob,
-            cancellationToken: cancellationToken);
+        await _containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
 
         var safeFolder = folder.Trim('/').Replace("\\", "/");
         var blobName = $"{safeFolder}/{fileName}";
