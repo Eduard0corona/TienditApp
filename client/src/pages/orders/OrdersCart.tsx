@@ -4,6 +4,7 @@ import PageTitle from '../../components/common/PageTitle';
 import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
+import { useTenant } from '../../hooks/useTenant';
 import './OrdersCart.css';
 import type {
   CreateOrderRequest,
@@ -12,7 +13,7 @@ import type {
   OrderType,
   ProductDto,
 } from '../../types';
-import { OrderType as OrderTypeConst, UnitType } from '../../types';
+import { BusinessType as BusinessTypeConst, OrderType as OrderTypeConst, UnitType } from '../../types';
 
 interface CartLine {
   productId: string;
@@ -23,9 +24,11 @@ interface CartLine {
 
 export default function OrdersCart() {
   const navigate = useNavigate();
+  const { tenant } = useTenant();
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [retailCart, setRetailCart] = useState<CartLine[]>([]);
+  const [serviceCart, setServiceCart] = useState<CartLine[]>([]);
   const [orderType, setOrderType] = useState<OrderType>(OrderTypeConst.Retail);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [customerNameOverride, setCustomerNameOverride] = useState('');
@@ -43,6 +46,7 @@ export default function OrdersCart() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const showsTableReferenceField = tenant?.businessType === BusinessTypeConst.Food;
 
   const isService = (product: ProductDto) =>
     product.unit === UnitType.Hour ||
@@ -94,9 +98,19 @@ export default function OrdersCart() {
   }, [loadData]);
 
   useEffect(() => {
-    setCart([]);
     setError('');
   }, [orderType]);
+
+  const cart = orderType === OrderTypeConst.Service ? serviceCart : retailCart;
+
+  const updateCurrentCart = (updater: (current: CartLine[]) => CartLine[]) => {
+    if (orderType === OrderTypeConst.Service) {
+      setServiceCart(updater);
+      return;
+    }
+
+    setRetailCart(updater);
+  };
 
   const updateServicePiece = (
     index: number,
@@ -120,7 +134,7 @@ export default function OrdersCart() {
   };
 
   const addToCart = (product: ProductDto) => {
-    setCart((current) => {
+    updateCurrentCart((current) => {
       const existing = current.find((line) => line.productId === product.id);
       if (existing) {
         return current.map((line) =>
@@ -151,11 +165,11 @@ export default function OrdersCart() {
 
   const updateQuantity = (productId: string, quantity: number) => {
     if (quantity <= 0) {
-      setCart((current) => current.filter((line) => line.productId !== productId));
+      updateCurrentCart((current) => current.filter((line) => line.productId !== productId));
       return;
     }
 
-    setCart((current) =>
+    updateCurrentCart((current) =>
       current.map((line) =>
         line.productId === productId ? { ...line, quantity } : line,
       ),
@@ -163,7 +177,7 @@ export default function OrdersCart() {
   };
 
   const removeLine = (productId: string) => {
-    setCart((current) => current.filter((line) => line.productId !== productId));
+    updateCurrentCart((current) => current.filter((line) => line.productId !== productId));
   };
 
   const total = useMemo(
@@ -241,7 +255,7 @@ export default function OrdersCart() {
       customerName: customerNameOverride.trim() || undefined,
       customerPhone: effectiveCustomerPhone,
       customerNotes: customerNotes.trim() || undefined,
-      tableNumber: tableNumber.trim() || undefined,
+      tableNumber: showsTableReferenceField ? tableNumber.trim() || undefined : undefined,
       orderType,
       items: cart.map((line) => ({
         productId: line.productId,
@@ -299,11 +313,11 @@ export default function OrdersCart() {
         <div className="col-xl-7">
           <div className="card">
             <div className="card-body">
-              <div className="d-flex justify-content-between align-items-center mb-3 gap-2">
+              <div className="orders-catalog-toolbar d-flex justify-content-between align-items-center mb-3 gap-2">
                 <h4 className="header-title mb-0">
                   {orderType === OrderTypeConst.Service ? 'Servicios disponibles' : 'Productos disponibles'}
                 </h4>
-                <div style={{ minWidth: 280 }}>
+                <div className="orders-catalog-search">
                   <input
                     type="text"
                     className="form-control form-control-sm"
@@ -364,17 +378,17 @@ export default function OrdersCart() {
 
               <div className="mb-3">
                 <label className="form-label d-block">Tipo de orden</label>
-                <div className="btn-group w-100" role="group" aria-label="Tipo de orden">
+                <div className="order-type-toggle d-flex flex-column flex-sm-row gap-2" role="group" aria-label="Tipo de orden">
                   <button
                     type="button"
-                    className={`btn ${orderType === OrderTypeConst.Retail ? 'btn-primary' : 'btn-light'}`}
+                    className={`btn flex-fill ${orderType === OrderTypeConst.Retail ? 'btn-primary' : 'btn-light'}`}
                     onClick={() => setOrderType(OrderTypeConst.Retail)}
                   >
                     Venta de productos
                   </button>
                   <button
                     type="button"
-                    className={`btn ${orderType === OrderTypeConst.Service ? 'btn-primary' : 'btn-light'}`}
+                    className={`btn flex-fill ${orderType === OrderTypeConst.Service ? 'btn-primary' : 'btn-light'}`}
                     onClick={() => setOrderType(OrderTypeConst.Service)}
                   >
                     Servicio
@@ -435,15 +449,17 @@ export default function OrdersCart() {
                 </div>
               )}
 
-              <div className="mb-2">
-                <label className="form-label">Mesa / Referencia</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={tableNumber}
-                  onChange={(e) => setTableNumber(e.target.value)}
-                />
-              </div>
+              {showsTableReferenceField && (
+                <div className="mb-2">
+                  <label className="form-label">Mesa / Referencia</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                  />
+                </div>
+              )}
 
               {orderType === OrderTypeConst.Service && (
                 <div className="border rounded p-2 mb-2">

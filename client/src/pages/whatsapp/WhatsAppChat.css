@@ -1,0 +1,39 @@
+.whatsapp-conversations-panel,
+.whatsapp-messages-panel {
+  height: calc(100vh - 200px);
+}
+
+.wa-conversation-item {
+  cursor: pointer;
+}
+
+.wa-message-bubble {
+  max-width: 70%;
+}
+
+@media (max-width: 1199.98px) {
+  .whatsapp-conversations-panel {
+    height: 340px;
+    margin-bottom: 1rem;
+  }
+
+  .whatsapp-messages-panel {
+    height: 65vh;
+    min-height: 420px;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .whatsapp-conversations-panel {
+    height: 300px;
+  }
+
+  .whatsapp-messages-panel {
+    height: 60vh;
+    min-height: 360px;
+  }
+
+  .wa-message-bubble {
+    max-width: 85%;
+  }
+}

@@ -3,6 +3,7 @@ import PageTitle from '../../components/common/PageTitle';
 import { chatApi } from '../../api/chatApi';
 import { useChatSignalR } from '../../hooks/useChatSignalR';
 import type { ConversationDto, ChatMessageDto } from '../../types';
+import './WhatsAppChat.css';
 
 export default function WhatsAppChat() {
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
@@ -247,7 +248,7 @@ export default function WhatsAppChat() {
       <div className="row">
         {/* Conversation List */}
         <div className="col-xl-4">
-          <div className="card" style={{ height: 'calc(100vh - 200px)' }}>
+          <div className="card whatsapp-conversations-panel">
             <div className="card-body p-0 d-flex flex-column h-100">
               {/* Search + New */}
               <div className="p-3 border-bottom">
@@ -296,7 +297,7 @@ export default function WhatsAppChat() {
                   conversations.map((convo) => (
                     <div
                       key={convo.id}
-                      className={`d-flex align-items-center p-3 border-bottom cursor-pointer ${
+                      className={`wa-conversation-item d-flex align-items-center p-3 border-bottom cursor-pointer ${
                         selectedId === convo.id ? 'bg-light' : ''
                       }`}
                       style={{ cursor: 'pointer' }}
@@ -345,7 +346,7 @@ export default function WhatsAppChat() {
 
         {/* Chat Panel */}
         <div className="col-xl-8">
-          <div className="card" style={{ height: 'calc(100vh - 200px)' }}>
+          <div className="card whatsapp-messages-panel">
             {!selectedId ? (
               <div className="card-body d-flex align-items-center justify-content-center h-100">
                 <div className="text-center text-muted">
@@ -397,9 +398,8 @@ export default function WhatsAppChat() {
                           className={`d-flex mb-2 ${isOutbound ? 'justify-content-end' : 'justify-content-start'}`}
                         >
                           <div
-                            className="rounded p-2 position-relative"
+                            className="wa-message-bubble rounded p-2 position-relative"
                             style={{
-                              maxWidth: '70%',
                               backgroundColor: isOutbound ? '#dcf8c6' : '#ffffff',
                               boxShadow: '0 1px 1px rgba(0,0,0,.1)',
                             }}
