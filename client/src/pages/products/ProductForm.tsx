@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
+import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { CreateProductRequest, CategoryDto, ProductDto, UnitType } from '../../types';
@@ -37,6 +38,7 @@ export default function ProductForm() {
   const [error, setError] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const {
     register,
@@ -146,11 +148,15 @@ export default function ProductForm() {
 
       // Upload image if selected
       if (imageFile && productId) {
+        setImageUploading(true);
         try {
-          await productsApi.uploadImage(productId, imageFile);
+          const { data: uploaded } = await productsApi.uploadImage(productId, imageFile);
+          setImagePreview(uploaded.medium || uploaded.original);
         } catch {
           // Product saved, but image failed — show warning but still navigate
           alert('El producto se guardó pero hubo un error al subir la imagen.');
+        } finally {
+          setImageUploading(false);
         }
       }
 
@@ -176,6 +182,11 @@ export default function ProductForm() {
 
   return (
     <>
+      <UploadLoadingModal
+        show={imageUploading}
+        title="Subiendo imagen"
+        description="Estamos procesando la imagen del producto."
+      />
       <PageTitle title={isEditing ? 'Editar Producto' : 'Nuevo Producto'} subtitle="Catálogo" />
 
       {error && (

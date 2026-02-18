@@ -7,31 +7,33 @@ import { COMMERCE_CAPABILITIES, hasAnyCapability, hasCapability } from '../../ut
 export default function LeftSidebar() {
   const { pathname } = useLocation();
   const { user } = useAuth();
-  const { capabilities } = useTenant();
+  const { tenant, capabilities } = useTenant();
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/');
   const canUseCommerce = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
   const canUseInventory = hasCapability(capabilities, TenantCapability.Inventory);
   const canUseAppointments = hasCapability(capabilities, TenantCapability.Appointments);
   const canUseKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
+  const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo.png';
+  const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '/images/logo-sm.png';
 
   return (
     <div className="leftside-menu">
       <Link to="/dashboard" className="logo logo-light">
         <span className="logo-lg">
-          <img src="/images/logo.png" alt="logo" />
+          <img src={tenantLogoLg} alt="logo" />
         </span>
         <span className="logo-sm">
-          <img src="/images/logo-sm.png" alt="small logo" />
+          <img src={tenantLogoSm} alt="small logo" />
         </span>
       </Link>
 
       <Link to="/dashboard" className="logo logo-dark">
         <span className="logo-lg">
-          <img src="/images/logo-dark.png" alt="dark logo" />
+          <img src={tenantLogoLg} alt="dark logo" />
         </span>
         <span className="logo-sm">
-          <img src="/images/logo-dark-sm.png" alt="small logo" />
+          <img src={tenantLogoSm} alt="small logo" />
         </span>
       </Link>
 

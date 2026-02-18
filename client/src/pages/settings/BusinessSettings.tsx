@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
+import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { tenantApi } from '../../api/tenantApi';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
@@ -101,6 +102,7 @@ export default function BusinessSettings() {
   const [msg, setMsg] = useState<{ type: string; text: string } | null>(null);
   const [logoMsg, setLogoMsg] = useState<{ type: string; text: string } | null>(null);
   const [logoLoading, setLogoLoading] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
   const [tenant, setTenant] = useState<TenantProfileDto | null>(null);
 
   const {
@@ -174,10 +176,12 @@ export default function BusinessSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
     setLogoLoading(true);
+    setLogoUploading(true);
     setLogoMsg(null);
     try {
       const { data: logos } = await tenantApi.uploadLogo(file);
       setTenant((prev) => prev ? { ...prev, logoUrl: logos.medium, logoImages: logos } : prev);
+      await refreshTenant();
       setLogoMsg({ type: 'success', text: 'Logo actualizado.' });
     } catch (err: unknown) {
       const errMsg =
@@ -186,6 +190,7 @@ export default function BusinessSettings() {
       setLogoMsg({ type: 'danger', text: errMsg });
     } finally {
       setLogoLoading(false);
+      setLogoUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -196,6 +201,7 @@ export default function BusinessSettings() {
     try {
       await tenantApi.deleteLogo();
       setTenant((prev) => prev ? { ...prev, logoUrl: undefined, logoImages: undefined } : prev);
+      await refreshTenant();
       setLogoMsg({ type: 'success', text: 'Logo eliminado.' });
     } catch {
       setLogoMsg({ type: 'danger', text: 'Error al eliminar el logo.' });
@@ -204,7 +210,7 @@ export default function BusinessSettings() {
     }
   };
 
-  const logoSrc = tenant?.logoImages?.medium || '/images/logo-placeholder.png';
+  const logoSrc = tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo-placeholder.png';
 
   const formatAddress = () => {
     const parts = [
@@ -235,6 +241,11 @@ export default function BusinessSettings() {
 
   return (
     <>
+      <UploadLoadingModal
+        show={logoLoading || logoUploading}
+        title="Subiendo logo"
+        description="Estamos actualizando el logo de tu empresa."
+      />
       <PageTitle title="Mi Empresa" subtitle="Configuración" />
 
       {/* Business Header */}
