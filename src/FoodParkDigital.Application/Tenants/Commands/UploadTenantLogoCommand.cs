@@ -62,7 +62,7 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
 
     public async Task<Result<LogoImageUrlsDto>> Handle(UploadTenantLogoCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role != "TENANT_ADMIN")
+        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
             return Result.Failure<LogoImageUrlsDto>("Solo el administrador puede cambiar el logo.");
 
         var tenantId = _tenantService.TenantId;

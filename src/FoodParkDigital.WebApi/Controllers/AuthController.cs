@@ -299,7 +299,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("my-tenant/logo")]
-    [Authorize(Roles = "TENANT_ADMIN")]
+    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantLogo(IFormFile file)
     {
@@ -319,7 +319,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpDelete("my-tenant/logo")]
-    [Authorize(Roles = "TENANT_ADMIN")]
+    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> DeleteTenantLogo()
     {
         var result = await _mediator.Send(new DeleteTenantLogoCommand());
