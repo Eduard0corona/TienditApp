@@ -4,7 +4,11 @@ import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { categoriesApi } from '../../api/categoriesApi';
-import type { CategoryDto, CreateCategoryRequest } from '../../types';
+import type {
+  CategoryDto,
+  CategoryTemplateDto,
+  CreateCategoryRequest,
+} from '../../types';
 
 const COLUMNS = [
   { header: 'Nombre' },
@@ -18,8 +22,13 @@ export default function CategoriesList() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryDto | null>(null);
+  const [templates, setTemplates] = useState<CategoryTemplateDto[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [installingTemplateId, setInstallingTemplateId] = useState<string | null>(null);
 
   const {
     register,
@@ -53,6 +62,21 @@ export default function CategoriesList() {
     setShowModal(true);
   };
 
+  const openTemplatesModal = async () => {
+    setError('');
+    setSuccess('');
+    setShowTemplatesModal(true);
+    setTemplatesLoading(true);
+    try {
+      const { data } = await categoriesApi.getTemplates();
+      setTemplates(data);
+    } catch {
+      setError('Error al cargar las plantillas de categorías.');
+    } finally {
+      setTemplatesLoading(false);
+    }
+  };
+
   const openEditModal = (category: CategoryDto) => {
     setEditingCategory(category);
     setShowModal(true);
@@ -63,6 +87,11 @@ export default function CategoriesList() {
     setEditingCategory(null);
   };
 
+  const closeTemplatesModal = () => {
+    setShowTemplatesModal(false);
+    setInstallingTemplateId(null);
+  };
+
   const onSubmit = async (data: CreateCategoryRequest) => {
     try {
       if (editingCategory) {
@@ -70,6 +99,7 @@ export default function CategoriesList() {
       } else {
         await categoriesApi.create(data);
       }
+      setSuccess(editingCategory ? 'Categoría actualizada.' : 'Categoría creada.');
       closeModal();
       await loadCategories();
     } catch (err: unknown) {
@@ -77,6 +107,27 @@ export default function CategoriesList() {
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
         'Error al guardar la categoría.';
       setError(msg);
+    }
+  };
+
+  const handleInstallTemplate = async (template: CategoryTemplateDto) => {
+    setError('');
+    setSuccess('');
+    setInstallingTemplateId(template.id);
+    try {
+      const { data } = await categoriesApi.installTemplate(template.id);
+      setSuccess(
+        `Plantilla "${data.templateName}" instalada: ${data.createdCount} creadas, ${data.skippedCount} omitidas.`,
+      );
+      await loadCategories();
+      closeTemplatesModal();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Error al instalar la plantilla.';
+      setError(msg);
+    } finally {
+      setInstallingTemplateId(null);
     }
   };
 
@@ -115,7 +166,10 @@ export default function CategoriesList() {
                   <h4 className="header-title mt-0">Listado de Categorías</h4>
                 </div>
                 <div className="col-sm-7">
-                  <div className="text-sm-end">
+                  <div className="text-sm-end d-flex justify-content-sm-end gap-2">
+                    <button className="btn btn-soft-primary" onClick={openTemplatesModal}>
+                      <i className="ri-layout-grid-line me-1"></i> Instalar Plantilla
+                    </button>
                     <button className="btn btn-primary" onClick={openCreateModal}>
                       <i className="ri-add-line me-1"></i> Nueva Categoría
                     </button>
@@ -127,6 +181,13 @@ export default function CategoriesList() {
                 <div className="alert alert-danger alert-dismissible fade show">
                   {error}
                   <button type="button" className="btn-close" onClick={() => setError('')}></button>
+                </div>
+              )}
+
+              {success && (
+                <div className="alert alert-success alert-dismissible fade show">
+                  {success}
+                  <button type="button" className="btn-close" onClick={() => setSuccess('')}></button>
                 </div>
               )}
 
@@ -221,6 +282,74 @@ export default function CategoriesList() {
             </button>
           </Modal.Footer>
         </form>
+      </Modal>
+
+      <Modal show={showTemplatesModal} onHide={closeTemplatesModal} centered size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Instalar Plantilla de Categorías</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {templatesLoading ? (
+            <div className="text-center py-4">
+              <div className="spinner-border text-primary" role="status"></div>
+            </div>
+          ) : (
+            <div className="row g-3">
+              {templates.length === 0 && (
+                <div className="col-12">
+                  <div className="alert alert-light border mb-0">
+                    No hay plantillas disponibles para este tenant.
+                  </div>
+                </div>
+              )}
+
+              {templates.map((template) => (
+                <div className="col-md-6" key={template.id}>
+                  <div className={`card h-100 border ${template.isRecommended ? 'border-primary' : ''}`}>
+                    <div className="card-body d-flex flex-column">
+                      <div className="d-flex justify-content-between align-items-start mb-2">
+                        <h5 className="card-title mb-0">{template.name}</h5>
+                        {template.isRecommended && (
+                          <span className="badge bg-primary">Recomendada</span>
+                        )}
+                      </div>
+                      <p className="text-muted mb-2">{template.description}</p>
+                      <p className="mb-2">
+                        <small className="text-muted">{template.categoryCount} categorías</small>
+                      </p>
+                      <div className="d-flex flex-wrap gap-1 mb-3">
+                        {template.categories.slice(0, 6).map((item) => (
+                          <span key={`${template.id}-${item.name}`} className="badge bg-light text-dark border">
+                            {item.name}
+                          </span>
+                        ))}
+                        {template.categories.length > 6 && (
+                          <span className="badge bg-light text-dark border">
+                            +{template.categories.length - 6}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-auto d-grid">
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleInstallTemplate(template)}
+                          disabled={installingTemplateId !== null}
+                        >
+                          {installingTemplateId === template.id ? 'Instalando...' : 'Instalar'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <button type="button" className="btn btn-light" onClick={closeTemplatesModal}>
+            Cerrar
+          </button>
+        </Modal.Footer>
       </Modal>
     </>
   );

@@ -304,6 +304,30 @@ export interface CategoryDto {
   isActive: boolean;
 }
 
+export interface CategoryTemplateItemDto {
+  name: string;
+  description?: string;
+  sortOrder: number;
+}
+
+export interface CategoryTemplateDto {
+  id: string;
+  name: string;
+  description: string;
+  businessType?: BusinessType;
+  isRecommended: boolean;
+  categoryCount: number;
+  categories: CategoryTemplateItemDto[];
+}
+
+export interface InstallCategoryTemplateResultDto {
+  templateId: string;
+  templateName: string;
+  createdCount: number;
+  skippedCount: number;
+  totalCount: number;
+}
+
 export interface PaginatedList<T> {
   items: T[];
   pageNumber: number;
