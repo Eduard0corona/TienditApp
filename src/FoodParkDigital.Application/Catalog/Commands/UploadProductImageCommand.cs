@@ -41,6 +41,8 @@ public class UploadProductImageCommandValidator : AbstractValidator<UploadProduc
 
 public class UploadProductImageCommandHandler : IRequestHandler<UploadProductImageCommand, Result<ProductImageUrlsDto>>
 {
+    private const string OriginalVariantSuffix = "_original.webp";
+
     private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorageService;
     private readonly IImageProcessingService _imageProcessingService;
@@ -75,19 +77,22 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
         // Subir cada variante
         var folder = $"products/{_tenantService.TenantId}";
         var baseId = Guid.NewGuid().ToString();
-        var baseUrl = $"/uploads/{folder}/{baseId}";
+        string? baseUrl = null;
 
         try
         {
             foreach (var variant in variants)
             {
                 var fileName = $"{baseId}{variant.Suffix}.webp";
-                await _fileStorageService.UploadAsync(
+                var uploadedUrl = await _fileStorageService.UploadAsync(
                     variant.Stream,
                     fileName,
                     "image/webp",
                     folder,
                     cancellationToken);
+
+                if (variant.Suffix == "_original" && uploadedUrl.EndsWith(OriginalVariantSuffix, StringComparison.OrdinalIgnoreCase))
+                    baseUrl = uploadedUrl[..^OriginalVariantSuffix.Length];
             }
         }
         finally
@@ -97,6 +102,9 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
         }
 
         // Actualizar producto con la ruta base (sin sufijo ni extensión)
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return Result.Failure<ProductImageUrlsDto>("No se pudo almacenar la imagen.");
+
         product.Update(
             product.CategoryId,
             product.Name,

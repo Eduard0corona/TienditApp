@@ -121,7 +121,12 @@ public static class DependencyInjection
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
-        services.AddScoped<IFileStorageService, LocalFileStorageService>();
+        var fileStorageProvider = configuration["FileStorage:Provider"];
+        if (string.Equals(fileStorageProvider, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<IFileStorageService, AzureBlobFileStorageService>();
+        else
+            services.AddScoped<IFileStorageService, LocalFileStorageService>();
+
         services.AddSingleton<IImageProcessingService, ImageProcessingService>();
         services.AddHttpContextAccessor();
 

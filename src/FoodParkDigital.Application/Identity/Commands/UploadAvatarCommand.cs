@@ -39,6 +39,8 @@ public class UploadAvatarCommandValidator : AbstractValidator<UploadAvatarComman
 
 public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, Result<AvatarImageUrlsDto>>
 {
+    private const string OriginalVariantSuffix = "_original.webp";
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
@@ -80,19 +82,22 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
         // Subir cada variante
         var folder = $"avatars/{_tenantService.TenantId}";
         var baseId = Guid.NewGuid().ToString();
-        var baseUrl = $"/uploads/{folder}/{baseId}";
+        string? baseUrl = null;
 
         try
         {
             foreach (var variant in variants)
             {
                 var fileName = $"{baseId}{variant.Suffix}.webp";
-                await _fileStorageService.UploadAsync(
+                var uploadedUrl = await _fileStorageService.UploadAsync(
                     variant.Stream,
                     fileName,
                     "image/webp",
                     folder,
                     cancellationToken);
+
+                if (variant.Suffix == "_original" && uploadedUrl.EndsWith(OriginalVariantSuffix, StringComparison.OrdinalIgnoreCase))
+                    baseUrl = uploadedUrl[..^OriginalVariantSuffix.Length];
             }
         }
         finally
@@ -100,6 +105,9 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
             foreach (var variant in variants)
                 variant.Dispose();
         }
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return Result.Failure<AvatarImageUrlsDto>("No se pudo almacenar la imagen.");
 
         // Actualizar avatar del usuario
         user.AvatarUrl = baseUrl;
