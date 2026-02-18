@@ -4,6 +4,7 @@ import PageTitle from '../../components/common/PageTitle';
 import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
+import './OrdersCart.css';
 import type {
   CreateOrderRequest,
   CreateServiceOrderPieceRequest,
@@ -139,6 +140,13 @@ export default function OrdersCart() {
         },
       ];
     });
+  };
+
+  const onProductCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, product: ProductDto) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      addToCart(product);
+    }
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
@@ -314,7 +322,14 @@ export default function OrdersCart() {
                 <div className="row g-2">
                   {filteredProducts.map((product) => (
                     <div className="col-md-6 col-lg-4" key={product.id}>
-                      <div className="border rounded p-2 h-100 d-flex flex-column">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="order-catalog-card border rounded p-2 h-100 d-flex flex-column"
+                        onClick={() => addToCart(product)}
+                        onKeyDown={(event) => onProductCardKeyDown(event, product)}
+                        title="Agregar al carrito"
+                      >
                         <div className="d-flex justify-content-between align-items-center gap-2">
                           <div className="fw-semibold">{product.name}</div>
                           <span className={`badge ${isService(product) ? 'bg-info' : 'bg-secondary'}`}>
@@ -326,13 +341,7 @@ export default function OrdersCart() {
                           <span className="fw-semibold">
                             ${product.priceAmount.toFixed(2)} {product.priceCurrency}
                           </span>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-soft-primary"
-                            onClick={() => addToCart(product)}
-                          >
-                            <i className="ri-add-line me-1"></i>Agregar
-                          </button>
+                          <span className="text-muted small">Click para agregar</span>
                         </div>
                       </div>
                     </div>
