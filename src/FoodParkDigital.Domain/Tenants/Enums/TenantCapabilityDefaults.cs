@@ -7,7 +7,7 @@ public static class TenantCapabilityDefaults
         {
             BusinessType.Food => TenantCapability.Food | TenantCapability.Inventory | TenantCapability.Kitchen,
             BusinessType.Retail => TenantCapability.Retail | TenantCapability.Inventory,
-            BusinessType.Service => TenantCapability.Service | TenantCapability.Inventory | TenantCapability.Appointments,
+            BusinessType.Service => TenantCapability.Service | TenantCapability.Retail | TenantCapability.Inventory | TenantCapability.Appointments,
             _ => TenantCapability.Inventory
         };
 }

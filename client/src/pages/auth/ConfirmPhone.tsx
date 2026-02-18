@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
@@ -24,12 +24,12 @@ export default function ConfirmPhone() {
     setError('');
     try {
       await authApi.confirmPhone(userId, data.code);
-      setSuccess('Número confirmado. Ahora puedes iniciar sesión.');
+      setSuccess('Numero confirmado. Ahora puedes iniciar sesion.');
       setTimeout(() => navigate('/login'), 2000);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Código inválido';
+        'Codigo invalido';
       setError(msg);
     }
   };
@@ -60,9 +60,9 @@ export default function ConfirmPhone() {
 
                 <div className="card-body p-4">
                   <div className="text-center w-75 m-auto">
-                    <h4 className="text-dark-50 text-center pb-0 fw-bold">Confirmar Teléfono</h4>
+                    <h4 className="text-dark-50 text-center pb-0 fw-bold">Confirmar Telefono</h4>
                     <p className="text-muted mb-4">
-                      Ingresa el código de 6 dígitos que recibiste por SMS.
+                      Ingresa el codigo de 5 o 6 digitos que recibiste por SMS.
                     </p>
                   </div>
 
@@ -71,18 +71,21 @@ export default function ConfirmPhone() {
 
                   <form onSubmit={handleSubmit(onSubmit)}>
                     <div className="mb-3">
-                      <label htmlFor="code" className="form-label">Código SMS</label>
+                      <label htmlFor="code" className="form-label">Codigo SMS</label>
                       <input
                         className={`form-control text-center ${errors.code ? 'is-invalid' : ''}`}
                         type="text"
                         id="code"
                         maxLength={6}
                         placeholder="000000"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
                         {...register('code', {
-                          required: 'El código es requerido',
-                          minLength: { value: 6, message: 'El código debe tener 6 dígitos' },
-                          maxLength: { value: 6, message: 'El código debe tener 6 dígitos' },
+                          required: 'El codigo es requerido',
+                          minLength: { value: 5, message: 'El codigo debe tener 5 o 6 digitos' },
+                          maxLength: { value: 6, message: 'El codigo debe tener 5 o 6 digitos' },
+                          pattern: { value: /^\d{5,6}$/, message: 'Solo se permiten digitos (5 o 6).' },
                         })}
                       />
                       {errors.code && <div className="invalid-feedback">{errors.code.message}</div>}
