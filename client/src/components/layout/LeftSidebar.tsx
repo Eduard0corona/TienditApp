@@ -8,6 +8,10 @@ export default function LeftSidebar() {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
+  const isPrivilegedRole = user?.role === 'TenantAdmin' || user?.role === 'SuperAdmin';
+  const userPermissions = new Set((user?.permissions ?? []).map((permission) => permission.toLowerCase()));
+  const hasPermission = (permission: string) =>
+    isPrivilegedRole || userPermissions.has(permission.toLowerCase());
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/');
   const isServicesCatalogActive = pathname === '/services';
@@ -17,6 +21,32 @@ export default function LeftSidebar() {
   const canUseAppointments = hasCapability(capabilities, TenantCapability.Appointments);
   const canUseKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
   const canUseServiceBoard = hasCapability(capabilities, TenantCapability.Service);
+  const canManageCatalog = hasPermission('ManageCatalog');
+  const canManageOrders = hasPermission('ManageOrders');
+  const canManageServiceBoard = hasPermission('ManageServiceBoard');
+  const canManageInventory = hasPermission('ManageInventory');
+  const canManageCash = hasPermission('ManageCash');
+  const canManageCustomers = hasPermission('ManageCustomers');
+  const canViewReports = hasPermission('ViewReports');
+  const canManageWhatsApp = hasPermission('ManageWhatsApp');
+  const canManageAiAgent = hasPermission('ManageAiAgent');
+  const canManageEmployees = hasPermission('ManageEmployees');
+  const canManageAppointments = hasPermission('ManageAppointments');
+  const showCatalog = canUseCommerce && canManageCatalog;
+  const showInventory = canUseInventory && canManageInventory;
+  const showCash = canUseCommerce && canManageCash;
+  const showOrders = canUseCommerce && canManageOrders;
+  const showServiceBoard = canUseServiceBoard && canManageServiceBoard;
+  const showKitchen = canUseKitchen && canManageServiceBoard;
+  const showCustomers = canUseCommerce && canManageCustomers;
+  const showEmployees = isPrivilegedRole && canUseCommerce && canManageEmployees;
+  const showAppointments = canUseAppointments && canManageAppointments;
+  const showReports = canUseCommerce && canViewReports;
+  const showOperationSection = showInventory || showCash || showOrders || showServiceBoard || showKitchen;
+  const showAiAgent = isPrivilegedRole && canUseCommerce && canManageAiAgent;
+  const showWhatsAppSettings = isPrivilegedRole && canUseCommerce && canManageWhatsApp;
+  const showWhatsAppChat = isPrivilegedRole && canUseCommerce && canManageWhatsApp;
+  const showAudit = isPrivilegedRole && canUseCommerce && canViewReports;
   const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo.png';
   const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '/images/logo-sm.png';
 
@@ -78,9 +108,9 @@ export default function LeftSidebar() {
             </Link>
           </li>
 
-          {canUseCommerce && <li className="side-nav-title">Catalogo</li>}
+          {showCatalog && <li className="side-nav-title">Catalogo</li>}
 
-          {canUseCommerce && (
+          {showCatalog && (
             <li className={`side-nav-item ${isActive('/products') ? 'menuitem-active' : ''}`}>
               <Link to="/products" className="side-nav-link">
                 <i className="ri-shopping-bag-line"></i>
@@ -89,7 +119,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseCommerce && (
+          {showCatalog && (
             <li className={`side-nav-item ${isActive('/categories') ? 'menuitem-active' : ''}`}>
               <Link to="/categories" className="side-nav-link">
                 <i className="ri-list-check-2"></i>
@@ -98,7 +128,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseCommerce && (
+          {showCatalog && (
             <li className={`side-nav-item ${isServicesCatalogActive ? 'menuitem-active' : ''}`}>
               <Link to="/services" className="side-nav-link">
                 <i className="ri-service-line"></i>
@@ -107,9 +137,9 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {(canUseCommerce || canUseInventory) && <li className="side-nav-title">Operacion</li>}
+          {showOperationSection && <li className="side-nav-title">Operacion</li>}
 
-          {canUseInventory && (
+          {showInventory && (
             <li className={`side-nav-item ${isActive('/inventory') ? 'menuitem-active' : ''}`}>
               <Link to="/inventory" className="side-nav-link">
                 <i className="ri-archive-drawer-line"></i>
@@ -118,7 +148,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseInventory && (
+          {showInventory && (
             <li className={`side-nav-item ${isActive('/suppliers') ? 'menuitem-active' : ''}`}>
               <Link to="/suppliers" className="side-nav-link">
                 <i className="ri-truck-line"></i>
@@ -127,7 +157,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseInventory && (
+          {showInventory && (
             <li className={`side-nav-item ${isActive('/purchases') ? 'menuitem-active' : ''}`}>
               <Link to="/purchases" className="side-nav-link">
                 <i className="ri-shopping-cart-2-line"></i>
@@ -136,7 +166,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseCommerce && (
+          {showCash && (
             <li className={`side-nav-item ${isActive('/cash') ? 'menuitem-active' : ''}`}>
               <Link to="/cash" className="side-nav-link">
                 <i className="ri-money-dollar-circle-line"></i>
@@ -145,7 +175,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseCommerce && (
+          {showOrders && (
             <li className={`side-nav-item ${isActive('/orders') ? 'menuitem-active' : ''}`}>
               <Link to="/orders" className="side-nav-link">
                 <i className="ri-file-list-3-line"></i>
@@ -154,7 +184,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseServiceBoard && (
+          {showServiceBoard && (
             <li className={`side-nav-item ${isServiceBoardActive ? 'menuitem-active' : ''}`}>
               <Link to="/services/board" className="side-nav-link">
                 <i className="ri-dashboard-line"></i>
@@ -163,7 +193,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseKitchen && (
+          {showKitchen && (
             <li className={`side-nav-item ${isActive('/kitchen') ? 'menuitem-active' : ''}`}>
               <Link to="/kitchen" className="side-nav-link">
                 <i className="ri-restaurant-2-line"></i>
@@ -172,7 +202,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseCommerce && (
+          {showCustomers && (
             <li className={`side-nav-item ${isActive('/customers') ? 'menuitem-active' : ''}`}>
               <Link to="/customers" className="side-nav-link">
                 <i className="ri-team-line"></i>
@@ -181,7 +211,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {(user?.role === 'TenantAdmin' || user?.role === 'SuperAdmin') && canUseCommerce && (
+          {showEmployees && (
             <li className={`side-nav-item ${isActive('/employees') ? 'menuitem-active' : ''}`}>
               <Link to="/employees" className="side-nav-link">
                 <i className="ri-user-settings-line"></i>
@@ -190,7 +220,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseAppointments && (
+          {showAppointments && (
             <li className={`side-nav-item ${isActive('/appointments') ? 'menuitem-active' : ''}`}>
               <Link to="/appointments" className="side-nav-link">
                 <i className="ri-calendar-schedule-line"></i>
@@ -199,7 +229,7 @@ export default function LeftSidebar() {
             </li>
           )}
 
-          {canUseCommerce && (
+          {showReports && (
             <li className={`side-nav-item ${isActive('/reports') ? 'menuitem-active' : ''}`}>
               <Link to="/reports" className="side-nav-link">
                 <i className="ri-bar-chart-box-line"></i>
@@ -217,38 +247,46 @@ export default function LeftSidebar() {
             </Link>
           </li>
 
-          {(user?.role === 'TenantAdmin' || user?.role === 'SuperAdmin') && canUseCommerce && (
+          {isPrivilegedRole && canUseCommerce && (
             <>
-              <li className={`side-nav-item ${isActive('/ai-agent') ? 'menuitem-active' : ''}`}>
-                <Link to="/ai-agent" className="side-nav-link">
-                  <i className="ri-robot-2-line"></i>
-                  <span>Agente IA</span>
-                </Link>
-              </li>
+              {showAiAgent && (
+                <li className={`side-nav-item ${isActive('/ai-agent') ? 'menuitem-active' : ''}`}>
+                  <Link to="/ai-agent" className="side-nav-link">
+                    <i className="ri-robot-2-line"></i>
+                    <span>Agente IA</span>
+                  </Link>
+                </li>
+              )}
               <li className={`side-nav-item ${isActive('/settings/business') ? 'menuitem-active' : ''}`}>
                 <Link to="/settings/business" className="side-nav-link">
                   <i className="ri-store-2-line"></i>
                   <span>Mi Empresa</span>
                 </Link>
               </li>
-              <li className={`side-nav-item ${isActive('/settings/whatsapp') ? 'menuitem-active' : ''}`}>
-                <Link to="/settings/whatsapp" className="side-nav-link">
-                  <i className="ri-whatsapp-line"></i>
-                  <span>WhatsApp</span>
-                </Link>
-              </li>
-              <li className={`side-nav-item ${isActive('/whatsapp/chat') ? 'menuitem-active' : ''}`}>
-                <Link to="/whatsapp/chat" className="side-nav-link">
-                  <i className="ri-chat-3-line"></i>
-                  <span>Chat WhatsApp</span>
-                </Link>
-              </li>
-              <li className={`side-nav-item ${isActive('/audit') ? 'menuitem-active' : ''}`}>
-                <Link to="/audit" className="side-nav-link">
-                  <i className="ri-shield-check-line"></i>
-                  <span>Auditoria</span>
-                </Link>
-              </li>
+              {showWhatsAppSettings && (
+                <li className={`side-nav-item ${isActive('/settings/whatsapp') ? 'menuitem-active' : ''}`}>
+                  <Link to="/settings/whatsapp" className="side-nav-link">
+                    <i className="ri-whatsapp-line"></i>
+                    <span>WhatsApp</span>
+                  </Link>
+                </li>
+              )}
+              {showWhatsAppChat && (
+                <li className={`side-nav-item ${isActive('/whatsapp/chat') ? 'menuitem-active' : ''}`}>
+                  <Link to="/whatsapp/chat" className="side-nav-link">
+                    <i className="ri-chat-3-line"></i>
+                    <span>Chat WhatsApp</span>
+                  </Link>
+                </li>
+              )}
+              {showAudit && (
+                <li className={`side-nav-item ${isActive('/audit') ? 'menuitem-active' : ''}`}>
+                  <Link to="/audit" className="side-nav-link">
+                    <i className="ri-shield-check-line"></i>
+                    <span>Auditoria</span>
+                  </Link>
+                </li>
+              )}
             </>
           )}
         </ul>
