@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import SimpleBar from 'simplebar';
 import { AuthProvider } from './contexts/AuthContext';
 import { TenantProvider } from './contexts/TenantContext';
 import App from './App';
@@ -14,7 +15,6 @@ import '@mdi/font/css/materialdesignicons.min.css';
 // Hyper CSS
 import './assets/css/vendor.min.css';
 import './assets/css/app.min.css';
-import './assets/css/custom-overrides.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -25,3 +25,5 @@ createRoot(document.getElementById('root')!).render(
     </AuthProvider>
   </StrictMode>,
 );
+
+SimpleBar.initHtmlApi();
