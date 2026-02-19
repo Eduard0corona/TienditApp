@@ -1,0 +1,18 @@
+.leftside-menu #leftside-menu-container {
+  height: calc(100vh - 70px);
+  max-height: calc(100vh - 70px);
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  padding-bottom: 1rem;
+}
+
+.leftside-menu #leftside-menu-container .simplebar-content-wrapper {
+  overflow-y: auto !important;
+}
+
+@media (max-width: 767.98px) {
+  .leftside-menu #leftside-menu-container {
+    height: calc(100vh - 60px);
+    max-height: calc(100vh - 60px);
+  }
+}

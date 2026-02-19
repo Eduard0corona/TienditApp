@@ -14,6 +14,7 @@ import '@mdi/font/css/materialdesignicons.min.css';
 // Hyper CSS
 import './assets/css/vendor.min.css';
 import './assets/css/app.min.css';
+import './assets/css/custom-overrides.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
