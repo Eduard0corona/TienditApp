@@ -10,10 +10,13 @@ export default function LeftSidebar() {
   const { tenant, capabilities } = useTenant();
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/');
+  const isServicesCatalogActive = pathname === '/services';
+  const isServiceBoardActive = pathname === '/services/board';
   const canUseCommerce = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
   const canUseInventory = hasCapability(capabilities, TenantCapability.Inventory);
   const canUseAppointments = hasCapability(capabilities, TenantCapability.Appointments);
   const canUseKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
+  const canUseServiceBoard = hasCapability(capabilities, TenantCapability.Service);
   const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo.png';
   const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '/images/logo-sm.png';
 
@@ -96,7 +99,7 @@ export default function LeftSidebar() {
           )}
 
           {canUseCommerce && (
-            <li className={`side-nav-item ${isActive('/services') ? 'menuitem-active' : ''}`}>
+            <li className={`side-nav-item ${isServicesCatalogActive ? 'menuitem-active' : ''}`}>
               <Link to="/services" className="side-nav-link">
                 <i className="ri-service-line"></i>
                 <span>Servicios</span>
@@ -147,6 +150,15 @@ export default function LeftSidebar() {
               <Link to="/orders" className="side-nav-link">
                 <i className="ri-file-list-3-line"></i>
                 <span>Ordenes</span>
+              </Link>
+            </li>
+          )}
+
+          {canUseServiceBoard && (
+            <li className={`side-nav-item ${isServiceBoardActive ? 'menuitem-active' : ''}`}>
+              <Link to="/services/board" className="side-nav-link">
+                <i className="ri-dashboard-line"></i>
+                <span>Tablero Servicios</span>
               </Link>
             </li>
           )}
