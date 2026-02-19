@@ -27,12 +27,14 @@ public class SupplyItemConfiguration : IEntityTypeConfiguration<SupplyItem>
         builder.Property(x => x.MinStock).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.MaxStock).HasColumnType("decimal(18,4)");
         builder.Property(x => x.ReorderPoint).HasColumnType("decimal(18,4)").IsRequired();
+        builder.Property(x => x.IsCritical).HasDefaultValue(false).IsRequired();
         builder.Property(x => x.TaxRate).HasColumnType("decimal(5,2)");
         builder.Property(x => x.Notes).HasMaxLength(1000);
         builder.Property(x => x.IsActive).HasDefaultValue(true).IsRequired();
 
         builder.HasIndex(x => new { x.TenantId, x.Name });
         builder.HasIndex(x => new { x.TenantId, x.IsActive });
+        builder.HasIndex(x => new { x.TenantId, x.IsCritical });
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasFilter("[Code] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.Sku }).IsUnique().HasFilter("[Sku] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.Barcode }).HasFilter("[Barcode] IS NOT NULL");

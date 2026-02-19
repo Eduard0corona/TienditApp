@@ -23,6 +23,7 @@ public class SupplyItemDto
     public bool TrackBatches { get; set; }
     public bool TrackExpiration { get; set; }
     public bool IsPerishable { get; set; }
+    public bool IsCritical { get; set; }
     public decimal? TaxRate { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; }

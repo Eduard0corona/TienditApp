@@ -428,6 +428,7 @@ export interface SupplyItemDto {
   trackBatches: boolean;
   trackExpiration: boolean;
   isPerishable: boolean;
+  isCritical: boolean;
   taxRate?: number;
   notes?: string;
   isActive: boolean;
@@ -456,6 +457,7 @@ export interface CreateSupplyItemRequest {
   trackBatches: boolean;
   trackExpiration: boolean;
   isPerishable: boolean;
+  isCritical?: boolean;
   taxRate?: number;
   notes?: string;
 }
@@ -645,10 +647,12 @@ export interface InventoryAlertItemDto {
   reorderPoint: number;
   deficit: number;
   isOutOfStock: boolean;
+  isCritical: boolean;
 }
 
 export interface InventoryAlertsDto {
   lowStockCount: number;
+  criticalLowStockCount: number;
   outOfStockCount: number;
   missingRecipeProductCount: number;
   items: InventoryAlertItemDto[];
@@ -979,6 +983,9 @@ export interface ServiceOrderPieceDto {
   serviceProductId?: string;
   isTrackable: boolean;
   notifyCustomer: boolean;
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
   brand?: string;
   model?: string;
   color?: string;
@@ -988,6 +995,25 @@ export interface ServiceOrderPieceDto {
   requestedService?: string;
   internalNotes?: string;
   status: ServiceOrderPieceStatus;
+}
+
+export interface ServiceBoardPieceDto {
+  pieceId: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  orderCreatedAt: string;
+  promisedAt?: string;
+  priority: number;
+  itemName: string;
+  requestedService?: string;
+  internalNotes?: string;
+  notifyCustomer: boolean;
+  status: ServiceOrderPieceStatus;
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
 }
 
 export interface OrderPaymentDto {

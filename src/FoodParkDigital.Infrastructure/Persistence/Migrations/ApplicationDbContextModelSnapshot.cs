@@ -1313,6 +1313,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsCritical")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsPerishable")
                         .HasColumnType("bit");
 
@@ -1376,6 +1381,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasFilter("[Code] IS NOT NULL");
 
                     b.HasIndex("TenantId", "IsActive");
+
+                    b.HasIndex("TenantId", "IsCritical");
 
                     b.HasIndex("TenantId", "Name");
 
@@ -1681,6 +1688,16 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("AssignedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("AssignedToName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("AssignedToUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Brand")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
@@ -1754,6 +1771,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AssignedToUserId");
+
                     b.HasIndex("OrderId");
 
                     b.HasIndex("TenantId", "IsTrackable");
@@ -1761,6 +1780,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "OrderId");
 
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "AssignedToUserId", "Status");
 
                     b.ToTable("ServiceOrderPieces", (string)null);
                 });
@@ -2560,6 +2581,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderPiece", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedToUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", "Order")
                         .WithMany("ServicePieces")
                         .HasForeignKey("OrderId")

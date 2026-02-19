@@ -77,7 +77,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/cancel")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request)
     {
         var result = await _mediator.Send(new CancelOrderCommand

@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Identity.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -26,9 +27,18 @@ public class ServiceOrderPieceConfiguration : IEntityTypeConfiguration<ServiceOr
         builder.Property(x => x.IsTrackable).HasDefaultValue(true);
         builder.Property(x => x.NotifyCustomer).HasDefaultValue(false);
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();
+        builder.Property(x => x.AssignedToUserId).IsRequired(false);
+        builder.Property(x => x.AssignedToName).HasMaxLength(200);
+        builder.Property(x => x.AssignedAt).IsRequired(false);
+
+        builder.HasOne<ApplicationUser>()
+            .WithMany()
+            .HasForeignKey(x => x.AssignedToUserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new { x.TenantId, x.OrderId });
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.IsTrackable });
+        builder.HasIndex(x => new { x.TenantId, x.AssignedToUserId, x.Status });
     }
 }

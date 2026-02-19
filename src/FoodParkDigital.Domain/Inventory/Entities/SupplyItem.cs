@@ -25,6 +25,7 @@ public class SupplyItem : AuditableEntity, ITenantScoped
         bool trackBatches = false,
         bool trackExpiration = false,
         bool isPerishable = false,
+        bool isCritical = false,
         decimal? taxRate = null,
         string? notes = null)
     {
@@ -47,6 +48,7 @@ public class SupplyItem : AuditableEntity, ITenantScoped
         TrackBatches = trackBatches;
         TrackExpiration = trackExpiration;
         IsPerishable = isPerishable;
+        IsCritical = isCritical;
         TaxRate = taxRate;
         Notes = notes;
         IsActive = true;
@@ -71,6 +73,7 @@ public class SupplyItem : AuditableEntity, ITenantScoped
     public bool TrackBatches { get; private set; }
     public bool TrackExpiration { get; private set; }
     public bool IsPerishable { get; private set; }
+    public bool IsCritical { get; private set; }
     public decimal? TaxRate { get; private set; }
     public string? Notes { get; private set; }
     public bool IsActive { get; private set; }
@@ -92,6 +95,7 @@ public class SupplyItem : AuditableEntity, ITenantScoped
         bool trackBatches = false,
         bool trackExpiration = false,
         bool isPerishable = false,
+        bool isCritical = false,
         decimal? taxRate = null,
         string? notes = null)
     {
@@ -111,6 +115,7 @@ public class SupplyItem : AuditableEntity, ITenantScoped
         TrackBatches = trackBatches;
         TrackExpiration = trackExpiration;
         IsPerishable = isPerishable;
+        IsCritical = isCritical;
         TaxRate = taxRate;
         Notes = notes;
     }

@@ -126,6 +126,7 @@ public class TenantResolutionMiddleware
         || path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal)
@@ -138,6 +139,9 @@ public class TenantResolutionMiddleware
 
         if (path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Kitchen, CapabilityMatchMode.All);
+
+        if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal))
+            return new CapabilityRequirement(TenantCapability.Service, CapabilityMatchMode.All);
 
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/products", StringComparison.Ordinal)

@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Events;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FluentValidation;
 using MediatR;
@@ -55,6 +56,26 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
         if (piece.Status == request.NewStatus)
             return Result.Success();
 
+        var isAdmin =
+            _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
+            || _currentUserService.TenantRole is "OWNER" or "ADMIN";
+        var hasCurrentUser = Guid.TryParse(_currentUserService.UserId, out var currentUserId);
+
+        if (!hasCurrentUser && !isAdmin)
+            return Result.Failure("No se pudo identificar el usuario actual.");
+
+        if (piece.AssignedToUserId.HasValue
+            && (!hasCurrentUser || piece.AssignedToUserId.Value != currentUserId)
+            && !isAdmin)
+        {
+            return Result.Failure("La pieza esta asignada a otro empleado.");
+        }
+
+        if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
+            piece.AssignTo(currentUserId, _currentUserService.UserName, DateTimeOffset.UtcNow);
+
+        var previousStatus = piece.Status;
+
         try
         {
             piece.UpdateStatus(request.NewStatus);
@@ -63,6 +84,13 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
         {
             return Result.Failure(ex.Message);
         }
+
+        piece.AddDomainEvent(new ServiceOrderPieceStatusChangedEvent(
+            request.OrderId,
+            request.PieceId,
+            order.TenantId,
+            previousStatus,
+            request.NewStatus));
 
         SyncOrderStatusFromPieces(order, _currentUserService.UserName);
         await _context.SaveChangesAsync(cancellationToken);

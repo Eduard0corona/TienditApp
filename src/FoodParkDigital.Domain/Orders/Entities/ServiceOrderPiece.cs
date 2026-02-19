@@ -64,6 +64,9 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
     public bool IsTrackable { get; private set; }
     public bool NotifyCustomer { get; private set; }
     public ServiceOrderPieceStatus Status { get; private set; }
+    public Guid? AssignedToUserId { get; private set; }
+    public string? AssignedToName { get; private set; }
+    public DateTimeOffset? AssignedAt { get; private set; }
 
     public Order Order { get; private set; } = null!;
 
@@ -79,5 +82,22 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
                 $"No se puede cambiar la pieza de '{Status}' a '{status}'.");
 
         Status = status;
+    }
+
+    public void AssignTo(Guid userId, string? userName, DateTimeOffset assignedAt)
+    {
+        if (Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
+            throw new DomainException("No se puede asignar una pieza completada o cancelada.");
+
+        AssignedToUserId = userId;
+        AssignedToName = userName;
+        AssignedAt = assignedAt;
+    }
+
+    public void ReleaseAssignment()
+    {
+        AssignedToUserId = null;
+        AssignedToName = null;
+        AssignedAt = null;
     }
 }

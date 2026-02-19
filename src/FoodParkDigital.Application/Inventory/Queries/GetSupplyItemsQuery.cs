@@ -75,6 +75,7 @@ public class GetSupplyItemsQueryHandler : IRequestHandler<GetSupplyItemsQuery, P
                 TrackBatches = x.TrackBatches,
                 TrackExpiration = x.TrackExpiration,
                 IsPerishable = x.IsPerishable,
+                IsCritical = x.IsCritical,
                 TaxRate = x.TaxRate,
                 Notes = x.Notes,
                 IsActive = x.IsActive,

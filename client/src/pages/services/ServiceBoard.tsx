@@ -1,25 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
 import { ordersApi } from '../../api/ordersApi';
+import { serviceBoardApi } from '../../api/serviceBoardApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
-import { OrderType as OrderTypeConst, ServiceOrderPieceStatus as ServiceOrderPieceStatusConst } from '../../types';
-import type { OrderDto, PaginatedList, ServiceOrderPieceStatus } from '../../types';
-
-interface ServiceBoardPiece {
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  customerPhone?: string;
-  createdAt: string;
-  promisedAt?: string;
-  priority: number;
-  pieceId: string;
-  itemName: string;
-  requestedService?: string;
-  internalNotes?: string;
-  notifyCustomer: boolean;
-  status: ServiceOrderPieceStatus;
-}
+import { ServiceOrderPieceStatus as ServiceOrderPieceStatusConst } from '../../types';
+import type { PaginatedList, ServiceBoardPieceDto, ServiceOrderPieceStatus } from '../../types';
 
 const STATUS_COLUMNS: Array<{
   status: ServiceOrderPieceStatus;
@@ -53,30 +38,8 @@ function getAllowedTransitions(status: ServiceOrderPieceStatus): ServiceOrderPie
   }
 }
 
-function mapOrdersToPieces(orders: OrderDto[]): ServiceBoardPiece[] {
-  return orders.flatMap((order) =>
-    order.servicePieces
-      .filter((piece) => piece.isTrackable)
-      .map((piece) => ({
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        customerName: order.customerName,
-        customerPhone: order.customerPhone,
-        createdAt: order.createdAt,
-        promisedAt: order.serviceDetail?.promisedAt,
-        priority: order.serviceDetail?.priority ?? 0,
-        pieceId: piece.id,
-        itemName: piece.itemName,
-        requestedService: piece.requestedService,
-        internalNotes: piece.internalNotes,
-        notifyCustomer: piece.notifyCustomer,
-        status: piece.status,
-      })),
-  );
-}
-
 export default function ServiceBoard() {
-  const [data, setData] = useState<PaginatedList<OrderDto>>({
+  const [data, setData] = useState<PaginatedList<ServiceBoardPieceDto>>({
     items: [],
     pageNumber: 1,
     totalPages: 0,
@@ -90,6 +53,7 @@ export default function ServiceBoard() {
   const [search, setSearch] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
 
@@ -97,11 +61,15 @@ export default function ServiceBoard() {
     setLoading(true);
     setError('');
     try {
-      const { data: response } = await ordersApi.getAll({
-        orderType: OrderTypeConst.Service,
+      const { data: response } = await serviceBoardApi.getPieces({
+        search: search || undefined,
+        includeCompleted: showCompleted,
+        includeCancelled: showCancelled,
+        onlyMine,
         pageNumber: 1,
-        pageSize: 200,
+        pageSize: 300,
       });
+
       setData(response);
       setLastUpdatedAt(new Date().toISOString());
     } catch {
@@ -109,7 +77,7 @@ export default function ServiceBoard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onlyMine, search, showCancelled, showCompleted]);
 
   useEffect(() => {
     void loadBoard();
@@ -141,61 +109,24 @@ export default function ServiceBoard() {
     return () => window.clearInterval(intervalId);
   }, [loadBoard]);
 
-  const pieces = useMemo(() => mapOrdersToPieces(data.items), [data.items]);
-
-  const visiblePieces = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-
-    return pieces.filter((piece) => {
-      if (!showCompleted && piece.status === ServiceOrderPieceStatusConst.Completed) {
-        return false;
-      }
-
-      if (!showCancelled && piece.status === ServiceOrderPieceStatusConst.Cancelled) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      return (
-        piece.orderNumber.toLowerCase().includes(normalizedSearch) ||
-        piece.customerName.toLowerCase().includes(normalizedSearch) ||
-        piece.itemName.toLowerCase().includes(normalizedSearch) ||
-        (piece.customerPhone || '').toLowerCase().includes(normalizedSearch)
-      );
-    });
-  }, [pieces, search, showCancelled, showCompleted]);
-
   const piecesByStatus = useMemo(() => {
-    const grouped: Record<number, ServiceBoardPiece[]> = {
+    const grouped: Record<number, ServiceBoardPieceDto[]> = {
       [ServiceOrderPieceStatusConst.Accepted]: [],
       [ServiceOrderPieceStatusConst.InProgress]: [],
       [ServiceOrderPieceStatusConst.Completed]: [],
       [ServiceOrderPieceStatusConst.Cancelled]: [],
     };
 
-    for (const piece of visiblePieces) {
+    for (const piece of data.items) {
       grouped[piece.status] ??= [];
       grouped[piece.status].push(piece);
     }
 
-    for (const key of Object.keys(grouped)) {
-      grouped[Number(key)].sort((a, b) => {
-        if (a.priority !== b.priority) {
-          return b.priority - a.priority;
-        }
-
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      });
-    }
-
     return grouped;
-  }, [visiblePieces]);
+  }, [data.items]);
 
-  const totalTrackable = pieces.length;
-  const activeTrackable = pieces.filter(
+  const totalTrackable = data.totalCount;
+  const activeTrackable = data.items.filter(
     (piece) =>
       piece.status === ServiceOrderPieceStatusConst.Accepted ||
       piece.status === ServiceOrderPieceStatusConst.InProgress,
@@ -216,6 +147,40 @@ export default function ServiceBoard() {
         (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
         (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
         'No se pudo actualizar el estado del servicio.';
+      setError(msg);
+    } finally {
+      setProcessingPieceId('');
+    }
+  };
+
+  const handleAssignToMe = async (pieceId: string) => {
+    setProcessingPieceId(pieceId);
+    setError('');
+    try {
+      await serviceBoardApi.assignToMe(pieceId);
+      await loadBoard();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
+        'No se pudo asignar la pieza.';
+      setError(msg);
+    } finally {
+      setProcessingPieceId('');
+    }
+  };
+
+  const handleRelease = async (pieceId: string) => {
+    setProcessingPieceId(pieceId);
+    setError('');
+    try {
+      await serviceBoardApi.release(pieceId);
+      await loadBoard();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
+        'No se pudo liberar la asignacion de la pieza.';
       setError(msg);
     } finally {
       setProcessingPieceId('');
@@ -255,6 +220,18 @@ export default function ServiceBoard() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Buscar por orden, cliente, pieza o telefono"
                 />
+                <div className="form-check">
+                  <input
+                    id="onlyMinePieces"
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={onlyMine}
+                    onChange={(e) => setOnlyMine(e.target.checked)}
+                  />
+                  <label className="form-check-label" htmlFor="onlyMinePieces">
+                    Mis servicios
+                  </label>
+                </div>
                 <div className="form-check">
                   <input
                     id="showCompletedPieces"
@@ -304,7 +281,7 @@ export default function ServiceBoard() {
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status"></div>
         </div>
-      ) : visiblePieces.length === 0 ? (
+      ) : data.items.length === 0 ? (
         <div className="card">
           <div className="card-body text-center py-5 text-muted">
             No hay servicios rastreables para mostrar con los filtros actuales.
@@ -347,7 +324,7 @@ export default function ServiceBoard() {
                             <div><strong>Orden:</strong> {piece.orderNumber}</div>
                             <div><strong>Cliente:</strong> {piece.customerName}</div>
                             {piece.customerPhone && <div><strong>Tel:</strong> {piece.customerPhone}</div>}
-                            <div><strong>Ingreso:</strong> {toLocalDateTime(piece.createdAt)}</div>
+                            <div><strong>Ingreso:</strong> {toLocalDateTime(piece.orderCreatedAt)}</div>
                             {piece.promisedAt && (
                               <div><strong>Promesa:</strong> {toLocalDateTime(piece.promisedAt)}</div>
                             )}
@@ -356,10 +333,39 @@ export default function ServiceBoard() {
                             )}
                           </div>
 
-                          <div className="d-flex justify-content-between align-items-center mt-2">
+                          <div className="d-flex justify-content-between align-items-center mt-2 gap-2 flex-wrap">
                             <span className={`badge ${piece.notifyCustomer ? 'bg-info' : 'bg-secondary'}`}>
                               {piece.notifyCustomer ? 'Notifica al cliente' : 'Sin notificacion'}
                             </span>
+                            {piece.assignedToUserId ? (
+                              <span className="badge bg-primary-subtle text-primary">
+                                Asignada: {piece.assignedToName || 'Empleado'}
+                              </span>
+                            ) : (
+                              <span className="badge bg-light text-muted">Sin asignar</span>
+                            )}
+                          </div>
+
+                          <div className="d-flex gap-1 mt-2">
+                            {!piece.assignedToUserId ? (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary flex-fill"
+                                disabled={isProcessing}
+                                onClick={() => void handleAssignToMe(piece.pieceId)}
+                              >
+                                Tomar servicio
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-secondary flex-fill"
+                                disabled={isProcessing}
+                                onClick={() => void handleRelease(piece.pieceId)}
+                              >
+                                Liberar
+                              </button>
+                            )}
                           </div>
 
                           {transitions.length > 0 && (

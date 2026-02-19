@@ -27,6 +27,9 @@ public class OrderInventoryService : IOrderInventoryService
 
     public async Task ApplyConsumptionForOrderAsync(Order order, CancellationToken cancellationToken)
     {
+        if (order.OrderType == OrderType.Service)
+            return;
+
         if (!ShouldConsumeInventory(order.Status))
             return;
 
@@ -162,6 +165,133 @@ public class OrderInventoryService : IOrderInventoryService
             movement.MovementNumber);
     }
 
+    public async Task ApplyConsumptionForServicePieceAsync(
+        Order order,
+        ServiceOrderPiece piece,
+        CancellationToken cancellationToken)
+    {
+        if (order.OrderType != OrderType.Service)
+            return;
+
+        if (!piece.IsTrackable || piece.ServiceProductId is null)
+            return;
+
+        if (piece.Status != ServiceOrderPieceStatus.Completed)
+            return;
+
+        var externalReference = BuildServicePieceConsumptionExternalReference(order.Id, piece.Id);
+        var alreadyApplied = await _context.InventoryMovements
+            .AnyAsync(
+                x => x.TenantId == order.TenantId && x.ExternalReference == externalReference,
+                cancellationToken);
+        if (alreadyApplied)
+            return;
+
+        var requirements = await _context.ProductSupplyRequirements
+            .Where(x =>
+                x.TenantId == order.TenantId
+                && x.IsActive
+                && x.ProductId == piece.ServiceProductId.Value)
+            .ToListAsync(cancellationToken);
+        if (requirements.Count == 0)
+            return;
+
+        var defaultLocationId = await _context.InventoryLocations
+            .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var groupedConsumptions = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
+        foreach (var requirement in requirements)
+        {
+            var locationId = requirement.InventoryLocationId ?? defaultLocationId;
+            if (!locationId.HasValue)
+            {
+                throw new DomainException(
+                    $"La receta del servicio '{piece.ItemName}' requiere una ubicacion de inventario por defecto.");
+            }
+
+            var effectiveQuantity = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
+            var key = (requirement.SupplyItemId, locationId.Value);
+
+            groupedConsumptions[key] = groupedConsumptions.TryGetValue(key, out var current)
+                ? current + effectiveQuantity
+                : effectiveQuantity;
+        }
+
+        if (groupedConsumptions.Count == 0)
+            return;
+
+        var supplyIds = groupedConsumptions.Keys.Select(x => x.SupplyItemId).Distinct().ToList();
+        var locationIds = groupedConsumptions.Keys.Select(x => x.InventoryLocationId).Distinct().ToList();
+
+        var supplies = await _context.SupplyItems
+            .Where(x => x.TenantId == order.TenantId && supplyIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var stocks = await _context.InventoryStocks
+            .Where(x =>
+                x.TenantId == order.TenantId
+                && supplyIds.Contains(x.SupplyItemId)
+                && locationIds.Contains(x.InventoryLocationId))
+            .ToListAsync(cancellationToken);
+
+        var stockByKey = stocks.ToDictionary(
+            x => (x.SupplyItemId, x.InventoryLocationId),
+            x => x);
+
+        var movementDate = _dateTimeProvider.UtcNow;
+        var movement = new InventoryMovement(
+            tenantId: order.TenantId,
+            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementType: InventoryMovementType.Exit,
+            movementReason: InventoryMovementReason.Consumption,
+            movementDate: movementDate,
+            referenceNumber: order.OrderNumber,
+            externalReference: externalReference,
+            notes: $"Consumo automatico por servicio completado ({piece.ItemName}) en orden {order.OrderNumber}");
+
+        foreach (var entry in groupedConsumptions)
+        {
+            var supplyId = entry.Key.SupplyItemId;
+            var locationId = entry.Key.InventoryLocationId;
+            var quantity = entry.Value;
+
+            if (!supplies.TryGetValue(supplyId, out var supply))
+                throw new DomainException("No se encontro un insumo configurado en la receta del servicio.");
+
+            if (!stockByKey.TryGetValue((supplyId, locationId), out var stock))
+            {
+                stock = new InventoryStock(order.TenantId, supplyId, locationId);
+                _context.InventoryStocks.Add(stock);
+                stockByKey[(supplyId, locationId)] = stock;
+            }
+
+            var quantityBefore = stock.OnHandQuantity;
+            var unitCost = supply.AverageCost > 0 ? supply.AverageCost : (supply.LastCost > 0 ? supply.LastCost : (decimal?)null);
+            stock.ApplyMovement(-quantity, unitCost, movementDate);
+
+            var line = movement.AddLine(
+                tenantId: order.TenantId,
+                supplyItemId: supplyId,
+                inventoryLocationId: locationId,
+                quantity: quantity,
+                unitCost: unitCost,
+                notes: $"Consumo por servicio {piece.ItemName} de orden {order.OrderNumber}");
+            line.SetBalances(quantityBefore, stock.OnHandQuantity);
+        }
+
+        movement.RecalculateTotalAmount();
+        _context.InventoryMovements.Add(movement);
+
+        _logger.LogInformation(
+            "ServicePieceInventoryConsumptionApplied: tenant {TenantId}, order {OrderId}, piece {PieceId}, movement {MovementNumber}.",
+            order.TenantId,
+            order.Id,
+            piece.Id,
+            movement.MovementNumber);
+    }
+
     public async Task ReverseConsumptionForOrderAsync(Order order, string? reason, CancellationToken cancellationToken)
     {
         var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
@@ -254,6 +384,8 @@ public class OrderInventoryService : IOrderInventoryService
 
     private static string BuildConsumptionExternalReference(Guid orderId) => $"ORDER:{orderId:N}:CONSUMPTION";
     private static string BuildReversalExternalReference(Guid orderId) => $"ORDER:{orderId:N}:REVERSAL";
+    private static string BuildServicePieceConsumptionExternalReference(Guid orderId, Guid pieceId)
+        => $"ORDER:{orderId:N}:PIECE:{pieceId:N}:CONSUMPTION";
 
     private async Task<string> GenerateMovementNumberAsync(
         Guid tenantId,
