@@ -193,6 +193,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         decimal amount,
         OrderPaymentMethod method,
         DateTimeOffset paidAt,
+        Guid? inventoryLocationId,
+        string? evidenceUrl,
         string? reference,
         string? notes)
     {
@@ -202,6 +204,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             amount: amount,
             method: method,
             paidAt: paidAt,
+            inventoryLocationId: inventoryLocationId,
+            evidenceUrl: evidenceUrl,
             reference: reference,
             notes: notes);
 

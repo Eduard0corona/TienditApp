@@ -3,9 +3,11 @@ import { Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
+import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { ordersApi } from '../../api/ordersApi';
+import { inventoryApi } from '../../api/inventoryApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
-import type { OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
+import type { InventoryLocationDto, OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
 import { OrderPaymentMethod as OrderPaymentMethodConst, OrderType as OrderTypeConst } from '../../types';
 
 const STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
@@ -89,6 +91,16 @@ const COLUMNS = [
   { header: 'Acciones', className: 'text-center' },
 ];
 
+type ParsedChecklistItem = {
+  label?: string;
+  checked?: boolean;
+};
+
+type ParsedPhotoItem = {
+  url?: string;
+  fileName?: string;
+};
+
 function toLocalDateTime(date: string) {
   return new Date(date).toLocaleString('es-MX', {
     year: 'numeric',
@@ -116,6 +128,16 @@ function getStatusLabel(status: OrderStatus, orderType?: OrderType): string {
   return STATUS_LABELS.get(status) ?? String(status);
 }
 
+function safeParseArray<T>(raw?: string): T[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function OrdersList() {
   const today = getTodayInputDate();
   const [data, setData] = useState<PaginatedList<OrderDto>>({
@@ -138,8 +160,13 @@ export default function OrdersList() {
   const [paymentOrder, setPaymentOrder] = useState<OrderDto | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<OrderPaymentMethod>(OrderPaymentMethodConst.Cash);
+  const [paymentLocationId, setPaymentLocationId] = useState('');
+  const [paymentEvidenceUrl, setPaymentEvidenceUrl] = useState('');
+  const [paymentEvidenceName, setPaymentEvidenceName] = useState('');
+  const [paymentUploadingEvidence, setPaymentUploadingEvidence] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [locations, setLocations] = useState<InventoryLocationDto[]>([]);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
 
@@ -150,6 +177,26 @@ export default function OrdersList() {
   const selectedOrderChecklist = useMemo(
     () => selectedOrder?.servicePieces.filter((piece) => piece.isTrackable) ?? [],
     [selectedOrder],
+  );
+  const selectedOrderIntakeChecklist = useMemo(
+    () => safeParseArray<ParsedChecklistItem>(selectedOrder?.serviceDetail?.intakeChecklistJson),
+    [selectedOrder],
+  );
+  const selectedOrderBeforePhotos = useMemo(() => {
+    const raw = safeParseArray<ParsedPhotoItem | string>(selectedOrder?.serviceDetail?.beforePhotosJson);
+    return raw
+      .map((item) => (typeof item === 'string' ? { url: item } : item))
+      .filter((item) => !!item.url);
+  }, [selectedOrder]);
+  const selectedOrderAfterPhotos = useMemo(() => {
+    const raw = safeParseArray<ParsedPhotoItem | string>(selectedOrder?.serviceDetail?.afterPhotosJson);
+    return raw
+      .map((item) => (typeof item === 'string' ? { url: item } : item))
+      .filter((item) => !!item.url);
+  }, [selectedOrder]);
+  const locationNameById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location.name])),
+    [locations],
   );
   const paymentSummary = useMemo(() => {
     if (!paymentOrder) {
@@ -215,6 +262,19 @@ export default function OrdersList() {
   }, [loadOrders]);
 
   useEffect(() => {
+    const loadLocations = async () => {
+      try {
+        const { data } = await inventoryApi.getLocations({ isActive: true });
+        setLocations(data);
+      } catch {
+        setLocations([]);
+      }
+    };
+
+    void loadLocations();
+  }, []);
+
+  useEffect(() => {
     const createdOff = onOrderCreated((payload) => {
       setRealtimeMessage(`Nueva orden recibida: ${payload.orderNumber}`);
       loadOrders();
@@ -239,15 +299,41 @@ export default function OrdersList() {
     setPaymentOrder(order);
     setPaymentAmount(order.balance.toFixed(2));
     setPaymentMethod(OrderPaymentMethodConst.Cash);
+    setPaymentLocationId('');
+    setPaymentEvidenceUrl('');
+    setPaymentEvidenceName('');
     setPaymentError('');
   };
 
   const closePaymentModal = () => {
-    if (paymentSubmitting) return;
+    if (paymentSubmitting || paymentUploadingEvidence) return;
     setPaymentOrder(null);
     setPaymentAmount('');
     setPaymentMethod(OrderPaymentMethodConst.Cash);
+    setPaymentLocationId('');
+    setPaymentEvidenceUrl('');
+    setPaymentEvidenceName('');
     setPaymentError('');
+  };
+
+  const handleUploadPaymentEvidence = async (file: File | undefined) => {
+    if (!file) return;
+
+    setPaymentError('');
+    setPaymentUploadingEvidence(true);
+    try {
+      const { data } = await ordersApi.uploadPaymentEvidence(file);
+      setPaymentEvidenceUrl(data.url);
+      setPaymentEvidenceName(data.fileName);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
+        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
+        'No se pudo subir el comprobante.';
+      setPaymentError(msg);
+    } finally {
+      setPaymentUploadingEvidence(false);
+    }
   };
 
   const handleAddPayment = async () => {
@@ -273,7 +359,12 @@ export default function OrdersList() {
     setPaymentError('');
 
     try {
-      await ordersApi.addPayment(paymentOrder.id, { amount, method: paymentMethod });
+      await ordersApi.addPayment(paymentOrder.id, {
+        amount,
+        method: paymentMethod,
+        inventoryLocationId: paymentLocationId || undefined,
+        evidenceUrl: paymentEvidenceUrl || undefined,
+      });
       await loadOrders();
 
       if (selectedOrder?.id === paymentOrder.id) {
@@ -283,6 +374,9 @@ export default function OrdersList() {
       setPaymentOrder(null);
       setPaymentAmount('');
       setPaymentMethod(OrderPaymentMethodConst.Cash);
+      setPaymentLocationId('');
+      setPaymentEvidenceUrl('');
+      setPaymentEvidenceName('');
       setPaymentError('');
     } catch (err: unknown) {
       const msg =
@@ -320,6 +414,11 @@ export default function OrdersList() {
 
   return (
     <>
+      <UploadLoadingModal
+        show={paymentUploadingEvidence}
+        title="Subiendo comprobante"
+        description="Estamos cargando la evidencia de pago."
+      />
       <PageTitle title="Órdenes" subtitle="Operación" />
 
       <div className="row">
@@ -554,6 +653,93 @@ export default function OrdersList() {
                 </table>
               </div>
 
+              {selectedOrder.serviceDetail && (
+                <div className="mt-3">
+                  <h5 className="mb-2">Recepcion de servicio</h5>
+                  <div className="row g-2">
+                    <div className="col-md-6"><strong>Recibido:</strong> {toLocalDateTime(selectedOrder.serviceDetail.receivedAt)}</div>
+                    <div className="col-md-6">
+                      <strong>Promesa:</strong> {selectedOrder.serviceDetail.promisedAt
+                        ? toLocalDateTime(selectedOrder.serviceDetail.promisedAt)
+                        : '-'}
+                    </div>
+                    <div className="col-md-6"><strong>Prioridad:</strong> {selectedOrder.serviceDetail.priority}</div>
+                  </div>
+                  {selectedOrder.serviceDetail.intakeNotes && (
+                    <div className="mt-2">
+                      <strong>Notas de ingreso:</strong>
+                      <div className="text-muted">{selectedOrder.serviceDetail.intakeNotes}</div>
+                    </div>
+                  )}
+                  {selectedOrder.serviceDetail.deliveryNotes && (
+                    <div className="mt-2">
+                      <strong>Notas de entrega:</strong>
+                      <div className="text-muted">{selectedOrder.serviceDetail.deliveryNotes}</div>
+                    </div>
+                  )}
+
+                  {selectedOrderIntakeChecklist.length > 0 && (
+                    <div className="mt-2">
+                      <strong>Checklist de recepcion:</strong>
+                      <ul className="mb-0 mt-1 ps-3">
+                        {selectedOrderIntakeChecklist.map((item, index) => (
+                          <li key={`${item.label || 'item'}-${index}`}>
+                            {item.checked ? '[x]' : '[ ]'} {item.label || 'Item'}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(selectedOrderBeforePhotos.length > 0 || selectedOrderAfterPhotos.length > 0) && (
+                    <div className="row g-2 mt-2">
+                      <div className="col-md-6">
+                        <strong>Fotos antes</strong>
+                        {selectedOrderBeforePhotos.length === 0 ? (
+                          <div className="text-muted small">Sin fotos.</div>
+                        ) : (
+                          <div className="d-flex flex-wrap gap-2 mt-1">
+                            {selectedOrderBeforePhotos.map((photo, index) => (
+                              <a
+                                key={`${photo.url || 'before'}-${index}`}
+                                href={photo.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="d-inline-flex align-items-center justify-content-center border rounded"
+                                style={{ width: 64, height: 64, overflow: 'hidden' }}
+                              >
+                                <img src={photo.url} alt={photo.fileName || 'Foto antes'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="col-md-6">
+                        <strong>Fotos despues</strong>
+                        {selectedOrderAfterPhotos.length === 0 ? (
+                          <div className="text-muted small">Sin fotos.</div>
+                        ) : (
+                          <div className="d-flex flex-wrap gap-2 mt-1">
+                            {selectedOrderAfterPhotos.map((photo, index) => (
+                              <a
+                                key={`${photo.url || 'after'}-${index}`}
+                                href={photo.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="d-inline-flex align-items-center justify-content-center border rounded"
+                                style={{ width: 64, height: 64, overflow: 'hidden' }}
+                              >
+                                <img src={photo.url} alt={photo.fileName || 'Foto despues'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {selectedOrderChecklist.length > 0 && (
                 <div className="mt-3">
                   <h5 className="mb-2">Checklist de servicios rastreables</h5>
@@ -609,6 +795,8 @@ export default function OrdersList() {
                         <tr>
                           <th>Fecha</th>
                           <th>Metodo</th>
+                          <th>Sucursal</th>
+                          <th>Evidencia</th>
                           <th className="text-end">Monto</th>
                         </tr>
                       </thead>
@@ -617,6 +805,14 @@ export default function OrdersList() {
                           <tr key={payment.id}>
                             <td>{toLocalDateTime(payment.paidAt)}</td>
                             <td>{PAYMENT_METHOD_LABELS[payment.method] || payment.method}</td>
+                            <td>{payment.inventoryLocationId ? (locationNameById.get(payment.inventoryLocationId) || 'Sucursal') : '-'}</td>
+                            <td>
+                              {payment.evidenceUrl ? (
+                                <a href={payment.evidenceUrl} target="_blank" rel="noreferrer">
+                                  Ver
+                                </a>
+                              ) : '-'}
+                            </td>
                             <td className="text-end">${payment.amount.toFixed(2)}</td>
                           </tr>
                         ))}
@@ -645,7 +841,7 @@ export default function OrdersList() {
       </Modal>
 
       <Modal show={!!paymentOrder} onHide={closePaymentModal} centered>
-        <Modal.Header closeButton={!paymentSubmitting}>
+        <Modal.Header closeButton={!paymentSubmitting && !paymentUploadingEvidence}>
           <Modal.Title>Registrar pago</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -685,7 +881,7 @@ export default function OrdersList() {
                   step="0.01"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  disabled={paymentSubmitting}
+                  disabled={paymentSubmitting || paymentUploadingEvidence}
                 />
               </div>
 
@@ -695,7 +891,7 @@ export default function OrdersList() {
                   className="form-select"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(Number(e.target.value) as OrderPaymentMethod)}
-                  disabled={paymentSubmitting}
+                  disabled={paymentSubmitting || paymentUploadingEvidence}
                 >
                   {Object.values(OrderPaymentMethodConst)
                     .filter((value): value is OrderPaymentMethod => typeof value === 'number')
@@ -705,6 +901,42 @@ export default function OrdersList() {
                       </option>
                     ))}
                 </select>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Sucursal (opcional)</label>
+                <select
+                  className="form-select"
+                  value={paymentLocationId}
+                  onChange={(e) => setPaymentLocationId(e.target.value)}
+                  disabled={paymentSubmitting || paymentUploadingEvidence}
+                >
+                  <option value="">Sin sucursal especifica</option>
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Comprobante (imagen o PDF)</label>
+                <input
+                  type="file"
+                  className="form-control"
+                  accept="image/*,.pdf"
+                  disabled={paymentSubmitting || paymentUploadingEvidence}
+                  onChange={(e) => {
+                    void handleUploadPaymentEvidence(e.target.files?.[0]);
+                    e.currentTarget.value = '';
+                  }}
+                />
+                {paymentEvidenceUrl && (
+                  <small className="text-success d-block mt-1">
+                    Archivo listo: {paymentEvidenceName || 'Comprobante'}
+                  </small>
+                )}
               </div>
 
               <div className="border rounded p-2 bg-light-subtle">
@@ -722,7 +954,7 @@ export default function OrdersList() {
             type="button"
             className="btn btn-light"
             onClick={closePaymentModal}
-            disabled={paymentSubmitting}
+            disabled={paymentSubmitting || paymentUploadingEvidence}
           >
             Cancelar
           </button>
@@ -730,7 +962,7 @@ export default function OrdersList() {
             type="button"
             className="btn btn-primary"
             onClick={handleAddPayment}
-            disabled={paymentSubmitting || !paymentOrder}
+            disabled={paymentSubmitting || paymentUploadingEvidence || !paymentOrder}
           >
             {paymentSubmitting ? 'Guardando...' : 'Registrar pago'}
           </button>

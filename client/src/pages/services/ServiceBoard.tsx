@@ -131,6 +131,19 @@ export default function ServiceBoard() {
       piece.status === ServiceOrderPieceStatusConst.Accepted ||
       piece.status === ServiceOrderPieceStatusConst.InProgress,
   ).length;
+  const overdueTrackable = data.items.filter(
+    (piece) =>
+      piece.isOverdue &&
+      (piece.status === ServiceOrderPieceStatusConst.Accepted ||
+        piece.status === ServiceOrderPieceStatusConst.InProgress),
+  ).length;
+  const nearDueTrackable = data.items.filter(
+    (piece) =>
+      !piece.isOverdue &&
+      (piece.minutesToPromise ?? Number.MAX_SAFE_INTEGER) <= 60 &&
+      (piece.status === ServiceOrderPieceStatusConst.Accepted ||
+        piece.status === ServiceOrderPieceStatusConst.InProgress),
+  ).length;
 
   const handlePieceStatusChange = async (
     orderId: string,
@@ -192,7 +205,7 @@ export default function ServiceBoard() {
       <PageTitle title="Tablero de Servicios" subtitle="Operacion" />
 
       <div className="row mb-3">
-        <div className="col-xl-3 col-md-6 mb-2">
+        <div className="col-xl-2 col-md-6 mb-2">
           <div className="card mb-0">
             <div className="card-body py-2">
               <div className="text-muted small">Piezas rastreables</div>
@@ -200,7 +213,7 @@ export default function ServiceBoard() {
             </div>
           </div>
         </div>
-        <div className="col-xl-3 col-md-6 mb-2">
+        <div className="col-xl-2 col-md-6 mb-2">
           <div className="card mb-0">
             <div className="card-body py-2">
               <div className="text-muted small">Activas</div>
@@ -208,7 +221,23 @@ export default function ServiceBoard() {
             </div>
           </div>
         </div>
-        <div className="col-xl-6 mb-2">
+        <div className="col-xl-2 col-md-6 mb-2">
+          <div className="card mb-0 border border-danger-subtle">
+            <div className="card-body py-2">
+              <div className="text-muted small">Atrasadas</div>
+              <div className="h4 mb-0 text-danger">{overdueTrackable}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-xl-2 col-md-6 mb-2">
+          <div className="card mb-0 border border-warning-subtle">
+            <div className="card-body py-2">
+              <div className="text-muted small">Por vencer (&lt;1h)</div>
+              <div className="h4 mb-0 text-warning">{nearDueTrackable}</div>
+            </div>
+          </div>
+        </div>
+        <div className="col-xl-4 mb-2">
           <div className="card mb-0">
             <div className="card-body py-2 d-flex flex-wrap gap-3 align-items-center justify-content-between">
               <div className="d-flex flex-wrap gap-2 align-items-center">
@@ -315,9 +344,21 @@ export default function ServiceBoard() {
                                 <small className="text-muted">{piece.requestedService}</small>
                               )}
                             </div>
-                            {piece.priority > 0 && (
-                              <span className="badge bg-warning text-dark">P{piece.priority}</span>
-                            )}
+                            <div className="d-flex flex-column align-items-end gap-1">
+                              {piece.priority > 0 && (
+                                <span className="badge bg-warning text-dark">P{piece.priority}</span>
+                              )}
+                              {piece.isOverdue && (
+                                <span className="badge bg-danger">
+                                  Atrasada {Math.max(1, Math.floor((piece.delayMinutes ?? 0) / 60))}h
+                                </span>
+                              )}
+                              {!piece.isOverdue && piece.minutesToPromise !== undefined && (
+                                <span className="badge bg-secondary-subtle text-dark">
+                                  SLA {Math.max(0, piece.minutesToPromise)} min
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="small">
@@ -326,7 +367,9 @@ export default function ServiceBoard() {
                             {piece.customerPhone && <div><strong>Tel:</strong> {piece.customerPhone}</div>}
                             <div><strong>Ingreso:</strong> {toLocalDateTime(piece.orderCreatedAt)}</div>
                             {piece.promisedAt && (
-                              <div><strong>Promesa:</strong> {toLocalDateTime(piece.promisedAt)}</div>
+                              <div className={piece.isOverdue ? 'text-danger fw-semibold' : undefined}>
+                                <strong>Promesa:</strong> {toLocalDateTime(piece.promisedAt)}
+                              </div>
                             )}
                             {piece.internalNotes && (
                               <div className="text-muted mt-1">Nota interna: {piece.internalNotes}</div>

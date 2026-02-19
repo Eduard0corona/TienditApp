@@ -74,6 +74,9 @@ public class ServiceOrderPieceDto
     public Guid? ServiceProductId { get; set; }
     public bool IsTrackable { get; set; }
     public bool NotifyCustomer { get; set; }
+    public Guid? AssignedToUserId { get; set; }
+    public string? AssignedToName { get; set; }
+    public DateTimeOffset? AssignedAt { get; set; }
     public string? Brand { get; set; }
     public string? Model { get; set; }
     public string? Color { get; set; }
@@ -91,6 +94,8 @@ public class OrderPaymentDto
     public decimal Amount { get; set; }
     public OrderPaymentMethod Method { get; set; }
     public DateTimeOffset PaidAt { get; set; }
+    public Guid? InventoryLocationId { get; set; }
+    public string? EvidenceUrl { get; set; }
     public string? Reference { get; set; }
     public string? Notes { get; set; }
 }

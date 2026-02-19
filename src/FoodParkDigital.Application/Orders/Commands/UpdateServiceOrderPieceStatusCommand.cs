@@ -74,6 +74,9 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
         if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
             piece.AssignTo(currentUserId, _currentUserService.UserName, DateTimeOffset.UtcNow);
 
+        if (request.NewStatus == ServiceOrderPieceStatus.Cancelled && !isAdmin)
+            return Result.Failure("Solo un administrador puede cancelar piezas de servicio.");
+
         var previousStatus = piece.Status;
 
         try

@@ -17,6 +17,8 @@ public record AddOrderPaymentCommand : IRequest<Result<OrderDto>>
     public decimal Amount { get; init; }
     public OrderPaymentMethod Method { get; init; }
     public DateTimeOffset? PaidAt { get; init; }
+    public Guid? InventoryLocationId { get; init; }
+    public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
 }
@@ -28,6 +30,7 @@ public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPayment
         RuleFor(x => x.OrderId).NotEmpty();
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Method).IsInEnum();
+        RuleFor(x => x.EvidenceUrl).MaximumLength(1000);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);
     }
@@ -62,10 +65,33 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
         if (order.Status == OrderStatus.Cancelled)
             return Result.Failure<OrderDto>("No se pueden registrar pagos en una orden cancelada.");
 
+        Guid? inventoryLocationId = request.InventoryLocationId;
+        if (inventoryLocationId.HasValue)
+        {
+            var exists = await _context.InventoryLocations
+                .AnyAsync(
+                    x => x.Id == inventoryLocationId.Value
+                      && x.TenantId == order.TenantId
+                      && x.IsActive,
+                    cancellationToken);
+
+            if (!exists)
+                return Result.Failure<OrderDto>("La sucursal seleccionada no es valida.");
+        }
+        else
+        {
+            inventoryLocationId = await _context.InventoryLocations
+                .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         var payment = order.RegisterPayment(
             amount: request.Amount,
             method: request.Method,
             paidAt: request.PaidAt ?? _dateTimeProvider.UtcNow,
+            inventoryLocationId: inventoryLocationId,
+            evidenceUrl: request.EvidenceUrl?.Trim(),
             reference: request.Reference?.Trim(),
             notes: request.Notes?.Trim());
         await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);

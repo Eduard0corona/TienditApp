@@ -800,9 +800,41 @@ export interface CashTransactionDto {
   amount: number;
   occurredAt: string;
   paymentMethod?: OrderPaymentMethod;
+  inventoryLocationId?: string;
+  inventoryLocationName?: string;
   orderId?: string;
   reference?: string;
   notes?: string;
+  createdBy?: string;
+}
+
+export interface DailyCashCutByUserDto {
+  userName: string;
+  paymentsCount: number;
+  totalAmount: number;
+}
+
+export interface DailyCashCutByLocationDto {
+  inventoryLocationId?: string;
+  locationName: string;
+  paymentsCount: number;
+  totalAmount: number;
+}
+
+export interface DailyCashCutDto {
+  date: string;
+  salesPaymentsTotal: number;
+  salesPaymentsCount: number;
+  cashTotal: number;
+  cardTotal: number;
+  transferTotal: number;
+  walletTotal: number;
+  otherTotal: number;
+  manualIncomeTotal: number;
+  manualExpenseTotal: number;
+  netCashFlow: number;
+  byUser: DailyCashCutByUserDto[];
+  byLocation: DailyCashCutByLocationDto[];
 }
 
 export interface OpenCashSessionRequest {
@@ -821,6 +853,7 @@ export interface AddCashTransactionRequest {
   amount: number;
   occurredAt?: string;
   paymentMethod?: OrderPaymentMethod;
+  inventoryLocationId?: string;
   orderId?: string;
   reference?: string;
   notes?: string;
@@ -1014,6 +1047,9 @@ export interface ServiceBoardPieceDto {
   assignedToUserId?: string;
   assignedToName?: string;
   assignedAt?: string;
+  isOverdue: boolean;
+  delayMinutes?: number;
+  minutesToPromise?: number;
 }
 
 export interface OrderPaymentDto {
@@ -1021,6 +1057,8 @@ export interface OrderPaymentDto {
   amount: number;
   method: OrderPaymentMethod;
   paidAt: string;
+  inventoryLocationId?: string;
+  evidenceUrl?: string;
   reference?: string;
   notes?: string;
 }
@@ -1075,6 +1113,9 @@ export interface CreateOrderRequest {
 
 export interface CreateServiceOrderPieceRequest {
   itemName: string;
+  serviceProductId?: string;
+  isTrackable?: boolean;
+  notifyCustomer?: boolean;
   brand?: string;
   model?: string;
   color?: string;
@@ -1101,8 +1142,16 @@ export interface AddOrderPaymentRequest {
   amount: number;
   method: OrderPaymentMethod;
   paidAt?: string;
+  inventoryLocationId?: string;
+  evidenceUrl?: string;
   reference?: string;
   notes?: string;
+}
+
+export interface UploadedFileDto {
+  url: string;
+  fileName: string;
+  contentType: string;
 }
 
 export interface TopSellingItemDto {

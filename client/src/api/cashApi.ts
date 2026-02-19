@@ -4,6 +4,7 @@ import type {
   CashSessionDto,
   CashTransactionDto,
   CloseCashSessionRequest,
+  DailyCashCutDto,
   OpenCashSessionRequest,
   PaginatedList,
 } from '../types';
@@ -26,6 +27,12 @@ export const cashApi = {
     pageNumber?: number;
     pageSize?: number;
   }) => api.get<PaginatedList<CashTransactionDto>>('/cash/transactions', { params }),
+
+  getDailyCut: (params?: {
+    date?: string;
+    inventoryLocationId?: string;
+    userName?: string;
+  }) => api.get<DailyCashCutDto>('/cash/daily-cut', { params }),
 
   addTransaction: (data: AddCashTransactionRequest) =>
     api.post<CashTransactionDto>('/cash/transactions', data),

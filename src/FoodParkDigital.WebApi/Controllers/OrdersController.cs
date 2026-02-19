@@ -60,6 +60,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/status")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusRequest request)
     {
         var result = await _mediator.Send(new UpdateOrderStatusCommand
@@ -100,6 +101,8 @@ public class OrdersController : ControllerBase
             Amount = request.Amount,
             Method = request.Method,
             PaidAt = request.PaidAt,
+            InventoryLocationId = request.InventoryLocationId,
+            EvidenceUrl = request.EvidenceUrl,
             Reference = request.Reference,
             Notes = request.Notes
         });
@@ -129,6 +132,50 @@ public class OrdersController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpPost("uploads/service-photo")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<UploadedFileDto>> UploadServicePhoto(IFormFile file)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "No se proporciono un archivo." });
+
+        var result = await _mediator.Send(new UploadServiceIntakePhotoCommand
+        {
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
+        });
+
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("uploads/payment-evidence")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<UploadedFileDto>> UploadPaymentEvidence(IFormFile file)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "No se proporciono un archivo." });
+
+        var result = await _mediator.Send(new UploadOrderPaymentEvidenceCommand
+        {
+            FileStream = file.OpenReadStream(),
+            FileName = file.FileName,
+            ContentType = file.ContentType,
+            FileSize = file.Length
+        });
+
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        return Ok(result.Value);
+    }
 }
 
 public record UpdateOrderStatusRequest
@@ -146,6 +193,8 @@ public record AddOrderPaymentRequest
     public decimal Amount { get; init; }
     public OrderPaymentMethod Method { get; init; }
     public DateTimeOffset? PaidAt { get; init; }
+    public Guid? InventoryLocationId { get; init; }
+    public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
 }

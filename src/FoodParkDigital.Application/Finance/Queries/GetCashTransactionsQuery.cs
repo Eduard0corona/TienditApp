@@ -43,17 +43,28 @@ public class GetCashTransactionsQueryHandler : IRequestHandler<GetCashTransactio
 
         var projected = query
             .OrderByDescending(x => x.OccurredAt)
+            .Select(x => new
+            {
+                Transaction = x,
+                LocationName = _context.InventoryLocations
+                    .Where(l => x.InventoryLocationId.HasValue && l.Id == x.InventoryLocationId.Value)
+                    .Select(l => l.Name)
+                    .FirstOrDefault()
+            })
             .Select(x => new CashTransactionDto
             {
-                Id = x.Id,
-                CashSessionId = x.CashSessionId,
-                TransactionType = x.TransactionType,
-                Amount = x.Amount,
-                OccurredAt = x.OccurredAt,
-                PaymentMethod = x.PaymentMethod,
-                OrderId = x.OrderId,
-                Reference = x.Reference,
-                Notes = x.Notes
+                Id = x.Transaction.Id,
+                CashSessionId = x.Transaction.CashSessionId,
+                TransactionType = x.Transaction.TransactionType,
+                Amount = x.Transaction.Amount,
+                OccurredAt = x.Transaction.OccurredAt,
+                PaymentMethod = x.Transaction.PaymentMethod,
+                InventoryLocationId = x.Transaction.InventoryLocationId,
+                InventoryLocationName = x.LocationName,
+                OrderId = x.Transaction.OrderId,
+                Reference = x.Transaction.Reference,
+                Notes = x.Transaction.Notes,
+                CreatedBy = x.Transaction.CreatedBy
             });
 
         return await PaginatedList<CashTransactionDto>.CreateAsync(

@@ -50,6 +50,16 @@ public class AssignServiceOrderPieceToMeCommandHandler : IRequestHandler<AssignS
         if (piece.Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
             return Result.Failure("No se puede asignar una pieza completada o cancelada.");
 
+        var isAdmin =
+            _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
+            || _currentUserService.TenantRole is "OWNER" or "ADMIN";
+
+        if (piece.AssignedToUserId.HasValue && piece.AssignedToUserId.Value == userId)
+            return Result.Success();
+
+        if (piece.AssignedToUserId.HasValue && !isAdmin)
+            return Result.Failure("La pieza ya esta asignada a otro empleado.");
+
         piece.AssignTo(userId, _currentUserService.UserName, DateTimeOffset.UtcNow);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();

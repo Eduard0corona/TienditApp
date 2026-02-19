@@ -643,6 +643,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("InventoryLocationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -676,6 +679,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CashSessionId");
 
+                    b.HasIndex("InventoryLocationId");
+
                     b.HasIndex("TenantId", "CashSessionId");
 
                     b.HasIndex("TenantId", "OccurredAt");
@@ -683,6 +688,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "OrderId");
 
                     b.HasIndex("TenantId", "TransactionType");
+
+                    b.HasIndex("TenantId", "InventoryLocationId", "OccurredAt");
 
                     b.ToTable("CashTransactions", (string)null);
                 });
@@ -1555,6 +1562,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("EvidenceUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("InventoryLocationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Method")
                         .HasColumnType("int");
 
@@ -1583,11 +1597,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("InventoryLocationId");
+
                     b.HasIndex("OrderId");
 
                     b.HasIndex("TenantId", "OrderId");
 
                     b.HasIndex("TenantId", "PaidAt");
+
+                    b.HasIndex("TenantId", "InventoryLocationId", "PaidAt");
 
                     b.ToTable("OrderPayments", (string)null);
                 });
@@ -2434,6 +2452,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CashSession");
                 });
 
@@ -2550,6 +2573,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderPayment", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", "Order")
                         .WithMany("Payments")
                         .HasForeignKey("OrderId")

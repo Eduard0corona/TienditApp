@@ -20,4 +20,7 @@ public class ServiceBoardPieceDto
     public Guid? AssignedToUserId { get; set; }
     public string? AssignedToName { get; set; }
     public DateTimeOffset? AssignedAt { get; set; }
+    public bool IsOverdue { get; set; }
+    public int? DelayMinutes { get; set; }
+    public int? MinutesToPromise { get; set; }
 }

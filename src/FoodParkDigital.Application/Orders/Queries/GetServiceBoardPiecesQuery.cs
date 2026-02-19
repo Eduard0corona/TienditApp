@@ -37,6 +37,8 @@ public class GetServiceBoardPiecesQueryHandler : IRequestHandler<GetServiceBoard
 
     public async Task<PaginatedList<ServiceBoardPieceDto>> Handle(GetServiceBoardPiecesQuery request, CancellationToken cancellationToken)
     {
+        var now = DateTimeOffset.UtcNow;
+
         var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
             _context,
             _tenantService.TenantId,
@@ -96,7 +98,10 @@ public class GetServiceBoardPiecesQueryHandler : IRequestHandler<GetServiceBoard
                 Status = p.Status,
                 AssignedToUserId = p.AssignedToUserId,
                 AssignedToName = p.AssignedToName,
-                AssignedAt = p.AssignedAt
+                AssignedAt = p.AssignedAt,
+                IsOverdue = false,
+                DelayMinutes = null,
+                MinutesToPromise = null
             })
             .OrderBy(p => p.Status == ServiceOrderPieceStatus.Accepted ? 0 :
                 p.Status == ServiceOrderPieceStatus.InProgress ? 1 :
@@ -105,10 +110,35 @@ public class GetServiceBoardPiecesQueryHandler : IRequestHandler<GetServiceBoard
             .ThenBy(p => p.PromisedAt ?? p.OrderCreatedAt)
             .ThenBy(p => p.OrderCreatedAt);
 
-        return await PaginatedList<ServiceBoardPieceDto>.CreateAsync(
+        var paginated = await PaginatedList<ServiceBoardPieceDto>.CreateAsync(
             projected,
             request.PageNumber,
             request.PageSize,
             cancellationToken);
+
+        foreach (var piece in paginated.Items)
+        {
+            if (!piece.PromisedAt.HasValue)
+                continue;
+
+            if (piece.Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
+                continue;
+
+            var minutes = (int)Math.Floor((now - piece.PromisedAt.Value).TotalMinutes);
+            if (minutes > 0)
+            {
+                piece.IsOverdue = true;
+                piece.DelayMinutes = minutes;
+                piece.MinutesToPromise = null;
+            }
+            else
+            {
+                piece.IsOverdue = false;
+                piece.DelayMinutes = null;
+                piece.MinutesToPromise = Math.Abs(minutes);
+            }
+        }
+
+        return paginated;
     }
 }

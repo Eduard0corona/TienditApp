@@ -174,27 +174,54 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
 
         }
 
-        foreach (var (product, item) in checklistCandidates)
-        {
-            for (var index = 0; index < item.Quantity; index++)
-            {
-                var itemName = item.Quantity > 1
-                    ? $"{product.Name} #{index + 1}"
-                    : product.Name;
+        var manualPieces = request.ServiceDetail?.Pieces
+            .Where(piece => !string.IsNullOrWhiteSpace(piece.ItemName))
+            .ToList()
+            ?? [];
 
+        if (manualPieces.Count > 0)
+        {
+            foreach (var piece in manualPieces)
+            {
                 order.AddServicePiece(
-                    itemName: itemName,
-                    brand: null,
-                    model: null,
-                    color: null,
-                    size: null,
-                    material: null,
-                    conditionNotes: item.Notes?.Trim(),
-                    requestedService: product.Name,
-                    internalNotes: null,
-                    serviceProductId: product.Id,
-                    isTrackable: true,
-                    notifyCustomer: product.NotifyCustomer);
+                    itemName: piece.ItemName.Trim(),
+                    brand: piece.Brand?.Trim(),
+                    model: piece.Model?.Trim(),
+                    color: piece.Color?.Trim(),
+                    size: piece.Size?.Trim(),
+                    material: piece.Material?.Trim(),
+                    conditionNotes: piece.ConditionNotes?.Trim(),
+                    requestedService: piece.RequestedService?.Trim(),
+                    internalNotes: piece.InternalNotes?.Trim(),
+                    serviceProductId: piece.ServiceProductId,
+                    isTrackable: piece.IsTrackable,
+                    notifyCustomer: piece.NotifyCustomer);
+            }
+        }
+        else
+        {
+            foreach (var (product, item) in checklistCandidates)
+            {
+                for (var index = 0; index < item.Quantity; index++)
+                {
+                    var itemName = item.Quantity > 1
+                        ? $"{product.Name} #{index + 1}"
+                        : product.Name;
+
+                    order.AddServicePiece(
+                        itemName: itemName,
+                        brand: null,
+                        model: null,
+                        color: null,
+                        size: null,
+                        material: null,
+                        conditionNotes: item.Notes?.Trim(),
+                        requestedService: product.Name,
+                        internalNotes: null,
+                        serviceProductId: product.Id,
+                        isTrackable: true,
+                        notifyCustomer: product.NotifyCustomer);
+                }
             }
         }
 
