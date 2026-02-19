@@ -87,23 +87,39 @@ public class TenantResolutionMiddleware
 
         if (tenantScopedPath && role is not ("SUPER_ADMIN" or "TENANT_ADMIN"))
         {
-            var requiredPermission = GetPermissionRequirement(path);
-            if (requiredPermission.HasValue)
+            var requiredPermissions = GetPermissionRequirements(path, context.Request.Method);
+            if (requiredPermissions.Count > 0)
             {
                 var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (!Guid.TryParse(userIdClaim, out var userId)
-                    || !await tenantAccessService.HasPermissionAsync(
-                        userId,
-                        tenantId,
-                        requiredPermission.Value,
-                        context.RequestAborted))
+                if (!Guid.TryParse(userIdClaim, out var userId))
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     await context.Response.WriteAsJsonAsync(new ProblemDetails
                     {
                         Status = 403,
                         Title = "Permission denied",
-                        Detail = $"El usuario no tiene permiso '{requiredPermission.Value}' para acceder a '{path}'."
+                        Detail = "No se pudo determinar el usuario autenticado para validar permisos."
+                    });
+                    return;
+                }
+
+                var userPermissions = await tenantAccessService.GetPermissionsAsync(
+                    userId,
+                    tenantId,
+                    context.RequestAborted);
+
+                var hasPermission = requiredPermissions.Any(required =>
+                    userPermissions.Contains(required.ToString(), StringComparer.OrdinalIgnoreCase));
+
+                if (!hasPermission)
+                {
+                    var expectedPermissions = string.Join(" | ", requiredPermissions.Select(x => x.ToString()));
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    await context.Response.WriteAsJsonAsync(new ProblemDetails
+                    {
+                        Status = 403,
+                        Title = "Permission denied",
+                        Detail = $"El usuario no tiene permisos requeridos ({expectedPermissions}) para acceder a '{path}'."
                     });
                     return;
                 }
@@ -198,49 +214,68 @@ public class TenantResolutionMiddleware
         return null;
     }
 
-    private static TenantPermission? GetPermissionRequirement(string path)
+    private static IReadOnlyCollection<TenantPermission> GetPermissionRequirements(string path, string method)
     {
+        var isReadRequest =
+            HttpMethods.IsGet(method)
+            || HttpMethods.IsHead(method)
+            || HttpMethods.IsOptions(method);
+
         if (path.StartsWith("/api/v1/employees", StringComparison.Ordinal))
-            return TenantPermission.ManageEmployees;
+            return [TenantPermission.ManageEmployees];
 
         if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal))
-            return TenantPermission.ManageInventory;
+            return [TenantPermission.ManageInventory];
 
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal))
-            return TenantPermission.ManageOrders;
+            return [TenantPermission.ManageOrders];
 
         if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
-            return TenantPermission.ManageServiceBoard;
+            return [TenantPermission.ManageServiceBoard];
 
         if (path.StartsWith("/api/v1/products", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/categories", StringComparison.Ordinal))
-            return TenantPermission.ManageCatalog;
+        {
+            if (isReadRequest)
+            {
+                // Catalog read is needed by other modules (orders, inventory, appointments).
+                return
+                [
+                    TenantPermission.ManageCatalog,
+                    TenantPermission.ManageOrders,
+                    TenantPermission.ManageInventory,
+                    TenantPermission.ManageAppointments
+                ];
+            }
+
+            return [TenantPermission.ManageCatalog];
+        }
 
         if (path.StartsWith("/api/v1/customers", StringComparison.Ordinal))
-            return TenantPermission.ManageCustomers;
+            return [TenantPermission.ManageCustomers];
 
         if (path.StartsWith("/api/v1/cash", StringComparison.Ordinal))
-            return TenantPermission.ManageCash;
+            return [TenantPermission.ManageCash];
 
         if (path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/audit", StringComparison.Ordinal))
-            return TenantPermission.ViewReports;
+            return [TenantPermission.ViewReports];
 
         if (path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/auth/my-tenant/whatsapp", StringComparison.Ordinal))
-            return TenantPermission.ManageWhatsApp;
+            return [TenantPermission.ManageWhatsApp];
 
         if (path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal))
-            return TenantPermission.ManageAiAgent;
+            return [TenantPermission.ManageAiAgent];
 
         if (path.StartsWith("/api/v1/appointments", StringComparison.Ordinal))
-            return TenantPermission.ManageAppointments;
+            return [TenantPermission.ManageAppointments];
 
-        return null;
+        return [];
     }
 
     private readonly record struct CapabilityRequirement(
