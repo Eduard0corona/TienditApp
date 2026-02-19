@@ -25,13 +25,16 @@ public class AssignServiceOrderPieceToMeCommandHandler : IRequestHandler<AssignS
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IOrderNotificationService _orderNotificationService;
 
     public AssignServiceOrderPieceToMeCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IOrderNotificationService orderNotificationService)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _orderNotificationService = orderNotificationService;
     }
 
     public async Task<Result> Handle(AssignServiceOrderPieceToMeCommand request, CancellationToken cancellationToken)
@@ -62,6 +65,14 @@ public class AssignServiceOrderPieceToMeCommandHandler : IRequestHandler<AssignS
 
         piece.AssignTo(userId, _currentUserService.UserName, DateTimeOffset.UtcNow);
         await _context.SaveChangesAsync(cancellationToken);
+
+        await _orderNotificationService.NotifyServiceBoardPieceUpdated(
+            piece.Order.TenantId,
+            piece.OrderId,
+            piece.Id,
+            piece.Status,
+            piece.AssignedToUserId);
+
         return Result.Success();
     }
 }
@@ -83,13 +94,16 @@ public class ReleaseServiceOrderPieceAssignmentCommandHandler : IRequestHandler<
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IOrderNotificationService _orderNotificationService;
 
     public ReleaseServiceOrderPieceAssignmentCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IOrderNotificationService orderNotificationService)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _orderNotificationService = orderNotificationService;
     }
 
     public async Task<Result> Handle(ReleaseServiceOrderPieceAssignmentCommand request, CancellationToken cancellationToken)
@@ -116,6 +130,14 @@ public class ReleaseServiceOrderPieceAssignmentCommandHandler : IRequestHandler<
 
         piece.ReleaseAssignment();
         await _context.SaveChangesAsync(cancellationToken);
+
+        await _orderNotificationService.NotifyServiceBoardPieceUpdated(
+            piece.Order.TenantId,
+            piece.OrderId,
+            piece.Id,
+            piece.Status,
+            piece.AssignedToUserId);
+
         return Result.Success();
     }
 }

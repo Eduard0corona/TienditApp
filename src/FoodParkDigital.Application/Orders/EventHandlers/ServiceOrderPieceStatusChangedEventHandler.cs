@@ -14,6 +14,7 @@ public class ServiceOrderPieceStatusChangedEventHandler : INotificationHandler<S
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IOrderInventoryService _orderInventoryService;
+    private readonly IOrderNotificationService _orderNotificationService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ILogger<ServiceOrderPieceStatusChangedEventHandler> _logger;
 
@@ -21,12 +22,14 @@ public class ServiceOrderPieceStatusChangedEventHandler : INotificationHandler<S
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
         IOrderInventoryService orderInventoryService,
+        IOrderNotificationService orderNotificationService,
         IWhatsAppService whatsAppService,
         ILogger<ServiceOrderPieceStatusChangedEventHandler> logger)
     {
         _context = context;
         _currentUserService = currentUserService;
         _orderInventoryService = orderInventoryService;
+        _orderNotificationService = orderNotificationService;
         _whatsAppService = whatsAppService;
         _logger = logger;
     }
@@ -61,6 +64,12 @@ public class ServiceOrderPieceStatusChangedEventHandler : INotificationHandler<S
             await _orderInventoryService.ApplyConsumptionForServicePieceAsync(order, piece, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+        await _orderNotificationService.NotifyServiceBoardPieceUpdated(
+            order.TenantId,
+            order.Id,
+            piece.Id,
+            piece.Status,
+            piece.AssignedToUserId);
 
         if (string.IsNullOrWhiteSpace(order.CustomerPhone) || !piece.NotifyCustomer)
             return;

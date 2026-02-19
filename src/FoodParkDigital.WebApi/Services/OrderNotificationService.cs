@@ -56,4 +56,24 @@ public class OrderNotificationService : IOrderNotificationService
             .Group($"kitchen_{tenantId}")
             .SendAsync("OrderCancelled", payload);
     }
+
+    public async Task NotifyServiceBoardPieceUpdated(
+        Guid tenantId,
+        Guid orderId,
+        Guid pieceId,
+        ServiceOrderPieceStatus status,
+        Guid? assignedToUserId)
+    {
+        var payload = new
+        {
+            OrderId = orderId,
+            PieceId = pieceId,
+            Status = status.ToString(),
+            AssignedToUserId = assignedToUserId
+        };
+
+        await _hubContext.Clients
+            .Group($"tenant_{tenantId}")
+            .SendAsync("ServiceBoardPieceUpdated", payload);
+    }
 }

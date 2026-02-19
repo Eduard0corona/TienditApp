@@ -55,7 +55,7 @@ export default function ServiceBoard() {
   const [showCancelled, setShowCancelled] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>('');
-  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
+  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated } = useOrderSignalR();
 
   const loadBoard = useCallback(async () => {
     setLoading(true);
@@ -93,21 +93,17 @@ export default function ServiceBoard() {
     const cancelledOff = onOrderCancelled(() => {
       void loadBoard();
     });
+    const pieceUpdatedOff = onServiceBoardPieceUpdated(() => {
+      void loadBoard();
+    });
 
     return () => {
       createdOff();
       changedOff();
       cancelledOff();
+      pieceUpdatedOff();
     };
-  }, [loadBoard, onOrderCancelled, onOrderCreated, onOrderStatusChanged]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void loadBoard();
-    }, 30000);
-
-    return () => window.clearInterval(intervalId);
-  }, [loadBoard]);
+  }, [loadBoard, onOrderCancelled, onOrderCreated, onOrderStatusChanged, onServiceBoardPieceUpdated]);
 
   const piecesByStatus = useMemo(() => {
     const grouped: Record<number, ServiceBoardPieceDto[]> = {
