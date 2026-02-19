@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
 import { ordersApi } from '../../api/ordersApi';
 import { serviceBoardApi } from '../../api/serviceBoardApi';
@@ -51,18 +51,23 @@ export default function ServiceBoard() {
   const [processingPieceId, setProcessingPieceId] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>('');
+  const refreshTimeoutRef = useRef<number | undefined>(undefined);
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated } = useOrderSignalR();
 
-  const loadBoard = useCallback(async () => {
-    setLoading(true);
+  const loadBoard = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
+
     setError('');
     try {
       const { data: response } = await serviceBoardApi.getPieces({
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         includeCompleted: showCompleted,
         includeCancelled: showCancelled,
         onlyMine,
@@ -75,26 +80,47 @@ export default function ServiceBoard() {
     } catch {
       setError('No se pudieron cargar los servicios para el tablero.');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  }, [onlyMine, search, showCancelled, showCompleted]);
+  }, [debouncedSearch, onlyMine, showCancelled, showCompleted]);
+
+  const scheduleBoardRefresh = useCallback(() => {
+    if (refreshTimeoutRef.current !== undefined) {
+      return;
+    }
+
+    refreshTimeoutRef.current = window.setTimeout(() => {
+      refreshTimeoutRef.current = undefined;
+      void loadBoard(true);
+    }, 150);
+  }, [loadBoard]);
 
   useEffect(() => {
-    void loadBoard();
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
+
+  useEffect(() => {
+    void loadBoard(false);
   }, [loadBoard]);
 
   useEffect(() => {
     const createdOff = onOrderCreated(() => {
-      void loadBoard();
+      scheduleBoardRefresh();
     });
     const changedOff = onOrderStatusChanged(() => {
-      void loadBoard();
+      scheduleBoardRefresh();
     });
     const cancelledOff = onOrderCancelled(() => {
-      void loadBoard();
+      scheduleBoardRefresh();
     });
     const pieceUpdatedOff = onServiceBoardPieceUpdated(() => {
-      void loadBoard();
+      scheduleBoardRefresh();
     });
 
     return () => {
@@ -102,8 +128,12 @@ export default function ServiceBoard() {
       changedOff();
       cancelledOff();
       pieceUpdatedOff();
+      if (refreshTimeoutRef.current !== undefined) {
+        window.clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = undefined;
+      }
     };
-  }, [loadBoard, onOrderCancelled, onOrderCreated, onOrderStatusChanged, onServiceBoardPieceUpdated]);
+  }, [onOrderCancelled, onOrderCreated, onOrderStatusChanged, onServiceBoardPieceUpdated, scheduleBoardRefresh]);
 
   const piecesByStatus = useMemo(() => {
     const grouped: Record<number, ServiceBoardPieceDto[]> = {

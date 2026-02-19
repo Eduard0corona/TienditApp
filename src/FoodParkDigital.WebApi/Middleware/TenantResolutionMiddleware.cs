@@ -68,11 +68,24 @@ public class TenantResolutionMiddleware
             tenantId = overrideTenantId;
         }
 
+        TenantAccessSnapshot? accessSnapshot = null;
         if (tenantScopedPath && role != "SUPER_ADMIN")
         {
             var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!Guid.TryParse(userIdClaim, out var userId) ||
-                !await tenantAccessService.HasActiveAccessAsync(userId, tenantId, context.RequestAborted))
+            if (!Guid.TryParse(userIdClaim, out var userId))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Status = 403,
+                    Title = "Tenant access denied",
+                    Detail = "No se pudo determinar el usuario autenticado."
+                });
+                return;
+            }
+
+            accessSnapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, context.RequestAborted);
+            if (!accessSnapshot.HasActiveAccess)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 await context.Response.WriteAsJsonAsync(new ProblemDetails
@@ -90,23 +103,7 @@ public class TenantResolutionMiddleware
             var requiredPermissions = GetPermissionRequirements(path, context.Request.Method);
             if (requiredPermissions.Count > 0)
             {
-                var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (!Guid.TryParse(userIdClaim, out var userId))
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    await context.Response.WriteAsJsonAsync(new ProblemDetails
-                    {
-                        Status = 403,
-                        Title = "Permission denied",
-                        Detail = "No se pudo determinar el usuario autenticado para validar permisos."
-                    });
-                    return;
-                }
-
-                var userPermissions = await tenantAccessService.GetPermissionsAsync(
-                    userId,
-                    tenantId,
-                    context.RequestAborted);
+                var userPermissions = accessSnapshot?.Permissions ?? [];
 
                 var hasPermission = requiredPermissions.Any(required =>
                     userPermissions.Contains(required.ToString(), StringComparer.OrdinalIgnoreCase));
@@ -132,12 +129,11 @@ public class TenantResolutionMiddleware
             if (capabilityRequirement.HasValue)
             {
                 var requirement = capabilityRequirement.Value;
+                var tenantCapabilities = accessSnapshot?.NormalizedCapabilities ?? TenantCapability.None;
                 var hasCapability = requirement.Mode switch
                 {
-                    CapabilityMatchMode.All => await tenantAccessService.HasCapabilityAsync(
-                        tenantId, requirement.Value, context.RequestAborted),
-                    _ => await tenantAccessService.HasAnyCapabilityAsync(
-                        tenantId, requirement.Value, context.RequestAborted)
+                    CapabilityMatchMode.All => (tenantCapabilities & requirement.Value) == requirement.Value,
+                    _ => (tenantCapabilities & requirement.Value) != 0
                 };
 
                 if (!hasCapability)
