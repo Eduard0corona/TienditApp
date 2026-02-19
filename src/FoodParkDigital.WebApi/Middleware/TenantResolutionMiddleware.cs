@@ -224,6 +224,12 @@ public class TenantResolutionMiddleware
         if (path.StartsWith("/api/v1/employees", StringComparison.Ordinal))
             return [TenantPermission.ManageEmployees];
 
+        if (path.StartsWith("/api/v1/inventory/locations", StringComparison.Ordinal) && isReadRequest)
+        {
+            // Cash module needs active locations to register payments/cuts by branch.
+            return [TenantPermission.ManageInventory, TenantPermission.ManageCash];
+        }
+
         if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal))
