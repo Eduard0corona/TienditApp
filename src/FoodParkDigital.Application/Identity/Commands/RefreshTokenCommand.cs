@@ -27,15 +27,18 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     private readonly IApplicationDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly ITenantAccessService _tenantAccessService;
 
     public RefreshTokenCommandHandler(
         IApplicationDbContext context,
         UserManager<ApplicationUser> userManager,
-        IJwtTokenService jwtTokenService)
+        IJwtTokenService jwtTokenService,
+        ITenantAccessService tenantAccessService)
     {
         _context = context;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
+        _tenantAccessService = tenantAccessService;
     }
 
     public async Task<Result<AuthResponse>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
@@ -77,18 +80,32 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 
         if (tenantMembership is null && user.DefaultTenantId.HasValue)
         {
-            var role = user.Role == UserRole.TenantAdmin
-                ? TenantUserRole.Admin
-                : TenantUserRole.Staff;
+            var hasAnyMembershipForTenant = await _context.TenantUsers
+                .IgnoreQueryFilters()
+                .AnyAsync(x => x.UserId == user.Id && x.TenantId == user.DefaultTenantId.Value, cancellationToken);
 
-            tenantMembership = new TenantUser(user.DefaultTenantId.Value, user.Id, role, TenantUserStatus.Active);
-            _context.TenantUsers.Add(tenantMembership);
-            await _context.SaveChangesAsync(cancellationToken);
+            if (!hasAnyMembershipForTenant)
+            {
+                var role = user.Role == UserRole.TenantAdmin
+                    ? TenantUserRole.Admin
+                    : TenantUserRole.Staff;
+
+                tenantMembership = new TenantUser(user.DefaultTenantId.Value, user.Id, role, TenantUserStatus.Active);
+                _context.TenantUsers.Add(tenantMembership);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
         }
+
+        var permissions = tenantMembership is null
+            ? []
+            : await _tenantAccessService.GetPermissionsAsync(user.Id, tenantMembership.TenantId, cancellationToken);
 
         var tenantContext = tenantMembership is null
             ? null
-            : new TenantTokenContext(tenantMembership.TenantId, tenantMembership.Role.ToString().ToUpperInvariant());
+            : new TenantTokenContext(
+                tenantMembership.TenantId,
+                tenantMembership.Role.ToString().ToUpperInvariant(),
+                permissions);
 
         if (user.DefaultTenantId is null && tenantMembership is not null)
             user.DefaultTenantId = tenantMembership.TenantId;

@@ -1,5 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,6 +39,48 @@ public class TenantAccessService : ITenantAccessService
         var tenantCapabilities = await GetNormalizedCapabilitiesAsync(tenantId, cancellationToken);
 
         return (tenantCapabilities & capabilities) != 0;
+    }
+
+    public async Task<IReadOnlyCollection<string>> GetPermissionsAsync(
+        Guid userId,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        var membership = await _context.TenantUsers
+            .IgnoreQueryFilters()
+            .Where(x => x.UserId == userId && x.TenantId == tenantId)
+            .Select(x => new
+            {
+                x.Status,
+                x.Role,
+                x.PermissionCodes,
+                UserRole = _context.Users
+                    .IgnoreQueryFilters()
+                    .Where(u => u.Id == x.UserId)
+                    .Select(u => (UserRole?)u.Role)
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (membership is null || membership.Status != TenantUserStatus.Active)
+            return [];
+
+        var userRole = membership.UserRole ?? UserRole.Staff;
+
+        return TenantPermissionCatalog.ResolveEffectiveCodes(
+            membership.PermissionCodes,
+            userRole,
+            membership.Role);
+    }
+
+    public async Task<bool> HasPermissionAsync(
+        Guid userId,
+        Guid tenantId,
+        TenantPermission permission,
+        CancellationToken cancellationToken)
+    {
+        var permissions = await GetPermissionsAsync(userId, tenantId, cancellationToken);
+        return permissions.Contains(permission.ToString(), StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task<TenantCapability> GetNormalizedCapabilitiesAsync(Guid tenantId, CancellationToken cancellationToken)

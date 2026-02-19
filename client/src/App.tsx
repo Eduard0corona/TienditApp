@@ -28,6 +28,7 @@ const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
+const EmployeesList = lazy(() => import('./pages/employees/EmployeesList'));
 const AiAgentSettings = lazy(() => import('./pages/ai-agent/AiAgentSettings'));
 const BusinessSettings = lazy(() => import('./pages/settings/BusinessSettings'));
 const WhatsAppSettings = lazy(() => import('./pages/settings/WhatsAppSettings'));
@@ -191,6 +192,14 @@ export default function App() {
               element={(
                 <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
                   <CustomersList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/employees"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <EmployeesList />
                 </CapabilityRoute>
               )}
             />

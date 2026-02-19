@@ -7,4 +7,6 @@ public interface ITenantAccessService
     Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
     Task<bool> HasCapabilityAsync(Guid tenantId, TenantCapability capability, CancellationToken cancellationToken);
     Task<bool> HasAnyCapabilityAsync(Guid tenantId, TenantCapability capabilities, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<string>> GetPermissionsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken);
+    Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken);
 }

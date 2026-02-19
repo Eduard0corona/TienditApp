@@ -17,6 +17,15 @@ public class CurrentUserService : ICurrentUserService
     public string? UserName => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Email);
     public string? Role => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Role);
     public string? TenantRole => _httpContextAccessor.HttpContext?.User?.FindFirstValue("tenant_role");
+    public IReadOnlyCollection<string> Permissions =>
+        _httpContextAccessor.HttpContext?.User?
+            .FindAll("perm")
+            .Select(x => x.Value)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+        ?? [];
+
     public Guid? TenantId
     {
         get

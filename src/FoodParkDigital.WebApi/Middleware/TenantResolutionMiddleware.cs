@@ -85,6 +85,31 @@ public class TenantResolutionMiddleware
             }
         }
 
+        if (tenantScopedPath && role is not ("SUPER_ADMIN" or "TENANT_ADMIN"))
+        {
+            var requiredPermission = GetPermissionRequirement(path);
+            if (requiredPermission.HasValue)
+            {
+                var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (!Guid.TryParse(userIdClaim, out var userId)
+                    || !await tenantAccessService.HasPermissionAsync(
+                        userId,
+                        tenantId,
+                        requiredPermission.Value,
+                        context.RequestAborted))
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    await context.Response.WriteAsJsonAsync(new ProblemDetails
+                    {
+                        Status = 403,
+                        Title = "Permission denied",
+                        Detail = $"El usuario no tiene permiso '{requiredPermission.Value}' para acceder a '{path}'."
+                    });
+                    return;
+                }
+            }
+        }
+
         if (tenantScopedPath && role != "SUPER_ADMIN")
         {
             var capabilityRequirement = GetCapabilityRequirement(path);
@@ -123,7 +148,13 @@ public class TenantResolutionMiddleware
         || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/cash", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/appointments", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/employees", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
@@ -147,6 +178,12 @@ public class TenantResolutionMiddleware
             || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/cash", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/appointments", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/employees", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
@@ -157,6 +194,51 @@ public class TenantResolutionMiddleware
                 TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food,
                 CapabilityMatchMode.Any);
         }
+
+        return null;
+    }
+
+    private static TenantPermission? GetPermissionRequirement(string path)
+    {
+        if (path.StartsWith("/api/v1/employees", StringComparison.Ordinal))
+            return TenantPermission.ManageEmployees;
+
+        if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal))
+            return TenantPermission.ManageInventory;
+
+        if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal))
+            return TenantPermission.ManageOrders;
+
+        if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
+            return TenantPermission.ManageServiceBoard;
+
+        if (path.StartsWith("/api/v1/products", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/categories", StringComparison.Ordinal))
+            return TenantPermission.ManageCatalog;
+
+        if (path.StartsWith("/api/v1/customers", StringComparison.Ordinal))
+            return TenantPermission.ManageCustomers;
+
+        if (path.StartsWith("/api/v1/cash", StringComparison.Ordinal))
+            return TenantPermission.ManageCash;
+
+        if (path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/audit", StringComparison.Ordinal))
+            return TenantPermission.ViewReports;
+
+        if (path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/auth/my-tenant/whatsapp", StringComparison.Ordinal))
+            return TenantPermission.ManageWhatsApp;
+
+        if (path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal))
+            return TenantPermission.ManageAiAgent;
+
+        if (path.StartsWith("/api/v1/appointments", StringComparison.Ordinal))
+            return TenantPermission.ManageAppointments;
 
         return null;
     }

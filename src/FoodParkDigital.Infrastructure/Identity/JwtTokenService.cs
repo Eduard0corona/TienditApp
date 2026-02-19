@@ -39,6 +39,16 @@ public class JwtTokenService : IJwtTokenService
         {
             claims.Add(new Claim("tenant_id", tenantContext.TenantId.ToString()));
             claims.Add(new Claim("tenant_role", tenantContext.TenantRole));
+
+            if (tenantContext.Permissions is not null)
+            {
+                foreach (var permission in tenantContext.Permissions
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    claims.Add(new Claim("perm", permission));
+                }
+            }
         }
 
         var token = new JwtSecurityToken(

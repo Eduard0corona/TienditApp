@@ -113,6 +113,7 @@ public class InventoryMovementCommandTests
         public string? UserName => "tester";
         public string? Role => "TENANT_ADMIN";
         public string? TenantRole => "TENANT_ADMIN";
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }
 

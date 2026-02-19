@@ -37,6 +37,8 @@ public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, R
             return Result.Failure<UserProfileDto>("Usuario no encontrado.");
 
         var dto = _mapper.Map<UserProfileDto>(user);
+        dto.TenantRole = _currentUserService.TenantRole;
+        dto.Permissions = _currentUserService.Permissions.ToList();
         return Result.Success(dto);
     }
 }

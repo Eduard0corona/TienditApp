@@ -104,6 +104,7 @@ public class OwnerWhatsAppConfigTests
         public string? UserName => "test@example.com";
         public string? Role { get; }
         public string? TenantRole => null;
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }
 

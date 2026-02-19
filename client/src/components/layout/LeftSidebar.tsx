@@ -181,6 +181,15 @@ export default function LeftSidebar() {
             </li>
           )}
 
+          {(user?.role === 'TenantAdmin' || user?.role === 'SuperAdmin') && canUseCommerce && (
+            <li className={`side-nav-item ${isActive('/employees') ? 'menuitem-active' : ''}`}>
+              <Link to="/employees" className="side-nav-link">
+                <i className="ri-user-settings-line"></i>
+                <span>Empleados</span>
+              </Link>
+            </li>
+          )}
+
           {canUseAppointments && (
             <li className={`side-nav-item ${isActive('/appointments') ? 'menuitem-active' : ''}`}>
               <Link to="/appointments" className="side-nav-link">

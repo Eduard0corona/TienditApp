@@ -39,12 +39,56 @@ export interface UserProfileDto {
   phoneNumberConfirmed: boolean;
   emailConfirmed: boolean;
   role: string;
+  tenantRole?: string;
+  permissions: string[];
   tenantId: string;
   isActive: boolean;
   avatarUrl?: string;
   avatarImages?: AvatarImageUrlsDto;
   twoFactorEnabled: boolean;
   createdAt: string;
+}
+
+export interface EmployeeDto {
+  tenantUserId: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  appRole: string;
+  tenantRole: string;
+  status: string;
+  isActive: boolean;
+  createdAt: string;
+  permissions: string[];
+}
+
+export interface EmployeePermissionOptionDto {
+  code: string;
+  name: string;
+  description: string;
+}
+
+export interface CreateEmployeeRequest {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  appRole: number;
+  tenantRole: number;
+  permissions: string[];
+}
+
+export interface UpdateEmployeeRequest {
+  tenantUserId: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  appRole: number;
+  tenantRole: number;
+  permissions: string[];
 }
 
 export interface MyTenantDto {
