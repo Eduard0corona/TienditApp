@@ -135,6 +135,11 @@ export default function OrdersList() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
+  const [paymentOrder, setPaymentOrder] = useState<OrderDto | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<OrderPaymentMethod>(OrderPaymentMethodConst.Cash);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
 
@@ -146,6 +151,29 @@ export default function OrdersList() {
     () => selectedOrder?.servicePieces.filter((piece) => piece.isTrackable) ?? [],
     [selectedOrder],
   );
+  const paymentSummary = useMemo(() => {
+    if (!paymentOrder) {
+      return {
+        pendingBefore: 0,
+        paidBefore: 0,
+        total: 0,
+        amountToSettle: 0,
+        pendingAfter: 0,
+      };
+    }
+
+    const parsedAmount = Number(paymentAmount);
+    const amount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+    const pendingBefore = Number(paymentOrder.balance.toFixed(2));
+
+    return {
+      total: Number(paymentOrder.total.toFixed(2)),
+      paidBefore: Number(paymentOrder.paidAmount.toFixed(2)),
+      pendingBefore,
+      amountToSettle: pendingBefore,
+      pendingAfter: Number(Math.max(0, pendingBefore - amount).toFixed(2)),
+    };
+  }, [paymentAmount, paymentOrder]);
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -207,66 +235,63 @@ export default function OrdersList() {
     };
   }, [loadOrders, onOrderCancelled, onOrderCreated, onOrderStatusChanged]);
 
-  const handleStatusChange = async (order: OrderDto, newStatus: string) => {
-    if (newStatus === '') return;
-    try {
-      await ordersApi.updateStatus(order.id, Number(newStatus) as OrderStatus);
-      await loadOrders();
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo actualizar el estado.';
-      setError(msg);
-    }
+  const openPaymentModal = (order: OrderDto) => {
+    setPaymentOrder(order);
+    setPaymentAmount(order.balance.toFixed(2));
+    setPaymentMethod(OrderPaymentMethodConst.Cash);
+    setPaymentError('');
   };
 
-  const handleCancel = async (order: OrderDto) => {
-    const reason = window.prompt('Motivo de cancelación (opcional):') ?? undefined;
-    try {
-      await ordersApi.cancel(order.id, reason || undefined);
-      await loadOrders();
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo cancelar la orden.';
-      setError(msg);
-    }
+  const closePaymentModal = () => {
+    if (paymentSubmitting) return;
+    setPaymentOrder(null);
+    setPaymentAmount('');
+    setPaymentMethod(OrderPaymentMethodConst.Cash);
+    setPaymentError('');
   };
 
-  const handleAddPayment = async (order: OrderDto) => {
-    const pending = Number(order.balance.toFixed(2));
-    const amountInput = window.prompt(`Monto a registrar (saldo actual: ${pending}):`);
-    if (!amountInput) return;
+  const handleAddPayment = async () => {
+    if (!paymentOrder) return;
 
-    const amount = Number(amountInput);
+    const amount = Number(paymentAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Monto de pago invalido.');
+      setPaymentError('Monto de pago invalido.');
       return;
     }
 
-    const methodInput = window.prompt(
-      'Metodo de pago: 0=Efectivo, 1=Tarjeta, 2=Transferencia, 3=Billetera digital, 4=Otro',
-      String(OrderPaymentMethodConst.Cash),
-    );
-    if (methodInput === null) return;
-
-    const method = Number(methodInput) as OrderPaymentMethod;
-    if (!Object.values(OrderPaymentMethodConst).includes(method)) {
-      setError('Metodo de pago invalido.');
+    if (amount > paymentOrder.balance) {
+      setPaymentError('El monto no puede ser mayor al saldo pendiente.');
       return;
     }
+
+    if (!Object.values(OrderPaymentMethodConst).includes(paymentMethod)) {
+      setPaymentError('Metodo de pago invalido.');
+      return;
+    }
+
+    setPaymentSubmitting(true);
+    setPaymentError('');
 
     try {
-      await ordersApi.addPayment(order.id, { amount, method });
+      await ordersApi.addPayment(paymentOrder.id, { amount, method: paymentMethod });
       await loadOrders();
+
+      if (selectedOrder?.id === paymentOrder.id) {
+        await refreshSelectedOrder(paymentOrder.id);
+      }
+
+      setPaymentOrder(null);
+      setPaymentAmount('');
+      setPaymentMethod(OrderPaymentMethodConst.Cash);
+      setPaymentError('');
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
         (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
         'No se pudo registrar el pago.';
-      setError(msg);
+      setPaymentError(msg);
+    } finally {
+      setPaymentSubmitting(false);
     }
   };
 
@@ -423,7 +448,13 @@ export default function OrdersList() {
                 renderRow={(order) => (
                   <>
                     <td>
-                      <span className="fw-semibold">{order.orderNumber}</span>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0 fw-semibold text-decoration-none"
+                        onClick={() => setSelectedOrder(order)}
+                      >
+                        {order.orderNumber}
+                      </button>
                       <div>
                         <span className={`badge mt-1 ${order.createdByBusiness ? 'bg-info' : 'bg-secondary'}`}>
                           {order.createdByBusiness ? 'Creada por empresa' : 'Creada por cliente'}
@@ -452,48 +483,15 @@ export default function OrdersList() {
                       </small>
                     </td>
                     <td className="text-center">
-                      <div className="d-flex gap-1 justify-content-center flex-wrap">
+                      <div className="d-flex justify-content-center">
                         <button
-                          className="btn btn-sm btn-soft-secondary"
-                          onClick={() => setSelectedOrder(order)}
-                          title="Ver detalle"
+                          type="button"
+                          className="btn btn-sm btn-soft-success"
+                          disabled={order.balance <= 0 || order.status === 99}
+                          onClick={() => openPaymentModal(order)}
                         >
-                          <i className="ri-eye-line"></i>
+                          Registrar pago
                         </button>
-                        <select
-                          className="form-select form-select-sm"
-                          style={{ width: 145 }}
-                          value=""
-                          disabled={(order.allowedTransitions?.length ?? 0) === 0}
-                          onChange={(e) => handleStatusChange(order, e.target.value)}
-                        >
-                          <option value="">Cambiar estado</option>
-                          {STATUS_OPTIONS.filter((status) =>
-                            (order.allowedTransitions ?? []).includes(status.value),
-                          ).map((status) => (
-                            <option key={status.value} value={status.value}>
-                              {getStatusLabel(status.value, order.orderType)}
-                            </option>
-                          ))}
-                        </select>
-                        {order.balance > 0 && order.status !== 99 && (
-                          <button
-                            className="btn btn-sm btn-soft-success"
-                            onClick={() => handleAddPayment(order)}
-                            title="Registrar pago"
-                          >
-                            <i className="ri-money-dollar-circle-line"></i>
-                          </button>
-                        )}
-                        {Boolean(order.canCancel) && (
-                          <button
-                            className="btn btn-sm btn-soft-danger"
-                            onClick={() => handleCancel(order)}
-                            title="Cancelar orden"
-                          >
-                            <i className="ri-close-circle-line"></i>
-                          </button>
-                        )}
                       </div>
                     </td>
                   </>
@@ -645,6 +643,100 @@ export default function OrdersList() {
           )}
         </Modal.Body>
       </Modal>
+
+      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered>
+        <Modal.Header closeButton={!paymentSubmitting}>
+          <Modal.Title>Registrar pago</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {paymentOrder && (
+            <>
+              <div className="mb-3">
+                <div><strong>Orden:</strong> {paymentOrder.orderNumber}</div>
+                <div><strong>Cliente:</strong> {paymentOrder.customerName}</div>
+              </div>
+
+              <div className="border rounded p-3 mb-3 bg-light-subtle">
+                <div className="d-flex justify-content-between mb-1">
+                  <span>Total de la orden</span>
+                  <strong>${paymentSummary.total.toFixed(2)}</strong>
+                </div>
+                <div className="d-flex justify-content-between mb-1">
+                  <span>Abonado previamente</span>
+                  <strong>${paymentSummary.paidBefore.toFixed(2)}</strong>
+                </div>
+                <div className="d-flex justify-content-between mb-1">
+                  <span>Pendiente actual</span>
+                  <strong className="text-danger">${paymentSummary.pendingBefore.toFixed(2)}</strong>
+                </div>
+                <div className="d-flex justify-content-between">
+                  <span>Liquida con</span>
+                  <strong className="text-success">${paymentSummary.amountToSettle.toFixed(2)}</strong>
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Monto a registrar</label>
+                <input
+                  type="number"
+                  className="form-control"
+                  min="0.01"
+                  max={paymentSummary.pendingBefore}
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  disabled={paymentSubmitting}
+                />
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label">Metodo de pago</label>
+                <select
+                  className="form-select"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(Number(e.target.value) as OrderPaymentMethod)}
+                  disabled={paymentSubmitting}
+                >
+                  {Object.values(OrderPaymentMethodConst)
+                    .filter((value): value is OrderPaymentMethod => typeof value === 'number')
+                    .map((value) => (
+                      <option key={value} value={value}>
+                        {PAYMENT_METHOD_LABELS[value] || value}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="border rounded p-2 bg-light-subtle">
+                <small>
+                  Saldo despues del pago: <strong>${paymentSummary.pendingAfter.toFixed(2)}</strong>
+                </small>
+              </div>
+
+              {paymentError && <div className="alert alert-danger mt-3 mb-0">{paymentError}</div>}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <button
+            type="button"
+            className="btn btn-light"
+            onClick={closePaymentModal}
+            disabled={paymentSubmitting}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleAddPayment}
+            disabled={paymentSubmitting || !paymentOrder}
+          >
+            {paymentSubmitting ? 'Guardando...' : 'Registrar pago'}
+          </button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 }
+
