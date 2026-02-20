@@ -548,6 +548,10 @@ export interface UpdateInventoryLocationRequest extends CreateInventoryLocationR
   id: string;
 }
 
+export type BranchDto = InventoryLocationDto;
+export type CreateBranchRequest = CreateInventoryLocationRequest;
+export type UpdateBranchRequest = UpdateInventoryLocationRequest;
+
 export interface InventoryStockDto {
   stockId: string;
   supplyItemId: string;

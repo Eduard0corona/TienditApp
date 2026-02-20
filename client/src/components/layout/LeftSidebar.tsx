@@ -34,6 +34,7 @@ export default function LeftSidebar() {
   const canManageAppointments = hasPermission('ManageAppointments');
   const showCatalog = canUseCommerce && canManageCatalog;
   const showInventory = canUseInventory && canManageInventory;
+  const showBranches = canUseInventory && canManageInventory;
   const showCash = canUseCommerce && canManageCash;
   const showOrders = canUseCommerce && canManageOrders;
   const showServiceBoard = canUseServiceBoard && canManageServiceBoard;
@@ -42,7 +43,7 @@ export default function LeftSidebar() {
   const showEmployees = isPrivilegedRole && canUseCommerce && canManageEmployees;
   const showAppointments = canUseAppointments && canManageAppointments;
   const showReports = canUseCommerce && canViewReports;
-  const showOperationSection = showInventory || showCash || showOrders || showServiceBoard || showKitchen;
+  const showOperationSection = showInventory || showBranches || showCash || showOrders || showServiceBoard || showKitchen;
   const showAiAgent = isPrivilegedRole && canUseCommerce && canManageAiAgent;
   const showWhatsAppSettings = isPrivilegedRole && canUseCommerce && canManageWhatsApp;
   const showWhatsAppChat = isPrivilegedRole && canUseCommerce && canManageWhatsApp;
@@ -144,6 +145,15 @@ export default function LeftSidebar() {
               <Link to="/inventory" className="side-nav-link">
                 <i className="ri-archive-drawer-line"></i>
                 <span>Inventario</span>
+              </Link>
+            </li>
+          )}
+
+          {showBranches && (
+            <li className={`side-nav-item ${isActive('/branches') ? 'menuitem-active' : ''}`}>
+              <Link to="/branches" className="side-nav-link">
+                <i className="ri-store-3-line"></i>
+                <span>Sucursales</span>
               </Link>
             </li>
           )}

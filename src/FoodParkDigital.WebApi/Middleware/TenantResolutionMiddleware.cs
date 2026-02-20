@@ -156,6 +156,7 @@ public class TenantResolutionMiddleware
 
     private static bool IsTenantScopedPath(string path) =>
         path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
@@ -177,6 +178,9 @@ public class TenantResolutionMiddleware
 
     private static CapabilityRequirement? GetCapabilityRequirement(string path)
     {
+        if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal))
+            return new CapabilityRequirement(TenantCapability.Inventory, CapabilityMatchMode.All);
+
         if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Inventory, CapabilityMatchMode.All);
 
@@ -219,6 +223,15 @@ public class TenantResolutionMiddleware
 
         if (path.StartsWith("/api/v1/employees", StringComparison.Ordinal))
             return [TenantPermission.ManageEmployees];
+
+        if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal) && isReadRequest)
+        {
+            // Cash module needs active branches to register payments/cuts by branch.
+            return [TenantPermission.ManageInventory, TenantPermission.ManageCash];
+        }
+
+        if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal))
+            return [TenantPermission.ManageInventory];
 
         if (path.StartsWith("/api/v1/inventory/locations", StringComparison.Ordinal) && isReadRequest)
         {

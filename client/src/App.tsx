@@ -18,6 +18,7 @@ const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
 const ServicesList = lazy(() => import('./pages/services/ServicesList'));
 const ServiceBoard = lazy(() => import('./pages/services/ServiceBoard'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
+const BranchesList = lazy(() => import('./pages/branches/BranchesList'));
 const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
@@ -112,6 +113,14 @@ export default function App() {
               element={(
                 <CapabilityRoute required={TenantCapability.Inventory}>
                   <InventoryManagement />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/branches"
+              element={(
+                <CapabilityRoute required={TenantCapability.Inventory}>
+                  <BranchesList />
                 </CapabilityRoute>
               )}
             />
