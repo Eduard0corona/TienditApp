@@ -1,0 +1,34 @@
+# Migraciones de base de datos
+
+## Estado actual
+
+`ApplicationDbContext`, configuraciones y migraciones están en `FoodParkDigital.Infrastructure`. `MigrationsAssembly` apunta a ese assembly. En Development, `Program.cs` ejecuta migración y seed al arranque; el bloque está condicionado a `IsDevelopment()`.
+
+## Reglas
+
+- Configuraciones EF y migraciones pertenecen a Infrastructure.
+- No edites una migración aplicada ni el snapshot manualmente.
+- No elimines/recrees bases como proceso normal de actualización.
+- Cada cambio de esquema incluye migración descriptiva, revisión SQL y documentación.
+- Producción no ejecuta migraciones automáticamente al iniciar; un paso de despliegue controlado aplica y observa el cambio.
+- Cambios destructivos usan expand/contract, backfill, compatibilidad de versiones y rollback/roll-forward.
+- Índices, claves y precisiones conservan `TenantId` cuando corresponda.
+- Consultas aplican filtros y paginación antes de materializar.
+
+## Comandos de desarrollo
+
+Con `dotnet-ef` instalado:
+
+```powershell
+dotnet ef migrations add NombreDescriptivo --project src/FoodParkDigital.Infrastructure --startup-project src/FoodParkDigital.WebApi
+dotnet ef database update --project src/FoodParkDigital.Infrastructure --startup-project src/FoodParkDigital.WebApi
+dotnet ef migrations script --idempotent --project src/FoodParkDigital.Infrastructure --startup-project src/FoodParkDigital.WebApi
+```
+
+Revisa el código/SQL generado, prueba desde la versión productiva previa y confirma datos/rollback. No ejecutes `database drop` sin autorización explícita y backup verificado.
+
+## Deuda actual
+
+- `PendingModelChangesWarning` está ignorado en la configuración del DbContext, lo que puede ocultar drift de modelo.
+- Falta automatización que valide migraciones contra SQL Server desde cero y desde baseline.
+- La divergencia de ramas puede contener historias de migración distintas; se resuelve en tarea separada antes de promover esquema.

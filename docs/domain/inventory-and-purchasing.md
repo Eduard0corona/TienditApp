@@ -1,0 +1,29 @@
+# Inventario y compras
+
+## Estado actual
+
+`SupplyItem` representa insumos; `InventoryLocation` funciona también como sucursal; `InventoryStock` almacena on-hand/reservado por insumo+ubicación. `InventoryMovement` y líneas forman el kardex con cantidades antes/después, costos, lote, caducidad, referencias y `ExternalReference`.
+
+Las entradas/salidas manuales pasan por `CreateInventoryMovementCommand`. Recibir una `PurchaseOrder` actualiza líneas, stock, costo del insumo y crea movimiento de compra. Órdenes con receta crean salida por venta/consumo; cancelación crea entrada compensatoria. Un índice único `(TenantId, ExternalReference)` protege los movimientos automáticos que sí usan clave estable.
+
+## Guardrails
+
+- Controllers y React no modifican existencias directamente.
+- Todo cambio produce un movimiento trazable con tenant, ubicación, causa y origen.
+- Reintentos usan clave idempotente estable y constraint único.
+- Salidas de órdenes referencian la orden/pieza origen.
+- Cancelaciones/devoluciones compensan; nunca borran movimiento histórico.
+- Transferencias identifican origen y destino y se ejecutan como unidad coordinada.
+- No se permite negativo salvo regla explícita y auditada.
+- Protege stock, folios y recepciones frente a concurrencia.
+- Valida que insumo, ubicación, proveedor, compra y orden pertenezcan al mismo tenant.
+- Diferencias entre stock calculado por kardex y almacenado se detectan/reconcilian mediante ajuste trazable.
+
+## Deuda actual
+
+- `InventoryStock` no tiene token de concurrencia visible; dos salidas simultáneas pueden competir.
+- Folios `INV-yyyyMMdd-nnnn` se generan contando registros y pueden colisionar; el índice único detecta, pero no evita el conflicto.
+- El movimiento manual permite tipos TransferIn/TransferOut, pero no se observó un caso de uso atómico que exija origen y destino.
+- La recepción de compra genera `ExternalReference` con timestamp, por lo que un retry no deduplica de forma determinista; además el avance de línea puede impedir/alterar el segundo intento, pero no es una garantía idempotente formal.
+- `allowNegative: true` aparece al revertir consumo; sumar una devolución no produce negativo, por lo que la excepción merece revisión.
+- No existe prueba de integración SQL Server para locks, constraints e idempotencia concurrente.

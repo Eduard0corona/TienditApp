@@ -1,0 +1,38 @@
+# Reglas de negocio
+
+## Órdenes
+
+- El constructor de `Order` exige exactamente uno entre `CustomerUserId` y `TemporaryCustomerId`.
+- Una orden inicia en `Pending` y su estado cambia mediante `TransitionTo` o `Cancel` con una máquina creada por tipo de negocio/orden.
+- Solo se agregan items mientras la orden está `Pending`; cantidad debe ser positiva y precio no negativo.
+- Las órdenes Service pueden tener `ServiceOrderDetail` y piezas; otros tipos no.
+- Las colecciones de items, historial, pagos y piezas son de solo lectura.
+- Un pago debe ser positivo, no puede exceder `Total` acumulado y no se admite en una orden cancelada.
+- La creación enlaza un perfil registrado por teléfono o crea/usa cliente temporal; el teléfono es obligatorio en el caso de uso actual.
+
+## Cancelación y trazabilidad
+
+El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
+
+## Servicio y citas
+
+- Una pieza inicia `Accepted`; pasa a `InProgress`, luego `Completed`, o puede cancelarse desde los dos primeros estados.
+- Una pieza completada/cancelada no puede asignarse.
+- El caso de uso sincroniza estado de la orden desde las piezas trackeables.
+- Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado.
+
+## Inventario, compras y caja
+
+- Existencia disponible es `OnHandQuantity - ReservedQuantity`; una salida normal no permite negativo.
+- Reservado no puede ser negativo ni superar existencia.
+- Los movimientos tienen líneas positivas y el tipo define el signo aplicado.
+- Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total.
+- Una caja cerrada no recibe movimientos y no puede cerrarse dos veces.
+
+## Guardrails
+
+- No cambies estados por asignación directa.
+- No calcules estados/totales/impuestos/saldos/existencias finales en frontend.
+- Cambios que cruzan orden, inventario, caja, auditoría o notificación pasan por casos de uso coordinados.
+- Mantén invariantes en agregados y formato/entrada en FluentValidation/Application.
+- Toda nueva regla necesita pruebas positivas y negativas.
