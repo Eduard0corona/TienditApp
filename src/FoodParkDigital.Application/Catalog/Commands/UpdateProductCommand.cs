@@ -35,6 +35,8 @@ public record UpdateProductCommand : IRequest<Result<ProductDto>>
     public UnitType? Unit { get; init; }
     public TimeSpan? AvailableFromTime { get; init; }
     public TimeSpan? AvailableToTime { get; init; }
+    public bool IsTrackable { get; init; }
+    public bool NotifyCustomer { get; init; }
 }
 
 public class UpdateProductCommandValidator : AbstractValidator<UpdateProductCommand>
@@ -75,6 +77,10 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x)
             .Must(x => !x.AvailableFromTime.HasValue || x.AvailableFromTime.Value != x.AvailableToTime!.Value)
             .WithMessage("La hora de inicio y fin no pueden ser iguales.");
+        RuleFor(x => x.NotifyCustomer)
+            .Equal(false)
+            .When(x => !x.IsTrackable)
+            .WithMessage("No puedes notificar al cliente en un servicio no rastreable.");
 
         When(x => IsServiceUnit(x.Unit), () =>
         {
@@ -108,6 +114,16 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
             RuleFor(x => x.IsFeatured)
                 .Equal(false)
                 .WithMessage("Los servicios no admiten la marca de destacado.");
+        });
+
+        When(x => !IsServiceUnit(x.Unit), () =>
+        {
+            RuleFor(x => x.IsTrackable)
+                .Equal(false)
+                .WithMessage("Solo los servicios pueden ser rastreables.");
+            RuleFor(x => x.NotifyCustomer)
+                .Equal(false)
+                .WithMessage("Solo los servicios pueden notificar al cliente.");
         });
     }
 
@@ -182,7 +198,9 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
             maxQuantityPerOrder: request.MaxQuantityPerOrder,
             unit: request.Unit,
             availableFromTime: request.AvailableFromTime,
-            availableToTime: request.AvailableToTime);
+            availableToTime: request.AvailableToTime,
+            isTrackable: request.IsTrackable,
+            notifyCustomer: request.NotifyCustomer);
 
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(_mapper.Map<ProductDto>(product));

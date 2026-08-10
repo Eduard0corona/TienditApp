@@ -17,6 +17,7 @@ public record AddCashTransactionCommand : IRequest<Result<CashTransactionDto>>
     public decimal Amount { get; init; }
     public DateTimeOffset? OccurredAt { get; init; }
     public OrderPaymentMethod? PaymentMethod { get; init; }
+    public Guid? InventoryLocationId { get; init; }
     public Guid? OrderId { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
@@ -30,6 +31,7 @@ public class AddCashTransactionCommandValidator : AbstractValidator<AddCashTrans
         RuleFor(x => x.TransactionType).IsInEnum();
         RuleFor(x => x.Amount).NotEqual(0);
         RuleFor(x => x.PaymentMethod).IsInEnum().When(x => x.PaymentMethod.HasValue);
+        RuleFor(x => x.InventoryLocationId).NotEmpty().When(x => x.InventoryLocationId.HasValue);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);
     }
@@ -53,11 +55,33 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
             .FirstOrDefaultAsync(x => x.Id == request.CashSessionId, cancellationToken)
             ?? throw new EntityNotFoundException("CashSession", request.CashSessionId);
 
+        Guid? inventoryLocationId = request.InventoryLocationId;
+        if (inventoryLocationId.HasValue)
+        {
+            var exists = await _context.InventoryLocations
+                .AnyAsync(
+                    x => x.Id == inventoryLocationId.Value
+                      && x.TenantId == session.TenantId
+                      && x.IsActive,
+                    cancellationToken);
+
+            if (!exists)
+                return Result.Failure<CashTransactionDto>("La sucursal seleccionada no es valida.");
+        }
+        else
+        {
+            inventoryLocationId = await _context.InventoryLocations
+                .Where(x => x.TenantId == session.TenantId && x.IsActive && x.IsDefault)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         session.RegisterTransaction(
             transactionType: request.TransactionType,
             amount: request.Amount,
             occurredAt: request.OccurredAt ?? _dateTimeProvider.UtcNow,
             paymentMethod: request.PaymentMethod,
+            inventoryLocationId: inventoryLocationId,
             orderId: request.OrderId,
             reference: request.Reference,
             notes: request.Notes);
@@ -76,6 +100,7 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
             Amount = transaction.Amount,
             OccurredAt = transaction.OccurredAt,
             PaymentMethod = transaction.PaymentMethod,
+            InventoryLocationId = transaction.InventoryLocationId,
             OrderId = transaction.OrderId,
             Reference = transaction.Reference,
             Notes = transaction.Notes

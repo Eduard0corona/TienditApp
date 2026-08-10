@@ -18,6 +18,8 @@ export default function Topbar() {
     () => tenant?.id ?? user?.tenantId ?? '',
     [tenant?.id, user?.tenantId],
   );
+  const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo.png';
+  const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '/images/logo-sm.png';
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -126,18 +128,18 @@ export default function Topbar() {
           <div className="logo-topbar">
             <Link to="/dashboard" className="logo-light">
               <span className="logo-lg">
-                <img src="/images/logo.png" alt="logo" />
+                <img src={tenantLogoLg} alt="logo" />
               </span>
               <span className="logo-sm">
-                <img src="/images/logo-sm.png" alt="small logo" />
+                <img src={tenantLogoSm} alt="small logo" />
               </span>
             </Link>
             <Link to="/dashboard" className="logo-dark">
               <span className="logo-lg">
-                <img src="/images/logo-dark.png" alt="dark logo" />
+                <img src={tenantLogoLg} alt="dark logo" />
               </span>
               <span className="logo-sm">
-                <img src="/images/logo-dark-sm.png" alt="small logo" />
+                <img src={tenantLogoSm} alt="small logo" />
               </span>
             </Link>
           </div>

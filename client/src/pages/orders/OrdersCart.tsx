@@ -1,27 +1,79 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
+import { useTenant } from '../../hooks/useTenant';
+import './OrdersCart.css';
 import type {
   CreateOrderRequest,
   CreateServiceOrderPieceRequest,
   CustomerDto,
   OrderType,
   ProductDto,
+  UploadedFileDto,
 } from '../../types';
-import { OrderType as OrderTypeConst, UnitType } from '../../types';
+import { BusinessType as BusinessTypeConst, OrderType as OrderTypeConst, UnitType } from '../../types';
 
 interface CartLine {
   productId: string;
   productName: string;
   unitPrice: number;
   quantity: number;
+  isService: boolean;
+}
+
+interface ServiceChecklistItem {
+  id: string;
+  label: string;
+  checked: boolean;
+}
+
+interface ServicePhotoItem {
+  id: string;
+  url: string;
+  fileName: string;
+}
+
+function toLocalDateTimeInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function buildChecklistItem(label = ''): ServiceChecklistItem {
+  return {
+    id: crypto.randomUUID(),
+    label,
+    checked: false,
+  };
+}
+
+function buildServicePiece(): CreateServiceOrderPieceRequest {
+  return {
+    itemName: '',
+    requestedService: '',
+    isTrackable: true,
+    notifyCustomer: false,
+  };
+}
+
+function buildPhoto(uploaded: UploadedFileDto): ServicePhotoItem {
+  return {
+    id: crypto.randomUUID(),
+    url: uploaded.url,
+    fileName: uploaded.fileName,
+  };
 }
 
 export default function OrdersCart() {
   const navigate = useNavigate();
+  const { tenant } = useTenant();
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -32,16 +84,25 @@ export default function OrdersCart() {
   const [tableNumber, setTableNumber] = useState('');
   const [customerNotes, setCustomerNotes] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [serviceReceivedAt, setServiceReceivedAt] = useState(() => toLocalDateTimeInput(new Date()));
   const [servicePromisedAt, setServicePromisedAt] = useState('');
   const [servicePriority, setServicePriority] = useState(1);
   const [serviceIntakeNotes, setServiceIntakeNotes] = useState('');
   const [serviceDeliveryNotes, setServiceDeliveryNotes] = useState('');
+  const [serviceChecklist, setServiceChecklist] = useState<ServiceChecklistItem[]>([
+    buildChecklistItem(''),
+  ]);
+  const [beforePhotos, setBeforePhotos] = useState<ServicePhotoItem[]>([]);
+  const [afterPhotos, setAfterPhotos] = useState<ServicePhotoItem[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [uploadingMessage, setUploadingMessage] = useState('Subiendo evidencia de servicio...');
   const [servicePieces, setServicePieces] = useState<CreateServiceOrderPieceRequest[]>([
-    { itemName: '', requestedService: '' },
+    buildServicePiece(),
   ]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const showsTableReferenceField = tenant?.businessType === BusinessTypeConst.Food;
 
   const isService = (product: ProductDto) =>
     product.unit === UnitType.Hour ||
@@ -93,9 +154,18 @@ export default function OrdersCart() {
   }, [loadData]);
 
   useEffect(() => {
-    setCart([]);
     setError('');
   }, [orderType]);
+
+  const serviceCatalogItems = useMemo(
+    () => products.filter((product) => isService(product)),
+    [products],
+  );
+
+  const serviceCartLines = useMemo(
+    () => cart.filter((line) => line.isService),
+    [cart],
+  );
 
   const updateServicePiece = (
     index: number,
@@ -109,13 +179,74 @@ export default function OrdersCart() {
   };
 
   const addServicePiece = () => {
-    setServicePieces((current) => [...current, { itemName: '', requestedService: '' }]);
+    const firstServiceLine = serviceCartLines[0];
+    setServicePieces((current) => [
+      ...current,
+      {
+        ...buildServicePiece(),
+        requestedService: firstServiceLine?.productName ?? '',
+        serviceProductId: firstServiceLine?.productId,
+      },
+    ]);
   };
 
   const removeServicePiece = (index: number) => {
     setServicePieces((current) =>
       current.length <= 1 ? current : current.filter((_, currentIndex) => currentIndex !== index),
     );
+  };
+
+  const updateChecklistItem = (id: string, changes: Partial<ServiceChecklistItem>) => {
+    setServiceChecklist((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...changes } : item)),
+    );
+  };
+
+  const addChecklistItem = () => {
+    setServiceChecklist((current) => [...current, buildChecklistItem('')]);
+  };
+
+  const removeChecklistItem = (id: string) => {
+    setServiceChecklist((current) =>
+      current.length <= 1 ? current : current.filter((item) => item.id !== id),
+    );
+  };
+
+  const removePhoto = (type: 'before' | 'after', id: string) => {
+    if (type === 'before') {
+      setBeforePhotos((current) => current.filter((photo) => photo.id !== id));
+      return;
+    }
+
+    setAfterPhotos((current) => current.filter((photo) => photo.id !== id));
+  };
+
+  const uploadServicePhotos = async (files: FileList | null, type: 'before' | 'after') => {
+    if (!files || files.length === 0) return;
+
+    setError('');
+    setUploadingPhotos(true);
+    setUploadingMessage(type === 'before'
+      ? 'Subiendo fotos de recepcion...'
+      : 'Subiendo fotos de entrega...');
+
+    try {
+      const uploads: ServicePhotoItem[] = [];
+      for (const file of Array.from(files)) {
+        const { data } = await ordersApi.uploadServicePhoto(file);
+        uploads.push(buildPhoto(data));
+      }
+
+      if (type === 'before') {
+        setBeforePhotos((current) => [...current, ...uploads]);
+      } else {
+        setAfterPhotos((current) => [...current, ...uploads]);
+      }
+    } catch {
+      setError('No se pudieron subir una o mas imagenes. Intenta nuevamente.');
+    } finally {
+      setUploadingPhotos(false);
+    }
   };
 
   const addToCart = (product: ProductDto) => {
@@ -136,9 +267,17 @@ export default function OrdersCart() {
           productName: product.name,
           unitPrice: product.priceAmount,
           quantity: 1,
+          isService: isService(product),
         },
       ];
     });
+  };
+
+  const onProductCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, product: ProductDto) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      addToCart(product);
+    }
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
@@ -162,6 +301,13 @@ export default function OrdersCart() {
     () => cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [cart],
   );
+  const hasServiceItems = useMemo(() => cart.some((line) => line.isService), [cart]);
+  const hasProductItems = useMemo(() => cart.some((line) => !line.isService), [cart]);
+  const resolvedOrderType = useMemo(
+    () => (hasServiceItems ? OrderTypeConst.Service : OrderTypeConst.Retail),
+    [hasServiceItems],
+  );
+  const isMixedCart = hasServiceItems && hasProductItems;
 
   const filteredProducts = useMemo(() => {
     const search = productSearch.trim().toLowerCase();
@@ -212,6 +358,9 @@ export default function OrdersCart() {
       .map((piece) => ({
         ...piece,
         itemName: piece.itemName.trim(),
+        serviceProductId: piece.serviceProductId || undefined,
+        isTrackable: piece.isTrackable ?? true,
+        notifyCustomer: piece.notifyCustomer ?? false,
         brand: piece.brand?.trim() || undefined,
         model: piece.model?.trim() || undefined,
         color: piece.color?.trim() || undefined,
@@ -223,29 +372,35 @@ export default function OrdersCart() {
       }))
       .filter((piece) => piece.itemName);
 
-    if (orderType === OrderTypeConst.Service && cleanedServicePieces.length === 0) {
-      setError('Debes agregar al menos una pieza para una orden de servicio.');
-      return;
-    }
+    const cleanedChecklist = serviceChecklist
+      .map((item) => ({
+        label: item.label.trim(),
+        checked: item.checked,
+      }))
+      .filter((item) => item.label.length > 0);
 
     const payload: CreateOrderRequest = {
       customerId: selectedCustomerId || undefined,
       customerName: customerNameOverride.trim() || undefined,
       customerPhone: effectiveCustomerPhone,
       customerNotes: customerNotes.trim() || undefined,
-      tableNumber: tableNumber.trim() || undefined,
-      orderType,
+      tableNumber: showsTableReferenceField ? tableNumber.trim() || undefined : undefined,
+      orderType: resolvedOrderType,
       items: cart.map((line) => ({
         productId: line.productId,
         quantity: line.quantity,
       })),
-      ...(orderType === OrderTypeConst.Service
+      ...(resolvedOrderType === OrderTypeConst.Service
         ? {
             serviceDetail: {
+              receivedAt: serviceReceivedAt ? new Date(serviceReceivedAt).toISOString() : undefined,
               promisedAt: servicePromisedAt ? new Date(servicePromisedAt).toISOString() : undefined,
               priority: servicePriority,
               intakeNotes: serviceIntakeNotes.trim() || undefined,
               deliveryNotes: serviceDeliveryNotes.trim() || undefined,
+              intakeChecklistJson: cleanedChecklist.length > 0 ? JSON.stringify(cleanedChecklist) : undefined,
+              beforePhotosJson: beforePhotos.length > 0 ? JSON.stringify(beforePhotos) : undefined,
+              afterPhotosJson: afterPhotos.length > 0 ? JSON.stringify(afterPhotos) : undefined,
               pieces: cleanedServicePieces,
             },
           }
@@ -278,6 +433,11 @@ export default function OrdersCart() {
 
   return (
     <>
+      <UploadLoadingModal
+        show={uploadingPhotos}
+        title="Subiendo imagenes"
+        description={uploadingMessage}
+      />
       <PageTitle title="Generar Orden" subtitle="Carrito" />
 
       {error && (
@@ -291,11 +451,11 @@ export default function OrdersCart() {
         <div className="col-xl-7">
           <div className="card">
             <div className="card-body">
-              <div className="d-flex justify-content-between align-items-center mb-3 gap-2">
+              <div className="orders-catalog-toolbar d-flex justify-content-between align-items-center mb-3 gap-2">
                 <h4 className="header-title mb-0">
                   {orderType === OrderTypeConst.Service ? 'Servicios disponibles' : 'Productos disponibles'}
                 </h4>
-                <div style={{ minWidth: 280 }}>
+                <div className="orders-catalog-search">
                   <input
                     type="text"
                     className="form-control form-control-sm"
@@ -314,7 +474,14 @@ export default function OrdersCart() {
                 <div className="row g-2">
                   {filteredProducts.map((product) => (
                     <div className="col-md-6 col-lg-4" key={product.id}>
-                      <div className="border rounded p-2 h-100 d-flex flex-column">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="order-catalog-card border rounded p-2 h-100 d-flex flex-column"
+                        onClick={() => addToCart(product)}
+                        onKeyDown={(event) => onProductCardKeyDown(event, product)}
+                        title="Agregar al carrito"
+                      >
                         <div className="d-flex justify-content-between align-items-center gap-2">
                           <div className="fw-semibold">{product.name}</div>
                           <span className={`badge ${isService(product) ? 'bg-info' : 'bg-secondary'}`}>
@@ -326,13 +493,7 @@ export default function OrdersCart() {
                           <span className="fw-semibold">
                             ${product.priceAmount.toFixed(2)} {product.priceCurrency}
                           </span>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-soft-primary"
-                            onClick={() => addToCart(product)}
-                          >
-                            <i className="ri-add-line me-1"></i>Agregar
-                          </button>
+                          <span className="text-muted small">Click para agregar</span>
                         </div>
                       </div>
                     </div>
@@ -354,23 +515,28 @@ export default function OrdersCart() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label d-block">Tipo de orden</label>
-                <div className="btn-group w-100" role="group" aria-label="Tipo de orden">
+                <label className="form-label d-block">Filtro del catalogo</label>
+                <div className="order-type-toggle d-flex flex-column flex-sm-row gap-2" role="group" aria-label="Tipo de orden">
                   <button
                     type="button"
-                    className={`btn ${orderType === OrderTypeConst.Retail ? 'btn-primary' : 'btn-light'}`}
+                    className={`btn flex-fill ${orderType === OrderTypeConst.Retail ? 'btn-primary' : 'btn-light'}`}
                     onClick={() => setOrderType(OrderTypeConst.Retail)}
                   >
                     Venta de productos
                   </button>
                   <button
                     type="button"
-                    className={`btn ${orderType === OrderTypeConst.Service ? 'btn-primary' : 'btn-light'}`}
+                    className={`btn flex-fill ${orderType === OrderTypeConst.Service ? 'btn-primary' : 'btn-light'}`}
                     onClick={() => setOrderType(OrderTypeConst.Service)}
                   >
                     Servicio
                   </button>
                 </div>
+                {isMixedCart && (
+                  <div className="form-text">
+                    Tienes productos y servicios en el carrito. Se habilitara checklist para los servicios rastreables.
+                  </div>
+                )}
               </div>
 
               <div className="mb-2">
@@ -426,20 +592,31 @@ export default function OrdersCart() {
                 </div>
               )}
 
-              <div className="mb-2">
-                <label className="form-label">Mesa / Referencia</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={tableNumber}
-                  onChange={(e) => setTableNumber(e.target.value)}
-                />
-              </div>
+              {showsTableReferenceField && (
+                <div className="mb-2">
+                  <label className="form-label">Mesa / Referencia</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                  />
+                </div>
+              )}
 
-              {orderType === OrderTypeConst.Service && (
+              {resolvedOrderType === OrderTypeConst.Service && (
                 <div className="border rounded p-2 mb-2">
-                  <h5 className="font-15 mb-2">Detalle del servicio</h5>
+                  <h5 className="font-15 mb-2">Recepcion de servicio</h5>
                   <div className="row g-2 mb-2">
+                    <div className="col-md-6">
+                      <label className="form-label">Fecha de recepcion</label>
+                      <input
+                        type="datetime-local"
+                        className="form-control"
+                        value={serviceReceivedAt}
+                        onChange={(e) => setServiceReceivedAt(e.target.value)}
+                      />
+                    </div>
                     <div className="col-md-6">
                       <label className="form-label">Fecha promesa</label>
                       <input
@@ -485,6 +662,102 @@ export default function OrdersCart() {
                     />
                   </div>
 
+                  <div className="mb-2">
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <label className="form-label mb-0">Checklist de recepcion</label>
+                      <button type="button" className="btn btn-sm btn-soft-primary" onClick={addChecklistItem}>
+                        <i className="ri-add-line me-1"></i>Agregar item
+                      </button>
+                    </div>
+
+                    {serviceChecklist.map((item) => (
+                      <div className="d-flex align-items-center gap-2 mb-1" key={item.id}>
+                        <input
+                          className="form-check-input mt-0"
+                          type="checkbox"
+                          checked={item.checked}
+                          onChange={(e) => updateChecklistItem(item.id, { checked: e.target.checked })}
+                        />
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          placeholder="Ejemplo: Sin manchas visibles"
+                          value={item.label}
+                          onChange={(e) => updateChecklistItem(item.id, { label: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-soft-danger"
+                          onClick={() => removeChecklistItem(item.id)}
+                          disabled={serviceChecklist.length <= 1}
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="row g-2 mb-2">
+                    <div className="col-md-6">
+                      <label className="form-label">Fotos antes</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="form-control"
+                        multiple
+                        onChange={(e) => {
+                          void uploadServicePhotos(e.target.files, 'before');
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                      {beforePhotos.length > 0 && (
+                        <div className="orders-photo-grid mt-2">
+                          {beforePhotos.map((photo) => (
+                            <div className="orders-photo-item" key={photo.id}>
+                              <img src={photo.url} alt={photo.fileName} className="img-fluid rounded" />
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-danger orders-photo-remove"
+                                onClick={() => removePhoto('before', photo.id)}
+                              >
+                                <i className="ri-close-line"></i>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Fotos despues</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="form-control"
+                        multiple
+                        onChange={(e) => {
+                          void uploadServicePhotos(e.target.files, 'after');
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                      {afterPhotos.length > 0 && (
+                        <div className="orders-photo-grid mt-2">
+                          {afterPhotos.map((photo) => (
+                            <div className="orders-photo-item" key={photo.id}>
+                              <img src={photo.url} alt={photo.fileName} className="img-fluid rounded" />
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-danger orders-photo-remove"
+                                onClick={() => removePhoto('after', photo.id)}
+                              >
+                                <i className="ri-close-line"></i>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       <label className="form-label mb-0">Piezas</label>
@@ -512,6 +785,104 @@ export default function OrdersCart() {
                               className="form-control"
                               value={piece.requestedService || ''}
                               onChange={(e) => updateServicePiece(index, { requestedService: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label">Servicio del catalogo</label>
+                            <select
+                              className="form-select"
+                              value={piece.serviceProductId || ''}
+                              onChange={(e) =>
+                                updateServicePiece(index, {
+                                  serviceProductId: e.target.value || undefined,
+                                })
+                              }
+                            >
+                              <option value="">Seleccionar...</option>
+                              {serviceCatalogItems.map((item) => (
+                                <option key={item.id} value={item.id}>{item.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-md-2">
+                            <label className="form-label d-block">Rastreable</label>
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              checked={piece.isTrackable ?? true}
+                              onChange={(e) => updateServicePiece(index, { isTrackable: e.target.checked })}
+                            />
+                          </div>
+                          <div className="col-md-2">
+                            <label className="form-label d-block">Notificar</label>
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              checked={piece.notifyCustomer ?? false}
+                              onChange={(e) => updateServicePiece(index, { notifyCustomer: e.target.checked })}
+                            />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label">Marca</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.brand || ''}
+                              onChange={(e) => updateServicePiece(index, { brand: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label">Modelo</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.model || ''}
+                              onChange={(e) => updateServicePiece(index, { model: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-4">
+                            <label className="form-label">Color</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.color || ''}
+                              onChange={(e) => updateServicePiece(index, { color: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-4">
+                            <label className="form-label">Talla</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.size || ''}
+                              onChange={(e) => updateServicePiece(index, { size: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-4">
+                            <label className="form-label">Material</label>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={piece.material || ''}
+                              onChange={(e) => updateServicePiece(index, { material: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label">Condicion</label>
+                            <textarea
+                              className="form-control"
+                              rows={2}
+                              value={piece.conditionNotes || ''}
+                              onChange={(e) => updateServicePiece(index, { conditionNotes: e.target.value })}
+                            />
+                          </div>
+                          <div className="col-md-6">
+                            <label className="form-label">Nota interna</label>
+                            <textarea
+                              className="form-control"
+                              rows={2}
+                              value={piece.internalNotes || ''}
+                              onChange={(e) => updateServicePiece(index, { internalNotes: e.target.value })}
                             />
                           </div>
                         </div>
@@ -554,7 +925,7 @@ export default function OrdersCart() {
                     <table className="table table-sm mb-2">
                       <thead>
                         <tr>
-                          <th>{orderType === OrderTypeConst.Service ? 'Servicio' : 'Producto'}</th>
+                          <th>Item</th>
                           <th className="text-center">Cant.</th>
                           <th className="text-end">Subtotal</th>
                           <th></th>
@@ -563,7 +934,12 @@ export default function OrdersCart() {
                       <tbody>
                         {cart.map((line) => (
                           <tr key={line.productId}>
-                            <td>{line.productName}</td>
+                            <td>
+                              {line.productName}
+                              <span className={`badge ms-2 ${line.isService ? 'bg-info' : 'bg-secondary'}`}>
+                                {line.isService ? 'Servicio' : 'Producto'}
+                              </span>
+                            </td>
                             <td className="text-center" style={{ width: 90 }}>
                               <input
                                 type="number"

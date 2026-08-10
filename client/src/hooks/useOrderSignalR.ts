@@ -21,6 +21,13 @@ export interface OrderCancelledPayload {
   reason?: string;
 }
 
+export interface ServiceBoardPieceUpdatedPayload {
+  orderId: string;
+  pieceId: string;
+  status: string;
+  assignedToUserId?: string;
+}
+
 export function useOrderSignalR() {
   const connectionRef = useRef<HubConnection | null>(null);
 
@@ -91,5 +98,13 @@ export function useOrderSignalR() {
     return () => conn.off('OrderCancelled', callback);
   }, []);
 
-  return { onOrderCreated, onOrderStatusChanged, onOrderCancelled };
+  const onServiceBoardPieceUpdated = useCallback((callback: (data: ServiceBoardPieceUpdatedPayload) => void) => {
+    const conn = connectionRef.current;
+    if (!conn) return () => {};
+
+    conn.on('ServiceBoardPieceUpdated', callback);
+    return () => conn.off('ServiceBoardPieceUpdated', callback);
+  }, []);
+
+  return { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated };
 }

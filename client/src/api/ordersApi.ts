@@ -7,6 +7,7 @@ import type {
   ServiceOrderPieceStatus,
   OrderType,
   PaginatedList,
+  UploadedFileDto,
 } from '../types';
 
 export const ordersApi = {
@@ -34,6 +35,22 @@ export const ordersApi = {
 
   addPayment: (id: string, data: AddOrderPaymentRequest) =>
     api.post<OrderDto>(`/orders/${id}/payments`, data),
+
+  uploadServicePhoto: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<UploadedFileDto>('/orders/uploads/service-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  uploadPaymentEvidence: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post<UploadedFileDto>('/orders/uploads/payment-evidence', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 
   updateServicePieceStatus: (orderId: string, pieceId: string, newStatus: ServiceOrderPieceStatus) =>
     api.put(`/orders/${orderId}/service-pieces/${pieceId}/status`, { newStatus }),

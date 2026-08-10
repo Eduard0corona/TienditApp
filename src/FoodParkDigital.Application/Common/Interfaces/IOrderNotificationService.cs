@@ -8,4 +8,10 @@ public interface IOrderNotificationService
     Task NotifyOrderCreated(Guid tenantId, Guid orderId, string orderNumber, BusinessType businessType, decimal total);
     Task NotifyOrderStatusChanged(Guid tenantId, Guid orderId, OrderStatus previousStatus, OrderStatus newStatus);
     Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason);
+    Task NotifyServiceBoardPieceUpdated(
+        Guid tenantId,
+        Guid orderId,
+        Guid pieceId,
+        ServiceOrderPieceStatus status,
+        Guid? assignedToUserId);
 }

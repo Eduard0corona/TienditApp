@@ -8,13 +8,9 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
 {
     private static readonly Dictionary<ServiceOrderPieceStatus, ServiceOrderPieceStatus[]> AllowedTransitions = new()
     {
-        { ServiceOrderPieceStatus.Received, [ServiceOrderPieceStatus.Inspection, ServiceOrderPieceStatus.Cancelled] },
-        { ServiceOrderPieceStatus.Inspection, [ServiceOrderPieceStatus.Washing, ServiceOrderPieceStatus.Cancelled] },
-        { ServiceOrderPieceStatus.Washing, [ServiceOrderPieceStatus.Drying, ServiceOrderPieceStatus.Cancelled] },
-        { ServiceOrderPieceStatus.Drying, [ServiceOrderPieceStatus.Detailing, ServiceOrderPieceStatus.Cancelled] },
-        { ServiceOrderPieceStatus.Detailing, [ServiceOrderPieceStatus.Ready, ServiceOrderPieceStatus.Cancelled] },
-        { ServiceOrderPieceStatus.Ready, [ServiceOrderPieceStatus.Delivered, ServiceOrderPieceStatus.Cancelled] },
-        { ServiceOrderPieceStatus.Delivered, [] },
+        { ServiceOrderPieceStatus.Accepted, [ServiceOrderPieceStatus.InProgress, ServiceOrderPieceStatus.Cancelled] },
+        { ServiceOrderPieceStatus.InProgress, [ServiceOrderPieceStatus.Completed, ServiceOrderPieceStatus.Cancelled] },
+        { ServiceOrderPieceStatus.Completed, [] },
         { ServiceOrderPieceStatus.Cancelled, [] }
     };
 
@@ -31,7 +27,10 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
         string? material,
         string? conditionNotes,
         string? requestedService,
-        string? internalNotes)
+        string? internalNotes,
+        Guid? serviceProductId = null,
+        bool isTrackable = true,
+        bool notifyCustomer = false)
     {
         TenantId = tenantId;
         OrderId = orderId;
@@ -44,7 +43,10 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
         ConditionNotes = conditionNotes;
         RequestedService = requestedService;
         InternalNotes = internalNotes;
-        Status = ServiceOrderPieceStatus.Received;
+        ServiceProductId = serviceProductId;
+        IsTrackable = isTrackable;
+        NotifyCustomer = notifyCustomer;
+        Status = ServiceOrderPieceStatus.Accepted;
     }
 
     public Guid TenantId { get; private set; }
@@ -58,7 +60,13 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
     public string? ConditionNotes { get; private set; }
     public string? RequestedService { get; private set; }
     public string? InternalNotes { get; private set; }
+    public Guid? ServiceProductId { get; private set; }
+    public bool IsTrackable { get; private set; }
+    public bool NotifyCustomer { get; private set; }
     public ServiceOrderPieceStatus Status { get; private set; }
+    public Guid? AssignedToUserId { get; private set; }
+    public string? AssignedToName { get; private set; }
+    public DateTimeOffset? AssignedAt { get; private set; }
 
     public Order Order { get; private set; } = null!;
 
@@ -74,5 +82,22 @@ public class ServiceOrderPiece : AuditableEntity, ITenantScoped
                 $"No se puede cambiar la pieza de '{Status}' a '{status}'.");
 
         Status = status;
+    }
+
+    public void AssignTo(Guid userId, string? userName, DateTimeOffset assignedAt)
+    {
+        if (Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
+            throw new DomainException("No se puede asignar una pieza completada o cancelada.");
+
+        AssignedToUserId = userId;
+        AssignedToName = userName;
+        AssignedAt = assignedAt;
+    }
+
+    public void ReleaseAssignment()
+    {
+        AssignedToUserId = null;
+        AssignedToName = null;
+        AssignedAt = null;
     }
 }

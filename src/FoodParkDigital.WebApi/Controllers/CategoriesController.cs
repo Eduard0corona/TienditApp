@@ -26,6 +26,27 @@ public class CategoriesController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("templates")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    public async Task<ActionResult<List<CategoryTemplateDto>>> GetTemplates()
+    {
+        var result = await _mediator.Send(new GetCategoryTemplatesQuery());
+        return Ok(result);
+    }
+
+    [HttpPost("templates/{templateId}/install")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    public async Task<ActionResult<InstallCategoryTemplateResultDto>> InstallTemplate(string templateId)
+    {
+        var result = await _mediator.Send(new InstallCategoryTemplateCommand
+        {
+            TemplateId = templateId
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CategoryDto>> GetById(Guid id)
     {

@@ -109,6 +109,7 @@ public class UpdateMyTenantCommandTests
         public string? UserName => "tenant-owner";
         public string? Role => "TENANT_ADMIN";
         public string? TenantRole => "OWNER";
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => tenantId;
     }
 

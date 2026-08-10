@@ -30,6 +30,7 @@ public class OrderCashService : IOrderCashService
             amount: payment.Amount,
             occurredAt: payment.PaidAt,
             paymentMethod: payment.Method,
+            inventoryLocationId: payment.InventoryLocationId,
             orderId: order.Id,
             reference: payment.Reference ?? order.OrderNumber,
             notes: payment.Notes);

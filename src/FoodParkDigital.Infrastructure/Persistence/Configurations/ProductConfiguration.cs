@@ -34,6 +34,8 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.Allergens).HasMaxLength(500);
         builder.Property(p => p.AvailableFromTime).HasColumnType("time");
         builder.Property(p => p.AvailableToTime).HasColumnType("time");
+        builder.Property(p => p.IsTrackable).HasDefaultValue(false);
+        builder.Property(p => p.NotifyCustomer).HasDefaultValue(false);
 
         // Tenant
         builder.Property(p => p.TenantId).IsRequired();

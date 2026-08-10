@@ -6,5 +6,6 @@ public interface ICurrentUserService
     string? UserName { get; }
     string? Role { get; }
     string? TenantRole { get; }
+    IReadOnlyCollection<string> Permissions { get; }
     Guid? TenantId { get; }
 }

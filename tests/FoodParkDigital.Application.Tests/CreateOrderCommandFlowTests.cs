@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -96,6 +97,67 @@ public class CreateOrderCommandFlowTests
         Assert.Equal(tenant.Id, temp!.TenantId);
         Assert.Equal("+525522223333", temp.PhoneNormalized);
         Assert.Equal("Cliente Temporal", temp.Name);
+    }
+
+    [Fact]
+    public async Task CreateOrder_ShouldGenerateChecklist_ForTrackableServicesOnly()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (tenant, product) = await fixture.SeedCatalogAsync();
+        fixture.SetTenant(tenant.Id);
+
+        var categoryId = await fixture.Context.Categories.Select(x => x.Id).FirstAsync();
+        var trackableService = new Product(
+            tenant.Id,
+            categoryId,
+            "Lavado Premium",
+            null,
+            180m,
+            "MXN",
+            unit: Domain.Catalog.Enums.UnitType.Service,
+            isTrackable: true,
+            notifyCustomer: true);
+        var nonTrackableService = new Product(
+            tenant.Id,
+            categoryId,
+            "Ajuste Express",
+            null,
+            80m,
+            "MXN",
+            unit: Domain.Catalog.Enums.UnitType.Service,
+            isTrackable: false,
+            notifyCustomer: false);
+        fixture.Context.Products.AddRange(trackableService, nonTrackableService);
+        await fixture.Context.SaveChangesAsync();
+
+        var handler = fixture.CreateHandler();
+        var result = await handler.Handle(
+            new CreateOrderCommand
+            {
+                CustomerPhone = "55 1111 9999",
+                CustomerName = "Cliente Checklist",
+                Items =
+                [
+                    new CreateOrderItemDto { ProductId = product.Id, Quantity = 1 },
+                    new CreateOrderItemDto { ProductId = trackableService.Id, Quantity = 2 },
+                    new CreateOrderItemDto { ProductId = nonTrackableService.Id, Quantity = 1 }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+
+        var persisted = await fixture.Context.Orders
+            .Include(x => x.ServicePieces)
+            .FirstAsync(x => x.Id == result.Value.Id);
+
+        Assert.Equal(2, persisted.ServicePieces.Count);
+        Assert.All(persisted.ServicePieces, piece =>
+        {
+            Assert.True(piece.IsTrackable);
+            Assert.True(piece.NotifyCustomer);
+            Assert.Equal(ServiceOrderPieceStatus.Accepted, piece.Status);
+        });
     }
 
     [Fact]
@@ -317,6 +379,7 @@ public class CreateOrderCommandFlowTests
         public string? UserName => "test-user";
         public string? Role => "TENANT_ADMIN";
         public string? TenantRole => "Admin";
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }
 

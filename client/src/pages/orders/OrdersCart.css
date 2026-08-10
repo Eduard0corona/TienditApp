@@ -1,0 +1,52 @@
+.order-catalog-card {
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.order-catalog-card:hover,
+.order-catalog-card:focus-visible {
+  border-color: var(--ct-primary) !important;
+  box-shadow: 0 8px 18px rgba(var(--ct-primary-rgb), 0.18);
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.orders-catalog-search {
+  width: 280px;
+  max-width: 100%;
+}
+
+.orders-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 0.5rem;
+}
+
+.orders-photo-item {
+  position: relative;
+}
+
+.orders-photo-item img {
+  width: 100%;
+  height: 84px;
+  object-fit: cover;
+}
+
+.orders-photo-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+}
+
+@media (max-width: 767.98px) {
+  .orders-catalog-toolbar {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .orders-catalog-search {
+    width: 100%;
+  }
+}

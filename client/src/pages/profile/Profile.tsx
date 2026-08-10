@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
+import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { useAuth } from '../../hooks/useAuth';
 import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
@@ -15,6 +16,7 @@ export default function Profile() {
 
   // Avatar state
   const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState<{ type: string; text: string } | null>(null);
 
   // Password state
@@ -60,6 +62,7 @@ export default function Profile() {
     const file = e.target.files?.[0];
     if (!file) return;
     setAvatarLoading(true);
+    setAvatarUploading(true);
     setAvatarMsg(null);
     try {
       await profileApi.uploadAvatar(file);
@@ -72,6 +75,7 @@ export default function Profile() {
       setAvatarMsg({ type: 'danger', text: msg });
     } finally {
       setAvatarLoading(false);
+      setAvatarUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -108,6 +112,12 @@ export default function Profile() {
 
   return (
     <>
+      <UploadLoadingModal
+        show={avatarLoading || avatarUploading}
+        title="Subiendo avatar"
+        description="Estamos actualizando tu foto de perfil."
+      />
+
       <PageTitle title="Mi Perfil" subtitle="Cuenta" />
 
       {/* Profile Header */}

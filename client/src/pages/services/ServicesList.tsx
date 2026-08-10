@@ -24,6 +24,8 @@ interface ServiceFormData {
   availableFromTime?: string;
   availableToTime?: string;
   sortOrder: number;
+  isTrackable: boolean;
+  notifyCustomer: boolean;
 }
 
 const COLUMNS = [
@@ -33,6 +35,8 @@ const COLUMNS = [
   { header: 'Unidad', className: 'text-center' },
   { header: 'Horario', className: 'text-center' },
   { header: 'Duracion (min)', className: 'text-center' },
+  { header: 'Rastreable', className: 'text-center' },
+  { header: 'Notificar', className: 'text-center' },
   { header: 'Disponible', className: 'text-center' },
   { header: 'Acciones', className: 'text-center' },
 ];
@@ -72,6 +76,8 @@ export default function ServicesList() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ServiceFormData>({
     defaultValues: {
@@ -85,6 +91,8 @@ export default function ServicesList() {
       availableFromTime: undefined,
       availableToTime: undefined,
       sortOrder: 0,
+      isTrackable: false,
+      notifyCustomer: false,
     },
   });
 
@@ -92,6 +100,11 @@ export default function ServicesList() {
     () => new Map(categories.map((category) => [category.id, category.name])),
     [categories],
   );
+  const isTrackableSelected = watch('isTrackable');
+
+  useEffect(() => {
+    if (!isTrackableSelected) setValue('notifyCustomer', false);
+  }, [isTrackableSelected, setValue]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -148,6 +161,8 @@ export default function ServicesList() {
       availableFromTime: undefined,
       availableToTime: undefined,
       sortOrder: 0,
+      isTrackable: false,
+      notifyCustomer: false,
     });
     setShowModal(true);
   };
@@ -165,6 +180,8 @@ export default function ServicesList() {
       availableFromTime: service.availableFromTime ? service.availableFromTime.slice(0, 5) : undefined,
       availableToTime: service.availableToTime ? service.availableToTime.slice(0, 5) : undefined,
       sortOrder: service.sortOrder,
+      isTrackable: service.isTrackable ?? false,
+      notifyCustomer: service.notifyCustomer ?? false,
     });
     setShowModal(true);
   };
@@ -191,6 +208,8 @@ export default function ServicesList() {
         : undefined,
       availableFromTime: form.availableFromTime ? `${form.availableFromTime}:00` : undefined,
       availableToTime: form.availableToTime ? `${form.availableToTime}:00` : undefined,
+      isTrackable: form.isTrackable,
+      notifyCustomer: form.notifyCustomer,
     };
 
     try {
@@ -323,6 +342,16 @@ export default function ServicesList() {
                         : 'Todo el dia'}
                     </td>
                     <td className="text-center">{service.preparationTimeMinutes ?? '-'}</td>
+                    <td className="text-center">
+                      <span className={`badge ${service.isTrackable ? 'bg-success' : 'bg-secondary'}`}>
+                        {service.isTrackable ? 'Si' : 'No'}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      <span className={`badge ${service.notifyCustomer ? 'bg-info' : 'bg-secondary'}`}>
+                        {service.notifyCustomer ? 'Si' : 'No'}
+                      </span>
+                    </td>
                     <td className="text-center">
                       <div className="form-check form-switch d-inline-block">
                         <input
@@ -474,6 +503,32 @@ export default function ServicesList() {
                 className="form-control"
                 {...register('sortOrder', { valueAsNumber: true })}
               />
+            </div>
+
+            <div className="mt-3">
+              <div className="form-check mb-2">
+                <input
+                  id="service-is-trackable"
+                  type="checkbox"
+                  className="form-check-input"
+                  {...register('isTrackable')}
+                />
+                <label htmlFor="service-is-trackable" className="form-check-label">
+                  Rastreable
+                </label>
+              </div>
+              <div className="form-check">
+                <input
+                  id="service-notify-customer"
+                  type="checkbox"
+                  className="form-check-input"
+                  disabled={!isTrackableSelected}
+                  {...register('notifyCustomer')}
+                />
+                <label htmlFor="service-notify-customer" className="form-check-label">
+                  Notificar al cliente
+                </label>
+              </div>
             </div>
           </Modal.Body>
           <Modal.Footer>

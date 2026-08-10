@@ -73,6 +73,22 @@ public class CashController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("daily-cut")]
+    public async Task<ActionResult<DailyCashCutDto>> GetDailyCut(
+        [FromQuery] DateOnly? date,
+        [FromQuery] Guid? inventoryLocationId,
+        [FromQuery] string? userName)
+    {
+        var result = await _mediator.Send(new GetDailyCashCutQuery
+        {
+            Date = date,
+            InventoryLocationId = inventoryLocationId,
+            UserName = userName
+        });
+
+        return Ok(result);
+    }
+
     [HttpPost("transactions")]
     public async Task<ActionResult<CashTransactionDto>> AddTransaction([FromBody] AddCashTransactionRequest request)
     {
@@ -83,6 +99,7 @@ public class CashController : ControllerBase
             Amount = request.Amount,
             OccurredAt = request.OccurredAt,
             PaymentMethod = request.PaymentMethod,
+            InventoryLocationId = request.InventoryLocationId,
             OrderId = request.OrderId,
             Reference = request.Reference,
             Notes = request.Notes
@@ -106,6 +123,7 @@ public class AddCashTransactionRequest
     public decimal Amount { get; init; }
     public DateTimeOffset? OccurredAt { get; init; }
     public OrderPaymentMethod? PaymentMethod { get; init; }
+    public Guid? InventoryLocationId { get; init; }
     public Guid? OrderId { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }

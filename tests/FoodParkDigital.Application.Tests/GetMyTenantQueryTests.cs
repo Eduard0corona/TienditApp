@@ -98,6 +98,7 @@ public class GetMyTenantQueryTests
         public string? UserName { get; } = null;
         public string? Role { get; } = null;
         public string? TenantRole { get; } = null;
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId { get; } = tenantId;
     }
 

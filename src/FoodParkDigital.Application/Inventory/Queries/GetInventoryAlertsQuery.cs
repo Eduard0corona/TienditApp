@@ -34,7 +34,7 @@ public class GetInventoryAlertsQueryHandler : IRequestHandler<GetInventoryAlerts
             join supply in _context.SupplyItems.AsNoTracking() on stock.SupplyItemId equals supply.Id
             join location in _context.InventoryLocations.AsNoTracking() on stock.InventoryLocationId equals location.Id
             where supply.IsActive && stock.OnHandQuantity <= supply.ReorderPoint
-            orderby (supply.ReorderPoint - stock.OnHandQuantity) descending
+            orderby supply.IsCritical descending, (supply.ReorderPoint - stock.OnHandQuantity) descending
             select new InventoryAlertItemDto
             {
                 SupplyItemId = supply.Id,
@@ -44,7 +44,8 @@ public class GetInventoryAlertsQueryHandler : IRequestHandler<GetInventoryAlerts
                 OnHandQuantity = stock.OnHandQuantity,
                 ReorderPoint = supply.ReorderPoint,
                 Deficit = supply.ReorderPoint - stock.OnHandQuantity,
-                IsOutOfStock = stock.OnHandQuantity <= 0
+                IsOutOfStock = stock.OnHandQuantity <= 0,
+                IsCritical = supply.IsCritical
             })
             .Take(50)
             .ToListAsync(cancellationToken);
@@ -63,6 +64,13 @@ public class GetInventoryAlertsQueryHandler : IRequestHandler<GetInventoryAlerts
             select stock.Id)
             .CountAsync(cancellationToken);
 
+        var criticalLowStockCount = await (
+            from stock in _context.InventoryStocks.AsNoTracking()
+            join supply in _context.SupplyItems.AsNoTracking() on stock.SupplyItemId equals supply.Id
+            where supply.IsActive && supply.IsCritical && stock.OnHandQuantity <= supply.ReorderPoint
+            select stock.Id)
+            .CountAsync(cancellationToken);
+
         var serviceUnits = new[] { UnitType.Hour, UnitType.Session, UnitType.Service };
 
         var missingRecipeProductCount = await _context.Products
@@ -76,6 +84,7 @@ public class GetInventoryAlertsQueryHandler : IRequestHandler<GetInventoryAlerts
         return new InventoryAlertsDto
         {
             LowStockCount = lowStockCount,
+            CriticalLowStockCount = criticalLowStockCount,
             OutOfStockCount = outOfStockCount,
             MissingRecipeProductCount = missingRecipeProductCount,
             Items = lowStockItems

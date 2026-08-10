@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import './DataTable.css';
 
 export interface DataTableColumn {
   header: string;
@@ -110,8 +111,8 @@ export default function DataTable<T>({
   return (
     <>
       {/* Top controls: entries selector + search */}
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <div className="d-flex align-items-center gap-2">
+      <div className="datatable-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div className="d-flex align-items-center gap-2 flex-wrap">
           <span>Mostrar</span>
           <select
             className="form-select form-select-sm"
@@ -125,12 +126,11 @@ export default function DataTable<T>({
           </select>
           <span>registros</span>
         </div>
-        <div>
+        <div className="datatable-search-wrapper">
           <input
             type="search"
-            className="form-control form-control-sm"
+            className="form-control form-control-sm w-100"
             placeholder="Buscar..."
-            style={{ width: 200 }}
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
           />
@@ -175,7 +175,7 @@ export default function DataTable<T>({
 
       {/* Bottom: info text + pagination */}
       {!loading && totalCount > 0 && (
-        <div className="d-flex justify-content-between align-items-center mt-3">
+        <div className="datatable-footer d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
           <span className="text-muted font-13">
             Mostrando {startEntry} a {endEntry} de {totalCount} registros
           </span>

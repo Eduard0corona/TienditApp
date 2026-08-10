@@ -39,12 +39,56 @@ export interface UserProfileDto {
   phoneNumberConfirmed: boolean;
   emailConfirmed: boolean;
   role: string;
+  tenantRole?: string;
+  permissions: string[];
   tenantId: string;
   isActive: boolean;
   avatarUrl?: string;
   avatarImages?: AvatarImageUrlsDto;
   twoFactorEnabled: boolean;
   createdAt: string;
+}
+
+export interface EmployeeDto {
+  tenantUserId: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  appRole: string;
+  tenantRole: string;
+  status: string;
+  isActive: boolean;
+  createdAt: string;
+  permissions: string[];
+}
+
+export interface EmployeePermissionOptionDto {
+  code: string;
+  name: string;
+  description: string;
+}
+
+export interface CreateEmployeeRequest {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  appRole: number;
+  tenantRole: number;
+  permissions: string[];
+}
+
+export interface UpdateEmployeeRequest {
+  tenantUserId: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  appRole: number;
+  tenantRole: number;
+  permissions: string[];
 }
 
 export interface MyTenantDto {
@@ -294,6 +338,8 @@ export interface ProductDto {
   availableFromTime?: string;
   availableToTime?: string;
   isLowStock: boolean;
+  isTrackable: boolean;
+  notifyCustomer: boolean;
 }
 
 export interface CategoryDto {
@@ -302,6 +348,30 @@ export interface CategoryDto {
   description?: string;
   sortOrder: number;
   isActive: boolean;
+}
+
+export interface CategoryTemplateItemDto {
+  name: string;
+  description?: string;
+  sortOrder: number;
+}
+
+export interface CategoryTemplateDto {
+  id: string;
+  name: string;
+  description: string;
+  businessType?: BusinessType;
+  isRecommended: boolean;
+  categoryCount: number;
+  categories: CategoryTemplateItemDto[];
+}
+
+export interface InstallCategoryTemplateResultDto {
+  templateId: string;
+  templateName: string;
+  createdCount: number;
+  skippedCount: number;
+  totalCount: number;
 }
 
 export interface PaginatedList<T> {
@@ -335,6 +405,8 @@ export interface CreateProductRequest {
   preparationTimeMinutes?: number;
   availableFromTime?: string;
   availableToTime?: string;
+  isTrackable?: boolean;
+  notifyCustomer?: boolean;
 }
 
 export interface UpdateProductRequest extends CreateProductRequest {
@@ -400,6 +472,7 @@ export interface SupplyItemDto {
   trackBatches: boolean;
   trackExpiration: boolean;
   isPerishable: boolean;
+  isCritical: boolean;
   taxRate?: number;
   notes?: string;
   isActive: boolean;
@@ -428,6 +501,7 @@ export interface CreateSupplyItemRequest {
   trackBatches: boolean;
   trackExpiration: boolean;
   isPerishable: boolean;
+  isCritical?: boolean;
   taxRate?: number;
   notes?: string;
 }
@@ -473,6 +547,10 @@ export interface CreateInventoryLocationRequest {
 export interface UpdateInventoryLocationRequest extends CreateInventoryLocationRequest {
   id: string;
 }
+
+export type BranchDto = InventoryLocationDto;
+export type CreateBranchRequest = CreateInventoryLocationRequest;
+export type UpdateBranchRequest = UpdateInventoryLocationRequest;
 
 export interface InventoryStockDto {
   stockId: string;
@@ -617,10 +695,12 @@ export interface InventoryAlertItemDto {
   reorderPoint: number;
   deficit: number;
   isOutOfStock: boolean;
+  isCritical: boolean;
 }
 
 export interface InventoryAlertsDto {
   lowStockCount: number;
+  criticalLowStockCount: number;
   outOfStockCount: number;
   missingRecipeProductCount: number;
   items: InventoryAlertItemDto[];
@@ -768,9 +848,41 @@ export interface CashTransactionDto {
   amount: number;
   occurredAt: string;
   paymentMethod?: OrderPaymentMethod;
+  inventoryLocationId?: string;
+  inventoryLocationName?: string;
   orderId?: string;
   reference?: string;
   notes?: string;
+  createdBy?: string;
+}
+
+export interface DailyCashCutByUserDto {
+  userName: string;
+  paymentsCount: number;
+  totalAmount: number;
+}
+
+export interface DailyCashCutByLocationDto {
+  inventoryLocationId?: string;
+  locationName: string;
+  paymentsCount: number;
+  totalAmount: number;
+}
+
+export interface DailyCashCutDto {
+  date: string;
+  salesPaymentsTotal: number;
+  salesPaymentsCount: number;
+  cashTotal: number;
+  cardTotal: number;
+  transferTotal: number;
+  walletTotal: number;
+  otherTotal: number;
+  manualIncomeTotal: number;
+  manualExpenseTotal: number;
+  netCashFlow: number;
+  byUser: DailyCashCutByUserDto[];
+  byLocation: DailyCashCutByLocationDto[];
 }
 
 export interface OpenCashSessionRequest {
@@ -789,6 +901,7 @@ export interface AddCashTransactionRequest {
   amount: number;
   occurredAt?: string;
   paymentMethod?: OrderPaymentMethod;
+  inventoryLocationId?: string;
   orderId?: string;
   reference?: string;
   notes?: string;
@@ -892,7 +1005,7 @@ export interface UpdateCustomerRequest extends CreateCustomerRequest {
 
 export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 99;
 export type OrderType = 0 | 1;
-export type ServiceOrderPieceStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 99;
+export type ServiceOrderPieceStatus = 0 | 1 | 2 | 99;
 export type OrderPaymentMethod = 0 | 1 | 2 | 3 | 4;
 
 export const OrderType = {
@@ -909,13 +1022,9 @@ export const OrderPaymentMethod = {
 } as const;
 
 export const ServiceOrderPieceStatus = {
-  Received: 0,
-  Inspection: 1,
-  Washing: 2,
-  Drying: 3,
-  Detailing: 4,
-  Ready: 5,
-  Delivered: 6,
+  Accepted: 0,
+  InProgress: 1,
+  Completed: 2,
   Cancelled: 99,
 } as const;
 
@@ -952,6 +1061,12 @@ export interface ServiceOrderDetailDto {
 export interface ServiceOrderPieceDto {
   id: string;
   itemName: string;
+  serviceProductId?: string;
+  isTrackable: boolean;
+  notifyCustomer: boolean;
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
   brand?: string;
   model?: string;
   color?: string;
@@ -963,11 +1078,35 @@ export interface ServiceOrderPieceDto {
   status: ServiceOrderPieceStatus;
 }
 
+export interface ServiceBoardPieceDto {
+  pieceId: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  orderCreatedAt: string;
+  promisedAt?: string;
+  priority: number;
+  itemName: string;
+  requestedService?: string;
+  internalNotes?: string;
+  notifyCustomer: boolean;
+  status: ServiceOrderPieceStatus;
+  assignedToUserId?: string;
+  assignedToName?: string;
+  assignedAt?: string;
+  isOverdue: boolean;
+  delayMinutes?: number;
+  minutesToPromise?: number;
+}
+
 export interface OrderPaymentDto {
   id: string;
   amount: number;
   method: OrderPaymentMethod;
   paidAt: string;
+  inventoryLocationId?: string;
+  evidenceUrl?: string;
   reference?: string;
   notes?: string;
 }
@@ -1022,6 +1161,9 @@ export interface CreateOrderRequest {
 
 export interface CreateServiceOrderPieceRequest {
   itemName: string;
+  serviceProductId?: string;
+  isTrackable?: boolean;
+  notifyCustomer?: boolean;
   brand?: string;
   model?: string;
   color?: string;
@@ -1048,8 +1190,16 @@ export interface AddOrderPaymentRequest {
   amount: number;
   method: OrderPaymentMethod;
   paidAt?: string;
+  inventoryLocationId?: string;
+  evidenceUrl?: string;
   reference?: string;
   notes?: string;
+}
+
+export interface UploadedFileDto {
+  url: string;
+  fileName: string;
+  contentType: string;
 }
 
 export interface TopSellingItemDto {

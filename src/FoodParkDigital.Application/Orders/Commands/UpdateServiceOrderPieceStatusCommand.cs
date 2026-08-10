@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Events;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FluentValidation;
 using MediatR;
@@ -48,15 +49,35 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        if (order.OrderType != OrderType.Service)
-            return Result.Failure("La orden indicada no es de tipo servicio.");
-
         var piece = order.ServicePieces.FirstOrDefault(x => x.Id == request.PieceId);
         if (piece is null)
             return Result.Failure("La pieza indicada no existe dentro de la orden.");
 
         if (piece.Status == request.NewStatus)
             return Result.Success();
+
+        var isAdmin =
+            _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
+            || _currentUserService.TenantRole is "OWNER" or "ADMIN";
+        var hasCurrentUser = Guid.TryParse(_currentUserService.UserId, out var currentUserId);
+
+        if (!hasCurrentUser && !isAdmin)
+            return Result.Failure("No se pudo identificar el usuario actual.");
+
+        if (piece.AssignedToUserId.HasValue
+            && (!hasCurrentUser || piece.AssignedToUserId.Value != currentUserId)
+            && !isAdmin)
+        {
+            return Result.Failure("La pieza esta asignada a otro empleado.");
+        }
+
+        if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
+            piece.AssignTo(currentUserId, _currentUserService.UserName, DateTimeOffset.UtcNow);
+
+        if (request.NewStatus == ServiceOrderPieceStatus.Cancelled && !isAdmin)
+            return Result.Failure("Solo un administrador puede cancelar piezas de servicio.");
+
+        var previousStatus = piece.Status;
 
         try
         {
@@ -67,6 +88,13 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             return Result.Failure(ex.Message);
         }
 
+        piece.AddDomainEvent(new ServiceOrderPieceStatusChangedEvent(
+            request.OrderId,
+            request.PieceId,
+            order.TenantId,
+            previousStatus,
+            request.NewStatus));
+
         SyncOrderStatusFromPieces(order, _currentUserService.UserName);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();
@@ -75,22 +103,23 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
     private static void SyncOrderStatusFromPieces(Order order, string? changedBy)
     {
         var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-        var pieces = order.ServicePieces.ToList();
+        var pieces = order.ServicePieces
+            .Where(x => x.IsTrackable)
+            .ToList();
 
         if (pieces.Count == 0)
             return;
 
         var allowed = stateMachine.GetAllowedTransitions(order.Status);
-        var allTerminal = pieces.All(x =>
-            x.Status is ServiceOrderPieceStatus.Delivered or ServiceOrderPieceStatus.Cancelled);
-        var anyInProgress = pieces.Any(x =>
-            x.Status is ServiceOrderPieceStatus.Inspection
-                or ServiceOrderPieceStatus.Washing
-                or ServiceOrderPieceStatus.Drying
-                or ServiceOrderPieceStatus.Detailing);
-        var anyAccepted = pieces.Any(x => x.Status is not ServiceOrderPieceStatus.Received and not ServiceOrderPieceStatus.Cancelled);
+        var nonCancelled = pieces
+            .Where(x => x.Status != ServiceOrderPieceStatus.Cancelled)
+            .ToList();
+        var allCompleted = nonCancelled.Count > 0
+            && nonCancelled.All(x => x.Status == ServiceOrderPieceStatus.Completed);
+        var anyInProgress = pieces.Any(x => x.Status == ServiceOrderPieceStatus.InProgress);
+        var anyAccepted = pieces.Any(x => x.Status == ServiceOrderPieceStatus.Accepted);
 
-        if (allTerminal && allowed.Contains(OrderStatus.Completed))
+        if (allCompleted && allowed.Contains(OrderStatus.Completed))
         {
             order.TransitionTo(OrderStatus.Completed, stateMachine, changedBy);
             return;

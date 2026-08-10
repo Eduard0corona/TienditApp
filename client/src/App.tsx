@@ -16,7 +16,9 @@ const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
 const ServicesList = lazy(() => import('./pages/services/ServicesList'));
+const ServiceBoard = lazy(() => import('./pages/services/ServiceBoard'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
+const BranchesList = lazy(() => import('./pages/branches/BranchesList'));
 const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
@@ -27,6 +29,7 @@ const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
+const EmployeesList = lazy(() => import('./pages/employees/EmployeesList'));
 const AiAgentSettings = lazy(() => import('./pages/ai-agent/AiAgentSettings'));
 const BusinessSettings = lazy(() => import('./pages/settings/BusinessSettings'));
 const WhatsAppSettings = lazy(() => import('./pages/settings/WhatsAppSettings'));
@@ -98,10 +101,26 @@ export default function App() {
               )}
             />
             <Route
+              path="/services/board"
+              element={(
+                <CapabilityRoute required={TenantCapability.Service}>
+                  <ServiceBoard />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
               path="/inventory"
               element={(
                 <CapabilityRoute required={TenantCapability.Inventory}>
                   <InventoryManagement />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/branches"
+              element={(
+                <CapabilityRoute required={TenantCapability.Inventory}>
+                  <BranchesList />
                 </CapabilityRoute>
               )}
             />
@@ -182,6 +201,14 @@ export default function App() {
               element={(
                 <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
                   <CustomersList />
+                </CapabilityRoute>
+              )}
+            />
+            <Route
+              path="/employees"
+              element={(
+                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                  <EmployeesList />
                 </CapabilityRoute>
               )}
             />

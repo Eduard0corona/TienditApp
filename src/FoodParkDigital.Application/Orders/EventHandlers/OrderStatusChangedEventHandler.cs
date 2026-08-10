@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Events;
@@ -59,10 +60,14 @@ public class OrderStatusChangedEventHandler : INotificationHandler<OrderStatusCh
         {
             var order = await _context.Orders
                 .AsNoTracking()
+                .Include(o => o.ServicePieces)
                 .FirstOrDefaultAsync(o => o.Id == notification.OrderId, cancellationToken);
 
             if (order?.CustomerPhone is not null)
             {
+                if (order.OrderType == OrderType.Service && !ShouldNotifyServiceChecklist(order, notification.NewStatus))
+                    return;
+
                 await _whatsAppService.SendTemplateMessageAsync(
                     notification.TenantId,
                     order.CustomerPhone,
@@ -76,5 +81,28 @@ public class OrderStatusChangedEventHandler : INotificationHandler<OrderStatusCh
         {
             _logger.LogError(ex, "Failed to send WhatsApp notification for order {OrderId}", notification.OrderId);
         }
+    }
+
+    private static bool ShouldNotifyServiceChecklist(Order order, OrderStatus newStatus)
+    {
+        var trackablePieces = order.ServicePieces
+            .Where(x => x.IsTrackable)
+            .ToList();
+
+        if (trackablePieces.Count == 0)
+            return true;
+
+        if (newStatus != OrderStatus.Completed)
+            return false;
+
+        if (!trackablePieces.Any(x => x.NotifyCustomer))
+            return false;
+
+        var nonCancelled = trackablePieces
+            .Where(x => x.Status != ServiceOrderPieceStatus.Cancelled)
+            .ToList();
+
+        return nonCancelled.Count > 0
+            && nonCancelled.All(x => x.Status == ServiceOrderPieceStatus.Completed);
     }
 }

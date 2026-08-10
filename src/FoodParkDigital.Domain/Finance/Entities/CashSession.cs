@@ -49,6 +49,7 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
         decimal amount,
         DateTimeOffset occurredAt,
         OrderPaymentMethod? paymentMethod = null,
+        Guid? inventoryLocationId = null,
         Guid? orderId = null,
         string? reference = null,
         string? notes = null)
@@ -65,6 +66,7 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
             amount: amount,
             occurredAt: occurredAt,
             paymentMethod: paymentMethod,
+            inventoryLocationId: inventoryLocationId,
             orderId: orderId,
             reference: reference,
             notes: notes));

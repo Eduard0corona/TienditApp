@@ -56,12 +56,8 @@ public class UpdateServiceOrderPieceStatusCommandTests
 
         var transitions = new[]
         {
-            ServiceOrderPieceStatus.Inspection,
-            ServiceOrderPieceStatus.Washing,
-            ServiceOrderPieceStatus.Drying,
-            ServiceOrderPieceStatus.Detailing,
-            ServiceOrderPieceStatus.Ready,
-            ServiceOrderPieceStatus.Delivered
+            ServiceOrderPieceStatus.InProgress,
+            ServiceOrderPieceStatus.Completed
         };
 
         foreach (var status in transitions)
@@ -81,7 +77,7 @@ public class UpdateServiceOrderPieceStatusCommandTests
             .FirstAsync(x => x.Id == order.Id);
 
         Assert.Equal(OrderStatus.Completed, persisted.Status);
-        Assert.Equal(ServiceOrderPieceStatus.Delivered, persisted.ServicePieces.Single().Status);
+        Assert.Equal(ServiceOrderPieceStatus.Completed, persisted.ServicePieces.Single().Status);
     }
 
     [Fact]
@@ -131,7 +127,7 @@ public class UpdateServiceOrderPieceStatusCommandTests
         {
             OrderId = order.Id,
             PieceId = pieceId,
-            NewStatus = ServiceOrderPieceStatus.Drying
+            NewStatus = ServiceOrderPieceStatus.Completed
         }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -150,6 +146,7 @@ public class UpdateServiceOrderPieceStatusCommandTests
         public string? UserName => "tester";
         public string? Role => "TENANT_ADMIN";
         public string? TenantRole => "TENANT_ADMIN";
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }
 

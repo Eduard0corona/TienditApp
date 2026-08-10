@@ -14,4 +14,7 @@ public interface IJwtTokenService
     ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
 }
 
-public record TenantTokenContext(Guid TenantId, string TenantRole);
+public record TenantTokenContext(
+    Guid TenantId,
+    string TenantRole,
+    IReadOnlyCollection<string>? Permissions = null);

@@ -14,6 +14,8 @@ public class OrderPayment : AuditableEntity, ITenantScoped
         decimal amount,
         OrderPaymentMethod method,
         DateTimeOffset paidAt,
+        Guid? inventoryLocationId,
+        string? evidenceUrl,
         string? reference,
         string? notes)
     {
@@ -25,6 +27,8 @@ public class OrderPayment : AuditableEntity, ITenantScoped
         Amount = amount;
         Method = method;
         PaidAt = paidAt;
+        InventoryLocationId = inventoryLocationId;
+        EvidenceUrl = evidenceUrl;
         Reference = reference;
         Notes = notes;
     }
@@ -34,6 +38,8 @@ public class OrderPayment : AuditableEntity, ITenantScoped
     public decimal Amount { get; private set; }
     public OrderPaymentMethod Method { get; private set; }
     public DateTimeOffset PaidAt { get; private set; }
+    public Guid? InventoryLocationId { get; private set; }
+    public string? EvidenceUrl { get; private set; }
     public string? Reference { get; private set; }
     public string? Notes { get; private set; }
 

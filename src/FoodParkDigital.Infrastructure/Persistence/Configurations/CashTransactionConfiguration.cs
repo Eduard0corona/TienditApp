@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Finance.Entities;
+using FoodParkDigital.Domain.Inventory.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -17,12 +18,19 @@ public class CashTransactionConfiguration : IEntityTypeConfiguration<CashTransac
         builder.Property(x => x.Amount).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.OccurredAt).IsRequired();
         builder.Property(x => x.PaymentMethod).HasConversion<int>();
+        builder.Property(x => x.InventoryLocationId).IsRequired(false);
         builder.Property(x => x.Reference).HasMaxLength(120);
         builder.Property(x => x.Notes).HasMaxLength(1000);
+
+        builder.HasOne<InventoryLocation>()
+            .WithMany()
+            .HasForeignKey(x => x.InventoryLocationId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new { x.TenantId, x.CashSessionId });
         builder.HasIndex(x => new { x.TenantId, x.OccurredAt });
         builder.HasIndex(x => new { x.TenantId, x.TransactionType });
         builder.HasIndex(x => new { x.TenantId, x.OrderId });
+        builder.HasIndex(x => new { x.TenantId, x.InventoryLocationId, x.OccurredAt });
     }
 }

@@ -26,17 +26,20 @@ public class SwitchTenantCommandHandler : IRequestHandler<SwitchTenantCommand, R
     private readonly IApplicationDbContext _context;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly ITenantAccessService _tenantAccessService;
 
     public SwitchTenantCommandHandler(
         ICurrentUserService currentUserService,
         IApplicationDbContext context,
         UserManager<ApplicationUser> userManager,
-        IJwtTokenService jwtTokenService)
+        IJwtTokenService jwtTokenService,
+        ITenantAccessService tenantAccessService)
     {
         _currentUserService = currentUserService;
         _context = context;
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
+        _tenantAccessService = tenantAccessService;
     }
 
     public async Task<Result<AuthResponse>> Handle(SwitchTenantCommand request, CancellationToken cancellationToken)
@@ -63,10 +66,11 @@ public class SwitchTenantCommandHandler : IRequestHandler<SwitchTenantCommand, R
         user.DefaultTenantId = request.TenantId;
         await _context.SaveChangesAsync(cancellationToken);
 
+        var permissions = await _tenantAccessService.GetPermissionsAsync(user.Id, request.TenantId, cancellationToken);
         var tenantRole = membership.Role.ToString().ToUpperInvariant();
         var accessToken = _jwtTokenService.GenerateAccessToken(
             user,
-            new TenantTokenContext(request.TenantId, tenantRole));
+            new TenantTokenContext(request.TenantId, tenantRole, permissions));
         var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
 
         _context.RefreshTokens.Add(refreshToken);

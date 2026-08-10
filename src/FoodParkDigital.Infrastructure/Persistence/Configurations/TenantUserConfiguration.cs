@@ -17,6 +17,7 @@ public class TenantUserConfiguration : IEntityTypeConfiguration<TenantUser>
         builder.Property(x => x.UserId).IsRequired();
         builder.Property(x => x.Role).HasConversion<int>().IsRequired();
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();
+        builder.Property(x => x.PermissionCodes).HasMaxLength(1000);
 
         builder.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
         builder.HasIndex(x => x.TenantId);

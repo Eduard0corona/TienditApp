@@ -28,7 +28,7 @@ public class DeleteTenantLogoCommandHandler : IRequestHandler<DeleteTenantLogoCo
 
     public async Task<Result> Handle(DeleteTenantLogoCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role != "TENANT_ADMIN")
+        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
             return Result.Failure("Solo el administrador puede eliminar el logo.");
 
         var tenantId = _tenantService.TenantId;

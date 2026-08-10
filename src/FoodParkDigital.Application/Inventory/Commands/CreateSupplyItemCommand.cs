@@ -29,6 +29,7 @@ public record CreateSupplyItemCommand : IRequest<Result<SupplyItemDto>>
     public bool TrackBatches { get; init; }
     public bool TrackExpiration { get; init; }
     public bool IsPerishable { get; init; }
+    public bool IsCritical { get; init; }
     public decimal? TaxRate { get; init; }
     public string? Notes { get; init; }
 }
@@ -114,6 +115,7 @@ public class CreateSupplyItemCommandHandler : IRequestHandler<CreateSupplyItemCo
             trackBatches: request.TrackBatches,
             trackExpiration: request.TrackExpiration,
             isPerishable: request.IsPerishable,
+            isCritical: request.IsCritical,
             taxRate: request.TaxRate,
             notes: request.Notes?.Trim());
 

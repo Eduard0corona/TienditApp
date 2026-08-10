@@ -11,6 +11,8 @@ public class UserProfileDto
     public bool PhoneNumberConfirmed { get; set; }
     public bool EmailConfirmed { get; set; }
     public string Role { get; set; } = null!;
+    public string? TenantRole { get; set; }
+    public List<string> Permissions { get; set; } = [];
     public Guid? TenantId { get; set; }
     public bool IsActive { get; set; }
     public string? AvatarUrl { get; set; }

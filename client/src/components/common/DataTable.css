@@ -1,0 +1,19 @@
+.datatable-search-wrapper {
+  width: 220px;
+  max-width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  .datatable-toolbar {
+    align-items: stretch !important;
+  }
+
+  .datatable-search-wrapper {
+    width: 100%;
+  }
+
+  .datatable-footer {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+}

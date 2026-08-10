@@ -365,6 +365,7 @@ public class CoreBusinessFlowSmokeTests
         public string? UserName => "smoke-user";
         public string? Role => "TENANT_ADMIN";
         public string? TenantRole => "Admin";
+        public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }
 

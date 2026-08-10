@@ -23,7 +23,10 @@ public class ConfirmPhoneCommandValidator : AbstractValidator<ConfirmPhoneComman
     public ConfirmPhoneCommandValidator()
     {
         RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Code).NotEmpty().Length(6);
+        RuleFor(x => x.Code)
+            .NotEmpty()
+            .Matches(@"^\d{5,6}$")
+            .WithMessage("El codigo debe tener 5 o 6 digitos.");
     }
 }
 
@@ -57,7 +60,11 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
         if (string.IsNullOrEmpty(user.PhoneNumber))
             return Result.Failure("El usuario no tiene un numero de telefono registrado.");
 
-        var result = await _userManager.ChangePhoneNumberAsync(user, user.PhoneNumber, request.Code);
+        var normalizedCode = NormalizeVerificationCode(request.Code);
+        if (normalizedCode is null)
+            return Result.Failure("Codigo invalido o expirado.");
+
+        var result = await _userManager.ChangePhoneNumberAsync(user, user.PhoneNumber, normalizedCode);
         if (!result.Succeeded)
             return Result.Failure("Codigo invalido o expirado.");
 
@@ -91,5 +98,17 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
             user.DefaultTenantId = membership.TenantId;
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string? NormalizeVerificationCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return null;
+
+        var digits = new string(code.Where(char.IsDigit).ToArray());
+        if (digits.Length == 5)
+            return digits.PadLeft(6, '0');
+
+        return digits.Length == 6 ? digits : null;
     }
 }

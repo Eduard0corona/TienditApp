@@ -47,6 +47,7 @@ interface SupplyFormState {
   trackBatches: boolean;
   trackExpiration: boolean;
   isPerishable: boolean;
+  isCritical: boolean;
   taxRate: string;
   notes: string;
 }
@@ -209,6 +210,7 @@ const EMPTY_PAGINATED = {
 
 const EMPTY_ALERTS: InventoryAlertsDto = {
   lowStockCount: 0,
+  criticalLowStockCount: 0,
   outOfStockCount: 0,
   missingRecipeProductCount: 0,
   items: [],
@@ -231,6 +233,7 @@ const buildEmptySupplyForm = (): SupplyFormState => ({
   trackBatches: false,
   trackExpiration: false,
   isPerishable: false,
+  isCritical: false,
   taxRate: '',
   notes: '',
 });
@@ -653,6 +656,7 @@ export default function InventoryManagement() {
       trackBatches: supply.trackBatches,
       trackExpiration: supply.trackExpiration,
       isPerishable: supply.isPerishable,
+      isCritical: supply.isCritical,
       taxRate: supply.taxRate?.toString() ?? '',
       notes: supply.notes ?? '',
     });
@@ -717,6 +721,7 @@ export default function InventoryManagement() {
       trackBatches: supplyForm.trackBatches,
       trackExpiration: supplyForm.trackExpiration,
       isPerishable: supplyForm.isPerishable,
+      isCritical: supplyForm.isCritical,
       taxRate: parsedTaxRate,
       notes: supplyForm.notes.trim() || undefined,
     };
@@ -1215,7 +1220,10 @@ export default function InventoryManagement() {
                       <>
                         <td>
                           <div className="fw-semibold">{item.name}</div>
-                          <div className="text-muted small">{item.categoryName || '-'}</div>
+                          <div className="text-muted small">
+                            {item.categoryName || '-'}
+                            {item.isCritical && <span className="badge bg-danger ms-1">Critico</span>}
+                          </div>
                         </td>
                         <td>
                           <div>{item.code || '-'}</div>
@@ -1712,7 +1720,7 @@ export default function InventoryManagement() {
               {activeTab === 'alerts' && (
                 <>
                   <div className="row mb-3">
-                    <div className="col-md-4 mb-2">
+                    <div className="col-md-3 mb-2">
                       <div className="card border-danger h-100 mb-0">
                         <div className="card-body py-2">
                           <div className="text-muted small">Sin stock</div>
@@ -1720,7 +1728,15 @@ export default function InventoryManagement() {
                         </div>
                       </div>
                     </div>
-                    <div className="col-md-4 mb-2">
+                    <div className="col-md-3 mb-2">
+                      <div className="card border-danger h-100 mb-0">
+                        <div className="card-body py-2">
+                          <div className="text-muted small">Bajo stock critico</div>
+                          <div className="h3 mb-0">{alertsData.criticalLowStockCount}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-3 mb-2">
                       <div className="card border-warning h-100 mb-0">
                         <div className="card-body py-2">
                           <div className="text-muted small">Bajo stock</div>
@@ -1728,7 +1744,7 @@ export default function InventoryManagement() {
                         </div>
                       </div>
                     </div>
-                    <div className="col-md-4 mb-2">
+                    <div className="col-md-3 mb-2">
                       <div className="card border-info h-100 mb-0">
                         <div className="card-body py-2">
                           <div className="text-muted small">Items sin receta</div>
@@ -1763,8 +1779,16 @@ export default function InventoryManagement() {
                         <td className="text-end">{item.reorderPoint.toFixed(4)}</td>
                         <td className="text-end">{item.deficit.toFixed(4)}</td>
                         <td className="text-center">
-                          <span className={`badge ${item.isOutOfStock ? 'bg-danger' : 'bg-warning text-dark'}`}>
-                            {item.isOutOfStock ? 'Sin stock' : 'Bajo stock'}
+                          <span
+                            className={`badge ${
+                              item.isOutOfStock
+                                ? 'bg-danger'
+                                : item.isCritical
+                                  ? 'bg-danger-subtle text-danger'
+                                  : 'bg-warning text-dark'
+                            }`}
+                          >
+                            {item.isOutOfStock ? 'Sin stock' : item.isCritical ? 'Bajo stock critico' : 'Bajo stock'}
                           </span>
                         </td>
                       </>
@@ -1987,6 +2011,15 @@ export default function InventoryManagement() {
                     onChange={(e) => setSupplyForm((current) => ({ ...current, isPerishable: e.target.checked }))}
                   />
                   <label className="form-check-label">Es perecedero</label>
+                </div>
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={supplyForm.isCritical}
+                    onChange={(e) => setSupplyForm((current) => ({ ...current, isCritical: e.target.checked }))}
+                  />
+                  <label className="form-check-label">Insumo critico</label>
                 </div>
               </div>
             </div>

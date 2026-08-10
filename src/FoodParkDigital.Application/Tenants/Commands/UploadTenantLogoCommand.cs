@@ -38,6 +38,8 @@ public class UploadTenantLogoCommandValidator : AbstractValidator<UploadTenantLo
 
 public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCommand, Result<LogoImageUrlsDto>>
 {
+    private const string OriginalVariantSuffix = "_original.webp";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
@@ -60,7 +62,7 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
 
     public async Task<Result<LogoImageUrlsDto>> Handle(UploadTenantLogoCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role != "TENANT_ADMIN")
+        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
             return Result.Failure<LogoImageUrlsDto>("Solo el administrador puede cambiar el logo.");
 
         var tenantId = _tenantService.TenantId;
@@ -81,19 +83,22 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
         // Upload each variant
         var folder = $"logos/{tenantId}";
         var baseId = Guid.NewGuid().ToString();
-        var baseUrl = $"/uploads/{folder}/{baseId}";
+        string? baseUrl = null;
 
         try
         {
             foreach (var variant in variants)
             {
                 var fileName = $"{baseId}{variant.Suffix}.webp";
-                await _fileStorageService.UploadAsync(
+                var uploadedUrl = await _fileStorageService.UploadAsync(
                     variant.Stream,
                     fileName,
                     "image/webp",
                     folder,
                     cancellationToken);
+
+                if (variant.Suffix == "_original" && uploadedUrl.EndsWith(OriginalVariantSuffix, StringComparison.OrdinalIgnoreCase))
+                    baseUrl = uploadedUrl[..^OriginalVariantSuffix.Length];
             }
         }
         finally
@@ -101,6 +106,9 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
             foreach (var variant in variants)
                 variant.Dispose();
         }
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return Result.Failure<LogoImageUrlsDto>("No se pudo almacenar la imagen.");
 
         // Update tenant logo
         tenant.Update(tenant.Name, tenant.ContactEmail, tenant.ContactPhone, baseUrl);

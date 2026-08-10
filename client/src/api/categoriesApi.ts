@@ -1,7 +1,9 @@
 import api from './axios';
 import type {
   CategoryDto,
+  CategoryTemplateDto,
   CreateCategoryRequest,
+  InstallCategoryTemplateResultDto,
   UpdateCategoryRequest,
 } from '../types';
 
@@ -23,4 +25,10 @@ export const categoriesApi = {
 
   toggleActive: (id: string, isActive: boolean) =>
     api.patch(`/categories/${id}/active`, { isActive }),
+
+  getTemplates: () =>
+    api.get<CategoryTemplateDto[]>('/categories/templates'),
+
+  installTemplate: (templateId: string) =>
+    api.post<InstallCategoryTemplateResultDto>(`/categories/templates/${templateId}/install`),
 };
