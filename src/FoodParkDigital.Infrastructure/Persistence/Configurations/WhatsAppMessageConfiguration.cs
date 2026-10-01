@@ -19,6 +19,8 @@ public class WhatsAppMessageConfiguration : IEntityTypeConfiguration<WhatsAppMes
         builder.Property(m => m.SentAt).IsRequired();
 
         builder.HasIndex(m => new { m.ConversationId, m.SentAt });
-        builder.HasIndex(m => m.ExternalMessageId);
+        // Idempotency key for webhook deliveries (Meta retries and may deliver twice).
+        // Outbound messages have no external id yet, hence the filter.
+        builder.HasIndex(m => m.ExternalMessageId).IsUnique().HasFilter("[ExternalMessageId] IS NOT NULL");
     }
 }

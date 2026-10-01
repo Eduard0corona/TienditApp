@@ -38,6 +38,9 @@ public class UpdateWhatsAppConfigCommandValidator : AbstractValidator<UpdateWhat
 
 public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsAppConfigCommand, Result<WhatsAppConfigDto>>
 {
+    public const string PhoneNumberIdInUseError =
+        "El Phone Number ID ya está vinculado a otro negocio. Si este número te pertenece, contacta a soporte para liberarlo.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
@@ -58,6 +61,12 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
             return Result.Failure<WhatsAppConfigDto>("Solo el administrador puede configurar WhatsApp.");
 
         var tenantId = _tenantService.TenantId;
+        var phoneNumberId = WhatsAppConfig.NormalizePhoneNumberId(request.PhoneNumberId);
+
+        if (phoneNumberId is not null
+            && await IsPhoneNumberIdUsedByAnotherTenantAsync(phoneNumberId, tenantId, cancellationToken))
+            return Result.Failure<WhatsAppConfigDto>(PhoneNumberIdInUseError);
+
         var config = await _context.WhatsAppConfigs
             .FirstOrDefaultAsync(w => w.TenantId == tenantId, cancellationToken);
 
@@ -79,12 +88,23 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
         config.Update(
             request.IsEnabled,
             request.AccessToken,
-            request.PhoneNumberId,
+            phoneNumberId,
             request.WabaId,
             request.DisplayPhoneNumber,
             verifyToken);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (phoneNumberId is not null)
+        {
+            // The unique index on PhoneNumberId settles concurrent claims of the same number.
+            if (!await IsPhoneNumberIdUsedByAnotherTenantAsync(phoneNumberId, tenantId, cancellationToken))
+                throw;
+
+            return Result.Failure<WhatsAppConfigDto>(PhoneNumberIdInUseError);
+        }
 
         return Result.Success(new WhatsAppConfigDto
         {
@@ -98,4 +118,12 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
             VerifyToken = config.VerifyToken
         });
     }
+
+    // Deliberately cross-tenant: the phone number ID routes anonymous webhooks, so it must
+    // map to a single tenant. Only existence is checked; no data of the other tenant is read.
+    private Task<bool> IsPhoneNumberIdUsedByAnotherTenantAsync(
+        string phoneNumberId, Guid tenantId, CancellationToken cancellationToken)
+        => _context.WhatsAppConfigs
+            .IgnoreQueryFilters()
+            .AnyAsync(w => w.PhoneNumberId == phoneNumberId && w.TenantId != tenantId, cancellationToken);
 }
