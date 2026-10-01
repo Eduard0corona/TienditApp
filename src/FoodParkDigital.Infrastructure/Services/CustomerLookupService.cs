@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Customers.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Services;
@@ -12,15 +13,19 @@ public class CustomerLookupService : ICustomerLookupService
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly ILogger<CustomerLookupService> _logger;
+    private readonly bool _logSensitiveData;
 
     public CustomerLookupService(
         IApplicationDbContext context,
         IPhoneNormalizationService phoneNormalizationService,
+        IHostEnvironment environment,
         ILogger<CustomerLookupService> logger)
     {
         _context = context;
         _phoneNormalizationService = phoneNormalizationService;
         _logger = logger;
+        // Customer phone numbers are only logged in full in Development.
+        _logSensitiveData = environment.IsDevelopment();
     }
 
     public async Task<CustomerLookupResult> ResolveForOrderAsync(
@@ -45,7 +50,7 @@ public class CustomerLookupService : ICustomerLookupService
         {
             _logger.LogInformation(
                 "OrderCustomerLinked: linked phone {Phone} to user {UserId}.",
-                phoneNormalized,
+                LoggablePhone(phoneNormalized),
                 profile.UserId);
             return new CustomerLookupResult(phoneNormalized, profile.UserId, null, name);
         }
@@ -71,7 +76,7 @@ public class CustomerLookupService : ICustomerLookupService
                 _logger.LogInformation(
                     "CreatedTempCustomer: tenant {TenantId}, phone {Phone}, tempCustomer {TemporaryCustomerId}.",
                     tenantId,
-                    phoneNormalized,
+                    LoggablePhone(phoneNormalized),
                     temp.Id);
             }
             catch (DbUpdateException ex)
@@ -94,4 +99,7 @@ public class CustomerLookupService : ICustomerLookupService
 
         return new CustomerLookupResult(phoneNormalized, null, temp.Id, temp.Name ?? name);
     }
+
+    private string LoggablePhone(string phoneNumber)
+        => _logSensitiveData ? phoneNumber : LogRedaction.MaskPhoneNumber(phoneNumber);
 }

@@ -16,6 +16,8 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -308,6 +310,7 @@ public class CreateOrderCommandFlowTests
             var customerLookup = new CustomerLookupService(
                 Context,
                 new PhoneNormalizationService(),
+                new HostingEnvironment { EnvironmentName = Environments.Production },
                 NullLogger<CustomerLookupService>.Instance);
 
             return new CreateOrderCommandHandler(
