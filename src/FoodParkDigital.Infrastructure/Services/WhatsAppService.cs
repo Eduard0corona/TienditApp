@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Services;
@@ -15,15 +16,19 @@ public class WhatsAppService : IWhatsAppService
     private readonly IApplicationDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WhatsAppService> _logger;
+    private readonly bool _logProviderResponses;
 
     public WhatsAppService(
         IApplicationDbContext context,
         IHttpClientFactory httpClientFactory,
+        IHostEnvironment environment,
         ILogger<WhatsAppService> logger)
     {
         _context = context;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        // Meta error responses can echo recipients or message content: only Development logs them verbatim.
+        _logProviderResponses = environment.IsDevelopment();
     }
 
     public async Task<Result> SendTemplateMessageAsync(
@@ -136,7 +141,12 @@ public class WhatsAppService : IWhatsAppService
             }
 
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("WhatsApp API error: {StatusCode} - {Error}", response.StatusCode, errorContent);
+            _logger.LogError(
+                "WhatsApp API error: {StatusCode}. Provider error code: {ProviderErrorCode}",
+                response.StatusCode,
+                LogRedaction.GetProviderErrorCode(errorContent));
+            if (_logProviderResponses)
+                _logger.LogInformation("WhatsApp response body: {Body}", errorContent);
             return Result.Failure($"Error al enviar mensaje de WhatsApp: {response.StatusCode}");
         }
         catch (Exception ex)

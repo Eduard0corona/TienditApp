@@ -2,10 +2,11 @@
 
 ## Estado actual
 
-Existen dos proyectos xUnit:
+Existen tres proyectos xUnit:
 
 - `FoodParkDigital.Domain.Tests`: máquinas de estado de órdenes y catálogo de permisos.
 - `FoodParkDigital.Application.Tests`: casos de órdenes/clientes, capabilities, tenant access, inventario, compras/caja, WhatsApp, empleados y configuración EF mediante SQLite/InMemory y dobles.
+- `FoodParkDigital.Infrastructure.Tests`: servicios de Infrastructure con dobles (HTTP, SMTP en loopback, logger y EF InMemory); cubre que SMS, correo y WhatsApp no registren códigos OTP, cuerpos, respuestas de proveedores ni PII fuera de Development.
 
 No se encontraron proyectos dedicados de pruebas WebApi, Infrastructure con SQL Server real compatible ni frontend. El workflow de despliegue restaura/publica backend y construye frontend, pero no ejecuta tests ni lint. Los proyectos de producción apuntan a .NET 9 mientras tests apuntan a .NET 10.
 
@@ -42,5 +43,6 @@ No se encontraron proyectos dedicados de pruebas WebApi, Infrastructure con SQL 
 ```powershell
 dotnet test tests/FoodParkDigital.Domain.Tests/FoodParkDigital.Domain.Tests.csproj
 dotnet test tests/FoodParkDigital.Application.Tests/FoodParkDigital.Application.Tests.csproj
+dotnet test tests/FoodParkDigital.Infrastructure.Tests/FoodParkDigital.Infrastructure.Tests.csproj
 dotnet test FoodParkDigital.sln
 ```

@@ -45,6 +45,12 @@ docker compose up --build
 
 Publica API en 5000/5001 y SQL Server en 1433. Reemplaza credenciales y JWT de ejemplo antes de cualquier entorno compartido. Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita.
 
+## SMS, correo y códigos OTP
+
+Si `SmsSettings:Provider` no es `Twilio`, o faltan `AccountSid`, `AuthToken` o `FromNumber`, la API no envía el SMS. Solo con `ASPNETCORE_ENVIRONMENT=Development` registra además su cuerpo (`SMS body: ...`), que incluye el código OTP de confirmación de teléfono, para completar el flujo en local. `appsettings.json` trae `Twilio` con valores de ejemplo, así que para leer el código define un proveedor distinto (por ejemplo `SmsSettings__Provider=None`) con variable de entorno o user-secrets.
+
+En cualquier otro entorno nunca se registran cuerpos de SMS ni códigos OTP: el aviso solo lleva el teléfono enmascarado (`***5678`). Los correos se registran con el destinatario enmascarado (`a***@e***.com`) y su cuerpo, con los enlaces de confirmación o restablecimiento, no se registra en ningún entorno. Si Twilio, Meta (WhatsApp) o el servidor SMTP rechazan un envío, fuera de Development solo se registran el estado HTTP o SMTP, el código de error del proveedor y el tipo de excepción, porque sus respuestas pueden repetir números, direcciones o contenido; en Development se registran completas para depurar.
+
 ## Validación local
 
 ```powershell
