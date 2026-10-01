@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.WhatsApp.Commands;
 using FoodParkDigital.Application.WhatsApp.Queries;
 using FoodParkDigital.Domain.WhatsApp.Enums;
+using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.WebApi.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -21,17 +22,21 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly IApplicationDbContext _context;
     private readonly WhatsAppWebhookSignatureVerifier _signatureVerifier;
     private readonly ILogger<WhatsAppWebhookController> _logger;
+    private readonly bool _logSensitiveData;
 
     public WhatsAppWebhookController(
         IMediator mediator,
         IApplicationDbContext context,
         WhatsAppWebhookSignatureVerifier signatureVerifier,
+        IHostEnvironment environment,
         ILogger<WhatsAppWebhookController> logger)
     {
         _mediator = mediator;
         _context = context;
         _signatureVerifier = signatureVerifier;
         _logger = logger;
+        // Database errors can quote the sender's phone number: only Development logs them in full.
+        _logSensitiveData = environment.IsDevelopment();
     }
 
     /// <summary>
@@ -139,7 +144,9 @@ public class WhatsAppWebhookController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing WhatsApp webhook payload");
+            _logger.LogError(
+                _logSensitiveData ? ex : LogRedaction.RedactDatabaseMessages(ex),
+                "Error processing WhatsApp webhook payload");
         }
 
         // Always return 200 to acknowledge receipt (Meta requires this)

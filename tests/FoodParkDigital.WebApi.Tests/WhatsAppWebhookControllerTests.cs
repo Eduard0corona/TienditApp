@@ -7,14 +7,17 @@ using FoodParkDigital.Application.WhatsApp.Queries;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Controllers;
 using FoodParkDigital.WebApi.Services;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.WebApi.Tests.WhatsAppWebhookTestSupport;
 
@@ -121,6 +124,41 @@ public class WhatsAppWebhookControllerTests
     }
 
     [Fact]
+    public async Task Receive_ShouldNotLogSenderPhone_WhenStoringMessageFailsWithSqlErrorOutsideDevelopment()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        fixture.Mediator.ProcessFailure = DuplicateConversationFailure(fixture.TenantB);
+        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.race");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret), logger);
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        Assert.Null(logger.FirstMentioning("5511112222"));
+        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Contains($"{typeof(SqlException).FullName} (SQL error 2601)", error.Exception!.ToString());
+    }
+
+    [Fact]
+    public async Task Receive_ShouldLogFullSqlError_WhenStoringMessageFailsInDevelopment()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var failure = DuplicateConversationFailure(fixture.TenantB);
+        fixture.Mediator.ProcessFailure = failure;
+        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.race-dev");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Development, AppSecret), body, Sign(body, AppSecret), logger, Environments.Development);
+
+        await controller.Receive(CancellationToken.None);
+
+        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Same(failure, error.Exception);
+    }
+
+    [Fact]
     public async Task Verify_ShouldReturnChallenge_WhenVerifyTokenMatches()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -145,6 +183,14 @@ public class WhatsAppWebhookControllerTests
 
     private static int? StatusCodeOf(IActionResult result)
         => Assert.IsAssignableFrom<IStatusCodeActionResult>(result).StatusCode;
+
+    // Two first messages from a new number race on the (TenantId, CustomerPhone) unique index.
+    private static DbUpdateException DuplicateConversationFailure(Guid tenantId)
+        => SqlExceptionFactory.SaveFailure(
+            2601,
+            "Cannot insert duplicate key row in object 'dbo.WhatsAppConversations' with unique index "
+            + "'IX_WhatsAppConversations_TenantId_CustomerPhone'. The duplicate key value is "
+            + $"({tenantId}, +5215511112222).");
 
     private static byte[] InboundPayload(string phoneNumberId, string messageId) => Encoding.UTF8.GetBytes($$"""
         {
@@ -205,7 +251,11 @@ public class WhatsAppWebhookControllerTests
         }
 
         public WhatsAppWebhookController CreateController(
-            WhatsAppWebhookSignatureVerifier verifier, byte[]? body = null, string? signature = null)
+            WhatsAppWebhookSignatureVerifier verifier,
+            byte[]? body = null,
+            string? signature = null,
+            ILogger<WhatsAppWebhookController>? logger = null,
+            string environmentName = "Production")
         {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Body = new MemoryStream(body ?? []);
@@ -213,7 +263,11 @@ public class WhatsAppWebhookControllerTests
                 httpContext.Request.Headers[WhatsAppWebhookSignatureVerifier.SignatureHeaderName] = signature;
 
             return new WhatsAppWebhookController(
-                Mediator, Context, verifier, NullLogger<WhatsAppWebhookController>.Instance)
+                Mediator,
+                Context,
+                verifier,
+                new TestHostEnvironment(environmentName),
+                logger ?? NullLogger<WhatsAppWebhookController>.Instance)
             {
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };
@@ -241,6 +295,9 @@ public class WhatsAppWebhookControllerTests
 
         public List<object> Requests { get; } = [];
 
+        /// <summary>When set, processing an inbound message throws it, like a failed save would.</summary>
+        public Exception? ProcessFailure { get; set; }
+
         public async Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken ct = default)
         {
             Requests.Add(request);
@@ -248,6 +305,7 @@ public class WhatsAppWebhookControllerTests
             {
                 VerifyWhatsAppWebhookTokenQuery query =>
                     await new VerifyWhatsAppWebhookTokenQueryHandler(_context).Handle(query, ct),
+                ProcessInboundMessageCommand when ProcessFailure is not null => throw ProcessFailure,
                 ProcessInboundMessageCommand => Result.Success(new ChatMessageDto()),
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };
