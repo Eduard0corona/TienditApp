@@ -26,8 +26,9 @@ public class RetailOrderStateMachine : IOrderStateMachine
             throw new InvalidOrderStateTransitionException(from, to, BusinessType.Retail);
     }
 
+    // Cancellation follows the transition table, the single source of truth for every path.
     public bool CanCancel(OrderStatus currentStatus)
-        => currentStatus is OrderStatus.Pending or OrderStatus.Confirmed or OrderStatus.Accepted;
+        => GetAllowedTransitions(currentStatus).Contains(OrderStatus.Cancelled);
 
     public OrderStatus GetInitialStatus() => OrderStatus.Pending;
 }

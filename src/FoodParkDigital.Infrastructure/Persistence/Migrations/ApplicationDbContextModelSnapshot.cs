@@ -1186,6 +1186,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<decimal>("OnHandQuantity")
+                        .IsConcurrencyToken()
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("ReservedQuantity")
@@ -1293,6 +1294,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal>("AverageCost")
+                        .IsConcurrencyToken()
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("Barcode")
@@ -1909,6 +1911,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("ReceivedQuantity")
+                        .IsConcurrencyToken()
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("SubTotal")

@@ -43,13 +43,27 @@ public class CreateInventoryMovementCommandValidator : AbstractValidator<CreateI
         RuleFor(x => x.MovementType).IsInEnum();
         RuleFor(x => x.MovementReason).IsInEnum();
         RuleFor(x => x.ReferenceNumber).MaximumLength(100);
-        RuleFor(x => x.ExternalReference).MaximumLength(100);
+        RuleFor(x => x.ExternalReference)
+            .MaximumLength(100)
+            .Must(reference => !IsReservedExternalReference(reference))
+            .WithMessage("La referencia externa usa un prefijo reservado por el sistema (ORDER: o PO:).");
+        RuleFor(x => x.MovementDate)
+            .LessThanOrEqualTo(_ => DateTimeOffset.UtcNow.AddMinutes(5))
+            .When(x => x.MovementDate.HasValue)
+            .WithMessage("La fecha del movimiento no puede estar en el futuro.");
         RuleFor(x => x.CounterpartyName).MaximumLength(200);
         RuleFor(x => x.DocumentNumber).MaximumLength(100);
         RuleFor(x => x.Notes).MaximumLength(2000);
         RuleFor(x => x.Lines).NotEmpty().WithMessage("Debes agregar al menos un detalle.");
         RuleForEach(x => x.Lines).SetValidator(new CreateInventoryMovementLineRequestValidator());
     }
+
+    // System movements use these prefixes as idempotency keys (order consumption, reversal and purchase
+    // receipts). A manual reference with the same key could suppress or fake those movements.
+    private static bool IsReservedExternalReference(string? reference) =>
+        reference is not null
+        && (reference.Trim().StartsWith("ORDER:", StringComparison.OrdinalIgnoreCase)
+            || reference.Trim().StartsWith("PO:", StringComparison.OrdinalIgnoreCase));
 }
 
 public class CreateInventoryMovementLineRequestValidator : AbstractValidator<CreateInventoryMovementLineRequest>
@@ -93,6 +107,15 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
             return Result.Failure<InventoryMovementDto>("El tenant no tiene habilitado el modulo de inventario.");
 
+        var externalReference = string.IsNullOrWhiteSpace(request.ExternalReference)
+            ? null
+            : request.ExternalReference.Trim();
+        if (externalReference is not null
+            && await _context.InventoryMovements.AnyAsync(x => x.ExternalReference == externalReference, cancellationToken))
+        {
+            return Result.Failure<InventoryMovementDto>("Ya existe un movimiento con esa referencia externa.");
+        }
+
         var movementDate = request.MovementDate ?? DateTimeOffset.UtcNow;
         var movementNumber = await GenerateMovementNumberAsync(movementDate, cancellationToken);
 
@@ -103,7 +126,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             movementReason: request.MovementReason,
             movementDate: movementDate,
             referenceNumber: request.ReferenceNumber?.Trim(),
-            externalReference: request.ExternalReference?.Trim(),
+            externalReference: externalReference,
             counterpartyName: request.CounterpartyName?.Trim(),
             documentNumber: request.DocumentNumber?.Trim(),
             notes: request.Notes?.Trim());
@@ -153,7 +176,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             var quantityBeforeLocation = stock.OnHandQuantity;
             var quantityBeforeSupply = onHandBySupply.GetValueOrDefault(line.SupplyItemId);
             var delta = ResolveDelta(request.MovementType, line.Quantity);
-            var unitCost = ResolveUnitCost(line.UnitCost, delta, supply);
+            var unitCost = ResolveUnitCost(request.MovementType, line.UnitCost, delta, supply);
 
             stock.ApplyMovement(delta, unitCost, movementDate);
 
@@ -169,7 +192,9 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
 
             movementLine.SetBalances(quantityBeforeLocation, stock.OnHandQuantity);
 
-            if (delta > 0 && unitCost.HasValue)
+            // Only goods acquired from outside change the average cost; transfers, adjustments and returns
+            // move stock the business already valued.
+            if (request.MovementType == InventoryMovementType.Entry && unitCost.HasValue)
                 supply.ApplyInboundCost(unitCost.Value, quantityBeforeSupply, line.Quantity);
 
             onHandBySupply[line.SupplyItemId] = quantityBeforeSupply + delta;
@@ -235,13 +260,23 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             _ => quantity
         };
 
-    private static decimal? ResolveUnitCost(decimal? requestedUnitCost, decimal delta, SupplyItem supply)
+    private static decimal? ResolveUnitCost(
+        InventoryMovementType movementType,
+        decimal? requestedUnitCost,
+        decimal delta,
+        SupplyItem supply)
     {
         if (requestedUnitCost.HasValue)
             return requestedUnitCost;
 
-        if (delta < 0)
-            return supply.AverageCost > 0 ? supply.AverageCost : null;
+        // Outbound and internal inbound movements are valued at the current average cost.
+        if (delta < 0 || movementType != InventoryMovementType.Entry)
+        {
+            if (supply.AverageCost > 0)
+                return supply.AverageCost;
+            if (delta < 0)
+                return null;
+        }
 
         if (supply.LastCost > 0)
             return supply.LastCost;
