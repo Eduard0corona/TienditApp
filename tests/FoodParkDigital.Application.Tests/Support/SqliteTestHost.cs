@@ -15,6 +15,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
 using InfrastructureDependencyInjection = FoodParkDigital.Infrastructure.DependencyInjection;
 
 namespace FoodParkDigital.Application.Tests.Support;
@@ -49,6 +51,8 @@ internal sealed class SqliteTestHost : IAsyncDisposable
 
         var services = new ServiceCollection();
         services.AddLogging();
+        // Services such as CustomerLookupService redact sensitive values outside Development.
+        services.AddSingleton<IHostEnvironment>(new HostingEnvironment { EnvironmentName = Environments.Production });
         services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
         services.AddSingleton<ICurrentTenantService>(_tenantService);
         services.AddSingleton<ICurrentUserService, FixedCurrentUserService>();
