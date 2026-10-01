@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -67,11 +68,18 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         if (existingUser)
             return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electronico.");
 
-        var phoneNormalized = _phoneNormalizationService.NormalizeToE164(request.PhoneNumber, "MX");
-        var existingProfile = await _context.CustomerProfiles
-            .AnyAsync(x => x.PhoneNormalized == phoneNormalized, cancellationToken);
+        var phoneNormalized = _phoneNormalizationService.NormalizeToE164(
+            request.PhoneNumber,
+            CustomerPhoneOwnershipRules.DefaultCountry);
+        var phoneHolder = await CustomerPhoneOwnershipRules.FindHolderAsync(
+            _context,
+            _phoneNormalizationService,
+            phoneNormalized,
+            cancellationToken);
 
-        if (existingProfile)
+        // Only a number its account confirmed by SMS is taken: an unverified profile must not let
+        // whoever typed the number first lock its real owner out.
+        if (phoneHolder is { IsVerified: true })
             return Result.Failure<AuthResponse>("Ya existe una cuenta de cliente con este telefono.");
 
         var user = new ApplicationUser
@@ -103,12 +111,17 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             if (!roleResult.Succeeded)
                 return Result.Failure<RefreshToken>(roleResult.ToErrorMessage());
 
-            _context.CustomerProfiles.Add(new CustomerProfile(
-                user.Id,
-                phoneNormalized,
-                $"{request.FirstName} {request.LastName}".Trim(),
-                request.FirstName,
-                request.LastName));
+            // While an unverified profile holds the number this account starts without one;
+            // ConfirmPhoneCommand gives the number to whichever account proves it by SMS.
+            if (phoneHolder is null)
+            {
+                _context.CustomerProfiles.Add(new CustomerProfile(
+                    user.Id,
+                    phoneNormalized,
+                    $"{request.FirstName} {request.LastName}".Trim(),
+                    request.FirstName,
+                    request.LastName));
+            }
 
             var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id);
             _context.RefreshTokens.Add(sessionToken);

@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Customers.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -31,17 +32,29 @@ public class CustomerLookupService : ICustomerLookupService
     {
         var phoneNormalized = _phoneNormalizationService.NormalizeToE164(rawPhone, defaultCountry);
 
-        var profile = await _context.CustomerProfiles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.PhoneNormalized == phoneNormalized, cancellationToken);
+        // Only an account that confirmed this number by SMS receives the order. Anyone can register a
+        // profile with someone else's number, so an unverified one falls through to a temporary
+        // customer, whose orders are claimed by whoever later confirms the number.
+        var profile = await CustomerPhoneOwnershipRules.FindHolderAsync(
+            _context,
+            _phoneNormalizationService,
+            phoneNormalized,
+            cancellationToken);
 
-        if (profile is not null)
+        if (profile is { IsVerified: true })
         {
             _logger.LogInformation(
                 "OrderCustomerLinked: linked phone {Phone} to user {UserId}.",
                 phoneNormalized,
                 profile.UserId);
             return new CustomerLookupResult(phoneNormalized, profile.UserId, null, name);
+        }
+
+        if (profile is not null)
+        {
+            _logger.LogInformation(
+                "UnverifiedCustomerProfileSkipped: user {UserId} has not confirmed this phone; using a temporary customer.",
+                profile.UserId);
         }
 
         var temp = await _context.TemporaryCustomers

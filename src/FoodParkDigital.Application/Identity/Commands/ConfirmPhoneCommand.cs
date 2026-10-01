@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -35,15 +37,18 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
     private readonly ITemporaryCustomerClaimService _claimService;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
 
     public ConfirmPhoneCommandHandler(
         UserManager<ApplicationUser> userManager,
         IApplicationDbContext context,
-        ITemporaryCustomerClaimService claimService)
+        ITemporaryCustomerClaimService claimService,
+        IPhoneNormalizationService phoneNormalizationService)
     {
         _userManager = userManager;
         _context = context;
         _claimService = claimService;
+        _phoneNormalizationService = phoneNormalizationService;
     }
 
     public async Task<Result> Handle(ConfirmPhoneCommand request, CancellationToken cancellationToken)
@@ -77,12 +82,77 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
                 return Result.Failure("Codigo invalido o expirado.");
 
             if (user.Role == UserRole.Customer)
+            {
                 await _claimService.ClaimByPhoneAsync(user.PhoneNumber, user.Id, "MX", ct);
+                await AssignPhoneToCustomerProfileAsync(user, user.PhoneNumber, ct);
+            }
             else
+            {
                 await EnsureTenantContextForUser(user, ct);
+            }
 
             return Result.Success();
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// The user just proved the number is theirs, so their profile takes it and orders placed with it
+    /// are linked to them from now on. The number is taken from a profile whose account never
+    /// confirmed it, never from an account that confirmed it first.
+    /// </summary>
+    private async Task AssignPhoneToCustomerProfileAsync(
+        ApplicationUser user,
+        string phoneNumber,
+        CancellationToken cancellationToken)
+    {
+        var phoneNormalized = _phoneNormalizationService.NormalizeToE164(
+            phoneNumber,
+            CustomerPhoneOwnershipRules.DefaultCountry);
+        var holder = await CustomerPhoneOwnershipRules.FindHolderAsync(
+            _context,
+            _phoneNormalizationService,
+            phoneNormalized,
+            cancellationToken);
+
+        if (holder is not null && holder.UserId != user.Id)
+        {
+            if (holder.IsVerified)
+                return;
+
+            // The phone is unique across profiles, so the unverified one must release it first.
+            // Its account is kept; it just stops holding a number it never proved.
+            var unverifiedProfile = await _context.CustomerProfiles
+                .FirstOrDefaultAsync(x => x.UserId == holder.UserId, cancellationToken);
+            if (unverifiedProfile is not null)
+            {
+                _context.CustomerProfiles.Remove(unverifiedProfile);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        var profile = await _context.CustomerProfiles
+            .FirstOrDefaultAsync(x => x.UserId == user.Id, cancellationToken);
+
+        if (profile is null)
+        {
+            _context.CustomerProfiles.Add(new CustomerProfile(
+                user.Id,
+                phoneNormalized,
+                $"{user.FirstName} {user.LastName}".Trim(),
+                user.FirstName,
+                user.LastName));
+        }
+        else if (profile.PhoneNormalized != phoneNormalized)
+        {
+            // The account confirmed a different number, so its previous one stops identifying it.
+            profile.UpdateProfile(phoneNormalized, profile.DisplayName, profile.FirstName, profile.LastName);
+        }
+        else
+        {
+            return;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureTenantContextForUser(ApplicationUser user, CancellationToken cancellationToken)
