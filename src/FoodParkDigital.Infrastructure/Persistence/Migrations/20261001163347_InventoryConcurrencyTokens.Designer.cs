@@ -2226,6 +2226,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PhoneNumberId")
+                        .IsUnique()
+                        .HasFilter("[PhoneNumberId] IS NOT NULL");
+
                     b.HasIndex("TenantId")
                         .IsUnique();
 
@@ -2319,7 +2323,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExternalMessageId");
+                    b.HasIndex("ExternalMessageId")
+                        .IsUnique()
+                        .HasFilter("[ExternalMessageId] IS NOT NULL");
 
                     b.HasIndex("ConversationId", "SentAt");
 

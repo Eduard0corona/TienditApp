@@ -21,6 +21,10 @@ public class WhatsAppConfigConfiguration : IEntityTypeConfiguration<WhatsAppConf
 
         builder.HasIndex(w => w.TenantId).IsUnique();
 
+        // Inbound webhooks resolve the tenant by phone_number_id, so one number
+        // can belong to a single tenant. Unconfigured tenants keep it null.
+        builder.HasIndex(w => w.PhoneNumberId).IsUnique().HasFilter("[PhoneNumberId] IS NOT NULL");
+
         builder.HasOne(w => w.Tenant)
             .WithOne()
             .HasForeignKey<WhatsAppConfig>(w => w.TenantId)

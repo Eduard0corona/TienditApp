@@ -11,7 +11,7 @@ TienditApp es un SaaS multi-tenant para negocios locales; los proyectos conserva
 - `src/FoodParkDigital.Infrastructure`: EF Core, migraciones, Identity e integraciones.
 - `src/FoodParkDigital.WebApi`: composition root, HTTP, middleware y SignalR.
 - `client`: React/TypeScript/Vite.
-- `tests`: xUnit de Domain/Application.
+- `tests`: xUnit de Domain/Application/Infrastructure.
 - `docs`: arquitectura, dominio, desarrollo, IA, roadmap y ADRs.
 
 ## Comandos

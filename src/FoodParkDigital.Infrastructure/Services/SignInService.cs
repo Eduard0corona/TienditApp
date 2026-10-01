@@ -34,29 +34,4 @@ public class SignInService : ISignInService
             result.IsNotAllowed,
             result.RequiresTwoFactor);
     }
-
-    public async Task<SignInResultDto> TwoFactorAuthenticatorSignInAsync(
-        string code,
-        bool isPersistent,
-        bool rememberClient)
-    {
-        var result = await _signInManager.TwoFactorAuthenticatorSignInAsync(code, isPersistent, rememberClient);
-
-        return new SignInResultDto(
-            result.Succeeded,
-            result.IsLockedOut,
-            result.IsNotAllowed,
-            result.RequiresTwoFactor);
-    }
-
-    public async Task<SignInResultDto> TwoFactorRecoveryCodeSignInAsync(string recoveryCode)
-    {
-        var result = await _signInManager.TwoFactorRecoveryCodeSignInAsync(recoveryCode);
-
-        return new SignInResultDto(
-            result.Succeeded,
-            result.IsLockedOut,
-            result.IsNotAllowed,
-            result.RequiresTwoFactor);
-    }
 }

@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authApi } from '../api/authApi';
 import { profileApi } from '../api/profileApi';
 import { refreshAccessToken, setAccessToken } from '../api/axios';
-import type { LoginRequest, UserProfileDto } from '../types';
-import { AuthContext } from './AuthContextDefinition';
+import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
+import { AuthContext, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 const SESSION_MARKER_KEY = 'fpd_has_session';
@@ -76,20 +76,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     recoverSession();
   }, [refreshProfile]);
 
-  const login = async (credentials: LoginRequest) => {
-    const { data } = await authApi.login(credentials);
-
-    if (data.requiresTwoFactor) {
-      return { requiresTwoFactor: true, userId: data.userId ?? undefined };
-    }
-
-    if (data.accessToken) {
-      setAccessToken(data.accessToken);
+  const startSession = async (accessToken?: string) => {
+    if (accessToken) {
+      setAccessToken(accessToken);
       setSessionMarker(true);
       await refreshProfile();
     }
+  };
 
+  const login = async (credentials: LoginRequest): Promise<LoginResult> => {
+    const { data } = await authApi.login(credentials);
+
+    if (data.requiresTwoFactor) {
+      if (!data.twoFactorChallengeToken) {
+        throw new Error('Respuesta de inicio de sesión sin desafío de verificación.');
+      }
+
+      // The challenge only lives in memory for the login step; it is never persisted.
+      return { requiresTwoFactor: true, twoFactorChallengeToken: data.twoFactorChallengeToken };
+    }
+
+    await startSession(data.accessToken);
     return { requiresTwoFactor: false };
+  };
+
+  const completeTwoFactorLogin = async (request: TwoFactorLoginRequest) => {
+    const { data } = await authApi.loginTwoFactor(request);
+    await startSession(data.accessToken);
   };
 
   const logout = async () => {
@@ -120,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         login,
+        completeTwoFactorLogin,
         logout,
         refreshProfile,
         switchTenant,

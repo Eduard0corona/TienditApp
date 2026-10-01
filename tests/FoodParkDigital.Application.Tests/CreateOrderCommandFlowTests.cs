@@ -17,6 +17,8 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -24,7 +26,7 @@ namespace FoodParkDigital.Application.Tests;
 public class CreateOrderCommandFlowTests
 {
     [Fact]
-    public async Task CreateOrder_ShouldLinkRegisteredCustomer_WhenPhoneExistsInCustomerProfile()
+    public async Task CreateOrder_ShouldLinkRegisteredCustomer_WhenTheyConfirmedTheProfilePhone()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var (tenant, product) = await fixture.SeedCatalogAsync();
@@ -38,6 +40,8 @@ public class CreateOrderCommandFlowTests
             NormalizedEmail = "REGISTERED@DEMO.COM",
             FirstName = "Cliente",
             LastName = "Registrado",
+            PhoneNumber = "+525511112222",
+            PhoneNumberConfirmed = true,
             Role = UserRole.Customer,
             IsActive = true
         };
@@ -404,6 +408,7 @@ public class CreateOrderCommandFlowTests
             var customerLookup = new CustomerLookupService(
                 Context,
                 new PhoneNormalizationService(),
+                new HostingEnvironment { EnvironmentName = Environments.Production },
                 NullLogger<CustomerLookupService>.Instance);
 
             return new CreateOrderCommandHandler(

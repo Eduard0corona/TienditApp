@@ -5,11 +5,11 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 ## Crítica antes de producción
 
 1. Credenciales expuestas: cadenas de conexión de Azure SQL y el secreto JWT estuvieron versionados y siguen en el historial de git. El código ya no los contiene y la API rechaza el secreto publicado, pero hay que rotarlos, revisar el firewall de Azure SQL y verificar si la cuenta SUPER_ADMIN sembrada con la contraseña anterior existe en la base remota. Reescribir el historial es destructivo y requiere coordinación.
-2. En corrección en tareas separadas: la fuga entre tenants del dashboard (productos más vendidos con `IgnoreQueryFilters()`), el escalamiento a `SUPER_ADMIN` mediante `POST /api/v1/auth/register`, el webhook de WhatsApp que acepta peticiones sin firma cuando falta `AppSecret` (y `PhoneNumberId`/`ExternalMessageId` no únicos), el 2FA que bloquea la cuenta, la subida de imagen de producto que borra sus campos y las escrituras parciales del registro de negocio/cliente y de la confirmación de teléfono.
-3. Aislamiento incompleto: `TenantSettings`/`WhatsAppConfig` no implementan `ITenantScoped`; `OrderItem`/`OrderStatusHistory` no tienen `TenantId`; quedan usos de `IgnoreQueryFilters()` por revisar; el override `X-Tenant-Id` de `SUPER_ADMIN` solo se audita en el log.
-4. Falta una suite que pruebe aislamiento HTTP, EF contra SQL Server, archivos, SignalR y webhooks.
-5. Archivos: el contenido se valida por firma y las fotos se re-codifican, pero `/uploads` es estático y público (las evidencias de pago se descargan sin autorización) y los PDF no pasan por un escaneo de malware.
-6. AutoMapper 13.0.1 tiene un advisory alto (`GHSA-rvv3-g6hj-g44x`, DoS por recursión) que solo se corrige en 15.1.1+/16.1.1+, versiones con licencia comercial. Hay que decidir entre licenciar, migrar a mapeo manual u otra librería. El riesgo práctico actual es bajo: solo mapea entidades de la base con profundidad acotada.
+2. Aislamiento incompleto: `TenantSettings`/`WhatsAppConfig` no implementan `ITenantScoped`; `OrderItem`/`OrderStatusHistory` no tienen `TenantId`; quedan usos de `IgnoreQueryFilters()` por revisar; el override `X-Tenant-Id` de `SUPER_ADMIN` solo se audita en el log.
+3. Falta una suite que pruebe aislamiento HTTP, EF contra SQL Server, archivos, SignalR y webhooks.
+4. Archivos: el contenido se valida por firma, las fotos se re-codifican y el borrado por URL está confinado a `{área}/{tenantId}` en almacenamiento local y Azure Blob (rechaza traversal, otros tenants/áreas y URLs ajenas al contenedor). Pendiente: `/uploads` es estático y público (las evidencias de pago se descargan sin autorización), los PDF no pasan por un escaneo de malware, `UploadAsync` no valida carpeta y nombre, hay que sanear filas heredadas cuyo `ImageUrl`/`LogoUrl`/`AvatarUrl` apunte fuera de su carpeta (el borrado se rechaza con un warning y el archivo queda huérfano) y falta un namespace por usuario para avatares (el usuario es global y un avatar subido con otra membresía no se borra desde otro tenant).
+5. Webhook de WhatsApp: la firma `X-Hub-Signature-256` se verifica fail-closed (503 sin `WhatsApp:AppSecret`, 401 sin firma válida; `WhatsApp:AllowUnsignedWebhooks` solo se respeta en Development), `PhoneNumberId` y `ExternalMessageId` tienen índices únicos filtrados y las entregas repetidas o concurrentes son idempotentes; como Meta no firma un timestamp, el replay se mitiga con esa idempotencia. Pendiente: `AppSecret` es global, así que un tenant con app de Meta propia (flujo que hoy sugiere la UI) será rechazado hasta definir secretos por tenant; la propiedad del `PhoneNumberId` no se verifica contra Meta (un admin podría reclamar primero el ID de otro negocio); faltan pruebas de pipeline HTTP y contra SQL Server.
+6. AutoMapper 13.0.1 tiene un advisory alto (`GHSA-rvv3-g6hj-g44x`, DoS por recursión) que solo se corrige en 15.1.1+/16.1.1+, versiones con licencia comercial. Hay que decidir entre licenciar, migrar a mapeo manual u otra librería. El riesgo práctico actual es bajo: solo mapea entidades de la base con profundidad acotada. `SQLitePCLRaw.lib.e_sqlite3` 2.1.10 (`GHSA-2m69-gcr7-jv3q`) tampoco tiene versión corregida, pero solo lo usan las pruebas con SQLite.
 7. .NET 9 dejó de tener soporte en mayo de 2026: planear la migración de la API a .NET 10 (LTS) junto con EF Core y ASP.NET Core 10.
 
 ## Alta
@@ -17,7 +17,8 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 - Eventos se limpian/publican después del commit sin Outbox; side effects pueden perderse o duplicarse.
 - Impuesto fijo `subtotal × 16%`, sin desglose fiscal persistido y sin decidir si los precios del catálogo incluyen IVA (si lo incluyen, se sobrecobra).
 - `SUPER_ADMIN` y `TENANT_ADMIN` omiten permisos/capabilities en partes del middleware; el claim `role` es el rol global y no el de la membresía; autorización distribuida por strings de ruta.
-- Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, no hay bloqueo de cuenta y el login distingue cuentas sin confirmar o bloqueadas.
+- `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
+- Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, el paso de contraseña del login no cuenta intentos fallidos (`lockoutOnFailure: false`; el 2FA sí usa lockout) y el login distingue cuentas sin confirmar o bloqueadas.
 - Folios de órdenes y movimientos por conteo (una colisión responde 500); la recepción de compra no tiene idempotency key estable.
 - No existen reembolsos: una orden con pagos no se puede cancelar.
 - Contratos de error mezclan `ProblemDetails` con objetos `{ error }`.
@@ -27,7 +28,7 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 
 ## Media
 
-- Controllers grandes; `WhatsAppWebhookController` accede al DbContext directamente.
+- Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
 - Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
 - Sin pruebas frontend ni de integración con SQL Server.
 - Producción .NET 9 y tests `net10.0` (el CI instala ambos SDK); no hay `global.json`.
@@ -56,11 +57,19 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 - Reporte operativo sin IVA en la utilidad, costo de ventas de órdenes reconocidas y mes del tenant.
 - Uploads validados por firma y re-codificados, sin metadatos, con tope de píxeles; evidencias limitadas a archivos del tenant.
 - Frontend: sesión expirada, refresh entre pestañas, cambio de tenant, SignalR, IVA en el carrito, acciones de estado/cancelación, caja, chat, reset de contraseña, página de inicio por permisos y error de lint `prefer-const`.
-- CI con build, tests, migraciones, lint, build y auditoría; despliegue condicionado a tests y lint; imagen Docker con SPA y usuario no root; npm sin vulnerabilidades y SQLitePCLRaw eliminado.
+- CI con build, tests, migraciones, lint, build y auditoría; despliegue condicionado a tests y lint; imagen Docker con SPA y usuario no root; npm sin vulnerabilidades.
+- Fuga entre tenants del dashboard (productos más vendidos) y escalamiento a `SUPER_ADMIN`: se eliminó `POST /api/v1/auth/register`.
+- Webhook de WhatsApp con firma obligatoria, índices únicos e idempotencia (migración `AddWhatsAppWebhookUniqueIndexes`).
+- Login con 2FA en dos pasos mediante un desafío de un solo uso; ya no bloquea la cuenta.
+- La subida de imagen de producto conserva sus campos (`Product.SetImage`).
+- Registro de negocio/cliente y confirmación de teléfono atómicos con la estrategia de reintentos; las órdenes solo se vinculan a teléfonos verificados por SMS.
+- Borrado de archivos confinado al namespace del tenant.
+- Logs sin códigos OTP ni PII de mensajería y con el teléfono del cliente enmascarado fuera de Development.
 
 ## Decisiones humanas pendientes
 
 - Modelo de autorización definitivo: policies/resource handlers, rol por tenant en el token y alcance administrativo cross-tenant.
+- Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
 - Política fiscal/redondeo, si los precios incluyen IVA y responsable legal-contable.
 - Semántica cuando no hay caja abierta, caja por sucursal y diseño de reembolsos/ajustes/CxC/Wallet.
 - Estrategia para reconciliar `master`/`develop` y migraciones.

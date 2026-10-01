@@ -52,6 +52,10 @@ Direcciones comprobadas en configuración: API HTTP `http://localhost:5203`, HTT
 
 `./start-dev.ps1` y `start-dev.cmd` lanzan ambos procesos. La contraseña del SUPER_ADMIN es la que definas en `Seed:SuperAdminPassword`.
 
+### Webhook de WhatsApp
+
+`POST /api/v1/whatsapp/webhook` verifica la firma `X-Hub-Signature-256` con `WhatsApp:AppSecret` (App Secret de Meta) en todos los entornos y responde 503 si no está configurado. Defínelo con variable de entorno (`WhatsApp__AppSecret`) o user-secrets, nunca en `appsettings*.json`. Para probar localmente sin firmar (curl/Postman) usa `WhatsApp__AllowUnsignedWebhooks=true`: solo se respeta con `ASPNETCORE_ENVIRONMENT=Development`; en otro entorno se ignora y se registra un error.
+
 ## Docker
 
 ```powershell
@@ -60,6 +64,14 @@ docker compose up --build
 ```
 
 La imagen compila también el SPA y corre con el usuario no root de la imagen de .NET. Publica API en 5000/5001 y SQL Server en 1433. Variables opcionales: `JWT_SECRET` (sin ella se usa una llave efímera de desarrollo), `SEED_SUPERADMIN_PASSWORD` y `MSSQL_SA_PASSWORD` (la contraseña por defecto del contenedor SQL solo sirve para un entorno local desechable). Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita.
+
+## SMS, correo y códigos OTP
+
+Si `SmsSettings:Provider` no es `Twilio`, o faltan `AccountSid`, `AuthToken` o `FromNumber`, la API no envía el SMS. Solo con `ASPNETCORE_ENVIRONMENT=Development` registra además su cuerpo (`SMS body: ...`), que incluye el código OTP de confirmación de teléfono, para completar el flujo en local. `appsettings.json` trae `Twilio` con valores de ejemplo, así que para leer el código define un proveedor distinto (por ejemplo `SmsSettings__Provider=None`) con variable de entorno o user-secrets.
+
+En cualquier otro entorno nunca se registran cuerpos de SMS ni códigos OTP: el aviso solo lleva el teléfono enmascarado (`***5678`). Los correos se registran con el destinatario enmascarado (`a***@e***.com`) y su cuerpo, con los enlaces de confirmación o restablecimiento, no se registra en ningún entorno. Si Twilio, Meta (WhatsApp) o el servidor SMTP rechazan un envío, fuera de Development solo se registran el estado HTTP o SMTP, el código de error del proveedor y el tipo de excepción, porque sus respuestas pueden repetir números, direcciones o contenido; en Development se registran completas para depurar.
+
+Al resolver el cliente de un pedido, los registros `OrderCustomerLinked` y `CreatedTempCustomer` siguen la misma regla: fuera de Development llevan el teléfono enmascarado (`***5678`) junto al usuario o al cliente temporal, y solo Development registra el número completo.
 
 ## Validación local
 

@@ -53,6 +53,9 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
 builder.Services.AddScoped<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
+// WhatsApp webhook signature verification (fails closed without WhatsApp:AppSecret)
+builder.Services.AddSingleton<WhatsAppWebhookSignatureVerifier>();
+
 // Rate Limiting
 builder.Services.AddRateLimiter(options =>
 {

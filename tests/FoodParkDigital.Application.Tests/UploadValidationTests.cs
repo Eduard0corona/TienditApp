@@ -247,8 +247,8 @@ public class UploadValidationTests
             return $"/uploads/{folder}/{fileName}";
         }
 
-        public Task DeleteAsync(string fileUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteVariantsAsync(string baseImageUrl, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteAsync(string fileUrl, string folder, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteVariantsAsync(string baseImageUrl, string folder, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class TestDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentTenantService tenantService)

@@ -19,6 +19,7 @@ Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen 
 - Una nueva entidad tenant-scoped debe quedar bajo filtro global y tener pruebas de modelo/aislamiento.
 - El frontend nunca es fuente confiable del tenant. El tenant efectivo viene de identidad autenticada y acceso validado.
 - Está prohibido usar `IgnoreQueryFilters()` como solución rápida. Cada uso aceptado debe filtrar explícitamente por tenant/usuario, justificar el escenario pre-tenant o administrativo y probar aislamiento.
+- `IgnoreQueryFilters()` desactiva los filtros de toda la consulta (joins, `Include`, navegaciones y subconsultas), no solo del `DbSet` donde se invoca; cada entidad tenant-scoped que participe necesita su predicado explícito.
 - Toda operación cross-tenant es administrativa, explícita, autorizada y auditada.
 - Las pruebas cubren leer, modificar, eliminar y descargar desde un tenant distinto, además de IDs adivinados.
 - Archivos, blobs, cachés, jobs, SignalR y notificaciones mantienen namespace/partición por tenant.
