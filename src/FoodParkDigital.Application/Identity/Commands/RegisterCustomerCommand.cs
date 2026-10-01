@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -39,7 +38,6 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
-    private readonly ITemporaryCustomerClaimService _claimService;
     private readonly IEmailService _emailService;
     private readonly ISmsService _smsService;
 
@@ -48,7 +46,6 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         IJwtTokenService jwtTokenService,
         IApplicationDbContext context,
         IPhoneNormalizationService phoneNormalizationService,
-        ITemporaryCustomerClaimService claimService,
         IEmailService emailService,
         ISmsService smsService)
     {
@@ -56,7 +53,6 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         _jwtTokenService = jwtTokenService;
         _context = context;
         _phoneNormalizationService = phoneNormalizationService;
-        _claimService = claimService;
         _emailService = emailService;
         _smsService = smsService;
     }
@@ -91,36 +87,49 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             IsActive = true
         };
 
-        var createResult = await _userManager.CreateAsync(user, request.Password);
-        if (!createResult.Succeeded)
+        // Identity checks the password only inside CreateAsync; reject it before writing anything
+        var passwordResult = await _userManager.ValidatePasswordPolicyAsync(user, request.Password);
+        if (!passwordResult.Succeeded)
+            return Result.Failure<AuthResponse>(passwordResult.ToErrorMessage());
+
+        // User, role, profile and session are committed together or not at all
+        var registration = await _context.ExecuteInResilientTransactionAsync(async ct =>
         {
-            var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
-            return Result.Failure<AuthResponse>(errors);
-        }
+            var createResult = await _userManager.CreateAsync(user, request.Password);
+            if (!createResult.Succeeded)
+                return Result.Failure<RefreshToken>(createResult.ToErrorMessage());
 
-        await _userManager.AddToRoleAsync(user, "CUSTOMER");
+            var roleResult = await _userManager.AddToRoleAsync(user, "CUSTOMER");
+            if (!roleResult.Succeeded)
+                return Result.Failure<RefreshToken>(roleResult.ToErrorMessage());
 
-        _context.CustomerProfiles.Add(new CustomerProfile(
-            user.Id,
-            phoneNormalized,
-            $"{request.FirstName} {request.LastName}".Trim(),
-            request.FirstName,
-            request.LastName));
-        await _context.SaveChangesAsync(cancellationToken);
+            _context.CustomerProfiles.Add(new CustomerProfile(
+                user.Id,
+                phoneNormalized,
+                $"{request.FirstName} {request.LastName}".Trim(),
+                request.FirstName,
+                request.LastName));
 
+            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id);
+            _context.RefreshTokens.Add(sessionToken);
+            await _context.SaveChangesAsync(ct);
+
+            return Result.Success(sessionToken);
+        }, cancellationToken);
+
+        if (registration.IsFailure)
+            return Result.Failure<AuthResponse>(registration.Error!);
+
+        // Send confirmations only after the registration is committed. Guest orders placed with this
+        // phone are linked by ConfirmPhoneCommand once the phone is verified, not here.
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
 
         var phoneCode = await _userManager.GenerateChangePhoneNumberTokenAsync(user, request.PhoneNumber);
         await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
 
-        await _claimService.ClaimByPhoneAsync(request.PhoneNumber, user.Id, "MX", cancellationToken);
-
         var accessToken = _jwtTokenService.GenerateAccessToken(user);
-        var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
-
-        _context.RefreshTokens.Add(refreshToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        var refreshToken = registration.Value;
 
         return Result.Success(new AuthResponse
         {

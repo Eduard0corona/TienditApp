@@ -48,32 +48,41 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
 
     public async Task<Result> Handle(ConfirmPhoneCommand request, CancellationToken cancellationToken)
     {
-        var user = await _context.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.Id.ToString() == request.UserId, cancellationToken);
-        if (user is null)
+        if (!Guid.TryParse(request.UserId, out var userId))
             return Result.Failure("Usuario no encontrado.");
 
-        if (user.PhoneNumberConfirmed)
+        // The confirmation and the follow-up linking commit together: a confirmed phone with a failed
+        // link would make every retry return early without linking. The user is loaded inside the
+        // unit so a retried attempt verifies the code against committed data.
+        return await _context.ExecuteInResilientTransactionAsync(async ct =>
+        {
+            var user = await _context.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Id == userId, ct);
+            if (user is null)
+                return Result.Failure("Usuario no encontrado.");
+
+            if (user.PhoneNumberConfirmed)
+                return Result.Success();
+
+            if (string.IsNullOrEmpty(user.PhoneNumber))
+                return Result.Failure("El usuario no tiene un numero de telefono registrado.");
+
+            var normalizedCode = NormalizeVerificationCode(request.Code);
+            if (normalizedCode is null)
+                return Result.Failure("Codigo invalido o expirado.");
+
+            var result = await _userManager.ChangePhoneNumberAsync(user, user.PhoneNumber, normalizedCode);
+            if (!result.Succeeded)
+                return Result.Failure("Codigo invalido o expirado.");
+
+            if (user.Role == UserRole.Customer)
+                await _claimService.ClaimByPhoneAsync(user.PhoneNumber, user.Id, "MX", ct);
+            else
+                await EnsureTenantContextForUser(user, ct);
+
             return Result.Success();
-
-        if (string.IsNullOrEmpty(user.PhoneNumber))
-            return Result.Failure("El usuario no tiene un numero de telefono registrado.");
-
-        var normalizedCode = NormalizeVerificationCode(request.Code);
-        if (normalizedCode is null)
-            return Result.Failure("Codigo invalido o expirado.");
-
-        var result = await _userManager.ChangePhoneNumberAsync(user, user.PhoneNumber, normalizedCode);
-        if (!result.Succeeded)
-            return Result.Failure("Codigo invalido o expirado.");
-
-        if (user.Role == UserRole.Customer)
-            await _claimService.ClaimByPhoneAsync(user.PhoneNumber, user.Id, "MX", cancellationToken);
-        else
-            await EnsureTenantContextForUser(user, cancellationToken);
-
-        return Result.Success();
+        }, cancellationToken);
     }
 
     private async Task EnsureTenantContextForUser(ApplicationUser user, CancellationToken cancellationToken)

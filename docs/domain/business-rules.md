@@ -9,6 +9,7 @@
 - Las colecciones de items, historial, pagos y piezas son de solo lectura.
 - Un pago debe ser positivo, no puede exceder `Total` acumulado y no se admite en una orden cancelada.
 - La creación enlaza un perfil registrado por teléfono o crea/usa cliente temporal; el teléfono es obligatorio en el caso de uso actual.
+- Las órdenes de un cliente temporal se vinculan a una cuenta solo cuando su dueño confirma el teléfono (`ConfirmPhoneCommand`), en la misma transacción que la confirmación; el registro de cliente no las vincula.
 
 ## Cancelación y trazabilidad
 

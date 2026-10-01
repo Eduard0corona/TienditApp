@@ -48,8 +48,9 @@ public class TemporaryCustomerClaimService : ITemporaryCustomerClaimService
         string defaultCountry,
         CancellationToken cancellationToken)
     {
+        // No explicit transaction: the single SaveChanges below is atomic on its own, runs under the
+        // retrying execution strategy, and joins the caller's transaction when there is one.
         var phoneNormalized = _phoneNormalizationService.NormalizeToE164(rawPhone, defaultCountry);
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
         var query = _context.TemporaryCustomers
             .IgnoreQueryFilters()
@@ -85,7 +86,6 @@ public class TemporaryCustomerClaimService : ITemporaryCustomerClaimService
             order.LinkToCustomerUser(userId);
 
         await _context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
         return tempCustomers.Count;
     }
 }
