@@ -1,5 +1,6 @@
 using System.Reflection;
 using FoodParkDigital.Application.Common.Behaviors;
+using FoodParkDigital.Application.Identity.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,8 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(assembly);
         services.AddAutoMapper(assembly);
+
+        services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
 
         return services;
     }

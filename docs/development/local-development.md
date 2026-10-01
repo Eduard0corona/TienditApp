@@ -37,6 +37,10 @@ Direcciones comprobadas en configuración: API HTTP `http://localhost:5203`, HTT
 
 `./start-dev.ps1` y `start-dev.cmd` lanzan ambos procesos. Los scripts contienen credenciales seed visibles; trátalas solo como desarrollo local y cámbialas si el entorno no es desechable.
 
+### Webhook de WhatsApp
+
+`POST /api/v1/whatsapp/webhook` verifica la firma `X-Hub-Signature-256` con `WhatsApp:AppSecret` (App Secret de Meta) en todos los entornos y responde 503 si no está configurado. Defínelo con variable de entorno (`WhatsApp__AppSecret`) o user-secrets, nunca en `appsettings*.json`. Para probar localmente sin firmar (curl/Postman) usa `WhatsApp__AllowUnsignedWebhooks=true`: solo se respeta con `ASPNETCORE_ENVIRONMENT=Development`; en otro entorno se ignora y se registra un error.
+
 ## Docker
 
 ```powershell

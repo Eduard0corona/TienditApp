@@ -9,6 +9,4 @@ public record SignInResultDto(
 public interface ISignInService
 {
     Task<SignInResultDto> CheckPasswordSignInAsync(Guid userId, string password, bool lockoutOnFailure);
-    Task<SignInResultDto> TwoFactorAuthenticatorSignInAsync(string code, bool isPersistent, bool rememberClient);
-    Task<SignInResultDto> TwoFactorRecoveryCodeSignInAsync(string recoveryCode);
 }
