@@ -189,8 +189,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.MapControllers();
-app.MapHub<OrderHub>("/hubs/orders");
-app.MapHub<ChatHub>("/hubs/chat");
+// Close hub connections when the access token expires so that reconnecting re-validates
+// tenant membership and permissions.
+app.MapHub<OrderHub>("/hubs/orders", options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
 app.MapFallback(async context =>
 {
     var path = context.Request.Path;

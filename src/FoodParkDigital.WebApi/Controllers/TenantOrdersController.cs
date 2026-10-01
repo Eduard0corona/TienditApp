@@ -15,16 +15,26 @@ public class TenantOrdersController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly ITenantAccessService _tenantAccessService;
+    private readonly ICurrentTenantService _currentTenantService;
 
-    public TenantOrdersController(IMediator mediator, ITenantAccessService tenantAccessService)
+    public TenantOrdersController(
+        IMediator mediator,
+        ITenantAccessService tenantAccessService,
+        ICurrentTenantService currentTenantService)
     {
         _mediator = mediator;
         _tenantAccessService = tenantAccessService;
+        _currentTenantService = currentTenantService;
     }
 
     [HttpPost]
     public async Task<ActionResult<OrderDto>> Create(Guid tenantId, [FromBody] CreateTenantOrderRequest request)
     {
+        // The middleware validated membership, permission and capabilities for the request tenant
+        // (token tenant or SUPER_ADMIN override); the route must target that same tenant.
+        if (tenantId != _currentTenantService.TenantId)
+            return Forbid();
+
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdClaim, out var userId))
             return Unauthorized(new { error = "Invalid user context." });

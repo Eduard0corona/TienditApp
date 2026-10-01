@@ -7,6 +7,19 @@ namespace FoodParkDigital.WebApi.Middleware;
 
 public class TenantResolutionMiddleware
 {
+    // Paths that never resolve a tenant. Matched by prefix so that a route parameter containing one of
+    // these fragments cannot skip tenant resolution (the previous check used Contains).
+    private static readonly string[] ExcludedPathPrefixes =
+    [
+        "/api/v1/auth/login",
+        "/api/v1/auth/refresh-token",
+        "/api/v1/auth/register",
+        "/api/v1/whatsapp/webhook",
+        "/swagger",
+        "/health",
+        "/hubs/"
+    ];
+
     private readonly RequestDelegate _next;
 
     public TenantResolutionMiddleware(RequestDelegate next)
@@ -21,13 +34,7 @@ public class TenantResolutionMiddleware
     {
         // Skip for unauthenticated paths
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
-        if (path.Contains("/auth/login") ||
-            path.Contains("/auth/refresh") ||
-            path.Contains("/auth/register") ||
-            path.Contains("/whatsapp/webhook") ||
-            path.Contains("/swagger") ||
-            path.Contains("/health") ||
-            path.Contains("/hubs/"))
+        if (IsExcludedPath(path))
         {
             await _next(context);
             return;
@@ -154,8 +161,25 @@ public class TenantResolutionMiddleware
         await _next(context);
     }
 
+    private static bool IsExcludedPath(string path) =>
+        ExcludedPathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.Ordinal));
+
+    // /api/v1/tenants/{tenantId}/orders[...]
+    private static bool IsTenantOrdersPath(string path)
+    {
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length >= 5
+            && segments[0] == "api"
+            && segments[1] == "v1"
+            && segments[2] == "tenants"
+            && Guid.TryParse(segments[3], out _)
+            && segments[4] == "orders";
+    }
+
     private static bool IsTenantScopedPath(string path) =>
         path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/auth/my-tenant", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
@@ -191,6 +215,8 @@ public class TenantResolutionMiddleware
             return new CapabilityRequirement(TenantCapability.Service, CapabilityMatchMode.All);
 
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
+            || IsTenantOrdersPath(path)
+            || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
@@ -244,8 +270,11 @@ public class TenantResolutionMiddleware
             || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal))
             return [TenantPermission.ManageInventory];
 
-        if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal))
+        if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal) || IsTenantOrdersPath(path))
             return [TenantPermission.ManageOrders];
+
+        if (path.StartsWith("/api/v1/marketing", StringComparison.Ordinal))
+            return [TenantPermission.ManageWhatsApp];
 
         if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
