@@ -21,9 +21,13 @@ Los grupos SignalR y rutas/nombres de archivos deben incluir aislamiento verific
 
 ### Autenticación y autorización
 
-El backend usa ASP.NET Identity, JWT HMAC, refresh tokens persistidos con rotación/revocación y 2FA. El access token vive en memoria del cliente; el refresh token se entrega como cookie `HttpOnly` y no se retorna al cliente después del login normal. Antes de producción deben revisarse expiraciones, revocación, protección CSRF/cookie, claves, algoritmos y el uso de tokens SignalR en query string.
+El backend usa ASP.NET Identity, JWT HMAC, refresh tokens persistidos con rotación/revocación y 2FA. El access token vive en memoria del cliente; el refresh token se entrega como cookie `HttpOnly` y no se retorna al cliente después del login normal ni del login con 2FA. Antes de producción deben revisarse expiraciones, revocación, protección CSRF/cookie, claves, algoritmos y el uso de tokens SignalR en query string.
+
+El login con 2FA tiene dos pasos y no usa cookies de Identity. `POST /api/v1/auth/login` valida la contraseña y, si el usuario tiene 2FA, solo devuelve `twoFactorChallengeToken`: un JWT de 5 minutos firmado con una clave derivada (HKDF) del secreto JWT y con audiencia propia, por lo que no se acepta como access token. Su huella (`jti` + security stamp) se guarda en `AspNetUserTokens`; así es de un solo uso, un login posterior lo reemplaza y deja de valer si cambia el security stamp. `POST /api/v1/twofactor/login` exige ese desafío más un TOTP o un código de recuperación de un solo uso; cada código fallido cuenta con el lockout de Identity (por defecto 5 intentos y 5 minutos) y el bloqueo invalida el desafío. Deuda: el paso de contraseña usa `lockoutOnFailure: false`, así que sus intentos solo los limita el rate limit `auth`.
 
 La política actual de contraseñas exige mayúscula, minúscula, dígito y longitud 6, sin carácter no alfanumérico. Es una política que debe evaluarse antes de producción. Los guards del frontend solo mejoran UX; cada operación sensible se autoriza en backend por rol, permiso y capability aplicables. Se registran como deuda los controllers que dependen de roles aun cuando existe un modelo granular de permisos.
+
+El alta de usuarios por API está acotada por caso de uso: `register/business` solo crea `TENANT_ADMIN`, `register/customer` solo `CUSTOMER` y `/api/v1/employees` limita el rol de aplicación a `TenantAdmin`, `Staff` o `Kitchen`. Se eliminó `POST /api/v1/auth/register`, que aceptaba cualquier `UserRole` (incluido `SuperAdmin`) de un `TENANT_ADMIN`. No existe camino de API para crear o promover `SUPER_ADMIN`; solo lo crea el seed de Development. `UserRole.SuperAdmin` vale `0`, el valor por defecto del enum y de `ApplicationUser.Role`, así que un rol omitido equivale al privilegio máximo: todo request que reciba `UserRole` debe rechazar `SuperAdmin` en su validador, y `RoleAssignmentGuardTests` lo verifica.
 
 ### CORS y rate limiting
 
@@ -33,7 +37,7 @@ Existen políticas de rate limiting para autenticación y API, pero la política
 
 ### Archivos
 
-Los uploads actuales validan parcialmente tamaño, extensión y `ContentType`, y las imágenes se decodifican con ImageSharp. Toda carga debe validar tamaño, tipo real/magic bytes, extensión, nombre normalizado, autorización, tenant, destino y malware cuando aplique. Los nombres de almacenamiento deben estar namespaced por tenant y las descargas deben repetir autorización; no confíes en el nombre o MIME enviado por el cliente.
+Los uploads actuales validan parcialmente tamaño, extensión y `ContentType`, y las imágenes se decodifican con ImageSharp. Toda carga debe validar tamaño, tipo real/magic bytes, extensión, nombre normalizado, autorización, tenant, destino y malware cuando aplique. Los nombres de almacenamiento deben estar namespaced por tenant y las descargas deben repetir autorización; no confíes en el nombre o MIME enviado por el cliente. El borrado por URL recibe la carpeta `{área}/{tenantId}` derivada del tenant dueño y ambos providers rechazan rutas fuera de ella; las URLs de imagen solo las fija el endpoint de upload correspondiente.
 
 ### SignalR, WhatsApp e integraciones
 

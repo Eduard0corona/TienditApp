@@ -47,7 +47,10 @@ public class DeleteProductCommandHandler : IRequestHandler<DeleteProductCommand,
         }
 
         if (!string.IsNullOrEmpty(product.ImageUrl))
-            await _fileStorageService.DeleteVariantsAsync(product.ImageUrl, cancellationToken);
+            await _fileStorageService.DeleteVariantsAsync(
+                product.ImageUrl,
+                TenantStorageFolders.ProductImages(product.TenantId),
+                cancellationToken);
 
         _context.Products.Remove(product);
         await _context.SaveChangesAsync(cancellationToken);

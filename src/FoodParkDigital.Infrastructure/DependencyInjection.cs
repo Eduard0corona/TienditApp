@@ -117,6 +117,7 @@ public static class DependencyInjection
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ISignInService, SignInService>();
+        services.AddScoped<ITwoFactorLoginChallengeService, TwoFactorLoginChallengeService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();

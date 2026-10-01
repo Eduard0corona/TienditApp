@@ -22,4 +22,8 @@
     <ProjectReference Include="..\FoodParkDigital.Application\FoodParkDigital.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="FoodParkDigital.Infrastructure.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -1,9 +1,10 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.WhatsApp.Commands;
+using FoodParkDigital.Application.WhatsApp.Queries;
 using FoodParkDigital.Domain.WhatsApp.Enums;
+using FoodParkDigital.WebApi.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,18 +19,18 @@ public class WhatsAppWebhookController : ControllerBase
 {
     private readonly IMediator _mediator;
     private readonly IApplicationDbContext _context;
-    private readonly IConfiguration _configuration;
+    private readonly WhatsAppWebhookSignatureVerifier _signatureVerifier;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
         IMediator mediator,
         IApplicationDbContext context,
-        IConfiguration configuration,
+        WhatsAppWebhookSignatureVerifier signatureVerifier,
         ILogger<WhatsAppWebhookController> logger)
     {
         _mediator = mediator;
         _context = context;
-        _configuration = configuration;
+        _signatureVerifier = signatureVerifier;
         _logger = logger;
     }
 
@@ -40,24 +41,20 @@ public class WhatsAppWebhookController : ControllerBase
     public async Task<IActionResult> Verify(
         [FromQuery(Name = "hub.mode")] string? mode,
         [FromQuery(Name = "hub.verify_token")] string? verifyToken,
-        [FromQuery(Name = "hub.challenge")] string? challenge)
+        [FromQuery(Name = "hub.challenge")] string? challenge,
+        CancellationToken cancellationToken)
     {
         if (mode != "subscribe" || string.IsNullOrEmpty(verifyToken) || string.IsNullOrEmpty(challenge))
             return BadRequest("Invalid verification request.");
 
-        // Look up tenant config by verify token
-        var config = await _context.WhatsAppConfigs
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.VerifyToken == verifyToken);
-
-        if (config is null)
+        var result = await _mediator.Send(new VerifyWhatsAppWebhookTokenQuery(verifyToken), cancellationToken);
+        if (result.IsFailure)
         {
             _logger.LogWarning("Webhook verification failed: unknown verify token");
             return Unauthorized("Invalid verify token.");
         }
 
-        _logger.LogInformation("Webhook verified for tenant {TenantId}", config.TenantId);
+        _logger.LogInformation("Webhook verified for tenant {TenantId}", result.Value);
         return Content(challenge, "text/plain", Encoding.UTF8);
     }
 
@@ -65,16 +62,29 @@ public class WhatsAppWebhookController : ControllerBase
     /// Receives incoming WhatsApp messages from Meta Cloud API.
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> Receive()
+    public async Task<IActionResult> Receive(CancellationToken cancellationToken)
     {
+        var body = await ReadBodyAsync(cancellationToken);
+
+        // Nothing in the payload (phone_number_id included) is trusted before this check.
+        var signatureStatus = _signatureVerifier.Verify(
+            body, Request.Headers[WhatsAppWebhookSignatureVerifier.SignatureHeaderName]);
+
+        // Misconfigured server, not a bad caller; Meta retries deliveries that do not get a 200.
+        if (signatureStatus == WhatsAppWebhookSignatureStatus.SecretNotConfigured)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+        if (signatureStatus is not (WhatsAppWebhookSignatureStatus.Valid
+            or WhatsAppWebhookSignatureStatus.VerificationDisabled))
+            return Unauthorized("Invalid webhook signature.");
+
+        // Processing deliberately ignores request cancellation: an authenticated delivery
+        // should finish (auto-reply included) because Meta's retry would be deduplicated.
         try
         {
-            var rawBody = await ReadRawBodyAsync();
+            var rawBody = Encoding.UTF8.GetString(body);
             if (string.IsNullOrWhiteSpace(rawBody))
                 return Ok();
-
-            if (!IsWebhookSignatureValid(rawBody))
-                return Unauthorized("Invalid webhook signature.");
 
             using var payloadDoc = JsonDocument.Parse(rawBody);
             var payload = payloadDoc.RootElement;
@@ -245,43 +255,11 @@ public class WhatsAppWebhookController : ControllerBase
         return normalized is "sent" or "delivered" or "read" or "failed";
     }
 
-    private async Task<string> ReadRawBodyAsync()
+    // The signature covers the exact bytes Meta sent, so they are hashed before any decoding.
+    private async Task<byte[]> ReadBodyAsync(CancellationToken cancellationToken)
     {
-        Request.EnableBuffering();
-        using var reader = new StreamReader(Request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
-        var rawBody = await reader.ReadToEndAsync();
-        Request.Body.Position = 0;
-        return rawBody;
-    }
-
-    private bool IsWebhookSignatureValid(string rawBody)
-    {
-        var appSecret = _configuration["WhatsApp:AppSecret"];
-        if (string.IsNullOrWhiteSpace(appSecret))
-        {
-            _logger.LogWarning("WhatsApp AppSecret is not configured. Signature validation skipped.");
-            return true;
-        }
-
-        if (!Request.Headers.TryGetValue("X-Hub-Signature-256", out var signatureHeaderValue))
-        {
-            _logger.LogWarning("Webhook signature header is missing.");
-            return false;
-        }
-
-        var signatureHeader = signatureHeaderValue.ToString();
-        const string prefix = "sha256=";
-        if (!signatureHeader.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var receivedHex = signatureHeader[prefix.Length..];
-        var bodyBytes = Encoding.UTF8.GetBytes(rawBody);
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(appSecret));
-        var computedHash = hmac.ComputeHash(bodyBytes);
-        var computedHex = Convert.ToHexString(computedHash).ToLowerInvariant();
-
-        return CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(receivedHex.ToLowerInvariant()),
-            Encoding.UTF8.GetBytes(computedHex));
+        using var buffer = new MemoryStream();
+        await Request.Body.CopyToAsync(buffer, cancellationToken);
+        return buffer.ToArray();
     }
 }
