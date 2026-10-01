@@ -183,7 +183,20 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors(CorsPolicyName);
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        // User uploads are served from the API origin: they must never run as active content.
+        if (!context.Context.Request.Path.StartsWithSegments("/uploads"))
+            return;
+
+        var headers = context.Context.Response.Headers;
+        headers.ContentSecurityPolicy = "sandbox";
+        if (context.File.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            headers.ContentDisposition = "attachment";
+    }
+});
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

@@ -65,6 +65,10 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
         if (order.Status == OrderStatus.Cancelled)
             return Result.Failure<OrderDto>("No se pueden registrar pagos en una orden cancelada.");
 
+        // The evidence is shown to staff as a link: it must be a file uploaded for this tenant.
+        if (!OrderUploadRules.IsOwnPaymentEvidence(request.EvidenceUrl, order.TenantId))
+            return Result.Failure<OrderDto>("La evidencia del pago debe subirse desde el sistema.");
+
         Guid? inventoryLocationId = request.InventoryLocationId;
         if (inventoryLocationId.HasValue)
         {

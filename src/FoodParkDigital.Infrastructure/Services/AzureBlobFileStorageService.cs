@@ -50,7 +50,11 @@ public class AzureBlobFileStorageService : IFileStorageService
             {
                 HttpHeaders = new BlobHttpHeaders
                 {
-                    ContentType = contentType
+                    ContentType = contentType,
+                    // PDFs can carry scripts and links: they are downloaded instead of rendered.
+                    ContentDisposition = contentType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase)
+                        ? "attachment"
+                        : null
                 }
             },
             cancellationToken);
