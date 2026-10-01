@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Identity.Commands.TwoFactor;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.WebApi.Security;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +15,12 @@ namespace FoodParkDigital.WebApi.Controllers;
 public class TwoFactorController : ControllerBase
 {
     private readonly IMediator _mediator;
+    private readonly IWebHostEnvironment _env;
 
-    public TwoFactorController(IMediator mediator)
+    public TwoFactorController(IMediator mediator, IWebHostEnvironment env)
     {
         _mediator = mediator;
+        _env = env;
     }
 
     [HttpPost("enable")]
@@ -64,13 +67,19 @@ public class TwoFactorController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> Login2FA([FromBody] Login2FACommand command)
+    public async Task<ActionResult<AuthResponse>> Login2FA(
+        [FromBody] Login2FACommand command,
+        CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return Unauthorized(new { error = result.Error });
 
-        return Ok(result.Value);
+        // Igual que /auth/login: el refresh token solo viaja en la cookie HttpOnly.
+        if (result.Value.RefreshToken is not null)
+            RefreshTokenCookie.Append(HttpContext, _env, result.Value.RefreshToken);
+
+        return Ok(result.Value with { RefreshToken = null });
     }
 }
 

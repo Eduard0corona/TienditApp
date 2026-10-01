@@ -22,6 +22,8 @@ public record ProcessInboundMessageCommand : IRequest<Result<ChatMessageDto>>
 public class ProcessInboundMessageCommandHandler
     : IRequestHandler<ProcessInboundMessageCommand, Result<ChatMessageDto>>
 {
+    public const string DuplicateMessageError = "Mensaje ya procesado.";
+
     private readonly IApplicationDbContext _context;
     private readonly IAiAgentAutoReplyService _aiAgentAutoReplyService;
     private readonly IWhatsAppService _whatsAppService;
@@ -49,12 +51,8 @@ public class ProcessInboundMessageCommandHandler
         ProcessInboundMessageCommand request, CancellationToken cancellationToken)
     {
         // Dedup: check if message already processed
-        var exists = await _context.WhatsAppMessages
-            .IgnoreQueryFilters()
-            .AnyAsync(m => m.ExternalMessageId == request.ExternalMessageId, cancellationToken);
-
-        if (exists)
-            return Result.Failure<ChatMessageDto>("Mensaje ya procesado.");
+        if (await IsAlreadyStoredAsync(request.ExternalMessageId, cancellationToken))
+            return Result.Failure<ChatMessageDto>(DuplicateMessageError);
 
         // Find or create conversation (use IgnoreQueryFilters since webhook has no tenant context)
         var conversation = await _context.WhatsAppConversations
@@ -78,7 +76,27 @@ public class ProcessInboundMessageCommandHandler
         var message = conversation.AddMessage(
             MessageDirection.Inbound, request.Body, request.ExternalMessageId);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent delivery of the same message can pass the check above; the unique
+            // index on ExternalMessageId lets only one insert win. Discard what this attempt
+            // staged so the scoped context stays usable for the rest of the webhook payload.
+            _context.WhatsAppMessages.Entry(message).State = EntityState.Detached;
+            _context.WhatsAppConversations.Entry(conversation).State = EntityState.Detached;
+
+            if (!await IsAlreadyStoredAsync(request.ExternalMessageId, cancellationToken))
+                throw;
+
+            _logger.LogInformation(
+                "Duplicate WhatsApp message {ExternalMessageId} for tenant {TenantId} ignored; a concurrent delivery stored it first",
+                request.ExternalMessageId,
+                request.TenantId);
+            return Result.Failure<ChatMessageDto>(DuplicateMessageError);
+        }
 
         var messageDto = _mapper.Map<ChatMessageDto>(message);
         var conversationDto = _mapper.Map<ConversationDto>(conversation);
@@ -90,6 +108,12 @@ public class ProcessInboundMessageCommandHandler
 
         return Result.Success(messageDto);
     }
+
+    // Webhooks run without tenant context; Meta message ids are globally unique.
+    private Task<bool> IsAlreadyStoredAsync(string externalMessageId, CancellationToken cancellationToken)
+        => _context.WhatsAppMessages
+            .IgnoreQueryFilters()
+            .AnyAsync(m => m.ExternalMessageId == externalMessageId, cancellationToken);
 
     private async Task TryAutoReplyAsync(
         Guid tenantId,

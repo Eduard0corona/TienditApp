@@ -43,7 +43,10 @@ api.interceptors.response.use(
     const url = originalRequest?.url ?? '';
 
     // Never auto-refresh for auth endpoints themselves (avoids loops)
-    const isAuthEndpoint = url.includes('/auth/refresh-token') || url.includes('/auth/login');
+    const isAuthEndpoint =
+      url.includes('/auth/refresh-token') ||
+      url.includes('/auth/login') ||
+      url.includes('/twofactor/login');
 
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
