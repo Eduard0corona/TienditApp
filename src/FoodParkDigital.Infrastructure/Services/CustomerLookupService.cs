@@ -61,12 +61,16 @@ public class CustomerLookupService : ICustomerLookupService
                     phoneNormalized,
                     temp.Id);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex)
             {
+                // A concurrent request created it first. Stop tracking the failed insert so the
+                // caller's next SaveChanges (the order) does not try it again, then reuse the winner.
+                _context.TemporaryCustomers.Entry(temp).State = EntityState.Detached;
+
                 temp = await _context.TemporaryCustomers
                     .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.PhoneNormalized == phoneNormalized, cancellationToken)
-                    ?? throw new InvalidOperationException("Failed to create or retrieve temporary customer.");
+                    ?? throw new InvalidOperationException("Failed to create or retrieve temporary customer.", ex);
             }
         }
         else if (!string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(temp.Name))

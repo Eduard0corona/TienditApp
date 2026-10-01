@@ -143,12 +143,9 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         if (!string.IsNullOrWhiteSpace(request.ContactPhone))
             tenant.Update(tenant.Name, tenant.ContactEmail, request.ContactPhone, tenant.LogoUrl);
 
-        _context.Tenants.Add(tenant);
-
         // Create tenant settings with defaults
         var capabilities = TenantCapabilityDefaults.FromBusinessType(request.BusinessType);
         var settings = new TenantSettings(tenant.Id, capabilities);
-        _context.TenantSettings.Add(settings);
 
         var publicGeneralCustomer = new Customer(
             tenantId: tenant.Id,
@@ -156,16 +153,12 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             phone: null,
             email: null,
             isPublicGeneral: true);
-        _context.Customers.Add(publicGeneralCustomer);
 
         var defaultLocation = new InventoryLocation(
             tenantId: tenant.Id,
             name: "Almacen principal",
             code: "MAIN",
             isDefault: true);
-        _context.InventoryLocations.Add(defaultLocation);
-
-        await _context.SaveChangesAsync(cancellationToken);
 
         // Create user as TenantAdmin
         var user = new ApplicationUser
@@ -181,23 +174,45 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             IsActive = true
         };
 
-        var createResult = await _userManager.CreateAsync(user, request.Password);
-        if (!createResult.Succeeded)
+        // Identity checks the password only inside CreateAsync; reject it before writing anything
+        var passwordResult = await _userManager.ValidatePasswordPolicyAsync(user, request.Password);
+        if (!passwordResult.Succeeded)
+            return Result.Failure<AuthResponse>(passwordResult.ToErrorMessage());
+
+        // Tenant, owner, membership and session are committed together or not at all
+        var registration = await _context.ExecuteInResilientTransactionAsync(async ct =>
         {
-            var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
-            return Result.Failure<AuthResponse>(errors);
-        }
+            _context.Tenants.Add(tenant);
+            _context.TenantSettings.Add(settings);
+            _context.Customers.Add(publicGeneralCustomer);
+            _context.InventoryLocations.Add(defaultLocation);
+            await _context.SaveChangesAsync(ct);
 
-        await _userManager.AddToRoleAsync(user, "TENANT_ADMIN");
+            var createResult = await _userManager.CreateAsync(user, request.Password);
+            if (!createResult.Succeeded)
+                return Result.Failure<RefreshToken>(createResult.ToErrorMessage());
 
-        _context.TenantUsers.Add(new TenantUser(
-            tenantId: tenant.Id,
-            userId: user.Id,
-            role: TenantUserRole.Owner,
-            status: TenantUserStatus.Active));
-        await _context.SaveChangesAsync(cancellationToken);
+            var roleResult = await _userManager.AddToRoleAsync(user, "TENANT_ADMIN");
+            if (!roleResult.Succeeded)
+                return Result.Failure<RefreshToken>(roleResult.ToErrorMessage());
 
-        // Send confirmations
+            _context.TenantUsers.Add(new TenantUser(
+                tenantId: tenant.Id,
+                userId: user.Id,
+                role: TenantUserRole.Owner,
+                status: TenantUserStatus.Active));
+
+            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id);
+            _context.RefreshTokens.Add(sessionToken);
+            await _context.SaveChangesAsync(ct);
+
+            return Result.Success(sessionToken);
+        }, cancellationToken);
+
+        if (registration.IsFailure)
+            return Result.Failure<AuthResponse>(registration.Error!);
+
+        // Send confirmations only after the registration is committed
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
 
@@ -208,10 +223,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         var accessToken = _jwtTokenService.GenerateAccessToken(
             user,
             new TenantTokenContext(tenant.Id, TenantUserRole.Owner.ToString().ToUpperInvariant()));
-        var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
-
-        _context.RefreshTokens.Add(refreshToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        var refreshToken = registration.Value;
 
         return Result.Success(new AuthResponse
         {

@@ -1,4 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -11,6 +13,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -81,6 +84,40 @@ public class TemporaryCustomerClaimServiceTests
         Assert.Equal(user.Id, reloadedTemp.ClaimedUserId);
         Assert.Equal(user.Id, reloadedOrder.CustomerUserId);
         Assert.Null(reloadedOrder.TemporaryCustomerId);
+    }
+
+    [Fact]
+    public async Task ClaimByPhoneAsync_ShouldLinkOrdersOfEveryTenant_WithRetryingExecutionStrategy()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        var tenantA = await CustomerSeed.GuestOrderAsync(host, "tenant-a", "+525512345678");
+        var tenantB = await CustomerSeed.GuestOrderAsync(host, "tenant-b", "+525512345678");
+        var otherPhone = await CustomerSeed.GuestOrderAsync(host, "tenant-c", "+525599998888");
+        var customer = await CustomerSeed.UnconfirmedCustomerAsync(host, "cliente@demo.com", "+525512345678");
+
+        var affected = await host.InScopeAsync(services => services
+            .GetRequiredService<ITemporaryCustomerClaimService>()
+            .ClaimByPhoneAsync("55 1234 5678", customer.UserId, "MX", CancellationToken.None));
+
+        Assert.Equal(2, affected);
+        var stored = await host.QueryAsync(async db => new
+        {
+            Temps = await db.TemporaryCustomers.IgnoreQueryFilters().ToDictionaryAsync(x => x.Id),
+            Orders = await db.Orders.IgnoreQueryFilters().ToDictionaryAsync(x => x.Id)
+        });
+
+        foreach (var claimed in new[] { tenantA, tenantB })
+        {
+            Assert.Equal(TemporaryCustomerStatus.Claimed, stored.Temps[claimed.TemporaryCustomerId].Status);
+            Assert.Equal(customer.UserId, stored.Temps[claimed.TemporaryCustomerId].ClaimedUserId);
+            Assert.Equal(customer.UserId, stored.Orders[claimed.OrderId].CustomerUserId);
+            Assert.Null(stored.Orders[claimed.OrderId].TemporaryCustomerId);
+        }
+
+        Assert.Equal(TemporaryCustomerStatus.PendingInvited, stored.Temps[otherPhone.TemporaryCustomerId].Status);
+        Assert.Null(stored.Temps[otherPhone.TemporaryCustomerId].ClaimedUserId);
+        Assert.Null(stored.Orders[otherPhone.OrderId].CustomerUserId);
+        Assert.Equal(otherPhone.TemporaryCustomerId, stored.Orders[otherPhone.OrderId].TemporaryCustomerId);
     }
 
     private sealed class TestCurrentTenantService : ICurrentTenantService

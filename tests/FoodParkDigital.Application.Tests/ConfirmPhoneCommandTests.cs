@@ -1,14 +1,19 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Identity.Commands;
+using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Customers.Enums;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MediatR;
@@ -18,11 +23,14 @@ namespace FoodParkDigital.Application.Tests;
 
 public class ConfirmPhoneCommandTests
 {
+    private const string CustomerPhone = "+525512345678";
+
     [Fact]
     public async Task ConfirmPhone_ShouldCreateTenantMembership_WhenBusinessUserHasDefaultTenantWithoutMembership()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         var tenantService = new TestCurrentTenantService();
@@ -70,6 +78,93 @@ public class ConfirmPhoneCommandTests
         Assert.NotNull(membership);
         Assert.Equal(TenantUserStatus.Active, membership!.Status);
         Assert.Equal(TenantUserRole.Admin, membership.Role);
+    }
+
+    [Fact]
+    public async Task ConfirmPhone_ShouldConfirmAndClaimGuestOrders_WithRetryingExecutionStrategy()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        var guest = await CustomerSeed.GuestOrderAsync(host, "tenant-uno", CustomerPhone);
+        var customer = await CustomerSeed.UnconfirmedCustomerAsync(host, "cliente@demo.com", CustomerPhone);
+
+        var result = await ConfirmAsync(host, customer);
+
+        Assert.True(result.IsSuccess, result.Error);
+        await AssertConfirmedAndClaimedAsync(host, customer.UserId, guest);
+    }
+
+    [Fact]
+    public async Task ConfirmPhone_ShouldLeavePhoneUnconfirmed_WhenClaimingGuestOrdersFails()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        var guest = await CustomerSeed.GuestOrderAsync(host, "tenant-uno", CustomerPhone);
+        var customer = await CustomerSeed.UnconfirmedCustomerAsync(host, "cliente@demo.com", CustomerPhone);
+
+        // Staff updates the guest order between the claim's read and its write: the rowversion no
+        // longer matches and the claim fails after the phone confirmation was already written.
+        host.BeforeSave.Arm(
+            when: context => context.ChangeTracker.Entries<Order>().Any(e => e.State == EntityState.Modified),
+            action: async context =>
+            {
+                var updated = await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE \"Orders\" SET \"Version\" = randomblob(8) WHERE \"Id\" = {guest.OrderId}");
+                Assert.Equal(1, updated);
+            });
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => ConfirmAsync(host, customer));
+
+        Assert.True(host.BeforeSave.Fired);
+        var afterFailure = await host.QueryAsync(async db => new
+        {
+            User = await db.Users.SingleAsync(x => x.Id == customer.UserId),
+            Temp = await db.TemporaryCustomers.IgnoreQueryFilters().SingleAsync(x => x.Id == guest.TemporaryCustomerId)
+        });
+        Assert.False(afterFailure.User.PhoneNumberConfirmed);
+        Assert.Equal(TemporaryCustomerStatus.PendingInvited, afterFailure.Temp.Status);
+
+        // Nothing was left half-done, so retrying with the same code confirms and links.
+        var retry = await ConfirmAsync(host, customer);
+
+        Assert.True(retry.IsSuccess, retry.Error);
+        await AssertConfirmedAndClaimedAsync(host, customer.UserId, guest);
+    }
+
+    [Fact]
+    public async Task ConfirmPhone_ShouldRetryConfirmationAndClaim_WhenCommitFailsTransiently()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        var guest = await CustomerSeed.GuestOrderAsync(host, "tenant-uno", CustomerPhone);
+        var customer = await CustomerSeed.UnconfirmedCustomerAsync(host, "cliente@demo.com", CustomerPhone);
+        host.CommitFaults.FailNext();
+
+        // The retried attempt must verify the code against committed data, not the security stamp
+        // the rolled-back attempt already rotated in memory.
+        var result = await ConfirmAsync(host, customer);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(0, host.CommitFaults.Remaining);
+        await AssertConfirmedAndClaimedAsync(host, customer.UserId, guest);
+    }
+
+    private static Task<Result> ConfirmAsync(SqliteTestHost host, UnconfirmedCustomer customer)
+        => host.HandleAsync<ConfirmPhoneCommandHandler, Result>(handler => handler.Handle(
+            new ConfirmPhoneCommand { UserId = customer.UserId.ToString(), Code = customer.PhoneCode },
+            CancellationToken.None));
+
+    private static async Task AssertConfirmedAndClaimedAsync(SqliteTestHost host, Guid userId, GuestOrder guest)
+    {
+        var stored = await host.QueryAsync(async db => new
+        {
+            User = await db.Users.SingleAsync(x => x.Id == userId),
+            Temp = await db.TemporaryCustomers.IgnoreQueryFilters().SingleAsync(x => x.Id == guest.TemporaryCustomerId),
+            Order = await db.Orders.IgnoreQueryFilters().SingleAsync(x => x.Id == guest.OrderId)
+        });
+
+        Assert.True(stored.User.PhoneNumberConfirmed);
+        Assert.Equal(TemporaryCustomerStatus.Claimed, stored.Temp.Status);
+        Assert.Equal(userId, stored.Temp.ClaimedUserId);
+        Assert.Equal(userId, stored.Order.CustomerUserId);
+        Assert.Null(stored.Order.TemporaryCustomerId);
     }
 
     private sealed class NoOpClaimService : ITemporaryCustomerClaimService

@@ -5,7 +5,7 @@
 Existen dos proyectos xUnit:
 
 - `FoodParkDigital.Domain.Tests`: máquinas de estado de órdenes y catálogo de permisos.
-- `FoodParkDigital.Application.Tests`: casos de órdenes/clientes, capabilities, tenant access, inventario, compras/caja, WhatsApp, empleados y configuración EF mediante SQLite/InMemory y dobles.
+- `FoodParkDigital.Application.Tests`: casos de órdenes/clientes, capabilities, tenant access, inventario, compras/caja, WhatsApp, empleados y configuración EF mediante SQLite/InMemory y dobles. `Support/SqliteTestHost` arma SQLite en memoria con FKs activas, una estrategia de ejecución con reintentos, Identity real con las opciones de producción e inyección de fallos (commit transitorio, comando fallido, escritura concurrente) para flujos transaccionales; no sustituye pruebas contra SQL Server.
 
 No se encontraron proyectos dedicados de pruebas WebApi, Infrastructure con SQL Server real compatible ni frontend. El workflow de despliegue restaura/publica backend y construye frontend, pero no ejecuta tests ni lint. Los proyectos de producción apuntan a .NET 9 mientras tests apuntan a .NET 10.
 

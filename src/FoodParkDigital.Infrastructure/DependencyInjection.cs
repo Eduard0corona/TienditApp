@@ -48,15 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 
         // Identity
-        services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
-        {
-            options.Password.RequireDigit = true;
-            options.Password.RequiredLength = 6;
-            options.Password.RequireNonAlphanumeric = false;
-            options.Password.RequireUppercase = true;
-            options.Password.RequireLowercase = true;
-            options.User.RequireUniqueEmail = true;
-        })
+        services.AddIdentity<ApplicationUser, ApplicationRole>(ConfigureIdentityOptions)
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddDefaultTokenProviders();
 
@@ -131,5 +123,15 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
 
         return services;
+    }
+
+    public static void ConfigureIdentityOptions(IdentityOptions options)
+    {
+        options.Password.RequireDigit = true;
+        options.Password.RequiredLength = 6;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireLowercase = true;
+        options.User.RequireUniqueEmail = true;
     }
 }
