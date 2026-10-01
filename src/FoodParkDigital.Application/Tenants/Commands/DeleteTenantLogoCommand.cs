@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,7 +42,10 @@ public class DeleteTenantLogoCommandHandler : IRequestHandler<DeleteTenantLogoCo
         if (string.IsNullOrEmpty(tenant.LogoUrl))
             return Result.Success();
 
-        await _fileStorageService.DeleteVariantsAsync(tenant.LogoUrl, cancellationToken);
+        await _fileStorageService.DeleteVariantsAsync(
+            tenant.LogoUrl,
+            TenantStorageFolders.Logos(tenantId),
+            cancellationToken);
         tenant.Update(tenant.Name, tenant.ContactEmail, tenant.ContactPhone, null);
         await _context.SaveChangesAsync(cancellationToken);
 
