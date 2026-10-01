@@ -14,8 +14,13 @@ public class CashSessionDto
     public decimal? ClosingAmount { get; set; }
     public CashSessionStatus Status { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Cash that entered the drawer (cash payments and manual deposits).</summary>
     public decimal Inflows { get; set; }
+    /// <summary>Cash that left the drawer (expenses, withdrawals, cash refunds).</summary>
     public decimal Outflows { get; set; }
+    /// <summary>Card, transfer, wallet and other non-cash payments; not part of the drawer.</summary>
+    public decimal NonCashInflows { get; set; }
+    /// <summary>Opening amount plus cash inflows minus cash outflows.</summary>
     public decimal ExpectedBalance { get; set; }
 }
 
@@ -48,6 +53,8 @@ public class DailyCashCutDto
     public decimal ManualIncomeTotal { get; set; }
     public decimal ManualExpenseTotal { get; set; }
     public decimal NetCashFlow { get; set; }
+    /// <summary>Cash payments plus manual income minus manual expenses: the net change of the drawer.</summary>
+    public decimal NetCashOnlyFlow { get; set; }
     public List<DailyCashCutByUserDto> ByUser { get; set; } = [];
     public List<DailyCashCutByLocationDto> ByLocation { get; set; } = [];
 }

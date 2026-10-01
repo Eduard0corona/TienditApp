@@ -97,7 +97,6 @@ public class CashController : ControllerBase
             CashSessionId = request.CashSessionId,
             TransactionType = request.TransactionType,
             Amount = request.Amount,
-            OccurredAt = request.OccurredAt,
             PaymentMethod = request.PaymentMethod,
             InventoryLocationId = request.InventoryLocationId,
             OrderId = request.OrderId,
@@ -121,7 +120,6 @@ public class AddCashTransactionRequest
     public Guid CashSessionId { get; init; }
     public CashTransactionType TransactionType { get; init; }
     public decimal Amount { get; init; }
-    public DateTimeOffset? OccurredAt { get; init; }
     public OrderPaymentMethod? PaymentMethod { get; init; }
     public Guid? InventoryLocationId { get; init; }
     public Guid? OrderId { get; init; }

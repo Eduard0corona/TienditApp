@@ -605,6 +605,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("OpeningAmount")
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -618,6 +622,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CashSessions_TenantId_SingleOpen")
+                        .HasFilter("[Status] = 0");
 
                     b.HasIndex("TenantId", "OpenedAt");
 

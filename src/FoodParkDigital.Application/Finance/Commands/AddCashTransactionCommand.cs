@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FluentValidation;
@@ -15,7 +16,6 @@ public record AddCashTransactionCommand : IRequest<Result<CashTransactionDto>>
     public Guid CashSessionId { get; init; }
     public CashTransactionType TransactionType { get; init; }
     public decimal Amount { get; init; }
-    public DateTimeOffset? OccurredAt { get; init; }
     public OrderPaymentMethod? PaymentMethod { get; init; }
     public Guid? InventoryLocationId { get; init; }
     public Guid? OrderId { get; init; }
@@ -28,8 +28,12 @@ public class AddCashTransactionCommandValidator : AbstractValidator<AddCashTrans
     public AddCashTransactionCommandValidator()
     {
         RuleFor(x => x.CashSessionId).NotEmpty();
-        RuleFor(x => x.TransactionType).IsInEnum();
-        RuleFor(x => x.Amount).NotEqual(0);
+        RuleFor(x => x.TransactionType)
+            .IsInEnum()
+            .Must(CashSession.IsManualTransactionType)
+            .WithMessage("Solo se pueden registrar manualmente depositos, gastos, retiros y reembolsos.");
+        // The type decides the direction of the movement; the amount is always positive.
+        RuleFor(x => x.Amount).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(x => x.PaymentMethod).IsInEnum().When(x => x.PaymentMethod.HasValue);
         RuleFor(x => x.InventoryLocationId).NotEmpty().When(x => x.InventoryLocationId.HasValue);
         RuleFor(x => x.Reference).MaximumLength(120);
@@ -76,10 +80,17 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        session.RegisterTransaction(
+        if (request.OrderId.HasValue
+            && !await _context.Orders.AnyAsync(o => o.Id == request.OrderId.Value, cancellationToken))
+        {
+            return Result.Failure<CashTransactionDto>("La orden indicada no existe.");
+        }
+
+        // The movement time is always stamped by the server so that already reported cuts cannot be altered.
+        var transaction = session.RegisterTransaction(
             transactionType: request.TransactionType,
             amount: request.Amount,
-            occurredAt: request.OccurredAt ?? _dateTimeProvider.UtcNow,
+            occurredAt: _dateTimeProvider.UtcNow,
             paymentMethod: request.PaymentMethod,
             inventoryLocationId: inventoryLocationId,
             orderId: request.OrderId,
@@ -87,10 +98,6 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
             notes: request.Notes);
 
         await _context.SaveChangesAsync(cancellationToken);
-
-        var transaction = session.Transactions
-            .OrderByDescending(x => x.CreatedAt)
-            .First();
 
         return Result.Success(new CashTransactionDto
         {

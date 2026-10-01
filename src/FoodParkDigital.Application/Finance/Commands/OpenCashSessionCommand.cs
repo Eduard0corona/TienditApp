@@ -69,7 +69,15 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
             notes: request.Notes);
 
         _context.CashSessions.Add(session);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent request opened a session first (unique index on the open session per tenant).
+            return Result.Failure<CashSessionDto>("Ya existe una caja abierta.");
+        }
 
         return Result.Success(ToDto(session));
     }
@@ -86,6 +94,7 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
         Status = session.Status,
         Notes = session.Notes,
         Inflows = session.Inflows,
+        NonCashInflows = session.NonCashInflows,
         Outflows = session.Outflows,
         ExpectedBalance = session.ExpectedBalance
     };
