@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using FoodParkDigital.Application;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Infrastructure;
+using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Seeds;
 using FoodParkDigital.WebApi.Hubs;
@@ -12,6 +13,33 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Local, git-ignored overrides (appsettings.{Environment}.local.json) for developer secrets.
+builder.Configuration.AddJsonFile(
+    $"appsettings.{builder.Environment.EnvironmentName}.local.json",
+    optional: true,
+    reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
+
+// The JWT signing key must come from configuration outside the repository.
+var jwtSecretError = JwtSecretPolicy.GetValidationError(builder.Configuration[$"{JwtSettings.SectionName}:Secret"]);
+var usesEphemeralJwtSecret = false;
+if (jwtSecretError is not null)
+{
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            $"{jwtSecretError} Configura JwtSettings__Secret (mínimo {JwtSecretPolicy.MinimumSecretBytes} bytes aleatorios) " +
+            "en las variables de entorno o el almacén de secretos del entorno.");
+    }
+
+    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        [$"{JwtSettings.SectionName}:Secret"] = JwtSecretPolicy.CreateEphemeralSecret()
+    });
+    usesEphemeralJwtSecret = true;
+}
 
 // Serilog
 builder.Host.UseSerilog((ctx, config) =>
@@ -169,13 +197,36 @@ app.MapFallback(async context =>
     await context.Response.SendFileAsync(indexPath);
 });
 
-// Auto-migrate and seed in development
-if (app.Environment.IsDevelopment())
+if (usesEphemeralJwtSecret)
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await db.Database.MigrateAsync();
-    await SeedData.SeedAsync(db, scope.ServiceProvider);
+    app.Logger.LogWarning(
+        "{Reason} Se usa una llave efímera de desarrollo; los tokens dejarán de ser válidos al reiniciar la API.",
+        jwtSecretError);
+}
+
+// Auto-migrate and seed only in Development, only when enabled, and never against a remote server
+// unless explicitly allowed.
+var databaseStartup = app.Configuration.GetSection(DatabaseStartupOptions.SectionName).Get<DatabaseStartupOptions>()
+    ?? new DatabaseStartupOptions();
+if (app.Environment.IsDevelopment() && (databaseStartup.AutoMigrateOnStartup || databaseStartup.SeedOnStartup))
+{
+    var connectionString = app.Configuration.GetConnectionString("DefaultConnection");
+    if (!databaseStartup.AllowRemoteDatabase && !DatabaseStartupOptions.IsLocalDataSource(connectionString))
+    {
+        app.Logger.LogWarning(
+            "Se omitieron la migración y el seed automáticos porque la base de datos no es local ({Host}). " +
+            "Usa Database:AllowRemoteDatabase=true solo si es intencional.",
+            DatabaseStartupOptions.GetHost(connectionString) ?? "desconocido");
+    }
+    else
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        if (databaseStartup.AutoMigrateOnStartup)
+            await db.Database.MigrateAsync();
+        if (databaseStartup.SeedOnStartup)
+            await SeedData.SeedAsync(db, scope.ServiceProvider);
+    }
 }
 
 await app.RunAsync();
