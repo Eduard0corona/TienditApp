@@ -17,4 +17,8 @@
     <ProjectReference Include="..\FoodParkDigital.Domain\FoodParkDigital.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="FoodParkDigital.Application.Tests" />
+  </ItemGroup>
+
 </Project>
