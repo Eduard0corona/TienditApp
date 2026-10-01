@@ -41,6 +41,8 @@ Direcciones comprobadas en configuración: API HTTP `http://localhost:5203`, HTT
 
 `POST /api/v1/whatsapp/webhook` verifica la firma `X-Hub-Signature-256` con `WhatsApp:AppSecret` (App Secret de Meta) en todos los entornos y responde 503 si no está configurado. Defínelo con variable de entorno (`WhatsApp__AppSecret`) o user-secrets, nunca en `appsettings*.json`. Para probar localmente sin firmar (curl/Postman) usa `WhatsApp__AllowUnsignedWebhooks=true`: solo se respeta con `ASPNETCORE_ENVIRONMENT=Development`; en otro entorno se ignora y se registra un error.
 
+Una entrega firmada recibe 200 cuando se procesó, o cuando se descarta por JSON inválido o `PhoneNumberId` desconocido. Recibe 500 si algún mensaje o la actualización de estados no se pudo procesar, para que Meta la reenvíe; al reenviarla, los mensajes ya guardados se ignoran por `ExternalMessageId`.
+
 ## Docker
 
 ```powershell

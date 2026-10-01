@@ -9,12 +9,15 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
-// Uses SQLite because InMemory does not enforce the unique index on ExternalMessageId.
+// Uses SQLite because InMemory does not enforce the unique indexes on ExternalMessageId and
+// (TenantId, CustomerPhone).
 public class ProcessInboundMessageCommandTests
 {
     [Fact]
@@ -71,6 +74,133 @@ public class ProcessInboundMessageCommandTests
         Assert.Equal(1, await fixture.CountMessagesAsync("wamid.next"));
     }
 
+    [Fact]
+    public async Task Handle_ShouldStoreMessageInWinningConversation_WhenConcurrentFirstMessageStartsItFirst()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        // The customer also chats with another tenant, whose conversation must stay untouched.
+        await fixture.StartConversationFromConcurrentDeliveryAsync(fixture.OtherTenantId, "wamid.other-tenant");
+
+        // Another first message from this new number starts the conversation after this handler
+        // found none, so only the unique index on (TenantId, CustomerPhone) detects the race.
+        var winnerId = Guid.Empty;
+        fixture.Database.BeforeNextSave(async () =>
+            winnerId = await fixture.StartConversationFromConcurrentDeliveryAsync(fixture.TenantId, "wamid.first"));
+
+        var result = await fixture.CreateHandler().Handle(fixture.Inbound("wamid.second"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(winnerId, result.Value.ConversationId);
+
+        var conversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Equal(winnerId, conversation.Id);
+        Assert.Equal(new[] { "wamid.first", "wamid.second" }, conversation.InboundMessageIds);
+        Assert.Equal(2, conversation.UnreadCount);
+
+        var otherTenantConversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.OtherTenantId));
+        Assert.Equal(new[] { "wamid.other-tenant" }, otherTenantConversation.InboundMessageIds);
+
+        // The inbound message and the auto-reply are announced in the conversation that stores them.
+        Assert.Equal(2, fixture.Notifier.Messages.Count);
+        Assert.All(fixture.Notifier.Messages, message => Assert.Equal(winnerId, message.ConversationId));
+        Assert.Single(fixture.WhatsApp.SentMessages);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldTreatAsDuplicate_WhenConcurrentDeliveryStartsConversationWithSameMessage()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        // Meta redelivers the first message of a new number while the original delivery is still
+        // being processed, so both deliveries try to start the conversation with it.
+        fixture.Database.BeforeNextSave(() =>
+            fixture.StartConversationFromConcurrentDeliveryAsync(fixture.TenantId, "wamid.first"));
+
+        var result = await fixture.CreateHandler().Handle(fixture.Inbound("wamid.first"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ProcessInboundMessageCommandHandler.DuplicateMessageError, result.Error);
+        var conversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Equal(new[] { "wamid.first" }, conversation.InboundMessageIds);
+        Assert.Empty(fixture.Notifier.Messages);
+        Assert.Empty(fixture.WhatsApp.SentMessages);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldTreatAsDuplicate_WhenSameMessageIsStoredWhileJoiningWinningConversation()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        // Another first message starts the conversation, and a redelivery of this message stores it
+        // there right before this handler joins that conversation.
+        fixture.Database.BeforeNextSave(async () =>
+        {
+            var winnerId = await fixture.StartConversationFromConcurrentDeliveryAsync(fixture.TenantId, "wamid.first");
+            fixture.Database.BeforeNextSave(() => fixture.StoreFromConcurrentDeliveryAsync(winnerId, "wamid.second"));
+        });
+
+        var result = await fixture.CreateHandler().Handle(fixture.Inbound("wamid.second"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ProcessInboundMessageCommandHandler.DuplicateMessageError, result.Error);
+        var conversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Equal(new[] { "wamid.first", "wamid.second" }, conversation.InboundMessageIds);
+        Assert.Empty(fixture.Notifier.Messages);
+        Assert.Empty(fixture.WhatsApp.SentMessages);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldRethrowAndKeepContextUsable_WhenStartingConversationFailsWithoutConcurrentDelivery()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        // Neither a duplicate nor a lost race: the failure must surface instead of being retried or swallowed.
+        fixture.Database.CommandFaults.FailNext(
+            command => command.CommandText.Contains("INSERT INTO \"WhatsAppConversations\"", StringComparison.Ordinal),
+            () => new SqliteException("disk I/O error", 10));
+
+        await Assert.ThrowsAsync<DbUpdateException>(
+            () => fixture.CreateHandler().Handle(fixture.Inbound("wamid.failed"), CancellationToken.None));
+
+        Assert.True(fixture.Database.CommandFaults.Fired);
+        Assert.Empty(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Empty(fixture.Notifier.Messages);
+        Assert.Empty(fixture.WhatsApp.SentMessages);
+
+        // Nothing staged by the failed attempt stays tracked for the rest of the webhook payload.
+        var next = await fixture.CreateHandler().Handle(fixture.Inbound("wamid.next"), CancellationToken.None);
+
+        Assert.True(next.IsSuccess, next.Error);
+        var conversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Equal(new[] { "wamid.next" }, conversation.InboundMessageIds);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldRethrowAndKeepContextUsable_WhenDatabaseIsUnavailableDuringSave()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+
+        // The execution strategy gives up on an outage with an exception that is not a DbUpdateException.
+        fixture.Database.BeforeNextSave(() => throw new RetryLimitExceededException(
+            "Simulated database outage.", new TimeoutException()));
+
+        await Assert.ThrowsAsync<RetryLimitExceededException>(
+            () => fixture.CreateHandler().Handle(fixture.Inbound("wamid.outage"), CancellationToken.None));
+
+        Assert.Empty(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Empty(fixture.Notifier.Messages);
+        Assert.Empty(fixture.WhatsApp.SentMessages);
+
+        // Nothing staged by the failed attempt stays tracked for the rest of the webhook payload.
+        var next = await fixture.CreateHandler().Handle(fixture.Inbound("wamid.next"), CancellationToken.None);
+
+        Assert.True(next.IsSuccess, next.Error);
+        var conversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Equal(new[] { "wamid.next" }, conversation.InboundMessageIds);
+    }
+
+    private sealed record StoredConversation(Guid Id, int UnreadCount, string[] InboundMessageIds);
+
     private sealed class TestFixture : IAsyncDisposable
     {
         private const string CustomerPhone = "+5215511112222";
@@ -78,16 +208,18 @@ public class ProcessInboundMessageCommandTests
         private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
             .CreateMapper();
 
-        private TestFixture(SqliteTestDatabase database, ApplicationDbContext context, Guid tenantId)
+        private TestFixture(SqliteTestDatabase database, ApplicationDbContext context, Guid tenantId, Guid otherTenantId)
         {
             Database = database;
             Context = context;
             TenantId = tenantId;
+            OtherTenantId = otherTenantId;
         }
 
         public SqliteTestDatabase Database { get; }
         public ApplicationDbContext Context { get; }
         public Guid TenantId { get; }
+        public Guid OtherTenantId { get; }
         public RecordingNotificationService Notifier { get; } = new();
         public RecordingWhatsAppService WhatsApp { get; } = new();
 
@@ -97,10 +229,11 @@ public class ProcessInboundMessageCommandTests
             var context = database.CreateContext();
 
             var tenant = new Tenant("Tenant WhatsApp", "tenant-whatsapp", BusinessType.Food, "whatsapp@tenant.com");
-            context.Tenants.Add(tenant);
+            var otherTenant = new Tenant("Otro Tenant", "otro-tenant", BusinessType.Retail, "otro@tenant.com");
+            context.Tenants.AddRange(tenant, otherTenant);
             await context.SaveChangesAsync();
 
-            return new TestFixture(database, context, tenant.Id);
+            return new TestFixture(database, context, tenant.Id, otherTenant.Id);
         }
 
         public ProcessInboundMessageCommandHandler CreateHandler()
@@ -137,10 +270,44 @@ public class ProcessInboundMessageCommandTests
             await concurrentContext.SaveChangesAsync();
         }
 
+        public async Task<Guid> StartConversationFromConcurrentDeliveryAsync(Guid tenantId, string externalMessageId)
+        {
+            await using var concurrentContext = Database.CreateIndependentContext();
+            var conversation = new WhatsAppConversation(tenantId, CustomerPhone, "Cliente");
+            conversation.AddMessage(MessageDirection.Inbound, "Hola, ¿tienen servicio a domicilio?", externalMessageId);
+            concurrentContext.WhatsAppConversations.Add(conversation);
+            await concurrentContext.SaveChangesAsync();
+            return conversation.Id;
+        }
+
         public Task<int> CountMessagesAsync(string externalMessageId)
             => Context.WhatsAppMessages
                 .IgnoreQueryFilters()
                 .CountAsync(m => m.ExternalMessageId == externalMessageId);
+
+        /// <summary>Reads the customer's committed conversations through a fresh context.</summary>
+        public async Task<StoredConversation[]> StoredConversationsAsync(Guid tenantId)
+        {
+            await using var context = Database.CreateIndependentContext();
+            var conversations = await context.WhatsAppConversations
+                .IgnoreQueryFilters()
+                .Where(c => c.TenantId == tenantId && c.CustomerPhone == CustomerPhone)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.UnreadCount,
+                    InboundMessageIds = c.Messages
+                        .Where(m => m.Direction == MessageDirection.Inbound)
+                        .Select(m => m.ExternalMessageId!)
+                        .ToList()
+                })
+                .ToListAsync();
+
+            return conversations
+                .Select(c => new StoredConversation(
+                    c.Id, c.UnreadCount, c.InboundMessageIds.Order(StringComparer.Ordinal).ToArray()))
+                .ToArray();
+        }
 
         public void ClearSideEffects()
         {

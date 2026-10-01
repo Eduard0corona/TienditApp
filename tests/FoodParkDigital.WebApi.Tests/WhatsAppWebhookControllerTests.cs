@@ -6,6 +6,8 @@ using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Application.WhatsApp.Queries;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.WhatsApp.Entities;
+using FoodParkDigital.Domain.WhatsApp.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.WebApi.Controllers;
 using FoodParkDigital.WebApi.Services;
@@ -14,6 +16,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.WebApi.Tests.WhatsAppWebhookTestSupport;
@@ -121,6 +125,84 @@ public class WhatsAppWebhookControllerTests
     }
 
     [Fact]
+    public async Task Receive_ShouldProcessRemainingMessagesAndReturn500_WhenAMessageCannotBeStored()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        fixture.Mediator.FailingMessageIds.Add("wamid.2");
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.1", "wamid.2", "wamid.3");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        // Meta redelivers anything that does not get a 200; the stored messages are then deduplicated.
+        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+        Assert.Equal(
+            new[] { "wamid.1", "wamid.2", "wamid.3" },
+            fixture.Mediator.Requests.OfType<ProcessInboundMessageCommand>().Select(c => c.ExternalMessageId));
+    }
+
+    [Fact]
+    public async Task Receive_ShouldReturn200_WhenRedeliveryRepeatsAlreadyStoredMessages()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        fixture.Mediator.DuplicateMessageIds.Add("wamid.1");
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.1", "wamid.2");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        Assert.Equal(2, fixture.Mediator.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Receive_ShouldReturn200AndNotProcess_WhenSignedPayloadIsNotValidJson()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = Encoding.UTF8.GetBytes("""{ "entry": [""");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        // A redelivery would carry the same body, so it is acknowledged instead of retried.
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        Assert.Empty(fixture.Mediator.Requests);
+    }
+
+    [Fact]
+    public async Task Receive_ShouldReturn200AndNotProcess_WhenPhoneNumberIdIsUnknown()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = InboundPayload("999999999999999", "wamid.unknown-number");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        Assert.Empty(fixture.Mediator.Requests);
+    }
+
+    [Fact]
+    public async Task Receive_ShouldReturn500_WhenStatusUpdateCannotBeSaved()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        await fixture.SeedSentMessageAsync(fixture.TenantB, "wamid.sent");
+        fixture.SaveFaults.FailNextSave();
+        var body = StatusPayload(TenantBPhoneNumberId, "wamid.sent", "delivered");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        Assert.True(fixture.SaveFaults.Fired);
+        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+    }
+
+    [Fact]
     public async Task Verify_ShouldReturnChallenge_WhenVerifyTokenMatches()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -146,7 +228,35 @@ public class WhatsAppWebhookControllerTests
     private static int? StatusCodeOf(IActionResult result)
         => Assert.IsAssignableFrom<IStatusCodeActionResult>(result).StatusCode;
 
-    private static byte[] InboundPayload(string phoneNumberId, string messageId) => Encoding.UTF8.GetBytes($$"""
+    private static byte[] InboundPayload(string phoneNumberId, params string[] messageIds)
+    {
+        var messages = string.Join(",", messageIds.Select(messageId => $$"""
+            {
+              "from": "5215511112222",
+              "id": "{{messageId}}",
+              "timestamp": "1759300000",
+              "type": "text",
+              "text": { "body": "Hola" }
+            }
+            """));
+
+        return WebhookPayload(phoneNumberId, $$"""
+            "contacts": [{ "profile": { "name": "Cliente" }, "wa_id": "5215511112222" }],
+            "messages": [{{messages}}]
+            """);
+    }
+
+    private static byte[] StatusPayload(string phoneNumberId, string messageId, string status)
+        => WebhookPayload(phoneNumberId, $$"""
+            "statuses": [{
+              "id": "{{messageId}}",
+              "status": "{{status}}",
+              "timestamp": "1759300001",
+              "recipient_id": "5215511112222"
+            }]
+            """);
+
+    private static byte[] WebhookPayload(string phoneNumberId, string valueFields) => Encoding.UTF8.GetBytes($$"""
         {
           "object": "whatsapp_business_account",
           "entry": [{
@@ -156,14 +266,7 @@ public class WhatsAppWebhookControllerTests
               "value": {
                 "messaging_product": "whatsapp",
                 "metadata": { "display_phone_number": "5215500000000", "phone_number_id": "{{phoneNumberId}}" },
-                "contacts": [{ "profile": { "name": "Cliente" }, "wa_id": "5215511112222" }],
-                "messages": [{
-                  "from": "5215511112222",
-                  "id": "{{messageId}}",
-                  "timestamp": "1759300000",
-                  "type": "text",
-                  "text": { "body": "Hola" }
-                }]
+                {{valueFields}}
               }
             }]
           }]
@@ -172,23 +275,27 @@ public class WhatsAppWebhookControllerTests
 
     private sealed class TestFixture : IAsyncDisposable
     {
-        private TestFixture(ApplicationDbContext context, Guid tenantA, Guid tenantB)
+        private TestFixture(ApplicationDbContext context, Guid tenantA, Guid tenantB, SaveChangesFaultInterceptor saveFaults)
         {
             Context = context;
             TenantA = tenantA;
             TenantB = tenantB;
+            SaveFaults = saveFaults;
             Mediator = new RecordingMediator(context);
         }
 
         public ApplicationDbContext Context { get; }
         public Guid TenantA { get; }
         public Guid TenantB { get; }
+        public SaveChangesFaultInterceptor SaveFaults { get; }
         public RecordingMediator Mediator { get; }
 
         public static async Task<TestFixture> CreateAsync()
         {
+            var saveFaults = new SaveChangesFaultInterceptor();
             var options = new DbContextOptionsBuilder<ApplicationDbContext>()
                 .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .AddInterceptors(saveFaults)
                 .Options;
 
             var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
@@ -201,7 +308,16 @@ public class WhatsAppWebhookControllerTests
                 CreateConfig(tenantB.Id, TenantBPhoneNumberId, TenantBVerifyToken));
             await context.SaveChangesAsync();
 
-            return new TestFixture(context, tenantA.Id, tenantB.Id);
+            return new TestFixture(context, tenantA.Id, tenantB.Id, saveFaults);
+        }
+
+        /// <summary>Stores a message the business sent, whose delivery statuses Meta reports later.</summary>
+        public async Task SeedSentMessageAsync(Guid tenantId, string externalMessageId)
+        {
+            var conversation = new WhatsAppConversation(tenantId, "+5215511112222", "Cliente");
+            conversation.AddMessage(MessageDirection.Outbound, "Tu pedido va en camino", externalMessageId);
+            Context.WhatsAppConversations.Add(conversation);
+            await Context.SaveChangesAsync();
         }
 
         public WhatsAppWebhookController CreateController(
@@ -241,6 +357,12 @@ public class WhatsAppWebhookControllerTests
 
         public List<object> Requests { get; } = [];
 
+        /// <summary>Inbound messages whose processing throws, as a database outage would.</summary>
+        public HashSet<string> FailingMessageIds { get; } = [];
+
+        /// <summary>Inbound messages the handler reports as already stored by an earlier delivery.</summary>
+        public HashSet<string> DuplicateMessageIds { get; } = [];
+
         public async Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken ct = default)
         {
             Requests.Add(request);
@@ -248,6 +370,10 @@ public class WhatsAppWebhookControllerTests
             {
                 VerifyWhatsAppWebhookTokenQuery query =>
                     await new VerifyWhatsAppWebhookTokenQueryHandler(_context).Handle(query, ct),
+                ProcessInboundMessageCommand command when FailingMessageIds.Contains(command.ExternalMessageId) =>
+                    throw new RetryLimitExceededException("Simulated database outage.", new TimeoutException()),
+                ProcessInboundMessageCommand command when DuplicateMessageIds.Contains(command.ExternalMessageId) =>
+                    Result.Failure<ChatMessageDto>(ProcessInboundMessageCommandHandler.DuplicateMessageError),
                 ProcessInboundMessageCommand => Result.Success(new ChatMessageDto()),
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };
@@ -274,6 +400,29 @@ public class WhatsAppWebhookControllerTests
 
         public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken ct = default)
             => throw new NotSupportedException();
+    }
+
+    /// <summary>Fails the next SaveChanges, as a database outage would.</summary>
+    private sealed class SaveChangesFaultInterceptor : SaveChangesInterceptor
+    {
+        private bool _armed;
+
+        public bool Fired { get; private set; }
+
+        public void FailNextSave() => _armed = true;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_armed)
+                return ValueTask.FromResult(result);
+
+            _armed = false;
+            Fired = true;
+            throw new DbUpdateException("Simulated database outage.");
+        }
     }
 
     private sealed class TestCurrentTenantService : ICurrentTenantService
