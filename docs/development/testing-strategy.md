@@ -6,7 +6,7 @@ Existen cuatro proyectos xUnit:
 
 - `FoodParkDigital.Domain.Tests`: máquinas de estado de órdenes y catálogo de permisos.
 - `FoodParkDigital.Application.Tests`: casos de órdenes/clientes, capabilities, tenant access, inventario, compras/caja, WhatsApp, empleados, aislamiento de archivos por tenant y configuración EF mediante SQLite/InMemory y dobles. `SqliteTestDatabase` cubre constraints relacionales (índices únicos) que InMemory ignora; no reemplaza a SQL Server.
-- `FoodParkDigital.Infrastructure.Tests`: servicios de Infrastructure con dobles (directorio temporal, HTTP, SMTP en loopback, logger y EF InMemory); cubre el confinamiento por tenant del almacenamiento local y de la resolución de blobs de Azure, y que SMS, correo y WhatsApp no registren códigos OTP, cuerpos, respuestas de proveedores ni PII fuera de Development.
+- `FoodParkDigital.Infrastructure.Tests`: servicios de Infrastructure con dobles (directorio temporal, HTTP, SMTP en loopback, logger y EF InMemory); cubre el confinamiento por tenant del almacenamiento local y de la resolución de blobs de Azure, y que SMS, correo, WhatsApp y la resolución del cliente de un pedido no registren códigos OTP, cuerpos, respuestas de proveedores ni PII fuera de Development.
 - `FoodParkDigital.WebApi.Tests`: verificación de firma del webhook de WhatsApp y su controller, sin pipeline HTTP completo.
 
 No se encontraron pruebas de pipeline HTTP completo, Infrastructure con SQL Server real compatible ni frontend. El workflow de despliegue restaura/publica backend y construye frontend, pero no ejecuta tests ni lint. Los proyectos de producción apuntan a .NET 9 mientras tests apuntan a .NET 10.
