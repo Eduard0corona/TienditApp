@@ -1,10 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
-using FoodParkDigital.Domain.Identity.Enums;
-using FoodParkDigital.Domain.Tenants.Entities;
-using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -31,22 +29,22 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISignInService _signInService;
-    private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
-    private readonly ITenantAccessService _tenantAccessService;
+    private readonly ITwoFactorLoginChallengeService _twoFactorChallengeService;
+    private readonly IAuthSessionIssuer _authSessionIssuer;
 
     public LoginCommandHandler(
         UserManager<ApplicationUser> userManager,
         ISignInService signInService,
-        IJwtTokenService jwtTokenService,
         IApplicationDbContext context,
-        ITenantAccessService tenantAccessService)
+        ITwoFactorLoginChallengeService twoFactorChallengeService,
+        IAuthSessionIssuer authSessionIssuer)
     {
         _userManager = userManager;
         _signInService = signInService;
-        _jwtTokenService = jwtTokenService;
         _context = context;
-        _tenantAccessService = tenantAccessService;
+        _twoFactorChallengeService = twoFactorChallengeService;
+        _authSessionIssuer = authSessionIssuer;
     }
 
     public async Task<Result<AuthResponse>> Handle(LoginCommand request, CancellationToken cancellationToken)
@@ -72,82 +70,21 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
             return Result.Failure<AuthResponse>("Credenciales inválidas.");
         }
 
-        // Verificar si el usuario tiene 2FA habilitado
+        // Con 2FA la contraseña solo habilita el desafío del segundo paso; los tokens los emite Login2FACommand.
         var is2FAEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
         if (is2FAEnabled)
         {
+            var challengeToken = await _twoFactorChallengeService.CreateAsync(user, cancellationToken);
+            if (challengeToken is null)
+                return Result.Failure<AuthResponse>("No se pudo iniciar la verificación en dos pasos. Intente de nuevo.");
+
             return Result.Success(new AuthResponse
             {
                 RequiresTwoFactor = true,
-                UserId = user.Id.ToString()
+                TwoFactorChallengeToken = challengeToken
             });
         }
 
-        var tenantMembership = await _context.TenantUsers
-            .IgnoreQueryFilters()
-            .Where(x => x.UserId == user.Id && x.Status == TenantUserStatus.Active)
-            .OrderByDescending(x => x.TenantId == user.DefaultTenantId)
-            .ThenBy(x => x.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (tenantMembership is null && user.DefaultTenantId.HasValue)
-        {
-            var hasAnyMembershipForTenant = await _context.TenantUsers
-                .IgnoreQueryFilters()
-                .AnyAsync(x => x.UserId == user.Id && x.TenantId == user.DefaultTenantId.Value, cancellationToken);
-
-            if (!hasAnyMembershipForTenant)
-            {
-                var role = user.Role == UserRole.TenantAdmin
-                    ? TenantUserRole.Admin
-                    : TenantUserRole.Staff;
-
-                tenantMembership = new TenantUser(user.DefaultTenantId.Value, user.Id, role, TenantUserStatus.Active);
-                _context.TenantUsers.Add(tenantMembership);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
-        }
-
-        var permissions = tenantMembership is null
-            ? []
-            : await _tenantAccessService.GetPermissionsAsync(user.Id, tenantMembership.TenantId, cancellationToken);
-
-        var tenantContext = tenantMembership is null
-            ? null
-            : new TenantTokenContext(
-                tenantMembership.TenantId,
-                tenantMembership.Role.ToString().ToUpperInvariant(),
-                permissions);
-
-        if (user.DefaultTenantId is null && tenantMembership is not null)
-            user.DefaultTenantId = tenantMembership.TenantId;
-
-        var accessToken = _jwtTokenService.GenerateAccessToken(user, tenantContext);
-        var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
-
-        _context.RefreshTokens.Add(refreshToken);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        return Result.Success(new AuthResponse
-        {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken.Token,
-            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
-            RequiresTwoFactor = false,
-            User = new UserDto
-            {
-                Id = user.Id,
-                Email = user.Email!,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                PhoneNumber = user.PhoneNumber,
-                PhoneNumberConfirmed = user.PhoneNumberConfirmed,
-                Role = user.Role.ToString(),
-                TenantId = tenantMembership?.TenantId ?? user.DefaultTenantId,
-                IsActive = user.IsActive,
-                AvatarUrl = string.IsNullOrEmpty(user.AvatarUrl) ? null : $"{user.AvatarUrl}_md.webp",
-                AvatarImages = AvatarImageUrlsDto.FromBaseUrl(user.AvatarUrl)
-            }
-        });
+        return Result.Success(await _authSessionIssuer.IssueAsync(user, cancellationToken));
     }
 }

@@ -2,6 +2,7 @@ import api from './axios';
 import type {
   AuthResponse,
   LoginRequest,
+  TwoFactorLoginRequest,
   ApiMessage,
   RegisterBusinessRequest,
   RegisterCustomerRequest,
@@ -11,6 +12,9 @@ import type {
 export const authApi = {
   login: (data: LoginRequest) =>
     api.post<AuthResponse>('/auth/login', data),
+
+  loginTwoFactor: (data: TwoFactorLoginRequest) =>
+    api.post<AuthResponse>('/twofactor/login', data),
 
   logout: () =>
     api.post<ApiMessage>('/auth/logout'),
