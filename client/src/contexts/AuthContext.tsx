@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authApi } from '../api/authApi';
 import { profileApi } from '../api/profileApi';
-import { setAccessToken } from '../api/axios';
+import { refreshAccessToken, setAccessToken } from '../api/axios';
 import type { LoginRequest, UserProfileDto } from '../types';
 import { AuthContext } from './AuthContextDefinition';
+import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 const SESSION_MARKER_KEY = 'fpd_has_session';
 
@@ -31,6 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfileDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const clearSession = useCallback(() => {
+    setAccessToken(null);
+    setUser(null);
+    setSessionMarker(false);
+  }, []);
+
+  useSessionSync(clearSession);
+
   const refreshProfile = useCallback(async () => {
     try {
       const { data } = await profileApi.getProfile();
@@ -50,9 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data } = await authApi.refreshToken();
-        if (data.accessToken) {
-          setAccessToken(data.accessToken);
+        // Shares the cross-tab refresh lock with the axios interceptor.
+        const accessToken = await refreshAccessToken();
+        if (accessToken) {
           setSessionMarker(true);
           await refreshProfile();
         }
@@ -87,9 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout();
     } finally {
-      setAccessToken(null);
-      setUser(null);
-      setSessionMarker(false);
+      clearSession();
+      broadcastSessionChange({ type: 'logout' });
     }
   };
 
@@ -98,7 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.accessToken) {
       setAccessToken(data.accessToken);
       setSessionMarker(true);
-      await refreshProfile();
+      // Every loaded list, hub group and draft belongs to the previous tenant: start over, here and in
+      // the other tabs (their next refresh would silently move them to the new tenant).
+      broadcastSessionChange({ type: 'tenant-switched' });
+      reloadForTenantChange();
     }
   };
 
