@@ -6,6 +6,8 @@ public record AuthResponse
     public string? RefreshToken { get; init; }
     public DateTimeOffset? ExpiresAt { get; init; }
     public bool RequiresTwoFactor { get; init; }
+    /// <summary>Desafío de un solo uso que exige POST /api/v1/twofactor/login cuando <see cref="RequiresTwoFactor"/> es true.</summary>
+    public string? TwoFactorChallengeToken { get; init; }
     public string? UserId { get; init; }
     public UserDto? User { get; init; }
 }
