@@ -33,7 +33,7 @@ Existen políticas de rate limiting para autenticación y API, pero la política
 
 ### Archivos
 
-Los uploads actuales validan parcialmente tamaño, extensión y `ContentType`, y las imágenes se decodifican con ImageSharp. Toda carga debe validar tamaño, tipo real/magic bytes, extensión, nombre normalizado, autorización, tenant, destino y malware cuando aplique. Los nombres de almacenamiento deben estar namespaced por tenant y las descargas deben repetir autorización; no confíes en el nombre o MIME enviado por el cliente.
+Los uploads actuales validan parcialmente tamaño, extensión y `ContentType`, y las imágenes se decodifican con ImageSharp. Toda carga debe validar tamaño, tipo real/magic bytes, extensión, nombre normalizado, autorización, tenant, destino y malware cuando aplique. Los nombres de almacenamiento deben estar namespaced por tenant y las descargas deben repetir autorización; no confíes en el nombre o MIME enviado por el cliente. El borrado por URL recibe la carpeta `{área}/{tenantId}` derivada del tenant dueño y ambos providers rechazan rutas fuera de ella; las URLs de imagen solo las fija el endpoint de upload correspondiente.
 
 ### SignalR, WhatsApp e integraciones
 

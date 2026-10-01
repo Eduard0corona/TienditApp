@@ -243,13 +243,13 @@ public class UploadProductImageCommandTests
             return Task.FromResult(url);
         }
 
-        public Task DeleteAsync(string fileUrl, CancellationToken cancellationToken = default)
+        public Task DeleteAsync(string fileUrl, string folder, CancellationToken cancellationToken = default)
         {
             DeletedUrls.Add(fileUrl);
             return Task.CompletedTask;
         }
 
-        public Task DeleteVariantsAsync(string baseImageUrl, CancellationToken cancellationToken = default)
+        public Task DeleteVariantsAsync(string baseImageUrl, string folder, CancellationToken cancellationToken = default)
         {
             DeletedUrls.Add(baseImageUrl);
             return Task.CompletedTask;

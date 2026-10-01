@@ -12,6 +12,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Catalog.Commands;
 
+// The image is not part of the request: it is set only through POST /api/v1/products/{id}/image,
+// so a client cannot point a product at files of another tenant that a later replace/delete would remove.
 public record CreateProductCommand : IRequest<Result<ProductDto>>
 {
     public Guid CategoryId { get; init; }
@@ -19,7 +21,6 @@ public record CreateProductCommand : IRequest<Result<ProductDto>>
     public string? Description { get; init; }
     public decimal PriceAmount { get; init; }
     public string PriceCurrency { get; init; } = "USD";
-    public string? ImageUrl { get; init; }
     public int? PreparationTimeMinutes { get; init; }
     public string? Sku { get; init; }
     public string? Barcode { get; init; }
@@ -182,7 +183,6 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
             description: request.Description,
             priceAmount: request.PriceAmount,
             priceCurrency: request.PriceCurrency,
-            imageUrl: request.ImageUrl,
             preparationTimeMinutes: request.PreparationTimeMinutes,
             sku: request.Sku,
             barcode: request.Barcode,

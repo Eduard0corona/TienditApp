@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Identity.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -12,15 +13,18 @@ public class DeleteAvatarCommandHandler : IRequestHandler<DeleteAvatarCommand, R
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICurrentTenantService _tenantService;
     private readonly IFileStorageService _fileStorageService;
 
     public DeleteAvatarCommandHandler(
         UserManager<ApplicationUser> userManager,
         ICurrentUserService currentUserService,
+        ICurrentTenantService tenantService,
         IFileStorageService fileStorageService)
     {
         _userManager = userManager;
         _currentUserService = currentUserService;
+        _tenantService = tenantService;
         _fileStorageService = fileStorageService;
     }
 
@@ -37,7 +41,10 @@ public class DeleteAvatarCommandHandler : IRequestHandler<DeleteAvatarCommand, R
         if (string.IsNullOrEmpty(user.AvatarUrl))
             return Result.Success();
 
-        await _fileStorageService.DeleteVariantsAsync(user.AvatarUrl, cancellationToken);
+        await _fileStorageService.DeleteVariantsAsync(
+            user.AvatarUrl,
+            TenantStorageFolders.Avatars(_tenantService.TenantId),
+            cancellationToken);
         user.AvatarUrl = null;
         await _userManager.UpdateAsync(user);
 
