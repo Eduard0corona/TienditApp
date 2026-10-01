@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
@@ -71,16 +72,14 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
         if (user is null || !user.IsActive)
             return Result.Failure<AvatarImageUrlsDto>("Usuario no encontrado.");
 
-        // Eliminar variantes anteriores si existen
-        if (!string.IsNullOrEmpty(user.AvatarUrl))
-            await _fileStorageService.DeleteVariantsAsync(user.AvatarUrl, cancellationToken);
+        var folder = TenantStorageFolders.Avatars(_tenantService.TenantId);
+        var previousAvatarUrl = user.AvatarUrl;
 
         // Generar variantes de imagen
         var variants = await _imageProcessingService.GenerateVariantsAsync(
             request.FileStream, cancellationToken);
 
         // Subir cada variante
-        var folder = $"avatars/{_tenantService.TenantId}";
         var baseId = Guid.NewGuid().ToString();
         string? baseUrl = null;
 
@@ -111,7 +110,17 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
 
         // Actualizar avatar del usuario
         user.AvatarUrl = baseUrl;
-        await _userManager.UpdateAsync(user);
+        var updated = await _userManager.UpdateAsync(user);
+        if (!updated.Succeeded)
+        {
+            await _fileStorageService.DeleteVariantsAsync(baseUrl, folder, cancellationToken);
+            return Result.Failure<AvatarImageUrlsDto>("No se pudo actualizar el avatar.");
+        }
+
+        // Las variantes anteriores se eliminan solo cuando la nueva imagen ya quedo guardada; antes se
+        // borraban primero y una imagen rechazada dejaba al usuario apuntando a archivos inexistentes.
+        if (!string.IsNullOrEmpty(previousAvatarUrl))
+            await _fileStorageService.DeleteVariantsAsync(previousAvatarUrl, folder, cancellationToken);
 
         return Result.Success(AvatarImageUrlsDto.FromBaseUrl(baseUrl)!);
     }

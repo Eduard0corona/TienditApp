@@ -1,7 +1,9 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Customers.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Services;
@@ -11,15 +13,19 @@ public class CustomerLookupService : ICustomerLookupService
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly ILogger<CustomerLookupService> _logger;
+    private readonly bool _logSensitiveData;
 
     public CustomerLookupService(
         IApplicationDbContext context,
         IPhoneNormalizationService phoneNormalizationService,
+        IHostEnvironment environment,
         ILogger<CustomerLookupService> logger)
     {
         _context = context;
         _phoneNormalizationService = phoneNormalizationService;
         _logger = logger;
+        // Customer phone numbers are only logged in full in Development.
+        _logSensitiveData = environment.IsDevelopment();
     }
 
     public async Task<CustomerLookupResult> ResolveForOrderAsync(
@@ -31,17 +37,29 @@ public class CustomerLookupService : ICustomerLookupService
     {
         var phoneNormalized = _phoneNormalizationService.NormalizeToE164(rawPhone, defaultCountry);
 
-        var profile = await _context.CustomerProfiles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.PhoneNormalized == phoneNormalized, cancellationToken);
+        // Only an account that confirmed this number by SMS receives the order. Anyone can register a
+        // profile with someone else's number, so an unverified one falls through to a temporary
+        // customer, whose orders are claimed by whoever later confirms the number.
+        var profile = await CustomerPhoneOwnershipRules.FindHolderAsync(
+            _context,
+            _phoneNormalizationService,
+            phoneNormalized,
+            cancellationToken);
+
+        if (profile is { IsVerified: true })
+        {
+            _logger.LogInformation(
+                "OrderCustomerLinked: linked phone {Phone} to user {UserId}.",
+                LoggablePhone(phoneNormalized),
+                profile.UserId);
+            return new CustomerLookupResult(phoneNormalized, profile.UserId, null, name);
+        }
 
         if (profile is not null)
         {
             _logger.LogInformation(
-                "OrderCustomerLinked: linked phone {Phone} to user {UserId}.",
-                phoneNormalized,
+                "UnverifiedCustomerProfileSkipped: user {UserId} has not confirmed this phone; using a temporary customer.",
                 profile.UserId);
-            return new CustomerLookupResult(phoneNormalized, profile.UserId, null, name);
         }
 
         var temp = await _context.TemporaryCustomers
@@ -58,15 +76,19 @@ public class CustomerLookupService : ICustomerLookupService
                 _logger.LogInformation(
                     "CreatedTempCustomer: tenant {TenantId}, phone {Phone}, tempCustomer {TemporaryCustomerId}.",
                     tenantId,
-                    phoneNormalized,
+                    LoggablePhone(phoneNormalized),
                     temp.Id);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex)
             {
+                // A concurrent request created it first. Stop tracking the failed insert so the
+                // caller's next SaveChanges (the order) does not try it again, then reuse the winner.
+                _context.TemporaryCustomers.Entry(temp).State = EntityState.Detached;
+
                 temp = await _context.TemporaryCustomers
                     .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.PhoneNormalized == phoneNormalized, cancellationToken)
-                    ?? throw new InvalidOperationException("Failed to create or retrieve temporary customer.");
+                    ?? throw new InvalidOperationException("Failed to create or retrieve temporary customer.", ex);
             }
         }
         else if (!string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(temp.Name))
@@ -77,4 +99,7 @@ public class CustomerLookupService : ICustomerLookupService
 
         return new CustomerLookupResult(phoneNormalized, null, temp.Id, temp.Name ?? name);
     }
+
+    private string LoggablePhone(string phoneNumber)
+        => _logSensitiveData ? phoneNumber : LogRedaction.MaskPhoneNumber(phoneNumber);
 }

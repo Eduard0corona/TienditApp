@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import type { LoginRequest } from '../../types';
+import TwoFactorLoginStep from './TwoFactorLoginStep';
 
 export default function Login() {
   const { login } = useAuth();
@@ -10,6 +11,8 @@ export default function Login() {
   const location = useLocation();
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Kept only in component memory: never in router state or browser storage.
+  const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState<string | null>(null);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
@@ -24,7 +27,7 @@ export default function Login() {
     try {
       const result = await login(data);
       if (result.requiresTwoFactor) {
-        navigate('/confirm-phone', { state: { userId: result.userId } });
+        setTwoFactorChallengeToken(result.twoFactorChallengeToken);
       } else {
         navigate(from, { replace: true });
       }
@@ -62,83 +65,93 @@ export default function Login() {
                 </div>
 
                 <div className="card-body p-4">
-                  <div className="text-center w-75 m-auto">
-                    <h4 className="text-dark-50 text-center pb-0 fw-bold">Iniciar Sesión</h4>
-                    <p className="text-muted mb-4">
-                      Ingresa tu email y contraseña para acceder al panel.
-                    </p>
-                  </div>
-
-                  {error && (
-                    <div className="alert alert-danger" role="alert">
-                      {error}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSubmit(onSubmit)}>
-                    <div className="mb-3">
-                      <label htmlFor="emailaddress" className="form-label">
-                        Email
-                      </label>
-                      <input
-                        className={`form-control ${errors.email ? 'is-invalid' : ''}`}
-                        type="email"
-                        id="emailaddress"
-                        placeholder="Ingresa tu email"
-                        {...register('email', { required: 'El email es requerido' })}
-                      />
-                      {errors.email && (
-                        <div className="invalid-feedback">{errors.email.message}</div>
-                      )}
-                    </div>
-
-                    <div className="mb-3">
-                      <Link to="/forgot-password" className="text-muted float-end">
-                        <small>¿Olvidaste tu contraseña?</small>
-                      </Link>
-                      <label htmlFor="password" className="form-label">
-                        Contraseña
-                      </label>
-                      <div className="input-group input-group-merge">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          id="password"
-                          className={`form-control ${errors.password ? 'is-invalid' : ''}`}
-                          placeholder="Ingresa tu contraseña"
-                          {...register('password', { required: 'La contraseña es requerida' })}
-                        />
-                        <div
-                          className={`input-group-text ${showPassword ? 'show-password' : ''}`}
-                          onClick={() => setShowPassword(!showPassword)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <span className="password-eye"></span>
-                        </div>
+                  {twoFactorChallengeToken ? (
+                    <TwoFactorLoginStep
+                      challengeToken={twoFactorChallengeToken}
+                      onSuccess={() => navigate(from, { replace: true })}
+                      onCancel={() => setTwoFactorChallengeToken(null)}
+                    />
+                  ) : (
+                    <>
+                      <div className="text-center w-75 m-auto">
+                        <h4 className="text-dark-50 text-center pb-0 fw-bold">Iniciar Sesión</h4>
+                        <p className="text-muted mb-4">
+                          Ingresa tu email y contraseña para acceder al panel.
+                        </p>
                       </div>
-                      {errors.password && (
-                        <div className="text-danger mt-1" style={{ fontSize: '0.875em' }}>
-                          {errors.password.message}
+
+                      {error && (
+                        <div className="alert alert-danger" role="alert">
+                          {error}
                         </div>
                       )}
-                    </div>
 
-                    <div className="mb-3 text-center">
-                      <button
-                        className="btn btn-primary"
-                        type="submit"
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                            Ingresando...
-                          </>
-                        ) : (
-                          'Iniciar Sesión'
-                        )}
-                      </button>
-                    </div>
-                  </form>
+                      <form onSubmit={handleSubmit(onSubmit)}>
+                        <div className="mb-3">
+                          <label htmlFor="emailaddress" className="form-label">
+                            Email
+                          </label>
+                          <input
+                            className={`form-control ${errors.email ? 'is-invalid' : ''}`}
+                            type="email"
+                            id="emailaddress"
+                            placeholder="Ingresa tu email"
+                            {...register('email', { required: 'El email es requerido' })}
+                          />
+                          {errors.email && (
+                            <div className="invalid-feedback">{errors.email.message}</div>
+                          )}
+                        </div>
+
+                        <div className="mb-3">
+                          <Link to="/forgot-password" className="text-muted float-end">
+                            <small>¿Olvidaste tu contraseña?</small>
+                          </Link>
+                          <label htmlFor="password" className="form-label">
+                            Contraseña
+                          </label>
+                          <div className="input-group input-group-merge">
+                            <input
+                              type={showPassword ? 'text' : 'password'}
+                              id="password"
+                              className={`form-control ${errors.password ? 'is-invalid' : ''}`}
+                              placeholder="Ingresa tu contraseña"
+                              {...register('password', { required: 'La contraseña es requerida' })}
+                            />
+                            <div
+                              className={`input-group-text ${showPassword ? 'show-password' : ''}`}
+                              onClick={() => setShowPassword(!showPassword)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <span className="password-eye"></span>
+                            </div>
+                          </div>
+                          {errors.password && (
+                            <div className="text-danger mt-1" style={{ fontSize: '0.875em' }}>
+                              {errors.password.message}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mb-3 text-center">
+                          <button
+                            className="btn btn-primary"
+                            type="submit"
+                            disabled={isSubmitting}
+                          >
+                            {isSubmitting ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                Ingresando...
+                              </>
+                            ) : (
+                              'Iniciar Sesión'
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    </>
+                  )}
                 </div>
               </div>
 

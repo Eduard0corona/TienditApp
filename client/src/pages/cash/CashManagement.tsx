@@ -41,6 +41,13 @@ function getTodayInputDate(): string {
 const getErrorMessage = (err: unknown, fallback: string) =>
   (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
 
+// Money typed by the cashier: empty, negative or more than 2 decimals is rejected (the API stores cents).
+function parseMoney(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+  return Number(trimmed);
+}
+
 const transactionTypeLabel = (type: CashTransactionType) => {
   switch (type) {
     case CashTransactionTypeConst.SalePayment: return 'Pago de venta';
@@ -69,6 +76,8 @@ export default function CashManagement() {
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  // Guards money operations against double clicks while a request is in flight.
+  const [submitting, setSubmitting] = useState(false);
 
   const [openingAmount, setOpeningAmount] = useState('0');
   const [closingAmount, setClosingAmount] = useState('');
@@ -147,31 +156,46 @@ export default function CashManagement() {
   );
 
   const openSession = async () => {
+    if (submitting) return;
     setError('');
     setSuccess('');
-    const amount = Number(openingAmount);
-    if (Number.isNaN(amount) || amount < 0) {
-      setError('Monto de apertura inválido.');
+    const amount = parseMoney(openingAmount);
+    if (amount === null) {
+      setError('Monto de apertura inválido: usa un número mayor o igual a 0 con máximo 2 decimales.');
       return;
     }
+    setSubmitting(true);
     try {
       await cashApi.openSession({ openingAmount: amount });
       setSuccess('Caja abierta correctamente.');
       await loadAll();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'No se pudo abrir la caja.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const closeSession = async () => {
-    if (!session) return;
+    if (!session || submitting) return;
     setError('');
     setSuccess('');
-    const amount = Number(closingAmount);
-    if (Number.isNaN(amount)) {
-      setError('Monto de cierre inválido.');
+    // An empty field used to close the drawer at $0 without asking.
+    const amount = parseMoney(closingAmount);
+    if (amount === null) {
+      setError('Captura el efectivo contado: un número mayor o igual a 0 con máximo 2 decimales.');
       return;
     }
+    const difference = amount - session.expectedBalance;
+    const confirmed = window.confirm(
+      `Esperado: $${session.expectedBalance.toFixed(2)}\n` +
+      `Contado: $${amount.toFixed(2)}\n` +
+      `Diferencia: $${difference.toFixed(2)}\n\n` +
+      '¿Cerrar la caja? Esta acción no se puede deshacer.',
+    );
+    if (!confirmed) return;
+
+    setSubmitting(true);
     try {
       await cashApi.closeSession(session.id, { closingAmount: amount });
       setSuccess('Caja cerrada correctamente.');
@@ -179,16 +203,19 @@ export default function CashManagement() {
       await loadAll();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'No se pudo cerrar la caja.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const addTransaction = async () => {
-    if (!session) return;
+    if (!session || submitting) return;
     setError('');
     setSuccess('');
-    const amount = Number(transactionAmount);
-    if (Number.isNaN(amount) || amount === 0) {
-      setError('Monto inválido.');
+    // Always positive: the server applies the sign from the type (expenses, withdrawals and refunds subtract).
+    const amount = parseMoney(transactionAmount);
+    if (amount === null || amount === 0) {
+      setError('Monto inválido: usa un número mayor a 0 con máximo 2 decimales.');
       return;
     }
 
@@ -201,6 +228,7 @@ export default function CashManagement() {
       notes: transactionNotes.trim() || undefined,
     };
 
+    setSubmitting(true);
     try {
       await cashApi.addTransaction(payload);
       setSuccess('Movimiento registrado.');
@@ -211,6 +239,8 @@ export default function CashManagement() {
       await Promise.all([loadAll(), loadTransactions()]);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'No se pudo registrar el movimiento.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -241,9 +271,11 @@ export default function CashManagement() {
             <h5>Abrir caja</h5>
             <div className="row align-items-end">
               <div className="col-md-4 mb-2">
-                <label className="form-label">Monto de apertura</label>
+                <label className="form-label" htmlFor="cash-opening-amount">Monto de apertura</label>
                 <input
+                  id="cash-opening-amount"
                   type="number"
+                  min="0"
                   step="0.01"
                   className="form-control"
                   value={openingAmount}
@@ -251,8 +283,8 @@ export default function CashManagement() {
                 />
               </div>
               <div className="col-md-2 mb-2">
-                <button className="btn btn-primary w-100" onClick={openSession}>
-                  Abrir
+                <button className="btn btn-primary w-100" onClick={openSession} disabled={submitting}>
+                  {submitting ? 'Abriendo...' : 'Abrir'}
                 </button>
               </div>
             </div>
@@ -269,26 +301,36 @@ export default function CashManagement() {
                 </div>
               </div>
             </div>
-            <div className="col-md-3">
+            <div className="col-md-2">
               <div className="card mb-0">
                 <div className="card-body py-2">
-                  <div className="text-muted small">Entradas</div>
+                  <div className="text-muted small">Entradas de efectivo</div>
                   <div className="h4 mb-0 text-success">${session.inflows.toFixed(2)}</div>
                 </div>
               </div>
             </div>
-            <div className="col-md-3">
+            <div className="col-md-2">
               <div className="card mb-0">
                 <div className="card-body py-2">
-                  <div className="text-muted small">Salidas</div>
+                  <div className="text-muted small">Salidas de efectivo</div>
                   <div className="h4 mb-0 text-danger">${session.outflows.toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-2">
+              <div className="card mb-0">
+                <div className="card-body py-2">
+                  <div className="text-muted small" title="Tarjeta, transferencia y otros: no forman parte del efectivo en caja">
+                    Otros métodos
+                  </div>
+                  <div className="h4 mb-0 text-info">${session.nonCashInflows.toFixed(2)}</div>
                 </div>
               </div>
             </div>
             <div className="col-md-3">
               <div className="card mb-0">
                 <div className="card-body py-2">
-                  <div className="text-muted small">Esperado</div>
+                  <div className="text-muted small">Efectivo esperado</div>
                   <div className="h4 mb-0">${session.expectedBalance.toFixed(2)}</div>
                 </div>
               </div>
@@ -313,14 +355,20 @@ export default function CashManagement() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Monto</label>
+                  <label className="form-label" htmlFor="cash-transaction-amount">Monto</label>
                   <input
+                    id="cash-transaction-amount"
                     type="number"
+                    min="0.01"
                     step="0.01"
                     className="form-control"
                     value={transactionAmount}
                     onChange={(e) => setTransactionAmount(e.target.value)}
+                    aria-describedby="cash-transaction-amount-help"
                   />
+                  <div id="cash-transaction-amount-help" className="form-text">
+                    Captura el monto en positivo; gastos, retiros y reembolsos se restan.
+                  </div>
                 </div>
                 <div className="col-md-3 mb-2">
                   <label className="form-label">Referencia</label>
@@ -354,7 +402,9 @@ export default function CashManagement() {
                   />
                 </div>
               </div>
-              <button className="btn btn-primary btn-sm me-2" onClick={addTransaction}>Registrar movimiento</button>
+              <button className="btn btn-primary btn-sm me-2" onClick={addTransaction} disabled={submitting}>
+                Registrar movimiento
+              </button>
             </div>
           </div>
 
@@ -416,7 +466,8 @@ export default function CashManagement() {
                     <div className="col-md-3"><strong>Efectivo:</strong> ${dailyCut.cashTotal.toFixed(2)}</div>
                     <div className="col-md-3"><strong>Tarjeta:</strong> ${dailyCut.cardTotal.toFixed(2)}</div>
                     <div className="col-md-3"><strong>Transferencia:</strong> ${dailyCut.transferTotal.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Neto:</strong> ${dailyCut.netCashFlow.toFixed(2)}</div>
+                    <div className="col-md-3"><strong>Neto (todos los métodos):</strong> ${dailyCut.netCashFlow.toFixed(2)}</div>
+                    <div className="col-md-3"><strong>Neto en efectivo:</strong> ${dailyCut.netCashOnlyFlow.toFixed(2)}</div>
                   </div>
 
                   <div className="row">
@@ -461,13 +512,17 @@ export default function CashManagement() {
                 <div className="d-flex align-items-center gap-2">
                   <input
                     type="number"
+                    min="0"
                     step="0.01"
                     className="form-control form-control-sm"
-                    placeholder="Monto cierre"
+                    placeholder="Efectivo contado"
+                    aria-label="Efectivo contado al cerrar"
                     value={closingAmount}
                     onChange={(e) => setClosingAmount(e.target.value)}
                   />
-                  <button className="btn btn-danger btn-sm" onClick={closeSession}>Cerrar caja</button>
+                  <button className="btn btn-danger btn-sm" onClick={closeSession} disabled={submitting || closingAmount.trim() === ''}>
+                    Cerrar caja
+                  </button>
                 </div>
               </div>
 

@@ -3,6 +3,7 @@ using System.Text.Json;
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
@@ -71,15 +72,18 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICurrentTenantService _tenantService;
     private readonly IMapper _mapper;
 
     public UpdateMyTenantCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
+        ICurrentTenantService tenantService,
         IMapper mapper)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _tenantService = tenantService;
         _mapper = mapper;
     }
 
@@ -94,47 +98,17 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
         if (!canManageTenant)
             return Result.Failure<TenantProfileDto>("Solo el administrador del tenant puede modificar los datos de la empresa.");
 
-        var tenantId = _currentUserService.TenantId;
-        var hasUserId = Guid.TryParse(_currentUserService.UserId, out var userId);
-
-        if (hasUserId)
-        {
-            if (tenantId is null)
-            {
-                tenantId = await _context.Users
-                    .IgnoreQueryFilters()
-                    .Where(u => u.Id == userId)
-                    .Select(u => u.DefaultTenantId)
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-
-            if (tenantId is null)
-            {
-                tenantId = await _context.TenantUsers
-                    .IgnoreQueryFilters()
-                    .Where(tu => tu.UserId == userId && tu.Status == TenantUserStatus.Active)
-                    .OrderBy(tu => tu.CreatedAt)
-                    .Select(tu => (Guid?)tu.TenantId)
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-        }
+        var tenantId = await MyTenantResolver.ResolveAsync(
+            _context,
+            _tenantService,
+            _currentUserService,
+            cancellationToken);
 
         if (tenantId is null)
             return Result.Failure<TenantProfileDto>("No se encontro el tenant del usuario.");
 
         var tenant = await _context.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
-
-        if (tenant is null && hasUserId)
-        {
-            tenant = await (
-                from tu in _context.TenantUsers.IgnoreQueryFilters()
-                join t in _context.Tenants.IgnoreQueryFilters() on tu.TenantId equals t.Id
-                where tu.UserId == userId && tu.Status == TenantUserStatus.Active
-                orderby tu.CreatedAt
-                select t)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
 
         if (tenant is null)
             return Result.Failure<TenantProfileDto>("Tenant no encontrado.");

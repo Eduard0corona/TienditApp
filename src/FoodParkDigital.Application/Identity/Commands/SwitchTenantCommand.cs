@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -10,7 +11,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
-public record SwitchTenantCommand(Guid TenantId) : IRequest<Result<AuthResponse>>;
+public record SwitchTenantCommand(Guid TenantId) : IRequest<Result<AuthResponse>>
+{
+    /// <summary>
+    /// Refresh token of the session being switched, taken by the controller from the HttpOnly cookie
+    /// (never from the request body). It is revoked once the new one is issued.
+    /// </summary>
+    [JsonIgnore]
+    public string? CurrentRefreshToken { get; init; }
+}
 
 public class SwitchTenantCommandValidator : AbstractValidator<SwitchTenantCommand>
 {
@@ -72,6 +81,15 @@ public class SwitchTenantCommandHandler : IRequestHandler<SwitchTenantCommand, R
             user,
             new TenantTokenContext(request.TenantId, tenantRole, permissions));
         var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
+
+        // Rotation: the previous token stayed valid after a switch and could start a parallel session.
+        if (!string.IsNullOrEmpty(request.CurrentRefreshToken))
+        {
+            var previousToken = await _context.RefreshTokens.FirstOrDefaultAsync(
+                x => x.Token == request.CurrentRefreshToken && x.UserId == user.Id && x.RevokedAt == null,
+                cancellationToken);
+            previousToken?.Revoke(refreshToken.Token);
+        }
 
         _context.RefreshTokens.Add(refreshToken);
         await _context.SaveChangesAsync(cancellationToken);

@@ -1,0 +1,157 @@
+using System.Data.Common;
+using FoodParkDigital.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
+namespace FoodParkDigital.Application.Tests.Support;
+
+/// <summary>
+/// Runs a one-shot callback right before the next SaveChanges whose context matches, after the
+/// code under test ran its checks and before it writes, e.g. to act as a concurrent request.
+/// </summary>
+internal sealed class BeforeSaveInterceptor : SaveChangesInterceptor
+{
+    private Func<DbContext, bool>? _when;
+    private Func<DbContext, Task>? _action;
+
+    public bool Fired { get; private set; }
+
+    public void Arm(Func<DbContext, bool> when, Func<DbContext, Task> action)
+    {
+        _when = when;
+        _action = action;
+    }
+
+    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        if (eventData.Context is { } context && _action is { } action && _when!(context))
+        {
+            // Disarm first so saves made by the callback itself do not trigger it again.
+            _action = null;
+            _when = null;
+            Fired = true;
+            await action(context);
+        }
+
+        return result;
+    }
+}
+
+/// <summary>Throws once when the next command matching the predicate is about to execute.</summary>
+internal sealed class CommandFaultInterceptor : DbCommandInterceptor
+{
+    private Func<DbCommand, bool>? _matches;
+    private Func<Exception>? _fault;
+
+    public bool Fired { get; private set; }
+
+    public void FailNext(Func<DbCommand, bool> matches, Func<Exception> fault)
+    {
+        _matches = matches;
+        _fault = fault;
+    }
+
+    public override InterceptionResult<DbDataReader> ReaderExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+    {
+        ThrowIfArmed(command);
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+        DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfArmed(command);
+        return ValueTask.FromResult(result);
+    }
+
+    public override InterceptionResult<int> NonQueryExecuting(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
+    {
+        ThrowIfArmed(command);
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+        DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfArmed(command);
+        return ValueTask.FromResult(result);
+    }
+
+    private void ThrowIfArmed(DbCommand command)
+    {
+        if (_fault is not { } fault || !_matches!(command))
+            return;
+
+        _fault = null;
+        _matches = null;
+        Fired = true;
+        throw fault();
+    }
+}
+
+/// <summary>Makes the next transaction commits fail with a retriable error before reaching SQLite.</summary>
+internal sealed class CommitFaultInterceptor : DbTransactionInterceptor
+{
+    public int Remaining { get; private set; }
+
+    public void FailNext(int commits = 1) => Remaining = commits;
+
+    public override InterceptionResult TransactionCommitting(
+        DbTransaction transaction, TransactionEventData eventData, InterceptionResult result)
+    {
+        ThrowIfArmed();
+        return result;
+    }
+
+    public override ValueTask<InterceptionResult> TransactionCommittingAsync(
+        DbTransaction transaction, TransactionEventData eventData, InterceptionResult result,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfArmed();
+        return ValueTask.FromResult(result);
+    }
+
+    private void ThrowIfArmed()
+    {
+        if (Remaining == 0)
+            return;
+
+        Remaining--;
+        throw new SimulatedTransientException();
+    }
+}
+
+internal sealed class RecordingEmailService : IEmailService
+{
+    public List<string> ConfirmationRecipients { get; } = [];
+
+    public Task SendEmailConfirmationAsync(string email, string userId, string token)
+    {
+        ConfirmationRecipients.Add(email);
+        return Task.CompletedTask;
+    }
+
+    public Task SendPasswordResetEmailAsync(string email, string userId, string token) => Task.CompletedTask;
+
+    public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
+}
+
+internal sealed class RecordingSmsService : ISmsService
+{
+    public List<string> VerificationRecipients { get; } = [];
+
+    public Task SendVerificationCodeAsync(string phoneNumber, string code)
+    {
+        VerificationRecipients.Add(phoneNumber);
+        return Task.CompletedTask;
+    }
+
+    public Task SendSmsAsync(string phoneNumber, string message) => Task.CompletedTask;
+}

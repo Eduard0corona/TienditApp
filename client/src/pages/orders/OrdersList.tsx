@@ -8,7 +8,12 @@ import { ordersApi } from '../../api/ordersApi';
 import { inventoryApi } from '../../api/inventoryApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import type { InventoryLocationDto, OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
-import { OrderPaymentMethod as OrderPaymentMethodConst, OrderType as OrderTypeConst } from '../../types';
+import {
+  OrderPaymentMethod as OrderPaymentMethodConst,
+  OrderStatus as OrderStatusConst,
+  OrderType as OrderTypeConst,
+} from '../../types';
+import { isSafeFileUrl } from '../../utils/safeUrl';
 
 const STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
   { value: 0, label: 'Pendiente' },
@@ -128,6 +133,11 @@ function getStatusLabel(status: OrderStatus, orderType?: OrderType): string {
   return STATUS_LABELS.get(status) ?? String(status);
 }
 
+const getApiErrorMessage = (err: unknown, fallback: string) =>
+  (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
+  (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
+  fallback;
+
 function safeParseArray<T>(raw?: string): T[] {
   if (!raw) return [];
   try {
@@ -168,7 +178,16 @@ export default function OrdersList() {
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [locations, setLocations] = useState<InventoryLocationDto[]>([]);
   const [realtimeMessage, setRealtimeMessage] = useState('');
+  const [statusSubmitting, setStatusSubmitting] = useState(false);
+  const [statusError, setStatusError] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
+
+  // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
+  // and is blocked while the order has payments).
+  const selectedOrderStatusActions = useMemo(
+    () => selectedOrder?.allowedTransitions.filter((status) => status !== OrderStatusConst.Cancelled) ?? [],
+    [selectedOrder],
+  );
 
   const selectedOrderTotalItems = useMemo(
     () => selectedOrder?.items.reduce((acc, item) => acc + item.quantity, 0) ?? 0,
@@ -186,13 +205,13 @@ export default function OrdersList() {
     const raw = safeParseArray<ParsedPhotoItem | string>(selectedOrder?.serviceDetail?.beforePhotosJson);
     return raw
       .map((item) => (typeof item === 'string' ? { url: item } : item))
-      .filter((item) => !!item.url);
+      .filter((item) => isSafeFileUrl(item.url));
   }, [selectedOrder]);
   const selectedOrderAfterPhotos = useMemo(() => {
     const raw = safeParseArray<ParsedPhotoItem | string>(selectedOrder?.serviceDetail?.afterPhotosJson);
     return raw
       .map((item) => (typeof item === 'string' ? { url: item } : item))
-      .filter((item) => !!item.url);
+      .filter((item) => isSafeFileUrl(item.url));
   }, [selectedOrder]);
   const locationNameById = useMemo(
     () => new Map(locations.map((location) => [location.id, location.name])),
@@ -336,12 +355,43 @@ export default function OrdersList() {
     }
   };
 
+  const handleStatusChange = async (order: OrderDto, newStatus: OrderStatus) => {
+    if (statusSubmitting) return;
+    setStatusSubmitting(true);
+    setStatusError('');
+    try {
+      await ordersApi.updateStatus(order.id, newStatus);
+      await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
+    } catch (err: unknown) {
+      setStatusError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la orden.'));
+    } finally {
+      setStatusSubmitting(false);
+    }
+  };
+
+  const handleCancelOrder = async (order: OrderDto) => {
+    if (statusSubmitting) return;
+    const reason = window.prompt(`Motivo de la cancelación de ${order.orderNumber} (opcional):`);
+    if (reason === null) return;
+
+    setStatusSubmitting(true);
+    setStatusError('');
+    try {
+      await ordersApi.cancel(order.id, reason.trim() || undefined);
+      await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
+    } catch (err: unknown) {
+      setStatusError(getApiErrorMessage(err, 'No se pudo cancelar la orden.'));
+    } finally {
+      setStatusSubmitting(false);
+    }
+  };
+
   const handleAddPayment = async () => {
-    if (!paymentOrder) return;
+    if (!paymentOrder || paymentSubmitting) return;
 
     const amount = Number(paymentAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentError('Monto de pago invalido.');
+    if (!/^\d+(\.\d{1,2})?$/.test(paymentAmount.trim()) || amount <= 0) {
+      setPaymentError('Monto de pago invalido: usa un número mayor a 0 con máximo 2 decimales.');
       return;
     }
 
@@ -379,11 +429,7 @@ export default function OrdersList() {
       setPaymentEvidenceName('');
       setPaymentError('');
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo registrar el pago.';
-      setPaymentError(msg);
+      setPaymentError(getApiErrorMessage(err, 'No se pudo registrar el pago.'));
     } finally {
       setPaymentSubmitting(false);
     }
@@ -601,7 +647,15 @@ export default function OrdersList() {
         </div>
       </div>
 
-      <Modal show={!!selectedOrder} onHide={() => setSelectedOrder(null)} size="lg" centered>
+      <Modal
+        show={!!selectedOrder}
+        onHide={() => {
+          setSelectedOrder(null);
+          setStatusError('');
+        }}
+        size="lg"
+        centered
+      >
         <Modal.Header closeButton>
           <Modal.Title>Detalle de Orden</Modal.Title>
         </Modal.Header>
@@ -625,6 +679,41 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Saldo:</strong> ${selectedOrder.balance.toFixed(2)}</p>
                 </div>
               </div>
+
+              {(selectedOrderStatusActions.length > 0 || selectedOrder.canCancel) && (
+                <div className="border rounded p-2 mb-3">
+                  <div className="fw-semibold mb-2">Acciones</div>
+                  <div className="d-flex flex-wrap gap-2">
+                    {selectedOrderStatusActions.map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        className="btn btn-sm btn-outline-primary"
+                        disabled={statusSubmitting}
+                        onClick={() => void handleStatusChange(selectedOrder, status)}
+                      >
+                        {getStatusLabel(status, selectedOrder.orderType)}
+                      </button>
+                    ))}
+                    {selectedOrder.canCancel && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        disabled={statusSubmitting}
+                        onClick={() => void handleCancelOrder(selectedOrder)}
+                      >
+                        Cancelar orden
+                      </button>
+                    )}
+                  </div>
+                  {!selectedOrder.canCancel && selectedOrder.paidAmount > 0 && (
+                    <small className="text-muted d-block mt-2">
+                      La orden tiene pagos registrados: no se puede cancelar hasta registrar el reembolso.
+                    </small>
+                  )}
+                  {statusError && <div className="alert alert-danger mt-2 mb-0 py-2">{statusError}</div>}
+                </div>
+              )}
 
               <h5 className="mb-2">Items</h5>
               <div className="table-responsive">
@@ -807,8 +896,8 @@ export default function OrdersList() {
                             <td>{PAYMENT_METHOD_LABELS[payment.method] || payment.method}</td>
                             <td>{payment.inventoryLocationId ? (locationNameById.get(payment.inventoryLocationId) || 'Sucursal') : '-'}</td>
                             <td>
-                              {payment.evidenceUrl ? (
-                                <a href={payment.evidenceUrl} target="_blank" rel="noreferrer">
+                              {isSafeFileUrl(payment.evidenceUrl) ? (
+                                <a href={payment.evidenceUrl} target="_blank" rel="noopener noreferrer">
                                   Ver
                                 </a>
                               ) : '-'}

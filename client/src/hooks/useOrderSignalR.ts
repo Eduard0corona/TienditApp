@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr';
-import { getAccessToken } from '../api/axios';
+import type { HubConnection } from '@microsoft/signalr';
+import { createHubConnection, keepHubConnected } from '../api/signalr';
 
 export interface OrderCreatedPayload {
   orderId: string;
@@ -33,44 +33,13 @@ export function useOrderSignalR() {
 
   useEffect(() => {
     let isDisposed = false;
-    let startTimeoutId: number | undefined;
-
-    const connection = new HubConnectionBuilder()
-      .withUrl('/hubs/orders', {
-        accessTokenFactory: () => getAccessToken() || '',
-      })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
-      .build();
-
+    const connection = createHubConnection('/hubs/orders');
     connectionRef.current = connection;
-
-    const startConnection = async () => {
-      try {
-        await connection.start();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const stoppedDuringNegotiation = message.toLowerCase().includes('stopped during negotiation');
-
-        // In React StrictMode the effect is mounted/unmounted twice in dev.
-        // Ignore negotiation errors caused by intentional teardown.
-        if (!isDisposed && !stoppedDuringNegotiation) {
-          console.error('OrderHub connection error:', err);
-        }
-      }
-    };
-
-    // Delay start one tick to avoid StrictMode mount/unmount negotiation races in dev.
-    startTimeoutId = window.setTimeout(() => {
-      void startConnection();
-    }, 0);
+    const stop = keepHubConnected(connection, 'OrderHub', () => isDisposed);
 
     return () => {
       isDisposed = true;
-      if (startTimeoutId !== undefined) {
-        window.clearTimeout(startTimeoutId);
-      }
-      void connection.stop().catch(() => undefined);
+      stop();
     };
   }, []);
 

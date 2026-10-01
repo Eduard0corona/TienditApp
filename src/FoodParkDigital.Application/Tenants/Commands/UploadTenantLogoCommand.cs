@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FluentValidation;
 using MediatR;
@@ -72,16 +73,14 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
         if (tenant is null)
             return Result.Failure<LogoImageUrlsDto>("Tenant no encontrado.");
 
-        // Delete previous variants if they exist
-        if (!string.IsNullOrEmpty(tenant.LogoUrl))
-            await _fileStorageService.DeleteVariantsAsync(tenant.LogoUrl, cancellationToken);
+        var folder = TenantStorageFolders.Logos(tenantId);
+        var previousLogoUrl = tenant.LogoUrl;
 
         // Generate image variants
         var variants = await _imageProcessingService.GenerateVariantsAsync(
             request.FileStream, cancellationToken);
 
         // Upload each variant
-        var folder = $"logos/{tenantId}";
         var baseId = Guid.NewGuid().ToString();
         string? baseUrl = null;
 
@@ -113,6 +112,11 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
         // Update tenant logo
         tenant.Update(tenant.Name, tenant.ContactEmail, tenant.ContactPhone, baseUrl);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // The previous files are removed only after the new logo is stored; deleting them first left the
+        // tenant pointing to missing files whenever the new image was rejected.
+        if (!string.IsNullOrEmpty(previousLogoUrl))
+            await _fileStorageService.DeleteVariantsAsync(previousLogoUrl, folder, cancellationToken);
 
         return Result.Success(LogoImageUrlsDto.FromBaseUrl(baseUrl)!);
     }

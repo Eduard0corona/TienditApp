@@ -48,15 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 
         // Identity
-        services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
-        {
-            options.Password.RequireDigit = true;
-            options.Password.RequiredLength = 6;
-            options.Password.RequireNonAlphanumeric = false;
-            options.Password.RequireUppercase = true;
-            options.Password.RequireLowercase = true;
-            options.User.RequireUniqueEmail = true;
-        })
+        services.AddIdentity<ApplicationUser, ApplicationRole>(ConfigureIdentityOptions)
         .AddEntityFrameworkStores<ApplicationDbContext>()
         .AddDefaultTokenProviders();
 
@@ -117,6 +109,7 @@ public static class DependencyInjection
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ISignInService, SignInService>();
+        services.AddScoped<ITwoFactorLoginChallengeService, TwoFactorLoginChallengeService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();
@@ -127,9 +120,21 @@ public static class DependencyInjection
         else
             services.AddScoped<IFileStorageService, LocalFileStorageService>();
 
-        services.AddSingleton<IImageProcessingService, ImageProcessingService>();
+        services.AddSingleton<ImageProcessingService>();
+        services.AddSingleton<IImageProcessingService>(sp => sp.GetRequiredService<ImageProcessingService>());
+        services.AddSingleton<IImageNormalizationService>(sp => sp.GetRequiredService<ImageProcessingService>());
         services.AddHttpContextAccessor();
 
         return services;
+    }
+
+    public static void ConfigureIdentityOptions(IdentityOptions options)
+    {
+        options.Password.RequireDigit = true;
+        options.Password.RequiredLength = 6;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireLowercase = true;
+        options.User.RequireUniqueEmail = true;
     }
 }

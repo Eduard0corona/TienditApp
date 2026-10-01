@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build, tests, migrations)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The API targets net9.0 and the test projects net10.0.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore FoodParkDigital.sln
+
+      - name: Build
+        run: dotnet build FoodParkDigital.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test FoodParkDigital.sln --no-build --configuration Release --verbosity normal
+
+      # Fails when an entity configuration changed without its migration.
+      - name: Check pending EF Core model changes
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+        run: |
+          dotnet tool install --global dotnet-ef --version 9.0.0
+          dotnet ef migrations has-pending-model-changes \
+            --project src/FoodParkDigital.Infrastructure \
+            --startup-project src/FoodParkDigital.WebApi \
+            --configuration Release \
+            --no-build
+
+  frontend:
+    name: Frontend (lint, build, audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

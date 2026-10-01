@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Identity.Queries;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Queries;
+using FoodParkDigital.WebApi.Security;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +22,6 @@ public class AuthController : ControllerBase
     private readonly IMediator _mediator;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IWebHostEnvironment _env;
-    private const string RefreshTokenCookieName = "refresh_token";
 
     public AuthController(
         IMediator mediator,
@@ -56,7 +56,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> RefreshToken()
     {
-        var refreshToken = Request.Cookies[RefreshTokenCookieName];
+        var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
         if (string.IsNullOrEmpty(refreshToken))
             return Unauthorized(new { error = "No refresh token provided." });
 
@@ -84,20 +84,10 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult> Logout()
     {
-        var refreshToken = Request.Cookies[RefreshTokenCookieName];
+        var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
         await _mediator.Send(new LogoutCommand(refreshToken));
         DeleteRefreshTokenCookie();
         return Ok(new { message = "Sesión cerrada exitosamente." });
-    }
-
-    [HttpPost("register")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
-    public async Task<ActionResult<UserDto>> Register([FromBody] RegisterUserCommand command)
-    {
-        var result = await _mediator.Send(command);
-        if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
-        return CreatedAtAction(nameof(Register), new { id = result.Value.Id }, result.Value);
     }
 
     [HttpPost("register/business")]
@@ -134,7 +124,7 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<ActionResult<AuthResponse>> SwitchTenant([FromBody] SwitchTenantCommand command)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command with { CurrentRefreshToken = Request.Cookies[RefreshTokenCookie.Name] });
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 
@@ -358,29 +348,9 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Mensaje enviado exitosamente." });
     }
 
-    private CookieOptions GetCookieOptions(DateTime? expires = null)
-    {
-        var isHttpsRequest = HttpContext?.Request?.IsHttps == true;
-        var secureCookie = !_env.IsDevelopment() && isHttpsRequest;
-
-        return new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = secureCookie,
-            SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
-            Expires = expires,
-            Path = "/api/v1/auth"
-        };
-    }
-
     private void SetRefreshTokenCookie(string refreshToken)
-    {
-        var cookieOptions = GetCookieOptions(DateTime.UtcNow.AddDays(7));
-        Response.Cookies.Append(RefreshTokenCookieName, refreshToken, cookieOptions);
-    }
+        => RefreshTokenCookie.Append(HttpContext, _env, refreshToken);
 
     private void DeleteRefreshTokenCookie()
-    {
-        Response.Cookies.Delete(RefreshTokenCookieName, GetCookieOptions());
-    }
+        => RefreshTokenCookie.Delete(HttpContext, _env);
 }

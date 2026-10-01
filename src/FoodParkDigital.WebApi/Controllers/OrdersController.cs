@@ -100,7 +100,6 @@ public class OrdersController : ControllerBase
             OrderId = id,
             Amount = request.Amount,
             Method = request.Method,
-            PaidAt = request.PaidAt,
             InventoryLocationId = request.InventoryLocationId,
             EvidenceUrl = request.EvidenceUrl,
             Reference = request.Reference,
@@ -192,7 +191,6 @@ public record AddOrderPaymentRequest
 {
     public decimal Amount { get; init; }
     public OrderPaymentMethod Method { get; init; }
-    public DateTimeOffset? PaidAt { get; init; }
     public Guid? InventoryLocationId { get; init; }
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }

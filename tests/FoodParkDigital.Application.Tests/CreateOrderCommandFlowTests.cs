@@ -2,6 +2,7 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -16,6 +17,8 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
@@ -23,7 +26,7 @@ namespace FoodParkDigital.Application.Tests;
 public class CreateOrderCommandFlowTests
 {
     [Fact]
-    public async Task CreateOrder_ShouldLinkRegisteredCustomer_WhenPhoneExistsInCustomerProfile()
+    public async Task CreateOrder_ShouldLinkRegisteredCustomer_WhenTheyConfirmedTheProfilePhone()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var (tenant, product) = await fixture.SeedCatalogAsync();
@@ -37,6 +40,8 @@ public class CreateOrderCommandFlowTests
             NormalizedEmail = "REGISTERED@DEMO.COM",
             FirstName = "Cliente",
             LastName = "Registrado",
+            PhoneNumber = "+525511112222",
+            PhoneNumberConfirmed = true,
             Role = UserRole.Customer,
             IsActive = true
         };
@@ -264,6 +269,103 @@ public class CreateOrderCommandFlowTests
                 CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CreateOrder_ShouldFail_WhenTrackableServiceWouldCreateTooManyPieces()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (tenant, _) = await fixture.SeedCatalogAsync();
+        var categoryId = await fixture.Context.Categories.Select(x => x.Id).FirstAsync();
+        var trackableService = new Product(
+            tenant.Id,
+            categoryId,
+            "Lavado por prenda",
+            null,
+            30m,
+            "MXN",
+            unit: Domain.Catalog.Enums.UnitType.Service,
+            isTrackable: true);
+        fixture.Context.Products.Add(trackableService);
+        await fixture.Context.SaveChangesAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                CustomerPhone = "55 1111 2222",
+                Items = [new CreateOrderItemDto { ProductId = trackableService.Id, Quantity = OrderLimits.MaxServicePiecesPerOrder + 1 }]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.False(await fixture.Context.Orders.AnyAsync());
+    }
+
+    [Fact]
+    public async Task CreateOrder_ShouldEnforceProductMaxQuantityPerOrder_AcrossLines()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (tenant, _) = await fixture.SeedCatalogAsync();
+        var categoryId = await fixture.Context.Categories.Select(x => x.Id).FirstAsync();
+        var limited = new Product(tenant.Id, categoryId, "Promo limitada", null, 50m, "MXN", maxQuantityPerOrder: 2);
+        fixture.Context.Products.Add(limited);
+        await fixture.Context.SaveChangesAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                CustomerPhone = "55 1111 3333",
+                Items =
+                [
+                    new CreateOrderItemDto { ProductId = limited.Id, Quantity = 2 },
+                    new CreateOrderItemDto { ProductId = limited.Id, Quantity = 1 }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("maximo 2", result.Error);
+    }
+
+    [Fact]
+    public async Task CreateOrder_ShouldRejectManualPieceReferencingServiceOutsideOrder()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (_, product) = await fixture.SeedCatalogAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                CustomerPhone = "55 1111 4444",
+                Items = [new CreateOrderItemDto { ProductId = product.Id, Quantity = 1 }],
+                ServiceDetail = new ServiceOrderDetailInput
+                {
+                    Pieces = [new ServiceOrderPieceInput { ItemName = "Chamarra", ServiceProductId = Guid.NewGuid() }]
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public void CreateOrderValidator_ShouldRejectExcessiveQuantitiesAndLines()
+    {
+        var validator = new CreateOrderCommandValidator();
+
+        var hugeQuantity = validator.Validate(new CreateOrderCommand
+        {
+            Items = [new CreateOrderItemDto { ProductId = Guid.NewGuid(), Quantity = 2_000_000_000 }]
+        });
+        var tooManyLines = validator.Validate(new CreateOrderCommand
+        {
+            Items = Enumerable.Range(0, OrderLimits.MaxItemsPerOrder + 1)
+                .Select(_ => new CreateOrderItemDto { ProductId = Guid.NewGuid(), Quantity = 1 })
+                .ToList()
+        });
+
+        Assert.False(hugeQuantity.IsValid);
+        Assert.False(tooManyLines.IsValid);
+    }
+
     private sealed class TestFixture : IAsyncDisposable
     {
         private readonly TestCurrentTenantService _tenantService;
@@ -306,6 +408,7 @@ public class CreateOrderCommandFlowTests
             var customerLookup = new CustomerLookupService(
                 Context,
                 new PhoneNormalizationService(),
+                new HostingEnvironment { EnvironmentName = Environments.Production },
                 NullLogger<CustomerLookupService>.Instance);
 
             return new CreateOrderCommandHandler(

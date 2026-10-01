@@ -89,15 +89,16 @@ stateDiagram-v2
 
 ## Efectos coordinados actuales
 
-- Al crear una orden de negocio, el caso de uso puede aplicar un estado inicial operativo y consumo de inventario.
-- Al entrar en estados operativos definidos por `ShouldConsumeInventory`, se crea una salida idempotente por `ExternalReference`.
-- Al cancelar, se crea un movimiento compensatorio si existió consumo.
-- Al completar una pieza, se puede consumir su receta.
-- Los eventos post-save crean auditoría y notifican por SignalR/WhatsApp.
+- Al crear una orden de negocio, el caso de uso puede aplicar un estado inicial operativo (`Confirmed`) y consumo de inventario. El tablero de cocina lista todos los estados Food anteriores a `Ready` (Pending, Confirmed, Accepted, InPreparation e InProgress) y se actualiza en tiempo real.
+- Al entrar en estados operativos definidos por `ShouldConsumeInventory`, se crea una salida idempotente por `ExternalReference`. En órdenes de servicio se consumen a nivel orden los productos que no se rastrean como pieza (por ejemplo, un producto vendido junto con el servicio); las líneas rastreadas consumen su receta al completar cada pieza.
+- `CanCancel` se deriva de la tabla de transiciones de cada máquina, y `CancelOrderCommand` y `UpdateOrderStatusCommand` (con destino `Cancelled`) pasan por `Order.Cancel`: se rechaza si la orden tiene pagos, se cancelan las piezas aceptadas o en progreso (las completadas se conservan) y se crea el movimiento compensatorio si existió consumo.
+- Al completar una pieza, su receta se consume dentro del mismo comando y del mismo guardado que el cambio de estado; si falta stock, la pieza no cambia. Cada cambio de pieza pasa por `Order.ChangeServicePieceStatus`, que modifica la fila de la orden: dos piezas completadas al mismo tiempo chocan en el rowversion de `Order` y el comando reintenta con datos frescos, de modo que la orden sí llega a `Completed`.
+- Las órdenes canceladas salen del tablero de servicios y no aceptan cambios de piezas ni pagos.
+- Los eventos post-save crean auditoría y notifican por SignalR/WhatsApp. Las notificaciones de citas se esperan dentro de la solicitud (antes eran fire-and-forget sobre el DbContext del request), son best-effort y muestran la hora del tenant.
 
 ## Deuda e inconsistencias
 
-- `Cancel()` restringe Food a Pending/Confirmed/InPreparation, Retail a Pending/Confirmed/Accepted y Service a Pending/Accepted/Confirmed/InProgress; sin embargo, las tablas de transición permiten `Cancelled` desde más estados Food. `UpdateOrderStatusCommand` puede transicionar a `Cancelled` por la tabla, mientras `CancelOrderCommand` usa `CanCancel`. Debe unificarse en una decisión posterior.
 - Las máquinas permiten saltos amplios (por ejemplo Pending a Delivered/Completed). Se documentan porque existen, no como flujo operativo ideal.
-- `UpdateOrderStatusCommand` captura concurrencia por rowversion de `Order`; no todas las operaciones relacionadas tienen control equivalente.
-- Cancelar mediante cambio de estado puede carecer de motivo.
+- Cancelar con `UpdateOrderStatusCommand` no registra motivo; el SPA usa el endpoint de cancelación, que sí lo pide.
+- No existen reembolsos: una orden pagada no puede cancelarse. Requiere el diseño de ajustes de ADR 0007.
+- Las cantidades de `OrderItem` son enteras aunque existen unidades Kg, Litro, Metro y Hora; vender fracciones requiere una decisión de producto y una migración.

@@ -20,6 +20,7 @@ public class UpdateMyTenantCommandTests
         var handler = new UpdateMyTenantCommandHandler(
             fixture.Context,
             fixture.CurrentUser,
+            fixture.TenantService,
             fixture.Mapper);
 
         var result = await handler.Handle(
@@ -47,6 +48,7 @@ public class UpdateMyTenantCommandTests
         var handler = new UpdateMyTenantCommandHandler(
             fixture.Context,
             fixture.CurrentUser,
+            fixture.TenantService,
             fixture.Mapper);
 
         var result = await handler.Handle(
@@ -62,19 +64,51 @@ public class UpdateMyTenantCommandTests
         Assert.Empty(fixture.Context.AuditLogs);
     }
 
+    [Fact]
+    public async Task Handle_ShouldFail_WhenNoRequestTenantAndNoActiveMembership()
+    {
+        await using var fixture = await TestFixture.CreateAsync(TenantCapability.Food);
+        var emptyTenantService = new TestCurrentTenantService();
+
+        var handler = new UpdateMyTenantCommandHandler(
+            fixture.Context,
+            fixture.CurrentUser,
+            emptyTenantService,
+            fixture.Mapper);
+
+        var result = await handler.Handle(
+            new UpdateMyTenantCommand
+            {
+                Name = "Nombre cambiado",
+                ContactEmail = "tenant@demo.com"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        var tenant = await fixture.Context.Tenants.SingleAsync();
+        Assert.Equal("Tenant Demo", tenant.Name);
+    }
+
     private sealed class TestFixture : IAsyncDisposable
     {
-        private TestFixture(ApplicationDbContext context, IMapper mapper, TestCurrentUserService currentUser, Tenant tenant)
+        private TestFixture(
+            ApplicationDbContext context,
+            IMapper mapper,
+            TestCurrentUserService currentUser,
+            TestCurrentTenantService tenantService,
+            Tenant tenant)
         {
             Context = context;
             Mapper = mapper;
             CurrentUser = currentUser;
+            TenantService = tenantService;
             Tenant = tenant;
         }
 
         public ApplicationDbContext Context { get; }
         public IMapper Mapper { get; }
         public TestCurrentUserService CurrentUser { get; }
+        public TestCurrentTenantService TenantService { get; }
         public Tenant Tenant { get; }
 
         public static async Task<TestFixture> CreateAsync(TenantCapability capabilities)
@@ -97,7 +131,7 @@ public class UpdateMyTenantCommandTests
                 .CreateMapper();
 
             var currentUser = new TestCurrentUserService(tenant.Id);
-            return new TestFixture(context, mapper, currentUser, tenant);
+            return new TestFixture(context, mapper, currentUser, tenantService, tenant);
         }
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();

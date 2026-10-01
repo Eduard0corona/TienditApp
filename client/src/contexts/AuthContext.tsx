@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authApi } from '../api/authApi';
 import { profileApi } from '../api/profileApi';
-import { setAccessToken } from '../api/axios';
-import type { LoginRequest, UserProfileDto } from '../types';
-import { AuthContext } from './AuthContextDefinition';
+import { refreshAccessToken, setAccessToken } from '../api/axios';
+import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
+import { AuthContext, type LoginResult } from './AuthContextDefinition';
+import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 const SESSION_MARKER_KEY = 'fpd_has_session';
 
@@ -31,6 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfileDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const clearSession = useCallback(() => {
+    setAccessToken(null);
+    setUser(null);
+    setSessionMarker(false);
+  }, []);
+
+  useSessionSync(clearSession);
+
   const refreshProfile = useCallback(async () => {
     try {
       const { data } = await profileApi.getProfile();
@@ -50,9 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data } = await authApi.refreshToken();
-        if (data.accessToken) {
-          setAccessToken(data.accessToken);
+        // Shares the cross-tab refresh lock with the axios interceptor.
+        const accessToken = await refreshAccessToken();
+        if (accessToken) {
           setSessionMarker(true);
           await refreshProfile();
         }
@@ -67,29 +76,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     recoverSession();
   }, [refreshProfile]);
 
-  const login = async (credentials: LoginRequest) => {
-    const { data } = await authApi.login(credentials);
-
-    if (data.requiresTwoFactor) {
-      return { requiresTwoFactor: true, userId: data.userId ?? undefined };
-    }
-
-    if (data.accessToken) {
-      setAccessToken(data.accessToken);
+  const startSession = async (accessToken?: string) => {
+    if (accessToken) {
+      setAccessToken(accessToken);
       setSessionMarker(true);
       await refreshProfile();
     }
+  };
 
+  const login = async (credentials: LoginRequest): Promise<LoginResult> => {
+    const { data } = await authApi.login(credentials);
+
+    if (data.requiresTwoFactor) {
+      if (!data.twoFactorChallengeToken) {
+        throw new Error('Respuesta de inicio de sesión sin desafío de verificación.');
+      }
+
+      // The challenge only lives in memory for the login step; it is never persisted.
+      return { requiresTwoFactor: true, twoFactorChallengeToken: data.twoFactorChallengeToken };
+    }
+
+    await startSession(data.accessToken);
     return { requiresTwoFactor: false };
+  };
+
+  const completeTwoFactorLogin = async (request: TwoFactorLoginRequest) => {
+    const { data } = await authApi.loginTwoFactor(request);
+    await startSession(data.accessToken);
   };
 
   const logout = async () => {
     try {
       await authApi.logout();
     } finally {
-      setAccessToken(null);
-      setUser(null);
-      setSessionMarker(false);
+      clearSession();
+      broadcastSessionChange({ type: 'logout' });
     }
   };
 
@@ -98,7 +119,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (data.accessToken) {
       setAccessToken(data.accessToken);
       setSessionMarker(true);
-      await refreshProfile();
+      // Every loaded list, hub group and draft belongs to the previous tenant: start over, here and in
+      // the other tabs (their next refresh would silently move them to the new tenant).
+      broadcastSessionChange({ type: 'tenant-switched' });
+      reloadForTenantChange();
     }
   };
 
@@ -109,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         login,
+        completeTwoFactorLogin,
         logout,
         refreshProfile,
         switchTenant,

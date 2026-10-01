@@ -12,44 +12,53 @@ El tenant efectivo debe derivarse de identidad autenticada y acceso validado, nu
 
 Riesgos actuales comprobados:
 
-- `TenantSettings` y `WhatsAppConfig` contienen `TenantId` pero no implementan `ITenantScoped`; por ello el filtro global automático no las cubre.
-- Existen usos de `IgnoreQueryFilters()` en autenticación, administración, webhooks y servicios. Cada uso debe revisarse por alcance y autorización; está prohibido añadirlo como atajo.
-- `TenantResolutionMiddleware` permite a `SUPER_ADMIN` sustituir el tenant mediante `X-Tenant-Id` y omite la comprobación de membresía/capability. Debe endurecerse y auditarse antes de considerarlo un control cross-tenant suficiente.
+- `TenantSettings` y `WhatsAppConfig` contienen `TenantId` pero no implementan `ITenantScoped`; por ello el filtro global automático no las cubre y cada consulta debe filtrar por tenant de forma explícita. `OrderItem` y `OrderStatusHistory` no tienen `TenantId`.
+- Existen usos de `IgnoreQueryFilters()` en autenticación, administración, webhooks y servicios. Cada uso debe revisarse por alcance y autorización; está prohibido añadirlo como atajo. El del dashboard, que exponía los productos más vendidos de todos los tenants, ya se corrigió.
+- `TenantResolutionMiddleware` permite a `SUPER_ADMIN` sustituir el tenant mediante `X-Tenant-Id` sin comprobar membresía/capability. El uso queda registrado en el log como evento de auditoría, pero falta justificación, límites y persistencia antes de considerarlo un control cross-tenant suficiente.
+- El interceptor de guardado rechaza entidades nuevas con un `TenantId` ajeno y cambios de `TenantId`; el middleware revalida la membresía en "mi tenant", marketing y órdenes por tenant, y los hubs la validan al conectar.
 - Las pruebas existentes no constituyen una suite completa que demuestre imposibilidad de consultar, modificar, eliminar o descargar datos de otro tenant.
 
 Los grupos SignalR y rutas/nombres de archivos deben incluir aislamiento verificable por tenant. Un rol global, incluido `SUPER_ADMIN`, no concede por sí solo permiso para ignorar ese aislamiento.
 
 ### Autenticación y autorización
 
-El backend usa ASP.NET Identity, JWT HMAC, refresh tokens persistidos con rotación/revocación y 2FA. El access token vive en memoria del cliente; el refresh token se entrega como cookie `HttpOnly` y no se retorna al cliente después del login normal. Antes de producción deben revisarse expiraciones, revocación, protección CSRF/cookie, claves, algoritmos y el uso de tokens SignalR en query string.
+El backend usa ASP.NET Identity, JWT HMAC, refresh tokens persistidos con rotación/revocación y 2FA. El access token vive en memoria del cliente; el refresh token se entrega como cookie `HttpOnly` (`Secure` fuera de Development) y no se retorna al cliente después del login normal ni del login con 2FA; cambiar de tenant también lo rota. La llave JWT es obligatoria fuera de Development, debe tener al menos 32 bytes y la API rechaza la que estuvo publicada en el repositorio.
+
+El login con 2FA tiene dos pasos y no usa cookies de Identity. `POST /api/v1/auth/login` valida la contraseña y, si el usuario tiene 2FA, solo devuelve `twoFactorChallengeToken`: un JWT de 5 minutos firmado con una clave derivada (HKDF) del secreto JWT y con audiencia propia, por lo que no se acepta como access token. Su huella (`jti` + security stamp) se guarda en `AspNetUserTokens`; así es de un solo uso, un login posterior lo reemplaza y deja de valer si cambia el security stamp. `POST /api/v1/twofactor/login` exige ese desafío más un TOTP o un código de recuperación de un solo uso; cada código fallido cuenta con el lockout de Identity (por defecto 5 intentos y 5 minutos) y el bloqueo invalida el desafío.
+
+Pendiente antes de producción: el paso de contraseña usa `lockoutOnFailure: false` (sus intentos solo los limita el rate limit `auth`), los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso y el login distingue cuentas sin confirmar o bloqueadas. También deben revisarse expiraciones, protección CSRF/cookie y el uso de tokens SignalR en query string.
 
 La política actual de contraseñas exige mayúscula, minúscula, dígito y longitud 6, sin carácter no alfanumérico. Es una política que debe evaluarse antes de producción. Los guards del frontend solo mejoran UX; cada operación sensible se autoriza en backend por rol, permiso y capability aplicables. Se registran como deuda los controllers que dependen de roles aun cuando existe un modelo granular de permisos.
 
+El alta de usuarios por API está acotada por caso de uso: `register/business` solo crea `TENANT_ADMIN`, `register/customer` solo `CUSTOMER` y `/api/v1/employees` limita el rol de aplicación a `TenantAdmin`, `Staff` o `Kitchen`. Se eliminó `POST /api/v1/auth/register`, que aceptaba cualquier `UserRole` (incluido `SuperAdmin`) de un `TENANT_ADMIN`. No existe camino de API para crear o promover `SUPER_ADMIN`; solo lo crea el seed de Development. `UserRole.SuperAdmin` vale `0`, el valor por defecto del enum y de `ApplicationUser.Role`, así que un rol omitido equivale al privilegio máximo: todo request que reciba `UserRole` debe rechazar `SuperAdmin` en su validador, y `RoleAssignmentGuardTests` lo verifica.
+
 ### CORS y rate limiting
 
-La política `AllowAll` acepta cualquier origen mediante `SetIsOriginAllowed(_ => true)` y además habilita credenciales. Es un riesgo crítico y bloqueante antes de producción. Debe sustituirse por una allowlist de orígenes por entorno.
+CORS usa la allowlist `Cors:AllowedOrigins` por entorno (vacía por defecto; `http://localhost:5173` en Development). Un origen fuera de la lista no recibe cabeceras CORS. La API agrega `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` y HSTS fuera de Development.
 
 Existen políticas de rate limiting para autenticación y API, pero la política general `api` no se observó aplicada globalmente ni en controllers; se requiere verificación y cobertura de endpoints sensibles, webhooks y hubs.
 
 ### Archivos
 
-Los uploads actuales validan parcialmente tamaño, extensión y `ContentType`, y las imágenes se decodifican con ImageSharp. Toda carga debe validar tamaño, tipo real/magic bytes, extensión, nombre normalizado, autorización, tenant, destino y malware cuando aplique. Los nombres de almacenamiento deben estar namespaced por tenant y las descargas deben repetir autorización; no confíes en el nombre o MIME enviado por el cliente.
+Las subidas de órdenes detectan el tipo real por firma (JPEG, PNG, WebP o PDF) en lugar de confiar en el nombre o el `ContentType` del cliente. Las fotos y evidencias en imagen se re-codifican a WebP sin metadatos (se elimina la ubicación GPS) y la decodificación de cualquier imagen se limita a JPEG, PNG, WebP y GIF de un solo cuadro, con un tope de 50 megapíxeles contra bombas de descompresión. Una evidencia de pago solo puede referir un archivo subido para el mismo tenant. Las respuestas de `/uploads` llevan `Content-Security-Policy: sandbox` y los PDF se sirven como descarga (también desde Azure Blob). El borrado por URL recibe la carpeta `{área}/{tenantId}` derivada del tenant dueño y ambos providers rechazan rutas fuera de ella; las URLs de imagen solo las fija el endpoint de upload correspondiente.
+
+Pendiente: `/uploads` sigue siendo estático y público, por lo que cualquiera con la URL descarga una evidencia de pago; los PDF no pasan por escaneo de malware. Las descargas deberían repetir autorización.
 
 ### SignalR, WhatsApp e integraciones
 
-Los hubs requieren autenticación y agrupan por claim `tenant_id`; deben validar pertenencia efectiva y permiso al conectar/unirse. Hay una inconsistencia comprobada entre `SUPERADMIN` en `OrderHub` y el rol `SUPER_ADMIN` usado en el resto del sistema. Webhooks de WhatsApp son anónimos por diseño y usan consultas sin filtros: la firma/origen, replay protection, asociación exacta a tenant e idempotencia son requisitos críticos.
+Los hubs requieren autenticación, validan al conectar membresía activa y permiso (órdenes: gestionar órdenes, tablero o ver reportes; chat: WhatsApp), agrupan por tenant y se cierran cuando expira el token. Webhooks de WhatsApp son anónimos por diseño y usan consultas sin filtros: la firma/origen, replay protection, asociación exacta a tenant e idempotencia son requisitos críticos. La firma `X-Hub-Signature-256` se verifica fail-closed, `PhoneNumberId` y `ExternalMessageId` son únicos y las entregas repetidas son idempotentes; lo pendiente (un `AppSecret` global y la propiedad del `PhoneNumberId`) está en la deuda técnica.
 
 Los access tokens de integraciones deben cifrarse o almacenarse en un secret store, nunca exponerse en DTOs/logs. No registrar tokens, contraseñas, códigos 2FA, cuerpos con PII innecesaria ni información financiera sensible.
 
 ### Logs y auditoría
 
-Serilog y `AuditLog` existen, pero los logs deben usar minimización y redacción. La auditoría de cambios sensibles debe incluir actor, tenant, acción, objetivo, resultado y correlación sin guardar secretos. El middleware actual registra excepciones con su mensaje; revisa que mensajes internos o de proveedores no filtren datos.
+Serilog y `AuditLog` existen, pero los logs deben usar minimización y redacción. La auditoría de cambios sensibles debe incluir actor, tenant, acción, objetivo, resultado y correlación sin guardar secretos. El middleware actual registra excepciones con su mensaje; revisa que mensajes internos o de proveedores no filtren datos. El cuerpo de un SMS (que puede ser un OTP) solo se registra en Development cuando no hay proveedor configurado, y la configuración de envío de OTP solo se toma de un `SUPER_ADMIN` activo.
 
 ## Secretos
 
-Configura connection strings, JWT, WhatsApp, SMS, email y Azure mediante variables de entorno, plataforma de secretos o user-secrets. Los valores de desarrollo y `docker-compose.yml` son ejemplos inseguros para producción. Rota cualquier secreto que haya sido expuesto.
+Configura connection strings, JWT, WhatsApp, SMS, email y Azure mediante variables de entorno, plataforma de secretos o user-secrets. El repositorio ya no contiene credenciales, pero cadenas de conexión de Azure SQL y el secreto JWT anterior siguen en el historial de git: rótalos y revisa el firewall de Azure SQL. Los valores de `docker-compose.yml` son ejemplos inseguros para producción.
 
-Las dependencias deben revisarse de forma continua. La validación documental del 2026-08-10 encontró advisories altos en AutoMapper/SQLitePCLRaw y 20 vulnerabilidades npm; prioriza análisis de explotabilidad, actualización compatible y regresión en una tarea dedicada. No uses actualizaciones automáticas de ruptura sin revisión.
+Las dependencias deben revisarse de forma continua; el CI audita las dependencias npm de producción en cada PR. Al 2026-10-01 npm no reporta vulnerabilidades. `SQLitePCLRaw.lib.e_sqlite3` 2.1.10 (`GHSA-2m69-gcr7-jv3q`) no tiene versión corregida y solo entra por las pruebas que usan SQLite; no forma parte de la aplicación publicada. AutoMapper 13.0.1 conserva un advisory alto (`GHSA-rvv3-g6hj-g44x`) cuya corrección solo existe en versiones con licencia comercial; requiere una decisión. No uses actualizaciones automáticas de ruptura sin revisión.
 
 ## Reporte responsable
 

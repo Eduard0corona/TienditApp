@@ -21,6 +21,7 @@ public class CloseCashSessionCommandValidator : AbstractValidator<CloseCashSessi
     public CloseCashSessionCommandValidator()
     {
         RuleFor(x => x.CashSessionId).NotEmpty();
+        RuleFor(x => x.ClosingAmount).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(x => x.Notes).MaximumLength(2000);
     }
 }
@@ -69,6 +70,7 @@ public class CloseCashSessionCommandHandler : IRequestHandler<CloseCashSessionCo
             Notes = session.Notes,
             Inflows = session.Inflows,
             Outflows = session.Outflows,
+            NonCashInflows = session.NonCashInflows,
             ExpectedBalance = session.ExpectedBalance
         });
     }
