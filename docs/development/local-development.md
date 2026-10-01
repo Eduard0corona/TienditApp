@@ -51,6 +51,8 @@ Si `SmsSettings:Provider` no es `Twilio`, o faltan `AccountSid`, `AuthToken` o `
 
 En cualquier otro entorno nunca se registran cuerpos de SMS ni códigos OTP: el aviso solo lleva el teléfono enmascarado (`***5678`). Los correos se registran con el destinatario enmascarado (`a***@e***.com`) y su cuerpo, con los enlaces de confirmación o restablecimiento, no se registra en ningún entorno. Si Twilio, Meta (WhatsApp) o el servidor SMTP rechazan un envío, fuera de Development solo se registran el estado HTTP o SMTP, el código de error del proveedor y el tipo de excepción, porque sus respuestas pueden repetir números, direcciones o contenido; en Development se registran completas para depurar.
 
+Al resolver el cliente de un pedido, los registros `OrderCustomerLinked` y `CreatedTempCustomer` siguen la misma regla: fuera de Development llevan el teléfono enmascarado (`***5678`) junto al usuario o al cliente temporal, y solo Development registra el número completo.
+
 ## Validación local
 
 ```powershell
