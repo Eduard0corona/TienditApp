@@ -291,6 +291,8 @@ public class CoreBusinessFlowSmokeTests
                 NormalizedEmail = "SMOKE.CUSTOMER@DEMO.COM",
                 FirstName = "Cliente",
                 LastName = "Smoke",
+                PhoneNumber = "+525511112222",
+                PhoneNumberConfirmed = true,
                 Role = UserRole.Customer,
                 IsActive = true
             };

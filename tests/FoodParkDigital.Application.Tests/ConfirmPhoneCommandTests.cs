@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -59,7 +60,7 @@ public class ConfirmPhoneCommandTests
 
         var userManager = new FakeUserManager(context);
         var claimService = new NoOpClaimService();
-        var handler = new ConfirmPhoneCommandHandler(userManager, context, claimService);
+        var handler = new ConfirmPhoneCommandHandler(userManager, context, claimService, new PhoneNormalizationService());
 
         var result = await handler.Handle(
             new ConfirmPhoneCommand
