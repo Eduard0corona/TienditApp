@@ -355,7 +355,7 @@ public class OrderInventoryRegressionTests
             Movement(tenant.TenantId, open, InventoryMovementType.Exit, "CONSUMPTION", 5m, supplyId, locationId));
         await context.SaveChangesAsync();
 
-        var report = await new GetOperationalReportQueryHandler(context, new FixedClock(Now)).Handle(new GetOperationalReportQuery
+        var report = await new GetOperationalReportQueryHandler(context, new FixedClock(Now), tenant).Handle(new GetOperationalReportQuery
         {
             FromDate = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero),
             ToDate = new DateTimeOffset(2026, 9, 30, 23, 59, 59, TimeSpan.Zero)
@@ -374,12 +374,16 @@ public class OrderInventoryRegressionTests
     {
         var (context, tenant, _) = CreateContext();
         await using var _ = context;
+        // Another tenant's settings come first: the report must use its own tenant's time zone.
+        var otherTenantSettings = new TenantSettings(Guid.NewGuid());
+        otherTenantSettings.Update(otherTenantSettings.Currency, "Asia/Tokyo", autoAcceptOrders: false, maxConcurrentOrders: 50);
+        context.TenantSettings.Add(otherTenantSettings);
         context.TenantSettings.Add(new TenantSettings(tenant.TenantId)); // America/Mexico_City (UTC-6)
         await context.SaveChangesAsync();
         // 03:00 UTC on October 1st is still September 30th at 21:00 in Mexico City.
         var clock = new FixedClock(new DateTimeOffset(2026, 10, 1, 3, 0, 0, TimeSpan.Zero));
 
-        var report = await new GetOperationalReportQueryHandler(context, clock)
+        var report = await new GetOperationalReportQueryHandler(context, clock, tenant)
             .Handle(new GetOperationalReportQuery(), CancellationToken.None);
 
         Assert.Equal(new DateTimeOffset(2026, 9, 1, 6, 0, 0, TimeSpan.Zero), report.RangeFrom);

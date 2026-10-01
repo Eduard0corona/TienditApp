@@ -22,11 +22,16 @@ public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalRe
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly ICurrentTenantService _tenantService;
 
-    public GetOperationalReportQueryHandler(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public GetOperationalReportQueryHandler(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider,
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
+        _tenantService = tenantService;
     }
 
     public async Task<OperationalReportDto> Handle(GetOperationalReportQuery request, CancellationToken cancellationToken)
@@ -113,8 +118,10 @@ public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalRe
 
         // The default range is the current month in the tenant's time zone, not the UTC month (which
         // moves the last evening hours of each month into the next one for Mexico).
+        // TenantSettings is not ITenantScoped (no global filter): the tenant must be explicit.
         var timeZoneId = await _context.TenantSettings
             .AsNoTracking()
+            .Where(x => x.TenantId == _tenantService.TenantId)
             .Select(x => x.TimeZone)
             .FirstOrDefaultAsync(cancellationToken);
         var zone = TenantDateTimeResolver.Resolve(timeZoneId);
