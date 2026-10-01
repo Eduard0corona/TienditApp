@@ -3,7 +3,7 @@
 ## Requisitos
 
 - .NET SDK 9 para la aplicación. En el estado actual, los proyectos de tests apuntan a `net10.0` y requieren SDK 10 para ejecutarse localmente.
-- Node.js y npm. El workflow usa Node.js 20; `client/package-lock.json` es la fuente de dependencias.
+- Node.js y npm. Los workflows usan Node.js 20 (Vite 7 requiere 20.19 o posterior); `client/package-lock.json` es la fuente de dependencias.
 - SQL Server; `docker-compose.yml` ofrece SQL Server 2022 y la API.
 - Opcional: Docker Desktop y `dotnet-ef` para administrar migraciones manualmente.
 
@@ -59,7 +59,7 @@ $env:SEED_SUPERADMIN_PASSWORD = "<contraseña local>"
 docker compose up --build
 ```
 
-Publica API en 5000/5001 y SQL Server en 1433. Variables opcionales: `JWT_SECRET` (sin ella se usa una llave efímera de desarrollo), `SEED_SUPERADMIN_PASSWORD` y `MSSQL_SA_PASSWORD` (la contraseña por defecto del contenedor SQL solo sirve para un entorno local desechable). Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita.
+La imagen compila también el SPA y corre con el usuario no root de la imagen de .NET. Publica API en 5000/5001 y SQL Server en 1433. Variables opcionales: `JWT_SECRET` (sin ella se usa una llave efímera de desarrollo), `SEED_SUPERADMIN_PASSWORD` y `MSSQL_SA_PASSWORD` (la contraseña por defecto del contenedor SQL solo sirve para un entorno local desechable). Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita.
 
 ## Validación local
 
@@ -70,5 +70,7 @@ Set-Location client
 npm run lint
 npm run build
 ```
+
+El workflow `CI` (`.github/workflows/ci.yml`) ejecuta lo mismo en cada PR, además de `dotnet ef migrations has-pending-model-changes` y `npm audit --omit=dev --audit-level=high`.
 
 Si falla por infraestructura o baseline, registra comando y salida; no cambies producción para forzar verde sin diagnosticar.

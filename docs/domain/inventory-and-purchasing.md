@@ -6,6 +6,14 @@
 
 Las entradas/salidas manuales pasan por `CreateInventoryMovementCommand`. Recibir una `PurchaseOrder` actualiza líneas, stock, costo del insumo y crea movimiento de compra. Órdenes con receta crean salida por venta/consumo; cancelación crea entrada compensatoria. Un índice único `(TenantId, ExternalReference)` protege los movimientos automáticos que sí usan clave estable.
 
+Reglas vigentes:
+
+- Solo las entradas (`Entry`) modifican el costo promedio; transferencias, ajustes y devoluciones se valoran al promedio vigente.
+- Los movimientos manuales no pueden usar los prefijos reservados `ORDER:` y `PO:` ni repetir una referencia externa existente, ni fecharse en el futuro.
+- Una recepción no puede repetir líneas ni fecharse en el futuro; el stock sube con las cantidades que la compra aceptó.
+- Cambiar el insumo de una línea de receta reemplaza el requisito (antes se ignoraba y se seguía consumiendo el insumo anterior).
+- `InventoryStock.OnHandQuantity`, `SupplyItem.AverageCost` y `PurchaseOrderLine.ReceivedQuantity` son tokens de concurrencia: dos operaciones simultáneas sobre el mismo stock, costo o línea ya no se sobrescriben; la segunda falla con 409 (el comando de piezas de servicio reintenta).
+
 ## Guardrails
 
 - Controllers y React no modifican existencias directamente.
@@ -21,7 +29,8 @@ Las entradas/salidas manuales pasan por `CreateInventoryMovementCommand`. Recibi
 
 ## Deuda actual
 
-- `InventoryStock` no tiene token de concurrencia visible; dos salidas simultáneas pueden competir.
+- Fuera del comando de piezas de servicio, un conflicto de concurrencia de stock responde 409 y el cliente debe reintentar; no hay reintento automático.
+- `Product.StockQuantity` es informativo: las ventas no lo descuentan ni lo validan. Falta decidir si el stock de producto se controla con recetas (insumo = producto) o con ese campo.
 - Folios `INV-yyyyMMdd-nnnn` se generan contando registros y pueden colisionar; el índice único detecta, pero no evita el conflicto.
 - El movimiento manual permite tipos TransferIn/TransferOut, pero no se observó un caso de uso atómico que exija origen y destino.
 - La recepción de compra genera `ExternalReference` con timestamp, por lo que un retry no deduplica de forma determinista; además el avance de línea puede impedir/alterar el segundo intento, pero no es una garantía idempotente formal.

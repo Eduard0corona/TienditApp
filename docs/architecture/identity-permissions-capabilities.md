@@ -10,7 +10,9 @@ Un capability no concede permiso y un permiso no habilita un capability. La auto
 
 ## Estado actual
 
-ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessService` resuelve membresía, capabilities normalizadas y permisos; si no hay permisos explícitos usa defaults por rol. `TenantResolutionMiddleware` aplica permisos/capabilities por prefijos de ruta y los controllers además usan `[Authorize]` y, con frecuencia, `[Authorize(Roles=...)]`. El frontend usa `ProtectedRoute` y `CapabilityRoute` para UX.
+ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessService` resuelve membresía, capabilities normalizadas y permisos; si no hay permisos explícitos usa defaults por rol. `TenantResolutionMiddleware` aplica permisos/capabilities por prefijos de ruta y los controllers además usan `[Authorize]` y, con frecuencia, `[Authorize(Roles=...)]`. Los hubs repiten la validación de membresía y permiso al conectar. El frontend usa `ProtectedRoute`, `CapabilityRoute` y `PermissionRoute` para UX.
+
+Cambiar de tenant rota el refresh token de la sesión (el anterior se revoca).
 
 ## Guardrails
 
@@ -25,7 +27,8 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 ## Deuda actual
 
 - Muchos controllers dependen de roles aunque ya existe un modelo granular; el middleware mitiga parte, pero la política está dispersa.
-- `TENANT_ADMIN` y `SUPER_ADMIN` omiten comprobaciones granulares en el middleware.
+- `TENANT_ADMIN` y `SUPER_ADMIN` omiten comprobaciones granulares en el middleware. El claim `role` del JWT es el rol global del usuario, no el de su membresía: un `TENANT_ADMIN` obtendría todos los permisos en cualquier tenant al que se le agregue como empleado, y `UpdateEmployeeCommand` sobrescribe ese rol global. Hoy es latente porque ningún flujo agrega un usuario existente a un segundo tenant.
 - El mapeo por prefijo y método no expresa recursos ni condiciones de negocio.
-- `OrderHub.JoinKitchenGroup` compara `SUPERADMIN`, diferente de `SUPER_ADMIN`.
+- Los access tokens no se pueden revocar antes de expirar (no se valida el security stamp) y los refresh tokens se guardan en texto plano, sin detección de reuso.
+- No hay bloqueo de cuenta por intentos fallidos y el login distingue cuentas sin confirmar o bloqueadas; se atiende junto con la corrección del 2FA, en una tarea separada.
 - No se encontró cobertura API end-to-end para la matriz rol/permiso/capability/tenant.

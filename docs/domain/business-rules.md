@@ -8,6 +8,8 @@
 - Las órdenes Service pueden tener `ServiceOrderDetail` y piezas; otros tipos no.
 - Las colecciones de items, historial, pagos y piezas son de solo lectura.
 - Un pago debe ser positivo, no puede exceder `Total` acumulado y no se admite en una orden cancelada.
+- Una orden con pagos no se puede cancelar mientras no existan reembolsos; cancelar cancela también sus piezas aceptadas o en progreso.
+- Una orden admite como máximo 200 líneas, 10,000 unidades por línea y 500 piezas de servicio, además del `MaxQuantityPerOrder` de cada producto.
 - La creación enlaza un perfil registrado por teléfono o crea/usa cliente temporal; el teléfono es obligatorio en el caso de uso actual.
 
 ## Cancelación y trazabilidad
@@ -18,7 +20,8 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 
 - Una pieza inicia `Accepted`; pasa a `InProgress`, luego `Completed`, o puede cancelarse desde los dos primeros estados.
 - Una pieza completada/cancelada no puede asignarse.
-- El caso de uso sincroniza estado de la orden desde las piezas trackeables.
+- El caso de uso sincroniza estado de la orden desde las piezas trackeables. Los cambios de pieza pasan por `Order.ChangeServicePieceStatus` para que el rowversion de la orden detecte cambios simultáneos.
+- Completar una pieza consume su receta en el mismo guardado; si falta stock, la pieza no se completa.
 - Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado.
 
 ## Inventario, compras y caja
@@ -27,7 +30,10 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Reservado no puede ser negativo ni superar existencia.
 - Los movimientos tienen líneas positivas y el tipo define el signo aplicado.
 - Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total.
-- Una caja cerrada no recibe movimientos y no puede cerrarse dos veces.
+- Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
+- El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
+- Solo puede haber una caja abierta por tenant.
+- Solo las entradas modifican el costo promedio de un insumo.
 
 ## Guardrails
 
