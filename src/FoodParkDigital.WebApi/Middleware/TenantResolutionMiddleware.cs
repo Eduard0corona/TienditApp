@@ -2,6 +2,7 @@ using System.Security.Claims;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.WebApi.Middleware;
 
@@ -21,10 +22,12 @@ public class TenantResolutionMiddleware
     ];
 
     private readonly RequestDelegate _next;
+    private readonly ILogger<TenantResolutionMiddleware> _logger;
 
-    public TenantResolutionMiddleware(RequestDelegate next)
+    public TenantResolutionMiddleware(RequestDelegate next, ILogger<TenantResolutionMiddleware>? logger = null)
     {
         _next = next;
+        _logger = logger ?? NullLogger<TenantResolutionMiddleware>.Instance;
     }
 
     public async Task InvokeAsync(
@@ -72,6 +75,18 @@ public class TenantResolutionMiddleware
             context.Request.Headers.TryGetValue("X-Tenant-Id", out var headerTenantId) &&
             Guid.TryParse(headerTenantId, out var overrideTenantId))
         {
+            // Cross-tenant access must be explicit, authorized and audited (AGENTS.md).
+            if (overrideTenantId != tenantId)
+            {
+                _logger.LogInformation(
+                    "Audit SuperAdminTenantOverride: user {UserId} acting on tenant {TenantId} (token tenant {TokenTenantId}) {Method} {Path}",
+                    context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+                    overrideTenantId,
+                    tenantId,
+                    context.Request.Method,
+                    context.Request.Path.Value);
+            }
+
             tenantId = overrideTenantId;
         }
 

@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Middleware;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -82,6 +83,39 @@ public class TenantResolutionMiddlewareTests
         Assert.Equal(0, access.Calls);
     }
 
+    [Fact]
+    public async Task SuperAdminTenantOverride_ShouldBeAuditLogged()
+    {
+        var otherTenantId = Guid.NewGuid();
+        var logger = new RecordingLogger<TenantResolutionMiddleware>();
+        var nextCalled = false;
+        var middleware = new TenantResolutionMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        }, logger);
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/v1/orders";
+        context.Request.Method = "GET";
+        context.Request.Headers["X-Tenant-Id"] = otherTenantId.ToString();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, UserId.ToString()),
+            new Claim(ClaimTypes.Role, "SUPER_ADMIN"),
+            new Claim("tenant_id", TenantId.ToString())
+        ], authenticationType: "Test"));
+        var tenantService = new FakeCurrentTenantService();
+
+        await middleware.InvokeAsync(context, tenantService, new FakeTenantAccessService(active: true, permissions: []));
+
+        Assert.True(nextCalled);
+        Assert.Equal(otherTenantId, tenantService.TenantId);
+        var entry = Assert.Single(logger.Messages);
+        Assert.Contains("SuperAdminTenantOverride", entry);
+        Assert.Contains(otherTenantId.ToString(), entry);
+        Assert.Contains(UserId.ToString(), entry);
+    }
+
     private static async Task<InvocationResult> InvokeAsync(
         string path,
         string method,
@@ -113,6 +147,16 @@ public class TenantResolutionMiddlewareTests
     }
 
     private sealed record InvocationResult(bool NextCalled, int StatusCode, FakeCurrentTenantService TenantService);
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Messages.Add(formatter(state, exception));
+    }
 
     private sealed class FakeCurrentTenantService : ICurrentTenantService
     {
