@@ -105,14 +105,7 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
         if (string.IsNullOrWhiteSpace(baseUrl))
             return Result.Failure<ProductImageUrlsDto>("No se pudo almacenar la imagen.");
 
-        product.Update(
-            product.CategoryId,
-            product.Name,
-            product.Description,
-            product.PriceAmount,
-            product.PriceCurrency,
-            baseUrl,
-            product.PreparationTimeMinutes);
+        product.SetImage(baseUrl);
 
         await _context.SaveChangesAsync(cancellationToken);
 
