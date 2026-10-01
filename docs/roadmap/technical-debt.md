@@ -16,6 +16,7 @@
 - Impuesto fijo `subtotal × 16%`, redondeos distintos y sin desglose fiscal persistido.
 - `SUPER_ADMIN` y `TENANT_ADMIN` omiten permisos/capabilities en partes del middleware; autorización distribuida por strings de ruta.
 - `OrderHub` usa el rol inconsistente `SUPERADMIN`.
+- `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Stock sin token de concurrencia; folios por conteo y recepción de compra sin idempotency key estable.
 - Contratos de error mezclan `ProblemDetails` con objetos `{ error }`.
 - Controllers no propagan `CancellationToken`.
@@ -39,6 +40,7 @@
 ## Decisiones humanas pendientes
 
 - Modelo de autorización definitivo: policies/resource handlers y alcance administrativo cross-tenant.
+- Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
 - Política fiscal/redondeo y responsable legal-contable.
 - Semántica cuando no hay caja abierta y diseño de ajustes/CxC/Wallet.
 - Estrategia para reconciliar `master`/`develop` y migraciones.

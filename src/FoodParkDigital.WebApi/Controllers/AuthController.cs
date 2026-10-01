@@ -90,16 +90,6 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Sesión cerrada exitosamente." });
     }
 
-    [HttpPost("register")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
-    public async Task<ActionResult<UserDto>> Register([FromBody] RegisterUserCommand command)
-    {
-        var result = await _mediator.Send(command);
-        if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
-        return CreatedAtAction(nameof(Register), new { id = result.Value.Id }, result.Value);
-    }
-
     [HttpPost("register/business")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command)
