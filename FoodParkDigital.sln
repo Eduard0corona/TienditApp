@@ -20,6 +20,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoodParkDigital.Application.Tests", "tests\FoodParkDigital.Application.Tests\FoodParkDigital.Application.Tests.csproj", "{ED958531-5BB2-4AD6-B577-8A1BD7217A9A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoodParkDigital.Infrastructure.Tests", "tests\FoodParkDigital.Infrastructure.Tests\FoodParkDigital.Infrastructure.Tests.csproj", "{B91F4ED6-A073-437B-A919-2FC42C329A75}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FoodParkDigital.WebApi.Tests", "tests\FoodParkDigital.WebApi.Tests\FoodParkDigital.WebApi.Tests.csproj", "{A80842A2-B641-462F-A55B-97828DB71746}"
 EndProject
 Global
