@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Mail;
@@ -10,11 +11,14 @@ public class EmailService : IEmailService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<EmailService> _logger;
+    private readonly bool _logSensitiveData;
 
-    public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+    public EmailService(IConfiguration configuration, IHostEnvironment environment, ILogger<EmailService> logger)
     {
         _configuration = configuration;
         _logger = logger;
+        // Full addresses and SMTP server responses (which can echo them) are only logged in Development.
+        _logSensitiveData = environment.IsDevelopment();
     }
 
     public async Task SendEmailConfirmationAsync(string email, string userId, string token)
@@ -54,7 +58,7 @@ public class EmailService : IEmailService
         var provider = _configuration["EmailSettings:Provider"]?.Trim();
         if (!string.Equals(provider, "Smtp", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogInformation("Email provider not configured for runtime sending. Message logged for {Email}.", to);
+            _logger.LogWarning("Email provider not configured for runtime sending. Email to {Email} was not sent.", LoggableEmail(to));
             _logger.LogInformation("Email subject: {Subject}", subject);
             return;
         }
@@ -72,7 +76,7 @@ public class EmailService : IEmailService
             || !int.TryParse(portRaw, out var port)
             || string.IsNullOrWhiteSpace(fromEmail))
         {
-            _logger.LogWarning("SMTP settings are incomplete. Email to {Email} was not sent.", to);
+            _logger.LogWarning("SMTP settings are incomplete. Email to {Email} was not sent.", LoggableEmail(to));
             return;
         }
 
@@ -96,11 +100,19 @@ public class EmailService : IEmailService
         try
         {
             await smtp.SendMailAsync(mail);
-            _logger.LogInformation("Email sent successfully to {Email}", to);
+            _logger.LogInformation("Email sent successfully to {Email}", LoggableEmail(to));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SMTP send failed for {Email}", to);
+            _logger.LogError(
+                _logSensitiveData ? ex : null,
+                "SMTP send failed for {Email}. Error: {ErrorType}. SMTP status: {SmtpStatusCode}",
+                LoggableEmail(to),
+                ex.GetType().Name,
+                (ex as SmtpException)?.StatusCode);
         }
     }
+
+    private string LoggableEmail(string email)
+        => _logSensitiveData ? email : LogRedaction.MaskEmail(email);
 }
