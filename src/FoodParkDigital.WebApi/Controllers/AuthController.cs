@@ -360,13 +360,12 @@ public class AuthController : ControllerBase
 
     private CookieOptions GetCookieOptions(DateTime? expires = null)
     {
-        var isHttpsRequest = HttpContext?.Request?.IsHttps == true;
-        var secureCookie = !_env.IsDevelopment() && isHttpsRequest;
-
+        // Outside Development the cookie is always Secure, even when TLS terminates at a proxy and
+        // the request reaches the app as HTTP.
         return new CookieOptions
         {
             HttpOnly = true,
-            Secure = secureCookie,
+            Secure = !_env.IsDevelopment(),
             SameSite = _env.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
             Expires = expires,
             Path = "/api/v1/auth"

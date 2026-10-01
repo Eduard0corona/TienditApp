@@ -4,8 +4,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Identity.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Services;
@@ -17,17 +19,20 @@ public class SmsService : ISmsService
     private readonly IApplicationDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHostEnvironment _environment;
     private readonly ILogger<SmsService> _logger;
 
     public SmsService(
         IApplicationDbContext context,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
+        IHostEnvironment environment,
         ILogger<SmsService> logger)
     {
         _context = context;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -45,8 +50,8 @@ public class SmsService : ISmsService
         var provider = _configuration["SmsSettings:Provider"]?.Trim();
         if (!string.Equals(provider, "Twilio", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogInformation("SMS provider not configured for runtime sending. Message logged for {PhoneNumber}.", phoneNumber);
-            _logger.LogInformation("SMS body: {Message}", message);
+            _logger.LogInformation("SMS provider not configured for runtime sending. Message not sent to {PhoneNumber}.", phoneNumber);
+            LogBodyInDevelopment(message);
             return;
         }
 
@@ -59,7 +64,7 @@ public class SmsService : ISmsService
             || string.IsNullOrWhiteSpace(fromNumber))
         {
             _logger.LogWarning("Twilio SMS settings are incomplete. Message not sent to {PhoneNumber}.", phoneNumber);
-            _logger.LogInformation("SMS body: {Message}", message);
+            LogBodyInDevelopment(message);
             return;
         }
 
@@ -93,10 +98,15 @@ public class SmsService : ISmsService
 
     private async Task<bool> TrySendVerificationByOwnerWhatsAppAsync(string phoneNumber, string code)
     {
+        // Platform OTPs may only go out through a WhatsApp account owned by an active SUPER_ADMIN;
+        // a tenant owner's account must never receive other users' verification codes.
         var config = await _context.OwnerWhatsAppConfigs
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(x => x.IsEnabled && x.UseForOtp)
+            .Where(x => _context.Users
+                .IgnoreQueryFilters()
+                .Any(u => u.Id == x.UserId && u.Role == UserRole.SuperAdmin && u.IsActive))
             .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
             .FirstOrDefaultAsync();
 
@@ -176,5 +186,12 @@ public class SmsService : ISmsService
             _logger.LogError(ex, "Unexpected error while sending OTP via owner WhatsApp config.");
             return false;
         }
+    }
+
+    // Message bodies carry verification codes; they are only written to the log in Development.
+    private void LogBodyInDevelopment(string message)
+    {
+        if (_environment.IsDevelopment())
+            _logger.LogInformation("SMS body (Development only): {Message}", message);
     }
 }
