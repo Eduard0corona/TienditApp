@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
@@ -71,16 +72,17 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
         if (user is null || !user.IsActive)
             return Result.Failure<AvatarImageUrlsDto>("Usuario no encontrado.");
 
-        // Eliminar variantes anteriores si existen
+        var folder = TenantStorageFolders.Avatars(_tenantService.TenantId);
+
+        // Eliminar variantes anteriores si existen (solo dentro de la carpeta del tenant)
         if (!string.IsNullOrEmpty(user.AvatarUrl))
-            await _fileStorageService.DeleteVariantsAsync(user.AvatarUrl, cancellationToken);
+            await _fileStorageService.DeleteVariantsAsync(user.AvatarUrl, folder, cancellationToken);
 
         // Generar variantes de imagen
         var variants = await _imageProcessingService.GenerateVariantsAsync(
             request.FileStream, cancellationToken);
 
         // Subir cada variante
-        var folder = $"avatars/{_tenantService.TenantId}";
         var baseId = Guid.NewGuid().ToString();
         string? baseUrl = null;
 

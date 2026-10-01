@@ -31,7 +31,7 @@ public class WhatsAppConfig : AuditableEntity
         string? verifyToken = null)
     {
         IsEnabled = isEnabled;
-        PhoneNumberId = phoneNumberId;
+        PhoneNumberId = NormalizePhoneNumberId(phoneNumberId);
         WabaId = wabaId;
         DisplayPhoneNumber = displayPhoneNumber;
 
@@ -42,4 +42,11 @@ public class WhatsAppConfig : AuditableEntity
         if (!string.IsNullOrEmpty(verifyToken))
             VerifyToken = verifyToken;
     }
+
+    /// <summary>
+    /// The phone number ID routes inbound webhooks to exactly one tenant, so a blank
+    /// value means "not configured" and is stored as null instead of an empty string.
+    /// </summary>
+    public static string? NormalizePhoneNumberId(string? phoneNumberId)
+        => string.IsNullOrWhiteSpace(phoneNumberId) ? null : phoneNumberId.Trim();
 }

@@ -3,6 +3,7 @@ export interface AuthResponse {
   refreshToken?: string;
   expiresAt?: string;
   requiresTwoFactor: boolean;
+  twoFactorChallengeToken?: string;
   userId?: string;
   user?: UserDto;
 }
@@ -102,6 +103,12 @@ export interface MyTenantDto {
 export interface LoginRequest {
   email: string;
   password: string;
+}
+
+export interface TwoFactorLoginRequest {
+  twoFactorChallengeToken: string;
+  code: string;
+  useRecoveryCode: boolean;
 }
 
 export interface UpdateProfileRequest {

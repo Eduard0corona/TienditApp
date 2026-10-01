@@ -33,7 +33,6 @@ export function useOrderSignalR() {
 
   useEffect(() => {
     let isDisposed = false;
-    let startTimeoutId: number | undefined;
 
     const connection = new HubConnectionBuilder()
       .withUrl('/hubs/orders', {
@@ -61,15 +60,13 @@ export function useOrderSignalR() {
     };
 
     // Delay start one tick to avoid StrictMode mount/unmount negotiation races in dev.
-    startTimeoutId = window.setTimeout(() => {
+    const startTimeoutId = window.setTimeout(() => {
       void startConnection();
     }, 0);
 
     return () => {
       isDisposed = true;
-      if (startTimeoutId !== undefined) {
-        window.clearTimeout(startTimeoutId);
-      }
+      window.clearTimeout(startTimeoutId);
       void connection.stop().catch(() => undefined);
     };
   }, []);

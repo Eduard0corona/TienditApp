@@ -105,38 +105,38 @@ public class Product : AuditableEntity, ITenantScoped
     // Navigation
     public Category Category { get; private set; } = null!;
 
+    // All parameters are required on purpose: defaults let partial calls silently reset
+    // fields. The image is not part of this update; it changes only through SetImage.
     public void Update(
         Guid categoryId,
         string name,
         string? description,
         decimal priceAmount,
         string priceCurrency,
-        string? imageUrl,
         int? preparationTimeMinutes,
-        string? sku = null,
-        string? barcode = null,
-        int sortOrder = 0,
-        bool isFeatured = false,
-        string? tags = null,
-        decimal? compareAtPrice = null,
-        decimal? taxRate = null,
-        int? calories = null,
-        string? allergens = null,
-        int? stockQuantity = null,
-        int? lowStockThreshold = null,
-        int? maxQuantityPerOrder = null,
-        UnitType? unit = null,
-        TimeSpan? availableFromTime = null,
-        TimeSpan? availableToTime = null,
-        bool isTrackable = false,
-        bool notifyCustomer = false)
+        string? sku,
+        string? barcode,
+        int sortOrder,
+        bool isFeatured,
+        string? tags,
+        decimal? compareAtPrice,
+        decimal? taxRate,
+        int? calories,
+        string? allergens,
+        int? stockQuantity,
+        int? lowStockThreshold,
+        int? maxQuantityPerOrder,
+        UnitType? unit,
+        TimeSpan? availableFromTime,
+        TimeSpan? availableToTime,
+        bool isTrackable,
+        bool notifyCustomer)
     {
         CategoryId = categoryId;
         Name = name;
         Description = description;
         PriceAmount = priceAmount;
         PriceCurrency = priceCurrency;
-        ImageUrl = imageUrl;
         PreparationTimeMinutes = preparationTimeMinutes;
         Sku = sku;
         Barcode = barcode;
@@ -155,6 +155,8 @@ public class Product : AuditableEntity, ITenantScoped
         NotifyCustomer = notifyCustomer;
         SetAvailabilitySchedule(availableFromTime, availableToTime);
     }
+
+    public void SetImage(string? imageUrl) => ImageUrl = imageUrl;
 
     public void SetAvailability(bool isAvailable) => IsAvailable = isAvailable;
 

@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
@@ -66,16 +67,17 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
             .FirstOrDefaultAsync(p => p.Id == request.ProductId, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.ProductId);
 
-        // Eliminar variantes anteriores si existen
+        var folder = TenantStorageFolders.ProductImages(_tenantService.TenantId);
+
+        // Eliminar variantes anteriores si existen (solo dentro de la carpeta del tenant)
         if (!string.IsNullOrEmpty(product.ImageUrl))
-            await _fileStorageService.DeleteVariantsAsync(product.ImageUrl, cancellationToken);
+            await _fileStorageService.DeleteVariantsAsync(product.ImageUrl, folder, cancellationToken);
 
         // Generar variantes de imagen
         var variants = await _imageProcessingService.GenerateVariantsAsync(
             request.FileStream, cancellationToken);
 
         // Subir cada variante
-        var folder = $"products/{_tenantService.TenantId}";
         var baseId = Guid.NewGuid().ToString();
         string? baseUrl = null;
 
@@ -105,14 +107,7 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
         if (string.IsNullOrWhiteSpace(baseUrl))
             return Result.Failure<ProductImageUrlsDto>("No se pudo almacenar la imagen.");
 
-        product.Update(
-            product.CategoryId,
-            product.Name,
-            product.Description,
-            product.PriceAmount,
-            product.PriceCurrency,
-            baseUrl,
-            product.PreparationTimeMinutes);
+        product.SetImage(baseUrl);
 
         await _context.SaveChangesAsync(cancellationToken);
 
