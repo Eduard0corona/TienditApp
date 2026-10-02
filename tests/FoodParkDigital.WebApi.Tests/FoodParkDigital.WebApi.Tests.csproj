@@ -23,4 +23,11 @@
     <ProjectReference Include="..\..\src\FoodParkDigital.WebApi\FoodParkDigital.WebApi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test doubles shared with FoodParkDigital.Infrastructure.Tests. -->
+    <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\CapturingLogger.cs" Link="Support\CapturingLogger.cs" />
+    <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\InMemoryApplicationDbContext.cs" Link="Support\InMemoryApplicationDbContext.cs" />
+    <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\SqlExceptionFactory.cs" Link="Support\SqlExceptionFactory.cs" />
+  </ItemGroup>
+
 </Project>

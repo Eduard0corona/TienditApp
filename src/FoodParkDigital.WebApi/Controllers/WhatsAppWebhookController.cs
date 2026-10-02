@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.WhatsApp.Commands;
 using FoodParkDigital.Application.WhatsApp.Queries;
 using FoodParkDigital.Domain.WhatsApp.Enums;
+using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.WebApi.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -21,17 +22,21 @@ public class WhatsAppWebhookController : ControllerBase
     private readonly IApplicationDbContext _context;
     private readonly WhatsAppWebhookSignatureVerifier _signatureVerifier;
     private readonly ILogger<WhatsAppWebhookController> _logger;
+    private readonly bool _logSensitiveData;
 
     public WhatsAppWebhookController(
         IMediator mediator,
         IApplicationDbContext context,
         WhatsAppWebhookSignatureVerifier signatureVerifier,
+        IHostEnvironment environment,
         ILogger<WhatsAppWebhookController> logger)
     {
         _mediator = mediator;
         _context = context;
         _signatureVerifier = signatureVerifier;
         _logger = logger;
+        // Database errors can quote the sender's phone number: only Development logs them in full.
+        _logSensitiveData = environment.IsDevelopment();
     }
 
     /// <summary>
@@ -148,12 +153,12 @@ public class WhatsAppWebhookController : ControllerBase
         catch (JsonException ex)
         {
             // A redelivery would carry the same body, so it is acknowledged instead of retried.
-            _logger.LogError(ex, "WhatsApp webhook payload is not valid JSON");
+            _logger.LogError(LoggableException(ex), "WhatsApp webhook payload is not valid JSON");
         }
         catch (Exception ex)
         {
             // Typically the database failing; the redelivery is deduplicated message by message.
-            _logger.LogError(ex, "Error processing WhatsApp webhook payload");
+            _logger.LogError(LoggableException(ex), "Error processing WhatsApp webhook payload");
             return StatusCode(StatusCodes.Status500InternalServerError);
         }
 
@@ -194,7 +199,7 @@ public class WhatsAppWebhookController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogError(
-                    ex,
+                    LoggableException(ex),
                     "WhatsApp message {ExternalMessageId} for tenant {TenantId} could not be processed; Meta will redeliver it",
                     msgId,
                     tenantId);
@@ -296,4 +301,7 @@ public class WhatsAppWebhookController : ControllerBase
         await Request.Body.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();
     }
+
+    private Exception LoggableException(Exception exception)
+        => _logSensitiveData ? exception : LogRedaction.RedactDatabaseMessages(exception);
 }

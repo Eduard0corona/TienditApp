@@ -12,12 +12,26 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace FoodParkDigital.Infrastructure;
 
 public static class DependencyInjection
 {
+    // EF Core events that log the provider exception before rethrowing it. SQL Server copies row values
+    // (duplicate keys, truncated text) into its messages, so outside Development these events are dropped
+    // and whoever handles the exception logs it through LogRedaction.RedactDatabaseMessages.
+    private static readonly EventId[] DatabaseErrorEvents =
+    [
+        CoreEventId.SaveChangesFailed,
+        CoreEventId.QueryIterationFailed,
+        RelationalEventId.ExecuteUpdateFailed,
+        RelationalEventId.ExecuteDeleteFailed,
+        RelationalEventId.NonQueryOperationFailed
+    ];
+
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services, IConfiguration configuration)
     {
@@ -30,6 +44,7 @@ public static class DependencyInjection
         {
             var auditInterceptor = sp.GetRequiredService<AuditableEntityInterceptor>();
             var tenantInterceptor = sp.GetRequiredService<TenantSaveChangesInterceptor>();
+            var logSensitiveData = sp.GetRequiredService<IHostEnvironment>().IsDevelopment();
 
             options.UseSqlServer(
                 configuration.GetConnectionString("DefaultConnection"),
@@ -42,7 +57,11 @@ public static class DependencyInjection
             options.AddInterceptors(auditInterceptor, tenantInterceptor);
 
             options.ConfigureWarnings(w =>
-                w.Ignore(RelationalEventId.PendingModelChangesWarning));
+            {
+                w.Ignore(RelationalEventId.PendingModelChangesWarning);
+                if (!logSensitiveData)
+                    w.Ignore(DatabaseErrorEvents);
+            });
         });
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());

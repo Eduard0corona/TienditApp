@@ -47,7 +47,7 @@ Los access tokens de integraciones deben cifrarse o almacenarse en un secret sto
 
 ### Logs y auditoría
 
-Serilog y `AuditLog` existen, pero los logs deben usar minimización y redacción. La auditoría de cambios sensibles debe incluir actor, tenant, acción, objetivo, resultado y correlación sin guardar secretos. El middleware actual registra excepciones con su mensaje; revisa que mensajes internos o de proveedores no filtren datos.
+Serilog y `AuditLog` existen, pero los logs deben usar minimización y redacción. La auditoría de cambios sensibles debe incluir actor, tenant, acción, objetivo, resultado y correlación sin guardar secretos. SQL Server copia valores de las filas en sus mensajes de error (claves duplicadas, valores truncados). Por eso, fuera de Development, ni el middleware de excepciones, ni el webhook de WhatsApp, ni EF Core registran mensajes de errores de base de datos: quedan el tipo, el número de error SQL, el `traceId` y el stack trace. El middleware registra las demás excepciones con su mensaje; revisa que mensajes internos o de proveedores no filtren datos.
 
 ## Secretos
 
