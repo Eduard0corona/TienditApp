@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.WhatsApp.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.WhatsApp.Commands;
 
@@ -36,19 +37,22 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
     private readonly IWhatsAppNotificationService _notificationService;
     private readonly ICurrentTenantService _tenantService;
     private readonly IMapper _mapper;
+    private readonly ILogger<SendChatMessageCommandHandler> _logger;
 
     public SendChatMessageCommandHandler(
         IApplicationDbContext context,
         IWhatsAppService whatsAppService,
         IWhatsAppNotificationService notificationService,
         ICurrentTenantService tenantService,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<SendChatMessageCommandHandler> logger)
     {
         _context = context;
         _whatsAppService = whatsAppService;
         _notificationService = notificationService;
         _tenantService = tenantService;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<Result<ChatMessageDto>> Handle(SendChatMessageCommand request, CancellationToken cancellationToken)
@@ -62,19 +66,7 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         if (sendResult.IsFailure)
             return Result.Failure<ChatMessageDto>(sendResult.Error!);
 
-        // Find or create conversation
-        var conversation = await _context.WhatsAppConversations
-            .FirstOrDefaultAsync(c => c.CustomerPhone == request.PhoneNumber, cancellationToken);
-
-        if (conversation is null)
-        {
-            conversation = new WhatsAppConversation(tenantId, request.PhoneNumber);
-            _context.WhatsAppConversations.Add(conversation);
-        }
-
-        // Add outbound message
-        var message = conversation.AddMessage(MessageDirection.Outbound, request.Message, null);
-        await _context.SaveChangesAsync(cancellationToken);
+        var (conversation, message) = await StoreOutboundMessageAsync(tenantId, request, cancellationToken);
 
         var messageDto = _mapper.Map<ChatMessageDto>(message);
         var conversationDto = _mapper.Map<ConversationDto>(conversation);
@@ -84,4 +76,58 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
 
         return Result.Success(messageDto);
     }
+
+    /// <summary>
+    /// Records the message already sent to the customer in their conversation, starting it if the
+    /// number has none yet.
+    /// </summary>
+    private async Task<(WhatsAppConversation Conversation, WhatsAppMessage Message)> StoreOutboundMessageAsync(
+        Guid tenantId, SendChatMessageCommand request, CancellationToken cancellationToken)
+    {
+        // Find or create conversation
+        var conversation = await FindConversationAsync(request.PhoneNumber, cancellationToken);
+
+        while (true)
+        {
+            var startsConversation = conversation is null;
+            if (conversation is null)
+            {
+                conversation = new WhatsAppConversation(tenantId, request.PhoneNumber);
+                _context.WhatsAppConversations.Add(conversation);
+            }
+
+            // Add outbound message
+            var message = conversation.AddMessage(MessageDirection.Outbound, request.Message, null);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return (conversation, message);
+            }
+            catch (DbUpdateException) when (startsConversation)
+            {
+                // The customer's first message (through the webhook) or another send can start the
+                // conversation after this request found none; the unique index on (TenantId, CustomerPhone)
+                // lets only one insert win. The message already reached the customer, so the loser discards
+                // what it staged and retries once in the winner's conversation; that retry starts nothing,
+                // so it cannot loop.
+                _context.WhatsAppMessages.Entry(message).State = EntityState.Detached;
+                _context.WhatsAppConversations.Entry(conversation).State = EntityState.Detached;
+
+                conversation = await FindConversationAsync(request.PhoneNumber, cancellationToken);
+                if (conversation is null)
+                    throw;
+
+                _logger.LogInformation(
+                    "WhatsApp message sent by tenant {TenantId} joins conversation {ConversationId}, which a concurrent request started",
+                    tenantId,
+                    conversation.Id);
+            }
+        }
+    }
+
+    // The global query filter limits the lookup to the conversations of the request's tenant.
+    private Task<WhatsAppConversation?> FindConversationAsync(string customerPhone, CancellationToken cancellationToken)
+        => _context.WhatsAppConversations
+            .FirstOrDefaultAsync(c => c.CustomerPhone == customerPhone, cancellationToken);
 }
