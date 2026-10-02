@@ -1,9 +1,12 @@
+using System.Data.Common;
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Infrastructure.Services;
 
 /// <summary>
-/// Reduces recipients and provider responses to values that are safe to log outside Development.
+/// Reduces recipients, provider responses and database errors to values that are safe to log outside Development.
 /// </summary>
 public static class LogRedaction
 {
@@ -62,4 +65,30 @@ public static class LogRedaction
             return null;
         }
     }
+
+    /// <summary>
+    /// Returns <paramref name="exception"/> unchanged unless its chain contains a database exception.
+    /// SQL Server copies row values into those messages (<c>The duplicate key value is (..., +525512345678)</c>,
+    /// <c>Truncated value: '...'</c>), so such a chain becomes a <see cref="RedactedDatabaseException"/>
+    /// that keeps every exception type, the SQL Server error number and the stack traces, but no message.
+    /// </summary>
+    public static Exception RedactDatabaseMessages(Exception exception)
+        => Flatten(exception).Any(e => e is DbException or DbUpdateException)
+            ? new RedactedDatabaseException(exception)
+            : exception;
+
+    /// <summary>Returns the number of the first SQL Server error in the chain, such as 2601 for a duplicate key.</summary>
+    public static int? GetSqlErrorNumber(Exception exception)
+        => Flatten(exception).OfType<SqlException>().Select(e => (int?)e.Number).FirstOrDefault();
+
+    internal static IEnumerable<Exception> InnerExceptionsOf(Exception exception)
+    {
+        if (exception is AggregateException aggregate)
+            return aggregate.InnerExceptions;
+
+        return exception.InnerException is { } inner ? [inner] : [];
+    }
+
+    private static IEnumerable<Exception> Flatten(Exception exception)
+        => InnerExceptionsOf(exception).SelectMany(Flatten).Prepend(exception);
 }

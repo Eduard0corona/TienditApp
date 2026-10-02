@@ -2,15 +2,17 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 public static class InMemoryApplicationDbContext
 {
-    public static ApplicationDbContext Create()
+    public static ApplicationDbContext Create(params IInterceptor[] interceptors)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(interceptors)
             .Options;
 
         return new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
