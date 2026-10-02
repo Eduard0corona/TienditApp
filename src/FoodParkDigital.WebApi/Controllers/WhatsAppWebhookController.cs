@@ -97,6 +97,7 @@ public class WhatsAppWebhookController : ControllerBase
             if (!payload.TryGetProperty("entry", out var entries))
                 return Ok(); // Acknowledge but ignore
 
+            var allMessagesProcessed = true;
             foreach (var entry in entries.EnumerateArray())
             {
                 if (!entry.TryGetProperty("changes", out var changes))
@@ -137,27 +138,43 @@ public class WhatsAppWebhookController : ControllerBase
                         }
                     }
 
-                    await ProcessMessagesAsync(value, config.TenantId, profileName);
+                    if (!await ProcessMessagesAsync(value, config.TenantId, profileName))
+                        allMessagesProcessed = false;
+
                     await ProcessStatusesAsync(value);
                 }
             }
+
+            // Meta redelivers anything that does not get a 200, for up to 7 days. The messages this
+            // delivery did store are then ignored as duplicates, so only the failed ones run again.
+            if (!allMessagesProcessed)
+                return StatusCode(StatusCodes.Status500InternalServerError);
+        }
+        catch (JsonException ex)
+        {
+            // A redelivery would carry the same body, so it is acknowledged instead of retried.
+            _logger.LogError(LoggableException(ex), "WhatsApp webhook payload is not valid JSON");
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                _logSensitiveData ? ex : LogRedaction.RedactDatabaseMessages(ex),
-                "Error processing WhatsApp webhook payload");
+            // Typically the database failing; the redelivery is deduplicated message by message.
+            _logger.LogError(LoggableException(ex), "Error processing WhatsApp webhook payload");
+            return StatusCode(StatusCodes.Status500InternalServerError);
         }
 
-        // Always return 200 to acknowledge receipt (Meta requires this)
         return Ok();
     }
 
-    private async Task ProcessMessagesAsync(JsonElement value, Guid tenantId, string? profileName)
+    /// <summary>
+    /// Processes every inbound message of the change and returns <c>false</c> when any of them
+    /// failed, so the delivery is answered with an error and Meta sends it again.
+    /// </summary>
+    private async Task<bool> ProcessMessagesAsync(JsonElement value, Guid tenantId, string? profileName)
     {
         if (!value.TryGetProperty("messages", out var messages))
-            return;
+            return true;
 
+        var allProcessed = true;
         foreach (var msg in messages.EnumerateArray())
         {
             var from = msg.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
@@ -167,15 +184,30 @@ public class WhatsAppWebhookController : ControllerBase
             if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(msgId) || string.IsNullOrWhiteSpace(body))
                 continue;
 
-            await _mediator.Send(new ProcessInboundMessageCommand
+            // A failed message must not keep the rest of the payload from being stored.
+            try
             {
-                TenantId = tenantId,
-                FromPhone = from.StartsWith('+') ? from : $"+{from}",
-                ProfileName = profileName,
-                Body = body,
-                ExternalMessageId = msgId
-            });
+                await _mediator.Send(new ProcessInboundMessageCommand
+                {
+                    TenantId = tenantId,
+                    FromPhone = from.StartsWith('+') ? from : $"+{from}",
+                    ProfileName = profileName,
+                    Body = body,
+                    ExternalMessageId = msgId
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    LoggableException(ex),
+                    "WhatsApp message {ExternalMessageId} for tenant {TenantId} could not be processed; Meta will redeliver it",
+                    msgId,
+                    tenantId);
+                allProcessed = false;
+            }
         }
+
+        return allProcessed;
     }
 
     private async Task ProcessStatusesAsync(JsonElement value)
@@ -269,4 +301,7 @@ public class WhatsAppWebhookController : ControllerBase
         await Request.Body.CopyToAsync(buffer, cancellationToken);
         return buffer.ToArray();
     }
+
+    private Exception LoggableException(Exception exception)
+        => _logSensitiveData ? exception : LogRedaction.RedactDatabaseMessages(exception);
 }

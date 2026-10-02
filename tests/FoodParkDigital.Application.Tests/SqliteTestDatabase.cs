@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.Data.Sqlite;
@@ -34,8 +35,16 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
         return database;
     }
 
-    /// <summary>Context for the code under test; <see cref="BeforeNextSave"/> hooks into it.</summary>
-    public ApplicationDbContext CreateContext() => Create(_beforeSave);
+    /// <summary>
+    /// Fails the next matching command of a context from <see cref="CreateContext"/>, e.g. a write
+    /// that fails for a reason other than a concurrent request.
+    /// </summary>
+    public CommandFaultInterceptor CommandFaults { get; } = new();
+
+    /// <summary>
+    /// Context for the code under test; <see cref="BeforeNextSave"/> and <see cref="CommandFaults"/> hook into it.
+    /// </summary>
+    public ApplicationDbContext CreateContext() => Create(_beforeSave, CommandFaults);
 
     /// <summary>Another context on the same database, e.g. acting as a concurrent request.</summary>
     public ApplicationDbContext CreateIndependentContext() => Create();
