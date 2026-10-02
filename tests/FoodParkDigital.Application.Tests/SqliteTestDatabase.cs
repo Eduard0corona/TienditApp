@@ -17,6 +17,7 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly BeforeSaveChangesInterceptor _beforeSave = new();
+    private readonly TestCurrentTenantService _tenantService = new();
 
     private SqliteTestDatabase(SqliteConnection connection)
     {
@@ -55,6 +56,12 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
     /// </summary>
     public void BeforeNextSave(Func<Task> action) => _beforeSave.Arm(action);
 
+    /// <summary>
+    /// Tenant of the request for the global query filters of every context, for code that relies on
+    /// them; without it the filters only match rows of no tenant.
+    /// </summary>
+    public void SetTenant(Guid tenantId) => _tenantService.SetTenant(tenantId);
+
     public ValueTask DisposeAsync() => _connection.DisposeAsync();
 
     private ApplicationDbContext Create(params IInterceptor[] interceptors)
@@ -64,7 +71,7 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
             .AddInterceptors(interceptors)
             .Options;
 
-        return new SqliteApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+        return new SqliteApplicationDbContext(options, _tenantService, new NullMediator());
     }
 
     private sealed class SqliteApplicationDbContext : ApplicationDbContext
