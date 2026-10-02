@@ -59,6 +59,14 @@ En cualquier otro entorno nunca se registran cuerpos de SMS ni códigos OTP: el 
 
 Al resolver el cliente de un pedido, los registros `OrderCustomerLinked` y `CreatedTempCustomer` siguen la misma regla: fuera de Development llevan el teléfono enmascarado (`***5678`) junto al usuario o al cliente temporal, y solo Development registra el número completo.
 
+## Errores no controlados
+
+`GlobalExceptionHandlerMiddleware` responde con `ProblemDetails`. Incluye `traceId`, el mismo valor que lleva la entrada del log, para que soporte encuentre el error que reporta un usuario. Las respuestas 500 no incluyen el mensaje de la excepción. El log registra el tipo (`ErrorType`), el número de error de SQL Server (`SqlErrorNumber`) y el `TraceId`.
+
+SQL Server copia valores de las filas en sus mensajes: la clave duplicada de un índice único (teléfono, email) o el inicio de un valor truncado. Por eso, fuera de Development, si la cadena de la excepción contiene una excepción de base de datos, se registran los tipos, el número de error y el stack trace, pero ningún mensaje (`LogRedaction.RedactDatabaseMessages`). Las demás excepciones se registran completas. El webhook de WhatsApp aplica la misma regla a los errores que captura.
+
+Fuera de Development, EF Core tampoco registra por su cuenta los guardados ni las consultas fallidos (`SaveChangesFailed`, `QueryIterationFailed`, `ExecuteUpdateFailed`, `ExecuteDeleteFailed`, `NonQueryOperationFailed`): la excepción sigue propagándose y quien la maneja la registra redactada. Development conserva la excepción completa en todos los casos para depurar.
+
 ## Validación local
 
 ```powershell
