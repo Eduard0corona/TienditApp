@@ -62,19 +62,7 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         if (sendResult.IsFailure)
             return Result.Failure<ChatMessageDto>(sendResult.Error!);
 
-        // Find or create conversation
-        var conversation = await _context.WhatsAppConversations
-            .FirstOrDefaultAsync(c => c.CustomerPhone == request.PhoneNumber, cancellationToken);
-
-        if (conversation is null)
-        {
-            conversation = new WhatsAppConversation(tenantId, request.PhoneNumber);
-            _context.WhatsAppConversations.Add(conversation);
-        }
-
-        // Add outbound message
-        var message = conversation.AddMessage(MessageDirection.Outbound, request.Message, null);
-        await _context.SaveChangesAsync(cancellationToken);
+        var (conversation, message) = await StoreOutboundMessageAsync(tenantId, request, cancellationToken);
 
         var messageDto = _mapper.Map<ChatMessageDto>(message);
         var conversationDto = _mapper.Map<ConversationDto>(conversation);
@@ -83,5 +71,39 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         await _notificationService.NotifyNewMessage(tenantId, conversationDto, messageDto);
 
         return Result.Success(messageDto);
+    }
+
+    /// <summary>
+    /// Records the message already sent to the customer. If the customer wrote, or the chat was marked
+    /// read, after the conversation was loaded, the message goes into the conversation as it is now.
+    /// </summary>
+    private async Task<(WhatsAppConversation Conversation, WhatsAppMessage Message)> StoreOutboundMessageAsync(
+        Guid tenantId, SendChatMessageCommand request, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            // Find or create conversation
+            var conversation = await _context.WhatsAppConversations
+                .FirstOrDefaultAsync(c => c.CustomerPhone == request.PhoneNumber, cancellationToken);
+
+            if (conversation is null)
+            {
+                conversation = new WhatsAppConversation(tenantId, request.PhoneNumber);
+                _context.WhatsAppConversations.Add(conversation);
+            }
+
+            // Add outbound message
+            var message = conversation.AddMessage(MessageDirection.Outbound, request.Message, null);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return (conversation, message);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < WhatsAppConversationConcurrency.MaxSaveAttempts)
+            {
+                _context.Detach(conversation, message);
+            }
+        }
     }
 }

@@ -94,7 +94,9 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         var host = new SqliteTestHost(connection);
         await host.InScopeAsync(async services =>
         {
-            await services.GetRequiredService<ApplicationDbContext>().Database.EnsureCreatedAsync();
+            var context = services.GetRequiredService<ApplicationDbContext>();
+            await context.Database.EnsureCreatedAsync();
+            await SqliteConversationVersion.CreateTriggerAsync(context);
 
             var roleManager = services.GetRequiredService<RoleManager<ApplicationRole>>();
             foreach (var role in roles)
@@ -163,6 +165,8 @@ internal sealed class SqliteTestHost : IAsyncDisposable
             modelBuilder.Entity<Order>()
                 .Property(o => o.Version)
                 .HasDefaultValueSql("randomblob(8)");
+
+            SqliteConversationVersion.Configure(modelBuilder);
         }
     }
 

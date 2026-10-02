@@ -298,7 +298,7 @@ public class WhatsAppWebhookControllerTests
                 .AddInterceptors(saveFaults)
                 .Options;
 
-            var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+            var context = new TestApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
 
             var tenantA = new Tenant("Tenant A", "tenant-a", BusinessType.Food, "a@tenant.com");
             var tenantB = new Tenant("Tenant B", "tenant-b", BusinessType.Retail, "b@tenant.com");
@@ -422,6 +422,28 @@ public class WhatsAppWebhookControllerTests
             _armed = false;
             Fired = true;
             throw new DbUpdateException("Simulated database outage.");
+        }
+    }
+
+    private sealed class TestApplicationDbContext : ApplicationDbContext
+    {
+        public TestApplicationDbContext(
+            DbContextOptions<ApplicationDbContext> options,
+            ICurrentTenantService tenantService,
+            IMediator mediator)
+            : base(options, tenantService, mediator)
+        {
+        }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // InMemory provider does not generate rowversion; allow test inserts.
+            modelBuilder.Entity<WhatsAppConversation>()
+                .Property<byte[]>("Version")
+                .IsRequired(false)
+                .ValueGeneratedNever();
         }
     }
 

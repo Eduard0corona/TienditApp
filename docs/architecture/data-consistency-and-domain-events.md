@@ -31,6 +31,7 @@ El commit original y los handlers no son atómicos. Si falla un handler después
 - Un caso de uso coordina cambios sin esconder commits intermedios.
 - Si varias escrituras deben ser atómicas (registro de negocio/cliente, confirmación de teléfono), el caso de uso usa `IApplicationDbContext.ExecuteInResilientTransactionAsync`: la transacción corre dentro de la estrategia de ejecución con reintentos, cada intento parte de un `ChangeTracker` limpio y solo hace commit si el `Result` es exitoso. No llames `Database.BeginTransactionAsync` directamente: la estrategia de reintentos de SQL Server rechaza transacciones iniciadas por el usuario. Correo/SMS se envían después del commit; los eventos de dominio de un `SaveChangesAsync` dentro de esa transacción se publican antes del commit.
 - No se depende de eventos post-save para procesos críticos mientras no exista entrega durable.
+- Si varias solicitudes modifican a la vez el mismo agregado (`Order`, `WhatsAppConversation`), este lleva `rowversion`. Ante `DbUpdateConcurrencyException`, el caso de uso recarga el agregado y reaplica su cambio con intentos acotados, en lugar de guardar valores absolutos calculados sobre una copia vieja.
 
 ## Arquitectura objetivo
 

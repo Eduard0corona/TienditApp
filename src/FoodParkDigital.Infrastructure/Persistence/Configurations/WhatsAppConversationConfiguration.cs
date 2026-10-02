@@ -19,6 +19,11 @@ public class WhatsAppConversationConfiguration : IEntityTypeConfiguration<WhatsA
         builder.Property(c => c.UnreadCount).IsRequired().HasDefaultValue(0);
         builder.Property(c => c.IsArchived).IsRequired().HasDefaultValue(false);
 
+        // Concurrency token: parallel webhook deliveries, replies and "mark as read" all rewrite the
+        // summary (UnreadCount, last message), so a write based on a stale copy must fail and be
+        // retried instead of overwriting another request's change.
+        builder.Property<byte[]>("Version").IsRowVersion().IsRequired();
+
         builder.HasIndex(c => new { c.TenantId, c.LastMessageAt })
             .IsDescending(false, true);
 
