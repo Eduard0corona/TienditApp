@@ -9,16 +9,19 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Controllers;
 using FoodParkDigital.WebApi.Services;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using static FoodParkDigital.WebApi.Tests.WhatsAppWebhookTestSupport;
 
@@ -203,6 +206,42 @@ public class WhatsAppWebhookControllerTests
     }
 
     [Fact]
+    public async Task Receive_ShouldNotLogSenderPhone_WhenStoringMessageFailsWithSqlErrorOutsideDevelopment()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        fixture.Mediator.ProcessFailure = DuplicateConversationFailure(fixture.TenantB);
+        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.race");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret), logger);
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        // The message was not stored, so Meta must deliver it again.
+        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+        Assert.Null(logger.FirstMentioning("5511112222"));
+        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Contains($"{typeof(SqlException).FullName} (SQL error 2601)", error.Exception!.ToString());
+    }
+
+    [Fact]
+    public async Task Receive_ShouldLogFullSqlError_WhenStoringMessageFailsInDevelopment()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var failure = DuplicateConversationFailure(fixture.TenantB);
+        fixture.Mediator.ProcessFailure = failure;
+        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.race-dev");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Development, AppSecret), body, Sign(body, AppSecret), logger, Environments.Development);
+
+        await controller.Receive(CancellationToken.None);
+
+        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Same(failure, error.Exception);
+    }
+
+    [Fact]
     public async Task Verify_ShouldReturnChallenge_WhenVerifyTokenMatches()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -227,6 +266,14 @@ public class WhatsAppWebhookControllerTests
 
     private static int? StatusCodeOf(IActionResult result)
         => Assert.IsAssignableFrom<IStatusCodeActionResult>(result).StatusCode;
+
+    // SQL Server quotes row values in its errors, such as the sender's phone in this unique-index violation.
+    private static DbUpdateException DuplicateConversationFailure(Guid tenantId)
+        => SqlExceptionFactory.SaveFailure(
+            2601,
+            "Cannot insert duplicate key row in object 'dbo.WhatsAppConversations' with unique index "
+            + "'IX_WhatsAppConversations_TenantId_CustomerPhone'. The duplicate key value is "
+            + $"({tenantId}, +5215511112222).");
 
     private static byte[] InboundPayload(string phoneNumberId, params string[] messageIds)
     {
@@ -321,7 +368,11 @@ public class WhatsAppWebhookControllerTests
         }
 
         public WhatsAppWebhookController CreateController(
-            WhatsAppWebhookSignatureVerifier verifier, byte[]? body = null, string? signature = null)
+            WhatsAppWebhookSignatureVerifier verifier,
+            byte[]? body = null,
+            string? signature = null,
+            ILogger<WhatsAppWebhookController>? logger = null,
+            string environmentName = "Production")
         {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Body = new MemoryStream(body ?? []);
@@ -329,7 +380,11 @@ public class WhatsAppWebhookControllerTests
                 httpContext.Request.Headers[WhatsAppWebhookSignatureVerifier.SignatureHeaderName] = signature;
 
             return new WhatsAppWebhookController(
-                Mediator, Context, verifier, NullLogger<WhatsAppWebhookController>.Instance)
+                Mediator,
+                Context,
+                verifier,
+                new TestHostEnvironment(environmentName),
+                logger ?? NullLogger<WhatsAppWebhookController>.Instance)
             {
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };
@@ -357,6 +412,9 @@ public class WhatsAppWebhookControllerTests
 
         public List<object> Requests { get; } = [];
 
+        /// <summary>When set, processing an inbound message throws it, like a failed save would.</summary>
+        public Exception? ProcessFailure { get; set; }
+
         /// <summary>Inbound messages whose processing throws, as a database outage would.</summary>
         public HashSet<string> FailingMessageIds { get; } = [];
 
@@ -370,6 +428,7 @@ public class WhatsAppWebhookControllerTests
             {
                 VerifyWhatsAppWebhookTokenQuery query =>
                     await new VerifyWhatsAppWebhookTokenQueryHandler(_context).Handle(query, ct),
+                ProcessInboundMessageCommand when ProcessFailure is not null => throw ProcessFailure,
                 ProcessInboundMessageCommand command when FailingMessageIds.Contains(command.ExternalMessageId) =>
                     throw new RetryLimitExceededException("Simulated database outage.", new TimeoutException()),
                 ProcessInboundMessageCommand command when DuplicateMessageIds.Contains(command.ExternalMessageId) =>

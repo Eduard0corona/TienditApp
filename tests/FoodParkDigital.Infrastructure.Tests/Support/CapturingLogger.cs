@@ -30,7 +30,8 @@ public sealed record LogEntry(
     LogLevel Level,
     string Message,
     IReadOnlyList<KeyValuePair<string, object?>> Properties,
-    Exception? Exception)
+    Exception? Exception,
+    string? Category = null)
 {
     public object? this[string property] => Properties.FirstOrDefault(p => p.Key == property).Value;
 

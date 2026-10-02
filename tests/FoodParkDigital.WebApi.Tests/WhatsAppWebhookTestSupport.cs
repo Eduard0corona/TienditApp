@@ -33,7 +33,7 @@ internal static class WhatsAppWebhookTestSupport
             NullLogger<WhatsAppWebhookSignatureVerifier>.Instance);
     }
 
-    private sealed class TestHostEnvironment : IHostEnvironment
+    internal sealed class TestHostEnvironment : IHostEnvironment
     {
         public TestHostEnvironment(string environmentName)
         {
