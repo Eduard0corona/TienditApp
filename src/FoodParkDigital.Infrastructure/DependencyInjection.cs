@@ -139,7 +139,9 @@ public static class DependencyInjection
         else
             services.AddScoped<IFileStorageService, LocalFileStorageService>();
 
-        services.AddSingleton<IImageProcessingService, ImageProcessingService>();
+        services.AddSingleton<ImageProcessingService>();
+        services.AddSingleton<IImageProcessingService>(sp => sp.GetRequiredService<ImageProcessingService>());
+        services.AddSingleton<IImageNormalizationService>(sp => sp.GetRequiredService<ImageProcessingService>());
         services.AddHttpContextAccessor();
 
         return services;

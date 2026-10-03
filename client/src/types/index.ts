@@ -843,8 +843,12 @@ export interface CashSessionDto {
   closingAmount?: number;
   status: CashSessionStatus;
   notes?: string;
+  /** Cash entering the drawer (cash payments and deposits). */
   inflows: number;
+  /** Cash leaving the drawer (expenses, withdrawals, refunds). */
   outflows: number;
+  /** Card, transfer and other payments: recorded in the session but not in the drawer. */
+  nonCashInflows: number;
   expectedBalance: number;
 }
 
@@ -888,6 +892,8 @@ export interface DailyCashCutDto {
   manualIncomeTotal: number;
   manualExpenseTotal: number;
   netCashFlow: number;
+  /** Cash payments plus manual income minus manual expenses: what the drawers should hold. */
+  netCashOnlyFlow: number;
   byUser: DailyCashCutByUserDto[];
   byLocation: DailyCashCutByLocationDto[];
 }
@@ -905,8 +911,8 @@ export interface CloseCashSessionRequest {
 export interface AddCashTransactionRequest {
   cashSessionId: string;
   transactionType: CashTransactionType;
+  /** Always positive; the server applies the sign from the transaction type. */
   amount: number;
-  occurredAt?: string;
   paymentMethod?: OrderPaymentMethod;
   inventoryLocationId?: string;
   orderId?: string;
@@ -954,7 +960,11 @@ export interface CreateAppointmentRequest {
 export interface OperationalReportDto {
   rangeFrom: string;
   rangeTo: string;
+  /** Completed orders, tax included. */
   totalRevenue: number;
+  totalTax: number;
+  /** Revenue without tax: the base of the gross profit. */
+  netRevenue: number;
   totalOrderPayments: number;
   totalPurchases: number;
   totalCogs: number;
@@ -1014,6 +1024,18 @@ export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 99;
 export type OrderType = 0 | 1;
 export type ServiceOrderPieceStatus = 0 | 1 | 2 | 99;
 export type OrderPaymentMethod = 0 | 1 | 2 | 3 | 4;
+
+export const OrderStatus = {
+  Pending: 0,
+  Confirmed: 1,
+  InPreparation: 2,
+  Ready: 3,
+  Accepted: 4,
+  InProgress: 5,
+  Delivered: 6,
+  Completed: 7,
+  Cancelled: 99,
+} as const;
 
 export const OrderType = {
   Retail: 0,
@@ -1196,8 +1218,8 @@ export interface CreateServiceOrderDetailRequest {
 export interface AddOrderPaymentRequest {
   amount: number;
   method: OrderPaymentMethod;
-  paidAt?: string;
   inventoryLocationId?: string;
+  /** Must be a URL returned by the evidence upload endpoint. */
   evidenceUrl?: string;
   reference?: string;
   notes?: string;

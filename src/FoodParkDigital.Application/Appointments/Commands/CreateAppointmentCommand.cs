@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.Commands;
 
@@ -39,15 +40,18 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly IWhatsAppService _whatsAppService;
+    private readonly ILogger<CreateAppointmentCommandHandler> _logger;
 
     public CreateAppointmentCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        IWhatsAppService whatsAppService)
+        IWhatsAppService whatsAppService,
+        ILogger<CreateAppointmentCommandHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
         _whatsAppService = whatsAppService;
+        _logger = logger;
     }
 
     public async Task<Result<AppointmentDto>> Handle(CreateAppointmentCommand request, CancellationToken cancellationToken)
@@ -85,11 +89,7 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
         _context.Appointments.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
 
-        _ = _whatsAppService.SendTextMessageAsync(
-            _tenantService.TenantId,
-            entity.CustomerPhone,
-            $"Tu cita para {entity.ServiceName} fue agendada para {entity.StartAt:dd/MM/yyyy HH:mm}.",
-            cancellationToken);
+        await AppointmentNotifier.NotifyScheduledAsync(_context, _whatsAppService, _logger, entity, cancellationToken);
 
         return Result.Success(new AppointmentDto
         {

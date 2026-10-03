@@ -30,6 +30,14 @@ public class ReceivePurchaseOrderCommandValidator : AbstractValidator<ReceivePur
     {
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
         RuleFor(x => x.Lines).NotEmpty().WithMessage("Debes agregar al menos una línea recibida.");
+        // A repeated line would add stock twice while the purchase order records only the last quantity.
+        RuleFor(x => x.Lines)
+            .Must(lines => lines.Select(l => l.PurchaseOrderLineId).Distinct().Count() == lines.Count)
+            .WithMessage("Cada línea de la compra solo puede aparecer una vez por recepción.");
+        RuleFor(x => x.ReceivedAt)
+            .LessThanOrEqualTo(_ => DateTimeOffset.UtcNow.AddMinutes(5))
+            .When(x => x.ReceivedAt.HasValue)
+            .WithMessage("La fecha de recepción no puede estar en el futuro.");
         RuleForEach(x => x.Lines).ChildRules(line =>
         {
             line.RuleFor(x => x.PurchaseOrderLineId).NotEmpty();
@@ -112,10 +120,11 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
             counterpartyName: purchaseOrder.Supplier.Name,
             notes: $"Recepción de compra {purchaseOrder.OrderNumber}");
 
-        foreach (var received in request.Lines)
+        // Stock follows the quantities the purchase order accepted.
+        foreach (var (lineId, quantityReceived) in reception)
         {
-            var line = lineMap[received.PurchaseOrderLineId];
-            if (received.QuantityReceived <= 0)
+            var line = lineMap[lineId];
+            if (quantityReceived <= 0)
                 continue;
 
             var key = $"{line.SupplyItemId:N}-{line.InventoryLocationId:N}";
@@ -127,13 +136,13 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
             }
 
             var quantityBefore = stock.OnHandQuantity;
-            stock.ApplyMovement(received.QuantityReceived, line.UnitCost, receivedAt);
+            stock.ApplyMovement(quantityReceived, line.UnitCost, receivedAt);
 
             var movementLine = movement.AddLine(
                 tenantId: _tenantService.TenantId,
                 supplyItemId: line.SupplyItemId,
                 inventoryLocationId: line.InventoryLocationId,
-                quantity: received.QuantityReceived,
+                quantity: quantityReceived,
                 unitCost: line.UnitCost,
                 notes: $"Recepción de {purchaseOrder.OrderNumber}");
             movementLine.SetBalances(quantityBefore, stock.OnHandQuantity);
@@ -141,8 +150,8 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
             if (supplies.TryGetValue(line.SupplyItemId, out var supply))
             {
                 var currentOnHand = onHandBySupply.GetValueOrDefault(line.SupplyItemId);
-                supply.ApplyInboundCost(line.UnitCost, currentOnHand, received.QuantityReceived);
-                onHandBySupply[line.SupplyItemId] = currentOnHand + received.QuantityReceived;
+                supply.ApplyInboundCost(line.UnitCost, currentOnHand, quantityReceived);
+                onHandBySupply[line.SupplyItemId] = currentOnHand + quantityReceived;
             }
         }
 

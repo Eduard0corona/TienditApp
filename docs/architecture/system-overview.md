@@ -26,7 +26,7 @@ El diagrama refleja referencias de proyecto y registros del composition root; no
 - `FoodParkDigital.Infrastructure`: EF Core, Identity/JWT, persistencia e implementaciones de integraciones.
 - `FoodParkDigital.WebApi`: composition root, controllers, middleware, SignalR y publicación SPA.
 - `client`: React 19/TypeScript/Vite.
-- `tests`: xUnit para Domain y Application, con algunos tests que ejercitan Infrastructure mediante SQLite/InMemory.
+- `tests`: xUnit para Domain, Application y WebApi, con algunos tests que ejercitan Infrastructure mediante EF InMemory.
 
 ## Decisiones arquitectónicas
 
@@ -38,7 +38,7 @@ No se propone migrar a microservicios. Solo se reconsiderará si un contexto nec
 
 - Rutas HTTP bajo `/api/v1`; hubs en `/hubs/orders` y `/hubs/chat`.
 - En Development, `Program.cs` ejecuta `MigrateAsync()` y seed al iniciar.
-- En despliegue, GitHub Actions construye `client`, publica WebApi con la SPA en `wwwroot` y despliega un paquete a Azure Web App.
+- En despliegue, el workflow `Deploy WebApp (API + SPA)` corre en cada push a `develop` o `master`, o a mano. Construye `client`, ejecuta lint, build y pruebas, publica WebApi con la SPA en `wwwroot` y despliega un paquete a Azure Web App. Ambas ramas despliegan a la misma app, así que deben mantenerse sincronizadas.
 - Serilog lee su configuración desde `appsettings`.
 - El almacenamiento se elige por `FileStorage:Provider`: Azure Blob o local.
 

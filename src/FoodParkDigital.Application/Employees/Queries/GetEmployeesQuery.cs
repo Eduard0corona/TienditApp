@@ -85,12 +85,13 @@ public class GetEmployeesQueryHandler : IRequestHandler<GetEmployeesQuery, Pagin
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
+        var (pageNumber, pageSize) = Paging.Normalize(request.PageNumber, request.PageSize);
 
         var rows = await query
             .OrderBy(x => x.User!.FirstName)
             .ThenBy(x => x.User!.LastName)
-            .Skip((request.PageNumber - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
         var items = rows.Select(x => new EmployeeDto
@@ -112,6 +113,6 @@ public class GetEmployeesQueryHandler : IRequestHandler<GetEmployeesQuery, Pagin
                 x.TenantUser.Role).ToList()
         }).ToList();
 
-        return new PaginatedList<EmployeeDto>(items, totalCount, request.PageNumber, request.PageSize);
+        return new PaginatedList<EmployeeDto>(items, totalCount, pageNumber, pageSize);
     }
 }

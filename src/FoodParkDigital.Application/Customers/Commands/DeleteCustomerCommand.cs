@@ -21,10 +21,14 @@ public class DeleteCustomerCommandValidator : AbstractValidator<DeleteCustomerCo
 public class DeleteCustomerCommandHandler : IRequestHandler<DeleteCustomerCommand, Result>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
 
-    public DeleteCustomerCommandHandler(IApplicationDbContext context)
+    public DeleteCustomerCommandHandler(
+        IApplicationDbContext context,
+        IPhoneNormalizationService phoneNormalizationService)
     {
         _context = context;
+        _phoneNormalizationService = phoneNormalizationService;
     }
 
     public async Task<Result> Handle(DeleteCustomerCommand request, CancellationToken cancellationToken)
@@ -43,10 +47,25 @@ public class DeleteCustomerCommandHandler : IRequestHandler<DeleteCustomerComman
         if (customer.IsPublicGeneral)
             return Result.Failure("No puedes eliminar el cliente publico en general.");
 
-        var inUse = await _context.Orders
-            .AnyAsync(
-                o => o.CustomerName == customer.Name
-                    && o.CustomerPhone == customer.Phone,
+        // Orders store the phone normalized to E.164 while customers keep it as typed; comparing the raw
+        // values (and the name) almost never matched, so customers with orders were hard-deleted.
+        var phoneCandidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(customer.Phone))
+        {
+            phoneCandidates.Add(customer.Phone.Trim());
+            try
+            {
+                phoneCandidates.Add(_phoneNormalizationService.NormalizeToE164(customer.Phone, "MX"));
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or DomainException)
+            {
+                // Not a valid phone number: only the raw value can match.
+            }
+        }
+
+        var inUse = phoneCandidates.Count > 0
+            && await _context.Orders.AnyAsync(
+                o => o.CustomerPhone != null && phoneCandidates.Contains(o.CustomerPhone),
                 cancellationToken);
         if (inUse)
             return Result.Failure("No puedes eliminar un cliente con ordenes relacionadas.");

@@ -51,6 +51,7 @@ public class GetServiceBoardPiecesQueryHandler : IRequestHandler<GetServiceBoard
             .AsNoTracking()
             .Where(p => p.IsTrackable)
             .Where(p => p.Order.OrderType == OrderType.Service)
+            .Where(p => p.Order.Status != OrderStatus.Cancelled)
             .AsQueryable();
 
         if (request.Status.HasValue)

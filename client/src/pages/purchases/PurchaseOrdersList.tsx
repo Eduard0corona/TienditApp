@@ -110,6 +110,8 @@ export default function PurchaseOrdersList() {
 
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  // A repeated click would receive (and add to stock) the same pending quantities twice.
+  const [receivingOrderId, setReceivingOrderId] = useState('');
   const [form, setForm] = useState<FormState>(buildForm());
 
   const activeSuppliers = useMemo(() => suppliers.filter((x) => x.isActive), [suppliers]);
@@ -240,8 +242,10 @@ export default function PurchaseOrdersList() {
   };
 
   const receivePending = async (orderId: string) => {
+    if (receivingOrderId) return;
     setError('');
     setSuccess('');
+    setReceivingOrderId(orderId);
     try {
       const { data } = await purchaseOrdersApi.getById(orderId);
       const pendingLines = data.lines
@@ -261,6 +265,8 @@ export default function PurchaseOrdersList() {
       await loadOrders();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'No se pudo recibir la compra.'));
+    } finally {
+      setReceivingOrderId('');
     }
   };
 
@@ -340,8 +346,13 @@ export default function PurchaseOrdersList() {
                 <td className="text-center">
                   {(item.status === PurchaseOrderStatusConst.Sent ||
                     item.status === PurchaseOrderStatusConst.PartiallyReceived) && (
-                    <button className="btn btn-sm btn-soft-success" onClick={() => receivePending(item.id)}>
-                      <i className="ri-download-2-line me-1"></i>Recibir
+                    <button
+                      className="btn btn-sm btn-soft-success"
+                      onClick={() => receivePending(item.id)}
+                      disabled={receivingOrderId !== ''}
+                    >
+                      <i className="ri-download-2-line me-1"></i>
+                      {receivingOrderId === item.id ? 'Recibiendo...' : 'Recibir'}
                     </button>
                   )}
                 </td>

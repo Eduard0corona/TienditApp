@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Reports.DTOs;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Inventory.Enums;
@@ -17,30 +18,34 @@ public record GetOperationalReportQuery : IRequest<OperationalReportDto>
 
 public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalReportQuery, OperationalReportDto>
 {
+    private const string OrderMovementReferencePrefix = "ORDER:";
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly ICurrentTenantService _tenantService;
 
-    public GetOperationalReportQueryHandler(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public GetOperationalReportQueryHandler(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider,
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
+        _tenantService = tenantService;
     }
 
     public async Task<OperationalReportDto> Handle(GetOperationalReportQuery request, CancellationToken cancellationToken)
     {
-        var now = _dateTimeProvider.UtcNow;
-        var from = request.FromDate ?? new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
-        var to = request.ToDate ?? from.AddMonths(1).AddTicks(-1);
+        var (from, to) = await ResolveRangeAsync(request, cancellationToken);
 
         var completedStatuses = new[] { OrderStatus.Delivered, OrderStatus.Completed };
-        var totalRevenue = await _context.Orders
+        var recognizedOrders = _context.Orders
             .AsNoTracking()
-            .Where(x => completedStatuses.Contains(x.Status) && x.CreatedAt >= from && x.CreatedAt <= to)
-            .SumAsync(x => (decimal?)x.Total, cancellationToken) ?? 0m;
+            .Where(x => completedStatuses.Contains(x.Status) && x.CreatedAt >= from && x.CreatedAt <= to);
 
-        var ordersCompleted = await _context.Orders
-            .AsNoTracking()
-            .CountAsync(x => completedStatuses.Contains(x.Status) && x.CreatedAt >= from && x.CreatedAt <= to, cancellationToken);
+        var totalRevenue = await recognizedOrders.SumAsync(x => (decimal?)x.Total, cancellationToken) ?? 0m;
+        var totalTax = await recognizedOrders.SumAsync(x => (decimal?)x.Tax, cancellationToken) ?? 0m;
+        var ordersCompleted = await recognizedOrders.CountAsync(cancellationToken);
 
         var totalOrderPayments = await _context.OrderPayments
             .AsNoTracking()
@@ -59,14 +64,17 @@ public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalRe
             .Where(x => x.Status != PurchaseOrderStatus.Cancelled && x.OrderedAt >= from && x.OrderedAt <= to)
             .SumAsync(x => (decimal?)x.Total, cancellationToken) ?? 0m;
 
-        var totalCogs = await _context.InventoryMovements
-            .AsNoTracking()
-            .Where(x =>
-                x.MovementType == InventoryMovementType.Exit &&
-                x.MovementReason == InventoryMovementReason.Sale &&
-                x.MovementDate >= from &&
-                x.MovementDate <= to)
-            .SumAsync(x => (decimal?)x.TotalAmount, cancellationToken) ?? 0m;
+        // Cost of sales of the same orders counted as revenue: their automatic consumptions (order lines
+        // and completed service pieces, both referenced "ORDER:..." with the order number). Orders that
+        // were cancelled (and reversed) or are still open no longer add cost without revenue.
+        var totalCogs = await (
+                from movement in _context.InventoryMovements.AsNoTracking()
+                join order in recognizedOrders on movement.ReferenceNumber equals order.OrderNumber
+                where movement.MovementType == InventoryMovementType.Exit
+                    && movement.ExternalReference != null
+                    && movement.ExternalReference.StartsWith(OrderMovementReferencePrefix)
+                select (decimal?)movement.TotalAmount)
+            .SumAsync(cancellationToken) ?? 0m;
 
         var appointmentsScheduled = await _context.Appointments
             .AsNoTracking()
@@ -87,14 +95,40 @@ public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalRe
             RangeFrom = from,
             RangeTo = to,
             TotalRevenue = totalRevenue,
+            TotalTax = totalTax,
+            NetRevenue = totalRevenue - totalTax,
             TotalOrderPayments = totalOrderPayments,
             TotalPurchases = totalPurchases,
             TotalCogs = totalCogs,
-            GrossProfit = totalRevenue - totalCogs,
+            // Tax collected belongs to the tax authority, not to the business.
+            GrossProfit = totalRevenue - totalTax - totalCogs,
             OrdersCompleted = ordersCompleted,
             AppointmentsScheduled = appointmentsScheduled,
             AppointmentsCompleted = appointmentsCompleted,
             RevenueByPaymentMethod = revenueByPaymentMethod
         };
+    }
+
+    private async Task<(DateTimeOffset From, DateTimeOffset To)> ResolveRangeAsync(
+        GetOperationalReportQuery request,
+        CancellationToken cancellationToken)
+    {
+        if (request.FromDate.HasValue)
+            return (request.FromDate.Value, request.ToDate ?? request.FromDate.Value.AddMonths(1).AddTicks(-1));
+
+        // The default range is the current month in the tenant's time zone, not the UTC month (which
+        // moves the last evening hours of each month into the next one for Mexico).
+        // TenantSettings is not ITenantScoped (no global filter): the tenant must be explicit.
+        var timeZoneId = await _context.TenantSettings
+            .AsNoTracking()
+            .Where(x => x.TenantId == _tenantService.TenantId)
+            .Select(x => x.TimeZone)
+            .FirstOrDefaultAsync(cancellationToken);
+        var zone = TenantDateTimeResolver.Resolve(timeZoneId);
+        var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, zone);
+        var firstDay = new DateTime(localNow.Year, localNow.Month, 1);
+        var monthStart = TenantDateTimeResolver.LocalDateBoundaryToUtc(firstDay, startOfDay: true, zone);
+        var monthEnd = TenantDateTimeResolver.LocalDateBoundaryToUtc(firstDay.AddMonths(1).AddDays(-1), startOfDay: false, zone);
+        return (monthStart, request.ToDate ?? monthEnd);
     }
 }

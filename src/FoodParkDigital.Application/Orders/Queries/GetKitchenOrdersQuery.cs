@@ -37,7 +37,13 @@ public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuer
             .AsNoTracking()
             .Include(o => o.Items)
             .Where(o => o.BusinessType == BusinessType.Food)
-            .Where(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.InPreparation)
+            // Every Food state before Ready. Orders created from the POS start as Confirmed, so the
+            // board must include it (it previously only listed Pending and InPreparation).
+            .Where(o => o.Status == OrderStatus.Pending
+                || o.Status == OrderStatus.Confirmed
+                || o.Status == OrderStatus.Accepted
+                || o.Status == OrderStatus.InPreparation
+                || o.Status == OrderStatus.InProgress)
             .OrderBy(o => o.CreatedAt)
             .ToListAsync(cancellationToken);
 

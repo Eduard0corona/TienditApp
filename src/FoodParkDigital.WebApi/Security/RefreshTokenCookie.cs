@@ -12,26 +12,22 @@ public static class RefreshTokenCookie
         httpContext.Response.Cookies.Append(
             Name,
             refreshToken,
-            CreateOptions(httpContext, environment, DateTime.UtcNow.AddDays(7)));
+            CreateOptions(environment, DateTime.UtcNow.AddDays(7)));
     }
 
     public static void Delete(HttpContext httpContext, IWebHostEnvironment environment)
     {
-        httpContext.Response.Cookies.Delete(Name, CreateOptions(httpContext, environment));
+        httpContext.Response.Cookies.Delete(Name, CreateOptions(environment));
     }
 
-    private static CookieOptions CreateOptions(
-        HttpContext httpContext,
-        IWebHostEnvironment environment,
-        DateTime? expires = null)
+    private static CookieOptions CreateOptions(IWebHostEnvironment environment, DateTime? expires = null)
     {
-        var isHttpsRequest = httpContext.Request.IsHttps;
-        var secureCookie = !environment.IsDevelopment() && isHttpsRequest;
-
         return new CookieOptions
         {
             HttpOnly = true,
-            Secure = secureCookie,
+            // Outside Development the cookie is always Secure, even when TLS terminates at a proxy and
+            // the request reaches the app as HTTP (Request.IsHttps would then be false).
+            Secure = !environment.IsDevelopment(),
             SameSite = environment.IsDevelopment() ? SameSiteMode.Lax : SameSiteMode.Strict,
             Expires = expires,
             Path = "/api/v1/auth"

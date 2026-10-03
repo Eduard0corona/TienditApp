@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
+using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
 
@@ -38,36 +40,58 @@ public class UploadServiceIntakePhotoCommandValidator : AbstractValidator<Upload
 
 public class UploadServiceIntakePhotoCommandHandler : IRequestHandler<UploadServiceIntakePhotoCommand, Result<UploadedFileDto>>
 {
+    private const int MaxPhotoDimension = 2048;
+
     private readonly ICurrentTenantService _tenantService;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IImageNormalizationService _imageNormalizationService;
 
     public UploadServiceIntakePhotoCommandHandler(
         ICurrentTenantService tenantService,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        IImageNormalizationService imageNormalizationService)
     {
         _tenantService = tenantService;
         _fileStorageService = fileStorageService;
+        _imageNormalizationService = imageNormalizationService;
     }
 
     public async Task<Result<UploadedFileDto>> Handle(UploadServiceIntakePhotoCommand request, CancellationToken cancellationToken)
     {
-        var extension = Path.GetExtension(request.FileName).ToLowerInvariant();
-        var fileName = $"{Guid.NewGuid()}{extension}";
-        var folder = $"orders/{_tenantService.TenantId}/service-intake/{DateTime.UtcNow:yyyyMM}";
+        // The type comes from the content, never from the file name or the client's Content-Type.
+        var content = await OrderUploadRules.BufferAsync(request.FileStream, cancellationToken);
+        var kind = await FileSignature.DetectAsync(content, cancellationToken);
+        if (!FileSignature.IsImage(kind))
+            return Result.Failure<UploadedFileDto>("El archivo no es una imagen JPG, PNG o WebP valida.");
 
-        var url = await _fileStorageService.UploadAsync(
-            request.FileStream,
-            fileName,
-            request.ContentType,
-            folder,
-            cancellationToken);
-
-        return Result.Success(new UploadedFileDto
+        Stream photo;
+        try
         {
-            Url = url,
-            FileName = fileName,
-            ContentType = request.ContentType
-        });
+            // Re-encoding drops anything hidden in the file and the photo's metadata (GPS, device).
+            photo = await _imageNormalizationService.NormalizeToWebpAsync(content, MaxPhotoDimension, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result.Failure<UploadedFileDto>(ex.Message);
+        }
+
+        await using (photo)
+        {
+            var fileName = $"{Guid.NewGuid()}.webp";
+            var url = await _fileStorageService.UploadAsync(
+                photo,
+                fileName,
+                "image/webp",
+                OrderUploadRules.ServiceIntakeFolder(_tenantService.TenantId, DateTimeOffset.UtcNow),
+                cancellationToken);
+
+            return Result.Success(new UploadedFileDto
+            {
+                Url = url,
+                FileName = fileName,
+                ContentType = "image/webp"
+            });
+        }
     }
 }
 
@@ -105,35 +129,74 @@ public class UploadOrderPaymentEvidenceCommandValidator : AbstractValidator<Uplo
 
 public class UploadOrderPaymentEvidenceCommandHandler : IRequestHandler<UploadOrderPaymentEvidenceCommand, Result<UploadedFileDto>>
 {
+    private const int MaxImageDimension = 2048;
+
     private readonly ICurrentTenantService _tenantService;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IImageNormalizationService _imageNormalizationService;
 
     public UploadOrderPaymentEvidenceCommandHandler(
         ICurrentTenantService tenantService,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        IImageNormalizationService imageNormalizationService)
     {
         _tenantService = tenantService;
         _fileStorageService = fileStorageService;
+        _imageNormalizationService = imageNormalizationService;
     }
 
     public async Task<Result<UploadedFileDto>> Handle(UploadOrderPaymentEvidenceCommand request, CancellationToken cancellationToken)
     {
-        var extension = Path.GetExtension(request.FileName).ToLowerInvariant();
-        var fileName = $"{Guid.NewGuid()}{extension}";
-        var folder = $"orders/{_tenantService.TenantId}/payment-evidence/{DateTime.UtcNow:yyyyMM}";
+        // The type comes from the content, never from the file name or the client's Content-Type.
+        var content = await OrderUploadRules.BufferAsync(request.FileStream, cancellationToken);
+        var kind = await FileSignature.DetectAsync(content, cancellationToken);
+        content.Position = 0;
 
-        var url = await _fileStorageService.UploadAsync(
-            request.FileStream,
-            fileName,
-            request.ContentType,
-            folder,
-            cancellationToken);
-
-        return Result.Success(new UploadedFileDto
+        Stream stored;
+        string extension;
+        string contentType;
+        if (FileSignature.IsImage(kind))
         {
-            Url = url,
-            FileName = fileName,
-            ContentType = request.ContentType
-        });
+            try
+            {
+                stored = await _imageNormalizationService.NormalizeToWebpAsync(content, MaxImageDimension, cancellationToken);
+            }
+            catch (DomainException ex)
+            {
+                return Result.Failure<UploadedFileDto>(ex.Message);
+            }
+
+            extension = ".webp";
+            contentType = "image/webp";
+        }
+        else if (kind == UploadedFileKind.Pdf)
+        {
+            // PDFs cannot be re-encoded here; they are stored as-is and served as downloads.
+            stored = content;
+            extension = ".pdf";
+            contentType = "application/pdf";
+        }
+        else
+        {
+            return Result.Failure<UploadedFileDto>("Solo se permiten imagenes JPG, PNG o WebP, o documentos PDF.");
+        }
+
+        await using (stored)
+        {
+            var fileName = $"{Guid.NewGuid()}{extension}";
+            var url = await _fileStorageService.UploadAsync(
+                stored,
+                fileName,
+                contentType,
+                OrderUploadRules.PaymentEvidenceFolder(_tenantService.TenantId, DateTimeOffset.UtcNow),
+                cancellationToken);
+
+            return Result.Success(new UploadedFileDto
+            {
+                Url = url,
+                FileName = fileName,
+                ContentType = contentType
+            });
+        }
     }
 }

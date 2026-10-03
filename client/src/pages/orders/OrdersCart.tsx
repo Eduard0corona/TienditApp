@@ -6,6 +6,7 @@ import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
 import { useTenant } from '../../hooks/useTenant';
+import { ORDER_TAX_RATE_PERCENT, estimateOrderTotals } from '../../utils/orderTotals';
 import './OrdersCart.css';
 import type {
   CreateOrderRequest,
@@ -16,6 +17,9 @@ import type {
   UploadedFileDto,
 } from '../../types';
 import { BusinessType as BusinessTypeConst, OrderType as OrderTypeConst, UnitType } from '../../types';
+
+// Same limit as the API (OrderLimits.MaxQuantityPerLine).
+const MAX_QUANTITY_PER_LINE = 10_000;
 
 interface CartLine {
   productId: string;
@@ -102,6 +106,7 @@ export default function OrdersCart() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [truncationNotice, setTruncationNotice] = useState('');
   const showsTableReferenceField = tenant?.businessType === BusinessTypeConst.Food;
 
   const isService = (product: ProductDto) =>
@@ -137,6 +142,12 @@ export default function OrdersCart() {
       const loadedProducts = [...productsResponse.data.items, ...servicesResponse.data.items]
         .sort((a, b) => a.name.localeCompare(b.name));
       const loadedCustomers = customersResponse.data.items;
+      // The POS loads the first page of each catalog: say so instead of silently hiding the rest.
+      const truncated = [productsResponse.data, servicesResponse.data, customersResponse.data]
+        .some((page) => page.totalCount > page.items.length);
+      setTruncationNotice(truncated
+        ? 'El catalogo o la lista de clientes tiene mas registros de los que se muestran aqui (maximo 200 por lista).'
+        : '');
       const defaultCustomer = loadedCustomers.find((c) => c.isPublicGeneral) ?? loadedCustomers[0];
 
       setProducts(loadedProducts);
@@ -297,10 +308,8 @@ export default function OrdersCart() {
     setCart((current) => current.filter((line) => line.productId !== productId));
   };
 
-  const total = useMemo(
-    () => cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
-    [cart],
-  );
+  // Subtotal, tax and total as the API will compute them; the cart used to show the subtotal as "Total".
+  const totals = useMemo(() => estimateOrderTotals(cart), [cart]);
   const hasServiceItems = useMemo(() => cart.some((line) => line.isService), [cart]);
   const hasProductItems = useMemo(() => cart.some((line) => !line.isService), [cart]);
   const resolvedOrderType = useMemo(
@@ -444,6 +453,11 @@ export default function OrdersCart() {
         <div className="alert alert-danger alert-dismissible fade show">
           {error}
           <button type="button" className="btn-close" onClick={() => setError('')}></button>
+        </div>
+      )}
+      {truncationNotice && (
+        <div className="alert alert-warning" role="status">
+          {truncationNotice}
         </div>
       )}
 
@@ -944,14 +958,19 @@ export default function OrdersCart() {
                               <input
                                 type="number"
                                 min={1}
+                                max={MAX_QUANTITY_PER_LINE}
+                                step={1}
+                                inputMode="numeric"
+                                aria-label={`Cantidad de ${line.productName}`}
                                 className="form-control form-control-sm text-center"
                                 value={line.quantity}
-                                onChange={(e) =>
-                                  updateQuantity(
-                                    line.productId,
-                                    Number(e.target.value || 0),
-                                  )
-                                }
+                                onChange={(e) => {
+                                  // Quantities are whole units in the API; an empty field keeps the line.
+                                  if (e.target.value.trim() === '') return;
+                                  const parsed = Number.parseInt(e.target.value, 10);
+                                  if (Number.isNaN(parsed)) return;
+                                  updateQuantity(line.productId, Math.min(parsed, MAX_QUANTITY_PER_LINE));
+                                }}
                               />
                             </td>
                             <td className="text-end">
@@ -972,10 +991,21 @@ export default function OrdersCart() {
                     </table>
                   </div>
 
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <span className="fw-semibold">Total</span>
-                    <span className="fw-bold">${total.toFixed(2)}</span>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span>Subtotal</span>
+                    <span>${totals.subtotal.toFixed(2)}</span>
                   </div>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span>IVA ({ORDER_TAX_RATE_PERCENT}%)</span>
+                    <span>${totals.tax.toFixed(2)}</span>
+                  </div>
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="fw-semibold">Total</span>
+                    <span className="fw-bold">${totals.total.toFixed(2)}</span>
+                  </div>
+                  <small className="text-muted d-block mb-3">
+                    El total definitivo lo calcula el sistema al generar la orden.
+                  </small>
                 </>
               )}
 

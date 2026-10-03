@@ -73,10 +73,7 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
             return Result.Failure<AvatarImageUrlsDto>("Usuario no encontrado.");
 
         var folder = TenantStorageFolders.Avatars(_tenantService.TenantId);
-
-        // Eliminar variantes anteriores si existen (solo dentro de la carpeta del tenant)
-        if (!string.IsNullOrEmpty(user.AvatarUrl))
-            await _fileStorageService.DeleteVariantsAsync(user.AvatarUrl, folder, cancellationToken);
+        var previousAvatarUrl = user.AvatarUrl;
 
         // Generar variantes de imagen
         var variants = await _imageProcessingService.GenerateVariantsAsync(
@@ -113,7 +110,17 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
 
         // Actualizar avatar del usuario
         user.AvatarUrl = baseUrl;
-        await _userManager.UpdateAsync(user);
+        var updated = await _userManager.UpdateAsync(user);
+        if (!updated.Succeeded)
+        {
+            await _fileStorageService.DeleteVariantsAsync(baseUrl, folder, cancellationToken);
+            return Result.Failure<AvatarImageUrlsDto>("No se pudo actualizar el avatar.");
+        }
+
+        // Las variantes anteriores se eliminan solo cuando la nueva imagen ya quedo guardada; antes se
+        // borraban primero y una imagen rechazada dejaba al usuario apuntando a archivos inexistentes.
+        if (!string.IsNullOrEmpty(previousAvatarUrl))
+            await _fileStorageService.DeleteVariantsAsync(previousAvatarUrl, folder, cancellationToken);
 
         return Result.Success(AvatarImageUrlsDto.FromBaseUrl(baseUrl)!);
     }
