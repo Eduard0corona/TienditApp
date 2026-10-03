@@ -27,12 +27,17 @@ public class GetMyTenantQueryTests
         var tenant = new Tenant("Tenant Uno", "tenant-uno", BusinessType.Food, "tenant@demo.com");
         context.Tenants.Add(tenant);
 
+        var otherTenant = new Tenant("Tenant Antiguo", "tenant-antiguo", BusinessType.Food, "old@demo.com");
+        context.Tenants.Add(otherTenant);
+
         var user = BuildUser(tenant.Id);
         context.Users.Add(user);
+        context.TenantUsers.Add(new TenantUser(otherTenant.Id, user.Id, TenantUserRole.Admin, TenantUserStatus.Active));
+        context.TenantUsers.Add(new TenantUser(tenant.Id, user.Id, TenantUserRole.Admin, TenantUserStatus.Active));
         await context.SaveChangesAsync();
 
         var currentUser = new TestCurrentUserService(user.Id.ToString(), null);
-        var handler = new GetMyTenantQueryHandler(context, currentUser, mapper);
+        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService(), mapper);
 
         var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
 
@@ -40,6 +45,57 @@ public class GetMyTenantQueryTests
         Assert.NotNull(result.Value);
         Assert.Equal(tenant.Id, result.Value!.Id);
         Assert.Equal(tenant.Name, result.Value.Name);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldFail_WhenMembershipIsDisabled()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+        var tenant = new Tenant("Tenant Uno", "tenant-uno", BusinessType.Food, "tenant@demo.com");
+        context.Tenants.Add(tenant);
+
+        var user = BuildUser(tenant.Id);
+        context.Users.Add(user);
+        context.TenantUsers.Add(new TenantUser(tenant.Id, user.Id, TenantUserRole.Admin, TenantUserStatus.Disabled));
+        await context.SaveChangesAsync();
+
+        // Even with the tenant in the token claim and as default tenant, a disabled member gets nothing.
+        var currentUser = new TestCurrentUserService(user.Id.ToString(), tenant.Id);
+        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService(), CreateMapper());
+
+        var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldUseTenantResolvedForRequest()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+        var claimTenant = new Tenant("Tenant Claim", "tenant-claim", BusinessType.Food, "claim@demo.com");
+        var requestTenant = new Tenant("Tenant Request", "tenant-request", BusinessType.Retail, "request@demo.com");
+        context.Tenants.AddRange(claimTenant, requestTenant);
+        var user = BuildUser(claimTenant.Id);
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var tenantService = new TestCurrentTenantService();
+        tenantService.SetTenant(requestTenant.Id);
+        var currentUser = new TestCurrentUserService(user.Id.ToString(), claimTenant.Id);
+        var handler = new GetMyTenantQueryHandler(context, currentUser, tenantService, CreateMapper());
+
+        var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(requestTenant.Id, result.Value!.Id);
     }
 
     [Fact]
@@ -62,7 +118,7 @@ public class GetMyTenantQueryTests
         await context.SaveChangesAsync();
 
         var currentUser = new TestCurrentUserService(user.Id.ToString(), null);
-        var handler = new GetMyTenantQueryHandler(context, currentUser, mapper);
+        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService(), mapper);
 
         var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
 

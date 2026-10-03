@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr';
-import { getAccessToken } from '../api/axios';
+import type { HubConnection } from '@microsoft/signalr';
+import { createHubConnection, keepHubConnected } from '../api/signalr';
 import type { ConversationDto, ChatMessageDto } from '../types';
 
 interface NewMessagePayload {
@@ -12,22 +12,14 @@ export function useChatSignalR() {
   const connectionRef = useRef<HubConnection | null>(null);
 
   useEffect(() => {
-    const connection = new HubConnectionBuilder()
-      .withUrl('/hubs/chat', {
-        accessTokenFactory: () => getAccessToken() || '',
-      })
-      .withAutomaticReconnect()
-      .configureLogging(LogLevel.Warning)
-      .build();
-
+    let isDisposed = false;
+    const connection = createHubConnection('/hubs/chat');
     connectionRef.current = connection;
-
-    connection.start().catch((err) => {
-      console.error('ChatHub connection error:', err);
-    });
+    const stop = keepHubConnected(connection, 'ChatHub', () => isDisposed);
 
     return () => {
-      connection.stop();
+      isDisposed = true;
+      stop();
     };
   }, []);
 

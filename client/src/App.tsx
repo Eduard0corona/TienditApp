@@ -1,8 +1,10 @@
 import { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import CapabilityRoute from './components/common/CapabilityRoute';
+import HomeRedirect from './components/common/HomeRedirect';
+import PermissionRoute from './components/common/PermissionRoute';
 import { TenantCapability } from './types';
 import { COMMERCE_CAPABILITIES } from './utils/tenantCapabilities';
 
@@ -10,6 +12,7 @@ const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
 const ConfirmPhone = lazy(() => import('./pages/auth/ConfirmPhone'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/profile/Profile'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
@@ -49,6 +52,7 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/confirm-phone" element={<ConfirmPhone />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Protected routes */}
           <Route
@@ -58,7 +62,14 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route
+              path="/dashboard"
+              element={(
+                <PermissionRoute permission="ViewReports">
+                  <Dashboard />
+                </PermissionRoute>
+              )}
+            />
             <Route path="/profile" element={<Profile />} />
             <Route
               path="/products"
@@ -239,8 +250,8 @@ export default function App() {
             />
           </Route>
 
-          {/* Default redirect */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Default redirect: the first page the user can open */}
+          <Route path="*" element={<HomeRedirect />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

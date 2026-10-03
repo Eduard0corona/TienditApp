@@ -148,6 +148,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
 
         var salesPaymentsTotal = paymentRows.Sum(x => x.Amount);
         var netCashFlow = salesPaymentsTotal + manualIncomeTotal - manualExpenseTotal;
+        var netCashOnlyFlow = cashTotal + manualIncomeTotal - manualExpenseTotal;
 
         return new DailyCashCutDto
         {
@@ -162,6 +163,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             ManualIncomeTotal = manualIncomeTotal,
             ManualExpenseTotal = manualExpenseTotal,
             NetCashFlow = netCashFlow,
+            NetCashOnlyFlow = netCashOnlyFlow,
             ByUser = byUser,
             ByLocation = byLocation
         };

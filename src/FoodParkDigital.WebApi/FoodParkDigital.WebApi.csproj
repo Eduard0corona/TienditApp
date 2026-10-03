@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <RootNamespace>FoodParkDigital.WebApi</RootNamespace>
+    <UserSecretsId>7bfae3dc-438e-4fbe-8d34-4341df8ab229</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

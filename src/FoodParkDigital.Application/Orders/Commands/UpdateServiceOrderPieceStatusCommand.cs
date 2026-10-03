@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -32,30 +33,68 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IOrderInventoryService _orderInventoryService;
 
     public UpdateServiceOrderPieceStatusCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IOrderInventoryService? orderInventoryService = null)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
     }
 
     public async Task<Result> Handle(UpdateServiceOrderPieceStatusCommand request, CancellationToken cancellationToken)
     {
-        var order = await _context.Orders
-            .Include(o => o.ServicePieces)
-            .Include(o => o.StatusHistory)
-            .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
-            ?? throw new EntityNotFoundException("Order", request.OrderId);
+        // Two employees can change pieces of the same order at the same time. Every change also updates
+        // the order row, so the second save hits the order's row version and is retried with fresh data.
+        const int maxAttempts = 3;
 
-        var piece = order.ServicePieces.FirstOrDefault(x => x.Id == request.PieceId);
-        if (piece is null)
-            return Result.Failure("La pieza indicada no existe dentro de la orden.");
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var order = await _context.Orders
+                .Include(o => o.ServicePieces)
+                .Include(o => o.StatusHistory)
+                .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
+                ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        if (piece.Status == request.NewStatus)
-            return Result.Success();
+            if (order.Status == OrderStatus.Cancelled)
+                return Result.Failure("La orden esta cancelada; sus piezas ya no se pueden modificar.");
 
+            var piece = order.ServicePieces.FirstOrDefault(x => x.Id == request.PieceId);
+            if (piece is null)
+                return Result.Failure("La pieza indicada no existe dentro de la orden.");
+
+            if (piece.Status == request.NewStatus)
+                return Result.Success();
+
+            var applied = await ApplyChangeAsync(order, piece, request, cancellationToken);
+            if (applied.IsFailure)
+                return applied;
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (_context is DbContext dbContext)
+                    dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        return Result.Failure(
+            "La orden fue actualizada por otro proceso. Refresca el tablero e intenta nuevamente.");
+    }
+
+    private async Task<Result> ApplyChangeAsync(
+        Order order,
+        ServiceOrderPiece piece,
+        UpdateServiceOrderPieceStatusCommand request,
+        CancellationToken cancellationToken)
+    {
         var isAdmin =
             _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
             || _currentUserService.TenantRole is "OWNER" or "ADMIN";
@@ -71,17 +110,18 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             return Result.Failure("La pieza esta asignada a otro empleado.");
         }
 
-        if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
-            piece.AssignTo(currentUserId, _currentUserService.UserName, DateTimeOffset.UtcNow);
-
         if (request.NewStatus == ServiceOrderPieceStatus.Cancelled && !isAdmin)
             return Result.Failure("Solo un administrador puede cancelar piezas de servicio.");
+
+        var now = DateTimeOffset.UtcNow;
+        if (!piece.AssignedToUserId.HasValue && hasCurrentUser)
+            piece.AssignTo(currentUserId, _currentUserService.UserName, now);
 
         var previousStatus = piece.Status;
 
         try
         {
-            piece.UpdateStatus(request.NewStatus);
+            order.ChangeServicePieceStatus(piece, request.NewStatus, now);
         }
         catch (DomainException ex)
         {
@@ -95,12 +135,20 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             previousStatus,
             request.NewStatus));
 
-        SyncOrderStatusFromPieces(order, _currentUserService.UserName);
-        await _context.SaveChangesAsync(cancellationToken);
+        // Inventory is consumed in the same unit of work as the status change: if stock is missing the
+        // whole change fails instead of leaving a completed piece without its consumption.
+        if (request.NewStatus == ServiceOrderPieceStatus.Completed)
+            await _orderInventoryService.ApplyConsumptionForServicePieceAsync(order, piece, cancellationToken);
+
+        // When the pieces move the order (e.g. to Completed), the rest of the order (products sold with
+        // the service) is consumed too; the call is idempotent and only acts on consuming statuses.
+        if (SyncOrderStatusFromPieces(order, _currentUserService.UserName))
+            await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+
         return Result.Success();
     }
 
-    private static void SyncOrderStatusFromPieces(Order order, string? changedBy)
+    private static bool SyncOrderStatusFromPieces(Order order, string? changedBy)
     {
         var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
         var pieces = order.ServicePieces
@@ -108,7 +156,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
             .ToList();
 
         if (pieces.Count == 0)
-            return;
+            return false;
 
         var allowed = stateMachine.GetAllowedTransitions(order.Status);
         var nonCancelled = pieces
@@ -122,16 +170,21 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
         if (allCompleted && allowed.Contains(OrderStatus.Completed))
         {
             order.TransitionTo(OrderStatus.Completed, stateMachine, changedBy);
-            return;
+            return true;
         }
 
         if (anyInProgress && allowed.Contains(OrderStatus.InProgress))
         {
             order.TransitionTo(OrderStatus.InProgress, stateMachine, changedBy);
-            return;
+            return true;
         }
 
         if (anyAccepted && allowed.Contains(OrderStatus.Accepted))
+        {
             order.TransitionTo(OrderStatus.Accepted, stateMachine, changedBy);
+            return true;
+        }
+
+        return false;
     }
 }

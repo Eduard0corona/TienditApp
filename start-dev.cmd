@@ -10,7 +10,7 @@ echo Starting API backend + React frontend...
 echo.
 echo   API:      http://localhost:5203
 echo   Frontend: http://localhost:5173
-echo   Login:    admin@foodparkdigital.com / Admin123!
+echo   Login:    admin@foodparkdigital.com (password: Seed:SuperAdminPassword en user-secrets)
 echo.
 
 start "FoodPark API" cmd /k "cd /d %~dp0 && dotnet run --project src\FoodParkDigital.WebApi"

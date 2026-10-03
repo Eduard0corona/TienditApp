@@ -43,6 +43,7 @@ public class CancelOrderCommandHandler : IRequestHandler<CancelOrderCommand, Res
     {
         var order = await _context.Orders
             .Include(o => o.StatusHistory)
+            .Include(o => o.ServicePieces)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 

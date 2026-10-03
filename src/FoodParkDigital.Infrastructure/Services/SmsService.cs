@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Identity.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -99,10 +100,15 @@ public class SmsService : ISmsService
 
     private async Task<bool> TrySendVerificationByOwnerWhatsAppAsync(string phoneNumber, string code)
     {
+        // Platform OTPs may only go out through a WhatsApp account owned by an active SUPER_ADMIN;
+        // a tenant owner's account must never receive other users' verification codes.
         var config = await _context.OwnerWhatsAppConfigs
             .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(x => x.IsEnabled && x.UseForOtp)
+            .Where(x => _context.Users
+                .IgnoreQueryFilters()
+                .Any(u => u.Id == x.UserId && u.Role == UserRole.SuperAdmin && u.IsActive))
             .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
             .FirstOrDefaultAsync();
 

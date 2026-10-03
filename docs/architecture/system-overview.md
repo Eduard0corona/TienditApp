@@ -26,7 +26,7 @@ El diagrama refleja referencias de proyecto y registros del composition root; no
 - `FoodParkDigital.Infrastructure`: EF Core, Identity/JWT, persistencia e implementaciones de integraciones.
 - `FoodParkDigital.WebApi`: composition root, controllers, middleware, SignalR y publicación SPA.
 - `client`: React 19/TypeScript/Vite.
-- `tests`: xUnit para Domain y Application, con algunos tests que ejercitan Infrastructure mediante SQLite/InMemory.
+- `tests`: xUnit para Domain, Application y WebApi, con algunos tests que ejercitan Infrastructure mediante EF InMemory.
 
 ## Decisiones arquitectónicas
 

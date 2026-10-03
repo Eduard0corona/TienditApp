@@ -17,6 +17,8 @@ export default function OperationalReports() {
   const [toDate, setToDate] = useState('');
   const [promoMessage, setPromoMessage] = useState('');
   const [minimumOrders, setMinimumOrders] = useState('1');
+  // A second click would message every customer twice.
+  const [sendingPromotion, setSendingPromotion] = useState(false);
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -38,6 +40,7 @@ export default function OperationalReports() {
   }, [loadReport]);
 
   const sendPromotion = async () => {
+    if (sendingPromotion) return;
     setError('');
     setSuccess('');
     const minimumCompletedOrders = Number(minimumOrders);
@@ -50,6 +53,9 @@ export default function OperationalReports() {
       return;
     }
 
+    if (!window.confirm('Se enviara el mensaje por WhatsApp a todos los clientes que cumplan el filtro. ¿Continuar?')) return;
+
+    setSendingPromotion(true);
     try {
       const { data } = await marketingApi.sendPromotion({
         message: promoMessage.trim(),
@@ -59,6 +65,8 @@ export default function OperationalReports() {
       setSuccess(`Promoción enviada a ${data.sent} clientes.`);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'No se pudo enviar la promoción.'));
+    } finally {
+      setSendingPromotion(false);
     }
   };
 
@@ -109,15 +117,18 @@ export default function OperationalReports() {
             <div className="col-md-3 mb-2">
               <div className="card mb-0">
                 <div className="card-body py-2">
-                  <div className="text-muted small">Ingresos</div>
-                  <div className="h4 mb-0">${report.totalRevenue.toFixed(2)}</div>
+                  <div className="text-muted small">Ventas netas (sin IVA)</div>
+                  <div className="h4 mb-0">${report.netRevenue.toFixed(2)}</div>
+                  <div className="text-muted small">
+                    Con IVA: ${report.totalRevenue.toFixed(2)} · IVA: ${report.totalTax.toFixed(2)}
+                  </div>
                 </div>
               </div>
             </div>
             <div className="col-md-3 mb-2">
               <div className="card mb-0">
                 <div className="card-body py-2">
-                  <div className="text-muted small">COGS</div>
+                  <div className="text-muted small">Costo de ventas</div>
                   <div className="h4 mb-0">${report.totalCogs.toFixed(2)}</div>
                 </div>
               </div>
@@ -206,7 +217,9 @@ export default function OperationalReports() {
                   />
                 </div>
                 <div className="col-md-2 mb-2 d-flex align-items-end">
-                  <button className="btn btn-primary w-100" onClick={sendPromotion}>Enviar</button>
+                  <button className="btn btn-primary w-100" onClick={sendPromotion} disabled={sendingPromotion}>
+                    {sendingPromotion ? 'Enviando...' : 'Enviar'}
+                  </button>
                 </div>
               </div>
             </div>

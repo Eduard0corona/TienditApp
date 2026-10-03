@@ -157,6 +157,20 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             notifyCustomer: notifyCustomer));
     }
 
+    /// <summary>
+    /// Changes a piece through the aggregate root. The order row is marked as changed so the save checks
+    /// its row version: two pieces changed at the same time then conflict (and the loser retries)
+    /// instead of each one deciding the order status from a stale view of the other piece.
+    /// </summary>
+    public void ChangeServicePieceStatus(ServiceOrderPiece piece, ServiceOrderPieceStatus newStatus, DateTimeOffset changedAt)
+    {
+        if (!_servicePieces.Contains(piece))
+            throw new DomainException("La pieza indicada no existe dentro de la orden.");
+
+        piece.UpdateStatus(newStatus);
+        UpdatedAt = changedAt;
+    }
+
     public void TransitionTo(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
     {
         stateMachine.ValidateTransition(Status, newStatus);
@@ -171,10 +185,22 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (!stateMachine.CanCancel(Status))
             throw new InvalidOrderStateTransitionException(Status, OrderStatus.Cancelled, BusinessType);
 
+        // Until refunds are modeled (see ADR 0007), cancelling would leave payments and cash
+        // movements counted for an order that no longer exists.
+        if (PaidAmount > 0)
+            throw new DomainException(
+                "La orden tiene pagos registrados; no se puede cancelar hasta registrar el reembolso.");
+
         var previousStatus = Status;
         Status = OrderStatus.Cancelled;
         CancellationReason = reason;
         _statusHistory.Add(new OrderStatusHistory(Id, previousStatus, OrderStatus.Cancelled, performedBy));
+
+        // Pieces still pending or in progress belong to an order that no longer exists: they leave the
+        // service board and can no longer be completed (which would consume inventory).
+        foreach (var piece in _servicePieces.Where(p => p.Status is ServiceOrderPieceStatus.Accepted or ServiceOrderPieceStatus.InProgress))
+            piece.UpdateStatus(ServiceOrderPieceStatus.Cancelled);
+
         AddDomainEvent(new OrderCancelledEvent(Id, TenantId, previousStatus, reason));
     }
 
@@ -208,6 +234,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             evidenceUrl: evidenceUrl,
             reference: reference,
             notes: notes);
+
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException("No se pueden registrar pagos en una orden cancelada.");
 
         var newPaidAmount = PaidAmount + payment.Amount;
         if (newPaidAmount > Total)

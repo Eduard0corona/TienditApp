@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,8 +27,19 @@ public class GetCurrentCashSessionQueryHandler : IRequestHandler<GetCurrentCashS
             .Select(x => new
             {
                 Entity = x,
-                Inflows = _context.CashTransactions.Where(t => t.CashSessionId == x.Id && t.Amount > 0).Sum(t => (decimal?)t.Amount) ?? 0m,
-                Outflows = _context.CashTransactions.Where(t => t.CashSessionId == x.Id && t.Amount < 0).Sum(t => (decimal?)(-t.Amount)) ?? 0m
+                // Same rules as CashSession: only cash movements count for the drawer.
+                Inflows = _context.CashTransactions
+                    .Where(t => t.CashSessionId == x.Id && t.Amount > 0
+                        && (t.PaymentMethod == null || t.PaymentMethod == OrderPaymentMethod.Cash))
+                    .Sum(t => (decimal?)t.Amount) ?? 0m,
+                Outflows = _context.CashTransactions
+                    .Where(t => t.CashSessionId == x.Id && t.Amount < 0
+                        && (t.PaymentMethod == null || t.PaymentMethod == OrderPaymentMethod.Cash))
+                    .Sum(t => (decimal?)(-t.Amount)) ?? 0m,
+                NonCashInflows = _context.CashTransactions
+                    .Where(t => t.CashSessionId == x.Id && t.Amount > 0
+                        && t.PaymentMethod != null && t.PaymentMethod != OrderPaymentMethod.Cash)
+                    .Sum(t => (decimal?)t.Amount) ?? 0m
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -47,6 +59,7 @@ public class GetCurrentCashSessionQueryHandler : IRequestHandler<GetCurrentCashS
             Notes = session.Entity.Notes,
             Inflows = session.Inflows,
             Outflows = session.Outflows,
+            NonCashInflows = session.NonCashInflows,
             ExpectedBalance = session.Entity.OpeningAmount + session.Inflows - session.Outflows
         };
     }

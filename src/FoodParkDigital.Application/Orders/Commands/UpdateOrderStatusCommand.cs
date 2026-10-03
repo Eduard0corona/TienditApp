@@ -49,6 +49,7 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
         {
             var order = await _context.Orders
                 .Include(o => o.StatusHistory)
+                .Include(o => o.ServicePieces)
                 .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
                 ?? throw new EntityNotFoundException("Order", request.OrderId);
 
@@ -61,11 +62,17 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
                 return Result.Failure(
                     $"No se puede cambiar de '{order.Status}' a '{request.NewStatus}'.");
 
-            order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
             if (request.NewStatus == OrderStatus.Cancelled)
+            {
+                // Same rules as CancelOrderCommand: cancellation event, payment guard and inventory reversal.
+                order.Cancel(stateMachine, _currentUserService.UserName);
                 await _orderInventoryService.ReverseConsumptionForOrderAsync(order, null, cancellationToken);
+            }
             else
+            {
+                order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
                 await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+            }
 
             try
             {

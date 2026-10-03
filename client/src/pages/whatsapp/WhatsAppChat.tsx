@@ -5,6 +5,10 @@ import { useChatSignalR } from '../../hooks/useChatSignalR';
 import type { ConversationDto, ChatMessageDto } from '../../types';
 import './WhatsAppChat.css';
 
+function appendUnique(messages: ChatMessageDto[], message: ChatMessageDto): ChatMessageDto[] {
+  return messages.some((existing) => existing.id === message.id) ? messages : [...messages, message];
+}
+
 export default function WhatsAppChat() {
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -23,6 +27,9 @@ export default function WhatsAppChat() {
   const { onNewMessage, onConversationUpdated } = useChatSignalR();
 
   const selectedConvo = conversations.find((c) => c.id === selectedId);
+  // Latest selection, read by async callbacks that finish after the user moved to another conversation.
+  const selectedIdRef = useRef<string | null>(selectedId);
+  selectedIdRef.current = selectedId;
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -51,16 +58,18 @@ export default function WhatsAppChat() {
       setMessages([]);
       return;
     }
+    // A slow response for a conversation the user already left must not replace the current one.
+    let isStale = false;
     const load = async () => {
       setLoadingMsgs(true);
       try {
         const { data } = await chatApi.getMessages(selectedId, 1, 200);
         // API returns DESC, reverse to show oldest first
-        setMessages([...data.items].reverse());
+        if (!isStale) setMessages([...data.items].reverse());
       } catch {
         // silent
       } finally {
-        setLoadingMsgs(false);
+        if (!isStale) setLoadingMsgs(false);
       }
     };
     load();
@@ -70,6 +79,10 @@ export default function WhatsAppChat() {
     setConversations((prev) =>
       prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
     );
+
+    return () => {
+      isStale = true;
+    };
   }, [selectedId]);
 
   // Auto-scroll to bottom
@@ -91,9 +104,9 @@ export default function WhatsAppChat() {
         return [data.conversation, ...prev];
       });
 
-      // If this conversation is selected, append message
+      // If this conversation is selected, append message (the hub also echoes messages sent from here)
       if (data.conversation.id === selectedId) {
-        setMessages((prev) => [...prev, data.message]);
+        setMessages((prev) => appendUnique(prev, data.message));
         // Mark as read
         chatApi.markAsRead(data.conversation.id).catch(() => {});
         setConversations((prev) =>
@@ -144,7 +157,7 @@ export default function WhatsAppChat() {
 
   // Send message
   const handleSend = async () => {
-    if (!newMessage.trim() || !selectedConvo) return;
+    if (!newMessage.trim() || !selectedConvo || sending) return;
     setSending(true);
     try {
       const { data: sentMsg } = await chatApi.sendMessage({
@@ -152,10 +165,16 @@ export default function WhatsAppChat() {
         message: newMessage.trim(),
         conversationId: selectedConvo.id,
       });
-      setMessages((prev) => [...prev, sentMsg]);
+      // Only if the user is still on that conversation; the hub echo is deduplicated by id.
+      if (sentMsg.conversationId === selectedIdRef.current) {
+        setMessages((prev) => appendUnique(prev, sentMsg));
+      }
       setNewMessage('');
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      const errMsg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'No se pudo enviar el mensaje.';
+      setError(errMsg);
     } finally {
       setSending(false);
     }

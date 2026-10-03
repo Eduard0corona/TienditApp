@@ -24,7 +24,7 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  API:      http://localhost:5203"
 Write-Host "  Frontend: http://localhost:5173"
-Write-Host "  Login:    admin@foodparkdigital.com / Admin123!"
+Write-Host "  Login:    admin@foodparkdigital.com (password: Seed:SuperAdminPassword en user-secrets)"
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Press Ctrl+C to stop both servers..." -ForegroundColor DarkGray

@@ -14,7 +14,8 @@ public class InventoryStockConfiguration : IEntityTypeConfiguration<InventorySto
         builder.Property(x => x.TenantId).IsRequired();
         builder.Property(x => x.SupplyItemId).IsRequired();
         builder.Property(x => x.InventoryLocationId).IsRequired();
-        builder.Property(x => x.OnHandQuantity).HasColumnType("decimal(18,4)").IsRequired();
+        // Concurrency token: two requests moving the same stock cannot overwrite each other.
+        builder.Property(x => x.OnHandQuantity).HasColumnType("decimal(18,4)").IsRequired().IsConcurrencyToken();
         builder.Property(x => x.ReservedQuantity).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.LastCost).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.LastMovementAt);

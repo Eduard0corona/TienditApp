@@ -2,7 +2,14 @@
 
 ## Estado actual
 
-`ApplicationDbContext`, configuraciones y migraciones están en `FoodParkDigital.Infrastructure`. `MigrationsAssembly` apunta a ese assembly. En Development, `Program.cs` ejecuta migración y seed al arranque; el bloque está condicionado a `IsDevelopment()`.
+`ApplicationDbContext`, configuraciones y migraciones están en `FoodParkDigital.Infrastructure`. `MigrationsAssembly` apunta a ese assembly. En Development, `Program.cs` ejecuta migración y seed al arranque solo si `Database:AutoMigrateOnStartup`/`Database:SeedOnStartup` están activos y el servidor es local (o `Database:AllowRemoteDatabase=true`); fuera de Development nunca se migra al iniciar.
+
+El CI ejecuta `dotnet ef migrations has-pending-model-changes` en cada PR, por lo que una configuración sin migración rompe el build.
+
+Migraciones recientes con notas operativas:
+
+- `CashSessionSingleOpenAndRevision`: agrega `CashSessions.Revision` y el índice único filtrado `IX_CashSessions_TenantId_SingleOpen`. Antes de crear el índice cierra las cajas abiertas duplicadas de un mismo tenant (conserva la más reciente y deja una nota); ese paso de datos no se revierte con `Down`.
+- `InventoryConcurrencyTokens`: solo modelo (tokens de concurrencia); no cambia el esquema.
 
 ## Reglas
 
@@ -29,6 +36,7 @@ Revisa el código/SQL generado, prueba desde la versión productiva previa y con
 
 ## Deuda actual
 
-- `PendingModelChangesWarning` está ignorado en la configuración del DbContext, lo que puede ocultar drift de modelo.
+- `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
 - Falta automatización que valide migraciones contra SQL Server desde cero y desde baseline.
+- Falta el proceso productivo: generar `migrations script --idempotent` como artefacto del pipeline, revisarlo y aplicarlo en un paso controlado antes de desplegar.
 - La divergencia de ramas puede contener historias de migración distintas; se resuelve en tarea separada antes de promover esquema.
