@@ -1,9 +1,11 @@
 name: Deploy WebApp (API + SPA)
 
+# develop and master deploy to the same app, so keep both branches in sync.
 on:
   push:
     branches:
       - develop
+      - master
   workflow_dispatch:
 
 permissions:
