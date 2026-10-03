@@ -65,7 +65,7 @@ public class ProcessInboundMessageCommandHandler
         // Notify via SignalR
         await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, messageDto);
 
-        await TryAutoReplyAsync(request.TenantId, conversation, request.Body, cancellationToken);
+        await TryAutoReplyAsync(request, conversation, cancellationToken);
 
         return Result.Success(messageDto);
     }
@@ -79,7 +79,7 @@ public class ProcessInboundMessageCommandHandler
     {
         var conversation = await FindConversationAsync(request, cancellationToken);
 
-        while (true)
+        for (var attempt = 1; ; attempt++)
         {
             var startsConversation = conversation is null;
             if (conversation is null)
@@ -105,15 +105,15 @@ public class ProcessInboundMessageCommandHandler
             {
                 // Whatever the failure, discard what this attempt staged so the scoped context stays
                 // usable for the retry below and for the rest of the webhook payload.
-                _context.WhatsAppMessages.Entry(message).State = EntityState.Detached;
-                _context.WhatsAppConversations.Entry(conversation).State = EntityState.Detached;
+                _context.Detach(conversation, message);
 
                 if (ex is not DbUpdateException)
                     throw;
 
                 // A concurrent delivery of the same message can pass the check in Handle; the
                 // unique index on ExternalMessageId lets only one insert win.
-                if (await IsAlreadyStoredAsync(request.ExternalMessageId, cancellationToken))
+                if (ex is not DbUpdateConcurrencyException
+                    && await IsAlreadyStoredAsync(request.ExternalMessageId, cancellationToken))
                 {
                     _logger.LogInformation(
                         "Duplicate WhatsApp message {ExternalMessageId} for tenant {TenantId} ignored; a concurrent delivery stored it first",
@@ -122,9 +122,20 @@ public class ProcessInboundMessageCommandHandler
                     return null;
                 }
 
+                if (attempt == WhatsAppConversationConcurrency.MaxSaveAttempts)
+                    throw;
+
+                if (ex is DbUpdateConcurrencyException)
+                {
+                    // Another request changed the conversation after it was loaded (a parallel message,
+                    // a reply, the chat marked read): add the message to the conversation as it is now.
+                    conversation = await FindConversationAsync(request, cancellationToken);
+                    continue;
+                }
+
                 // Two first messages from a new number can both try to start its conversation; the
                 // unique index on (TenantId, CustomerPhone) lets only one insert win. The loser retries
-                // once in the winner's conversation; that retry starts nothing, so it cannot loop.
+                // in the winner's conversation.
                 conversation = startsConversation
                     ? await FindConversationAsync(request, cancellationToken)
                     : null;
@@ -157,16 +168,15 @@ public class ProcessInboundMessageCommandHandler
             .AnyAsync(m => m.ExternalMessageId == externalMessageId, cancellationToken);
 
     private async Task TryAutoReplyAsync(
-        Guid tenantId,
+        ProcessInboundMessageCommand request,
         WhatsAppConversation conversation,
-        string inboundBody,
         CancellationToken cancellationToken)
     {
         try
         {
             var reply = await _aiAgentAutoReplyService.BuildReplyAsync(
-                tenantId,
-                inboundBody,
+                request.TenantId,
+                request.Body,
                 conversation.CustomerName,
                 cancellationToken);
 
@@ -174,7 +184,7 @@ public class ProcessInboundMessageCommandHandler
                 return;
 
             var sendResult = await _whatsAppService.SendTextMessageAsync(
-                tenantId,
+                request.TenantId,
                 conversation.CustomerPhone,
                 reply,
                 cancellationToken);
@@ -183,29 +193,61 @@ public class ProcessInboundMessageCommandHandler
             {
                 _logger.LogWarning(
                     "AI auto-reply could not be sent for tenant {TenantId}, conversation {ConversationId}: {Error}",
-                    tenantId,
+                    request.TenantId,
                     conversation.Id,
                     sendResult.Error);
                 return;
             }
 
-            var outboundMessage = conversation.AddMessage(
-                MessageDirection.Outbound,
-                reply,
-                externalMessageId: null);
-            await _context.SaveChangesAsync(cancellationToken);
+            var (repliedConversation, outboundMessage) =
+                await StoreAutoReplyAsync(request, conversation, reply, cancellationToken);
 
             var outboundDto = _mapper.Map<ChatMessageDto>(outboundMessage);
-            var conversationDto = _mapper.Map<ConversationDto>(conversation);
-            await _notificationService.NotifyNewMessage(tenantId, conversationDto, outboundDto);
+            var conversationDto = _mapper.Map<ConversationDto>(repliedConversation);
+            await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, outboundDto);
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
                 "AI auto-reply processing failed for tenant {TenantId}, conversation {ConversationId}",
-                tenantId,
+                request.TenantId,
                 conversation.Id);
+        }
+    }
+
+    /// <summary>
+    /// Records the reply the AI agent already sent. While the agent answered, the business often marks
+    /// the chat read or the customer writes again, so the reply goes into the conversation as it is now.
+    /// </summary>
+    private async Task<(WhatsAppConversation Conversation, WhatsAppMessage Message)> StoreAutoReplyAsync(
+        ProcessInboundMessageCommand request,
+        WhatsAppConversation conversation,
+        string reply,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var message = conversation.AddMessage(MessageDirection.Outbound, reply, externalMessageId: null);
+
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return (conversation, message);
+            }
+            catch (Exception ex)
+            {
+                // Whatever the failure, discard what this attempt staged so the rest of the webhook
+                // payload does not save it.
+                _context.Detach(conversation, message);
+
+                if (ex is not DbUpdateConcurrencyException
+                    || attempt == WhatsAppConversationConcurrency.MaxSaveAttempts)
+                    throw;
+
+                conversation = await FindConversationAsync(request, cancellationToken)
+                    ?? throw new InvalidOperationException($"Conversation {conversation.Id} no longer exists.");
+            }
         }
     }
 }

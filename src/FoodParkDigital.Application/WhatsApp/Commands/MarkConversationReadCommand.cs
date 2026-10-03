@@ -20,15 +20,26 @@ public class MarkConversationReadCommandHandler : IRequestHandler<MarkConversati
 
     public async Task<Result> Handle(MarkConversationReadCommand request, CancellationToken cancellationToken)
     {
-        var conversation = await _context.WhatsAppConversations
-            .FirstOrDefaultAsync(c => c.Id == request.ConversationId, cancellationToken);
+        for (var attempt = 1; ; attempt++)
+        {
+            var conversation = await _context.WhatsAppConversations
+                .FirstOrDefaultAsync(c => c.Id == request.ConversationId, cancellationToken);
 
-        if (conversation is null)
-            return Result.Failure("Conversación no encontrada.");
+            if (conversation is null)
+                return Result.Failure("Conversación no encontrada.");
 
-        conversation.MarkAsRead();
-        await _context.SaveChangesAsync(cancellationToken);
+            conversation.MarkAsRead();
 
-        return Result.Success();
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < WhatsAppConversationConcurrency.MaxSaveAttempts)
+            {
+                // A message or a reply was stored after the conversation was loaded: mark it as it is now.
+                _context.Detach(conversation);
+            }
+        }
     }
 }

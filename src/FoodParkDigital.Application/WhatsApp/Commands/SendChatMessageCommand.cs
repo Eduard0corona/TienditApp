@@ -79,7 +79,8 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
 
     /// <summary>
     /// Records the message already sent to the customer in their conversation, starting it if the
-    /// number has none yet.
+    /// number has none yet. If the customer wrote, or the chat was marked read, after the conversation
+    /// was loaded, the message goes into the conversation as it is now.
     /// </summary>
     private async Task<(WhatsAppConversation Conversation, WhatsAppMessage Message)> StoreOutboundMessageAsync(
         Guid tenantId, SendChatMessageCommand request, CancellationToken cancellationToken)
@@ -87,7 +88,7 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         // Find or create conversation
         var conversation = await FindConversationAsync(request.PhoneNumber, cancellationToken);
 
-        while (true)
+        for (var attempt = 1; ; attempt++)
         {
             var startsConversation = conversation is null;
             if (conversation is null)
@@ -104,6 +105,12 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
                 await _context.SaveChangesAsync(cancellationToken);
                 return (conversation, message);
             }
+            catch (DbUpdateConcurrencyException) when (attempt < WhatsAppConversationConcurrency.MaxSaveAttempts)
+            {
+                // The customer wrote, or the chat was marked read, after the conversation was loaded.
+                _context.Detach(conversation, message);
+                conversation = await FindConversationAsync(request.PhoneNumber, cancellationToken);
+            }
             catch (DbUpdateException) when (startsConversation)
             {
                 // The customer's first message (through the webhook) or another send can start the
@@ -111,8 +118,7 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
                 // lets only one insert win. The message already reached the customer, so the loser discards
                 // what it staged and retries once in the winner's conversation; that retry starts nothing,
                 // so it cannot loop.
-                _context.WhatsAppMessages.Entry(message).State = EntityState.Detached;
-                _context.WhatsAppConversations.Entry(conversation).State = EntityState.Detached;
+                _context.Detach(conversation, message);
 
                 conversation = await FindConversationAsync(request.PhoneNumber, cancellationToken);
                 if (conversation is null)

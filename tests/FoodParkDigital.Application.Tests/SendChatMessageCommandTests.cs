@@ -14,7 +14,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
-// Uses SQLite because InMemory does not enforce the unique index on (TenantId, CustomerPhone).
+// Uses SQLite because InMemory does not enforce the unique index on (TenantId, CustomerPhone), nor
+// generate the conversation's rowversion.
 public class SendChatMessageCommandTests
 {
     private const string SentText = "Hola, ¿le ayudamos con su pedido?";
@@ -56,6 +57,43 @@ public class SendChatMessageCommandTests
         Assert.Equal(otherTenantConversationId, otherTenantConversation.Id);
         Assert.Equal(new[] { "wamid.other-tenant" }, otherTenantConversation.InboundMessageIds);
         Assert.Empty(otherTenantConversation.OutboundBodies);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldKeepNewestMessageInSummary_WhenCustomerWritesWhileSentMessageIsSaved()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var conversationId = await fixture.StartConversationFromWebhookAsync(fixture.TenantId, "wamid.first");
+        // The customer also chats with another tenant, whose conversation must stay untouched.
+        var otherTenantConversationId = await fixture.StartConversationFromWebhookAsync(
+            fixture.OtherTenantId, "wamid.other-tenant");
+
+        // The webhook stores the customer's next message after the sent message was added to the
+        // conversation and before it is saved.
+        fixture.Database.BeforeNextSave(() => fixture.ReceiveFromWebhookAsync(
+            fixture.TenantId, "wamid.concurrent", "¿Aceptan pago con tarjeta?"));
+
+        var result = await fixture.CreateHandler().Handle(fixture.Send(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(conversationId, result.Value.ConversationId);
+        Assert.Equal(new[] { SentText }, fixture.WhatsApp.SentMessages);
+
+        var conversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.TenantId));
+        Assert.Equal(new[] { "wamid.concurrent", "wamid.first" }, conversation.InboundMessageIds);
+        Assert.Equal(new[] { SentText }, conversation.OutboundBodies);
+        Assert.Equal(2, conversation.UnreadCount);
+        AssertSummarizesNewestMessage(conversation);
+
+        // SignalR replaces the conversation in the business's list, so it must carry what was stored.
+        var (notifiedConversation, _) = Assert.Single(fixture.Notifier.Notifications);
+        Assert.Equal(2, notifiedConversation.UnreadCount);
+
+        var otherTenantConversation = Assert.Single(await fixture.StoredConversationsAsync(fixture.OtherTenantId));
+        Assert.Equal(otherTenantConversationId, otherTenantConversation.Id);
+        Assert.Equal(new[] { "wamid.other-tenant" }, otherTenantConversation.InboundMessageIds);
+        Assert.Empty(otherTenantConversation.OutboundBodies);
+        Assert.Equal(1, otherTenantConversation.UnreadCount);
     }
 
     [Fact]
@@ -109,8 +147,31 @@ public class SendChatMessageCommandTests
         Assert.Empty(fixture.Notifier.Notifications);
     }
 
+    /// <summary>The conversation list previews the newest message, the one the chat shows last.</summary>
+    private static void AssertSummarizesNewestMessage(StoredConversation conversation)
+    {
+        var newest = conversation.Messages.MaxBy(m => m.SentAt)!;
+        Assert.Equal(newest.SentAt, conversation.LastMessageAt);
+        Assert.Equal(newest.Body, conversation.LastMessageBody);
+    }
+
+    private sealed record StoredMessage(
+        MessageDirection Direction, string? ExternalMessageId, string Body, DateTimeOffset SentAt);
+
     private sealed record StoredConversation(
-        Guid Id, int UnreadCount, string[] InboundMessageIds, string[] OutboundBodies);
+        Guid Id, int UnreadCount, string? LastMessageBody, DateTimeOffset LastMessageAt, StoredMessage[] Messages)
+    {
+        public string[] InboundMessageIds => Messages
+            .Where(m => m.Direction == MessageDirection.Inbound)
+            .Select(m => m.ExternalMessageId!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        public string[] OutboundBodies => Messages
+            .Where(m => m.Direction == MessageDirection.Outbound)
+            .Select(m => m.Body)
+            .ToArray();
+    }
 
     private sealed class TestFixture : IAsyncDisposable
     {
@@ -169,7 +230,14 @@ public class SendChatMessageCommandTests
         /// Delivers the customer's first message to <paramref name="tenantId"/> through the webhook's
         /// handler, in its own context like a separate request.
         /// </summary>
-        public async Task<Guid> StartConversationFromWebhookAsync(Guid tenantId, string externalMessageId)
+        public Task<Guid> StartConversationFromWebhookAsync(Guid tenantId, string externalMessageId)
+            => ReceiveFromWebhookAsync(tenantId, externalMessageId, "Hola, quiero hacer un pedido");
+
+        /// <summary>
+        /// Delivers a message from the customer to <paramref name="tenantId"/> through the webhook's
+        /// handler, in its own context like a separate request, and returns its conversation.
+        /// </summary>
+        public async Task<Guid> ReceiveFromWebhookAsync(Guid tenantId, string externalMessageId, string body)
         {
             await using var webhookContext = Database.CreateIndependentContext();
             var webhook = new ProcessInboundMessageCommandHandler(
@@ -185,7 +253,7 @@ public class SendChatMessageCommandTests
                 TenantId = tenantId,
                 FromPhone = CustomerPhone,
                 ProfileName = "Cliente",
-                Body = "Hola, quiero hacer un pedido",
+                Body = body,
                 ExternalMessageId = externalMessageId
             }, CancellationToken.None);
 
@@ -204,25 +272,17 @@ public class SendChatMessageCommandTests
                 {
                     c.Id,
                     c.UnreadCount,
+                    c.LastMessageBody,
+                    c.LastMessageAt,
                     Messages = c.Messages
-                        .Select(m => new { m.Direction, m.ExternalMessageId, m.Body })
+                        .Select(m => new StoredMessage(m.Direction, m.ExternalMessageId, m.Body, m.SentAt))
                         .ToList()
                 })
                 .ToListAsync();
 
             return conversations
                 .Select(c => new StoredConversation(
-                    c.Id,
-                    c.UnreadCount,
-                    c.Messages
-                        .Where(m => m.Direction == MessageDirection.Inbound)
-                        .Select(m => m.ExternalMessageId!)
-                        .Order(StringComparer.Ordinal)
-                        .ToArray(),
-                    c.Messages
-                        .Where(m => m.Direction == MessageDirection.Outbound)
-                        .Select(m => m.Body)
-                        .ToArray()))
+                    c.Id, c.UnreadCount, c.LastMessageBody, c.LastMessageAt, c.Messages.ToArray()))
                 .ToArray();
         }
 

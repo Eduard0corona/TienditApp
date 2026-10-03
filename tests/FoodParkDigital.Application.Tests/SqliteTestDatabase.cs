@@ -32,6 +32,7 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
         var database = new SqliteTestDatabase(connection);
         await using var context = database.CreateIndependentContext();
         await context.Database.EnsureCreatedAsync();
+        await SqliteConversationVersion.CreateTriggerAsync(context);
 
         return database;
     }
@@ -94,6 +95,8 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
                 if (property.GetColumnType()?.Contains("(max)", StringComparison.OrdinalIgnoreCase) == true)
                     property.SetColumnType("TEXT");
             }
+
+            SqliteConversationVersion.Configure(modelBuilder);
         }
     }
 

@@ -34,6 +34,23 @@ dotnet ef migrations script --idempotent --project src/FoodParkDigital.Infrastru
 
 Revisa el código/SQL generado, prueba desde la versión productiva previa y confirma datos/rollback. No ejecutes `database drop` sin autorización explícita y backup verificado.
 
+## Scripts para producción
+
+Como producción no migra al arrancar, cada migración nueva deja en `database/production/<MigrationId>/` los scripts que aplica el despliegue:
+
+- **`verify.sql`:** consultas de solo lectura para antes y después. Muestra las migraciones aplicadas, los datos que harían fallar la migración y las filas afectadas.
+- **`apply.sql`:** la salida de `dotnet ef migrations script --idempotent`, que aplica solo las migraciones que faltan en `__EFMigrationsHistory`. Va precedida de un bloque `SET` con dos partes:
+  - las opciones que exigen los índices filtrados, porque el `sqlcmd` clásico arranca con `QUOTED_IDENTIFIER OFF`;
+  - `XACT_ABORT ON`. EF Core 9 ejecuta todas las migraciones del script en una sola transacción y no lo incluye; sin él, un error que solo termina una sentencia deja que el `COMMIT` confirme lo demás.
+- **`rollback.sql`:** el `Down` idempotente de la migración, para usarlo después de volver al código anterior.
+
+El orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `develop` o `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR.
+
+Antes de publicarlos:
+
+1. Ejecútalos con `sqlcmd` contra bases desechables de LocalDB en los estados posibles de producción: vacía, en la migración anterior con datos y con datos que la migración rechaza.
+2. Vuelve a ejecutarlos para confirmar que la segunda vez no hacen nada.
+
 ## Deuda actual
 
 - `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
