@@ -27,9 +27,6 @@ public class OrderInventoryService : IOrderInventoryService
 
     public async Task ApplyConsumptionForOrderAsync(Order order, CancellationToken cancellationToken)
     {
-        if (order.OrderType == OrderType.Service)
-            return;
-
         if (!ShouldConsumeInventory(order.Status))
             return;
 
@@ -50,6 +47,24 @@ public class OrderInventoryService : IOrderInventoryService
             orderItems = order.Items
                 .Select(x => new { x.ProductId, x.ProductName, x.Quantity })
                 .ToList();
+        }
+
+        if (order.OrderType == OrderType.Service)
+        {
+            // Lines tracked as pieces consume their recipe when each piece is completed
+            // (ApplyConsumptionForServicePieceAsync). Everything else in the order (e.g. shoe polish sold
+            // with a repair, or an untracked service) is consumed here like a retail sale; before, a mixed
+            // cart never consumed it. Pieces of a new order are still in memory; saved ones are queried.
+            var savedPieceProductIds = await _context.ServiceOrderPieces
+                .Where(p => p.OrderId == order.Id && p.IsTrackable && p.ServiceProductId != null)
+                .Select(p => p.ServiceProductId!.Value)
+                .ToListAsync(cancellationToken);
+            var pieceProductIds = order.ServicePieces
+                .Where(p => p.IsTrackable && p.ServiceProductId.HasValue)
+                .Select(p => p.ServiceProductId!.Value)
+                .Concat(savedPieceProductIds)
+                .ToHashSet();
+            orderItems = orderItems.Where(x => !pieceProductIds.Contains(x.ProductId)).ToList();
         }
 
         if (orderItems.Count == 0)

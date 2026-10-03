@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.Commands;
 
@@ -29,15 +30,18 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly IWhatsAppService _whatsAppService;
+    private readonly ILogger<UpdateAppointmentStatusCommandHandler> _logger;
 
     public UpdateAppointmentStatusCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        IWhatsAppService whatsAppService)
+        IWhatsAppService whatsAppService,
+        ILogger<UpdateAppointmentStatusCommandHandler> logger)
     {
         _context = context;
         _tenantService = tenantService;
         _whatsAppService = whatsAppService;
+        _logger = logger;
     }
 
     public async Task<Result<AppointmentDto>> Handle(UpdateAppointmentStatusCommand request, CancellationToken cancellationToken)
@@ -49,11 +53,7 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
         entity.ChangeStatus(request.NewStatus);
         await _context.SaveChangesAsync(cancellationToken);
 
-        _ = _whatsAppService.SendTextMessageAsync(
-            _tenantService.TenantId,
-            entity.CustomerPhone,
-            $"Tu cita ({entity.ServiceName}) cambió a estado: {entity.Status}.",
-            cancellationToken);
+        await AppointmentNotifier.NotifyStatusChangedAsync(_whatsAppService, _logger, entity, cancellationToken);
 
         return Result.Success(new AppointmentDto
         {

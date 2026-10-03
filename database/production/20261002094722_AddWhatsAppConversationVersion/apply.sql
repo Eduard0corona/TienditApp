@@ -1,24 +1,28 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
 -- Generado el 2026-10-02 con `dotnet ef migrations script --idempotent` (EF Core 9.0.0)
--- desde la PR #20 (rama bugfix/actualizacion-perdida-conversacion-whatsapp, 91556dc).
--- Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
+-- desde la PR #20 (rama bugfix/actualizacion-perdida-conversacion-whatsapp, sobre master
+-- 24e79cb). Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory].
--- En una base que ya tiene 20261001155915_AddWhatsAppWebhookUniqueIndexes solo ejecuta
+-- En una base que ya tiene 20261001163347_InventoryConcurrencyTokens, la última migración
+-- del código que hoy corre en producción, solo ejecuta
 --     ALTER TABLE [WhatsAppConversations] ADD [Version] rowversion NOT NULL;
--- y su registro en [__EFMigrationsHistory]. Si también falta esa migración del 1 de
--- octubre, la aplica antes: normaliza PhoneNumberId vacío a NULL y crea dos índices
--- únicos filtrados. Revisa los duplicados antes con verify.sql.
+-- y su registro en [__EFMigrationsHistory]. Si faltan migraciones anteriores, las aplica
+-- antes. Dos de las del 1 de octubre tocan datos (verify.sql muestra qué cambiarían):
+-- AddWhatsAppWebhookUniqueIndexes normaliza PhoneNumberId vacío a NULL y crea dos índices
+-- únicos filtrados, y CashSessionSingleOpenAndRevision deja abierta solo la caja más
+-- reciente de cada tenant y cierra las demás.
 --
 -- Todo corre en una sola transacción. Las opciones SET de abajo son las que exigen los
--- índices filtrados: el sqlcmd clásico arranca con QUOTED_IDENTIFIER OFF y, sin ellas,
--- falla la migración del 1 de octubre. XACT_ABORT ON revierte la transacción completa ante
--- cualquier error. Sin él, un error que solo termina la sentencia (por ejemplo, una
--- violación de restricción en un UPDATE) deja seguir el lote hasta el COMMIT.
+-- índices filtrados, que crean varias migraciones (entre ellas las dos del 1 de octubre):
+-- el sqlcmd clásico arranca con QUOTED_IDENTIFIER OFF y, sin ellas, esas migraciones
+-- fallan. XACT_ABORT ON revierte la transacción completa ante cualquier error. Sin él, un
+-- error que solo termina la sentencia (por ejemplo, una violación de restricción en un
+-- UPDATE) deja seguir el lote hasta el COMMIT.
 --
--- Orden: respaldo de la base -> verify.sql -> este script -> verify.sql -> desplegar el
--- código de la PR #20. Por ejemplo:
+-- Orden: respaldo de la base -> verify.sql -> este script -> verify.sql -> fusionar la
+-- PR #20, cuyo merge a master despliega a producción. Por ejemplo:
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql
 -- Agregar [Version] escribe un valor en cada fila de WhatsAppConversations y bloquea la
 -- tabla mientras dura. En una tabla pequeña es inmediato; si es grande, hazlo con poco tráfico.
@@ -2758,6 +2762,62 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261001155915_AddWhatsAppWebhookUniqueIndexes', N'9.0.0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261001161600_CashSessionSingleOpenAndRevision'
+)
+BEGIN
+    ALTER TABLE [CashSessions] ADD [Revision] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261001161600_CashSessionSingleOpenAndRevision'
+)
+BEGIN
+    WITH Ranked AS (
+        SELECT Id,
+               ROW_NUMBER() OVER (PARTITION BY TenantId ORDER BY OpenedAt DESC, Id DESC) AS RowNumber
+        FROM CashSessions
+        WHERE Status = 0
+    )
+    UPDATE cs
+    SET Status = 1,
+        ClosedAt = SYSDATETIMEOFFSET(),
+        ClosedBy = N'system-migration',
+        Notes = LEFT(CONCAT(COALESCE(cs.Notes + N' | ', N''),
+            N'Cerrada automaticamente al migrar: el negocio tenia otra caja abierta.'), 2000)
+    FROM CashSessions AS cs
+    INNER JOIN Ranked AS r ON r.Id = cs.Id
+    WHERE r.RowNumber > 1;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261001161600_CashSessionSingleOpenAndRevision'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_CashSessions_TenantId_SingleOpen] ON [CashSessions] ([TenantId]) WHERE [Status] = 0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261001161600_CashSessionSingleOpenAndRevision'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261001161600_CashSessionSingleOpenAndRevision', N'9.0.0');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261001163347_InventoryConcurrencyTokens'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261001163347_InventoryConcurrencyTokens', N'9.0.0');
 END;
 
 IF NOT EXISTS (

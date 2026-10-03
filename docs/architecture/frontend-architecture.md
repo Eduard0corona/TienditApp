@@ -16,6 +16,14 @@ Estructura principal:
 
 El access token se mantiene en memoria y se agrega con interceptor. El refresh token usa cookie `HttpOnly`; `localStorage` solo conserva un marcador de sesión. Vite proxya API, uploads y hubs a `localhost:5203`.
 
+Sesión y tiempo real:
+
+- `refreshAccessToken` (en `src/api/axios.ts`) es single-flight y se serializa entre pestañas con la Web Locks API, porque el refresh token rota en cada uso.
+- Un refresh rechazado emite `expired` y la sesión se cierra; un error de red la conserva. Si un refresh devuelve otro tenant (otra pestaña cambió de tenant), la pestaña recarga.
+- `useSessionSync` propaga logout y cambio de tenant a las demás pestañas con `BroadcastChannel`; cambiar de tenant recarga la aplicación.
+- `src/api/signalr.ts` crea las conexiones: reintenta indefinidamente, reintenta el primer arranque, reinicia tras un cierre del servidor y pide un token vigente en cada (re)conexión.
+- `HomeRedirect`/`PermissionRoute` llevan a cada usuario a la primera página que puede abrir; `isSafeFileUrl` solo deja enlazar archivos de `/uploads` o https; `estimateOrderTotals` replica la regla de impuesto del backend para el carrito (el total definitivo es el de la API).
+
 ## Guardrails
 
 - Backend decide estados, totales, impuestos, saldos y existencias finales.
@@ -32,6 +40,8 @@ El access token se mantiene en memoria y se agrega con interceptor. El refresh t
 
 - `InventoryManagement.tsx` supera 2,400 líneas; `OrdersCart.tsx`, `OrdersList.tsx` y `types/index.ts` rondan o superan 1,000. Son candidatos a refactor por feature/componente, no deben reescribirse incidentalmente.
 - No se encontró framework ni suite de pruebas frontend.
-- Capabilities se aplican a muchas rutas, pero no se observa un guard frontend equivalente para permisos granulares.
+- Capabilities se aplican a muchas rutas; el guard de permisos (`PermissionRoute`) solo protege el dashboard.
+- La búsqueda de `DataTable` filtra únicamente la página cargada, y el POS carga como máximo 200 productos, servicios y clientes (ahora lo avisa).
+- Accesibilidad: muchas etiquetas no están asociadas a su campo y hay botones de solo icono sin nombre accesible.
 - `client/README.md` aún es el texto genérico del template Vite.
 - Los estilos minificados versionados hacen difícil rastrear y revisar cambios visuales.

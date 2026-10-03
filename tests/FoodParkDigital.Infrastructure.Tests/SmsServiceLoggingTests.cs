@@ -1,5 +1,6 @@
 using System.Net;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Infrastructure.Tests.Support;
@@ -131,7 +132,19 @@ public class SmsServiceLoggingTests
     {
         var http = new StubHttpMessageHandler(HttpStatusCode.BadRequest, MetaRecipientNotAllowedResponse);
         await using var context = InMemoryApplicationDbContext.Create();
-        var ownerConfig = new OwnerWhatsAppConfig(Guid.NewGuid());
+        // Platform OTPs only go out through a WhatsApp account owned by an active SUPER_ADMIN.
+        var owner = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = "owner@example.com",
+            Email = "owner@example.com",
+            FirstName = "Owner",
+            LastName = "User",
+            Role = UserRole.SuperAdmin,
+            IsActive = true
+        };
+        context.Users.Add(owner);
+        var ownerConfig = new OwnerWhatsAppConfig(owner.Id);
         ownerConfig.Update(
             isEnabled: true,
             useForOtp: true,

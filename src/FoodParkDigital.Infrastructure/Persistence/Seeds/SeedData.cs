@@ -6,16 +6,22 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Persistence.Seeds;
 
 public static class SeedData
 {
+    public const string DefaultSuperAdminEmail = "admin@foodparkdigital.com";
+
     public static async Task SeedAsync(ApplicationDbContext context, IServiceProvider services)
     {
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<ApplicationRole>>();
+        var configuration = services.GetService<IConfiguration>();
+        var logger = services.GetService<ILoggerFactory>()?.CreateLogger(typeof(SeedData).FullName!);
 
         // Seed roles
         string[] roles = ["SUPER_ADMIN", "TENANT_ADMIN", "STAFF", "KITCHEN", "CUSTOMER"];
@@ -42,10 +48,20 @@ public static class SeedData
             await context.SaveChangesAsync();
         }
 
-        // Ensure super admin user exists
-        var adminEmail = "admin@foodparkdigital.com";
+        // Ensure super admin user exists. The password only comes from configuration
+        // (user-secrets or environment variables); without it the account is not created.
+        var adminEmail = configuration?["Seed:SuperAdminEmail"] is { Length: > 0 } configuredEmail
+            ? configuredEmail.Trim()
+            : DefaultSuperAdminEmail;
+        var adminPassword = configuration?["Seed:SuperAdminPassword"];
+
         var admin = await userManager.FindByEmailAsync(adminEmail);
-        if (admin is null)
+        if (admin is null && string.IsNullOrWhiteSpace(adminPassword))
+        {
+            logger?.LogWarning(
+                "Seed: no se creó el SUPER_ADMIN inicial porque Seed:SuperAdminPassword no está configurado.");
+        }
+        else if (admin is null)
         {
             admin = new ApplicationUser
             {
@@ -59,7 +75,7 @@ public static class SeedData
                 IsActive = true
             };
 
-            var result = await userManager.CreateAsync(admin, "Admin123!");
+            var result = await userManager.CreateAsync(admin, adminPassword!);
             if (!result.Succeeded)
             {
                 var errors = string.Join(", ", result.Errors.Select(e => e.Description));
@@ -67,21 +83,24 @@ public static class SeedData
             }
         }
 
-        if (!await userManager.IsInRoleAsync(admin, "SUPER_ADMIN"))
-            await userManager.AddToRoleAsync(admin, "SUPER_ADMIN");
-
-        var hasOwnerMembership = await context.TenantUsers
-            .IgnoreQueryFilters()
-            .AnyAsync(x => x.TenantId == systemTenant.Id && x.UserId == admin.Id);
-
-        if (!hasOwnerMembership)
+        if (admin is not null)
         {
-            context.TenantUsers.Add(new TenantUser(
-                systemTenant.Id,
-                admin.Id,
-                TenantUserRole.Owner,
-                TenantUserStatus.Active));
-            await context.SaveChangesAsync();
+            if (!await userManager.IsInRoleAsync(admin, "SUPER_ADMIN"))
+                await userManager.AddToRoleAsync(admin, "SUPER_ADMIN");
+
+            var hasOwnerMembership = await context.TenantUsers
+                .IgnoreQueryFilters()
+                .AnyAsync(x => x.TenantId == systemTenant.Id && x.UserId == admin.Id);
+
+            if (!hasOwnerMembership)
+            {
+                context.TenantUsers.Add(new TenantUser(
+                    systemTenant.Id,
+                    admin.Id,
+                    TenantUserRole.Owner,
+                    TenantUserStatus.Active));
+                await context.SaveChangesAsync();
+            }
         }
 
         // Ensure every tenant has "Publico en general" customer

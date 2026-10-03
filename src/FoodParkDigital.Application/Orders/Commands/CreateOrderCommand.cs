@@ -75,11 +75,18 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.CustomerPhone).MaximumLength(50);
         RuleFor(x => x.OrderType).IsInEnum();
         RuleFor(x => x.Items).NotEmpty().WithMessage("Order must have at least one item.");
+        RuleFor(x => x.Items.Count)
+            .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
+            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleForEach(x => x.Items).ChildRules(item =>
         {
             item.RuleFor(i => i.ProductId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0);
+            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine);
         });
+        RuleFor(x => x.ServiceDetail!.Pieces.Count)
+            .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
+            .When(x => x.ServiceDetail is not null)
+            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
 
         When(x => x.OrderType == OrderType.Service && !x.CreatedByBusiness, () =>
         {
@@ -190,6 +197,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
+        var quantitiesByProduct = new Dictionary<Guid, int>();
 
         foreach (var itemDto in request.Items)
         {
@@ -206,6 +214,10 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 return Result.Failure<OrderDto>(
                     $"El item '{product.Name}' no corresponde al tipo de orden '{expectedLabel}'.");
             }
+
+            var quantityError = OrderLimits.TrackProductQuantity(quantitiesByProduct, product, itemDto.Quantity);
+            if (quantityError is not null)
+                return Result.Failure<OrderDto>(quantityError);
 
             order.AddItem(product.Id, product.Name, itemDto.Quantity, product.PriceAmount, itemDto.Notes);
 
@@ -232,6 +244,13 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             .Where(piece => !string.IsNullOrWhiteSpace(piece.ItemName))
             .ToList()
             ?? [];
+
+        var piecesError = OrderLimits.ValidateServicePieces(
+            manualPieces,
+            checklistCandidates,
+            quantitiesByProduct.Keys.ToHashSet());
+        if (piecesError is not null)
+            return Result.Failure<OrderDto>(piecesError);
 
         if (manualPieces.Count > 0)
         {

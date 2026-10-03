@@ -74,10 +74,7 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
             return Result.Failure<LogoImageUrlsDto>("Tenant no encontrado.");
 
         var folder = TenantStorageFolders.Logos(tenantId);
-
-        // Delete previous variants if they exist (only inside the tenant folder)
-        if (!string.IsNullOrEmpty(tenant.LogoUrl))
-            await _fileStorageService.DeleteVariantsAsync(tenant.LogoUrl, folder, cancellationToken);
+        var previousLogoUrl = tenant.LogoUrl;
 
         // Generate image variants
         var variants = await _imageProcessingService.GenerateVariantsAsync(
@@ -115,6 +112,11 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
         // Update tenant logo
         tenant.Update(tenant.Name, tenant.ContactEmail, tenant.ContactPhone, baseUrl);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // The previous files are removed only after the new logo is stored; deleting them first left the
+        // tenant pointing to missing files whenever the new image was rejected.
+        if (!string.IsNullOrEmpty(previousLogoUrl))
+            await _fileStorageService.DeleteVariantsAsync(previousLogoUrl, folder, cancellationToken);
 
         return Result.Success(LogoImageUrlsDto.FromBaseUrl(baseUrl)!);
     }

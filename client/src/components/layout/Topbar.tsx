@@ -5,6 +5,24 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import type { MyTenantDto } from '../../types';
 
+const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
+
+function readAutoSwitchMarker(): boolean {
+  try {
+    return window.sessionStorage.getItem(AUTO_SWITCH_MARKER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeAutoSwitchMarker() {
+  try {
+    window.sessionStorage.setItem(AUTO_SWITCH_MARKER_KEY, '1');
+  } catch {
+    // Ignore storage failures (private mode / blocked storage)
+  }
+}
+
 export default function Topbar() {
   const { user, logout, switchTenant } = useAuth();
   const { tenant, refreshTenant } = useTenant();
@@ -52,7 +70,11 @@ export default function Topbar() {
   useEffect(() => {
     const ensureTenantContext = async () => {
       if (selectedTenantId || availableTenants.length === 0 || switchingTenant || autoSwitchAttempted) return;
+      // Switching reloads the page; trying only once per tab avoids a reload loop if the tenant still
+      // cannot be resolved afterwards.
+      if (readAutoSwitchMarker()) return;
 
+      writeAutoSwitchMarker();
       setAutoSwitchAttempted(true);
       setSwitchingTenant(true);
       try {

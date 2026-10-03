@@ -23,7 +23,8 @@ public class SupplyItemConfiguration : IEntityTypeConfiguration<SupplyItem>
         builder.Property(x => x.Unit).HasConversion<int>().IsRequired();
         builder.Property(x => x.DefaultCost).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.LastCost).HasColumnType("decimal(18,4)").IsRequired();
-        builder.Property(x => x.AverageCost).HasColumnType("decimal(18,4)").IsRequired();
+        // Concurrency token: concurrent receptions cannot lose an average-cost update.
+        builder.Property(x => x.AverageCost).HasColumnType("decimal(18,4)").IsRequired().IsConcurrencyToken();
         builder.Property(x => x.MinStock).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.MaxStock).HasColumnType("decimal(18,4)");
         builder.Property(x => x.ReorderPoint).HasColumnType("decimal(18,4)").IsRequired();

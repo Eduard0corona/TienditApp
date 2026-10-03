@@ -16,7 +16,6 @@ public record AddOrderPaymentCommand : IRequest<Result<OrderDto>>
     public Guid OrderId { get; init; }
     public decimal Amount { get; init; }
     public OrderPaymentMethod Method { get; init; }
-    public DateTimeOffset? PaidAt { get; init; }
     public Guid? InventoryLocationId { get; init; }
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
@@ -28,7 +27,8 @@ public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPayment
     public AddOrderPaymentCommandValidator()
     {
         RuleFor(x => x.OrderId).NotEmpty();
-        RuleFor(x => x.Amount).GreaterThan(0);
+        // Payments are stored with 2 decimals; more precision would make orders and the cash ledger diverge.
+        RuleFor(x => x.Amount).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(x => x.Method).IsInEnum();
         RuleFor(x => x.EvidenceUrl).MaximumLength(1000);
         RuleFor(x => x.Reference).MaximumLength(120);
@@ -65,6 +65,10 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
         if (order.Status == OrderStatus.Cancelled)
             return Result.Failure<OrderDto>("No se pueden registrar pagos en una orden cancelada.");
 
+        // The evidence is shown to staff as a link: it must be a file uploaded for this tenant.
+        if (!OrderUploadRules.IsOwnPaymentEvidence(request.EvidenceUrl, order.TenantId))
+            return Result.Failure<OrderDto>("La evidencia del pago debe subirse desde el sistema.");
+
         Guid? inventoryLocationId = request.InventoryLocationId;
         if (inventoryLocationId.HasValue)
         {
@@ -89,7 +93,8 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
         var payment = order.RegisterPayment(
             amount: request.Amount,
             method: request.Method,
-            paidAt: request.PaidAt ?? _dateTimeProvider.UtcNow,
+            // Stamped by the server: a client-provided date could rewrite already reported cuts.
+            paidAt: _dateTimeProvider.UtcNow,
             inventoryLocationId: inventoryLocationId,
             evidenceUrl: request.EvidenceUrl?.Trim(),
             reference: request.Reference?.Trim(),

@@ -39,12 +39,53 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     public CashSessionStatus Status { get; private set; }
     public string? Notes { get; private set; }
 
+    /// <summary>
+    /// Optimistic concurrency token: every movement and the close increment it, so a payment that races
+    /// a close (or two closes) cannot both succeed.
+    /// </summary>
+    public int Revision { get; private set; }
+
     public IReadOnlyCollection<CashTransaction> Transactions => _transactions.AsReadOnly();
-    public decimal Inflows => _transactions.Where(x => x.Amount > 0).Sum(x => x.Amount);
-    public decimal Outflows => _transactions.Where(x => x.Amount < 0).Sum(x => Math.Abs(x.Amount));
+
+    // Inflows, outflows and the expected balance describe the physical cash in the drawer: manual movements
+    // and payments made in cash. Card, transfer and wallet payments are reported apart as NonCashInflows.
+    public decimal Inflows => _transactions.Where(x => x.Amount > 0 && IsCashMovement(x.PaymentMethod)).Sum(x => x.Amount);
+    public decimal Outflows => _transactions.Where(x => x.Amount < 0 && IsCashMovement(x.PaymentMethod)).Sum(x => -x.Amount);
+    public decimal NonCashInflows => _transactions.Where(x => x.Amount > 0 && !IsCashMovement(x.PaymentMethod)).Sum(x => x.Amount);
     public decimal ExpectedBalance => OpeningAmount + Inflows - Outflows;
 
-    public void RegisterTransaction(
+    public static bool IsCashMovement(OrderPaymentMethod? paymentMethod) =>
+        paymentMethod is null or OrderPaymentMethod.Cash;
+
+    /// <summary>
+    /// Movements a user may register by hand. Sale payments only come from order payments.
+    /// </summary>
+    public static bool IsManualTransactionType(CashTransactionType transactionType) =>
+        transactionType is CashTransactionType.Deposit
+            or CashTransactionType.Expense
+            or CashTransactionType.Withdrawal
+            or CashTransactionType.Refund;
+
+    /// <summary>
+    /// The transaction type decides the direction of the money: sales and deposits enter the drawer,
+    /// refunds, expenses and withdrawals leave it. Adjustments keep the sign they are given.
+    /// </summary>
+    public static decimal ToSignedAmount(CashTransactionType transactionType, decimal amount)
+    {
+        if (amount == 0)
+            throw new DomainException("El monto del movimiento debe ser diferente de cero.");
+
+        return transactionType switch
+        {
+            CashTransactionType.SalePayment or CashTransactionType.Deposit when amount < 0 =>
+                throw new DomainException("El monto de un ingreso debe ser mayor a cero."),
+            CashTransactionType.SalePayment or CashTransactionType.Deposit => amount,
+            CashTransactionType.Refund or CashTransactionType.Expense or CashTransactionType.Withdrawal => -Math.Abs(amount),
+            _ => amount
+        };
+    }
+
+    public CashTransaction RegisterTransaction(
         CashTransactionType transactionType,
         decimal amount,
         DateTimeOffset occurredAt,
@@ -56,31 +97,36 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (Status != CashSessionStatus.Open)
             throw new DomainException("No se pueden registrar movimientos en una caja cerrada.");
-        if (amount == 0)
-            throw new DomainException("El monto del movimiento debe ser diferente de cero.");
 
-        _transactions.Add(new CashTransaction(
+        var transaction = new CashTransaction(
             tenantId: TenantId,
             cashSessionId: Id,
             transactionType: transactionType,
-            amount: amount,
+            amount: ToSignedAmount(transactionType, amount),
             occurredAt: occurredAt,
             paymentMethod: paymentMethod,
             inventoryLocationId: inventoryLocationId,
             orderId: orderId,
             reference: reference,
-            notes: notes));
+            notes: notes);
+
+        _transactions.Add(transaction);
+        Revision++;
+        return transaction;
     }
 
     public void Close(DateTimeOffset closedAt, string closedBy, decimal closingAmount, string? notes = null)
     {
         if (Status != CashSessionStatus.Open)
             throw new DomainException("La caja ya está cerrada.");
+        if (closingAmount < 0)
+            throw new DomainException("El monto contado al cierre no puede ser negativo.");
 
         ClosedAt = closedAt;
         ClosedBy = closedBy;
         ClosingAmount = closingAmount;
         Notes = string.IsNullOrWhiteSpace(notes) ? Notes : notes.Trim();
         Status = CashSessionStatus.Closed;
+        Revision++;
     }
 }

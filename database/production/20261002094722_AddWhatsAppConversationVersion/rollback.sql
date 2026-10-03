@@ -1,7 +1,7 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): revierte 20261002094722_AddWhatsAppConversationVersion.
 -- Generado el 2026-10-02 con `dotnet ef migrations script
--- 20261002094722_AddWhatsAppConversationVersion 20261001155915_AddWhatsAppWebhookUniqueIndexes
+-- 20261002094722_AddWhatsAppConversationVersion 20261001163347_InventoryConcurrencyTokens
 -- --idempotent` (EF Core 9.0.0). Debajo del bloque SET, el contenido es el que genera EF.
 --
 -- Quita la columna [Version] de [WhatsAppConversations] y su registro en

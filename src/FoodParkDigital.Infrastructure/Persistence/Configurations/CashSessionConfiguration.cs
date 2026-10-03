@@ -20,9 +20,16 @@ public class CashSessionConfiguration : IEntityTypeConfiguration<CashSession>
         builder.Property(x => x.ClosingAmount).HasColumnType("decimal(18,4)");
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();
         builder.Property(x => x.Notes).HasMaxLength(2000);
+        builder.Property(x => x.Revision).IsConcurrencyToken();
 
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.OpenedAt });
+
+        // Business rule: at most one open cash session per tenant, enforced by the database.
+        builder.HasIndex(x => x.TenantId)
+            .IsUnique()
+            .HasFilter("[Status] = 0")
+            .HasDatabaseName("IX_CashSessions_TenantId_SingleOpen");
 
         builder.HasMany(x => x.Transactions)
             .WithOne(x => x.CashSession)

@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,44 +14,28 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICurrentTenantService _tenantService;
     private readonly IMapper _mapper;
 
     public GetMyTenantQueryHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
+        ICurrentTenantService tenantService,
         IMapper mapper)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _tenantService = tenantService;
         _mapper = mapper;
     }
 
     public async Task<Result<TenantProfileDto>> Handle(GetMyTenantQuery request, CancellationToken cancellationToken)
     {
-        var tenantId = _currentUserService.TenantId;
-        var hasUserId = Guid.TryParse(_currentUserService.UserId, out var userId);
-
-        if (hasUserId)
-        {
-            if (tenantId is null)
-            {
-                tenantId = await _context.Users
-                    .IgnoreQueryFilters()
-                    .Where(u => u.Id == userId)
-                    .Select(u => u.DefaultTenantId)
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-
-            if (tenantId is null)
-            {
-                tenantId = await _context.TenantUsers
-                    .IgnoreQueryFilters()
-                    .Where(tu => tu.UserId == userId)
-                    .OrderBy(tu => tu.CreatedAt)
-                    .Select(tu => (Guid?)tu.TenantId)
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-        }
+        var tenantId = await MyTenantResolver.ResolveAsync(
+            _context,
+            _tenantService,
+            _currentUserService,
+            cancellationToken);
 
         if (tenantId is null)
             return Result.Failure<TenantProfileDto>("No se encontro el tenant del usuario.");
@@ -59,19 +44,6 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
             .AsNoTracking()
             .Include(t => t.Settings)
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
-
-        if (tenant is null && hasUserId)
-        {
-            tenant = await (
-                from tu in _context.TenantUsers.IgnoreQueryFilters()
-                join t in _context.Tenants.IgnoreQueryFilters() on tu.TenantId equals t.Id
-                where tu.UserId == userId
-                orderby tu.CreatedAt
-                select t)
-                .AsNoTracking()
-                .Include(t => t.Settings)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
 
         if (tenant is null)
             return Result.Failure<TenantProfileDto>("Tenant no encontrado.");

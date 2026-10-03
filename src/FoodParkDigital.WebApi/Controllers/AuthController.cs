@@ -124,7 +124,7 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<ActionResult<AuthResponse>> SwitchTenant([FromBody] SwitchTenantCommand command)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command with { CurrentRefreshToken = Request.Cookies[RefreshTokenCookie.Name] });
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 

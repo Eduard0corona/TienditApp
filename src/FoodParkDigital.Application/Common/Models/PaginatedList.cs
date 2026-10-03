@@ -11,6 +11,7 @@ public class PaginatedList<T>
 
     public PaginatedList(List<T> items, int count, int pageNumber, int pageSize)
     {
+        (pageNumber, pageSize) = Paging.Normalize(pageNumber, pageSize);
         PageNumber = pageNumber;
         TotalPages = (int)Math.Ceiling(count / (double)pageSize);
         TotalCount = count;
@@ -23,6 +24,8 @@ public class PaginatedList<T>
     public static async Task<PaginatedList<T>> CreateAsync(
         IQueryable<T> source, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
+        (pageNumber, pageSize) = Paging.Normalize(pageNumber, pageSize);
+
         var count = await source.CountAsync(cancellationToken);
         var items = await source
             .Skip((pageNumber - 1) * pageSize)
@@ -31,4 +34,17 @@ public class PaginatedList<T>
 
         return new PaginatedList<T>(items, count, pageNumber, pageSize);
     }
+}
+
+public static class Paging
+{
+    // The largest page the SPA requests today (reference lists load 500 rows).
+    public const int MaxPageSize = 500;
+
+    /// <summary>
+    /// Clamps client paging values: page numbers start at 1 and page sizes are kept between 1 and
+    /// <see cref="MaxPageSize"/>, so a request cannot dump a whole table or trigger a negative OFFSET.
+    /// </summary>
+    public static (int PageNumber, int PageSize) Normalize(int pageNumber, int pageSize) =>
+        (Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, MaxPageSize));
 }

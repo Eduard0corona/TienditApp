@@ -2,7 +2,13 @@
 
 ## Estado actual
 
-Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo y agrega un filtro `TenantId == CurrentTenantId` a cada entidad que implementa `ITenantScoped`. `TenantSaveChangesInterceptor` intenta completar un `TenantId` vacío en entidades nuevas. `TenantResolutionMiddleware` toma `tenant_id` del JWT, valida acceso para rutas reconocidas y configura `ICurrentTenantService`.
+Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo y agrega un filtro `TenantId == CurrentTenantId` a cada entidad que implementa `ITenantScoped`. `TenantResolutionMiddleware` toma `tenant_id` del JWT, valida acceso para rutas reconocidas y configura `ICurrentTenantService`.
+
+- `TenantSaveChangesInterceptor` completa un `TenantId` vacío en entidades nuevas, rechaza un `TenantId` ajeno (salvo el de un tenant creado en la misma unidad de trabajo, como en el alta de negocio) y rechaza cambiar el `TenantId` de una entidad existente (`TenantMismatchException`, 403).
+- Las exclusiones del middleware se comparan por prefijo y las rutas de "mi tenant" y marketing son tenant-scoped: un miembro desactivado ya no puede usarlas con un token vigente.
+- `TenantOrdersController` rechaza un tenant de ruta distinto del tenant validado.
+- Los hubs validan al conectar membresía activa y permiso (`OrderHub`: gestionar órdenes, tablero o ver reportes; `ChatHub`: WhatsApp) y se cierran cuando expira el token.
+- El override `X-Tenant-Id` de `SUPER_ADMIN` queda registrado como evento de auditoría en el log (usuario, tenant, tenant del token, método y ruta).
 
 Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant. Muchas claves e índices incluyen `TenantId`.
 
@@ -21,12 +27,11 @@ Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen 
 
 ## Riesgos comprobados
 
-1. `TenantSettings` y `WhatsAppConfig` tienen `TenantId` sin `ITenantScoped`; el filtro automático no se aplica.
-2. Hay múltiples `IgnoreQueryFilters()` en autenticación, empleados, tenants, webhooks e integraciones. Algunos escenarios ocurren antes de resolver tenant, pero la cobertura completa no está probada.
-3. `SUPER_ADMIN` puede cambiar tenant mediante `X-Tenant-Id` sin validar membresía ni capability y sin auditoría visible en el middleware.
+1. `TenantSettings` y `WhatsAppConfig` tienen `TenantId` sin `ITenantScoped`; el filtro automático no se aplica y cada consulta debe filtrar por tenant de forma explícita (la auditoría del 2026-10-01 encontró y corrigió una consulta del reporte operativo que no lo hacía).
+2. Hay múltiples `IgnoreQueryFilters()` en autenticación, empleados, tenants, webhooks e integraciones. El uso del dashboard, que exponía los productos más vendidos de todos los tenants, se corrige en una tarea separada.
+3. El override `X-Tenant-Id` de `SUPER_ADMIN` ya se audita en el log, pero no exige justificación, no tiene límites y no se persiste en `AuditLog`.
 4. El middleware decide si una ruta es tenant-scoped mediante una lista manual; una ruta nueva puede quedar fuera por omisión.
-5. Los hubs aceptan `tenant_id` del token y el middleware omite `/hubs/`; no se observa revalidación de membresía activa al conectar.
-6. No existe una suite end-to-end de aislamiento para API, archivos, SignalR y webhooks.
-7. `TenantSaveChangesInterceptor` no rechaza de forma explícita una entidad nueva con un `TenantId` ajeno ya informado; el filtro de lectura no sustituye validación de escritura.
+5. `OrderItem` y `OrderStatusHistory` no tienen `TenantId` y se exponen como `DbSet`; una consulta directa sin unir con `Order` no tiene filtro.
+6. No existe una suite end-to-end de aislamiento para API, archivos, SignalR y webhooks; hay pruebas unitarias del middleware, los hubs y el interceptor.
 
-Estos puntos son deuda/riesgo. Esta documentación no los corrige.
+Estos puntos siguen siendo deuda/riesgo.

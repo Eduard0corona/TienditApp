@@ -116,7 +116,10 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
         var existingById = existingRequirements.ToDictionary(x => x.Id);
         foreach (var line in request.Lines)
         {
-            if (line.RequirementId.HasValue && existingById.TryGetValue(line.RequirementId.Value, out var existing))
+            var existing = line.RequirementId.HasValue
+                ? existingById.GetValueOrDefault(line.RequirementId.Value)
+                : null;
+            if (existing is not null && existing.SupplyItemId == line.SupplyItemId)
             {
                 existing.Update(
                     quantity: line.Quantity,
@@ -126,6 +129,11 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
                 existing.SetActive(true);
                 continue;
             }
+
+            // A line whose supply changed is a different requirement: it replaces the old one. Before,
+            // the new supply was silently ignored and the old one kept being consumed.
+            if (existing is not null)
+                _context.ProductSupplyRequirements.Remove(existing);
 
             _context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(
                 tenantId: _tenantService.TenantId,

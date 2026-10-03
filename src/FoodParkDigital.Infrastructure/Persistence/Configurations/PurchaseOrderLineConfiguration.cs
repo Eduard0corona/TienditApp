@@ -17,7 +17,8 @@ public class PurchaseOrderLineConfiguration : IEntityTypeConfiguration<PurchaseO
         builder.Property(x => x.SupplyItemId).IsRequired();
         builder.Property(x => x.InventoryLocationId).IsRequired();
         builder.Property(x => x.Quantity).HasColumnType("decimal(18,4)").IsRequired();
-        builder.Property(x => x.ReceivedQuantity).HasColumnType("decimal(18,4)").IsRequired();
+        // Concurrency token: two simultaneous receptions of the same line cannot both pass the pending check.
+        builder.Property(x => x.ReceivedQuantity).HasColumnType("decimal(18,4)").IsRequired().IsConcurrencyToken();
         builder.Property(x => x.UnitCost).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.TaxPercent).HasColumnType("decimal(5,2)").IsRequired();
         builder.Property(x => x.SubTotal).HasColumnType("decimal(18,4)").IsRequired();
