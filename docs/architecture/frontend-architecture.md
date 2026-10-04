@@ -19,7 +19,7 @@ El access token se mantiene en memoria y se agrega con interceptor. El refresh t
 Sesión y tiempo real:
 
 - `refreshAccessToken` (en `src/api/axios.ts`) es single-flight y se serializa entre pestañas con la Web Locks API, porque el refresh token rota en cada uso.
-- Un refresh rechazado emite `expired` y la sesión se cierra; un error de red la conserva. Si un refresh devuelve otro tenant (otra pestaña cambió de tenant), la pestaña recarga.
+- Un refresh rechazado (400, 401 o 403) emite `expired` y la sesión se cierra; un 429, un error del servidor o uno de red la conservan y la siguiente llamada reintenta. Si un refresh devuelve otro tenant (otra pestaña cambió de tenant), la pestaña recarga.
 - `useSessionSync` propaga logout y cambio de tenant a las demás pestañas con `BroadcastChannel`; cambiar de tenant recarga la aplicación.
 - `src/api/signalr.ts` crea las conexiones: reintenta indefinidamente, reintenta el primer arranque, reinicia tras un cierre del servidor y pide un token vigente en cada (re)conexión.
 - `src/utils/labels.ts` concentra las etiquetas en español de estados, métodos de pago, tipos y roles (acepta el número de REST o el nombre del enum de SignalR); `src/api/errors.ts` (`getApiErrorMessage`, `getApiFieldErrors`) es la única forma de leer errores de la API.
