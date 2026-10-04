@@ -6,12 +6,8 @@ import { tenantApi } from '../../api/tenantApi';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
+import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 
-const BUSINESS_TYPE_LABELS: Record<number, string> = {
-  0: 'Alimentos',
-  1: 'Retail',
-  2: 'Servicios',
-};
 
 const INDUSTRY_OPTIONS = [
   'Alimentos y Bebidas',

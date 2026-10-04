@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { useAuth } from '../../hooks/useAuth';
+import { getUserRoleLabel } from '../../utils/labels';
 import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 
@@ -142,7 +143,7 @@ export default function Profile() {
                         <h4 className="mt-1 mb-1 text-white">
                           {user?.firstName} {user?.lastName}
                         </h4>
-                        <p className="font-13 text-white-50">{user?.role}</p>
+                        <p className="font-13 text-white-50">{getUserRoleLabel(user?.role, user?.tenantRole)}</p>
                         <ul className="mb-0 list-inline text-light">
                           <li className="list-inline-item me-3">
                             <h5 className="mb-1 text-white">{user?.email}</h5>
@@ -255,7 +256,7 @@ export default function Profile() {
                   </p>
                   <p className="text-muted">
                     <strong>Rol:</strong>{' '}
-                    <span className="ms-2">{user?.role}</span>
+                    <span className="ms-2">{getUserRoleLabel(user?.role, user?.tenantRole)}</span>
                   </p>
                   <p className="text-muted">
                     <strong>2FA:</strong>{' '}

@@ -63,6 +63,17 @@ const SERVICE_PIECE_STATUS_BY_NAME: Record<string, ServiceOrderPieceStatus> = {
   Cancelled: 99,
 };
 
+const CATALOG_ITEM_TYPE_LABELS: Record<string, string> = {
+  Product: 'Producto',
+  Service: 'Servicio',
+};
+
+export const BUSINESS_TYPE_LABELS: Record<number, string> = {
+  0: 'Alimentos',
+  1: 'Comercio',
+  2: 'Servicios',
+};
+
 // Keyed without separators: the API returns both SUPER_ADMIN (claims) and TenantAdmin (enum names).
 const ROLE_LABELS: Record<string, string> = {
   SUPERADMIN: 'Administrador de la plataforma',
@@ -106,4 +117,20 @@ export function getServicePieceStatusLabel(status: ServiceOrderPieceStatus | str
 export function getRoleLabel(role: string | null | undefined): string {
   if (!role) return '';
   return ROLE_LABELS[role.replace(/[\s_-]/g, '').toUpperCase()] ?? role;
+}
+
+/**
+ * Role shown for the signed-in user: the membership role (Dueño, Administrador, Empleado) except for
+ * kitchen and platform accounts, whose platform role says more.
+ */
+export function getUserRoleLabel(role: string | null | undefined, tenantRole: string | null | undefined): string {
+  const platformRole = (role ?? '').replace(/[\s_-]/g, '').toUpperCase();
+  if (platformRole === 'KITCHEN' || platformRole === 'SUPERADMIN' || !tenantRole) return getRoleLabel(role);
+  return getRoleLabel(tenantRole);
+}
+
+/** Label of a catalog item type sent as text by reports ("Product", "Service"). */
+export function getCatalogItemTypeLabel(type: string | null | undefined): string {
+  if (!type) return '';
+  return CATALOG_ITEM_TYPE_LABELS[type] ?? type;
 }

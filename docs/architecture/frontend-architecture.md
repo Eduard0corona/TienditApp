@@ -22,6 +22,7 @@ Sesión y tiempo real:
 - Un refresh rechazado emite `expired` y la sesión se cierra; un error de red la conserva. Si un refresh devuelve otro tenant (otra pestaña cambió de tenant), la pestaña recarga.
 - `useSessionSync` propaga logout y cambio de tenant a las demás pestañas con `BroadcastChannel`; cambiar de tenant recarga la aplicación.
 - `src/api/signalr.ts` crea las conexiones: reintenta indefinidamente, reintenta el primer arranque, reinicia tras un cierre del servidor y pide un token vigente en cada (re)conexión.
+- `src/utils/labels.ts` concentra las etiquetas en español de estados, métodos de pago, tipos y roles (acepta el número de REST o el nombre del enum de SignalR); `src/api/errors.ts` (`getApiErrorMessage`, `getApiFieldErrors`) es la única forma de leer errores de la API.
 - `HomeRedirect`/`AccessRoute` llevan a cada usuario a la pantalla de su trabajo (`getLandingPath`); `isSafeFileUrl` solo deja enlazar archivos de `/uploads` o https; `estimateOrderTotals` replica la regla de impuesto del backend para el carrito (el total definitivo es el de la API).
 
 ## Guardrails

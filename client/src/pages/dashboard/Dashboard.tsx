@@ -3,6 +3,7 @@ import PageTitle from '../../components/common/PageTitle';
 import { useAuth } from '../../hooks/useAuth';
 import { dashboardApi } from '../../api/dashboardApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
+import { getCatalogItemTypeLabel, getOrderStatusLabel } from '../../utils/labels';
 import type { DashboardMetricsDto } from '../../types';
 
 function getTodayDateInput() {
@@ -53,12 +54,12 @@ export default function Dashboard() {
       setRealtimeMessage(`Nueva orden: ${payload.orderNumber}`);
       loadMetrics();
     });
-    const changedOff = onOrderStatusChanged(() => {
-      setRealtimeMessage('Cambio de estado de orden recibido');
+    const changedOff = onOrderStatusChanged((payload) => {
+      setRealtimeMessage(`Una orden cambió a: ${getOrderStatusLabel(payload.newStatus)}`);
       loadMetrics();
     });
     const cancelledOff = onOrderCancelled(() => {
-      setRealtimeMessage('Se recibio una cancelacion de orden');
+      setRealtimeMessage('Se canceló una orden');
       loadMetrics();
     });
 
@@ -179,7 +180,7 @@ export default function Dashboard() {
         <div className="col-lg-6">
           <div className="card">
             <div className="card-body">
-              <h4 className="header-title mb-3">Ordenes por estado</h4>
+              <h4 className="header-title mb-3">Órdenes por estado</h4>
               {loading ? (
                 <p className="text-muted mb-0">Cargando...</p>
               ) : statusRows.length === 0 ? (
@@ -196,7 +197,7 @@ export default function Dashboard() {
                     <tbody>
                       {statusRows.map(([status, count]) => (
                         <tr key={status}>
-                          <td>{status}</td>
+                          <td>{getOrderStatusLabel(status)}</td>
                           <td className="text-end fw-semibold">{count}</td>
                         </tr>
                       ))}
@@ -231,7 +232,7 @@ export default function Dashboard() {
                       {metrics?.topSellingItems.map((item) => (
                         <tr key={item.productId}>
                           <td>{item.productName}</td>
-                          <td>{item.itemType}</td>
+                          <td>{getCatalogItemTypeLabel(item.itemType)}</td>
                           <td className="text-end">{item.quantitySold}</td>
                           <td className="text-end">${item.totalAmount.toFixed(2)}</td>
                         </tr>

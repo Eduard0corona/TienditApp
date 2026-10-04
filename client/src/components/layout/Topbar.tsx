@@ -4,6 +4,7 @@ import { authApi } from '../../api/authApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import type { MyTenantDto } from '../../types';
+import { getRoleLabel, getUserRoleLabel } from '../../utils/labels';
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
 
@@ -178,7 +179,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
               >
                 {availableTenants.map((entry) => (
                   <option key={entry.tenantId} value={entry.tenantId}>
-                    {entry.name} ({entry.role})
+                    {entry.name} ({getRoleLabel(entry.role)})
                   </option>
                 ))}
               </select>
@@ -321,7 +322,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
                 <h5 className="my-0">
                   {user ? `${user.firstName} ${user.lastName}` : 'Usuario'}
                 </h5>
-                <h6 className="my-0 fw-normal">{user?.role || ''}</h6>
+                <h6 className="my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</h6>
               </span>
             </a>
             <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated profile-dropdown">

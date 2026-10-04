@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
 import { reportsApi } from '../../api/reportsApi';
+import { getPaymentMethodLabel } from '../../utils/labels';
 import { marketingApi } from '../../api/marketingApi';
 import type { OperationalReportDto } from '../../types';
 
@@ -180,7 +181,7 @@ export default function OperationalReports() {
                         <tbody>
                           {paymentRows.map(([method, total]) => (
                             <tr key={method}>
-                              <td>{method}</td>
+                              <td>{getPaymentMethodLabel(method)}</td>
                               <td className="text-end">${total.toFixed(2)}</td>
                             </tr>
                           ))}
