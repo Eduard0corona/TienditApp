@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Fiscal;
 
 namespace FoodParkDigital.Application.Catalog.DTOs;
 
@@ -23,6 +24,11 @@ public class ProductDto
     public decimal? TaxRate { get; set; }
     public bool IsTaxExempt { get; set; }
     public bool HasDiscount { get; set; }
+
+    // Invoicing (CFDI 4.0): the product's own codes, null when it uses the generic ones.
+    public string? SatProductCode { get; set; }
+    public string? SatUnitCode { get; set; }
+    public CfdiTaxObject TaxObject { get; set; }
 
     // Media
     public string? ImageUrl { get; set; }

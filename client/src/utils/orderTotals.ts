@@ -2,6 +2,7 @@
 // banker's rounding like .NET's Math.Round. With prices that include IVA the group keeps the amount
 // charged and the tax is taken out of it; otherwise the tax is added on top. It is an estimate for the
 // cashier: the order total is the one the API returns, and the sale is rejected if they differ.
+import { lineAmountCents } from './units';
 
 export interface VatTreatment {
   ratePercent: number;
@@ -51,7 +52,8 @@ export function estimateOrderTotals(lines: TotalsLine[], pricesIncludeTax: boole
   for (const line of lines) {
     const key = `${line.ratePercent}|${line.isExempt}`;
     const group = groups.get(key) ?? { ratePercent: line.ratePercent, isExempt: line.isExempt, amountCents: 0 };
-    group.amountCents += Math.round(line.unitPrice * 100) * line.quantity;
+    // Weighed lines can fall between cents: each line is rounded once, like OrderItem.TotalPrice.
+    group.amountCents += lineAmountCents(line.unitPrice, line.quantity);
     groups.set(key, group);
   }
 

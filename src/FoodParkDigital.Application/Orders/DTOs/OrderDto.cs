@@ -1,3 +1,5 @@
+using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 
@@ -61,7 +63,7 @@ public class OrderRefundDto
 public class OrderRefundLineDto
 {
     public Guid OrderItemId { get; set; }
-    public int Quantity { get; set; }
+    public decimal Quantity { get; set; }
 }
 
 public class OrderItemDto
@@ -69,14 +71,19 @@ public class OrderItemDto
     public Guid Id { get; set; }
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
-    public int Quantity { get; set; }
-    /// <summary>Units given back with refunds.</summary>
-    public int ReturnedQuantity { get; set; }
+    /// <summary>Up to three decimals for weight, volume, length and time.</summary>
+    public decimal Quantity { get; set; }
+    /// <summary>Quantity given back with refunds.</summary>
+    public decimal ReturnedQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal TotalPrice { get; set; }
     public string? Notes { get; set; }
     public decimal TaxRate { get; set; }
     public bool IsTaxExempt { get; set; }
+    public UnitType Unit { get; set; }
+    public string SatProductCode { get; set; } = null!;
+    public string SatUnitCode { get; set; } = null!;
+    public CfdiTaxObject TaxObject { get; set; }
 }
 
 public class OrderTaxLineDto
@@ -184,6 +191,6 @@ public class TopSellingItemDto
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
     public string ItemType { get; set; } = "Product";
-    public int QuantitySold { get; set; }
+    public decimal QuantitySold { get; set; }
     public decimal TotalAmount { get; set; }
 }

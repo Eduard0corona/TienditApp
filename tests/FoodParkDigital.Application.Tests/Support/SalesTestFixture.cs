@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -75,7 +76,8 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         string name,
         decimal price,
         decimal? taxRate = null,
-        bool isTaxExempt = false)
+        bool isTaxExempt = false,
+        UnitType? unit = null)
     {
         var category = await Context.Categories.FirstOrDefaultAsync(c => c.TenantId == tenant.Id);
         if (category is null)
@@ -84,7 +86,7 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             Context.Categories.Add(category);
         }
 
-        var product = new Product(tenant.Id, category.Id, name, null, price, "MXN", taxRate: taxRate, isTaxExempt: isTaxExempt);
+        var product = new Product(tenant.Id, category.Id, name, null, price, "MXN", taxRate: taxRate, unit: unit, isTaxExempt: isTaxExempt);
         Context.Products.Add(product);
         await Context.SaveChangesAsync();
         return product;

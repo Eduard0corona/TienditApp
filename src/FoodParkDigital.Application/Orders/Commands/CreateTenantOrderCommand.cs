@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
@@ -49,7 +50,8 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         RuleForEach(x => x.Items).ChildRules(item =>
         {
             item.RuleFor(i => i.ProductId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine);
+            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
+                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
         });
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
@@ -141,7 +143,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             tableNumber: request.TableNumber,
             pricesIncludeTax: salesSettings.PricesIncludeTax);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var quantitiesByProduct = new Dictionary<Guid, int>();
+        var quantitiesByProduct = new Dictionary<Guid, decimal>();
 
         foreach (var itemDto in request.Items)
         {
@@ -164,15 +166,20 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             if (quantityError is not null)
                 return Result.Failure<OrderDto>(quantityError);
 
+            var isTrackableService = OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable;
+            if (isTrackableService && decimal.Truncate(itemDto.Quantity) != itemDto.Quantity)
+                return Result.Failure<OrderDto>($"'{product.Name}' crea una pieza por unidad: la cantidad debe ser entera.");
+
             order.AddItem(
                 product.Id,
                 product.Name,
                 itemDto.Quantity,
                 product.PriceAmount,
                 itemDto.Notes,
-                product.GetVatRate(salesSettings.DefaultTaxRate));
+                product.GetVatRate(salesSettings.DefaultTaxRate),
+                OrderLineFiscalData.From(product));
 
-            if (OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
+            if (isTrackableService)
                 checklistCandidates.Add((product, itemDto));
         }
 
@@ -226,7 +233,8 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         {
             foreach (var (product, item) in checklistCandidates)
             {
-                for (var index = 0; index < item.Quantity; index++)
+                var pieces = (int)item.Quantity;
+                for (var index = 0; index < pieces; index++)
                 {
                     var itemName = item.Quantity > 1
                         ? $"{product.Name} #{index + 1}"

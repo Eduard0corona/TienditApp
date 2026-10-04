@@ -51,7 +51,7 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.ContactEmail).NotEmpty().EmailAddress();
         RuleFor(x => x.ContactPhone).MaximumLength(20);
         RuleFor(x => x.Rfc)
-            .Matches(@"^[A-ZN&]{3,4}\d{6}[A-Z0-9]{3}$")
+            .Matches(@"^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$")
             .When(x => !string.IsNullOrEmpty(x.Rfc))
             .WithMessage("El RFC no tiene un formato valido.");
         RuleFor(x => x.LegalName).MaximumLength(300);

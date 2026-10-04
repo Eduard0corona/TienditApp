@@ -19,6 +19,15 @@ import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
 import { buildTicketText, buildWhatsAppTicketUrl, printTicket } from '../../utils/ticket';
+import {
+  allowsFractions,
+  formatQuantity,
+  getQuantityStep,
+  getUnitShortLabel,
+  lineAmount,
+  parseQuantity,
+  roundQuantity,
+} from '../../utils/units';
 import { readSellDraft, writeSellDraft } from './sellDraft';
 import './SellPage.css';
 
@@ -38,6 +47,30 @@ interface CartLine {
   isService: boolean;
   ratePercent: number;
   isExempt: boolean;
+  unit?: UnitType;
+  /** Sold by weight, volume, length or time: the quantity admits three decimals. */
+  fractional: boolean;
+}
+
+/** A weighed or measured product waiting for its quantity. */
+interface MeasureRequest {
+  product: ProductDto;
+  text: string;
+  /** The product is already in the ticket: the quantity replaces the one there. */
+  replacing: boolean;
+}
+
+/** Quick picks of the quantity dialog for each unit. */
+function getQuickQuantities(unit?: UnitType): number[] {
+  switch (unit) {
+    case UnitType.G:
+    case UnitType.Ml:
+      return [100, 250, 500, 1000];
+    case UnitType.Hour:
+      return [0.5, 1, 1.5, 2];
+    default:
+      return [0.25, 0.5, 1, 2];
+  }
 }
 
 interface CompletedSale {
@@ -118,6 +151,9 @@ export default function SellPage() {
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [sendingToChat, setSendingToChat] = useState(false);
+  const [measure, setMeasure] = useState<MeasureRequest | null>(null);
+  // What the cashier is typing in a quantity box ("1." on the way to "1.5"), until the box loses focus.
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const draftLoadedFor = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +170,8 @@ export default function SellPage() {
         isService: isServiceProduct(product),
         ratePercent: vat.ratePercent,
         isExempt: vat.isExempt,
+        unit: product.unit,
+        fractional: allowsFractions(product.unit),
       };
     },
     [defaultTaxRate],
@@ -238,7 +276,8 @@ export default function SellPage() {
     ),
     [cart, pricesIncludeTax],
   );
-  const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
+  // A weighed product counts as one article, whatever it weighs.
+  const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
   const phoneError = customerPhone.trim() && !isPlausiblePhone(customerPhone)
     ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'
@@ -268,6 +307,12 @@ export default function SellPage() {
 
   const addProduct = useCallback((product: ProductDto) => {
     setSaleError('');
+    if (allowsFractions(product.unit)) {
+      // Weighed or measured: ask how much instead of adding one.
+      const existing = cart.find((line) => line.productId === product.id);
+      setMeasure({ product, text: existing ? String(existing.quantity) : '', replacing: Boolean(existing) });
+      return;
+    }
     setCart((current) => {
       const existing = current.find((line) => line.productId === product.id);
       if (existing) {
@@ -281,14 +326,48 @@ export default function SellPage() {
       }
       return [...current, toCartLine(product, 1)];
     });
-  }, [toCartLine, toast]);
+  }, [cart, toCartLine, toast]);
+
+  const measuredQuantity = measure ? parseQuantity(measure.text, measure.product.unit) : null;
+  const measureTooLarge = measuredQuantity !== null && measuredQuantity > MAX_QUANTITY_PER_LINE;
+
+  const confirmMeasure = () => {
+    if (!measure || measuredQuantity === null || measureTooLarge) return;
+    const { product } = measure;
+    setCart((current) => {
+      if (current.some((line) => line.productId === product.id)) {
+        return current.map((line) => (line.productId === product.id ? { ...line, quantity: measuredQuantity } : line));
+      }
+      if (current.length >= MAX_LINES) {
+        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
+        return current;
+      }
+      return [...current, toCartLine(product, measuredQuantity)];
+    });
+    setMeasure(null);
+  };
 
   const changeQuantity = (productId: string, quantity: number) => {
-    setCart((current) => (quantity <= 0
+    const rounded = roundQuantity(quantity);
+    setCart((current) => (rounded <= 0
       ? current.filter((line) => line.productId !== productId)
       : current.map((line) => (line.productId === productId
-        ? { ...line, quantity: Math.min(quantity, MAX_QUANTITY_PER_LINE) }
+        ? { ...line, quantity: Math.min(rounded, MAX_QUANTITY_PER_LINE) }
         : line))));
+  };
+
+  const typeQuantity = (line: CartLine, text: string) => {
+    setQuantityDrafts((current) => ({ ...current, [line.productId]: text }));
+    const parsed = parseQuantity(text, line.unit);
+    if (parsed !== null) changeQuantity(line.productId, parsed);
+  };
+
+  const finishTypingQuantity = (productId: string) => {
+    setQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
   };
 
   const updateLine = (productId: string, changes: Partial<CartLine>) => {
@@ -482,65 +561,73 @@ export default function SellPage() {
         </div>
       ) : (
         <ul className="sell-lines list-unstyled mb-2">
-          {cart.map((line) => (
-            <li key={line.productId} className="sell-line">
-              <div className="d-flex justify-content-between gap-2">
-                <div className="sell-line-name">
-                  {line.name}
-                  <div className="small text-muted">{formatMoney(line.unitPrice)} c/u</div>
+          {cart.map((line) => {
+            const step = getQuantityStep(line.unit);
+            const unitLabel = getUnitShortLabel(line.unit);
+            const removesLine = line.quantity - step <= 0;
+            const stepLabel = line.fractional ? `${formatQuantity(step, line.unit)} de` : 'uno de';
+            return (
+              <li key={line.productId} className="sell-line">
+                <div className="d-flex justify-content-between gap-2">
+                  <div className="sell-line-name">
+                    {line.name}
+                    <div className="small text-muted">
+                      {line.fractional
+                        ? `${formatQuantity(line.quantity, line.unit)} × ${formatMoney(line.unitPrice)}/${unitLabel}`
+                        : `${formatMoney(line.unitPrice)} c/u`}
+                    </div>
+                  </div>
+                  <strong className="ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</strong>
                 </div>
-                <strong className="ta-money">{formatMoney(line.unitPrice * line.quantity)}</strong>
-              </div>
-              <div className="d-flex align-items-center justify-content-between gap-2 mt-1">
-                <div className="sell-stepper" role="group" aria-label={`Cantidad de ${line.name}`}>
+                <div className="d-flex align-items-center justify-content-between gap-2 mt-1">
+                  <div className="sell-stepper" role="group" aria-label={`Cantidad de ${line.name}`}>
+                    <button
+                      type="button"
+                      className="btn btn-light"
+                      aria-label={removesLine ? `Quitar ${line.name}` : `Quitar ${stepLabel} ${line.name}`}
+                      onClick={() => changeQuantity(line.productId, line.quantity - step)}
+                    >
+                      <i className={removesLine ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
+                    </button>
+                    <input
+                      className={`form-control text-center ta-money ${line.fractional ? 'sell-quantity-measured' : ''}`}
+                      inputMode={line.fractional ? 'decimal' : 'numeric'}
+                      aria-label={line.fractional ? `Cantidad de ${line.name} en ${unitLabel}` : `Cantidad de ${line.name}`}
+                      value={quantityDrafts[line.productId] ?? String(line.quantity)}
+                      onChange={(event) => typeQuantity(line, event.target.value)}
+                      onBlur={() => finishTypingQuantity(line.productId)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-light"
+                      aria-label={`Agregar ${stepLabel} ${line.name}`}
+                      onClick={() => changeQuantity(line.productId, line.quantity + step)}
+                    >
+                      <i className="ri-add-line" aria-hidden="true"></i>
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="btn btn-light"
-                    aria-label={line.quantity === 1 ? `Quitar ${line.name}` : `Quitar uno de ${line.name}`}
-                    onClick={() => changeQuantity(line.productId, line.quantity - 1)}
+                    className={`btn btn-sm ${line.showNotes ? 'btn-soft-warning' : 'btn-light'}`}
+                    onClick={() => updateLine(line.productId, { showNotes: !line.showNotes })}
+                    aria-expanded={line.showNotes}
                   >
-                    <i className={line.quantity === 1 ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
+                    <i className="ri-sticky-note-line me-1" aria-hidden="true"></i>Nota
                   </button>
+                </div>
+                {line.showNotes && (
                   <input
-                    className="form-control text-center ta-money"
-                    inputMode="numeric"
-                    aria-label={`Cantidad de ${line.name}`}
-                    value={line.quantity}
-                    onChange={(event) => {
-                      const parsed = Number.parseInt(event.target.value, 10);
-                      if (!Number.isNaN(parsed)) changeQuantity(line.productId, parsed);
-                    }}
+                    className="form-control form-control-sm mt-2"
+                    placeholder="Ej. sin cebolla, para llevar"
+                    aria-label={`Nota para ${line.name}`}
+                    maxLength={300}
+                    value={line.notes}
+                    onChange={(event) => updateLine(line.productId, { notes: event.target.value })}
                   />
-                  <button
-                    type="button"
-                    className="btn btn-light"
-                    aria-label={`Agregar uno de ${line.name}`}
-                    onClick={() => changeQuantity(line.productId, line.quantity + 1)}
-                  >
-                    <i className="ri-add-line" aria-hidden="true"></i>
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${line.showNotes ? 'btn-soft-warning' : 'btn-light'}`}
-                  onClick={() => updateLine(line.productId, { showNotes: !line.showNotes })}
-                  aria-expanded={line.showNotes}
-                >
-                  <i className="ri-sticky-note-line me-1" aria-hidden="true"></i>Nota
-                </button>
-              </div>
-              {line.showNotes && (
-                <input
-                  className="form-control form-control-sm mt-2"
-                  placeholder="Ej. sin cebolla, para llevar"
-                  aria-label={`Nota para ${line.name}`}
-                  maxLength={300}
-                  value={line.notes}
-                  onChange={(event) => updateLine(line.productId, { notes: event.target.value })}
-                />
-              )}
-            </li>
-          ))}
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -763,21 +850,27 @@ export default function SellPage() {
             <div className="sell-products">
               {visibleProducts.map((product) => {
                 const inCart = cart.find((line) => line.productId === product.id)?.quantity ?? 0;
+                const unitLabel = allowsFractions(product.unit) ? getUnitShortLabel(product.unit) : '';
+                const price = unitLabel ? `${formatMoney(product.priceAmount)}/${unitLabel}` : formatMoney(product.priceAmount);
+                const inCartLabel = unitLabel ? formatQuantity(inCart, product.unit) : String(inCart);
+                // The badge shows the number only: the tile already says the unit.
+                const badge = inCart.toLocaleString('es-MX', { maximumFractionDigits: 3 });
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    className={`sell-product ${inCart > 0 ? 'in-cart' : ''}`}
+                    className={`sell-product ${inCart > 0 ? 'in-cart' : ''} ${unitLabel ? 'measured' : ''}`}
                     onClick={() => addProduct(product)}
-                    aria-label={`Agregar ${product.name}, ${formatMoney(product.priceAmount)}${inCart > 0 ? `, ${inCart} en el ticket` : ''}`}
+                    aria-label={`Agregar ${product.name}, ${price}${inCart > 0 ? `, ${inCartLabel} en el ticket` : ''}`}
                   >
                     {product.images?.thumbnail && (
                       <img src={product.images.thumbnail} alt="" className="sell-product-image" loading="lazy" />
                     )}
                     <span className="sell-product-name">{product.name}</span>
-                    <span className="sell-product-price ta-money">{formatMoney(product.priceAmount)}</span>
+                    <span className="sell-product-price ta-money">{price}</span>
                     {isServiceProduct(product) && <span className="sell-product-tag">Servicio</span>}
-                    {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{inCart}</span>}
+                    {unitLabel && !isServiceProduct(product) && <span className="sell-product-tag">Por {unitLabel}</span>}
+                    {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{badge}</span>}
                   </button>
                 );
               })}
@@ -806,6 +899,67 @@ export default function SellPage() {
         </Offcanvas.Header>
         <Offcanvas.Body>{cartPanel}</Offcanvas.Body>
       </Offcanvas>
+
+      <Modal show={!!measure} onHide={() => setMeasure(null)} centered>
+        {measure && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              confirmMeasure();
+            }}
+          >
+            <Modal.Header closeButton>
+              <Modal.Title as="h2" className="h5">{measure.product.name}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <label className="form-label" htmlFor="sell-measure">
+                ¿Cuánto? <span className="text-muted">({formatMoney(measure.product.priceAmount)}/{getUnitShortLabel(measure.product.unit)})</span>
+              </label>
+              <div className="input-group input-group-lg">
+                <input
+                  id="sell-measure"
+                  className={`form-control ta-money ${measure.text && (measuredQuantity === null || measureTooLarge) ? 'is-invalid' : ''}`}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  autoFocus
+                  placeholder="0.000"
+                  value={measure.text}
+                  onChange={(event) => setMeasure({ ...measure, text: event.target.value })}
+                  aria-describedby="sell-measure-help"
+                />
+                <span className="input-group-text">{getUnitShortLabel(measure.product.unit)}</span>
+              </div>
+              <div id="sell-measure-help" className={measure.text && (measuredQuantity === null || measureTooLarge) ? 'invalid-feedback d-block' : 'form-text'}>
+                {measureTooLarge
+                  ? `Máximo ${MAX_QUANTITY_PER_LINE.toLocaleString('es-MX')} por producto.`
+                  : measure.text && measuredQuantity === null
+                    ? 'Escribe una cantidad mayor a cero, con hasta 3 decimales.'
+                    : measuredQuantity !== null
+                      ? `Importe: ${formatMoney(lineAmount(measure.product.priceAmount, measuredQuantity))}`
+                      : 'Hasta 3 decimales.'}
+              </div>
+              <div className="sell-measure-picks mt-3" role="group" aria-label="Cantidades rápidas">
+                {getQuickQuantities(measure.product.unit).map((quantity) => (
+                  <button
+                    key={quantity}
+                    type="button"
+                    className="btn btn-light btn-touch"
+                    onClick={() => setMeasure({ ...measure, text: String(quantity) })}
+                  >
+                    {formatQuantity(quantity, measure.product.unit)}
+                  </button>
+                ))}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <button type="button" className="btn btn-light" onClick={() => setMeasure(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={measuredQuantity === null || measureTooLarge}>
+                {measure.replacing ? 'Cambiar cantidad' : 'Agregar'}
+              </button>
+            </Modal.Footer>
+          </form>
+        )}
+      </Modal>
 
       <Modal show={chargeOpen} onHide={() => !submitting && setChargeOpen(false)} centered size="lg" fullscreen="sm-down">
         <Modal.Header closeButton={!submitting}>

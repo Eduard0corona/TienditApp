@@ -18,7 +18,7 @@ public static class OrderLimits
     /// Adds the line quantity to the running total of the product and returns an error when the
     /// product's MaxQuantityPerOrder is exceeded.
     /// </summary>
-    public static string? TrackProductQuantity(Dictionary<Guid, int> quantitiesByProduct, Product product, int quantity)
+    public static string? TrackProductQuantity(Dictionary<Guid, decimal> quantitiesByProduct, Product product, decimal quantity)
     {
         quantitiesByProduct.TryGetValue(product.Id, out var current);
         var total = current + quantity;
@@ -40,7 +40,7 @@ public static class OrderLimits
     {
         var piecesToCreate = manualPieces.Count > 0
             ? manualPieces.Count
-            : trackableServiceLines.Sum(line => line.Item.Quantity);
+            : (int)trackableServiceLines.Sum(line => decimal.Ceiling(line.Item.Quantity));
 
         if (piecesToCreate > MaxServicePiecesPerOrder)
             return $"Una orden puede generar como maximo {MaxServicePiecesPerOrder} piezas de servicio.";

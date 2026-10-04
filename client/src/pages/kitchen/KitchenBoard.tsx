@@ -6,6 +6,7 @@ import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { OrderStatus } from '../../types';
 import type { KitchenOrderDto } from '../../types';
 import { getOrderStatusLabel } from '../../utils/labels';
+import { formatTicketQuantity } from '../../utils/ticket';
 
 // Realtime events are the main signal; polling covers a dropped or blocked connection, and every
 // (re)connection reloads because events sent while it was down are lost.
@@ -209,7 +210,7 @@ export default function KitchenBoard() {
                     <ul className="list-unstyled border rounded p-2 mb-3">
                       {order.items.map((item) => (
                         <li key={item.id} className="py-1">
-                          <span className="fw-bold fs-5 me-1">{item.quantity}×</span>
+                          <span className="fw-bold fs-5 me-1">{formatTicketQuantity(item)}</span>
                           <span className="fs-5">{item.productName}</span>
                           {item.notes && (
                             <div className="alert alert-warning py-1 px-2 mt-1 mb-0 small">{item.notes}</div>

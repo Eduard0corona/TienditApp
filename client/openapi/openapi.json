@@ -4923,6 +4923,81 @@
         }
       }
     },
+    "/api/v1/orders/{id}/cfdi-draft": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "rfc",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fiscalRegime",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cfdiUse",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiDraftDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiDraftDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdiDraftDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders/{id}/status": {
       "put": {
         "tags": [
@@ -8123,6 +8198,233 @@
         },
         "additionalProperties": false
       },
+      "CfdiConceptDto": {
+        "required": [
+          "amount",
+          "description",
+          "orderItemId",
+          "productCode",
+          "quantity",
+          "taxObject",
+          "transfer",
+          "unitCode",
+          "unitValue"
+        ],
+        "type": "object",
+        "properties": {
+          "orderItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "unitCode": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "unitValue": {
+            "type": "number",
+            "format": "double"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "taxObject": {
+            "type": "string"
+          },
+          "transfer": {
+            "$ref": "#/components/schemas/CfdiTransferDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CfdiDraftDto": {
+        "required": [
+          "blockers",
+          "concepts",
+          "currency",
+          "difference",
+          "exportation",
+          "isGeneralPublic",
+          "isReadyToStamp",
+          "issuer",
+          "orderId",
+          "orderNumber",
+          "orderTotal",
+          "paymentForm",
+          "paymentMethod",
+          "receiver",
+          "subTotal",
+          "total",
+          "totalTransferred",
+          "transfers",
+          "version",
+          "voucherType",
+          "warnings"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "voucherType": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "exportation": {
+            "type": "string"
+          },
+          "issuedAtPostalCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "paymentForm": {
+            "type": "string"
+          },
+          "paymentMethod": {
+            "type": "string"
+          },
+          "issuer": {
+            "$ref": "#/components/schemas/CfdiPartyDto"
+          },
+          "receiver": {
+            "$ref": "#/components/schemas/CfdiPartyDto"
+          },
+          "isGeneralPublic": {
+            "type": "boolean"
+          },
+          "concepts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiConceptDto"
+            }
+          },
+          "transfers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CfdiTransferDto"
+            }
+          },
+          "subTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalTransferred": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "difference": {
+            "type": "number",
+            "format": "double"
+          },
+          "isReadyToStamp": {
+            "type": "boolean"
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CfdiPartyDto": {
+        "type": "object",
+        "properties": {
+          "rfc": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "fiscalRegime": {
+            "type": "string",
+            "nullable": true
+          },
+          "postalCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "cfdiUse": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CfdiTaxObject": {
+        "enum": [
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "CfdiTransferDto": {
+        "required": [
+          "base",
+          "factorType",
+          "tax"
+        ],
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "number",
+            "format": "double"
+          },
+          "tax": {
+            "type": "string"
+          },
+          "factorType": {
+            "type": "string"
+          },
+          "rateOrQuota": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ChangePasswordCommand": {
         "required": [
           "currentPassword",
@@ -8834,8 +9136,8 @@
             "format": "uuid"
           },
           "quantity": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           },
           "notes": {
             "type": "string",
@@ -8889,6 +9191,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
+          "taxObject",
           "unit"
         ],
         "type": "object",
@@ -8947,6 +9250,17 @@
           },
           "isTaxExempt": {
             "type": "boolean"
+          },
+          "satProductCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "satUnitCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxObject": {
+            "$ref": "#/components/schemas/CfdiTaxObject"
           },
           "calories": {
             "type": "integer",
@@ -9433,8 +9747,8 @@
             "type": "string"
           },
           "quantity": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -11367,8 +11681,12 @@
           "productName",
           "quantity",
           "returnedQuantity",
+          "satProductCode",
+          "satUnitCode",
+          "taxObject",
           "taxRate",
           "totalPrice",
+          "unit",
           "unitPrice"
         ],
         "type": "object",
@@ -11385,12 +11703,12 @@
             "type": "string"
           },
           "quantity": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           },
           "returnedQuantity": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           },
           "unitPrice": {
             "type": "number",
@@ -11410,6 +11728,18 @@
           },
           "isTaxExempt": {
             "type": "boolean"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "satProductCode": {
+            "type": "string"
+          },
+          "satUnitCode": {
+            "type": "string"
+          },
+          "taxObject": {
+            "$ref": "#/components/schemas/CfdiTaxObject"
           }
         },
         "additionalProperties": false
@@ -11531,8 +11861,8 @@
             "format": "uuid"
           },
           "quantity": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -11853,6 +12183,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
+          "taxObject",
           "unit"
         ],
         "type": "object",
@@ -11913,6 +12244,17 @@
           },
           "hasDiscount": {
             "type": "boolean"
+          },
+          "satProductCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "satUnitCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxObject": {
+            "$ref": "#/components/schemas/CfdiTaxObject"
           },
           "imageUrl": {
             "type": "string",
@@ -12387,8 +12729,8 @@
             "format": "uuid"
           },
           "quantity": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -13804,8 +14146,8 @@
             "type": "string"
           },
           "quantitySold": {
-            "type": "integer",
-            "format": "int32"
+            "type": "number",
+            "format": "double"
           },
           "totalAmount": {
             "type": "number",
@@ -14288,6 +14630,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
+          "taxObject",
           "unit"
         ],
         "type": "object",
@@ -14350,6 +14693,17 @@
           },
           "isTaxExempt": {
             "type": "boolean"
+          },
+          "satProductCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "satUnitCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "taxObject": {
+            "$ref": "#/components/schemas/CfdiTaxObject"
           },
           "calories": {
             "type": "integer",

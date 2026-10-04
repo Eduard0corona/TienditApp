@@ -6,10 +6,14 @@ import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { CreateProductRequest, CategoryDto, ProductDto, UnitType } from '../../types';
+import { CfdiTaxObject } from '../../types';
+import SatFiscalFields from '../../components/catalog/SatFiscalFields';
+import { satProductCodeRules, satUnitCodeRules, toSatCodePayload } from '../../utils/satCodes';
 import { getApiErrorMessage } from '../../api/errors';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
+import { getDefaultSatUnitCode } from '../../utils/units';
 
 type ProductFormValues = CreateProductRequest & { vatOption: VatOption };
 
@@ -51,6 +55,7 @@ export default function ProductForm() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     values: product
@@ -67,6 +72,9 @@ export default function ProductForm() {
           tags: product.tags || '',
           compareAtPrice: product.compareAtPrice ?? undefined,
           vatOption: toVatOption(product),
+          satProductCode: product.satProductCode ?? '',
+          satUnitCode: product.satUnitCode ?? '',
+          taxObject: product.taxObject ?? CfdiTaxObject.Subject,
           calories: product.calories ?? undefined,
           allergens: product.allergens || '',
           stockQuantity: product.stockQuantity ?? undefined,
@@ -89,11 +97,17 @@ export default function ProductForm() {
           isFeatured: false,
           tags: '',
           vatOption: '',
+          satProductCode: '',
+          satUnitCode: '',
+          taxObject: CfdiTaxObject.Subject,
           allergens: '',
           availableFromTime: undefined,
           availableToTime: undefined,
         },
   });
+
+  const watchedUnit = watch('unit');
+  const selectedUnit = watchedUnit != null && String(watchedUnit) !== '' ? (Number(watchedUnit) as UnitType) : undefined;
 
   const loadData = useCallback(async () => {
     try {
@@ -132,6 +146,10 @@ export default function ProductForm() {
     const payload: CreateProductRequest = {
       ...data,
       ...fromVatOption(vatOption),
+      // Sent every time: an update without them would go back to the generic codes.
+      satProductCode: toSatCodePayload(data.satProductCode),
+      satUnitCode: toSatCodePayload(data.satUnitCode),
+      taxObject: Number(data.taxObject ?? CfdiTaxObject.Subject) as CfdiTaxObject,
       unit: data.unit != null && data.unit !== ('' as unknown) ? (Number(data.unit) as UnitType) : undefined,
       compareAtPrice: data.compareAtPrice ? Number(data.compareAtPrice) : undefined,
       calories: data.calories ? Number(data.calories) : undefined,
@@ -337,6 +355,14 @@ export default function ProductForm() {
                     </div>
                   </div>
                 </div>
+                <SatFiscalFields
+                  idPrefix="product"
+                  productCode={register('satProductCode', satProductCodeRules)}
+                  unitCode={register('satUnitCode', satUnitCodeRules)}
+                  taxObject={register('taxObject')}
+                  defaultUnitCode={getDefaultSatUnitCode(selectedUnit)}
+                  errors={{ productCode: errors.satProductCode?.message, unitCode: errors.satUnitCode?.message }}
+                />
               </div>
             </div>
 

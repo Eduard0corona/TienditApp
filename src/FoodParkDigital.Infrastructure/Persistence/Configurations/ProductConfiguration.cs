@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Fiscal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -26,6 +27,15 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.PriceCurrency).HasMaxLength(3).IsRequired();
         builder.Property(p => p.CompareAtPrice).HasColumnType("decimal(18,2)");
         builder.Property(p => p.TaxRate).HasColumnType("decimal(5,2)");
+
+        // Invoicing (CFDI 4.0); null codes mean the generic product code and the unit's code.
+        builder.Property(p => p.SatProductCode).HasMaxLength(8);
+        builder.Property(p => p.SatUnitCode).HasMaxLength(3);
+        builder.Property(p => p.TaxObject)
+            .HasConversion<int>()
+            .HasDefaultValue(CfdiTaxObject.Subject)
+            .ValueGeneratedNever()
+            .IsRequired();
 
         // Media
         builder.Property(p => p.ImageUrl).HasMaxLength(500);

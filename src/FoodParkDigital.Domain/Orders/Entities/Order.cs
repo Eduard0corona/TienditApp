@@ -102,18 +102,20 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
 
     /// <param name="vatRate">IVA of the line; the general rate (16 %) when omitted.</param>
+    /// <param name="fiscal">Unit and invoicing codes copied from the product; a generic piece when omitted.</param>
     public void AddItem(
         Guid productId,
         string productName,
-        int quantity,
+        decimal quantity,
         decimal unitPrice,
         string? notes = null,
-        VatRate? vatRate = null)
+        VatRate? vatRate = null,
+        OrderLineFiscalData? fiscal = null)
     {
         if (Status != OrderStatus.Pending)
             throw new DomainException("Cannot add items to an order that is not pending.");
 
-        var item = new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General);
+        var item = new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General, fiscal);
         _items.Add(item);
         RecalculateTotals();
     }
@@ -331,7 +333,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         Guid? inventoryLocationId,
         string? reference,
         bool restockItems,
-        IReadOnlyCollection<(Guid OrderItemId, int Quantity)> returnedItems)
+        IReadOnlyCollection<(Guid OrderItemId, decimal Quantity)> returnedItems)
     {
         if (Status == OrderStatus.Cancelled)
             throw new DomainException("La orden está cancelada: no tiene pagos que reembolsar.");

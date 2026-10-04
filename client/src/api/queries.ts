@@ -10,7 +10,30 @@ export const queryKeys = {
   messagingSettings: ['messaging', 'settings'] as const,
   reminderHistory: ['messaging', 'reminders', 'history'] as const,
   messagingTemplates: (purpose?: number) => ['messaging', 'templates', purpose ?? 'all'] as const,
+  cfdiDraft: (orderId: string, receiver?: CfdiReceiver) => ['orders', orderId, 'cfdi-draft', receiver ?? null] as const,
 };
+
+/** Fiscal data of the customer an invoice is for (CFDI 4.0 receptor). */
+export interface CfdiReceiver {
+  rfc: string;
+  name: string;
+  postalCode: string;
+  fiscalRegime: string;
+  cfdiUse: string;
+}
+
+/** Preview of the invoice of an order; without a receiver it goes to the general public. */
+export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver) {
+  return useQuery({
+    queryKey: queryKeys.cfdiDraft(orderId, receiver),
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/orders/{id}/cfdi-draft', {
+      path: { id: orderId },
+      query: receiver,
+      signal,
+    }),
+    retry: false,
+  });
+}
 
 /** What the server says the user can do now (fresher than the token's claims). */
 export function useMyAccess(enabled = true) {

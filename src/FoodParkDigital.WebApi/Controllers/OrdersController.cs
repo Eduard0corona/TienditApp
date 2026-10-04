@@ -51,6 +51,42 @@ public class OrdersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Previews the CFDI 4.0 invoice of the order: concepts, IVA per rate and what is missing to stamp it. Without
+    /// receiver data the sale goes to the general public. Nothing is stamped.
+    /// </summary>
+    [HttpGet("{id:guid}/cfdi-draft")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<CfdiDraftDto>> GetCfdiDraft(
+        Guid id,
+        [FromQuery] string? rfc,
+        [FromQuery] string? name,
+        [FromQuery] string? postalCode,
+        [FromQuery] string? fiscalRegime,
+        [FromQuery] string? cfdiUse)
+    {
+        var hasReceiver = !string.IsNullOrWhiteSpace(rfc) || !string.IsNullOrWhiteSpace(name)
+            || !string.IsNullOrWhiteSpace(postalCode) || !string.IsNullOrWhiteSpace(fiscalRegime)
+            || !string.IsNullOrWhiteSpace(cfdiUse);
+        var result = await _mediator.Send(new GetOrderCfdiDraftQuery
+        {
+            OrderId = id,
+            Receiver = hasReceiver
+                ? new CfdiReceiverInput
+                {
+                    Rfc = rfc,
+                    Name = name,
+                    PostalCode = postalCode,
+                    FiscalRegime = fiscalRegime,
+                    CfdiUse = cfdiUse
+                }
+                : null
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpPost]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> Create([FromBody] CreateOrderCommand command)

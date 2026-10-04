@@ -2,6 +2,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Fiscal;
 
 namespace FoodParkDigital.Domain.Catalog.Entities;
 
@@ -85,6 +86,12 @@ public class Product : AuditableEntity, ITenantScoped
     public decimal? TaxRate { get; private set; }
     /// <summary>Exempt from IVA ("exento"), which an invoice tells apart from a 0 % rate.</summary>
     public bool IsTaxExempt { get; private set; }
+
+    // Invoicing (CFDI 4.0). Without codes of its own the product is invoiced with the generic product code and
+    // the unit code of its unit.
+    public string? SatProductCode { get; private set; }
+    public string? SatUnitCode { get; private set; }
+    public CfdiTaxObject TaxObject { get; private set; } = CfdiTaxObject.Subject;
 
     // Media
     public string? ImageUrl { get; private set; }
@@ -170,6 +177,25 @@ public class Product : AuditableEntity, ITenantScoped
         TaxRate = taxRate.HasValue ? VatRate.Of(taxRate.Value).Percent : null;
         IsTaxExempt = isTaxExempt;
     }
+
+    public void SetFiscalData(string? satProductCode, string? satUnitCode, CfdiTaxObject taxObject)
+    {
+        if (!Enum.IsDefined(taxObject))
+            throw new DomainException("El objeto de impuesto no es válido.");
+        if (taxObject == CfdiTaxObject.NotSubject && (TaxRate is > 0 || (TaxRate is null && !IsTaxExempt)))
+        {
+            // Not subject to tax means no IVA at all: the product must be exempt or at 0 %.
+            throw new DomainException("Un producto que no es objeto de impuesto debe ser exento o con tasa 0 %.");
+        }
+
+        SatProductCode = SatCatalog.NormalizeProductCode(satProductCode);
+        SatUnitCode = SatCatalog.NormalizeUnitCode(satUnitCode);
+        TaxObject = taxObject;
+    }
+
+    public string GetSatProductCode() => SatProductCode ?? SatCatalog.GenericProductCode;
+
+    public string GetSatUnitCode() => SatUnitCode ?? UnitTypeRules.DefaultSatUnitCode(Unit);
 
     /// <summary>IVA of the product when sold by a business whose default rate is <paramref name="defaultTaxRate"/>.</summary>
     public VatRate GetVatRate(decimal defaultTaxRate) => VatRate.ForProduct(TaxRate, IsTaxExempt, defaultTaxRate);

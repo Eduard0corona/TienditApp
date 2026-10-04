@@ -62,7 +62,7 @@ public class OrderRefund : AuditableEntity, ITenantScoped
 
     public IReadOnlyCollection<OrderRefundLine> Lines => _lines.AsReadOnly();
 
-    internal void AddLine(OrderItem item, int quantity)
+    internal void AddLine(OrderItem item, decimal quantity)
         => _lines.Add(new OrderRefundLine(TenantId, Id, item.Id, quantity));
 }
 
@@ -71,7 +71,7 @@ public class OrderRefundLine : BaseEntity, ITenantScoped
 {
     private OrderRefundLine() { }
 
-    internal OrderRefundLine(Guid tenantId, Guid refundId, Guid orderItemId, int quantity)
+    internal OrderRefundLine(Guid tenantId, Guid refundId, Guid orderItemId, decimal quantity)
     {
         TenantId = tenantId;
         RefundId = refundId;
@@ -82,5 +82,5 @@ public class OrderRefundLine : BaseEntity, ITenantScoped
     public Guid TenantId { get; private set; }
     public Guid RefundId { get; private set; }
     public Guid OrderItemId { get; private set; }
-    public int Quantity { get; private set; }
+    public decimal Quantity { get; private set; }
 }

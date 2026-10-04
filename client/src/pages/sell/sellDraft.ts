@@ -24,7 +24,7 @@ export function readSellDraft(tenantId: string): SellDraft | null {
     const parsed = JSON.parse(raw) as Partial<SellDraft>;
     return {
       lines: Array.isArray(parsed.lines)
-        ? parsed.lines.filter((line) => typeof line?.productId === 'string' && Number.isInteger(line.quantity) && line.quantity > 0)
+        ? parsed.lines.filter((line) => typeof line?.productId === 'string' && Number.isFinite(line.quantity) && line.quantity > 0)
         : [],
       customerName: typeof parsed.customerName === 'string' ? parsed.customerName : '',
       customerPhone: typeof parsed.customerPhone === 'string' ? parsed.customerPhone : '',

@@ -16,6 +16,10 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useTenant } from '../../hooks/useTenant';
 import { formatMoney } from '../../utils/money';
 import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
+import { getDefaultSatUnitCode } from '../../utils/units';
+import SatFiscalFields from '../../components/catalog/SatFiscalFields';
+import { satProductCodeRules, satUnitCodeRules, toSatCodePayload } from '../../utils/satCodes';
+import { CfdiTaxObject } from '../../types';
 import { useConfirm } from '../../hooks/useConfirm';
 
 interface ServiceFormData {
@@ -32,6 +36,9 @@ interface ServiceFormData {
   isTrackable: boolean;
   notifyCustomer: boolean;
   vatOption: VatOption;
+  satProductCode: string;
+  satUnitCode: string;
+  taxObject: CfdiTaxObject;
 }
 
 const COLUMNS = [
@@ -174,6 +181,9 @@ export default function ServicesList() {
       isTrackable: false,
       notifyCustomer: false,
       vatOption: '',
+      satProductCode: '',
+      satUnitCode: '',
+      taxObject: CfdiTaxObject.Subject,
     });
     setShowModal(true);
   };
@@ -194,6 +204,9 @@ export default function ServicesList() {
       isTrackable: service.isTrackable ?? false,
       notifyCustomer: service.notifyCustomer ?? false,
       vatOption: toVatOption(service),
+      satProductCode: service.satProductCode ?? '',
+      satUnitCode: service.satUnitCode ?? '',
+      taxObject: service.taxObject ?? CfdiTaxObject.Subject,
     });
     setShowModal(true);
   };
@@ -222,8 +235,11 @@ export default function ServicesList() {
       availableToTime: form.availableToTime ? `${form.availableToTime}:00` : undefined,
       isTrackable: form.isTrackable,
       notifyCustomer: form.notifyCustomer,
-      // Sent every time: an update without it would reset the service to the business rate.
+      // Sent every time: an update without them would reset the rate and the CFDI codes.
       ...fromVatOption(form.vatOption),
+      satProductCode: toSatCodePayload(form.satProductCode),
+      satUnitCode: toSatCodePayload(form.satUnitCode),
+      taxObject: Number(form.taxObject) as CfdiTaxObject,
     };
 
     try {
@@ -480,6 +496,16 @@ export default function ServicesList() {
                   ))}
                 </select>
                 <div className="form-text">Algunos servicios están exentos (por ejemplo, consultas médicas).</div>
+              </div>
+              <div className="col-12 mb-3">
+                <SatFiscalFields
+                  idPrefix="service"
+                  productCode={register('satProductCode', satProductCodeRules)}
+                  unitCode={register('satUnitCode', satUnitCodeRules)}
+                  taxObject={register('taxObject')}
+                  defaultUnitCode={getDefaultSatUnitCode(Number(watch('unit')) as UnitType)}
+                  errors={{ productCode: errors.satProductCode?.message, unitCode: errors.satUnitCode?.message }}
+                />
               </div>
             </div>
 

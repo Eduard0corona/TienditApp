@@ -3976,6 +3976,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/cfdi-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    rfc?: string;
+                    name?: string;
+                    postalCode?: string;
+                    fiscalRegime?: string;
+                    cfdiUse?: string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CfdiDraftDto"];
+                        "application/json": components["schemas"]["CfdiDraftDto"];
+                        "text/json": components["schemas"]["CfdiDraftDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/status": {
         parameters: {
             query?: never;
@@ -6045,6 +6090,73 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
         };
+        CfdiConceptDto: {
+            /** Format: uuid */
+            orderItemId: string;
+            productCode: string;
+            unitCode: string;
+            description: string;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            unitValue: number;
+            /** Format: double */
+            amount: number;
+            taxObject: string;
+            transfer: components["schemas"]["CfdiTransferDto"];
+        };
+        CfdiDraftDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            version: string;
+            voucherType: string;
+            currency: string;
+            exportation: string;
+            issuedAtPostalCode?: string | null;
+            paymentForm: string;
+            paymentMethod: string;
+            issuer: components["schemas"]["CfdiPartyDto"];
+            receiver: components["schemas"]["CfdiPartyDto"];
+            isGeneralPublic: boolean;
+            concepts: components["schemas"]["CfdiConceptDto"][];
+            transfers: components["schemas"]["CfdiTransferDto"][];
+            /** Format: double */
+            subTotal: number;
+            /** Format: double */
+            totalTransferred: number;
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            difference: number;
+            isReadyToStamp: boolean;
+            blockers: string[];
+            warnings: string[];
+        };
+        CfdiPartyDto: {
+            rfc?: string | null;
+            name?: string | null;
+            fiscalRegime?: string | null;
+            postalCode?: string | null;
+            cfdiUse?: string | null;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CfdiTaxObject: 1 | 2;
+        CfdiTransferDto: {
+            /** Format: double */
+            base: number;
+            tax: string;
+            factorType: string;
+            /** Format: double */
+            rateOrQuota?: number | null;
+            /** Format: double */
+            amount?: number | null;
+        };
         ChangePasswordCommand: {
             currentPassword: string;
             newPassword: string;
@@ -6238,7 +6350,7 @@ export interface components {
         CreateOrderItemDto: {
             /** Format: uuid */
             productId: string;
-            /** Format: int32 */
+            /** Format: double */
             quantity: number;
             notes?: string | null;
         };
@@ -6273,6 +6385,9 @@ export interface components {
             /** Format: double */
             taxRate?: number | null;
             isTaxExempt: boolean;
+            satProductCode?: string | null;
+            satUnitCode?: string | null;
+            taxObject: components["schemas"]["CfdiTaxObject"];
             /** Format: int32 */
             calories?: number | null;
             allergens?: string | null;
@@ -6417,7 +6532,7 @@ export interface components {
             /** Format: uuid */
             productId: string;
             productName: string;
-            /** Format: int32 */
+            /** Format: double */
             quantity: number;
         };
         CustomerDto: {
@@ -7008,9 +7123,9 @@ export interface components {
             /** Format: uuid */
             productId: string;
             productName: string;
-            /** Format: int32 */
+            /** Format: double */
             quantity: number;
-            /** Format: int32 */
+            /** Format: double */
             returnedQuantity: number;
             /** Format: double */
             unitPrice: number;
@@ -7020,6 +7135,10 @@ export interface components {
             /** Format: double */
             taxRate: number;
             isTaxExempt: boolean;
+            unit: components["schemas"]["UnitType"];
+            satProductCode: string;
+            satUnitCode: string;
+            taxObject: components["schemas"]["CfdiTaxObject"];
         };
         OrderPaymentDto: {
             /** Format: uuid */
@@ -7057,7 +7176,7 @@ export interface components {
         OrderRefundLineDto: {
             /** Format: uuid */
             orderItemId: string;
-            /** Format: int32 */
+            /** Format: double */
             quantity: number;
         };
         /**
@@ -7182,6 +7301,9 @@ export interface components {
             taxRate?: number | null;
             isTaxExempt: boolean;
             hasDiscount: boolean;
+            satProductCode?: string | null;
+            satUnitCode?: string | null;
+            taxObject: components["schemas"]["CfdiTaxObject"];
             imageUrl?: string | null;
             images: components["schemas"]["ProductImageUrlsDto"];
             isAvailable: boolean;
@@ -7330,7 +7452,7 @@ export interface components {
         RefundItemDto: {
             /** Format: uuid */
             orderItemId: string;
-            /** Format: int32 */
+            /** Format: double */
             quantity: number;
         };
         RefundOrderRequest: {
@@ -7733,7 +7855,7 @@ export interface components {
             productId: string;
             productName: string;
             itemType: string;
-            /** Format: int32 */
+            /** Format: double */
             quantitySold: number;
             /** Format: double */
             totalAmount: number;
@@ -7883,6 +8005,9 @@ export interface components {
             /** Format: double */
             taxRate?: number | null;
             isTaxExempt: boolean;
+            satProductCode?: string | null;
+            satUnitCode?: string | null;
+            taxObject: components["schemas"]["CfdiTaxObject"];
             /** Format: int32 */
             calories?: number | null;
             allergens?: string | null;

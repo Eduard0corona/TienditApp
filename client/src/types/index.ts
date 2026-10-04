@@ -366,6 +366,13 @@ export const UnitType = {
 } as const;
 export type UnitType = (typeof UnitType)[keyof typeof UnitType];
 
+/** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
+export const CfdiTaxObject = {
+  NotSubject: 1,
+  Subject: 2,
+} as const;
+export type CfdiTaxObject = (typeof CfdiTaxObject)[keyof typeof CfdiTaxObject];
+
 export interface ProductImageUrlsDto {
   original: string;
   large: string;
@@ -391,6 +398,11 @@ export interface ProductDto {
   taxRate?: number | null;
   isTaxExempt: boolean;
   hasDiscount: boolean;
+  /** CFDI ClaveProdServ; empty uses the generic 01010101. */
+  satProductCode?: string | null;
+  /** CFDI ClaveUnidad; empty uses the code of the unit. */
+  satUnitCode?: string | null;
+  taxObject: CfdiTaxObject;
   imageUrl?: string;
   images?: ProductImageUrlsDto;
   isAvailable: boolean;
@@ -463,6 +475,9 @@ export interface CreateProductRequest {
   compareAtPrice?: number;
   taxRate?: number | null;
   isTaxExempt?: boolean;
+  satProductCode?: string;
+  satUnitCode?: string;
+  taxObject?: CfdiTaxObject;
   calories?: number;
   allergens?: string;
   stockQuantity?: number;
@@ -1298,9 +1313,15 @@ export interface OrderItemDto {
   id: string;
   productId: string;
   productName: string;
+  /** Up to three decimals for weight, volume, length and time; whole for pieces. */
   quantity: number;
   /** Units given back with refunds; the sold quantity never changes. */
   returnedQuantity?: number;
+  /** Unit the line was sold in, with its CFDI codes at the time of the sale. */
+  unit?: UnitType;
+  satProductCode?: string;
+  satUnitCode?: string;
+  taxObject?: CfdiTaxObject;
   unitPrice: number;
   totalPrice: number;
   notes?: string;

@@ -84,7 +84,7 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
           <div className="d-flex flex-wrap gap-1">
             {(card.favoriteProducts ?? []).map((product) => (
               <span key={product.productId} className="badge bg-primary-subtle text-primary-emphasis">
-                {product.productName} × {product.quantity}
+                {product.productName} × {product.quantity.toLocaleString('es-MX', { maximumFractionDigits: 3 })}
               </span>
             ))}
           </div>

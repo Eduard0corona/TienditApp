@@ -374,6 +374,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("nvarchar(3)");
 
+                    b.Property<string>("SatProductCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)");
+
+                    b.Property<string>("SatUnitCode")
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
                     b.Property<string>("Sku")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -387,6 +395,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("Tags")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("TaxObject")
+                        .HasColumnType("int")
+                        .HasDefaultValue(2);
 
                     b.Property<decimal?>("TaxRate")
                         .HasColumnType("decimal(5,2)");
@@ -1877,17 +1889,39 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,3)");
 
-                    b.Property<int>("ReturnedQuantity")
-                        .HasColumnType("int");
+                    b.Property<decimal>("ReturnedQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("SatProductCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)")
+                        .HasDefaultValue("01010101");
+
+                    b.Property<string>("SatUnitCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)")
+                        .HasDefaultValue("H87");
+
+                    b.Property<int>("TaxObject")
+                        .HasColumnType("int")
+                        .HasDefaultValue(2);
 
                     b.Property<decimal>("TaxRate")
                         .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal>("TotalPrice")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Unit");
 
                     b.Property<decimal>("UnitPrice")
                         .HasColumnType("decimal(18,2)");
@@ -2034,8 +2068,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OrderItemId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,3)");
 
                     b.Property<Guid>("RefundId")
                         .HasColumnType("uniqueidentifier");

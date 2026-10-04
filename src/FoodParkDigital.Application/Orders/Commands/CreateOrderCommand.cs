@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
@@ -55,7 +56,8 @@ public record CreateOrderPaymentDto
 public record CreateOrderItemDto
 {
     public Guid ProductId { get; init; }
-    public int Quantity { get; init; }
+    /// <summary>Whole for pieces; up to three decimals for weight, volume, length and time.</summary>
+    public decimal Quantity { get; init; }
     public string? Notes { get; init; }
 }
 
@@ -105,7 +107,8 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleForEach(x => x.Items).ChildRules(item =>
         {
             item.RuleFor(i => i.ProductId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine);
+            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
+                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
             item.RuleFor(i => i.Notes).MaximumLength(300);
         });
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
@@ -266,7 +269,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             pricesIncludeTax: salesSettings.PricesIncludeTax,
             channel: request.Channel);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var quantitiesByProduct = new Dictionary<Guid, int>();
+        var quantitiesByProduct = new Dictionary<Guid, decimal>();
 
         foreach (var itemDto in request.Items)
         {
@@ -288,15 +291,20 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             if (quantityError is not null)
                 return Result.Failure<OrderDto>(quantityError);
 
+            var isTrackableService = OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable;
+            if (isTrackableService && decimal.Truncate(itemDto.Quantity) != itemDto.Quantity)
+                return Result.Failure<OrderDto>($"'{product.Name}' crea una pieza por unidad: la cantidad debe ser entera.");
+
             order.AddItem(
                 product.Id,
                 product.Name,
                 itemDto.Quantity,
                 product.PriceAmount,
                 string.IsNullOrWhiteSpace(itemDto.Notes) ? null : itemDto.Notes.Trim(),
-                product.GetVatRate(salesSettings.DefaultTaxRate));
+                product.GetVatRate(salesSettings.DefaultTaxRate),
+                OrderLineFiscalData.From(product));
 
-            if (OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
+            if (isTrackableService)
                 checklistCandidates.Add((product, itemDto));
         }
 
@@ -350,7 +358,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         {
             foreach (var (product, item) in checklistCandidates)
             {
-                for (var index = 0; index < item.Quantity; index++)
+                var pieces = (int)item.Quantity;
+                for (var index = 0; index < pieces; index++)
                 {
                     var itemName = item.Quantity > 1
                         ? $"{product.Name} #{index + 1}"
