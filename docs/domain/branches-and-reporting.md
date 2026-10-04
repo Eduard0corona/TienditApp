@@ -26,7 +26,7 @@
 - Principal por negocio: su ubicación principal activa, si no la primera activa, si no la primera. Los negocios sin ubicaciones reciben una "Sucursal principal".
 - Cajas: la sucursal de su ubicación; si no tenían, la principal. Pedidos: la ubicación de su primer pago; si no, la principal.
 - Después de migrar, las ubicaciones que solo eran almacenes aparecen como sucursales: desactívalas en Configuración › Sucursales y, si surten a todas, márcalas como almacén general en Inventario.
-- El rollback se niega (`THROW 50003`) si hay sucursales que no venían de una ubicación (se perderían).
+- El rollback se niega (`THROW 50003`) si hay sucursales que no venían de una ubicación (se perderían), salvo la "Sucursal principal" predeterminada sin editar, que no guarda nada más.
 
 ## Modelo de lectura: ventas diarias por sucursal
 

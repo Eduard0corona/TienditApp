@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-04 tras las Fases 0, 1 y 2 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-04 tras las Fases 0, 1, 2 y 3 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -21,7 +21,6 @@ Actualizada el 2026-10-04 tras las Fases 0, 1 y 2 del roadmap de producto (la au
 - Contratos de error mezclan `ProblemDetails` con objetos `{ error }`; el cliente ya los lee con un solo helper (`src/api/errors.ts`), pero el servidor sigue respondiendo en varias formas y con algunos mensajes de dominio en inglés.
 - Controllers no propagan `CancellationToken`.
 - Política de contraseña (longitud mínima 6) pendiente de evaluación.
-- `OrderItem.Quantity` es entero aunque existen unidades Kg, Litro, Metro y Hora.
 
 ## Media
 
@@ -39,7 +38,7 @@ Actualizada el 2026-10-04 tras las Fases 0, 1 y 2 del roadmap de producto (la au
 - Un pago puede guardarse sin movimiento de caja si el cajero no tiene caja abierta y hay varias o ninguna en la sucursal, salvo que el negocio active `RequireOpenCashSession`.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - `Product.StockQuantity` es informativo: las ventas no lo descuentan.
-- Un administrador puede activar cualquier capability desde `PUT /auth/my-tenant`; es un bypass si los módulos dependen del plan contratado.
+- Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
 - Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.
 
@@ -122,6 +121,26 @@ Pendientes detectados en la Fase 2:
 - `OutgoingMessages` no tiene retención y las campañas no respetan horario de envío.
 - Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`types/index.ts`) y generados.
 - La actualización de pantallas por SignalR sigue siendo best-effort.
+
+## Resuelto el 2026-10-04 (Fase 3: crecer)
+
+- Cantidades con 3 decimales en kilo, litro, metro y hora (`OrderItem.Quantity` ya no es entero) y datos por línea para CFDI 4.0: claves SAT de producto y unidad, objeto de impuesto y vista previa del comprobante (migración `AddDecimalQuantitiesAndCfdiData`).
+- Variantes y extras con precio validado en el servidor, mesas y cuentas abiertas por rondas a cocina (migración `AddProductOptionsAndOpenTabs`).
+- Menú en línea con QR, pedidos por enlace y compartir por WhatsApp (migración `AddOnlineMenu`).
+- Sucursal como agregado propio para ventas, cajas e inventario, y ventas diarias por sucursal en un modelo de lectura que calcula un worker (migración `AddBranchesAndDailySalesSnapshots`).
+- Consola de plataforma: planes con módulos y límites, suscripción por negocio con prueba, pago vencido y suspensión, y pagos registrados (migración `AddPlansAndSubscriptions`). Los módulos de un negocio con plan se recortan al plan.
+- Vender sin conexión: ventas de mostrador cobradas guardadas en el dispositivo y enviadas al volver la conexión con clave de idempotencia (migración `AddOfflineSaleIdempotency`).
+- La migración de sucursales fallaba en el script idempotente (SQL que usaba columnas agregadas en el mismo lote) y su `Down` siempre se habría negado si un negocio no tenía ubicaciones: ambas cosas se corrigieron antes de publicarla y los scripts de la Fase 3 se probaron en SQL Server 2022.
+
+Pendientes detectados en la Fase 3:
+
+- Timbrado con un PAC y certificados CSD, factura global, complementos de pago y notas de crédito.
+- Las opciones de un producto no consumen insumos propios; cancelar un platillo de una ronda enviada se compensa con un reembolso; falta dividir cuentas y unir mesas; las mesas son del negocio, no de la sucursal.
+- Menú en línea sin pago en línea, entrega a domicilio ni aviso automático de confirmación.
+- Cada ubicación de inventario se volvió sucursal: las que solo eran almacén hay que desactivarlas a mano después de aplicar la migración.
+- Los pagos de planes los registra la plataforma a mano; falta el adaptador de un proveedor de pagos con verificación de firma.
+- Sin conexión no se puede recargar la página ni iniciar sesión (no hay service worker y el token vive en memoria); la cocina no ve la venta hasta que se envía, y una venta cuyo precio cambió mientras tanto se rechaza y hay que registrarla de nuevo.
+- Con EF Core 10, el script idempotente desde una base vacía falla en una migración de febrero ya aplicada en producción; una base nueva se crea con `dotnet ef database update`. Falta validar las migraciones contra SQL Server en el CI.
 
 ## Decisiones humanas pendientes
 

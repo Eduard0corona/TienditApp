@@ -90,8 +90,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             // same Id and data (payments, refunds and drawers that pointed at it keep pointing at the same place), and
             // the location belongs to it. One branch per business is the default: its default active location, else
             // the first active one, else the first one. Businesses without locations get a default branch.
+            // Each block runs through EXEC: in the idempotent script the whole migration is one batch, compiled before the
+            // columns above exist, and a statement naming a missing column fails the batch.
             migrationBuilder.Sql(@"
-INSERT INTO [Branches] ([Id], [TenantId], [Name], [Code], [Description], [AddressLine1], [AddressLine2], [City], [State],
+EXEC(N'INSERT INTO [Branches] ([Id], [TenantId], [Name], [Code], [Description], [AddressLine1], [AddressLine2], [City], [State],
     [Country], [PostalCode], [ContactName], [ContactPhone], [IsDefault], [IsActive], [CreatedAt], [CreatedBy], [UpdatedAt], [UpdatedBy])
 SELECT l.[Id], l.[TenantId], l.[Name], l.[Code], l.[Description], l.[AddressLine1], l.[AddressLine2], l.[City], l.[State],
     l.[Country], l.[PostalCode], l.[ContactName], l.[ContactPhone], 0, l.[IsActive], l.[CreatedAt], l.[CreatedBy], l.[UpdatedAt], l.[UpdatedBy]
@@ -109,27 +111,27 @@ INNER JOIN ranked r ON r.[Id] = b.[Id]
 WHERE r.rn = 1;
 
 INSERT INTO [Branches] ([Id], [TenantId], [Name], [Code], [IsDefault], [IsActive], [CreatedAt], [CreatedBy])
-SELECT NEWID(), t.[Id], N'Sucursal principal', N'PRINCIPAL', 1, 1, SYSDATETIMEOFFSET(), N'migration'
+SELECT NEWID(), t.[Id], N''Sucursal principal'', N''PRINCIPAL'', 1, 1, SYSDATETIMEOFFSET(), N''migration''
 FROM [Tenants] t
 WHERE NOT EXISTS (SELECT 1 FROM [Branches] b WHERE b.[TenantId] = t.[Id]);
 
-UPDATE [InventoryLocations] SET [BranchId] = [Id];
+UPDATE [InventoryLocations] SET [BranchId] = [Id];');
 ");
 
             // Drawers stay at the branch of their location; drawers without one go to the default branch.
             migrationBuilder.Sql(@"
-UPDATE [CashSessions] SET [BranchId] = [InventoryLocationId] WHERE [InventoryLocationId] IS NOT NULL;
+EXEC(N'UPDATE [CashSessions] SET [BranchId] = [InventoryLocationId] WHERE [InventoryLocationId] IS NOT NULL;
 
 UPDATE s SET [BranchId] = b.[Id]
 FROM [CashSessions] s
 INNER JOIN [Branches] b ON b.[TenantId] = s.[TenantId] AND b.[IsDefault] = 1
-WHERE s.[BranchId] IS NULL;
+WHERE s.[BranchId] IS NULL;');
 ");
 
             // An order was made where its first payment was taken (the payment's location is now its branch); orders
             // without payments, or paid without location, go to the default branch.
             migrationBuilder.Sql(@"
-UPDATE o SET [BranchId] = p.[InventoryLocationId]
+EXEC(N'UPDATE o SET [BranchId] = p.[InventoryLocationId]
 FROM [Orders] o
 CROSS APPLY (
     SELECT TOP (1) op.[InventoryLocationId]
@@ -140,7 +142,7 @@ CROSS APPLY (
 UPDATE o SET [BranchId] = b.[Id]
 FROM [Orders] o
 INNER JOIN [Branches] b ON b.[TenantId] = o.[TenantId] AND b.[IsDefault] = 1
-WHERE o.[BranchId] IS NULL;
+WHERE o.[BranchId] IS NULL;');
 ");
 
             migrationBuilder.CreateIndex(
@@ -226,9 +228,17 @@ WHERE o.[BranchId] IS NULL;
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             // Rolling back drops the branches. Branches created after this migration (not one of the former locations)
-            // and their data would be lost silently: refuse instead, so they are handled by hand first.
+            // and their data would be lost silently: refuse instead, so they are handled by hand first. The default
+            // branch of a business without locations (this migration's or a new business's), still untouched, holds
+            // nothing else and can go.
             migrationBuilder.Sql(@"
-IF EXISTS (SELECT 1 FROM [Branches] b WHERE NOT EXISTS (SELECT 1 FROM [InventoryLocations] l WHERE l.[Id] = b.[Id]))
+IF EXISTS (
+    SELECT 1 FROM [Branches] b
+    WHERE NOT EXISTS (SELECT 1 FROM [InventoryLocations] l WHERE l.[Id] = b.[Id])
+      AND NOT (b.[IsDefault] = 1 AND b.[Code] = N'PRINCIPAL' AND b.[Name] = N'Sucursal principal'
+          AND b.[Description] IS NULL AND b.[AddressLine1] IS NULL AND b.[AddressLine2] IS NULL AND b.[City] IS NULL
+          AND b.[State] IS NULL AND b.[Country] IS NULL AND b.[PostalCode] IS NULL
+          AND b.[ContactName] IS NULL AND b.[ContactPhone] IS NULL))
     THROW 50003, N'There are branches that were not inventory locations; rolling back would lose them.', 1;
 ");
 
