@@ -11,7 +11,7 @@ Estructura principal:
 - `src/components/common` y `layout`: reutilización y shell.
 - `src/hooks`: Auth/Tenant y conexiones SignalR.
 - `src/contexts`: estado de autenticación y tenant.
-- `src/types/index.ts`: contratos TypeScript compartidos.
+- `src/types/index.ts`: contratos TypeScript compartidos. Los enums del dominio se copian como objetos `as const` con los mismos números, porque la API los intercambia como enteros; `ClientEnumContractTests` (WebApi.Tests) los compara con el dominio.
 - `src/utils/tenantCapabilities.ts`: helpers de capabilities.
 
 El access token se mantiene en memoria y se agrega con interceptor. El refresh token usa cookie `HttpOnly`; `localStorage` solo conserva un marcador de sesión. Vite proxya API, uploads y hubs a `localhost:5203`.
@@ -36,6 +36,7 @@ Sesión y tiempo real:
 - No persistas access/refresh tokens en almacenamiento accesible a JavaScript.
 - SignalR debe reconectar, cancelar al desmontar, aislar tenant y manejar errores.
 - Cambios de contrato requieren actualizar DTO, tipo TypeScript, API wrapper y consumidores.
+- Un enum del dominio se copia con sus valores exactos; nunca se renumera en el cliente.
 
 ## Deuda actual
 
