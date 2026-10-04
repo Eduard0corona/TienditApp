@@ -2,12 +2,14 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Queries;
 
+[RequiresPlatformAdmin]
 public record GetAllTenantsQuery : IRequest<PaginatedList<TenantDto>>
 {
     public int PageNumber { get; init; } = 1;

@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Events;
 using System.Reflection;
 using FoodParkDigital.Application.Common.Behaviors;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Application.Messaging;
 using FluentValidation;
@@ -18,6 +19,8 @@ public static class DependencyInjection
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(assembly);
+            // Authorization first: a request the user may not send is not even validated.
+            cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(AuthorizationBehavior<,>));
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         });
@@ -26,6 +29,7 @@ public static class DependencyInjection
         services.AddAutoMapper(assembly);
 
         services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
+        services.AddScoped<CurrentAccessContext>();
 
         // Messaging: used by the use cases and by the messaging worker, in the business's scope.
         services.AddScoped<MessagingConsentService>();

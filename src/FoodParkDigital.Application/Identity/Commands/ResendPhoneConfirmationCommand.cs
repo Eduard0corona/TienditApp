@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
 using MediatR;
@@ -12,6 +13,7 @@ namespace FoodParkDigital.Application.Identity.Commands;
 /// Sends a new phone confirmation code. The confirmation screen identifies the account by the user id
 /// it received at registration (the phone is stored as typed, so it may not match an E.164 search).
 /// </summary>
+[AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
 public record ResendPhoneConfirmationCommand : IRequest<Result>
 {
     public Guid? UserId { get; init; }

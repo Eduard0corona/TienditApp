@@ -3,9 +3,11 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +16,7 @@ namespace FoodParkDigital.Application.Catalog.Commands;
 
 // The image is not part of the request: it is set only through POST /api/v1/products/{id}/image,
 // so a client cannot point a product at files of another tenant that a later replace/delete would remove.
+[RequiresPermission(TenantPermission.ManageCatalog)]
 public record CreateProductCommand : IRequest<Result<ProductDto>>
 {
     public Guid CategoryId { get; init; }

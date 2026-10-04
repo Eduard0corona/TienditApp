@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -12,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+[AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
 public record RefreshTokenCommand(string? ExpiredToken, string RefreshToken) : IRequest<Result<AuthResponse>>;
 
 public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenCommand>

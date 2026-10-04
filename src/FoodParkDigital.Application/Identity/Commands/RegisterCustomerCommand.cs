@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -12,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+[AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
 public record RegisterCustomerCommand : IRequest<Result<AuthResponse>>
 {
     public string Email { get; init; } = null!;

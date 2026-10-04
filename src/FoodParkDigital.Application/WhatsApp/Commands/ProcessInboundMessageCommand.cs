@@ -2,6 +2,7 @@ using AutoMapper;
 using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.WhatsApp.Commands;
 
+[AllowAnonymousRequest("Lo envía el procesador del webhook de WhatsApp (sistema), sin usuario.")]
 public record ProcessInboundMessageCommand : IRequest<Result<ChatMessageDto>>
 {
     public Guid TenantId { get; init; }

@@ -4,8 +4,10 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +20,7 @@ public enum ProductCatalogItemType
     Service = 1
 }
 
+[RequiresPermission(TenantPermission.ManageCatalog, TenantPermission.ManageOrders, TenantPermission.ManageInventory, TenantPermission.ManageAppointments)]
 public record GetProductsQuery : IRequest<PaginatedList<ProductDto>>
 {
     public Guid? CategoryId { get; init; }

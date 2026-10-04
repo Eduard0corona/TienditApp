@@ -1,10 +1,12 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +18,7 @@ namespace FoodParkDigital.Application.Marketing.Commands;
 /// opt-outs, is sent in the background with retries and stays in the campaign history. Returns how many
 /// customers it will reach.
 /// </summary>
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record SendPromotionalMessageCommand : IRequest<Result<int>>
 {
     public string Message { get; init; } = null!;

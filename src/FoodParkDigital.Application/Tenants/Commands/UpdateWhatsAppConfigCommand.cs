@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FluentValidation;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Commands;
 
+[RequiresTenantManager]
 public record UpdateWhatsAppConfigCommand : IRequest<Result<WhatsAppConfigDto>>
 {
     public bool IsEnabled { get; init; }

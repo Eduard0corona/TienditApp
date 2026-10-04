@@ -2,7 +2,6 @@ import {
   CampaignAudienceKind,
   CampaignStatus,
   OutgoingMessageStatus,
-  type CampaignDto,
 } from '../../types';
 
 export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; className: string }> = {
@@ -20,7 +19,7 @@ export const MESSAGE_STATUS: Record<OutgoingMessageStatus, { label: string; clas
   [OutgoingMessageStatus.Cancelled]: { label: 'Cancelado', className: 'bg-secondary-subtle text-secondary-emphasis' },
 };
 
-export function describeAudience(campaign: Pick<CampaignDto, 'audienceKind' | 'audienceMinimumOrders' | 'audienceDays'>): string {
+export function describeAudience(campaign: { audienceKind: number; audienceMinimumOrders: number; audienceDays?: number | null }): string {
   switch (campaign.audienceKind) {
     case CampaignAudienceKind.AllCustomers:
       return 'Todos los clientes con teléfono';

@@ -2,13 +2,16 @@ using AutoMapper;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.AiAgents.Commands;
 
+[RequiresPermission(TenantPermission.ManageAiAgent)]
 public record CreateAiAgentCommand : IRequest<Result<AiAgentDto>>
 {
     public string Name { get; init; } = null!;

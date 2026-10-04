@@ -1,8 +1,10 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +15,7 @@ namespace FoodParkDigital.Application.Finance.Commands;
 /// Closes a drawer with the counted cash. The expected amount and the difference are kept for the shift
 /// history; a difference needs a note. A cashier closes their own drawer; the owner or an admin can close any.
 /// </summary>
+[RequiresPermission(TenantPermission.ManageCash)]
 public record CloseCashSessionCommand : IRequest<Result<CashSessionDto>>
 {
     public Guid CashSessionId { get; init; }

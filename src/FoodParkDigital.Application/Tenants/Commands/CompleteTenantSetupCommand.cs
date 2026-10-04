@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Tenants.Commands;
 
 /// <summary>Marks the guided setup as finished (or skipped) so it is not offered again.</summary>
+[RequiresTenantManager]
 public record CompleteTenantSetupCommand : IRequest<Result>;
 
 public class CompleteTenantSetupCommandHandler : IRequestHandler<CompleteTenantSetupCommand, Result>

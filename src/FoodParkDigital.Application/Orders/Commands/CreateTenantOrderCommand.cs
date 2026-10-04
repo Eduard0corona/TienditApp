@@ -2,6 +2,7 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
@@ -18,6 +19,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
+[RequiresAuthentication]
 public record CreateTenantOrderCommand : IRequest<Result<OrderDto>>
 {
     public Guid TenantId { get; init; }

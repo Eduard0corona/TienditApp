@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace FoodParkDigital.Application.Identity.Commands.TwoFactor;
 
+[AllowAnonymousRequest("Segundo paso del inicio de sesión: el reto de 2FA identifica al usuario.")]
 public record Login2FACommand : IRequest<Result<AuthResponse>>
 {
     /// <summary>Desafío emitido por <see cref="LoginCommand"/> tras validar la contraseña.</summary>

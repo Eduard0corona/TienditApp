@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { customersApi } from '../../api/customersApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useCustomerCard } from '../../api/queries';
+import type { Schemas } from '../../api/typedClient';
 import StatusChip from '../common/StatusChip';
-import { OrderChannel, type CustomerCardDto } from '../../types';
+import { OrderChannel } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 
@@ -13,36 +13,17 @@ interface CustomerCardPanelProps {
   /** Shown while the card loads or when nothing is known yet. */
   fallbackName?: string;
   /** Starts a sale for this customer; omitted where it makes no sense. */
-  onNewOrder?: (card: CustomerCardDto) => void;
+  onNewOrder?: (card: Schemas['CustomerCardDto']) => void;
   /** Hides the "open chat" link (already in the chat). */
   inChat?: boolean;
 }
 
 /** What the business knows about a customer: purchases, balance, favorites, appointments and opt-out. */
 export default function CustomerCardPanel({ phone, customerId, fallbackName, onNewOrder, inChat = false }: CustomerCardPanelProps) {
-  const requestKey = `${phone ?? ''}|${customerId ?? ''}`;
-  // The result is kept with the customer it belongs to: switching customers shows "loading" again.
-  const [loaded, setLoaded] = useState<{ key: string; card?: CustomerCardDto; error?: string } | null>(null);
+  const { data: card, error, isPending } = useCustomerCard(phone, customerId);
 
-  useEffect(() => {
-    if (!phone && !customerId) return;
-    let cancelled = false;
-    customersApi.getCard({ phone, customerId })
-      .then(({ data }) => {
-        if (!cancelled) setLoaded({ key: requestKey, card: data });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setLoaded({ key: requestKey, error: getApiErrorMessage(err, 'No se pudo cargar la ficha del cliente.') });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [phone, customerId, requestKey]);
-
-  const current = loaded?.key === requestKey ? loaded : null;
-  if (current?.error) return <div className="alert alert-warning mb-0">{current.error}</div>;
-  const card = current?.card;
-  if (!card) return <p className="text-muted mb-0">Cargando ficha…</p>;
+  if (error) return <div className="alert alert-warning mb-0">{getApiErrorMessage(error, 'No se pudo cargar la ficha del cliente.')}</div>;
+  if (isPending || !card) return <p className="text-muted mb-0">Cargando ficha…</p>;
 
   return (
     <div className="customer-card">
@@ -97,11 +78,11 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
         )}
       </div>
 
-      {card.favoriteProducts.length > 0 && (
+      {(card.favoriteProducts ?? []).length > 0 && (
         <div className="mb-3">
           <div className="fw-semibold small mb-1">Lo que más pide</div>
           <div className="d-flex flex-wrap gap-1">
-            {card.favoriteProducts.map((product) => (
+            {(card.favoriteProducts ?? []).map((product) => (
               <span key={product.productId} className="badge bg-primary-subtle text-primary-emphasis">
                 {product.productName} × {product.quantity}
               </span>
@@ -110,11 +91,11 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
         </div>
       )}
 
-      {card.upcomingAppointments.length > 0 && (
+      {(card.upcomingAppointments ?? []).length > 0 && (
         <div className="mb-3">
           <div className="fw-semibold small mb-1">Próximas citas</div>
           <ul className="list-unstyled small mb-0">
-            {card.upcomingAppointments.map((appointment) => (
+            {(card.upcomingAppointments ?? []).map((appointment) => (
               <li key={appointment.id}>{formatDateTime(appointment.startAt)} · {appointment.serviceName}</li>
             ))}
           </ul>
@@ -122,11 +103,11 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
       )}
 
       <div className="fw-semibold small mb-1">Últimos pedidos</div>
-      {card.recentOrders.length === 0 ? (
+      {(card.recentOrders ?? []).length === 0 ? (
         <p className="small text-muted mb-0">Todavía no tiene pedidos.</p>
       ) : (
         <ul className="list-unstyled small mb-0">
-          {card.recentOrders.map((order) => (
+          {(card.recentOrders ?? []).map((order) => (
             <li key={order.id} className="d-flex justify-content-between align-items-center gap-2 border-bottom py-1">
               <span>
                 <Link to={`/orders?search=${encodeURIComponent(order.orderNumber)}`}>{order.orderNumber}</Link>

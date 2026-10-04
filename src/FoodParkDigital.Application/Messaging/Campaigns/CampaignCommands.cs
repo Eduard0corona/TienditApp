@@ -1,12 +1,14 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +51,7 @@ public static class CampaignRules
             at));
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record PreviewCampaignQuery : IRequest<Result<CampaignPreviewDto>>
 {
     public Guid TemplateId { get; init; }
@@ -113,6 +116,7 @@ public class PreviewCampaignQueryHandler : IRequestHandler<PreviewCampaignQuery,
     }
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record CreateCampaignCommand : IRequest<Result<CampaignDto>>
 {
     public string Name { get; init; } = string.Empty;
@@ -210,6 +214,7 @@ public class CreateCampaignCommandHandler : IRequestHandler<CreateCampaignComman
     }
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record CancelCampaignCommand(Guid CampaignId) : IRequest<Result<CampaignDto>>;
 
 /// <summary>Stops a campaign: messages not sent yet are cancelled; the ones already sent stay in its history.</summary>
@@ -264,6 +269,7 @@ public class CancelCampaignCommandHandler : IRequestHandler<CancelCampaignComman
     }
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record GetCampaignsQuery : IRequest<PaginatedList<CampaignDto>>
 {
     public CampaignStatus? Status { get; init; }
@@ -291,6 +297,7 @@ public class GetCampaignsQueryHandler : IRequestHandler<GetCampaignsQuery, Pagin
     }
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record GetCampaignQuery(Guid CampaignId) : IRequest<CampaignDto?>;
 
 public class GetCampaignQueryHandler : IRequestHandler<GetCampaignQuery, CampaignDto?>
@@ -308,6 +315,7 @@ public class GetCampaignQueryHandler : IRequestHandler<GetCampaignQuery, Campaig
 }
 
 /// <summary>Sent messages of a campaign or the reminders, newest first.</summary>
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record GetOutgoingMessagesQuery : IRequest<PaginatedList<OutgoingMessageDto>>
 {
     public Guid? CampaignId { get; init; }

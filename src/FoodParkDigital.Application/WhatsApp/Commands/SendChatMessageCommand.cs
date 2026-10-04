@@ -1,7 +1,9 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.WhatsApp.DTOs;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
 using FluentValidation;
@@ -11,6 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.WhatsApp.Commands;
 
+[RequiresPermission(TenantPermission.ManageWhatsApp)]
 public record SendChatMessageCommand : IRequest<Result<ChatMessageDto>>
 {
     public string PhoneNumber { get; init; } = null!;

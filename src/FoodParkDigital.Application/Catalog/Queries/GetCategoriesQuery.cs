@@ -2,11 +2,14 @@ using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Catalog.Queries;
 
+[RequiresPermission(TenantPermission.ManageCatalog, TenantPermission.ManageOrders, TenantPermission.ManageInventory, TenantPermission.ManageAppointments)]
 public record GetCategoriesQuery : IRequest<List<CategoryDto>>;
 
 public class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQuery, List<CategoryDto>>

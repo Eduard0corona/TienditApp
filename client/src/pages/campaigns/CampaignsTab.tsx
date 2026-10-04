@@ -1,19 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useCampaignMessages, useCampaigns, useCancelCampaign, useCreateCampaign } from '../../api/queries';
+import type { Schemas } from '../../api/typedClient';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import {
   CampaignAudienceKind,
   CampaignStatus,
   MessagePurpose,
-  type CampaignDto,
   type CampaignPreviewDto,
   type MessageTemplateDto,
-  type OutgoingMessageDto,
-  type PaginatedList,
 } from '../../types';
+
+type CampaignDto = Schemas['CampaignDto'];
 import { formatDateTime, toDateTimeLocalInput } from '../../utils/dates';
 import { CAMPAIGN_STATUS, MESSAGE_STATUS, describeAudience } from './campaignLabels';
 
@@ -57,8 +58,10 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const toast = useToast();
   const { confirm } = useConfirm();
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedList<CampaignDto> | null>(null);
-  const [loading, setLoading] = useState(true);
+  const campaigns = useCampaigns(page, PAGE_SIZE);
+  const cancelMutation = useCancelCampaign();
+  const createMutation = useCreateCampaign();
+  const data = campaigns.data;
   const [error, setError] = useState('');
   const [templates, setTemplates] = useState<MessageTemplateDto[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -66,30 +69,6 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [detail, setDetail] = useState<CampaignDto | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: campaigns } = await messagingApi.getCampaigns({ pageNumber: page, pageSize: PAGE_SIZE });
-      setData(campaigns);
-      setError('');
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudieron cargar las campañas.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [page]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Campaigns being sent update by themselves.
-  useEffect(() => {
-    if (!data?.items.some((campaign) => campaign.status === CampaignStatus.Sending || campaign.status === CampaignStatus.Scheduled)) return;
-    const id = window.setInterval(() => void load(), 15000);
-    return () => window.clearInterval(id);
-  }, [data, load]);
 
   const openNew = async () => {
     setFormError('');
@@ -141,15 +120,14 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
     setBusy(true);
     setFormError('');
     try {
-      await messagingApi.createCampaign({
+      await createMutation.mutateAsync({
         ...audienceRequest(draft),
         name: draft.name.trim(),
-        scheduledAt: draft.sendNow ? undefined : new Date(draft.scheduledAt).toISOString(),
+        scheduledAt: draft.sendNow ? null : new Date(draft.scheduledAt).toISOString(),
       });
       toast.success(draft.sendNow ? 'Campaña en camino: se envía en segundo plano.' : 'Campaña programada.');
       setDraft(null);
       setPage(1);
-      await load();
     } catch (err: unknown) {
       setFormError(getApiErrorMessage(err, 'No se pudo crear la campaña.'));
     } finally {
@@ -167,10 +145,9 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
     });
     if (!accepted) return;
     try {
-      const { data: updated } = await messagingApi.cancelCampaign(campaign.id);
+      const updated = await cancelMutation.mutateAsync(campaign.id);
       toast.success('Campaña cancelada.');
       if (detail?.id === updated.id) setDetail(updated);
-      await load();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo cancelar la campaña.'));
     }
@@ -197,9 +174,10 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
         </div>
 
         {error && <div className="alert alert-danger">{error}</div>}
-        {loading && !data ? (
+        {campaigns.error && <div className="alert alert-danger">{getApiErrorMessage(campaigns.error, 'No se pudieron cargar las campañas.')}</div>}
+        {campaigns.isPending ? (
           <p className="text-muted mb-0">Cargando…</p>
-        ) : !data || data.items.length === 0 ? (
+        ) : !data || (data.items ?? []).length === 0 ? (
           <p className="text-muted mb-0">Todavía no has enviado campañas.</p>
         ) : (
           <>
@@ -215,7 +193,7 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
                   </tr>
                 </thead>
                 <tbody>
-                  {data.items.map((campaign) => (
+                  {(data.items ?? []).map((campaign) => (
                     <tr key={campaign.id}>
                       <td>
                         <button type="button" className="btn btn-link p-0 fw-semibold text-decoration-none" onClick={() => setDetail(campaign)}>
@@ -395,22 +373,9 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
 
 function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose: () => void }) {
   const [page, setPage] = useState(1);
-  const [messages, setMessages] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    messagingApi.getMessages({ campaignId: campaign.id, pageNumber: page, pageSize: 20 })
-      .then(({ data }) => {
-        if (!cancelled) setMessages(data);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(getApiErrorMessage(err, 'No se pudieron cargar los mensajes.'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [campaign.id, page]);
+  const query = useCampaignMessages(campaign.id, page);
+  const messages = query.data;
+  const error = query.error ? getApiErrorMessage(query.error, 'No se pudieron cargar los mensajes.') : '';
 
   return (
     <Modal show onHide={onClose} centered size="lg" fullscreen="sm-down">
@@ -426,7 +391,7 @@ function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose:
         {error && <div className="alert alert-danger">{error}</div>}
         {!messages ? (
           <p className="text-muted mb-0">Cargando…</p>
-        ) : messages.items.length === 0 ? (
+        ) : (messages.items ?? []).length === 0 ? (
           <p className="text-muted mb-0">
             {campaign.status === CampaignStatus.Scheduled ? 'Los clientes se eligen cuando empiece.' : 'No hubo clientes que cumplieran el filtro.'}
           </p>
@@ -442,7 +407,7 @@ function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose:
                   </tr>
                 </thead>
                 <tbody>
-                  {messages.items.map((message) => (
+                  {(messages.items ?? []).map((message) => (
                     <tr key={message.id}>
                       <td>
                         {message.recipientName ?? 'Cliente'}

@@ -109,6 +109,10 @@ builder.Services.AddEndpointsApiExplorer();
 // Swagger with JWT
 builder.Services.AddSwaggerGen(options =>
 {
+    options.DocumentFilter<FoodParkDigital.WebApi.Swagger.LowercasePathsDocumentFilter>();
+    // Accurate client types (client/src/api/generated): non-nullable properties are required.
+    options.SupportNonNullableReferenceTypes();
+    options.SchemaFilter<FoodParkDigital.WebApi.Swagger.RequireNonNullablePropertiesSchemaFilter>();
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "TienditApp API",

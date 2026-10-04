@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Claims;
 using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -36,7 +37,8 @@ public class TenantResolutionMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         ICurrentTenantService tenantService,
-        ITenantAccessService tenantAccessService)
+        ITenantAccessService tenantAccessService,
+        CurrentAccessContext? accessContext = null)
     {
         // Skip for unauthenticated paths
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
@@ -110,6 +112,8 @@ public class TenantResolutionMiddleware
             }
 
             accessSnapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, context.RequestAborted);
+            // The authorization behavior reuses it instead of reading it again.
+            accessContext?.Prime(userId, tenantId, accessSnapshot);
             if (!accessSnapshot.HasActiveAccess)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;

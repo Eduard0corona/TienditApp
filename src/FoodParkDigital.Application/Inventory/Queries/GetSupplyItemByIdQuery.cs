@@ -1,12 +1,16 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Inventory.Queries;
 
+[RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record GetSupplyItemByIdQuery(Guid Id) : IRequest<SupplyItemDto>;
 
 public class GetSupplyItemByIdQueryHandler : IRequestHandler<GetSupplyItemByIdQuery, SupplyItemDto>

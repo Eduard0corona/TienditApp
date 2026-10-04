@@ -1,15 +1,18 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Messaging.Templates;
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record GetMessageTemplatesQuery : IRequest<List<MessageTemplateDto>>
 {
     public MessagePurpose? Purpose { get; init; }
@@ -40,6 +43,7 @@ public static class MessageTemplateLimits
     public const int MaxPerBusiness = 100;
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record CreateMessageTemplateCommand : IRequest<Result<MessageTemplateDto>>
 {
     public string Name { get; init; } = string.Empty;
@@ -99,6 +103,7 @@ public class CreateMessageTemplateCommandHandler : IRequestHandler<CreateMessage
     }
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record UpdateMessageTemplateCommand : IRequest<Result<MessageTemplateDto>>
 {
     public Guid Id { get; init; }

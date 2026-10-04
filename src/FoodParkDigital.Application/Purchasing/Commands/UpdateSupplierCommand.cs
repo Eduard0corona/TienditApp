@@ -2,14 +2,17 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Purchasing.Commands;
 
+[RequiresPermission(TenantPermission.ManageInventory)]
 public record UpdateSupplierCommand : IRequest<Result<SupplierDto>>
 {
     public Guid Id { get; init; }

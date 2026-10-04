@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Infrastructure.Services;
 using FluentValidation;
@@ -47,6 +48,7 @@ public class GlobalExceptionHandlerMiddleware
             ValidationException => (StatusCodes.Status400BadRequest, "Validation Error"),
             DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Concurrency Conflict"),
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
+            ForbiddenAccessException => (StatusCodes.Status403Forbidden, "Forbidden"),
             _ => (StatusCodes.Status500InternalServerError, "Internal Server Error")
         };
 

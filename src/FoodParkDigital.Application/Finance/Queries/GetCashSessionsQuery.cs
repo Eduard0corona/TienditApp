@@ -1,7 +1,9 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Finance.Queries;
 
 /// <summary>Shift history: who opened each drawer, where, what it should have had and what was counted.</summary>
+[RequiresPermission(TenantPermission.ManageCash)]
 public record GetCashSessionsQuery : IRequest<PaginatedList<CashSessionDto>>
 {
     public DateTimeOffset? FromDate { get; init; }

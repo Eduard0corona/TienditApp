@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Common.ValueObjects;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Queries;
 
+[RequiresTenantMember]
 public record GetTenantSetupQuery : IRequest<Result<TenantSetupDto>>;
 
 public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, Result<TenantSetupDto>>

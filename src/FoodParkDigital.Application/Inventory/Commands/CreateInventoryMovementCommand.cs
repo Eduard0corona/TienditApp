@@ -2,10 +2,12 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +25,8 @@ public record CreateInventoryMovementLineRequest
     public string? Notes { get; init; }
 }
 
+[RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record CreateInventoryMovementCommand : IRequest<Result<InventoryMovementDto>>
 {
     public InventoryMovementType MovementType { get; init; }

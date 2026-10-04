@@ -2,6 +2,7 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -17,6 +18,7 @@ namespace FoodParkDigital.Application.Tenants.Commands;
 /// Changes how the business prices and closes its sales. It applies to sales made from now on: every
 /// order keeps the policy it was sold with, so no past total changes.
 /// </summary>
+[RequiresTenantManager]
 public record UpdateSalesPolicyCommand : IRequest<Result<TenantSalesPolicyDto>>
 {
     public bool PricesIncludeTax { get; init; }

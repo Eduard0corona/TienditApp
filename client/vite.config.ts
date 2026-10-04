@@ -32,6 +32,10 @@ export default defineConfig({
             return 'vendor-react'
           }
 
+          if (packageName.startsWith('@tanstack/')) {
+            return 'vendor-query'
+          }
+
           if (packageName === '@microsoft/signalr') {
             return 'vendor-signalr'
           }

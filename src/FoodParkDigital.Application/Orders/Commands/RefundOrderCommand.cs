@@ -1,10 +1,12 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.Commands;
 
 /// <summary>Gives money back for an order, optionally for returned units that go back to inventory.</summary>
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record RefundOrderCommand : IRequest<Result<OrderDto>>
 {
     public Guid OrderId { get; init; }

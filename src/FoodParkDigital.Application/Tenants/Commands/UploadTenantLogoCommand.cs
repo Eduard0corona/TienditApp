@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FluentValidation;
 using MediatR;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Commands;
 
+[RequiresTenantManager]
 public record UploadTenantLogoCommand : IRequest<Result<LogoImageUrlsDto>>
 {
     public Stream FileStream { get; init; } = null!;

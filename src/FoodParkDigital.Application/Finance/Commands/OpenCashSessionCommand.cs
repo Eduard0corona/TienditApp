@@ -1,9 +1,11 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Finance.Commands;
 
 /// <summary>Opens a drawer for the current cashier at a branch. Each cashier has at most one open drawer.</summary>
+[RequiresPermission(TenantPermission.ManageCash)]
 public record OpenCashSessionCommand : IRequest<Result<CashSessionDto>>
 {
     public decimal OpeningAmount { get; init; }

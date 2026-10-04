@@ -1,13 +1,16 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Customers.Commands;
 
+[RequiresPermission(TenantPermission.ManageCustomers)]
 public record DeleteCustomerCommand(Guid Id) : IRequest<Result>;
 
 public class DeleteCustomerCommandValidator : AbstractValidator<DeleteCustomerCommand>

@@ -1,10 +1,13 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 
 namespace FoodParkDigital.Application.Tenants.Commands;
 
+[RequiresPermission(TenantPermission.ManageWhatsApp)]
 public record SendWhatsAppMessageCommand : IRequest<Result>
 {
     public string PhoneNumber { get; init; } = null!;

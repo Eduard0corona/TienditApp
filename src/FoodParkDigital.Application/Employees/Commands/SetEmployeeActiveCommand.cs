@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Commands;
 
+[RequiresPermission(TenantPermission.ManageEmployees)]
 public record SetEmployeeActiveCommand : IRequest<Result>
 {
     public Guid TenantUserId { get; init; }

@@ -1,16 +1,19 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Messaging.DTOs;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Messaging.OptOuts;
 
+[RequiresPermission(TenantPermission.ManageCampaigns, TenantPermission.ManageCustomers)]
 public record GetMessagingOptOutsQuery : IRequest<PaginatedList<MessagingOptOutDto>>
 {
     public string? Search { get; init; }
@@ -52,6 +55,7 @@ public class GetMessagingOptOutsQueryHandler : IRequestHandler<GetMessagingOptOu
 }
 
 /// <summary>Records, at the customer's request, that they do or do not want campaigns and reminders.</summary>
+[RequiresPermission(TenantPermission.ManageCampaigns, TenantPermission.ManageCustomers)]
 public record SetMessagingOptOutCommand : IRequest<Result>
 {
     public string Phone { get; init; } = string.Empty;

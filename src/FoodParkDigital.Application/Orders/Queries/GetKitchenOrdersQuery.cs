@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -9,6 +10,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
+[RequiresPermission(TenantPermission.ManageServiceBoard)]
+[RequiresCapability(TenantCapability.Kitchen)]
 public record GetKitchenOrdersQuery : IRequest<List<KitchenOrderDto>>;
 
 public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuery, List<KitchenOrderDto>>

@@ -1,10 +1,12 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.StateMachines;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 
@@ -15,6 +17,7 @@ namespace FoodParkDigital.Application.Orders.Commands;
 /// unit not returned yet and cancels the order when its state allows it. A delivered or completed order
 /// cannot be cancelled: it stays in its state, fully refunded.
 /// </summary>
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record VoidOrderCommand : IRequest<Result<OrderDto>>
 {
     public Guid OrderId { get; init; }

@@ -1,11 +1,13 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Queries;
 
+[RequiresAuthentication]
 public record GetOwnerWhatsAppConfigQuery : IRequest<Result<OwnerWhatsAppConfigDto>>;
 
 public class GetOwnerWhatsAppConfigQueryHandler

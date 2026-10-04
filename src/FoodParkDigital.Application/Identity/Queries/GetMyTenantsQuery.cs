@@ -1,10 +1,12 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Queries;
 
+[RequiresAuthentication]
 public record GetMyTenantsQuery : IRequest<IReadOnlyList<MyTenantDto>>;
 
 public class GetMyTenantsQueryHandler : IRequestHandler<GetMyTenantsQuery, IReadOnlyList<MyTenantDto>>

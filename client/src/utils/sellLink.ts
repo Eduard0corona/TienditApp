@@ -1,5 +1,5 @@
 /** Link to Vender with the customer filled in; from a chat, the order is recorded as a WhatsApp order. */
-export function buildSellLink(options: { phone?: string; name?: string; conversationId?: string }): string {
+export function buildSellLink(options: { phone?: string | null; name?: string | null; conversationId?: string | null }): string {
   const params = new URLSearchParams();
   if (options.phone) params.set('phone', options.phone);
   if (options.name) params.set('name', options.name);

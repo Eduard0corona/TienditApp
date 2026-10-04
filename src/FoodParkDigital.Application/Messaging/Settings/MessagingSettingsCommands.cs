@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging.Campaigns;
 using FoodParkDigital.Application.Messaging.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Messaging.Settings;
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record GetMessagingSettingsQuery : IRequest<MessagingSettingsDto>;
 
 public class GetMessagingSettingsQueryHandler : IRequestHandler<GetMessagingSettingsQuery, MessagingSettingsDto>
@@ -46,6 +48,7 @@ public class GetMessagingSettingsQueryHandler : IRequestHandler<GetMessagingSett
     }
 }
 
+[RequiresPermission(TenantPermission.ManageCampaigns)]
 public record UpdateAppointmentRemindersCommand : IRequest<Result<MessagingSettingsDto>>
 {
     public bool Enabled { get; init; }

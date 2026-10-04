@@ -1,9 +1,11 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Purchasing.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +22,7 @@ public record CreatePurchaseOrderLineRequest
     public string? Notes { get; init; }
 }
 
+[RequiresPermission(TenantPermission.ManageInventory)]
 public record CreatePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>
 {
     public Guid SupplierId { get; init; }

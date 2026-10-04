@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +12,7 @@ namespace FoodParkDigital.Application.Finance.Queries;
 /// The drawer the current user's cash payments enter: their own open session or, while it is the only one,
 /// a drawer opened before per-cashier sessions.
 /// </summary>
+[RequiresPermission(TenantPermission.ManageCash)]
 public record GetCurrentCashSessionQuery : IRequest<CashSessionDto?>;
 
 public class GetCurrentCashSessionQueryHandler : IRequestHandler<GetCurrentCashSessionQuery, CashSessionDto?>

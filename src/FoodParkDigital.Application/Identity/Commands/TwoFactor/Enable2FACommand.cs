@@ -1,11 +1,13 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Identity.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 
 namespace FoodParkDigital.Application.Identity.Commands.TwoFactor;
 
+[RequiresAuthentication]
 public record Enable2FACommand(Guid UserId) : IRequest<Result<Enable2FAResponse>>;
 
 public record Enable2FAResponse(

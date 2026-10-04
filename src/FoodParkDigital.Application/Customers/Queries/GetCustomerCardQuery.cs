@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -15,6 +16,7 @@ namespace FoodParkDigital.Application.Customers.Queries;
 /// they owe, their appointments and whether they accept campaigns. Used by the chat, the customers list and
 /// the orders screen.
 /// </summary>
+[RequiresPermission(TenantPermission.ManageCustomers, TenantPermission.ManageWhatsApp, TenantPermission.ManageOrders)]
 public record GetCustomerCardQuery : IRequest<Result<CustomerCardDto>>
 {
     public string? Phone { get; init; }

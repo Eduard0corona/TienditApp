@@ -1,17 +1,20 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Finance.Commands;
 
+[RequiresPermission(TenantPermission.ManageCash)]
 public record AddCashTransactionCommand : IRequest<Result<CashTransactionDto>>
 {
     public Guid CashSessionId { get; init; }

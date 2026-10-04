@@ -3,13 +3,16 @@ using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Catalog.Commands;
 
+[RequiresPermission(TenantPermission.ManageCatalog)]
 public record InstallCategoryTemplateCommand : IRequest<Result<InstallCategoryTemplateResultDto>>
 {
     public string TemplateId { get; init; } = null!;

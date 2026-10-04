@@ -1,14 +1,17 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
+[RequiresPermission(TenantPermission.ViewReports)]
 public record GetDashboardMetricsQuery : IRequest<DashboardMetricsDto>
 {
     public DateTimeOffset? FromDate { get; init; }
