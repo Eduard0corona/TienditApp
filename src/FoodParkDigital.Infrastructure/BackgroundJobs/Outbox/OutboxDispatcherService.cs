@@ -30,6 +30,7 @@ public sealed class OutboxDispatcherService : BackgroundService
     {
         var pollInterval = TimeSpan.FromSeconds(Math.Max(1, _options.PollIntervalSeconds));
         var nextCleanup = DateTimeOffset.UtcNow;
+        var consecutiveFailures = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -44,6 +45,8 @@ public sealed class OutboxDispatcherService : BackgroundService
                     await _dispatcher.DeleteProcessedAsync(stoppingToken);
                     nextCleanup = DateTimeOffset.UtcNow.Add(CleanupInterval);
                 }
+
+                consecutiveFailures = 0;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -51,13 +54,14 @@ public sealed class OutboxDispatcherService : BackgroundService
             }
             catch (Exception ex)
             {
+                consecutiveFailures++;
                 // Typically the database being unreachable: wait for the next poll and try again.
                 _logger.LogError(Services.LogRedaction.RedactDatabaseMessages(ex), "Outbox dispatch pass failed");
             }
 
             try
             {
-                await _signal.WaitAsync(pollInterval, stoppingToken);
+                await _signal.WaitAsync(BackOff.Delay(pollInterval, consecutiveFailures), stoppingToken);
             }
             catch (OperationCanceledException)
             {

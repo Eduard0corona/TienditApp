@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Security.Claims;
+using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Tenants.Enums;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -173,7 +176,20 @@ public class TenantResolutionMiddleware
         }
 
         tenantService.SetTenant(tenantId);
+        TagTelemetry(context, tenantId);
         await _next(context);
+    }
+
+    /// <summary>
+    /// Adds the tenant to the request trace and to the built-in HTTP metrics (http.server.request.duration),
+    /// so error rates and latency can be charted and alerted per business.
+    /// </summary>
+    private static void TagTelemetry(HttpContext context, Guid tenantId)
+    {
+        var tenant = tenantId.ToString();
+        context.Features.Get<IHttpMetricsTagsFeature>()?.Tags.Add(
+            new KeyValuePair<string, object?>(TienditAppMetrics.TenantTag, tenant));
+        Activity.Current?.SetTag(TienditAppMetrics.TenantTag, tenant);
     }
 
     private static bool IsExcludedPath(string path) =>

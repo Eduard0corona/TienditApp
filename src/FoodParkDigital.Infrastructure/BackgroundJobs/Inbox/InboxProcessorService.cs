@@ -30,6 +30,7 @@ public sealed class InboxProcessorService : BackgroundService
     {
         var pollInterval = TimeSpan.FromSeconds(Math.Max(1, _options.PollIntervalSeconds));
         var nextCleanup = DateTimeOffset.UtcNow;
+        var consecutiveFailures = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -44,6 +45,8 @@ public sealed class InboxProcessorService : BackgroundService
                     await _processor.DeleteProcessedAsync(stoppingToken);
                     nextCleanup = DateTimeOffset.UtcNow.Add(CleanupInterval);
                 }
+
+                consecutiveFailures = 0;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -51,12 +54,13 @@ public sealed class InboxProcessorService : BackgroundService
             }
             catch (Exception ex)
             {
+                consecutiveFailures++;
                 _logger.LogError(Services.LogRedaction.RedactDatabaseMessages(ex), "Webhook inbox pass failed");
             }
 
             try
             {
-                await _signal.WaitAsync(pollInterval, stoppingToken);
+                await _signal.WaitAsync(BackOff.Delay(pollInterval, consecutiveFailures), stoppingToken);
             }
             catch (OperationCanceledException)
             {

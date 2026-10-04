@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using Microsoft.EntityFrameworkCore;
@@ -70,7 +71,7 @@ public class WhatsAppService : IWhatsAppService
             }
         };
 
-        return await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken);
+        return Record(tenantId, await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken));
     }
 
     public async Task<MessageSendResult> SendTextMessageAsync(
@@ -91,7 +92,7 @@ public class WhatsAppService : IWhatsAppService
             text = new { body = message }
         };
 
-        return await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken);
+        return Record(tenantId, await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken));
     }
 
     private async Task<Domain.Tenants.Entities.WhatsAppConfig?> GetConfigAsync(
@@ -162,6 +163,15 @@ public class WhatsAppService : IWhatsAppService
             _logger.LogError(ex, "Failed to send WhatsApp message");
             return MessageSendResult.Failed("Error de conexión con la API de WhatsApp.", isTransient: true);
         }
+    }
+
+    private static MessageSendResult Record(Guid tenantId, MessageSendResult result)
+    {
+        var outcome = result.IsSuccess
+            ? MetricOutcomes.Sent
+            : result.IsTransient ? MetricOutcomes.TransientFailure : MetricOutcomes.Rejected;
+        TienditAppMetrics.RecordMessageSent("whatsapp", outcome, tenantId);
+        return result;
     }
 
     /// <summary>Throttling, timeouts and server errors can succeed later; other 4xx responses will not.</summary>

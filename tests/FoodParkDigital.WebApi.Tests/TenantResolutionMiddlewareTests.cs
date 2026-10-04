@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Middleware;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -147,6 +148,35 @@ public class TenantResolutionMiddlewareTests
         Assert.Contains("SuperAdminTenantOverride", entry);
         Assert.Contains(otherTenantId.ToString(), entry);
         Assert.Contains(UserId.ToString(), entry);
+    }
+
+    [Fact]
+    public async Task ResolvedTenant_ShouldTagTheRequestMetrics_ForAlertsPerBusiness()
+    {
+        var middleware = new TenantResolutionMiddleware(_ => Task.CompletedTask);
+        var context = new DefaultHttpContext();
+        var metricsTags = new MetricsTagsFeature();
+        context.Features.Set<IHttpMetricsTagsFeature>(metricsTags);
+        context.Request.Path = "/api/v1/auth/my-tenant";
+        context.Request.Method = "GET";
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, UserId.ToString()),
+            new Claim(ClaimTypes.Role, "STAFF"),
+            new Claim("tenant_id", TenantId.ToString())
+        ], authenticationType: "Test"));
+
+        await middleware.InvokeAsync(context, new FakeCurrentTenantService(), new FakeTenantAccessService(active: true, permissions: []));
+
+        var tag = Assert.Single(metricsTags.Tags);
+        Assert.Equal("tenant.id", tag.Key);
+        Assert.Equal(TenantId.ToString(), tag.Value);
+    }
+
+    private sealed class MetricsTagsFeature : IHttpMetricsTagsFeature
+    {
+        public ICollection<KeyValuePair<string, object?>> Tags { get; } = [];
+        public bool MetricsDisabled { get; set; }
     }
 
     private static async Task<InvocationResult> InvokeAsync(

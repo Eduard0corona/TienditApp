@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Common;
@@ -226,13 +227,17 @@ public sealed class OutboxDispatcher
         context.Attach(message);
         var now = _clock.UtcNow;
 
+        var eventType = message.Type[(message.Type.LastIndexOf('.') + 1)..];
         if (failure is null)
         {
             message.MarkProcessed(now);
+            TienditAppMetrics.RecordOutboxMessage(MetricOutcomes.Processed, eventType, message.TenantId);
         }
         else
         {
             var deadLettered = message.MarkFailed(now, failure, permanent ? 1 : _options.MaxAttempts);
+            TienditAppMetrics.RecordOutboxMessage(
+                deadLettered ? MetricOutcomes.DeadLettered : MetricOutcomes.Failed, eventType, message.TenantId);
             if (deadLettered)
             {
                 _logger.LogError(

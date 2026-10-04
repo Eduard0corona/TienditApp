@@ -7,6 +7,7 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Seeds;
 using FoodParkDigital.WebApi.Hubs;
 using FoodParkDigital.WebApi.Middleware;
+using FoodParkDigital.WebApi.Observability;
 using FoodParkDigital.WebApi.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -48,6 +49,9 @@ builder.Host.UseSerilog((ctx, config) =>
 // Layer registrations
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+
+// Health checks and OpenTelemetry (exported only when a destination is configured)
+builder.AddObservability();
 
 // SignalR notification services
 builder.Services.AddScoped<IOrderNotificationService, OrderNotificationService>();
@@ -205,6 +209,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.MapHealthEndpoints();
 app.MapControllers();
 // Close hub connections when the access token expires so that reconnecting re-validates
 // tenant membership and permissions.

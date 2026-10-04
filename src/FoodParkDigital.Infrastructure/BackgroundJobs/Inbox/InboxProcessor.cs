@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
@@ -134,14 +135,20 @@ public sealed class InboxProcessor
         if (failure is null)
         {
             message.MarkProcessed(now);
+            TienditAppMetrics.RecordInboxDelivery(MetricOutcomes.Processed, message.Source);
         }
         else if (message.MarkFailed(now, failure, _options.MaxAttempts))
         {
+            TienditAppMetrics.RecordInboxDelivery(MetricOutcomes.DeadLettered, message.Source);
             _logger.LogError(
                 "Webhook delivery {InboxMessageId} was set aside after {Attempts} attempts: {Failure}",
                 message.Id,
                 message.Attempts,
                 failure);
+        }
+        else
+        {
+            TienditAppMetrics.RecordInboxDelivery(MetricOutcomes.Failed, message.Source);
         }
 
         try
