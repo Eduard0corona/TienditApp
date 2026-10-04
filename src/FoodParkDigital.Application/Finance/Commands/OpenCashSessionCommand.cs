@@ -10,23 +10,29 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Finance.Commands;
 
+/// <summary>Opens a drawer for the current cashier at a branch. Each cashier has at most one open drawer.</summary>
 public record OpenCashSessionCommand : IRequest<Result<CashSessionDto>>
 {
     public decimal OpeningAmount { get; init; }
     public string? Notes { get; init; }
+
+    /// <summary>Branch of the drawer; the default branch when omitted.</summary>
+    public Guid? InventoryLocationId { get; init; }
 }
 
 public class OpenCashSessionCommandValidator : AbstractValidator<OpenCashSessionCommand>
 {
     public OpenCashSessionCommandValidator()
     {
-        RuleFor(x => x.OpeningAmount).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.OpeningAmount).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(x => x.Notes).MaximumLength(2000);
     }
 }
 
 public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionCommand, Result<CashSessionDto>>
 {
+    public const string AlreadyOpenMessage = "Ya tienes una caja abierta. Ciérrala antes de abrir otra.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
@@ -56,17 +62,37 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
             return Result.Failure<CashSessionDto>("El tenant no tiene módulos comerciales habilitados.");
         }
 
+        var userId = CashSessionMapping.ParseUserId(_currentUserService.UserId);
+        if (userId is null)
+            return Result.Failure<CashSessionDto>("No se pudo identificar a quién abre la caja.");
+
         var hasOpenSession = await _context.CashSessions
-            .AnyAsync(x => x.Status == CashSessionStatus.Open, cancellationToken);
+            .AnyAsync(x => x.Status == CashSessionStatus.Open && x.OpenedByUserId == userId, cancellationToken);
         if (hasOpenSession)
-            return Result.Failure<CashSessionDto>("Ya existe una caja abierta.");
+            return Result.Failure<CashSessionDto>(AlreadyOpenMessage);
+
+        var location = request.InventoryLocationId is { } locationId
+            ? await _context.InventoryLocations
+                .Where(x => x.Id == locationId && x.IsActive)
+                .Select(x => new { x.Id, x.Name })
+                .FirstOrDefaultAsync(cancellationToken)
+            : await _context.InventoryLocations
+                .Where(x => x.IsActive)
+                .OrderByDescending(x => x.IsDefault)
+                .ThenBy(x => x.Name)
+                .Select(x => new { x.Id, x.Name })
+                .FirstOrDefaultAsync(cancellationToken);
+        if (request.InventoryLocationId is not null && location is null)
+            return Result.Failure<CashSessionDto>("La sucursal seleccionada no es válida.");
 
         var session = new CashSession(
             tenantId: _tenantService.TenantId,
             openedAt: _dateTimeProvider.UtcNow,
             openedBy: _currentUserService.UserName ?? "system",
             openingAmount: request.OpeningAmount,
-            notes: request.Notes);
+            notes: request.Notes,
+            openedByUserId: userId,
+            inventoryLocationId: location?.Id);
 
         _context.CashSessions.Add(session);
         try
@@ -75,27 +101,10 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
         }
         catch (DbUpdateException)
         {
-            // A concurrent request opened a session first (unique index on the open session per tenant).
-            return Result.Failure<CashSessionDto>("Ya existe una caja abierta.");
+            // A concurrent request of the same cashier opened a drawer first (unique index per open cashier).
+            return Result.Failure<CashSessionDto>(AlreadyOpenMessage);
         }
 
-        return Result.Success(ToDto(session));
+        return Result.Success(CashSessionMapping.ToDto(session, userId, location?.Name));
     }
-
-    private static CashSessionDto ToDto(CashSession session) => new()
-    {
-        Id = session.Id,
-        OpenedAt = session.OpenedAt,
-        OpenedBy = session.OpenedBy,
-        OpeningAmount = session.OpeningAmount,
-        ClosedAt = session.ClosedAt,
-        ClosedBy = session.ClosedBy,
-        ClosingAmount = session.ClosingAmount,
-        Status = session.Status,
-        Notes = session.Notes,
-        Inflows = session.Inflows,
-        NonCashInflows = session.NonCashInflows,
-        Outflows = session.Outflows,
-        ExpectedBalance = session.ExpectedBalance
-    };
 }

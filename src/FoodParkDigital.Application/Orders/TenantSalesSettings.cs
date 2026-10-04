@@ -9,7 +9,8 @@ public sealed record TenantSalesSettings(
     string? TimeZone,
     bool PricesIncludeTax,
     decimal DefaultTaxRate,
-    bool AutoCloseCounterSales)
+    bool AutoCloseCounterSales,
+    bool RequireOpenCashSession = false)
 {
     /// <summary>
     /// A business without settings sells as every business did before tax policies: 16 % added on top.
@@ -25,11 +26,16 @@ public sealed record TenantSalesSettings(
         var settings = await context.TenantSettings
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)
-            .Select(x => new { x.TimeZone, x.PricesIncludeTax, x.DefaultTaxRate, x.AutoCloseCounterSales })
+            .Select(x => new { x.TimeZone, x.PricesIncludeTax, x.DefaultTaxRate, x.AutoCloseCounterSales, x.RequireOpenCashSession })
             .FirstOrDefaultAsync(cancellationToken);
 
         return settings is null
             ? Legacy
-            : new TenantSalesSettings(settings.TimeZone, settings.PricesIncludeTax, settings.DefaultTaxRate, settings.AutoCloseCounterSales);
+            : new TenantSalesSettings(
+                settings.TimeZone,
+                settings.PricesIncludeTax,
+                settings.DefaultTaxRate,
+                settings.AutoCloseCounterSales,
+                settings.RequireOpenCashSession);
     }
 }

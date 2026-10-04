@@ -577,6 +577,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("CashCountJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
                     b.Property<DateTimeOffset?>("ClosedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -587,11 +591,24 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("ClosingAmount")
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<decimal?>("ClosingDifference")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("ClosingNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal?>("ExpectedClosingAmount")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<Guid?>("InventoryLocationId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
@@ -604,6 +621,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("OpenedByUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal>("OpeningAmount")
                         .HasColumnType("decimal(18,4)");
@@ -626,14 +646,18 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_CashSessions_TenantId_SingleOpen")
-                        .HasFilter("[Status] = 0");
+                    b.HasIndex("InventoryLocationId");
 
                     b.HasIndex("TenantId", "OpenedAt");
 
+                    b.HasIndex("TenantId", "OpenedByUserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CashSessions_TenantId_OpenedByUserId_Open")
+                        .HasFilter("[Status] = 0 AND [OpenedByUserId] IS NOT NULL");
+
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "InventoryLocationId", "OpenedAt");
 
                     b.ToTable("CashSessions", (string)null);
                 });
@@ -2134,6 +2158,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("RequireOpenCashSession")
+                        .HasColumnType("bit");
+
                     b.Property<string>("SettingsJson")
                         .HasColumnType("nvarchar(max)");
 
@@ -2644,6 +2671,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashTransaction", b =>

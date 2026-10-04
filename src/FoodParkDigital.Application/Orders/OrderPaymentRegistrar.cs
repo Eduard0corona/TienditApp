@@ -25,8 +25,11 @@ public sealed class OrderPaymentRegistrar
     private readonly IApplicationDbContext _context;
     private readonly IOrderCashService _orderCashService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    public const string NoOpenDrawerMessage = "Abre tu caja para cobrar en efectivo.";
+
     private Guid? _defaultLocationId;
     private bool _defaultLocationLoaded;
+    private TenantSalesSettings? _salesSettings;
 
     public OrderPaymentRegistrar(
         IApplicationDbContext context,
@@ -80,7 +83,16 @@ public sealed class OrderPaymentRegistrar
             evidenceUrl: input.EvidenceUrl?.Trim(),
             reference: input.Reference?.Trim(),
             notes: input.Notes?.Trim());
-        await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);
+        var inDrawer = await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);
+
+        // A business may refuse cash that no drawer would count. The order was changed in memory only: the
+        // caller does not save after a failure.
+        if (!inDrawer && input.Method == OrderPaymentMethod.Cash)
+        {
+            _salesSettings ??= await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
+            if (_salesSettings.RequireOpenCashSession)
+                return Result.Failure<OrderPayment>(NoOpenDrawerMessage);
+        }
 
         return Result.Success(payment);
     }

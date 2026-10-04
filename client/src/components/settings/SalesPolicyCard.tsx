@@ -16,6 +16,7 @@ export default function SalesPolicyCard() {
     pricesIncludeTax: tenant?.pricesIncludeTax ?? false,
     defaultTaxRate: tenant?.defaultTaxRate ?? 16,
     autoCloseCounterSales: tenant?.autoCloseCounterSales ?? true,
+    requireOpenCashSession: tenant?.requireOpenCashSession ?? false,
   };
   const [draft, setDraft] = useState<TenantSalesPolicyDto | null>(null);
   const [saving, setSaving] = useState(false);
@@ -23,7 +24,8 @@ export default function SalesPolicyCard() {
   const value = draft ?? saved;
   const changed = value.pricesIncludeTax !== saved.pricesIncludeTax
     || value.defaultTaxRate !== saved.defaultTaxRate
-    || value.autoCloseCounterSales !== saved.autoCloseCounterSales;
+    || value.autoCloseCounterSales !== saved.autoCloseCounterSales
+    || value.requireOpenCashSession !== saved.requireOpenCashSession;
 
   const save = async () => {
     const taxChanged = value.pricesIncludeTax !== saved.pricesIncludeTax || value.defaultTaxRate !== saved.defaultTaxRate;

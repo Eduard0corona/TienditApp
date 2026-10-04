@@ -44,6 +44,7 @@ public class TenantProfileDto
     public bool PricesIncludeTax { get; set; }
     public decimal DefaultTaxRate { get; set; } = 16m;
     public bool AutoCloseCounterSales { get; set; } = true;
+    public bool RequireOpenCashSession { get; set; }
     public DateTimeOffset? OnboardingCompletedAt { get; set; }
 
     // MX Business fields

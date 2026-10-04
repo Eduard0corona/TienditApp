@@ -20,16 +20,27 @@ public class CashSessionConfiguration : IEntityTypeConfiguration<CashSession>
         builder.Property(x => x.ClosingAmount).HasColumnType("decimal(18,4)");
         builder.Property(x => x.Status).HasConversion<int>().IsRequired();
         builder.Property(x => x.Notes).HasMaxLength(2000);
+        builder.Property(x => x.ExpectedClosingAmount).HasColumnType("decimal(18,4)");
+        builder.Property(x => x.ClosingDifference).HasColumnType("decimal(18,4)");
+        builder.Property(x => x.ClosingNotes).HasMaxLength(2000);
+        builder.Property(x => x.CashCountJson).HasMaxLength(4000);
         builder.Property(x => x.Revision).IsConcurrencyToken();
 
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.OpenedAt });
+        builder.HasIndex(x => new { x.TenantId, x.InventoryLocationId, x.OpenedAt });
 
-        // Business rule: at most one open cash session per tenant, enforced by the database.
-        builder.HasIndex(x => x.TenantId)
+        // Business rule: each cashier has at most one open drawer, enforced by the database. Drawers opened
+        // before per-cashier sessions have no owner and are not covered (there was at most one per tenant).
+        builder.HasIndex(x => new { x.TenantId, x.OpenedByUserId })
             .IsUnique()
-            .HasFilter("[Status] = 0")
-            .HasDatabaseName("IX_CashSessions_TenantId_SingleOpen");
+            .HasFilter("[Status] = 0 AND [OpenedByUserId] IS NOT NULL")
+            .HasDatabaseName("IX_CashSessions_TenantId_OpenedByUserId_Open");
+
+        builder.HasOne<FoodParkDigital.Domain.Inventory.Entities.InventoryLocation>()
+            .WithMany()
+            .HasForeignKey(x => x.InventoryLocationId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(x => x.Transactions)
             .WithOne(x => x.CashSession)

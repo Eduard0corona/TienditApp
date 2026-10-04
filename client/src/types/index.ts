@@ -163,6 +163,8 @@ export interface TenantProfileDto {
   defaultTaxRate: number;
   /** Counter sales close by themselves once fully paid. */
   autoCloseCounterSales: boolean;
+  /** Cash payments are refused unless the cashier has an open drawer. */
+  requireOpenCashSession?: boolean;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -183,6 +185,8 @@ export interface TenantSalesPolicyDto {
   pricesIncludeTax: boolean;
   defaultTaxRate: number;
   autoCloseCounterSales: boolean;
+  /** Refuse cash payments when the cashier has no open drawer. Omitted keeps the current value. */
+  requireOpenCashSession?: boolean;
 }
 
 export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
@@ -908,6 +912,22 @@ export interface CashSessionDto {
   /** Card, transfer and other payments: recorded in the session but not in the drawer. */
   nonCashInflows: number;
   expectedBalance: number;
+  openedByUserId?: string | null;
+  /** The drawer belongs to the current user: their cash payments enter it. */
+  isMine: boolean;
+  inventoryLocationId?: string | null;
+  inventoryLocationName?: string | null;
+  /** Expected cash frozen at closing. */
+  expectedClosingAmount?: number | null;
+  /** Counted minus expected: negative is a shortage. */
+  closingDifference?: number | null;
+  closingNotes?: string | null;
+  cashCount: CashCountLineDto[];
+}
+
+export interface CashCountLineDto {
+  denomination: number;
+  quantity: number;
 }
 
 export interface CashTransactionDto {
@@ -959,11 +979,16 @@ export interface DailyCashCutDto {
 export interface OpenCashSessionRequest {
   openingAmount: number;
   notes?: string;
+  /** Branch of the drawer; the default one when omitted. */
+  inventoryLocationId?: string;
 }
 
 export interface CloseCashSessionRequest {
   closingAmount: number;
+  /** Required when the count differs from the expected cash. */
   notes?: string;
+  /** Optional count by denomination; must add up to closingAmount. */
+  cashCount?: CashCountLineDto[];
 }
 
 export interface AddCashTransactionRequest {

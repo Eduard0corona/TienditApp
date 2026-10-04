@@ -115,11 +115,11 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             Clock,
             phoneNormalization,
             orderInventoryService: null,
-            orderCashService: new OrderCashService(Context));
+            orderCashService: new OrderCashService(Context, CurrentUser));
     }
 
     public AddOrderPaymentCommandHandler AddPaymentHandler()
-        => new(Context, Clock, Mapper, new OrderCashService(Context), CurrentUser);
+        => new(Context, Clock, Mapper, new OrderCashService(Context, CurrentUser), CurrentUser);
 
     public ValueTask DisposeAsync() => Context.DisposeAsync();
 }

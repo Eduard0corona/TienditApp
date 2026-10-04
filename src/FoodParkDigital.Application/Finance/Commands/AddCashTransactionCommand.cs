@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Finance.DTOs;
+using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
@@ -43,13 +44,20 @@ public class AddCashTransactionCommandValidator : AbstractValidator<AddCashTrans
 
 public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransactionCommand, Result<CashTransactionDto>>
 {
+    public const string NotYourDrawerMessage = "Solo quien abrió la caja o el administrador del negocio puede registrar movimientos en ella.";
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly ICurrentUserService? _currentUserService;
 
-    public AddCashTransactionCommandHandler(IApplicationDbContext context, IDateTimeProvider dateTimeProvider)
+    public AddCashTransactionCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider,
+        ICurrentUserService? currentUserService = null)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
+        _currentUserService = currentUserService;
     }
 
     public async Task<Result<CashTransactionDto>> Handle(AddCashTransactionCommand request, CancellationToken cancellationToken)
@@ -58,6 +66,14 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
             .Include(x => x.Transactions)
             .FirstOrDefaultAsync(x => x.Id == request.CashSessionId, cancellationToken)
             ?? throw new EntityNotFoundException("CashSession", request.CashSessionId);
+
+        // An expense or withdrawal changes what a cashier must count: only they or an admin may record it.
+        if (session.OpenedByUserId is not null && _currentUserService is not null
+            && !session.IsOwnedBy(CashSessionMapping.ParseUserId(_currentUserService.UserId))
+            && !TenantManagementRules.CanManageTenant(_currentUserService))
+        {
+            return Result.Failure<CashTransactionDto>(NotYourDrawerMessage);
+        }
 
         Guid? inventoryLocationId = request.InventoryLocationId;
         if (inventoryLocationId.HasValue)

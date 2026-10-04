@@ -42,6 +42,12 @@ public class TenantSettings : BaseEntity
     public decimal DefaultTaxRate { get; private set; } = VatRate.GeneralPercent;
     /// <summary>Counter sales close by themselves once fully paid (food with kitchen, once ready).</summary>
     public bool AutoCloseCounterSales { get; private set; } = true;
+
+    /// <summary>
+    /// When true a cash payment is refused unless the cashier has an open drawer, so no cash goes uncounted.
+    /// Off by default: card and transfer payments never need a drawer.
+    /// </summary>
+    public bool RequireOpenCashSession { get; private set; }
     /// <summary>When the owner finished or skipped the guided setup.</summary>
     public DateTimeOffset? OnboardingCompletedAt { get; private set; }
 
@@ -69,6 +75,8 @@ public class TenantSettings : BaseEntity
         PricesIncludeTax = pricesIncludeTax;
         AutoCloseCounterSales = autoCloseCounterSales;
     }
+
+    public void SetRequireOpenCashSession(bool required) => RequireOpenCashSession = required;
 
     /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>
     public void CompleteOnboarding(DateTimeOffset completedAt)

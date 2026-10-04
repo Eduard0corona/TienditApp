@@ -11,12 +11,16 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
 
     private CashSession() { }
 
+    /// <param name="openedByUserId">The cashier who owns the drawer: payments they take enter this session.</param>
+    /// <param name="inventoryLocationId">The branch (location) where the drawer is.</param>
     public CashSession(
         Guid tenantId,
         DateTimeOffset openedAt,
         string openedBy,
         decimal openingAmount,
-        string? notes = null)
+        string? notes = null,
+        Guid? openedByUserId = null,
+        Guid? inventoryLocationId = null)
     {
         if (openingAmount < 0)
             throw new DomainException("El fondo inicial no puede ser negativo.");
@@ -24,6 +28,8 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
         TenantId = tenantId;
         OpenedAt = openedAt;
         OpenedBy = openedBy;
+        OpenedByUserId = openedByUserId;
+        InventoryLocationId = inventoryLocationId;
         OpeningAmount = openingAmount;
         Notes = notes?.Trim();
         Status = CashSessionStatus.Open;
@@ -37,7 +43,25 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? ClosedBy { get; private set; }
     public decimal? ClosingAmount { get; private set; }
     public CashSessionStatus Status { get; private set; }
+    /// <summary>Notes captured when the drawer was opened.</summary>
     public string? Notes { get; private set; }
+
+    /// <summary>Cashier who owns the drawer. Null for drawers opened before per-cashier sessions.</summary>
+    public Guid? OpenedByUserId { get; private set; }
+
+    /// <summary>Branch (inventory location) of the drawer.</summary>
+    public Guid? InventoryLocationId { get; private set; }
+
+    /// <summary>Cash the drawer should have held at closing (opening amount plus cash in, minus cash out).</summary>
+    public decimal? ExpectedClosingAmount { get; private set; }
+
+    /// <summary>Counted minus expected at closing: negative is a shortage, positive a surplus.</summary>
+    public decimal? ClosingDifference { get; private set; }
+
+    public string? ClosingNotes { get; private set; }
+
+    /// <summary>Optional count by denomination, as JSON (<c>[{"denomination":500,"quantity":2}]</c>).</summary>
+    public string? CashCountJson { get; private set; }
 
     /// <summary>
     /// Optimistic concurrency token: every movement and the close increment it, so a payment that races
@@ -115,18 +139,40 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
         return transaction;
     }
 
-    public void Close(DateTimeOffset closedAt, string closedBy, decimal closingAmount, string? notes = null)
+    /// <summary>
+    /// Closes the drawer with the counted cash and keeps the expected amount and the difference, so the
+    /// shift history shows shortages and surpluses. A difference needs an explanation.
+    /// Requires <see cref="Transactions"/> to be loaded.
+    /// </summary>
+    public void Close(
+        DateTimeOffset closedAt,
+        string closedBy,
+        decimal closingAmount,
+        string? notes = null,
+        string? cashCountJson = null)
     {
         if (Status != CashSessionStatus.Open)
             throw new DomainException("La caja ya está cerrada.");
         if (closingAmount < 0)
             throw new DomainException("El monto contado al cierre no puede ser negativo.");
 
+        var expected = ExpectedBalance;
+        var difference = closingAmount - expected;
+        if (difference != 0 && string.IsNullOrWhiteSpace(notes))
+            throw new DomainException(difference < 0
+                ? "Explica el faltante en las notas del cierre."
+                : "Explica el sobrante en las notas del cierre.");
+
         ClosedAt = closedAt;
         ClosedBy = closedBy;
         ClosingAmount = closingAmount;
-        Notes = string.IsNullOrWhiteSpace(notes) ? Notes : notes.Trim();
+        ExpectedClosingAmount = expected;
+        ClosingDifference = difference;
+        ClosingNotes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        CashCountJson = string.IsNullOrWhiteSpace(cashCountJson) ? null : cashCountJson;
         Status = CashSessionStatus.Closed;
         Revision++;
     }
+
+    public bool IsOwnedBy(Guid? userId) => OpenedByUserId is not null && OpenedByUserId == userId;
 }

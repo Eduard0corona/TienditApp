@@ -145,7 +145,7 @@ public class PurchasingAndCashFlowTests
             context,
             new TestDateTimeProvider(),
             mapper,
-            new OrderCashService(context));
+            new OrderCashService(context, new CashierUser()));
 
         var result = await handler.Handle(new AddOrderPaymentCommand
         {
@@ -219,5 +219,15 @@ public class PurchasingAndCashFlowTests
 
         public Task<object?> Send(object request, CancellationToken ct = default)
             => Task.FromResult<object?>(null);
+    }
+
+    private sealed class CashierUser : ICurrentUserService
+    {
+        public string? UserId => null;
+        public string? UserName => "tester";
+        public string? Role => "TENANT_ADMIN";
+        public string? TenantRole => null;
+        public IReadOnlyCollection<string> Permissions => [];
+        public Guid? TenantId => null;
     }
 }
