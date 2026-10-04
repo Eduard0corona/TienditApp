@@ -4,19 +4,20 @@ import {
   OutgoingMessageStatus,
 } from '../../types';
 
+// Same chips as order states (theme.css .ta-chip-*): always with text.
 export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; className: string }> = {
-  [CampaignStatus.Scheduled]: { label: 'Programada', className: 'bg-info-subtle text-info-emphasis' },
-  [CampaignStatus.Sending]: { label: 'Enviando', className: 'bg-warning-subtle text-warning-emphasis' },
-  [CampaignStatus.Completed]: { label: 'Terminada', className: 'bg-success-subtle text-success-emphasis' },
-  [CampaignStatus.Cancelled]: { label: 'Cancelada', className: 'bg-secondary-subtle text-secondary-emphasis' },
+  [CampaignStatus.Scheduled]: { label: 'Programada', className: 'ta-chip ta-chip-confirmed' },
+  [CampaignStatus.Sending]: { label: 'Enviando', className: 'ta-chip ta-chip-preparing' },
+  [CampaignStatus.Completed]: { label: 'Terminada', className: 'ta-chip ta-chip-ready' },
+  [CampaignStatus.Cancelled]: { label: 'Cancelada', className: 'ta-chip ta-chip-cancelled' },
 };
 
 export const MESSAGE_STATUS: Record<OutgoingMessageStatus, { label: string; className: string }> = {
-  [OutgoingMessageStatus.Pending]: { label: 'Pendiente', className: 'bg-info-subtle text-info-emphasis' },
-  [OutgoingMessageStatus.Sent]: { label: 'Enviado', className: 'bg-success-subtle text-success-emphasis' },
-  [OutgoingMessageStatus.Failed]: { label: 'Falló', className: 'bg-danger-subtle text-danger-emphasis' },
-  [OutgoingMessageStatus.Skipped]: { label: 'No enviado', className: 'bg-secondary-subtle text-secondary-emphasis' },
-  [OutgoingMessageStatus.Cancelled]: { label: 'Cancelado', className: 'bg-secondary-subtle text-secondary-emphasis' },
+  [OutgoingMessageStatus.Pending]: { label: 'Pendiente', className: 'ta-chip ta-chip-new' },
+  [OutgoingMessageStatus.Sent]: { label: 'Enviado', className: 'ta-chip ta-chip-ready' },
+  [OutgoingMessageStatus.Failed]: { label: 'Falló', className: 'ta-chip ta-chip-cancelled' },
+  [OutgoingMessageStatus.Skipped]: { label: 'No enviado', className: 'ta-chip ta-chip-done' },
+  [OutgoingMessageStatus.Cancelled]: { label: 'Cancelado', className: 'ta-chip ta-chip-done' },
 };
 
 export function describeAudience(campaign: { audienceKind: number; audienceMinimumOrders: number; audienceDays?: number | null }): string {

@@ -186,9 +186,9 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
                 <thead>
                   <tr>
                     <th>Campaña</th>
-                    <th>Estado</th>
-                    <th>Envío</th>
-                    <th>Resultado</th>
+                    <th className="d-none d-sm-table-cell">Estado</th>
+                    <th className="d-none d-md-table-cell">Envío</th>
+                    <th className="d-none d-md-table-cell">Resultado</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -196,14 +196,20 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
                   {(data.items ?? []).map((campaign) => (
                     <tr key={campaign.id}>
                       <td>
-                        <button type="button" className="btn btn-link p-0 fw-semibold text-decoration-none" onClick={() => setDetail(campaign)}>
+                        <button type="button" className="btn btn-link p-0 fw-semibold text-decoration-none text-start" onClick={() => setDetail(campaign)}>
                           {campaign.name}
                         </button>
+                        <span className={`${CAMPAIGN_STATUS[campaign.status].className} ms-2 d-sm-none`}>{CAMPAIGN_STATUS[campaign.status].label}</span>
                         <div className="small text-muted">{describeAudience(campaign)}</div>
+                        {/* On a phone the date and the result go under the name. */}
+                        <div className="small text-muted d-md-none">
+                          {formatDateTime(campaign.startedAt ?? campaign.scheduledAt)}
+                          {campaign.status !== CampaignStatus.Scheduled && <> · {progressText(campaign)}</>}
+                        </div>
                       </td>
-                      <td><span className={`badge ${CAMPAIGN_STATUS[campaign.status].className}`}>{CAMPAIGN_STATUS[campaign.status].label}</span></td>
-                      <td className="small">{formatDateTime(campaign.startedAt ?? campaign.scheduledAt)}</td>
-                      <td className="small">
+                      <td className="d-none d-sm-table-cell"><span className={CAMPAIGN_STATUS[campaign.status].className}>{CAMPAIGN_STATUS[campaign.status].label}</span></td>
+                      <td className="small d-none d-md-table-cell">{formatDateTime(campaign.startedAt ?? campaign.scheduledAt)}</td>
+                      <td className="small d-none d-md-table-cell">
                         {campaign.status === CampaignStatus.Scheduled ? '-' : progressText(campaign)}
                         {campaign.excludedCount > 0 && <div className="text-muted">{campaign.excludedCount} con baja, excluidos</div>}
                       </td>
@@ -383,7 +389,7 @@ function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose:
         <Modal.Title as="h2" className="h5">{campaign.name}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <p className="mb-1"><span className={`badge ${CAMPAIGN_STATUS[campaign.status].className}`}>{CAMPAIGN_STATUS[campaign.status].label}</span></p>
+        <p className="mb-1"><span className={CAMPAIGN_STATUS[campaign.status].className}>{CAMPAIGN_STATUS[campaign.status].label}</span></p>
         <p className="small text-muted mb-3">
           {describeAudience(campaign)} · plantilla {campaign.templateName ?? '-'} · {campaign.createdBy ?? ''}
           {' · '}programada {formatDateTime(campaign.scheduledAt)}
@@ -413,7 +419,7 @@ function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose:
                         {message.recipientName ?? 'Cliente'}
                         <div className="small text-muted">{message.phone}</div>
                       </td>
-                      <td><span className={`badge ${MESSAGE_STATUS[message.status].className}`}>{MESSAGE_STATUS[message.status].label}</span></td>
+                      <td><span className={MESSAGE_STATUS[message.status].className}>{MESSAGE_STATUS[message.status].label}</span></td>
                       <td className="small">
                         {message.readAt ? `Leído ${formatDateTime(message.readAt)}`
                           : message.deliveredAt ? `Entregado ${formatDateTime(message.deliveredAt)}`

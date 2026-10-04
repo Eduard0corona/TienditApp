@@ -142,7 +142,7 @@ export default function RemindersTab() {
                         <div className="small text-muted">{formatDateTime(message.sentAt ?? message.createdAt)}</div>
                       </td>
                       <td>
-                        <span className={`badge ${MESSAGE_STATUS[message.status].className}`}>{MESSAGE_STATUS[message.status].label}</span>
+                        <span className={MESSAGE_STATUS[message.status].className}>{MESSAGE_STATUS[message.status].label}</span>
                         {message.lastError && <div className="small text-muted">{message.lastError}</div>}
                       </td>
                       <td className="small" style={{ maxWidth: 380 }}>{message.body}</td>

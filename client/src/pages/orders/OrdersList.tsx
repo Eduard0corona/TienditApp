@@ -701,7 +701,8 @@ export default function OrdersList() {
                       </>
                     )}
                   </div>
-                  {!selectedOrder.canCancel && selectedNetPaid > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
+                  {!selectedOrder.canCancel && selectedNetPaid > 0
+                    && selectedOrder.allowedTransitions.includes(OrderStatusConst.Cancelled) && (
                     <small className="text-muted d-block mt-2">
                       {canRefund
                         ? 'Tiene pagos registrados: para cancelarla usa «Anular venta», que devuelve el dinero.'
