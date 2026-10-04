@@ -1,4 +1,4 @@
-import type { TenantSalesPolicyDto } from '../../types';
+import { OrderNotificationPolicy, type TenantSalesPolicyDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals } from '../../utils/orderTotals';
 
@@ -15,12 +15,30 @@ const RATE_OPTIONS = [
   { value: 0, label: '0 %' },
 ];
 
+const NOTIFICATION_OPTIONS: { value: OrderNotificationPolicy; label: string; help: string }[] = [
+  {
+    value: OrderNotificationPolicy.RemoteAndServices,
+    label: 'Pedidos a distancia y servicios (recomendado)',
+    help: 'Avisa de pedidos por WhatsApp o por el menú en línea y de servicios que el cliente recoge después. Una venta de mostrador no manda mensaje: el cliente ya tiene su ticket.',
+  },
+  {
+    value: OrderNotificationPolicy.AllOrders,
+    label: 'Todos los pedidos con teléfono',
+    help: 'También las ventas de mostrador en las que capturas el teléfono del cliente.',
+  },
+  {
+    value: OrderNotificationPolicy.Off,
+    label: 'Ninguno',
+    help: 'No se manda ningún aviso automático de pedidos. Puedes escribirle al cliente desde el chat.',
+  },
+];
+
 /** How a $100 product is charged with each policy, computed like the server does. */
 function example(pricesIncludeTax: boolean, rate: number) {
   return estimateOrderTotals([{ unitPrice: 100, quantity: 1, ratePercent: rate, isExempt: false }], pricesIncludeTax);
 }
 
-/** IVA policy of the business: whether prices include it, the general rate and closing paid sales. */
+/** Sales policy of the business: IVA, the general rate, closing paid sales, the drawer and customer messages. */
 export default function SalesPolicyFields({ value, onChange, disabled, idPrefix }: SalesPolicyFieldsProps) {
   const included = example(true, value.defaultTaxRate);
   const added = example(false, value.defaultTaxRate);
@@ -131,6 +149,32 @@ export default function SalesPolicyFields({ value, onChange, disabled, idPrefix 
             </>
           )}
         </div>
+        {value.orderNotificationPolicy !== undefined && (
+          <div className="col-md-6">
+            <label className="form-label fw-semibold" htmlFor={`${idPrefix}-notifications`}>
+              Avisos por WhatsApp al cliente
+            </label>
+            <select
+              id={`${idPrefix}-notifications`}
+              className="form-select"
+              value={value.orderNotificationPolicy}
+              onChange={(event) => onChange({
+                ...value,
+                orderNotificationPolicy: Number(event.target.value) as OrderNotificationPolicy,
+              })}
+              disabled={disabled}
+              aria-describedby={`${idPrefix}-notifications-help`}
+            >
+              {NOTIFICATION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <div id={`${idPrefix}-notifications-help`} className="form-text">
+              {NOTIFICATION_OPTIONS.find((option) => option.value === value.orderNotificationPolicy)?.help}
+              {' '}Cada aviso es un mensaje de plantilla que Meta cobra.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

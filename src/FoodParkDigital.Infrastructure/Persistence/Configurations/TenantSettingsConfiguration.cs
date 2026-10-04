@@ -17,6 +17,7 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
         builder.Property(s => s.SettingsJson).HasColumnType("nvarchar(max)");
         builder.Property(s => s.DefaultTaxRate).HasColumnType("decimal(5,2)");
         builder.Property(s => s.OnlineMenuMode).HasConversion<int>().IsRequired();
+        builder.Property(s => s.OrderNotificationPolicy).HasConversion<int>().IsRequired();
 
         builder.HasIndex(s => s.TenantId).IsUnique();
     }

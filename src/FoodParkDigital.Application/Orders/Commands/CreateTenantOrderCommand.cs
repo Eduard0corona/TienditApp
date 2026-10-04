@@ -272,6 +272,6 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         };
 
         if (stateMachine.GetAllowedTransitions(order.Status).Contains(defaultStatus))
-            order.TransitionTo(defaultStatus, stateMachine, performedBy);
+            order.AdvanceOnCreation(defaultStatus, stateMachine, performedBy);
     }
 }

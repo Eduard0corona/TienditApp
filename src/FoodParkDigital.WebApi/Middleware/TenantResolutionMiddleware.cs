@@ -141,7 +141,8 @@ public class TenantResolutionMiddleware
             }
         }
 
-        if (tenantScopedPath && role is not ("SUPER_ADMIN" or "TENANT_ADMIN"))
+        // Owners and admins of this business (by membership, read above on this request) need no permission codes.
+        if (tenantScopedPath && role != "SUPER_ADMIN" && accessSnapshot is not { IsManager: true })
         {
             var requiredPermissions = GetPermissionRequirements(path, context.Request.Method);
             if (requiredPermissions.Count > 0)

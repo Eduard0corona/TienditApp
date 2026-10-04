@@ -38,7 +38,7 @@ No se propone migrar a microservicios. Solo se reconsiderará si un contexto nec
 
 - Rutas HTTP bajo `/api/v1`; hubs en `/hubs/orders` y `/hubs/chat`.
 - En Development, `Program.cs` ejecuta `MigrateAsync()` y seed al iniciar.
-- En despliegue, el workflow `Deploy WebApp (API + SPA)` corre en cada push a `develop` o `master`, o a mano. Construye `client`, ejecuta lint, build y pruebas, publica WebApi con la SPA en `wwwroot` y despliega un paquete a Azure Web App. Ambas ramas despliegan a la misma app, así que deben mantenerse sincronizadas.
+- En despliegue, el workflow `Deploy WebApp (API + SPA)` corre en cada push a `master`, o a mano desde `master`. Construye `client`, ejecuta lint, build y pruebas, publica WebApi con la SPA en `wwwroot` y despliega un paquete a Azure Web App.
 - Serilog lee su configuración desde `appsettings`.
 - El almacenamiento se elige por `FileStorage:Provider`: Azure Blob o local.
 

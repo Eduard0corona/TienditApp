@@ -27,7 +27,7 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 - Un mensaje entrante que es solo "BAJA", "STOP", "ALTO" o "darme de baja" registra la baja del número y se responde con una confirmación; "ALTA" o "START" la revierte. No se usa la respuesta automática para esos mensajes. Frases como "quiero cancelar mi pedido" no cuentan.
 - El negocio también puede registrar o reactivar una baja a petición del cliente (permiso `ManageCampaigns` o `ManageCustomers`). Cada cambio se audita.
-- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) siguen llegando: el cliente los pidió al hacer el pedido.
+- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) siguen llegando: el cliente los pidió al hacer el pedido. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador.
 
 ## Cola y worker
 

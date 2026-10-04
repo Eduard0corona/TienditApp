@@ -52,6 +52,9 @@ public class TenantSettings : BaseEntity
     /// <summary>When the owner finished or skipped the guided setup.</summary>
     public DateTimeOffset? OnboardingCompletedAt { get; private set; }
 
+    /// <summary>Which orders send the customer WhatsApp messages: by default not counter sales (the customer is there).</summary>
+    public OrderNotificationPolicy OrderNotificationPolicy { get; private set; } = OrderNotificationPolicy.RemoteAndServices;
+
     public const int MinReminderHoursBefore = 1;
     public const int MaxReminderHoursBefore = 72;
     public const int DefaultReminderHoursBefore = 24;
@@ -88,6 +91,13 @@ public class TenantSettings : BaseEntity
     }
 
     public void SetRequireOpenCashSession(bool required) => RequireOpenCashSession = required;
+
+    public void SetOrderNotificationPolicy(OrderNotificationPolicy policy)
+    {
+        if (!Enum.IsDefined(policy))
+            throw new DomainException("La política de avisos no es válida.");
+        OrderNotificationPolicy = policy;
+    }
 
     public void UpdateAppointmentReminders(bool enabled, int hoursBefore, Guid? templateId)
     {

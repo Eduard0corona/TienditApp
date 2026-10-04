@@ -71,26 +71,14 @@ public class SetEmployeeActiveCommandHandler : IRequestHandler<SetEmployeeActive
         if (currentUserId == tenantUser.UserId)
             return Result.Failure("No puedes desactivar tu propio acceso.");
 
-        if (tenantUser.Role is TenantUserRole.Owner or TenantUserRole.Admin || user.Role == UserRole.TenantAdmin)
-        {
-            var activeAdmins = await _context.TenantUsers
-                .IgnoreQueryFilters()
-                .Where(x =>
-                    x.TenantId == _tenantService.TenantId
-                    && x.Status == TenantUserStatus.Active)
-                .Join(
-                    _context.Users.IgnoreQueryFilters(),
-                    tu => tu.UserId,
-                    u => u.Id,
-                    (tu, u) => new { tu, u })
-                .CountAsync(
-                    x =>
-                        (x.tu.Role == TenantUserRole.Owner || x.tu.Role == TenantUserRole.Admin)
-                        || x.u.Role == UserRole.TenantAdmin,
-                    cancellationToken);
+        if (tenantUser.Role == TenantUserRole.Owner)
+            return Result.Failure(EmployeeAccessRules.OwnerIsPermanentMessage);
 
-            if (activeAdmins <= 1)
-                return Result.Failure("Debe existir al menos un administrador activo en el tenant.");
+        // Administering the business comes from the membership (owning another business gives nothing here).
+        if (EmployeeAccessRules.IsManagerRole(tenantUser.Role)
+            && !await EmployeeAccessRules.HasAnotherActiveManagerAsync(_context, _tenantService.TenantId, tenantUser.Id, cancellationToken))
+        {
+            return Result.Failure(EmployeeAccessRules.LastManagerMessage);
         }
 
         tenantUser.SetStatus(TenantUserStatus.Disabled);

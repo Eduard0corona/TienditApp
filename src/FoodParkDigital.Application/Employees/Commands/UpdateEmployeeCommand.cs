@@ -81,23 +81,40 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
         if (user is null || user.Role == UserRole.Customer)
             return Result.Failure<EmployeeDto>("Empleado no encontrado.");
 
-        var tenantRole = request.AppRole == UserRole.TenantAdmin
-            ? TenantUserRole.Admin
-            : request.TenantRole;
+        // The owner keeps the business: from here only their name and phone change, never their role.
+        var isOwner = tenantUser.Role == TenantUserRole.Owner;
+        var appRole = isOwner ? user.Role : request.AppRole;
+        var tenantRole = isOwner
+            ? TenantUserRole.Owner
+            : request.AppRole == UserRole.TenantAdmin ? TenantUserRole.Admin : request.TenantRole;
+
+        if (EmployeeAccessRules.IsManagerRole(tenantUser.Role) && !EmployeeAccessRules.IsManagerRole(tenantRole))
+        {
+            if (Guid.TryParse(_currentUserService.UserId, out var currentUserId) && currentUserId == tenantUser.UserId)
+                return Result.Failure<EmployeeDto>(EmployeeAccessRules.SelfDemotionMessage);
+            if (!await EmployeeAccessRules.HasAnotherActiveManagerAsync(_context, _tenantService.TenantId, tenantUser.Id, cancellationToken))
+                return Result.Failure<EmployeeDto>(EmployeeAccessRules.LastManagerMessage);
+        }
 
         var permissions = TenantPermissionCatalog.NormalizeCodes(request.Permissions);
         if (permissions.Count == 0)
         {
-            permissions = TenantPermissionCatalog.GetDefaultCodes(request.AppRole, tenantRole);
+            permissions = TenantPermissionCatalog.GetDefaultCodes(appRole, tenantRole);
         }
 
         user.FirstName = request.FirstName.Trim();
         user.LastName = request.LastName.Trim();
         user.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
 
-        if (user.Role != request.AppRole)
+        // The account role is shared by every business of the person: with another business, only this membership
+        // changes (the role inside each business comes from its membership).
+        var belongsToAnotherBusiness = user.Role != appRole && await _context.TenantUsers
+            .IgnoreQueryFilters()
+            .AnyAsync(x => x.UserId == user.Id && x.TenantId != _tenantService.TenantId, cancellationToken);
+
+        if (user.Role != appRole && !belongsToAnotherBusiness)
         {
-            user.Role = request.AppRole;
+            user.Role = appRole;
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (currentRoles.Count > 0)
             {
@@ -109,7 +126,7 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
                 }
             }
 
-            var addRoleResult = await _userManager.AddToRoleAsync(user, EmployeeDefinitions.ToIdentityRole(request.AppRole));
+            var addRoleResult = await _userManager.AddToRoleAsync(user, EmployeeDefinitions.ToIdentityRole(appRole));
             if (!addRoleResult.Succeeded)
             {
                 var addErrors = string.Join(", ", addRoleResult.Errors.Select(e => e.Description));

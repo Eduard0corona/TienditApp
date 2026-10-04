@@ -39,7 +39,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
                 break;
             case RequiresTenantManagerAttribute:
                 await RequireMemberAsync(cancellationToken);
-                if (!_access.IsTenantManager)
+                if (!await _access.IsTenantManagerAsync(cancellationToken))
                     throw new ForbiddenAccessException("Solo el administrador del negocio puede hacer esto.");
                 break;
             case RequiresTenantMemberAttribute:
@@ -47,7 +47,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
                 break;
             case RequiresPermissionAttribute permission:
                 await RequireMemberAsync(cancellationToken);
-                if (!_access.IsTenantManager)
+                if (!await _access.IsTenantManagerAsync(cancellationToken))
                 {
                     var granted = await _access.GetPermissionsAsync(cancellationToken);
                     if (!permission.AnyOf.Any(required => granted.Contains(required.ToString(), StringComparer.OrdinalIgnoreCase)))

@@ -2,20 +2,19 @@
 
 ## Estrategia vigente
 
-- `master`: producción. Es la única rama que despliega: cada push publica la API y la SPA (workflow `Deploy WebApp`), y una ejecución manual desde otra rama se omite.
-- `develop`: integración activa mientras se resuelve la divergencia; ya no despliega a producción.
-- Ramas de trabajo cortas desde la rama objetivo.
-- Pull Requests pequeños, con una intención y validación reproducible.
+- `master`: la única rama permanente y la de producción. Cada push publica la API y la SPA (workflow `Deploy WebApp`); una ejecución manual desde otra rama se omite.
+- Ramas de trabajo cortas desde `master`, que vuelven a ella por Pull Request.
+- Pull Requests pequeños, con una intención y validación reproducible. Antes de fusionar uno con migraciones, aplica su `apply.sql` en producción (ver [migraciones](database-migrations.md)).
 - Preferencia por squash merge para historial funcional claro, si el equipo la aprueba.
 
-Al documentar el repositorio, `origin/master...origin/develop` devolvió `5 27`: master tenía 5 commits exclusivos y develop 27. La `master` local estaba 19 commits detrás de `origin/master`. No resuelvas esa divergencia incidentalmente; requiere inventario, estrategia y revisión separada.
+`develop` se retiró el 4 de octubre de 2026: todo su contenido ya estaba en `master`. Mientras existió, también desplegaba a producción con su propio workflow, así que una rama vieja con un workflow de despliegue es un riesgo: bórrala en lugar de dejarla.
 
 ## Flujo
 
 ```powershell
 git status --short --branch
-git fetch origin develop master
-git switch develop
+git fetch origin master
+git switch master
 git pull --ff-only
 git switch -c tipo/descripcion-corta
 ```
@@ -33,6 +32,6 @@ git diff
 
 - No force push en ramas compartidas.
 - No mezclar refactor amplio con cambio funcional.
-- No hacer merge/rebase de `master` y `develop` dentro de otra tarea.
+- No crear ramas permanentes además de `master` ni ramas con su propio workflow de despliegue.
 - No incluir secretos, artefactos generados o cambios accidentales.
 - No declarar validación que no se ejecutó.

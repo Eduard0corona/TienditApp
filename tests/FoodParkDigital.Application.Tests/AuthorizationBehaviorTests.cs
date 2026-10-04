@@ -4,6 +4,8 @@ using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.Queries;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 
@@ -102,7 +104,24 @@ public class AuthorizationBehaviorTests
     {
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             Behavior<ManagersOnly>(Staff(permissions: ["ManageCash", "ManageEmployees"])).Handle(new ManagersOnly(), Next, CancellationToken.None));
-        Assert.Equal("ok", await Behavior<ManagersOnly>(Staff(permissions: [], role: "TENANT_ADMIN")).Handle(new ManagersOnly(), Next, CancellationToken.None));
+        Assert.Equal("ok", await Behavior<ManagersOnly>(Staff(permissions: [], role: "TENANT_ADMIN", tenantRole: "ADMIN")).Handle(new ManagersOnly(), Next, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task OwningAnotherBusiness_ShouldGiveNoAdminRightsWhereThePersonIsStaff()
+    {
+        // A TENANT_ADMIN account (it owns another business) that is staff here, or an admin demoted after the token was issued.
+        var staffHere = Staff(permissions: ["ManageOrders"], role: "TENANT_ADMIN", tenantRole: "STAFF");
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<ManagersOnly>(staffHere).Handle(new ManagersOnly(), Next, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<NeedsCash>(staffHere).Handle(new NeedsCash(), Next, CancellationToken.None));
+        var access = await new GetMyAccessQueryHandler(staffHere.Context, staffHere.User).Handle(new GetMyAccessQuery(), CancellationToken.None);
+        Assert.False(access.IsTenantManager);
+        Assert.Equal(["ManageOrders"], access.Permissions);
+        // The menu follows the role in this business, not the one an older token carries.
+        Assert.Equal("STAFF", access.Role);
     }
 
     [Fact]
@@ -119,6 +138,8 @@ public class AuthorizationBehaviorTests
         Assert.Equal((int)(TenantCapability.Retail | TenantCapability.Inventory), staffAccess.Capabilities);
         Assert.True(ownerAccess.IsTenantManager);
         Assert.Equal(Enum.GetNames<TenantPermission>().Length, ownerAccess.Permissions.Count);
+        Assert.Equal("STAFF", staffAccess.Role);
+        Assert.Equal("TENANT_ADMIN", ownerAccess.Role);
     }
 
     private static Task<string> Next() => Task.FromResult("ok");
@@ -137,9 +158,24 @@ public class AuthorizationBehaviorTests
         {
             Role = role,
             TenantRole = tenantRole,
-            Snapshot = new TenantAccessSnapshot(active, capabilities, permissions),
+            Snapshot = new TenantAccessSnapshot(
+                active,
+                capabilities,
+                permissions,
+                IsManager: active && tenantRole is "OWNER" or "ADMIN",
+                EffectiveRole: active
+                    ? TenantPermissionCatalog.EffectiveRole(AccountRole(role), Enum.Parse<TenantUserRole>(tenantRole, ignoreCase: true))
+                    : null),
             Capabilities = capabilities
         };
+
+    private static UserRole AccountRole(string role) => role switch
+    {
+        "SUPER_ADMIN" => UserRole.SuperAdmin,
+        "TENANT_ADMIN" => UserRole.TenantAdmin,
+        "KITCHEN" => UserRole.Kitchen,
+        _ => UserRole.Staff
+    };
 
     private sealed record Unruled : IRequest<string>;
 

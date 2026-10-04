@@ -3183,6 +3183,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("OnlineMenuMode")
                         .HasColumnType("int");
 
+                    b.Property<int>("OrderNotificationPolicy")
+                        .HasColumnType("int");
+
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
 

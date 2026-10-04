@@ -39,6 +39,9 @@ public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, R
             return Result.Failure<UserProfileDto>("Usuario no encontrado.");
 
         var dto = _mapper.Map<UserProfileDto>(user);
+        // Inside a business the role is the one the person has there (the token's), as the API applies it.
+        if (!string.IsNullOrEmpty(_currentUserService.TenantRole) && !string.IsNullOrEmpty(_currentUserService.Role))
+            dto.Role = _currentUserService.Role;
         dto.TenantRole = _currentUserService.TenantRole;
         dto.Permissions = _currentUserService.Permissions.ToList();
         return Result.Success(dto);

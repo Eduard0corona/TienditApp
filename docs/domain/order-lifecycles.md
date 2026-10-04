@@ -98,6 +98,21 @@ stateDiagram-v2
 - Reembolsar no cambia el estado: registra el reembolso, saca el efectivo de la caja y, si se pide, regresa insumos. "Anular venta" reembolsa lo que queda de cada pago y después cancela si la máquina lo permite; una orden ya entregada o completada queda en su estado, reembolsada por completo.
 - La auditoría y los avisos de WhatsApp de cada evento se procesan por el outbox, después del commit y con reintentos; SignalR se notifica en proceso (best-effort). Las notificaciones de citas se esperan dentro de la solicitud, son best-effort y muestran la hora del tenant; los recordatorios de citas salen por la cola de mensajería.
 
+### Avisos al cliente (Fase 4)
+
+Cada aviso de pedido (`order_confirmed`, `order_status_update`, `order_cancelled`) es una plantilla de WhatsApp que Meta cobra. La política del negocio (`TenantSettings.OrderNotificationPolicy`, en Mi negocio > Impuestos y ventas) decide qué pedidos los reciben; `OrderNotificationRules` la evalúa en el handler del outbox:
+
+| Política | Quién recibe avisos |
+| --- | --- |
+| Pedidos a distancia y servicios (`RemoteAndServices`, por defecto) | Pedidos del cliente (menú en línea, su cuenta), pedidos que el negocio toma de un chat (canal WhatsApp) y servicios. Una venta de mostrador (`CreatedByBusiness`, canal `Counter`, que no es servicio) no: el cliente está ahí y tiene su ticket. |
+| Todos los pedidos con teléfono (`AllOrders`) | También las ventas de mostrador con teléfono. |
+| Ninguno (`Off`) | Nadie. |
+
+- El cliente sabe del pedido una vez, al crearse: el estado inicial que aplica la venta (`Order.AdvanceOnCreation`, por ejemplo `Pending` → `Confirmed`) no manda además un "cambió a Confirmada". `OrderCreatedEvent.Status` lleva el estado con el que nació la orden.
+- Un pedido que espera al negocio (`Pending`, pedido en línea sin aceptación automática) no recibe "pedido confirmado" al llegar; el cliente recibe el aviso cuando el negocio lo confirma.
+- Los eventos guardados en el outbox antes de este cambio no traen `Status` y se leen como `Confirmed`, igual que los trataba el handler anterior.
+- La baja del cliente (BAJA) no detiene estos avisos (ver [mensajería](messaging.md#bajas)).
+
 ## Cuentas abiertas por mesa (Fase 3)
 
 Un negocio con el módulo Comida puede abrir una cuenta (`Order.IsTab`) para una mesa (`DiningTable`) o a nombre de alguien (barra, "Juan"). La cuenta es una sola orden: se cobra, factura y reembolsa como cualquier otra, pero recibe productos en rondas.
@@ -122,7 +137,8 @@ stateDiagram-v2
 - En Mi negocio, "Menú en línea" tiene tres modos (`OnlineMenuMode`): apagado (por defecto), solo menú y menú con pedidos. El enlace es `/m/{slug}`; hay QR descargable, botón para compartir por WhatsApp y QR por mesa (`?mesa=Mesa 4`, que llega como mesa del pedido).
 - El cliente arma el pedido con opciones y lo envía con su nombre y teléfono. Llega como cualquier pedido de cliente (`CreatedByBusiness = false`, canal `Online`, ligado a su cliente temporal o registrado), en `Pending` para que el negocio lo confirme, o en `Confirmed` si el negocio acepta pedidos automáticamente (`AutoAcceptOrders`). La cocina lo ve como cualquier pedido de comida.
 - Mismas reglas de precio que en mostrador (`OrderLineBuilder`); el pedido se rechaza si el total cambió desde que el cliente lo vio, si un producto ya no está disponible o es un servicio.
-- Pendiente: pago en línea, entrega a domicilio con costo de envío y aviso de confirmación automático al cliente.
+- El cliente recibe el aviso por WhatsApp cuando el negocio confirma su pedido (o al llegar, si se acepta automáticamente), según la [política de avisos](#avisos-al-cliente-fase-4).
+- Pendiente: pago en línea y entrega a domicilio con costo de envío.
 
 ## Variantes y extras (Fase 3)
 

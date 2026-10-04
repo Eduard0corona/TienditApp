@@ -1,7 +1,7 @@
 name: Deploy WebApp (API + SPA)
 
-# Only master reaches production, so an older branch (develop included) cannot overwrite the published
-# version. A manual run started from any other branch is skipped.
+# Only master reaches production, so an older branch cannot overwrite the published version. A manual run
+# started from any other branch is skipped.
 on:
   push:
     branches:

@@ -48,10 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     try {
       const { data } = await profileApi.getProfile();
-      // The token's permission claims can be older than a change made by an admin: the server's current
+      // The token's role and permission claims can be older than a change made by an admin: the server's current
       // access wins when it answers (menus and guards only; the API checks every request itself).
       const access = await apiRequest('get', '/api/v1/me/access').catch(() => null);
-      setUser(access?.isMember ? { ...data, permissions: access.permissions ?? data.permissions } : data);
+      setUser(access?.isMember
+        ? { ...data, role: access.role ?? data.role, permissions: access.permissions ?? data.permissions }
+        : data);
       queryClient.removeQueries({ queryKey: queryKeys.myAccess });
     } catch {
       setUser(null);

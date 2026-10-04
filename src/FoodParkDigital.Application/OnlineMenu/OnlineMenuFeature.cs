@@ -375,7 +375,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         {
             var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
             if (stateMachine.GetAllowedTransitions(order.Status).Contains(OrderStatus.Confirmed))
-                order.TransitionTo(OrderStatus.Confirmed, stateMachine, "menu-en-linea");
+                order.AdvanceOnCreation(OrderStatus.Confirmed, stateMachine, "menu-en-linea");
             else
                 accepted = false;
         }

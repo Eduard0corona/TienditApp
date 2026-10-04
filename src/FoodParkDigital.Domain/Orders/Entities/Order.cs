@@ -334,6 +334,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         => Transition(newStatus, stateMachine, performedBy, notifyCustomer: true);
 
     /// <summary>
+    /// The status a new order starts in (confirmed or accepted by the business, or accepted automatically
+    /// online). The customer hears about the order once, from its creation, and not again for this step.
+    /// </summary>
+    public void AdvanceOnCreation(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
+        => Transition(newStatus, stateMachine, performedBy, notifyCustomer: false);
+
+    /// <summary>
     /// Closes a fully paid counter sale: the customer leaves with what they bought, so nobody has to mark
     /// it delivered by hand. Food that goes through the kitchen closes only once it is ready, and a service
     /// only when none of its tracked pieces is still being worked on (those close when their pieces are
@@ -416,7 +423,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     public void MarkAsCreated()
     {
-        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total));
+        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total, Status));
     }
 
     public void LinkToCustomerUser(Guid userId)

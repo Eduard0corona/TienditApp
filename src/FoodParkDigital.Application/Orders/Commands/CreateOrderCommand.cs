@@ -577,6 +577,6 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         };
 
         if (stateMachine.GetAllowedTransitions(order.Status).Contains(defaultStatus))
-            order.TransitionTo(defaultStatus, stateMachine, performedBy);
+            order.AdvanceOnCreation(defaultStatus, stateMachine, performedBy);
     }
 }

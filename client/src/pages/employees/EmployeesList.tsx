@@ -182,6 +182,9 @@ export default function EmployeesList() {
     );
   };
 
+  // The owner keeps the business: their role and permissions are not edited here (the API refuses it too).
+  const editingOwner = editingEmployee?.tenantRole === 'Owner';
+
   const permissionSummary = useMemo(() => {
     const map = new Map(permissionOptions.map((option) => [option.code, option.name]));
     return (codes: string[]) => codes.map((code) => map.get(code) || code).join(', ');
@@ -195,8 +198,9 @@ export default function EmployeesList() {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           phoneNumber: form.phoneNumber?.trim() || undefined,
-          appRole: form.appRole,
-          tenantRole: form.appRole === 1 ? 1 : form.tenantRole,
+          // The owner's selects are disabled (no value in the form): the API keeps their role whatever is sent.
+          appRole: editingOwner ? 1 : form.appRole,
+          tenantRole: editingOwner || form.appRole === 1 ? 1 : form.tenantRole,
           permissions: selectedPermissions,
         };
 
@@ -326,13 +330,16 @@ export default function EmployeesList() {
                       <small className="text-muted">{permissionSummary(employee.permissions) || '-'}</small>
                     </td>
                     <td className="text-center">
-                      <button
-                        className="btn btn-sm btn-soft-secondary me-1"
-                        title={employee.isActive ? 'Desactivar' : 'Activar'}
-                        onClick={() => void toggleActive(employee)}
-                      >
-                        <i className={employee.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
-                      </button>
+                      {employee.tenantRole !== 'Owner' && (
+                        <button
+                          className="btn btn-sm btn-soft-secondary me-1"
+                          title={employee.isActive ? 'Desactivar' : 'Activar'}
+                          aria-label={`${employee.isActive ? 'Desactivar' : 'Activar'} a ${employee.firstName} ${employee.lastName}`}
+                          onClick={() => void toggleActive(employee)}
+                        >
+                          <i className={employee.isActive ? 'ri-pause-line' : 'ri-play-line'} aria-hidden="true"></i>
+                        </button>
+                      )}
                       <button
                         className="btn btn-sm btn-soft-primary"
                         title="Editar"
@@ -405,10 +412,16 @@ export default function EmployeesList() {
               </div>
             )}
 
+            {editingOwner && (
+              <div className="alert alert-info small" role="status">
+                Es el dueño del negocio: conserva todos los permisos y su rol no se puede cambiar ni desactivar.
+              </div>
+            )}
+
             <div className="row">
               <div className="col-md-6 mb-3">
                 <label className="form-label">Rol de aplicacion</label>
-                <select className="form-select" {...register('appRole', { valueAsNumber: true })}>
+                <select className="form-select" disabled={editingOwner} {...register('appRole', { valueAsNumber: true })}>
                   {APP_ROLE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
@@ -418,7 +431,7 @@ export default function EmployeesList() {
                 <label className="form-label">Rol de tenant</label>
                 <select
                   className="form-select"
-                  disabled={watchedAppRole === 1}
+                  disabled={editingOwner || watchedAppRole === 1}
                   {...register('tenantRole', { valueAsNumber: true })}
                 >
                   {TENANT_ROLE_OPTIONS.map((option) => (
@@ -439,7 +452,8 @@ export default function EmployeesList() {
                         <input
                           className="form-check-input mt-1"
                           type="checkbox"
-                          checked={checked}
+                          checked={editingOwner || checked}
+                          disabled={editingOwner}
                           onChange={(e) => togglePermission(permission.code, e.target.checked)}
                         />
                         <span>

@@ -27,8 +27,22 @@ public sealed class CurrentAccessContext
 
     public bool IsAuthenticated => Guid.TryParse(_user.UserId, out _);
     public bool IsPlatformAdmin => _user.Role == PlatformAdminRole;
-    public bool IsTenantManager => TenantManagementRules.CanManageTenant(_user);
     public Guid TenantId => _tenant.TenantId;
+
+    /// <summary>
+    /// Owner or admin of the current business, read from the membership on this request: a demotion applies at
+    /// once, without waiting for the token to expire. The platform admin manages any business.
+    /// </summary>
+    public async Task<bool> IsTenantManagerAsync(CancellationToken cancellationToken)
+    {
+        if (IsPlatformAdmin)
+            return true;
+        if (_tenant.TenantId == Guid.Empty)
+            return TenantManagementRules.CanManageTenant(_user);
+
+        var snapshot = await GetSnapshotAsync(cancellationToken);
+        return snapshot is { HasActiveAccess: true, IsManager: true };
+    }
 
     public void Prime(Guid userId, Guid tenantId, TenantAccessSnapshot snapshot) => _cached = (userId, tenantId, snapshot);
 
@@ -86,7 +100,7 @@ public sealed class CurrentAccessContext
     /// <summary>Effective permissions: every permission for owners, admins and the platform admin.</summary>
     public async Task<IReadOnlyCollection<string>> GetPermissionsAsync(CancellationToken cancellationToken)
     {
-        if (IsTenantManager)
+        if (await IsTenantManagerAsync(cancellationToken))
             return Enum.GetNames<TenantPermission>();
 
         var snapshot = await GetSnapshotAsync(cancellationToken);

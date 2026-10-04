@@ -83,7 +83,9 @@ public class TenantAccessService : ITenantAccessService
             HasActiveAccess: true,
             NormalizedCapabilities: normalizedCapabilities,
             Permissions: permissions,
-            TenantSuspended: snapshot.TenantStatus is TenantStatus.Suspended or TenantStatus.Inactive);
+            TenantSuspended: snapshot.TenantStatus is TenantStatus.Suspended or TenantStatus.Inactive,
+            IsManager: snapshot.Role is TenantUserRole.Owner or TenantUserRole.Admin,
+            EffectiveRole: TenantPermissionCatalog.EffectiveRole(userRole, snapshot.Role));
     }
 
     public async Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)

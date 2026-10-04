@@ -2,7 +2,7 @@
 
 ## Producto y fuente de verdad
 
-TienditApp es un SaaS multi-tenant para negocios locales; los proyectos conservan el nombre `FoodParkDigital`. `develop` es la fuente funcional activa y `master` la estable mientras se resuelve su divergencia en una tarea separada. El código y las pruebas de la rama objetivo describen el estado actual; ADRs y esta documentación fijan decisiones/guardrails.
+TienditApp es un SaaS multi-tenant para negocios locales; los proyectos conservan el nombre `FoodParkDigital`. `master` es la única rama permanente y la de producción: cada merge a ella despliega. El código y las pruebas de la rama objetivo describen el estado actual; ADRs y esta documentación fijan decisiones/guardrails.
 
 ## Mapa
 

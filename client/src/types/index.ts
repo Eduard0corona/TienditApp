@@ -167,6 +167,8 @@ export interface TenantProfileDto {
   requireOpenCashSession?: boolean;
   /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
   onlineMenuMode?: OnlineMenuMode;
+  /** Which orders send the customer WhatsApp messages (paid templates). */
+  orderNotificationPolicy?: OrderNotificationPolicy;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -189,6 +191,8 @@ export interface TenantSalesPolicyDto {
   autoCloseCounterSales: boolean;
   /** Refuse cash payments when the cashier has no open drawer. Omitted keeps the current value. */
   requireOpenCashSession?: boolean;
+  /** Which orders send the customer WhatsApp messages. Omitted keeps the current value. */
+  orderNotificationPolicy?: OrderNotificationPolicy;
 }
 
 export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
@@ -375,6 +379,17 @@ export const OnlineMenuMode = {
   Orders: 2,
 } as const;
 export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
+
+/**
+ * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders
+ * placed from a distance and services; a counter sale gets no message.
+ */
+export const OrderNotificationPolicy = {
+  RemoteAndServices: 0,
+  AllOrders: 1,
+  Off: 2,
+} as const;
+export type OrderNotificationPolicy = (typeof OrderNotificationPolicy)[keyof typeof OrderNotificationPolicy];
 
 /** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
 export const CfdiTaxObject = {

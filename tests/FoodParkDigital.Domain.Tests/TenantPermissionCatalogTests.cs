@@ -34,6 +34,30 @@ public class TenantPermissionCatalogTests
         Assert.All(allCodes, code => Assert.Contains(code, adminCodes));
     }
 
+    [Theory]
+    [InlineData(UserRole.TenantAdmin, TenantUserRole.Owner, UserRole.TenantAdmin)]
+    [InlineData(UserRole.Staff, TenantUserRole.Admin, UserRole.TenantAdmin)]
+    [InlineData(UserRole.Kitchen, TenantUserRole.Admin, UserRole.TenantAdmin)]
+    [InlineData(UserRole.TenantAdmin, TenantUserRole.Staff, UserRole.Staff)] // Owns another business.
+    [InlineData(UserRole.Kitchen, TenantUserRole.Staff, UserRole.Kitchen)]
+    [InlineData(UserRole.Staff, TenantUserRole.Staff, UserRole.Staff)]
+    [InlineData(UserRole.SuperAdmin, TenantUserRole.Staff, UserRole.SuperAdmin)]
+    [InlineData(UserRole.Customer, TenantUserRole.Admin, UserRole.Customer)]
+    public void EffectiveRole_ShouldComeFromTheMembershipInThatBusiness(
+        UserRole accountRole, TenantUserRole membershipRole, UserRole expected)
+    {
+        Assert.Equal(expected, TenantPermissionCatalog.EffectiveRole(accountRole, membershipRole));
+    }
+
+    [Fact]
+    public void GetDefaultCodes_ForTheOwnerOfAnotherBusiness_ShouldBeTheStaffOnesWhereTheyAreStaff()
+    {
+        var codes = TenantPermissionCatalog.GetDefaultCodes(UserRole.TenantAdmin, TenantUserRole.Staff);
+
+        Assert.Equal(TenantPermissionCatalog.GetDefaultCodes(UserRole.Staff, TenantUserRole.Staff), codes);
+        Assert.DoesNotContain("ManageEmployees", codes);
+    }
+
     [Fact]
     public void ResolveEffectiveCodes_ShouldUseExplicitCodesWhenPresent()
     {

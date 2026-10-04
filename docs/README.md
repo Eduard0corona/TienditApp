@@ -1,6 +1,6 @@
 # Documentación de TienditApp
 
-Esta documentación describe `develop` en el commit `b26a3c6` inspeccionado el 10 de agosto de 2026. La divergencia confirmada fue `origin/master...origin/develop = 5/27` (commits exclusivos de cada lado). La rama `master` local estaba desactualizada y no se usó como referencia.
+Esta documentación describe `master`, la única rama permanente desde el 4 de octubre de 2026 (antes convivía con `develop`).
 
 ## Convenciones de estado
 

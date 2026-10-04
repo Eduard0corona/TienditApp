@@ -27,6 +27,9 @@ public record UpdateSalesPolicyCommand : IRequest<Result<TenantSalesPolicyDto>>
 
     /// <summary>Null keeps the current value (the guided setup does not ask about the drawer).</summary>
     public bool? RequireOpenCashSession { get; init; }
+
+    /// <summary>Which orders send the customer WhatsApp messages; null keeps the current policy.</summary>
+    public OrderNotificationPolicy? OrderNotificationPolicy { get; init; }
 }
 
 public class UpdateSalesPolicyCommandValidator : AbstractValidator<UpdateSalesPolicyCommand>
@@ -36,6 +39,10 @@ public class UpdateSalesPolicyCommandValidator : AbstractValidator<UpdateSalesPo
         RuleFor(x => x.DefaultTaxRate)
             .Must(VatRateRules.IsAllowed)
             .WithMessage(VatRateRules.InvalidRateMessage);
+        RuleFor(x => x.OrderNotificationPolicy)
+            .IsInEnum()
+            .When(x => x.OrderNotificationPolicy.HasValue)
+            .WithMessage("La política de avisos no es válida.");
     }
 }
 
@@ -85,16 +92,20 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
             settings.PricesIncludeTax,
             settings.DefaultTaxRate,
             settings.AutoCloseCounterSales,
-            settings.RequireOpenCashSession
+            settings.RequireOpenCashSession,
+            settings.OrderNotificationPolicy
         };
         settings.UpdateSalesPolicy(request.PricesIncludeTax, request.DefaultTaxRate, request.AutoCloseCounterSales);
         if (request.RequireOpenCashSession is { } requireOpenCashSession)
             settings.SetRequireOpenCashSession(requireOpenCashSession);
+        if (request.OrderNotificationPolicy is { } notificationPolicy)
+            settings.SetOrderNotificationPolicy(notificationPolicy);
 
         var changed = previous.PricesIncludeTax != settings.PricesIncludeTax
             || previous.DefaultTaxRate != settings.DefaultTaxRate
             || previous.AutoCloseCounterSales != settings.AutoCloseCounterSales
-            || previous.RequireOpenCashSession != settings.RequireOpenCashSession;
+            || previous.RequireOpenCashSession != settings.RequireOpenCashSession
+            || previous.OrderNotificationPolicy != settings.OrderNotificationPolicy;
         if (changed)
         {
             // How totals are computed is a financial setting: who changed it, and from what, stays recorded.
@@ -112,7 +123,8 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
                         settings.PricesIncludeTax,
                         settings.DefaultTaxRate,
                         settings.AutoCloseCounterSales,
-                        settings.RequireOpenCashSession
+                        settings.RequireOpenCashSession,
+                        settings.OrderNotificationPolicy
                     }
                 })));
         }
@@ -124,7 +136,8 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
             PricesIncludeTax = settings.PricesIncludeTax,
             DefaultTaxRate = settings.DefaultTaxRate,
             AutoCloseCounterSales = settings.AutoCloseCounterSales,
-            RequireOpenCashSession = settings.RequireOpenCashSession
+            RequireOpenCashSession = settings.RequireOpenCashSession,
+            OrderNotificationPolicy = settings.OrderNotificationPolicy
         });
     }
 }

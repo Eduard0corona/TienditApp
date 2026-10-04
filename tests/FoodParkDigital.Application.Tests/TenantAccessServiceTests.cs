@@ -1,4 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -76,6 +79,46 @@ public class TenantAccessServiceTests
             CancellationToken.None);
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public async Task Snapshot_ShouldTakeTheRoleFromTheMembershipInEachBusiness()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+        var owned = new Tenant("Tenant propio", "tenant-propio", BusinessType.Retail, "propio@test.com");
+        var other = new Tenant("Tenant ajeno", "tenant-ajeno", BusinessType.Retail, "ajeno@test.com");
+        context.Tenants.AddRange(owned, other);
+        context.TenantSettings.AddRange(new TenantSettings(owned.Id, TenantCapability.Retail), new TenantSettings(other.Id, TenantCapability.Retail));
+        // One account: owner of its business (so its account role is TENANT_ADMIN) and staff in another one.
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "duena@test.com",
+            UserName = "duena@test.com",
+            FirstName = "Dueña",
+            LastName = "Demo",
+            Role = UserRole.TenantAdmin
+        };
+        context.Users.Add(user);
+        context.TenantUsers.AddRange(
+            new TenantUser(owned.Id, user.Id, TenantUserRole.Owner),
+            new TenantUser(other.Id, user.Id, TenantUserRole.Staff));
+        await context.SaveChangesAsync();
+        var service = new TenantAccessService(context);
+
+        var asOwner = await service.GetAccessSnapshotAsync(user.Id, owned.Id, CancellationToken.None);
+        var asStaff = await service.GetAccessSnapshotAsync(user.Id, other.Id, CancellationToken.None);
+
+        Assert.True(asOwner.IsManager);
+        Assert.Equal(UserRole.TenantAdmin, asOwner.EffectiveRole);
+        Assert.Contains(nameof(TenantPermission.ManageEmployees), asOwner.Permissions);
+        Assert.False(asStaff.IsManager);
+        Assert.Equal(UserRole.Staff, asStaff.EffectiveRole);
+        Assert.DoesNotContain(nameof(TenantPermission.ManageEmployees), asStaff.Permissions);
+        Assert.Equal(TenantPermissionCatalog.GetDefaultCodes(UserRole.Staff, TenantUserRole.Staff).Order(), asStaff.Permissions.Order());
     }
 
     private sealed class TestCurrentTenantService : ICurrentTenantService

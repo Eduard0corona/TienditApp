@@ -4,7 +4,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import type { TenantSalesPolicyDto } from '../../types';
+import { OrderNotificationPolicy, type TenantSalesPolicyDto } from '../../types';
 import SalesPolicyFields from './SalesPolicyFields';
 
 /** "Impuestos y ventas" in Mi negocio: the IVA policy applies to sales made from now on. */
@@ -17,6 +17,7 @@ export default function SalesPolicyCard() {
     defaultTaxRate: tenant?.defaultTaxRate ?? 16,
     autoCloseCounterSales: tenant?.autoCloseCounterSales ?? true,
     requireOpenCashSession: tenant?.requireOpenCashSession ?? false,
+    orderNotificationPolicy: tenant?.orderNotificationPolicy ?? OrderNotificationPolicy.RemoteAndServices,
   };
   const [draft, setDraft] = useState<TenantSalesPolicyDto | null>(null);
   const [saving, setSaving] = useState(false);
@@ -25,7 +26,8 @@ export default function SalesPolicyCard() {
   const changed = value.pricesIncludeTax !== saved.pricesIncludeTax
     || value.defaultTaxRate !== saved.defaultTaxRate
     || value.autoCloseCounterSales !== saved.autoCloseCounterSales
-    || value.requireOpenCashSession !== saved.requireOpenCashSession;
+    || value.requireOpenCashSession !== saved.requireOpenCashSession
+    || value.orderNotificationPolicy !== saved.orderNotificationPolicy;
 
   const save = async () => {
     const taxChanged = value.pricesIncludeTax !== saved.pricesIncludeTax || value.defaultTaxRate !== saved.defaultTaxRate;

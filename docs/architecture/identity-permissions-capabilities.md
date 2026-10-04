@@ -50,6 +50,24 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).
 - El mapeo por prefijo de ruta del middleware se conserva como defensa en profundidad; se retirará cuando la API tenga pruebas end-to-end de la matriz.
 
+## Rol efectivo por negocio (Fase 4)
+
+Una persona puede ser dueña de un negocio y empleada en otro, con una sola cuenta. El rol que cuenta dentro de un negocio sale de su membresía (`TenantUser.Role`), no del rol de la cuenta (`ApplicationUser.Role`):
+
+| Cuenta | Membresía | Rol efectivo en ese negocio |
+| --- | --- | --- |
+| `SUPER_ADMIN` | cualquiera | `SUPER_ADMIN` |
+| cualquier empleado | `Owner` o `Admin` | `TENANT_ADMIN` |
+| `KITCHEN` | `Staff` | `KITCHEN` |
+| `TENANT_ADMIN` o `STAFF` | `Staff` | `STAFF` |
+
+- `TenantPermissionCatalog.EffectiveRole` fija la tabla; los permisos por defecto (`GetDefaultCodes`) la usan.
+- Con un negocio seleccionado, el claim `role` del JWT es el rol efectivo (`tenant_role` sigue llevando la membresía). Sin negocio, es el de la cuenta.
+- "Administra el negocio" (`CurrentAccessContext.IsTenantManagerAsync`, `[RequiresTenantManager]`, todos los permisos en `[RequiresPermission]` y el salto de permisos del middleware) se decide con la membresía leída en cada petición (`TenantAccessSnapshot.IsManager`), no con el claim: un token emitido antes de un cambio de rol no conserva el acceso de administrador.
+- `GET /auth/profile` devuelve el rol del token y `GET /api/v1/me/access` el rol efectivo actual (`TenantAccessSnapshot.EffectiveRole`); la app usa el segundo, así el menú y la página de entrada coinciden con lo que decide la API aunque el token sea anterior a un cambio de rol. Al iniciar sesión la app abre la página de entrada del rol (Inicio para administradores; Vender, Cocina o Taller para el resto) en lugar de una ruta fija.
+- Equipo (`UpdateEmployeeCommand`, `SetEmployeeActiveCommand`, `EmployeeAccessRules`): el dueño no se puede desactivar ni cambiar de rol (su nombre y teléfono sí); nadie se quita a sí mismo el rol de administrador; un negocio conserva al menos un dueño o admin activo, contado por membresía. El rol de la cuenta solo cambia si la persona no pertenece a otro negocio: de lo contrario solo cambia su membresía en este.
+- La migración `AlignTenantAdminMemberships` marca como `Admin` las membresías `Staff` de cuentas `TENANT_ADMIN` que solo pertenecen a un negocio, para que nadie que hoy administra su negocio pierda el acceso con la regla nueva. Es irreversible a propósito: su `Down` no degrada a nadie.
+
 ## Guardrails
 
 - Los guards de React y menús ocultos no son seguridad.
@@ -63,7 +81,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 ## Deuda actual
 
 - Los controllers conservan `[Authorize(Roles=...)]` además de la regla del caso de uso; la regla v2 es la autoridad y los roles de controller deben retirarse con pruebas de API.
-- `TENANT_ADMIN` y `SUPER_ADMIN` omiten comprobaciones granulares en el middleware. El claim `role` del JWT es el rol global del usuario, no el de su membresía: un `TENANT_ADMIN` obtendría todos los permisos en cualquier tenant al que se le agregue como empleado, y `UpdateEmployeeCommand` sobrescribe ese rol global. Hoy es latente porque ningún flujo agrega un usuario existente a un segundo tenant.
+- `SUPER_ADMIN` y quien administra el negocio por membresía omiten las comprobaciones granulares del middleware (todos sus permisos son implícitos). Algunos handlers además comparan el texto del claim `role` (`TENANT_ADMIN`); desde la Fase 4 es el rol efectivo del negocio, pero esas comparaciones deben retirarse a favor de la regla v2.
 - La autorización por recurso (por ejemplo, cerrar solo la caja propia) sigue en los handlers.
 - Los access tokens no se pueden revocar antes de expirar (no se valida el security stamp) y los refresh tokens se guardan en texto plano, sin detección de reuso.
 - No hay bloqueo de cuenta por intentos fallidos y el login distingue cuentas sin confirmar o bloqueadas; se atiende junto con la corrección del 2FA, en una tarea separada.

@@ -184,6 +184,7 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
         dto.DefaultTaxRate = settings.DefaultTaxRate;
         dto.AutoCloseCounterSales = settings.AutoCloseCounterSales;
         dto.RequireOpenCashSession = settings.RequireOpenCashSession;
+        dto.OrderNotificationPolicy = settings.OrderNotificationPolicy;
         dto.OnboardingCompletedAt = settings.OnboardingCompletedAt;
         return Result.Success(dto);
     }

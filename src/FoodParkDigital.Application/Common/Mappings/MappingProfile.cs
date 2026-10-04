@@ -81,6 +81,8 @@ public class MappingProfile : Profile
                 s.Settings == null || s.Settings.AutoCloseCounterSales))
             .ForMember(d => d.RequireOpenCashSession, opt => opt.MapFrom(s =>
                 s.Settings != null && s.Settings.RequireOpenCashSession))
+            .ForMember(d => d.OrderNotificationPolicy, opt => opt.MapFrom(s =>
+                s.Settings != null ? s.Settings.OrderNotificationPolicy : OrderNotificationPolicy.RemoteAndServices))
             .ForMember(d => d.OnlineMenuMode, opt => opt.MapFrom(s =>
                 s.Settings != null ? s.Settings.OnlineMenuMode : OnlineMenuMode.Off))
             .ForMember(d => d.OnboardingCompletedAt, opt => opt.MapFrom(s =>

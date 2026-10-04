@@ -1,11 +1,11 @@
 # Deuda técnica
 
-Actualizada el 2026-10-04 tras las Fases 0, 1, 2 y 3 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
 1. Credenciales expuestas: cadenas de conexión de Azure SQL y el secreto JWT estuvieron versionados y siguen en el historial de git. El código ya no los contiene y la API rechaza el secreto publicado, pero hay que rotarlos, revisar el firewall de Azure SQL y verificar si la cuenta SUPER_ADMIN sembrada con la contraseña anterior existe en la base remota. Reescribir el historial es destructivo y requiere coordinación.
-2. Aislamiento incompleto: `TenantSettings`/`WhatsAppConfig` no implementan `ITenantScoped`; `OrderItem`/`OrderStatusHistory` no tienen `TenantId`; quedan usos de `IgnoreQueryFilters()` por revisar; el override `X-Tenant-Id` de `SUPER_ADMIN` solo se audita en el log.
+2. Aislamiento incompleto: `TenantSettings`/`WhatsAppConfig` no implementan `ITenantScoped`; `OrderItem`/`OrderStatusHistory` no tienen `TenantId`; los usos de `IgnoreQueryFilters()` ya están inventariados por archivo y motivo (`TenantFilterBypassAllowlistTests` rompe CI con uno nuevo), pero cada uno depende de su predicado explícito; el override `X-Tenant-Id` de `SUPER_ADMIN` solo se audita en el log.
 3. Falta una suite que pruebe aislamiento HTTP, EF contra SQL Server, archivos, SignalR y webhooks.
 4. Archivos: el contenido se valida por firma, las fotos se re-codifican y el borrado por URL está confinado a `{área}/{tenantId}` en almacenamiento local y Azure Blob (rechaza traversal, otros tenants/áreas y URLs ajenas al contenedor). Pendiente: `/uploads` es estático y público (las evidencias de pago se descargan sin autorización), los PDF no pasan por un escaneo de malware, `UploadAsync` no valida carpeta y nombre, hay que sanear filas heredadas cuyo `ImageUrl`/`LogoUrl`/`AvatarUrl` apunte fuera de su carpeta (el borrado se rechaza con un warning y el archivo queda huérfano) y falta un namespace por usuario para avatares (el usuario es global y un avatar subido con otra membresía no se borra desde otro tenant).
 5. Webhook WhatsApp (actualizado 2026-10-02): la firma `X-Hub-Signature-256` se verifica fail-closed (503 sin `WhatsApp:AppSecret`, 401 sin firma válida; `WhatsApp:AllowUnsignedWebhooks` solo se respeta en Development), `PhoneNumberId` y `ExternalMessageId` tienen índices únicos filtrados (migración `AddWhatsAppWebhookUniqueIndexes`, verificada en SQL Server LocalDB) y las entregas repetidas o concurrentes son idempotentes; si dos primeros mensajes de un número nuevo llegan a la vez, el índice único `(TenantId, CustomerPhone)` deja crear una sola conversación y el otro mensaje se guarda en ella. Lo mismo ocurre si el negocio escribe a un número nuevo mientras llega su primer mensaje, o si dos envíos del negocio coinciden: `POST /api/v1/whatsapp/chat/send` guarda el mensaje, ya entregado, en la conversación ganadora de su tenant en lugar de responder 500 (verificado en SQL Server LocalDB con y sin `READ_COMMITTED_SNAPSHOT`). `WhatsAppConversation` tiene token de concurrencia `rowversion` (migración `AddWhatsAppConversationVersion`, verificada en SQL Server LocalDB con y sin `READ_COMMITTED_SNAPSHOT`; se aplica antes de desplegar el código que la usa): mensajes simultáneos del mismo cliente, auto-respuestas, envíos del negocio y "marcar leído" recargan la conversación y reaplican su cambio, hasta 10 intentos, en lugar de sobrescribir `UnreadCount` y el último mensaje. Cada mensaje del payload se procesa por separado y el `POST` responde 500 si alguno, o la actualización de estados, no se pudo procesar, para que Meta reenvíe la entrega (hasta 7 días); los mensajes ya guardados se ignoran por `ExternalMessageId`. JSON inválido y `PhoneNumberId` desconocido se confirman con 200. Como Meta no firma un timestamp, el replay se mitiga con esa idempotencia. Pendiente: un mensaje que falle siempre se reintenta y registra error durante esos 7 días; el envío del negocio llama a Meta antes de guardar y no hay Outbox, así que si el guardado falla por otra causa el mensaje entregado queda fuera del historial y la API responde 500; si una conversación recibe más de 10 escrituras simultáneas, la que agota los intentos falla (el webhook responde 500 y Meta reenvía, pero un envío del negocio o una auto-respuesta ya entregados quedan fuera del historial); `AppSecret` es global, así que un tenant con app de Meta propia (flujo que hoy sugiere la UI) será rechazado hasta definir secretos por tenant; la propiedad del `PhoneNumberId` no se verifica contra Meta (un admin podría reclamar primero el ID de otro negocio); faltan pruebas automatizadas de pipeline HTTP y contra SQL Server.
@@ -14,7 +14,7 @@ Actualizada el 2026-10-04 tras las Fases 0, 1, 2 y 3 del roadmap de producto (la
 ## Alta
 
 - Movimientos manuales de inventario registrados desde la pantalla antes de la corrección del 2026-10-04: se guardaron con el tipo y el motivo siguientes al elegido. Movieron las existencias en sentido contrario, y las "Salidas" guardadas como `Entry` promediaron su costo como si fueran compras. Falta revisarlos con cada tenant y compensarlos ([procedimiento y consulta de solo lectura](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md)). El dominio no tiene una operación para revaluar el costo promedio.
-- El claim `role` es el rol global y no el de la membresía: un `TENANT_ADMIN` tendría todos los permisos en cualquier negocio al que se le agregue como empleado. La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
+- La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, el paso de contraseña del login no cuenta intentos fallidos (`lockoutOnFailure: false`; el 2FA sí usa lockout) y el login distingue cuentas sin confirmar o bloqueadas.
 - Folios de órdenes y movimientos por conteo (una colisión responde 500); la recepción de compra no tiene idempotency key estable.
@@ -86,7 +86,7 @@ Pendientes detectados en la Fase 0:
 ## Resuelto el 2026-10-04 (Fase 1: plataforma)
 
 - API, pruebas e imagen Docker en .NET 10 (LTS) con EF Core y ASP.NET Core 10.0.12 y Serilog.AspNetCore 10, antes del fin de soporte de .NET 9 (10 de noviembre de 2026). El App Service debe usar el stack .NET 10 porque el despliegue es dependiente del framework.
-- Solo `master` despliega: `develop` salió de los disparadores y una ejecución manual desde otra rama se omite.
+- Solo `master` despliega: una ejecución manual desde otra rama se omite. `develop` conservaba su propio workflow de despliegue y se retiró en la Fase 4.
 
 ## Resuelto el 2026-10-04 (Fase 1: vender rápido)
 
@@ -142,14 +142,23 @@ Pendientes detectados en la Fase 3:
 - Sin conexión no se puede recargar la página ni iniciar sesión (no hay service worker y el token vive en memoria); la cocina no ve la venta hasta que se envía, y una venta cuyo precio cambió mientras tanto se rechaza y hay que registrarla de nuevo.
 - Con EF Core 10, el script idempotente desde una base vacía falla en una migración de febrero ya aplicada en producción; una base nueva se crea con `dotnet ef database update`. Falta validar las migraciones contra SQL Server en el CI.
 
+## Resuelto el 2026-10-04 (Fase 4: cerrar el diagnóstico)
+
+- Rol por negocio: el rol que cuenta en un negocio sale de la membresía. El token lleva el rol efectivo, administrar el negocio se lee de la membresía en cada petición y `/me/access` devuelve el rol actual; ser dueño de otro negocio ya no da permisos donde la persona es empleada (migración `AlignTenantAdminMemberships` para no quitarle el acceso a quien hoy administra su negocio).
+- Equipo: el dueño no se puede desactivar ni cambiar de rol, nadie se quita a sí mismo el rol de administrador y siempre queda un administrador activo, contado por membresía; editar a una persona que tiene otro negocio ya no cambia el rol de su cuenta.
+- Avisos de pedidos: política por negocio (migración `AddOrderNotificationPolicy`); por defecto las ventas de mostrador ya no mandan plantillas pagadas, el cliente recibe un solo aviso al crear su pedido y un pedido que espera al negocio no se anuncia como confirmado.
+- Al iniciar sesión la app abre la página de entrada de cada rol (Inicio solo para administradores).
+- `TenantFilterBypassAllowlistTests` inventaría cada uso de `IgnoreQueryFilters()` por archivo, cantidad y motivo.
+- `develop` se retira: `master` es la única rama permanente y el CI y la documentación ya no la mencionan. Borrar la rama en GitHub es un paso manual del dueño del repositorio.
+- Los tipos generados del cliente marcaban como obligatorios los enums y objetos que pueden faltar (`OrderStatus?`, `PlanDto?`); el filtro de OpenAPI ya respeta la nulabilidad de C#.
+
 ## Decisiones humanas pendientes
 
 - Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.
-- Modelo de autorización definitivo: policies/resource handlers, rol por tenant en el token y alcance administrativo cross-tenant.
+- Modelo de autorización definitivo: policies/resource handlers y alcance administrativo cross-tenant (el rol por negocio en el token ya existe desde la Fase 4).
 - Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
 - Responsable legal-contable de la política fiscal (descuentos, IEPS, retenciones y CFDI).
 - Cuentas por cobrar, saldo a favor y Wallet (los reembolsos ya existen; los ajustes contables no).
-- Estrategia para reconciliar `master`/`develop` y migraciones.
 - Cuándo agregar staging con swap antes de producción.
 - AutoMapper: licencia comercial o reemplazo.
 - Cantidades fraccionarias y control de stock por producto.

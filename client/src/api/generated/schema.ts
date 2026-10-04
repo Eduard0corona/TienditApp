@@ -6934,7 +6934,7 @@ export interface components {
             transactionType: components["schemas"]["CashTransactionType"];
             /** Format: double */
             amount: number;
-            paymentMethod: components["schemas"]["OrderPaymentMethod"];
+            paymentMethod?: components["schemas"]["OrderPaymentMethod"];
             /** Format: uuid */
             inventoryLocationId?: string | null;
             /** Format: uuid */
@@ -7053,7 +7053,7 @@ export interface components {
             requiresTwoFactor: boolean;
             twoFactorChallengeToken?: string | null;
             userId?: string | null;
-            user: components["schemas"]["UserDto"];
+            user?: components["schemas"]["UserDto"];
         };
         AvatarImageUrlsDto: {
             original: string;
@@ -7251,7 +7251,7 @@ export interface components {
             amount: number;
             /** Format: date-time */
             occurredAt: string;
-            paymentMethod: components["schemas"]["OrderPaymentMethod"];
+            paymentMethod?: components["schemas"]["OrderPaymentMethod"];
             /** Format: uuid */
             inventoryLocationId?: string | null;
             inventoryLocationName?: string | null;
@@ -7290,7 +7290,7 @@ export interface components {
             id: string;
             name: string;
             description: string;
-            businessType: components["schemas"]["BusinessType"];
+            businessType?: components["schemas"]["BusinessType"];
             isRecommended: boolean;
             /** Format: int32 */
             categoryCount: number;
@@ -7315,7 +7315,7 @@ export interface components {
             /** Format: double */
             amount: number;
             taxObject: string;
-            transfer: components["schemas"]["CfdiTransferDto"];
+            transfer?: components["schemas"]["CfdiTransferDto"];
         };
         CfdiDraftDto: {
             /** Format: uuid */
@@ -7576,7 +7576,7 @@ export interface components {
             tableNumber?: string | null;
             createdByBusiness: boolean;
             orderType: components["schemas"]["OrderType"];
-            serviceDetail: components["schemas"]["ServiceOrderDetailInput"];
+            serviceDetail?: components["schemas"]["ServiceOrderDetailInput"];
             items: components["schemas"]["CreateOrderItemDto"][];
             payments: components["schemas"]["CreateOrderPaymentDto"][];
             /** Format: double */
@@ -7660,7 +7660,7 @@ export interface components {
             lowStockThreshold?: number | null;
             /** Format: int32 */
             maxQuantityPerOrder?: number | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             /** Format: date-span */
             availableFromTime?: string | null;
             /** Format: date-span */
@@ -7940,7 +7940,7 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isActive: boolean;
-            openTab: components["schemas"]["OpenTabSummaryDto"];
+            openTab?: components["schemas"]["OpenTabSummaryDto"];
         };
         Disable2FARequest: {
             code: string;
@@ -8488,7 +8488,7 @@ export interface components {
             updatedAt?: string | null;
             items: components["schemas"]["OrderItemDto"][];
             statusHistory: components["schemas"]["OrderStatusHistoryDto"][];
-            serviceDetail: components["schemas"]["ServiceOrderDetailDto"];
+            serviceDetail?: components["schemas"]["ServiceOrderDetailDto"];
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
@@ -8543,6 +8543,11 @@ export interface components {
             /** Format: double */
             priceDelta: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderNotificationPolicy: 0 | 1 | 2;
         OrderPaymentDto: {
             /** Format: uuid */
             id: string;
@@ -8744,7 +8749,7 @@ export interface components {
             /** Format: uuid */
             planId?: string | null;
             planName?: string | null;
-            subscriptionStatus: components["schemas"]["SubscriptionStatus"];
+            subscriptionStatus?: components["schemas"]["SubscriptionStatus"];
             /** Format: date-time */
             trialEndsAt?: string | null;
             /** Format: date-time */
@@ -8794,7 +8799,7 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             tags?: string | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             /** Format: double */
             priceAmount: number;
             priceCurrency: string;
@@ -8808,7 +8813,7 @@ export interface components {
             satUnitCode?: string | null;
             taxObject: components["schemas"]["CfdiTaxObject"];
             imageUrl?: string | null;
-            images: components["schemas"]["ProductImageUrlsDto"];
+            images?: components["schemas"]["ProductImageUrlsDto"];
             isAvailable: boolean;
             isFeatured: boolean;
             /** Format: int32 */
@@ -8942,7 +8947,7 @@ export interface components {
             taxRate?: number | null;
             isTaxExempt: boolean;
             imageUrl?: string | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             isFeatured: boolean;
             availableNow: boolean;
             allergens?: string | null;
@@ -9304,8 +9309,8 @@ export interface components {
         };
         SubscriptionDetailDto: {
             hasPlan: boolean;
-            plan: components["schemas"]["PlanDto"];
-            status: components["schemas"]["SubscriptionStatus"];
+            plan?: components["schemas"]["PlanDto"];
+            status?: components["schemas"]["SubscriptionStatus"];
             /** Format: date-time */
             startedAt?: string | null;
             /** Format: date-time */
@@ -9472,7 +9477,7 @@ export interface components {
             contactEmail: string;
             contactPhone?: string | null;
             logoUrl?: string | null;
-            logoImages: components["schemas"]["LogoImageUrlsDto"];
+            logoImages?: components["schemas"]["LogoImageUrlsDto"];
             capabilities: components["schemas"]["TenantCapability"];
             /** Format: date-time */
             createdAt: string;
@@ -9481,6 +9486,7 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
+            orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
@@ -9503,6 +9509,7 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
+            orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
         };
         TenantSetupDto: {
             businessType: components["schemas"]["BusinessType"];
@@ -9682,7 +9689,7 @@ export interface components {
             zipCode?: string | null;
             city?: string | null;
             state?: string | null;
-            capabilities: components["schemas"]["TenantCapability"];
+            capabilities?: components["schemas"]["TenantCapability"];
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];
@@ -9755,7 +9762,7 @@ export interface components {
             lowStockThreshold?: number | null;
             /** Format: int32 */
             maxQuantityPerOrder?: number | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             /** Format: date-span */
             availableFromTime?: string | null;
             /** Format: date-span */
@@ -9769,6 +9776,7 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession?: boolean | null;
+            orderNotificationPolicy?: components["schemas"]["OrderNotificationPolicy"];
         };
         UpdateServiceOrderPieceStatusRequest: {
             newStatus: components["schemas"]["ServiceOrderPieceStatus"];
@@ -9858,7 +9866,7 @@ export interface components {
             tenantId?: string | null;
             isActive: boolean;
             avatarUrl?: string | null;
-            avatarImages: components["schemas"]["AvatarImageUrlsDto"];
+            avatarImages?: components["schemas"]["AvatarImageUrlsDto"];
         };
         UserProfileDto: {
             /** Format: uuid */
@@ -9877,7 +9885,7 @@ export interface components {
             tenantId?: string | null;
             isActive: boolean;
             avatarUrl?: string | null;
-            avatarImages: components["schemas"]["AvatarImageUrlsDto"];
+            avatarImages?: components["schemas"]["AvatarImageUrlsDto"];
             twoFactorEnabled: boolean;
             /** Format: date-time */
             createdAt: string;

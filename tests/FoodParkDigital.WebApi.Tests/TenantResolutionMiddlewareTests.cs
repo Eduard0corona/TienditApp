@@ -41,6 +41,22 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Fact]
+    public async Task AdminRoleInTheToken_ShouldNotSkipPermissions_WhenTheMembershipIsStaff()
+    {
+        // The token says TENANT_ADMIN (issued before a demotion, or the account owns another business),
+        // but the membership read on this request is staff: the route's permission still applies.
+        var staffHere = new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageCatalog)]);
+        var managerHere = new FakeTenantAccessService(active: true, permissions: [], isManager: true);
+
+        var denied = await InvokeAsync("/api/v1/orders", "GET", "TENANT_ADMIN", staffHere);
+        var allowed = await InvokeAsync("/api/v1/orders", "GET", "STAFF", managerHere);
+
+        Assert.False(denied.NextCalled);
+        Assert.Equal(StatusCodes.Status403Forbidden, denied.StatusCode);
+        Assert.True(allowed.NextCalled);
+    }
+
+    [Fact]
     public async Task MyTenant_ShouldResolveTenant_ForActiveMemberWithoutPermissions()
     {
         var access = new FakeTenantAccessService(active: true, permissions: []);
@@ -121,7 +137,7 @@ public class TenantResolutionMiddlewareTests
     public async Task SuspendedBusiness_ShouldOnlyReadWhyItIsSuspended(string path, string method, bool allowed)
     {
         var result = await InvokeAsync(path, method, "TENANT_ADMIN",
-            new FakeTenantAccessService(active: true, [], suspended: true));
+            new FakeTenantAccessService(active: true, [], suspended: true, isManager: true));
 
         Assert.Equal(allowed, result.NextCalled);
         Assert.Equal(allowed ? StatusCodes.Status200OK : StatusCodes.Status403Forbidden, result.StatusCode);
@@ -258,7 +274,8 @@ public class TenantResolutionMiddlewareTests
         bool active,
         IReadOnlyCollection<string> permissions,
         TenantCapability capabilities = TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food | TenantCapability.Inventory,
-        bool suspended = false)
+        bool suspended = false,
+        bool isManager = false)
         : ITenantAccessService
     {
         public int Calls { get; private set; }
@@ -270,7 +287,8 @@ public class TenantResolutionMiddlewareTests
                 active,
                 capabilities,
                 active ? permissions : [],
-                suspended));
+                suspended,
+                active && isManager));
         }
 
         public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>

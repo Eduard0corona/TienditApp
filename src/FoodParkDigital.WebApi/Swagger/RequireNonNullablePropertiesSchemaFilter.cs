@@ -1,3 +1,6 @@
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -5,7 +8,8 @@ namespace FoodParkDigital.WebApi.Swagger;
 
 /// <summary>
 /// Marks every property that cannot be null as required, so the generated client types say <c>total: number</c>
-/// instead of <c>total?: number</c>. Nullable properties (<c>string?</c>, <c>int?</c>) stay optional.
+/// instead of <c>total?: number</c>. Nullable properties (<c>string?</c>, <c>int?</c>, <c>OrderStatus?</c>) stay
+/// optional.
 /// </summary>
 public sealed class RequireNonNullablePropertiesSchemaFilter : ISchemaFilter
 {
@@ -14,10 +18,22 @@ public sealed class RequireNonNullablePropertiesSchemaFilter : ISchemaFilter
         if (schema.Properties is not { Count: > 0 })
             return;
 
+        var nullableMembers = NullableMemberNames(context.Type);
         foreach (var (name, property) in schema.Properties)
         {
-            if (!property.Nullable)
+            // A reference to another schema (an enum, a DTO) cannot say "nullable": the CLR property decides.
+            if (!property.Nullable && !nullableMembers.Contains(name))
                 schema.Required.Add(name);
         }
+    }
+
+    private static HashSet<string> NullableMemberNames(Type type)
+    {
+        var nullability = new NullabilityInfoContext();
+        return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => Nullable.GetUnderlyingType(p.PropertyType) is not null
+                        || (!p.PropertyType.IsValueType && nullability.Create(p).ReadState == NullabilityState.Nullable))
+            .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? JsonNamingPolicy.CamelCase.ConvertName(p.Name))
+            .ToHashSet(StringComparer.Ordinal);
     }
 }

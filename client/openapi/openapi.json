@@ -8396,7 +8396,6 @@
         "required": [
           "amount",
           "cashSessionId",
-          "paymentMethod",
           "transactionType"
         ],
         "type": "object",
@@ -8799,8 +8798,7 @@
       },
       "AuthResponse": {
         "required": [
-          "requiresTwoFactor",
-          "user"
+          "requiresTwoFactor"
         ],
         "type": "object",
         "properties": {
@@ -9417,7 +9415,6 @@
           "cashSessionId",
           "id",
           "occurredAt",
-          "paymentMethod",
           "transactionType"
         ],
         "type": "object",
@@ -9560,7 +9557,6 @@
       },
       "CategoryTemplateDto": {
         "required": [
-          "businessType",
           "categories",
           "categoryCount",
           "description",
@@ -9627,7 +9623,6 @@
           "productCode",
           "quantity",
           "taxObject",
-          "transfer",
           "unitCode",
           "unitValue"
         ],
@@ -10575,8 +10570,7 @@
           "items",
           "openTab",
           "orderType",
-          "payments",
-          "serviceDetail"
+          "payments"
         ],
         "type": "object",
         "properties": {
@@ -10784,8 +10778,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject",
-          "unit"
+          "taxObject"
         ],
         "type": "object",
         "properties": {
@@ -11759,7 +11752,6 @@
           "id",
           "isActive",
           "name",
-          "openTab",
           "sortOrder"
         ],
         "type": "object",
@@ -13443,7 +13435,6 @@
           "pricesIncludeTax",
           "refundedAmount",
           "refunds",
-          "serviceDetail",
           "servicePieces",
           "status",
           "statusHistory",
@@ -13773,6 +13764,15 @@
           }
         },
         "additionalProperties": false
+      },
+      "OrderNotificationPolicy": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
       },
       "OrderPaymentDto": {
         "required": [
@@ -14361,7 +14361,6 @@
           "createdAt",
           "name",
           "slug",
-          "subscriptionStatus",
           "tenantId",
           "tenantStatus",
           "usersCount"
@@ -14516,7 +14515,6 @@
           "categoryId",
           "hasDiscount",
           "id",
-          "images",
           "isAvailable",
           "isFeatured",
           "isLowStock",
@@ -14528,8 +14526,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject",
-          "unit"
+          "taxObject"
         ],
         "type": "object",
         "properties": {
@@ -15027,8 +15024,7 @@
           "isTaxExempt",
           "name",
           "optionGroups",
-          "price",
-          "unit"
+          "price"
         ],
         "type": "object",
         "properties": {
@@ -16290,8 +16286,6 @@
           "branchesUsed",
           "hasPlan",
           "payments",
-          "plan",
-          "status",
           "suspendedByPlatform",
           "usersUsed"
         ],
@@ -16818,9 +16812,9 @@
           "createdAt",
           "defaultTaxRate",
           "id",
-          "logoImages",
           "name",
           "onlineMenuMode",
+          "orderNotificationPolicy",
           "pricesIncludeTax",
           "requireOpenCashSession",
           "slug",
@@ -16877,6 +16871,9 @@
           },
           "requireOpenCashSession": {
             "type": "boolean"
+          },
+          "orderNotificationPolicy": {
+            "$ref": "#/components/schemas/OrderNotificationPolicy"
           },
           "onlineMenuMode": {
             "$ref": "#/components/schemas/OnlineMenuMode"
@@ -16941,6 +16938,7 @@
         "required": [
           "autoCloseCounterSales",
           "defaultTaxRate",
+          "orderNotificationPolicy",
           "pricesIncludeTax",
           "requireOpenCashSession"
         ],
@@ -16958,6 +16956,9 @@
           },
           "requireOpenCashSession": {
             "type": "boolean"
+          },
+          "orderNotificationPolicy": {
+            "$ref": "#/components/schemas/OrderNotificationPolicy"
           }
         },
         "additionalProperties": false
@@ -17544,7 +17545,6 @@
       },
       "UpdateMyTenantCommand": {
         "required": [
-          "capabilities",
           "contactEmail",
           "name"
         ],
@@ -17748,8 +17748,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject",
-          "unit"
+          "taxObject"
         ],
         "type": "object",
         "properties": {
@@ -17890,6 +17889,9 @@
           "requireOpenCashSession": {
             "type": "boolean",
             "nullable": true
+          },
+          "orderNotificationPolicy": {
+            "$ref": "#/components/schemas/OrderNotificationPolicy"
           }
         },
         "additionalProperties": false
@@ -18163,7 +18165,6 @@
       },
       "UserDto": {
         "required": [
-          "avatarImages",
           "email",
           "firstName",
           "id",
@@ -18217,7 +18218,6 @@
       },
       "UserProfileDto": {
         "required": [
-          "avatarImages",
           "createdAt",
           "email",
           "emailConfirmed",
