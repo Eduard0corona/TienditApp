@@ -45,6 +45,8 @@ public class TenantProfileDto
     public decimal DefaultTaxRate { get; set; } = 16m;
     public bool AutoCloseCounterSales { get; set; } = true;
     public bool RequireOpenCashSession { get; set; }
+    /// <summary>The public menu (/m/{slug}): off, menu only, or menu that takes orders.</summary>
+    public OnlineMenuMode OnlineMenuMode { get; set; }
     public DateTimeOffset? OnboardingCompletedAt { get; set; }
 
     // MX Business fields

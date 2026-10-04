@@ -2811,6 +2811,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("OnboardingCompletedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<int>("OnlineMenuMode")
+                        .HasColumnType("int");
+
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
 

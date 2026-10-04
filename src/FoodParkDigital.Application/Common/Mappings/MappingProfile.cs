@@ -24,6 +24,7 @@ using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 
 namespace FoodParkDigital.Application.Common.Mappings;
@@ -80,6 +81,8 @@ public class MappingProfile : Profile
                 s.Settings == null || s.Settings.AutoCloseCounterSales))
             .ForMember(d => d.RequireOpenCashSession, opt => opt.MapFrom(s =>
                 s.Settings != null && s.Settings.RequireOpenCashSession))
+            .ForMember(d => d.OnlineMenuMode, opt => opt.MapFrom(s =>
+                s.Settings != null ? s.Settings.OnlineMenuMode : OnlineMenuMode.Off))
             .ForMember(d => d.OnboardingCompletedAt, opt => opt.MapFrom(s =>
                 s.Settings != null ? s.Settings.OnboardingCompletedAt : null))
             .ForMember(d => d.Street, opt => opt.MapFrom(s => s.Address != null ? s.Address.Street : null))

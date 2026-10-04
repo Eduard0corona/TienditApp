@@ -31,6 +31,7 @@ const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const SellPage = lazy(() => import('./pages/sell/SellPage'));
 const TablesPage = lazy(() => import('./pages/tables/TablesPage'));
+const PublicMenuPage = lazy(() => import('./pages/public/PublicMenuPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const CampaignsPage = lazy(() => import('./pages/campaigns/CampaignsPage'));
@@ -56,6 +57,8 @@ export default function App() {
           <Route path="/confirm-email" element={<ConfirmEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* The public menu of a business, opened from its link or QR (no sign-in). */}
+          <Route path="/m/:slug" element={<PublicMenuPage />} />
 
           {/* Protected routes */}
           <Route

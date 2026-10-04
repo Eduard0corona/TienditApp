@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
+import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
 import { tenantApi } from '../../api/tenantApi';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
@@ -314,6 +315,7 @@ export default function BusinessSettings() {
       )}
 
       <SalesPolicyCard />
+      <OnlineMenuCard />
 
       <div className="row">
         {/* Left Column */}

@@ -165,6 +165,8 @@ export interface TenantProfileDto {
   autoCloseCounterSales: boolean;
   /** Cash payments are refused unless the cashier has an open drawer. */
   requireOpenCashSession?: boolean;
+  /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
+  onlineMenuMode?: OnlineMenuMode;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -365,6 +367,14 @@ export const UnitType = {
   Service: 52,
 } as const;
 export type UnitType = (typeof UnitType)[keyof typeof UnitType];
+
+/** Same numbers as Domain.Tenants.Enums.OnlineMenuMode. */
+export const OnlineMenuMode = {
+  Off: 0,
+  MenuOnly: 1,
+  Orders: 2,
+} as const;
+export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
 
 /** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
 export const CfdiTaxObject = {

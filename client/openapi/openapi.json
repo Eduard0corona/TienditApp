@@ -6123,6 +6123,103 @@
         }
       }
     },
+    "/api/v1/public/menu/{slug}": {
+      "get": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicMenuDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicMenuDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicMenuDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/orders": {
+      "post": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlacePublicOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlacePublicOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlacePublicOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderReceiptDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderReceiptDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderReceiptDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/purchaseorders": {
       "get": {
         "tags": [
@@ -7204,6 +7301,54 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TenantSalesPolicyDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/my-tenant/online-menu": {
+      "put": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOnlineMenuRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOnlineMenuRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOnlineMenuRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineMenuSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineMenuSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnlineMenuSettingsDto"
                 }
               }
             }
@@ -12082,6 +12227,31 @@
         },
         "additionalProperties": false
       },
+      "OnlineMenuMode": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "OnlineMenuSettingsDto": {
+        "required": [
+          "mode",
+          "slug"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/OnlineMenuMode"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "OpenCashSessionCommand": {
         "required": [
           "openingAmount"
@@ -12984,6 +13154,42 @@
         },
         "additionalProperties": false
       },
+      "PlacePublicOrderRequest": {
+        "required": [
+          "customerName",
+          "customerPhone",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "tableLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateOrderItemDto"
+            }
+          },
+          "expectedTotal": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PreviewCampaignQuery": {
         "required": [
           "audienceKind",
@@ -13451,6 +13657,174 @@
           },
           "isActive": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicMenuCategoryDto": {
+        "required": [
+          "id",
+          "name",
+          "products"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicMenuProductDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicMenuDto": {
+        "required": [
+          "acceptsOrders",
+          "businessName",
+          "categories",
+          "currency",
+          "defaultTaxRate",
+          "pricesIncludeTax",
+          "slug"
+        ],
+        "type": "object",
+        "properties": {
+          "businessName": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string"
+          },
+          "pricesIncludeTax": {
+            "type": "boolean"
+          },
+          "defaultTaxRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "acceptsOrders": {
+            "type": "boolean"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicMenuCategoryDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicMenuProductDto": {
+        "required": [
+          "availableNow",
+          "id",
+          "isFeatured",
+          "isTaxExempt",
+          "name",
+          "optionGroups",
+          "price",
+          "unit"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "number",
+            "format": "double"
+          },
+          "compareAtPrice": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "taxRate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isTaxExempt": {
+            "type": "boolean"
+          },
+          "imageUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "isFeatured": {
+            "type": "boolean"
+          },
+          "availableNow": {
+            "type": "boolean"
+          },
+          "allergens": {
+            "type": "string",
+            "nullable": true
+          },
+          "optionGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductOptionGroupDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicOrderReceiptDto": {
+        "required": [
+          "businessName",
+          "confirmed",
+          "orderNumber",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderNumber": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -14875,6 +15249,7 @@
           "id",
           "logoImages",
           "name",
+          "onlineMenuMode",
           "pricesIncludeTax",
           "requireOpenCashSession",
           "slug",
@@ -14931,6 +15306,9 @@
           },
           "requireOpenCashSession": {
             "type": "boolean"
+          },
+          "onlineMenuMode": {
+            "$ref": "#/components/schemas/OnlineMenuMode"
           },
           "onboardingCompletedAt": {
             "type": "string",
@@ -15591,6 +15969,18 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/TenantCapability"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateOnlineMenuRequest": {
+        "required": [
+          "mode"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/OnlineMenuMode"
           }
         },
         "additionalProperties": false

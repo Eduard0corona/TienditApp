@@ -42,9 +42,9 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal(
         [
-            "ConfirmEmailCommand", "ConfirmPhoneCommand", "ForgotPasswordCommand", "Login2FACommand", "LoginCommand", "LogoutCommand",
-            "ProcessInboundMessageCommand", "RefreshTokenCommand", "RegisterBusinessCommand", "RegisterCustomerCommand",
-            "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand", "ResetPasswordCommand",
+            "ConfirmEmailCommand", "ConfirmPhoneCommand", "ForgotPasswordCommand", "GetPublicMenuQuery", "Login2FACommand", "LoginCommand",
+            "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand", "RegisterBusinessCommand",
+            "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand", "ResetPasswordCommand",
             "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);
     }

@@ -106,6 +106,16 @@ public class TenantSettings : BaseEntity
         OnboardingCompletedAt ??= completedAt;
     }
 
+    /// <summary>The public menu (/m/{slug}): off by default, menu only, or menu that takes orders.</summary>
+    public OnlineMenuMode OnlineMenuMode { get; private set; } = OnlineMenuMode.Off;
+
+    public void UpdateOnlineMenu(OnlineMenuMode mode)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new DomainException("El modo del menú en línea no es válido.");
+        OnlineMenuMode = mode;
+    }
+
     public bool HasCapability(TenantCapability capability)
         => (Capabilities & capability) == capability;
 }

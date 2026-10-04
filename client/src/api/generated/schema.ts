@@ -4969,6 +4969,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/menu/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicMenuDto"];
+                        "application/json": components["schemas"]["PublicMenuDto"];
+                        "text/json": components["schemas"]["PublicMenuDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PlacePublicOrderRequest"];
+                    "text/json": components["schemas"]["PlacePublicOrderRequest"];
+                    "application/*+json": components["schemas"]["PlacePublicOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicOrderReceiptDto"];
+                        "application/json": components["schemas"]["PublicOrderReceiptDto"];
+                        "text/json": components["schemas"]["PublicOrderReceiptDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/purchaseorders": {
         parameters: {
             query?: never;
@@ -5825,6 +5909,49 @@ export interface paths {
                         "text/plain": components["schemas"]["TenantSalesPolicyDto"];
                         "application/json": components["schemas"]["TenantSalesPolicyDto"];
                         "text/json": components["schemas"]["TenantSalesPolicyDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/my-tenant/online-menu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOnlineMenuRequest"];
+                    "text/json": components["schemas"]["UpdateOnlineMenuRequest"];
+                    "application/*+json": components["schemas"]["UpdateOnlineMenuRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineMenuSettingsDto"];
+                        "application/json": components["schemas"]["OnlineMenuSettingsDto"];
+                        "text/json": components["schemas"]["OnlineMenuSettingsDto"];
                     };
                 };
             };
@@ -7549,6 +7676,15 @@ export interface components {
             role: string;
             status: string;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OnlineMenuMode: 0 | 1 | 2;
+        OnlineMenuSettingsDto: {
+            mode: components["schemas"]["OnlineMenuMode"];
+            slug: string;
+        };
         OpenCashSessionCommand: {
             /** Format: double */
             openingAmount: number;
@@ -7836,6 +7972,15 @@ export interface components {
             otpTemplateLanguageCode: string;
             hasAccessToken: boolean;
         };
+        PlacePublicOrderRequest: {
+            customerName: string;
+            customerPhone: string;
+            notes?: string | null;
+            tableLabel?: string | null;
+            items: components["schemas"]["CreateOrderItemDto"][];
+            /** Format: double */
+            expectedTotal?: number | null;
+        };
         PreviewCampaignQuery: {
             /** Format: uuid */
             templateId: string;
@@ -7978,6 +8123,51 @@ export interface components {
             effectiveQuantity: number;
             notes?: string | null;
             isActive: boolean;
+        };
+        PublicMenuCategoryDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            products: components["schemas"]["PublicMenuProductDto"][];
+        };
+        PublicMenuDto: {
+            businessName: string;
+            slug: string;
+            logoUrl?: string | null;
+            contactPhone?: string | null;
+            currency: string;
+            pricesIncludeTax: boolean;
+            /** Format: double */
+            defaultTaxRate: number;
+            acceptsOrders: boolean;
+            categories: components["schemas"]["PublicMenuCategoryDto"][];
+        };
+        PublicMenuProductDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            /** Format: double */
+            price: number;
+            /** Format: double */
+            compareAtPrice?: number | null;
+            /** Format: double */
+            taxRate?: number | null;
+            isTaxExempt: boolean;
+            imageUrl?: string | null;
+            unit: components["schemas"]["UnitType"];
+            isFeatured: boolean;
+            availableNow: boolean;
+            allergens?: string | null;
+            optionGroups: components["schemas"]["ProductOptionGroupDto"][];
+        };
+        PublicOrderReceiptDto: {
+            orderNumber: string;
+            /** Format: double */
+            total: number;
+            confirmed: boolean;
+            businessName: string;
+            contactPhone?: string | null;
         };
         PurchaseOrderDto: {
             /** Format: uuid */
@@ -8407,6 +8597,7 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
+            onlineMenuMode: components["schemas"]["OnlineMenuMode"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
             rfc?: string | null;
@@ -8590,6 +8781,9 @@ export interface components {
             city?: string | null;
             state?: string | null;
             capabilities: components["schemas"]["TenantCapability"];
+        };
+        UpdateOnlineMenuRequest: {
+            mode: components["schemas"]["OnlineMenuMode"];
         };
         UpdateOrderStatusRequest: {
             newStatus: components["schemas"]["OrderStatus"];
