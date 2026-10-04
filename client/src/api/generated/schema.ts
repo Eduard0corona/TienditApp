@@ -4711,6 +4711,475 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformOverviewDto"];
+                        "application/json": components["schemas"]["PlatformOverviewDto"];
+                        "text/json": components["schemas"]["PlatformOverviewDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    search?: string;
+                    subscriptionStatus?: components["schemas"]["SubscriptionStatus"];
+                    withoutPlan?: boolean;
+                    planId?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformTenantDtoPaginatedList"];
+                        "application/json": components["schemas"]["PlatformTenantDtoPaginatedList"];
+                        "text/json": components["schemas"]["PlatformTenantDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SubscriptionDetailDto"];
+                        "application/json": components["schemas"]["SubscriptionDetailDto"];
+                        "text/json": components["schemas"]["SubscriptionDetailDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AssignPlanRequest"];
+                    "text/json": components["schemas"]["AssignPlanRequest"];
+                    "application/*+json": components["schemas"]["AssignPlanRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RegisterSubscriptionPaymentRequest"];
+                    "text/json": components["schemas"]["RegisterSubscriptionPaymentRequest"];
+                    "application/*+json": components["schemas"]["RegisterSubscriptionPaymentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/trial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ExtendTrialRequest"];
+                    "text/json": components["schemas"]["ExtendTrialRequest"];
+                    "application/*+json": components["schemas"]["ExtendTrialRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PlatformReasonRequest"];
+                    "text/json": components["schemas"]["PlatformReasonRequest"];
+                    "application/*+json": components["schemas"]["PlatformReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/tenants/{tenantId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PlatformReasonRequest"];
+                    "text/json": components["schemas"]["PlatformReasonRequest"];
+                    "application/*+json": components["schemas"]["PlatformReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlanDto"][];
+                        "application/json": components["schemas"]["PlanDto"][];
+                        "text/json": components["schemas"]["PlanDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreatePlanCommand"];
+                    "text/json": components["schemas"]["CreatePlanCommand"];
+                    "application/*+json": components["schemas"]["CreatePlanCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlanDto"];
+                        "application/json": components["schemas"]["PlanDto"];
+                        "text/json": components["schemas"]["PlanDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/plans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdatePlanCommand"];
+                    "text/json": components["schemas"]["UpdatePlanCommand"];
+                    "application/*+json": components["schemas"]["UpdatePlanCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlanDto"];
+                        "application/json": components["schemas"]["PlanDto"];
+                        "text/json": components["schemas"]["PlanDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products": {
         parameters: {
             query?: never;
@@ -5998,6 +6467,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SubscriptionDetailDto"];
+                        "application/json": components["schemas"]["SubscriptionDetailDto"];
+                        "text/json": components["schemas"]["SubscriptionDetailDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/my-tenant/online-menu": {
         parameters: {
             query?: never;
@@ -6511,6 +7017,12 @@ export interface components {
          * @enum {integer}
          */
         AppointmentStatus: 0 | 1 | 2 | 3 | 4 | 99;
+        AssignPlanRequest: {
+            /** Format: uuid */
+            planId: string;
+            /** Format: int32 */
+            trialDays?: number | null;
+        };
         AuditLogDto: {
             /** Format: uuid */
             id: string;
@@ -7094,6 +7606,23 @@ export interface components {
             reference?: string | null;
             notes?: string | null;
         };
+        CreatePlanCommand: {
+            code: string;
+            name: string;
+            description?: string | null;
+            /** Format: double */
+            monthlyPrice: number;
+            modules: components["schemas"]["TenantCapability"];
+            /** Format: int32 */
+            maxBranches: number;
+            /** Format: int32 */
+            maxUsers: number;
+            /** Format: int32 */
+            trialDays: number;
+            /** Format: int32 */
+            sortOrder: number;
+            isDefaultForNewBusinesses: boolean;
+        };
         CreateProductCommand: {
             /** Format: uuid */
             categoryId: string;
@@ -7450,6 +7979,10 @@ export interface components {
             sharedKey: string;
             qrCodeUrl: string;
             manualEntryKey: string;
+        };
+        ExtendTrialRequest: {
+            /** Format: int32 */
+            days: number;
         };
         ForgotPasswordCommand: {
             email: string;
@@ -8138,6 +8671,97 @@ export interface components {
             /** Format: double */
             expectedTotal?: number | null;
         };
+        PlanDto: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            description?: string | null;
+            /** Format: double */
+            monthlyPrice: number;
+            currency: string;
+            modules: components["schemas"]["TenantCapability"];
+            /** Format: int32 */
+            maxBranches: number;
+            /** Format: int32 */
+            maxUsers: number;
+            /** Format: int32 */
+            trialDays: number;
+            isDefaultForNewBusinesses: boolean;
+            isActive: boolean;
+            /** Format: int32 */
+            sortOrder: number;
+            /** Format: int32 */
+            tenantsCount: number;
+        };
+        PlatformOverviewDto: {
+            /** Format: int32 */
+            totalTenants: number;
+            /** Format: int32 */
+            activeTenants: number;
+            /** Format: int32 */
+            tenantsWithoutAccess: number;
+            /** Format: int32 */
+            newTenantsLast30Days: number;
+            /** Format: int32 */
+            withoutPlan: number;
+            /** Format: int32 */
+            inTrial: number;
+            /** Format: int32 */
+            paying: number;
+            /** Format: int32 */
+            pastDue: number;
+            /** Format: int32 */
+            suspended: number;
+            /** Format: int32 */
+            cancelled: number;
+            /** Format: double */
+            monthlyRecurringRevenue: number;
+            /** Format: double */
+            paymentsLast30Days: number;
+            /** Format: int32 */
+            trialsEndingIn7Days: number;
+        };
+        PlatformReasonRequest: {
+            reason: string;
+        };
+        PlatformTenantDto: {
+            /** Format: uuid */
+            tenantId: string;
+            name: string;
+            slug: string;
+            businessType: components["schemas"]["BusinessType"];
+            tenantStatus: components["schemas"]["TenantStatus"];
+            contactEmail?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            planId?: string | null;
+            planName?: string | null;
+            subscriptionStatus: components["schemas"]["SubscriptionStatus"];
+            /** Format: date-time */
+            trialEndsAt?: string | null;
+            /** Format: date-time */
+            paidThrough?: string | null;
+            statusReason?: string | null;
+            /** Format: int32 */
+            branchesCount: number;
+            /** Format: int32 */
+            usersCount: number;
+            /** Format: date-time */
+            lastOrderAt?: string | null;
+        };
+        PlatformTenantDtoPaginatedList: {
+            items: components["schemas"]["PlatformTenantDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
         PreviewCampaignQuery: {
             /** Format: uuid */
             templateId: string;
@@ -8449,6 +9073,14 @@ export interface components {
             lastName: string;
             phoneNumber: string;
         };
+        RegisterSubscriptionPaymentRequest: {
+            /** Format: int32 */
+            months: number;
+            /** Format: double */
+            amount?: number | null;
+            method: components["schemas"]["SubscriptionPaymentMethod"];
+            reference?: string | null;
+        };
         ResendConfirmationEmailCommand: {
             email: string;
         };
@@ -8664,6 +9296,54 @@ export interface components {
             productCount: number;
             categories: string[];
         };
+        SubscriptionDetailDto: {
+            hasPlan: boolean;
+            plan: components["schemas"]["PlanDto"];
+            status: components["schemas"]["SubscriptionStatus"];
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            trialEndsAt?: string | null;
+            /** Format: date-time */
+            paidThrough?: string | null;
+            /** Format: date-time */
+            suspendsAt?: string | null;
+            statusReason?: string | null;
+            suspendedByPlatform: boolean;
+            /** Format: int32 */
+            branchesUsed: number;
+            /** Format: int32 */
+            usersUsed: number;
+            payments: components["schemas"]["SubscriptionPaymentDto"][];
+        };
+        SubscriptionPaymentDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: double */
+            amount: number;
+            currency: string;
+            /** Format: int32 */
+            months: number;
+            method: components["schemas"]["SubscriptionPaymentMethod"];
+            reference?: string | null;
+            /** Format: date-time */
+            paidAt: string;
+            /** Format: date-time */
+            periodStart: string;
+            /** Format: date-time */
+            periodEnd: string;
+            recordedBy: string;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        SubscriptionPaymentMethod: 0 | 1 | 2 | 3;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        SubscriptionStatus: 0 | 1 | 2 | 3 | 4;
         SupplierDto: {
             /** Format: uuid */
             id: string;
@@ -9013,6 +9693,26 @@ export interface components {
             displayPhoneNumber?: string | null;
             otpTemplateName?: string | null;
             otpTemplateLanguageCode?: string | null;
+        };
+        UpdatePlanCommand: {
+            code: string;
+            name: string;
+            description?: string | null;
+            /** Format: double */
+            monthlyPrice: number;
+            modules: components["schemas"]["TenantCapability"];
+            /** Format: int32 */
+            maxBranches: number;
+            /** Format: int32 */
+            maxUsers: number;
+            /** Format: int32 */
+            trialDays: number;
+            /** Format: int32 */
+            sortOrder: number;
+            isDefaultForNewBusinesses: boolean;
+            /** Format: uuid */
+            id: string;
+            isActive: boolean;
         };
         UpdateProductCommand: {
             /** Format: uuid */

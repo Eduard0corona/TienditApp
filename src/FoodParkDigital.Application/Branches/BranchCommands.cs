@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -104,6 +105,9 @@ public class CreateBranchCommandHandler : IRequestHandler<CreateBranchCommand, R
                 return Result.Failure<BranchDto>($"Un negocio tiene máximo {Branch.MaxBranchesPerTenant} sucursales.");
             if (await BranchFieldRules.CodeTakenAsync(_context, request.Code, null, ct))
                 return Result.Failure<BranchDto>("Ya existe una sucursal con esa clave.");
+            var planError = await SubscriptionRules.CheckBranchLimitAsync(_context, tenantId, ct);
+            if (planError is not null)
+                return Result.Failure<BranchDto>(planError);
 
             var makeDefault = request.IsDefault || !await _context.Branches.AnyAsync(x => x.IsDefault, ct);
             var branch = new Branch(tenantId, request.Name, request.Code, request.ToContact());
@@ -209,6 +213,13 @@ public class SetBranchActiveCommandHandler : IRequestHandler<SetBranchActiveComm
 
         if (request.IsActive)
         {
+            if (!branch.IsActive)
+            {
+                var planError = await SubscriptionRules.CheckBranchLimitAsync(_context, branch.TenantId, cancellationToken);
+                if (planError is not null)
+                    return Result.Failure(planError);
+            }
+
             branch.Activate();
         }
         else

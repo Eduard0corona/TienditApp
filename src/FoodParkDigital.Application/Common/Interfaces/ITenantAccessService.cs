@@ -2,10 +2,12 @@ using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Application.Common.Interfaces;
 
+/// <param name="TenantSuspended">The business is suspended or cancelled (billing): its members keep their membership but not the use.</param>
 public sealed record TenantAccessSnapshot(
     bool HasActiveAccess,
     TenantCapability NormalizedCapabilities,
-    IReadOnlyCollection<string> Permissions);
+    IReadOnlyCollection<string> Permissions,
+    bool TenantSuspended = false);
 
 public interface ITenantAccessService
 {

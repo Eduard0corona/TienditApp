@@ -1,6 +1,7 @@
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Billing.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -68,6 +69,9 @@ public interface IApplicationDbContext
     DbSet<KitchenTicket> KitchenTickets { get; }
     DbSet<Branch> Branches { get; }
     DbSet<DailySalesSnapshot> DailySalesSnapshots { get; }
+    DbSet<Plan> Plans { get; }
+    DbSet<TenantSubscription> TenantSubscriptions { get; }
+    DbSet<SubscriptionPayment> SubscriptionPayments { get; }
     DatabaseFacade Database { get; }
     ChangeTracker ChangeTracker { get; }
 

@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -36,10 +37,12 @@ public class CreateTenantCommandValidator : AbstractValidator<CreateTenantComman
 public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, Result<TenantDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
-    public CreateTenantCommandHandler(IApplicationDbContext context)
+    public CreateTenantCommandHandler(IApplicationDbContext context, IDateTimeProvider clock)
     {
         _context = context;
+        _clock = clock;
     }
 
     public async Task<Result<TenantDto>> Handle(CreateTenantCommand request, CancellationToken cancellationToken)
@@ -71,6 +74,12 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
             isDefault: true,
             branchId: defaultBranch.Id);
         _context.InventoryLocations.Add(defaultLocation);
+
+        // With a plan for new businesses the business starts its trial there (modules trimmed to the plan).
+        var trial = await SubscriptionRules.StartTrialForNewBusinessAsync(
+            _context, tenant.Id, settings, request.BusinessType, _clock.UtcNow, cancellationToken);
+        if (trial is not null)
+            _context.TenantSubscriptions.Add(trial);
 
         await _context.SaveChangesAsync(cancellationToken);
 

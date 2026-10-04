@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -46,6 +47,13 @@ public class SetEmployeeActiveCommandHandler : IRequestHandler<SetEmployeeActive
 
         if (request.IsActive)
         {
+            if (tenantUser.Status != TenantUserStatus.Active)
+            {
+                var planError = await SubscriptionRules.CheckUserLimitAsync(_context, tenantUser.TenantId, cancellationToken);
+                if (planError is not null)
+                    return Result.Failure(planError);
+            }
+
             tenantUser.SetStatus(TenantUserStatus.Active);
             await _context.SaveChangesAsync(cancellationToken);
             return Result.Success();

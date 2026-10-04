@@ -65,6 +65,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Auditoría', path: '/audit', icon: 'ri-shield-check-line', area: 'audit', keywords: 'bitácora actividad' },
     ],
   },
+  {
+    title: 'Plataforma',
+    items: [
+      { label: 'Negocios', path: '/platform', icon: 'ri-building-4-line', area: 'platform', exact: true, keywords: 'consola tenants suscripciones cobranza suspendidos' },
+      { label: 'Planes', path: '/platform/plans', icon: 'ri-price-tag-3-line', area: 'platform', keywords: 'precios módulos límites prueba gratis' },
+    ],
+  },
 ];
 
 export function isNavItemAllowed(item: NavItem, access: Access, capabilities: number | null): boolean {

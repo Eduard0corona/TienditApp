@@ -39,6 +39,8 @@ export interface Access {
   refunds: boolean;
   /** WhatsApp campaigns, templates, appointment reminders and opt-outs: owners, admins and ManageCampaigns. */
   campaigns: boolean;
+  /** Platform console (businesses, plans and billing): the platform admin only. */
+  platform: boolean;
 }
 
 export type AccessArea = Exclude<keyof Access, 'isAdmin'>;
@@ -91,6 +93,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     businessSettings: isAdmin,
     refunds: commerce && isCounterRole && can('ManageOrders') && can('ProcessRefunds'),
     campaigns: commerce && isCounterRole && can('ManageCampaigns'),
+    platform: role === 'superadmin',
   };
 }
 

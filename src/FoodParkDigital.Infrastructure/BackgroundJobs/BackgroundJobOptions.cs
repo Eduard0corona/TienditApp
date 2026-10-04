@@ -15,6 +15,14 @@ public sealed class BackgroundJobOptions
     public QueueOptions Inbox { get; set; } = new();
     public MessagingOptions Messaging { get; set; } = new();
     public SalesSnapshotOptions SalesSnapshots { get; set; } = new();
+    public SubscriptionOptions Subscriptions { get; set; } = new();
+
+    /// <summary>Billing dates applied to the businesses (past due, suspended).</summary>
+    public sealed class SubscriptionOptions
+    {
+        /// <summary>How often the subscriptions whose dates changed their status are looked for.</summary>
+        public int IntervalMinutes { get; set; } = 60;
+    }
 
     /// <summary>Daily sales snapshots of closed days, read by the sales reports.</summary>
     public sealed class SalesSnapshotOptions

@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Billing.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common;
@@ -153,6 +154,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<KitchenTicket> KitchenTickets => Set<KitchenTicket>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<DailySalesSnapshot> DailySalesSnapshots => Set<DailySalesSnapshot>();
+    public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
+    public DbSet<SubscriptionPayment> SubscriptionPayments => Set<SubscriptionPayment>();
 
     // Background queues: infrastructure only, read across tenants by the workers (not on IApplicationDbContext).
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

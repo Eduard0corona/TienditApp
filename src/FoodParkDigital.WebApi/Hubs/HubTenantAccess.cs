@@ -39,7 +39,8 @@ public sealed record HubTenantAccess(Guid TenantId, string? Role, IReadOnlyColle
             return null;
 
         var snapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, cancellationToken);
-        return snapshot.HasActiveAccess
+        // A business suspended for billing gets no live updates either.
+        return snapshot is { HasActiveAccess: true, TenantSuspended: false }
             ? new HubTenantAccess(tenantId, role, snapshot.Permissions)
             : null;
     }

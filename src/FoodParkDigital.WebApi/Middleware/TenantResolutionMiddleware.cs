@@ -125,6 +125,20 @@ public class TenantResolutionMiddleware
                 });
                 return;
             }
+
+            // A business suspended or cancelled for billing keeps only what explains why (its profile and plan).
+            if (accessSnapshot.TenantSuspended && !IsAllowedWhileSuspended(path, context.Request.Method))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Status = 403,
+                    Type = TenantSuspendedProblemType,
+                    Title = "Tenant suspended",
+                    Detail = "El negocio está suspendido. Revisa tu plan en Mi negocio o contacta a soporte."
+                });
+                return;
+            }
         }
 
         if (tenantScopedPath && role is not ("SUPER_ADMIN" or "TENANT_ADMIN"))
@@ -210,6 +224,12 @@ public class TenantResolutionMiddleware
             && Guid.TryParse(segments[3], out _)
             && segments[4] == "orders";
     }
+
+    public const string TenantSuspendedProblemType = "tenant-suspended";
+
+    private static bool IsAllowedWhileSuspended(string path, string method) =>
+        HttpMethods.IsGet(method)
+        && (path == "/api/v1/auth/my-tenant" || path == "/api/v1/auth/my-tenant/subscription");
 
     private static bool IsTenantScopedPath(string path) =>
         path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)

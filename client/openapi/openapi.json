@@ -5735,6 +5735,530 @@
         }
       }
     },
+    "/api/v1/platform/overview": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOverviewDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOverviewDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOverviewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subscriptionStatus",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/SubscriptionStatus"
+            }
+          },
+          {
+            "name": "withoutPlan",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "planId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformTenantDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformTenantDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformTenantDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/subscription": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/plan": {
+      "put": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPlanRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPlanRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/payments": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterSubscriptionPaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterSubscriptionPaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterSubscriptionPaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/trial": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendTrialRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendTrialRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendTrialRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/suspend": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformReasonRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformReasonRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/reactivate": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/tenants/{tenantId}/cancel": {
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformReasonRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformReasonRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/plans": {
+      "get": {
+        "tags": [
+          "Platform"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlanDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Platform"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/plans/{id}": {
+      "put": {
+        "tags": [
+          "Platform"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products": {
       "get": {
         "tags": [
@@ -7402,6 +7926,35 @@
         }
       }
     },
+    "/api/v1/auth/my-tenant/subscription": {
+      "get": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/my-tenant/online-menu": {
       "put": {
         "tags": [
@@ -8145,6 +8698,24 @@
         ],
         "type": "integer",
         "format": "int32"
+      },
+      "AssignPlanRequest": {
+        "required": [
+          "planId"
+        ],
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trialDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "AuditLogDto": {
         "required": [
@@ -10139,6 +10710,59 @@
         },
         "additionalProperties": false
       },
+      "CreatePlanCommand": {
+        "required": [
+          "code",
+          "isDefaultForNewBusinesses",
+          "maxBranches",
+          "maxUsers",
+          "modules",
+          "monthlyPrice",
+          "name",
+          "sortOrder",
+          "trialDays"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "monthlyPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "modules": {
+            "$ref": "#/components/schemas/TenantCapability"
+          },
+          "maxBranches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxUsers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trialDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isDefaultForNewBusinesses": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateProductCommand": {
         "required": [
           "categoryId",
@@ -11315,6 +11939,19 @@
           },
           "manualEntryKey": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ExtendTrialRequest": {
+        "required": [
+          "days"
+        ],
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -13546,6 +14183,284 @@
         },
         "additionalProperties": false
       },
+      "PlanDto": {
+        "required": [
+          "code",
+          "currency",
+          "id",
+          "isActive",
+          "isDefaultForNewBusinesses",
+          "maxBranches",
+          "maxUsers",
+          "modules",
+          "monthlyPrice",
+          "name",
+          "sortOrder",
+          "tenantsCount",
+          "trialDays"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "monthlyPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "modules": {
+            "$ref": "#/components/schemas/TenantCapability"
+          },
+          "maxBranches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxUsers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trialDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isDefaultForNewBusinesses": {
+            "type": "boolean"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tenantsCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformOverviewDto": {
+        "required": [
+          "activeTenants",
+          "cancelled",
+          "inTrial",
+          "monthlyRecurringRevenue",
+          "newTenantsLast30Days",
+          "pastDue",
+          "paying",
+          "paymentsLast30Days",
+          "suspended",
+          "tenantsWithoutAccess",
+          "totalTenants",
+          "trialsEndingIn7Days",
+          "withoutPlan"
+        ],
+        "type": "object",
+        "properties": {
+          "totalTenants": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "activeTenants": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tenantsWithoutAccess": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "newTenantsLast30Days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "withoutPlan": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inTrial": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paying": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pastDue": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "suspended": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cancelled": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "monthlyRecurringRevenue": {
+            "type": "number",
+            "format": "double"
+          },
+          "paymentsLast30Days": {
+            "type": "number",
+            "format": "double"
+          },
+          "trialsEndingIn7Days": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformReasonRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformTenantDto": {
+        "required": [
+          "branchesCount",
+          "businessType",
+          "createdAt",
+          "name",
+          "slug",
+          "subscriptionStatus",
+          "tenantId",
+          "tenantStatus",
+          "usersCount"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "businessType": {
+            "$ref": "#/components/schemas/BusinessType"
+          },
+          "tenantStatus": {
+            "$ref": "#/components/schemas/TenantStatus"
+          },
+          "contactEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "planName": {
+            "type": "string",
+            "nullable": true
+          },
+          "subscriptionStatus": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          },
+          "trialEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "paidThrough": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "statusReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "branchesCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "usersCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastOrderAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformTenantDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformTenantDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PreviewCampaignQuery": {
         "required": [
           "audienceKind",
@@ -14597,6 +15512,32 @@
         },
         "additionalProperties": false
       },
+      "RegisterSubscriptionPaymentRequest": {
+        "required": [
+          "method",
+          "months"
+        ],
+        "type": "object",
+        "properties": {
+          "months": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "method": {
+            "$ref": "#/components/schemas/SubscriptionPaymentMethod"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ResendConfirmationEmailCommand": {
         "required": [
           "email"
@@ -15328,6 +16269,146 @@
           }
         },
         "additionalProperties": false
+      },
+      "SubscriptionDetailDto": {
+        "required": [
+          "branchesUsed",
+          "hasPlan",
+          "payments",
+          "plan",
+          "status",
+          "suspendedByPlatform",
+          "usersUsed"
+        ],
+        "type": "object",
+        "properties": {
+          "hasPlan": {
+            "type": "boolean"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanDto"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "trialEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "paidThrough": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "suspendsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "statusReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "suspendedByPlatform": {
+            "type": "boolean"
+          },
+          "branchesUsed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "usersUsed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "payments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPaymentDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SubscriptionPaymentDto": {
+        "required": [
+          "amount",
+          "currency",
+          "id",
+          "method",
+          "months",
+          "paidAt",
+          "periodEnd",
+          "periodStart",
+          "recordedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "months": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "method": {
+            "$ref": "#/components/schemas/SubscriptionPaymentMethod"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "periodStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recordedBy": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SubscriptionPaymentMethod": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "SubscriptionStatus": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32"
       },
       "SupplierDto": {
         "required": [
@@ -16574,6 +17655,68 @@
           "otpTemplateLanguageCode": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdatePlanCommand": {
+        "required": [
+          "code",
+          "id",
+          "isActive",
+          "isDefaultForNewBusinesses",
+          "maxBranches",
+          "maxUsers",
+          "modules",
+          "monthlyPrice",
+          "name",
+          "sortOrder",
+          "trialDays"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "monthlyPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "modules": {
+            "$ref": "#/components/schemas/TenantCapability"
+          },
+          "maxBranches": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxUsers": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "trialDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isDefaultForNewBusinesses": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

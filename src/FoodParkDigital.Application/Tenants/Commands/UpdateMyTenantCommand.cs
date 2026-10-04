@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using System;
 using System.Text.Json;
 using AutoMapper;
@@ -131,6 +132,13 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
         }
 
         tenant.SetBusinessInfo(request.Rfc, request.LegalName, request.Industry, request.TaxRegime, address);
+
+        if (request.Capabilities is { } requestedModules)
+        {
+            var planError = await SubscriptionRules.CheckModulesAsync(_context, tenant.Id, requestedModules, cancellationToken);
+            if (planError is not null)
+                return Result.Failure<TenantProfileDto>(planError);
+        }
 
         var settings = await _context.TenantSettings
             .FirstOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);

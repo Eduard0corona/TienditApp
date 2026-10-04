@@ -27,6 +27,8 @@ const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsLis
 const OperationalReports = lazy(() => import('./pages/reports/OperationalReports'));
 const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
+const PlatformConsole = lazy(() => import('./pages/platform/PlatformConsole'));
+const PlansPage = lazy(() => import('./pages/platform/PlansPage'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const SellPage = lazy(() => import('./pages/sell/SellPage'));
@@ -194,6 +196,22 @@ export default function App() {
               element={(
                 <AccessRoute area="audit">
                   <AuditLogs />
+                </AccessRoute>
+              )}
+            />
+            <Route
+              path="/platform"
+              element={(
+                <AccessRoute area="platform">
+                  <PlatformConsole />
+                </AccessRoute>
+              )}
+            />
+            <Route
+              path="/platform/plans"
+              element={(
+                <AccessRoute area="platform">
+                  <PlansPage />
                 </AccessRoute>
               )}
             />
