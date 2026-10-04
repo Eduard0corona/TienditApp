@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using MediatR;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Queries;
 
+[RequiresAuthentication]
 public record GetMyTenantQuery : IRequest<Result<TenantProfileDto>>;
 
 public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<TenantProfileDto>>

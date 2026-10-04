@@ -2,12 +2,15 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.WhatsApp.DTOs;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.WhatsApp.Queries;
 
+[RequiresPermission(TenantPermission.ManageWhatsApp)]
 public record GetConversationsQuery : IRequest<PaginatedList<ConversationDto>>
 {
     public int PageNumber { get; init; } = 1;

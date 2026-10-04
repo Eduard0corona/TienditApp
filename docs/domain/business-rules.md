@@ -10,7 +10,9 @@
 - Un pago debe ser positivo, no puede exceder `Total` acumulado y no se admite en una orden cancelada. Una venta puede crearse con sus pagos (hasta 10); si uno es inválido, no se crea.
 - El IVA de cada línea se fija al venderla (tasa del producto o del negocio) y la orden conserva si sus precios incluían IVA; cambiar la política después no altera ventas anteriores.
 - Una venta de mostrador pagada se cierra sola si el negocio mantiene `AutoCloseCounterSales` (ver [ciclos de vida](order-lifecycles.md)).
-- Una orden con pagos no se puede cancelar mientras no existan reembolsos; cancelar cancela también sus piezas aceptadas o en progreso.
+- Una orden con dinero sin reembolsar no se puede cancelar: se reembolsa primero o se usa "Anular venta", que reembolsa y cancela en un paso. Cancelar cancela también sus piezas aceptadas o en progreso.
+- Un reembolso no puede superar lo cobrado y no devuelto ni devolver más unidades de las vendidas; pagos y líneas no se editan (ver [finanzas](finance-payments-and-taxes.md#reembolsos-y-anulaciones-fase-2)).
+- Cada orden guarda su canal (`Channel`): mostrador, WhatsApp (tomada desde un chat) o en línea (reservado para el menú público).
 - Una orden admite como máximo 200 líneas, 10,000 unidades por línea y 500 piezas de servicio, además del `MaxQuantityPerOrder` de cada producto.
 - La creación enlaza la cuenta cuyo perfil tiene ese teléfono solo si esa cuenta lo confirmó por SMS (`PhoneNumberConfirmed` y su teléfono confirmado es el del perfil, `CustomerPhoneOwnershipRules`); si no, crea/usa cliente temporal. El teléfono es opcional solo en ventas de mostrador a público en general (sin cliente seleccionado o con el cliente "Publico en general"): la orden queda sin cliente, con nombre "Público en general" si no se captura otro, y no recibe avisos de WhatsApp. Un cliente con nombre y los pedidos del propio cliente siguen requiriéndolo. Un teléfono que no se puede normalizar a E.164 responde 400 con un mensaje en español (`PhoneNumberRules.InvalidPhoneMessage`) en lugar de un 500.
 - Las órdenes de un cliente temporal se vinculan a una cuenta solo cuando su dueño confirma el teléfono (`ConfirmPhoneCommand`), en la misma transacción que la confirmación; el registro de cliente no las vincula.
@@ -36,8 +38,15 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total.
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
-- Solo puede haber una caja abierta por tenant.
+- Cada cajero tiene como máximo una caja abierta por negocio; solo él o un administrador la cierra o le registra gastos y retiros. Un cierre con diferencia exige notas.
 - Solo las entradas modifican el costo promedio de un insumo.
+
+## Mensajería
+
+- Quien escribe BAJA (o STOP) deja de recibir campañas y recordatorios; con ALTA vuelve. La baja no se borra al volver: se conserva cuándo y cómo se eligió. Los avisos de sus pedidos siguen llegando.
+- Las bajas se revisan al momento de enviar cada mensaje, no solo al elegir destinatarios.
+- Un recordatorio no se envía si la cita cambió de hora, se canceló, se cerró o ya empezó.
+- Una campaña llega como máximo a 5,000 clientes y no se envía dos veces al mismo número.
 
 ## Guardrails
 

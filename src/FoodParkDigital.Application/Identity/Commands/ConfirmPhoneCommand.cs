@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -14,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+[AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
 public record ConfirmPhoneCommand : IRequest<Result>
 {
     public string UserId { get; init; } = null!;

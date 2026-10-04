@@ -1,11 +1,13 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Commands;
 
+[RequiresTenantManager]
 public record DeleteTenantLogoCommand : IRequest<Result>;
 
 public class DeleteTenantLogoCommandHandler : IRequestHandler<DeleteTenantLogoCommand, Result>

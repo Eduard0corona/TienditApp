@@ -1,14 +1,17 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
+[RequiresPermission(TenantPermission.ViewReports)]
 public record GetDashboardMetricsQuery : IRequest<DashboardMetricsDto>
 {
     public DateTimeOffset? FromDate { get; init; }
@@ -99,7 +102,20 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
         var payments = await paymentsQuery
             .Select(p => new { p.OrderId, p.Amount })
             .ToListAsync(cancellationToken);
-        var revenue = payments.Sum(p => p.Amount);
+
+        // Refunds given back in the range lower what was charged (they never edit the payments).
+        var refundsQuery = _context.OrderRefunds
+            .AsNoTracking()
+            .Where(r => r.RefundedAt >= rangeFromUtc && r.RefundedAt <= rangeToUtc);
+        if (canReadRetailOrders && !canReadServiceOrders)
+            refundsQuery = refundsQuery.Where(r => _context.Orders.Any(o => o.Id == r.OrderId && o.OrderType == OrderType.Retail));
+        else if (!canReadRetailOrders && canReadServiceOrders)
+            refundsQuery = refundsQuery.Where(r => _context.Orders.Any(o => o.Id == r.OrderId && o.OrderType == OrderType.Service));
+        else if (!canReadRetailOrders && !canReadServiceOrders)
+            refundsQuery = refundsQuery.Where(_ => false);
+        var refunded = await refundsQuery.SumAsync(r => (decimal?)r.Amount, cancellationToken) ?? 0m;
+
+        var revenue = payments.Sum(p => p.Amount) - refunded;
         var paidOrders = payments.Select(p => p.OrderId).Distinct().Count();
         var openOrders = orders
             .Where(o => o.Status != OrderStatus.Cancelled && o.Total - o.PaidAmount > 0)
@@ -180,15 +196,16 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
                   && (
                       (canReadRetailOrders && o.OrderType == OrderType.Retail) ||
                       (canReadServiceOrders && o.OrderType == OrderType.Service))
+            // Units returned with refunds are not sold: they count neither in quantity nor in amount.
             group new { oi, p } by new { oi.ProductId, oi.ProductName, Unit = (UnitType?)p.Unit } into g
-            orderby g.Sum(x => x.oi.Quantity) descending
+            orderby g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity) descending
             select new TopSellingItemDto
             {
                 ProductId = g.Key.ProductId,
                 ProductName = g.Key.ProductName,
                 ItemType = g.Key.Unit.HasValue && ServiceUnits.Contains(g.Key.Unit.Value) ? "Service" : "Product",
-                QuantitySold = g.Sum(x => x.oi.Quantity),
-                TotalAmount = g.Sum(x => x.oi.TotalPrice)
+                QuantitySold = g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity),
+                TotalAmount = g.Sum(x => x.oi.TotalPrice - x.oi.TotalPrice * x.oi.ReturnedQuantity / x.oi.Quantity)
             })
             .Take(10);
     }

@@ -20,3 +20,7 @@ El cálculo fijo actual queda como deuda, no solución fiscal. Implementar requi
 ## Actualización 2026-10-04 (Fase 1)
 
 Primera etapa implementada: política de IVA por negocio (incluido o sumado), tasa por producto (16, 8, 0 % o exento), tasa guardada por línea, política guardada por orden y desglose calculado en el servidor con redondeo bancario por tasa (`OrderTaxCalculator`). Los negocios existentes conservan el IVA sumado al 16 %, que da los mismos totales que el cálculo anterior. Siguen pendientes descuentos, otros impuestos, datos CFDI, reembolsos y ajustes.
+
+## Actualización 2026-10-04 (Fase 2)
+
+Reembolsos implementados como compensación, no como edición: cada `OrderRefund` es inmutable, guarda importe, forma de pago, motivo, autor, fecha del servidor y las unidades devueltas; la orden acumula `RefundedAmount` y las líneas `ReturnedQuantity`, pero sus pagos y líneas no cambian. El efectivo devuelto es un movimiento de salida en la caja del cajero y los insumos devueltos son una entrada de inventario con referencia propia. Anular una venta es reembolsar el resto de cada pago y, si el estado lo permite, cancelarla. Siguen pendientes las notas de crédito fiscales, el saldo a favor, las cuentas por cobrar y la conciliación.

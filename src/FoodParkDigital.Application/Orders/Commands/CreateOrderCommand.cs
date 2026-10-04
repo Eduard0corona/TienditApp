@@ -2,6 +2,7 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
@@ -18,6 +19,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record CreateOrderCommand : IRequest<Result<OrderDto>>
 {
     public Guid? CustomerId { get; init; }
@@ -36,6 +38,8 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>
     /// the sale is rejected instead of charging a different amount.
     /// </summary>
     public decimal? ExpectedTotal { get; init; }
+    /// <summary>Counter (default) or WhatsApp, when the business takes the order from a chat.</summary>
+    public OrderChannel Channel { get; init; } = OrderChannel.Counter;
 }
 
 public record CreateOrderPaymentDto
@@ -91,6 +95,9 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.CustomerName).MaximumLength(200);
         RuleFor(x => x.CustomerPhone).MaximumLength(50);
         RuleFor(x => x.OrderType).IsInEnum();
+        // Online orders come from the public menu, not from the business's screens.
+        RuleFor(x => x.Channel).IsInEnum().NotEqual(OrderChannel.Online)
+            .WithMessage("El canal del pedido no es válido.");
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
@@ -256,7 +263,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             customerPhone: linkedCustomer?.PhoneNormalized,
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber,
-            pricesIncludeTax: salesSettings.PricesIncludeTax);
+            pricesIncludeTax: salesSettings.PricesIncludeTax,
+            channel: request.Channel);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
         var quantitiesByProduct = new Dictionary<Guid, int>();
 

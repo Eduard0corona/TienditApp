@@ -2,13 +2,16 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Purchasing.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 
 namespace FoodParkDigital.Application.Purchasing.Commands;
 
+[RequiresPermission(TenantPermission.ManageInventory)]
 public record CreateSupplierCommand : IRequest<Result<SupplierDto>>
 {
     public string Name { get; init; } = null!;

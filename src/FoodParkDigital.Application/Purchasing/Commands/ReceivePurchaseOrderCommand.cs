@@ -1,10 +1,12 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +19,7 @@ public record ReceivePurchaseOrderLineRequest
     public decimal QuantityReceived { get; init; }
 }
 
+[RequiresPermission(TenantPermission.ManageInventory)]
 public record ReceivePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>
 {
     public Guid PurchaseOrderId { get; init; }

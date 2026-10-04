@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -10,6 +11,7 @@ using MediatR;
 
 namespace FoodParkDigital.Application.Tenants.Commands;
 
+[RequiresPlatformAdmin]
 public record CreateTenantCommand : IRequest<Result<TenantDto>>
 {
     public string Name { get; init; } = null!;

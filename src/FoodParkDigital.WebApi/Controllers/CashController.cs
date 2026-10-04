@@ -45,11 +45,36 @@ public class CashController : ControllerBase
         {
             CashSessionId = id,
             ClosingAmount = request.ClosingAmount,
-            Notes = request.Notes
+            Notes = request.Notes,
+            CashCount = request.CashCount
         });
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
         return Ok(result.Value);
+    }
+
+    /// <summary>Shift history: drawers by date, branch and status, with expected, counted and difference.</summary>
+    [HttpGet("sessions")]
+    public async Task<ActionResult<PaginatedList<CashSessionDto>>> GetSessions(
+        [FromQuery] DateTimeOffset? fromDate,
+        [FromQuery] DateTimeOffset? toDate,
+        [FromQuery] Guid? inventoryLocationId,
+        [FromQuery] CashSessionStatus? status,
+        [FromQuery] bool onlyWithDifference = false,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var result = await _mediator.Send(new GetCashSessionsQuery
+        {
+            FromDate = fromDate,
+            ToDate = toDate,
+            InventoryLocationId = inventoryLocationId,
+            Status = status,
+            OnlyWithDifference = onlyWithDifference,
+            PageNumber = pageNumber,
+            PageSize = pageSize
+        });
+        return Ok(result);
     }
 
     [HttpGet("transactions")]
@@ -113,6 +138,7 @@ public class CloseCashSessionRequest
 {
     public decimal ClosingAmount { get; init; }
     public string? Notes { get; init; }
+    public List<CashCountLineDto>? CashCount { get; init; }
 }
 
 public class AddCashTransactionRequest

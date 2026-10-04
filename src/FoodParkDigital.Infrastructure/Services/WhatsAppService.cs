@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace FoodParkDigital.Infrastructure.Services;
 public class WhatsAppService : IWhatsAppService
 {
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
+    public const string NotConfiguredError = "WhatsApp no está configurado para este tenant.";
 
     private readonly IApplicationDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -31,7 +33,7 @@ public class WhatsAppService : IWhatsAppService
         _logProviderResponses = environment.IsDevelopment();
     }
 
-    public async Task<Result> SendTemplateMessageAsync(
+    public async Task<MessageSendResult> SendTemplateMessageAsync(
         Guid tenantId,
         string phoneNumber,
         string templateName,
@@ -41,7 +43,7 @@ public class WhatsAppService : IWhatsAppService
     {
         var config = await GetConfigAsync(tenantId, cancellationToken);
         if (config is null)
-            return Result.Failure("WhatsApp no está configurado para este tenant.");
+            return MessageSendResult.Failed(NotConfiguredError, isTransient: false);
 
         var body = new
         {
@@ -69,10 +71,10 @@ public class WhatsAppService : IWhatsAppService
             }
         };
 
-        return await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken);
+        return Record(tenantId, await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken));
     }
 
-    public async Task<Result> SendTextMessageAsync(
+    public async Task<MessageSendResult> SendTextMessageAsync(
         Guid tenantId,
         string phoneNumber,
         string message,
@@ -80,7 +82,7 @@ public class WhatsAppService : IWhatsAppService
     {
         var config = await GetConfigAsync(tenantId, cancellationToken);
         if (config is null)
-            return Result.Failure("WhatsApp no está configurado para este tenant.");
+            return MessageSendResult.Failed(NotConfiguredError, isTransient: false);
 
         var body = new
         {
@@ -90,7 +92,7 @@ public class WhatsAppService : IWhatsAppService
             text = new { body = message }
         };
 
-        return await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken);
+        return Record(tenantId, await SendRequestAsync(config.PhoneNumberId!, config.AccessToken!, body, cancellationToken));
     }
 
     private async Task<Domain.Tenants.Entities.WhatsAppConfig?> GetConfigAsync(
@@ -116,7 +118,7 @@ public class WhatsAppService : IWhatsAppService
         return config;
     }
 
-    private async Task<Result> SendRequestAsync(
+    private async Task<MessageSendResult> SendRequestAsync(
         string phoneNumberId, string accessToken, object body, CancellationToken cancellationToken)
     {
         try
@@ -132,27 +134,71 @@ public class WhatsAppService : IWhatsAppService
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             });
 
-            var response = await client.SendAsync(request, cancellationToken);
+            using var response = await client.SendAsync(request, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
                 _logger.LogInformation("WhatsApp message sent successfully to {PhoneNumberId}", phoneNumberId);
-                return Result.Success();
+                return MessageSendResult.Sent(GetMessageId(responseBody));
             }
 
-            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
             _logger.LogError(
                 "WhatsApp API error: {StatusCode}. Provider error code: {ProviderErrorCode}",
                 response.StatusCode,
-                LogRedaction.GetProviderErrorCode(errorContent));
+                LogRedaction.GetProviderErrorCode(responseBody));
             if (_logProviderResponses)
-                _logger.LogInformation("WhatsApp response body: {Body}", errorContent);
-            return Result.Failure($"Error al enviar mensaje de WhatsApp: {response.StatusCode}");
+                _logger.LogInformation("WhatsApp response body: {Body}", responseBody);
+            return MessageSendResult.Failed(
+                $"Error al enviar mensaje de WhatsApp: {response.StatusCode}",
+                isTransient: IsTransientStatus((int)response.StatusCode));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
+            // No connection, DNS or a timeout: the message may be accepted on a later attempt.
             _logger.LogError(ex, "Failed to send WhatsApp message");
-            return Result.Failure("Error de conexión con la API de WhatsApp.");
+            return MessageSendResult.Failed("Error de conexión con la API de WhatsApp.", isTransient: true);
+        }
+    }
+
+    private static MessageSendResult Record(Guid tenantId, MessageSendResult result)
+    {
+        var outcome = result.IsSuccess
+            ? MetricOutcomes.Sent
+            : result.IsTransient ? MetricOutcomes.TransientFailure : MetricOutcomes.Rejected;
+        TienditAppMetrics.RecordMessageSent("whatsapp", outcome, tenantId);
+        return result;
+    }
+
+    /// <summary>Throttling, timeouts and server errors can succeed later; other 4xx responses will not.</summary>
+    internal static bool IsTransientStatus(int statusCode)
+        => statusCode is 408 or 429 || statusCode >= 500;
+
+    /// <summary>Reads the <c>wamid</c> of <c>{"messages": [{"id": "wamid..."}]}</c>.</summary>
+    internal static string? GetMessageId(string? responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("messages", out var messages)
+                && messages.ValueKind == JsonValueKind.Array
+                && messages.GetArrayLength() > 0
+                && messages[0].TryGetProperty("id", out var id)
+                && id.ValueKind == JsonValueKind.String
+                    ? id.GetString()
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }

@@ -572,16 +572,16 @@ public class ProcessInboundMessageCommandTests
     {
         public List<string> SentMessages { get; } = [];
 
-        public Task<Result> SendTemplateMessageAsync(
+        public Task<MessageSendResult> SendTemplateMessageAsync(
             Guid tenantId, string phoneNumber, string templateName, string languageCode, string[] parameters,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success());
+            => Task.FromResult(MessageSendResult.Sent());
 
-        public Task<Result> SendTextMessageAsync(
+        public Task<MessageSendResult> SendTextMessageAsync(
             Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken = default)
         {
             SentMessages.Add(message);
-            return Task.FromResult(Result.Success());
+            return Task.FromResult(MessageSendResult.Sent());
         }
     }
 

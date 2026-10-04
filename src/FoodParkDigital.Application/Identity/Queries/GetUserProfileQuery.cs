@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using MediatR;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace FoodParkDigital.Application.Identity.Queries;
 
+[RequiresAuthentication]
 public record GetUserProfileQuery : IRequest<Result<UserProfileDto>>;
 
 public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, Result<UserProfileDto>>

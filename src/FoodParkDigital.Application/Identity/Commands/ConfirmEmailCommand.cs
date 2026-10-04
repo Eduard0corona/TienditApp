@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Identity.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+[AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
 public record ConfirmEmailCommand(string UserId, string Token) : IRequest<Result>;
 
 public class ConfirmEmailCommandHandler : IRequestHandler<ConfirmEmailCommand, Result>

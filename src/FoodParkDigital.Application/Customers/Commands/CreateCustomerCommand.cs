@@ -2,14 +2,17 @@ using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Customers.Commands;
 
+[RequiresPermission(TenantPermission.ManageCustomers)]
 public record CreateCustomerCommand : IRequest<Result<CustomerDto>>
 {
     public string Name { get; init; } = null!;

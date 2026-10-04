@@ -1,4 +1,6 @@
 using System.Globalization;
+using FoodParkDigital.Application.Common.Events;
+using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Orders;
@@ -55,11 +57,10 @@ public class OrderNotificationLabelsTests
         await context.SaveChangesAsync();
         var whatsApp = new RecordingWhatsAppService();
 
-        var handler = new OrderStatusChangedEventHandler(
-            context, new FixedUserService(), new NoOpOrderNotificationService(), whatsApp,
-            NullLogger<OrderStatusChangedEventHandler>.Instance);
-        await handler.Handle(
+        var handler = new OrderCustomerNotifications(context, whatsApp, NullLogger<OrderCustomerNotifications>.Instance);
+        await handler.HandleAsync(
             new OrderStatusChangedEvent(order.Id, tenantService.TenantId, OrderStatus.Confirmed, OrderStatus.InPreparation),
+            OutboxContext(tenantService.TenantId),
             CancellationToken.None);
 
         var parameters = Assert.Single(whatsApp.Templates);
@@ -80,17 +81,70 @@ public class OrderNotificationLabelsTests
         await context.SaveChangesAsync();
         var whatsApp = new RecordingWhatsAppService();
 
-        var handler = new OrderStatusChangedEventHandler(
-            context, new FixedUserService(), new NoOpOrderNotificationService(), whatsApp,
-            NullLogger<OrderStatusChangedEventHandler>.Instance);
-        await handler.Handle(
-            new OrderStatusChangedEvent(order.Id, tenantService.TenantId, OrderStatus.Confirmed, OrderStatus.Delivered, NotifyCustomer: false),
+        var closed = new OrderStatusChangedEvent(
+            order.Id, tenantService.TenantId, OrderStatus.Confirmed, OrderStatus.Delivered, NotifyCustomer: false);
+        var outboxContext = OutboxContext(tenantService.TenantId);
+        await new OrderCustomerNotifications(context, whatsApp, NullLogger<OrderCustomerNotifications>.Instance)
+            .HandleAsync(closed, outboxContext, CancellationToken.None);
+        await new OrderAuditHandlers(context).HandleAsync(closed, outboxContext, CancellationToken.None);
+        // The outbox dispatcher saves what the handlers added.
+        await context.SaveChangesAsync();
+
+        // The change is still audited, by the cashier who caused it; only the customer message is skipped.
+        Assert.Empty(whatsApp.Templates);
+        var audit = Assert.Single(await context.AuditLogs.ToListAsync());
+        Assert.Equal("cajero@negocio.mx", audit.PerformedBy);
+        Assert.Equal(outboxContext.OccurredAt, audit.Timestamp);
+    }
+
+    [Fact]
+    public async Task TransientWhatsAppFailure_ShouldBeRetriedByTheOutbox()
+    {
+        var tenantService = new FixedTenantService();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new InMemoryContext(options, tenantService);
+        var order = new Order(tenantService.TenantId, Guid.NewGuid(), null, true, "ORD-000002",
+            BusinessType.Food, OrderType.Retail, "Karla", "+525511112222", null, null);
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+        var handler = new OrderCustomerNotifications(
+            context,
+            new RecordingWhatsAppService { NextResult = MessageSendResult.Failed("429", isTransient: true) },
+            NullLogger<OrderCustomerNotifications>.Instance);
+
+        // Throwing makes the dispatcher retry with backoff.
+        await Assert.ThrowsAsync<TransientDeliveryException>(() => handler.HandleAsync(
+            new OrderStatusChangedEvent(order.Id, tenantService.TenantId, OrderStatus.Confirmed, OrderStatus.Ready),
+            OutboxContext(tenantService.TenantId),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RejectedWhatsAppMessage_ShouldNotBeRetried()
+    {
+        var tenantService = new FixedTenantService();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new InMemoryContext(options, tenantService);
+        var order = new Order(tenantService.TenantId, Guid.NewGuid(), null, true, "ORD-000003",
+            BusinessType.Food, OrderType.Retail, "Karla", "+525511112222", null, null);
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+        var whatsApp = new RecordingWhatsAppService { NextResult = MessageSendResult.Failed("BadRequest", isTransient: false) };
+
+        await new OrderCustomerNotifications(context, whatsApp, NullLogger<OrderCustomerNotifications>.Instance).HandleAsync(
+            new OrderStatusChangedEvent(order.Id, tenantService.TenantId, OrderStatus.Confirmed, OrderStatus.Ready),
+            OutboxContext(tenantService.TenantId),
             CancellationToken.None);
 
-        // The change is still audited; only the customer message is skipped.
-        Assert.Empty(whatsApp.Templates);
-        Assert.Single(await context.AuditLogs.ToListAsync());
+        Assert.Single(whatsApp.Templates);
     }
+
+    private static OutboxEventContext OutboxContext(Guid tenantId)
+        => new(Guid.NewGuid(), tenantId, "user-1", "cajero@negocio.mx", new DateTimeOffset(2026, 10, 4, 18, 0, 0, TimeSpan.Zero), 1);
 
     private sealed class InMemoryContext(DbContextOptions<ApplicationDbContext> options, ICurrentTenantService tenantService)
         : ApplicationDbContext(options, tenantService, new NoOpMediator())
@@ -106,40 +160,23 @@ public class OrderNotificationLabelsTests
     private sealed class RecordingWhatsAppService : IWhatsAppService
     {
         public List<string[]> Templates { get; } = [];
+        public MessageSendResult NextResult { get; init; } = MessageSendResult.Sent();
 
-        public Task<Result> SendTemplateMessageAsync(Guid tenantId, string phoneNumber, string templateName,
+        public Task<MessageSendResult> SendTemplateMessageAsync(Guid tenantId, string phoneNumber, string templateName,
             string languageCode, string[] parameters, CancellationToken cancellationToken = default)
         {
             Templates.Add(parameters);
-            return Task.FromResult(Result.Success());
+            return Task.FromResult(NextResult);
         }
 
-        public Task<Result> SendTextMessageAsync(Guid tenantId, string phoneNumber, string message,
-            CancellationToken cancellationToken = default) => Task.FromResult(Result.Success());
-    }
-
-    private sealed class NoOpOrderNotificationService : IOrderNotificationService
-    {
-        public Task NotifyOrderCreated(Guid tenantId, Guid orderId, string orderNumber, BusinessType businessType, decimal total) => Task.CompletedTask;
-        public Task NotifyOrderStatusChanged(Guid tenantId, Guid orderId, OrderStatus previousStatus, OrderStatus newStatus) => Task.CompletedTask;
-        public Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason) => Task.CompletedTask;
-        public Task NotifyServiceBoardPieceUpdated(Guid tenantId, Guid orderId, Guid pieceId, ServiceOrderPieceStatus status, Guid? assignedToUserId) => Task.CompletedTask;
+        public Task<MessageSendResult> SendTextMessageAsync(Guid tenantId, string phoneNumber, string message,
+            CancellationToken cancellationToken = default) => Task.FromResult(MessageSendResult.Sent());
     }
 
     private sealed class FixedTenantService : ICurrentTenantService
     {
         public Guid TenantId { get; private set; } = Guid.NewGuid();
         public void SetTenant(Guid tenantId) => TenantId = tenantId;
-    }
-
-    private sealed class FixedUserService : ICurrentUserService
-    {
-        public string? UserId => null;
-        public string? UserName => "cocina";
-        public string? Role => "KITCHEN";
-        public string? TenantRole => null;
-        public IReadOnlyCollection<string> Permissions => [];
-        public Guid? TenantId => null;
     }
 
     private sealed class NoOpMediator : IMediator

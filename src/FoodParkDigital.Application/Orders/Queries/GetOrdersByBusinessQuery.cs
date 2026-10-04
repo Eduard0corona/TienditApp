@@ -3,14 +3,17 @@ using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record GetOrdersByBusinessQuery : IRequest<PaginatedList<OrderDto>>
 {
     public OrderType? OrderTypeFilter { get; init; }

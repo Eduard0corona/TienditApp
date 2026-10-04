@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FluentValidation;
@@ -14,6 +15,7 @@ namespace FoodParkDigital.Application.Catalog.Commands;
 /// Fills an empty catalog with a sample one (categories and products) chosen in the guided setup. It is
 /// refused once the business has products, so it can never duplicate or overwrite a real catalog.
 /// </summary>
+[RequiresTenantManager]
 public record InstallStarterCatalogCommand : IRequest<Result<InstallStarterCatalogResultDto>>
 {
     public string TemplateId { get; init; } = null!;

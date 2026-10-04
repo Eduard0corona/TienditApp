@@ -1,13 +1,16 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Purchasing.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Purchasing.Queries;
 
+[RequiresPermission(TenantPermission.ManageInventory)]
 public record GetPurchaseOrdersQuery : IRequest<PaginatedList<PurchaseOrderDto>>
 {
     public Guid? SupplierId { get; init; }

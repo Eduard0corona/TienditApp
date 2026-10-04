@@ -3,12 +3,15 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 
 namespace FoodParkDigital.Application.Catalog.Commands;
 
+[RequiresPermission(TenantPermission.ManageCatalog)]
 public record CreateCategoryCommand : IRequest<Result<CategoryDto>>
 {
     public string Name { get; init; } = null!;

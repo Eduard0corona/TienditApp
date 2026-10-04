@@ -9,6 +9,9 @@ internal sealed class NoOpOrderCashService : IOrderCashService
 
     private NoOpOrderCashService() { }
 
-    public Task RegisterOrderPaymentAsync(Order order, OrderPayment payment, CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    public Task<bool> RegisterOrderPaymentAsync(Order order, OrderPayment payment, CancellationToken cancellationToken)
+        => Task.FromResult(false);
+
+    public Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
+        => Task.FromResult(false);
 }

@@ -1,15 +1,18 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Reports.DTOs;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Purchasing.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Reports.Queries;
 
+[RequiresPermission(TenantPermission.ViewReports)]
 public record GetOperationalReportQuery : IRequest<OperationalReportDto>
 {
     public DateTimeOffset? FromDate { get; init; }

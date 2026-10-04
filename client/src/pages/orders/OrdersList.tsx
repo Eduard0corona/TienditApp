@@ -6,14 +6,17 @@ import DataTable from '../../components/common/DataTable';
 import StatusChip from '../../components/common/StatusChip';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
+import RefundOrderModal from '../../components/orders/RefundOrderModal';
+import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
-import type { OrderDto, OrderStatus, OrderType, PaginatedList } from '../../types';
+import type { OrderDto, OrderStatus, OrderType, PaginatedList, RefundOrderRequest, VoidOrderRequest } from '../../types';
 import {
+  OrderChannel,
   OrderStatus as OrderStatusConst,
   OrderType as OrderTypeConst,
 } from '../../types';
@@ -129,14 +132,20 @@ export default function OrdersList() {
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
+  const [refundTarget, setRefundTarget] = useState<{ order: OrderDto; mode: 'refund' | 'void' } | null>(null);
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [refundError, setRefundError] = useState('');
+  const [cardFor, setCardFor] = useState<{ phone: string; name: string } | null>(null);
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
   const { prompt } = useConfirm();
   const toast = useToast();
   // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
-  // roles can read orders but move food orders from the kitchen board.
-  const canSell = getAccess(user, capabilities).sell;
+  // roles can read orders but move food orders from the kitchen board. Refunds also need ProcessRefunds.
+  const access = getAccess(user, capabilities);
+  const canSell = access.sell;
+  const canRefund = access.refunds;
 
   // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
   // and is blocked while the order has payments).
@@ -145,6 +154,8 @@ export default function OrdersList() {
     [selectedOrder],
   );
 
+  const selectedNetPaid = selectedOrder ? (selectedOrder.netPaidAmount ?? selectedOrder.paidAmount) : 0;
+  const canRefundSelected = canRefund && selectedNetPaid > 0;
   const selectedOrderTotalItems = useMemo(
     () => selectedOrder?.items.reduce((acc, item) => acc + item.quantity, 0) ?? 0,
     [selectedOrder],
@@ -280,6 +291,41 @@ export default function OrdersList() {
       setStatusError(getApiErrorMessage(err, 'No se pudo cancelar el pedido.'));
     } finally {
       setStatusSubmitting(false);
+    }
+  };
+
+  const openRefundModal = (order: OrderDto, mode: 'refund' | 'void') => {
+    setRefundTarget({ order, mode });
+    setRefundError('');
+  };
+
+  const closeRefundModal = () => {
+    if (refundSubmitting) return;
+    setRefundTarget(null);
+    setRefundError('');
+  };
+
+  // A refund never edits the sale: the server records it apart, takes cash from the cashier's drawer and
+  // returns the units to inventory when asked.
+  const handleRefund = async (request: { mode: 'refund'; data: RefundOrderRequest } | { mode: 'void'; data: VoidOrderRequest }) => {
+    if (!refundTarget || refundSubmitting) return;
+    const order = refundTarget.order;
+    setRefundSubmitting(true);
+    setRefundError('');
+    try {
+      const { data: updated } = request.mode === 'void'
+        ? await ordersApi.voidOrder(order.id, request.data)
+        : await ordersApi.refund(order.id, request.data);
+      setRefundTarget(null);
+      if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
+      toast.success(request.mode === 'void'
+        ? `Venta ${order.orderNumber} anulada.`
+        : `Reembolso de ${formatMoney(request.data.amount)} registrado en ${order.orderNumber}.`);
+      await loadOrders();
+    } catch (err: unknown) {
+      setRefundError(getApiErrorMessage(err, request.mode === 'void' ? 'No se pudo anular la venta.' : 'No se pudo registrar el reembolso.'));
+    } finally {
+      setRefundSubmitting(false);
     }
   };
 
@@ -483,6 +529,14 @@ export default function OrdersList() {
                         <span className={`badge mt-1 ${order.createdByBusiness ? 'bg-info' : 'bg-secondary'}`}>
                           {order.createdByBusiness ? 'Creada por empresa' : 'Creada por cliente'}
                         </span>
+                        {order.channel === OrderChannel.WhatsApp && (
+                          <span className="badge mt-1 ms-1 bg-success-subtle text-success-emphasis">
+                            <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>WhatsApp
+                          </span>
+                        )}
+                        {order.channel === OrderChannel.Online && (
+                          <span className="badge mt-1 ms-1 bg-primary-subtle text-primary-emphasis">En línea</span>
+                        )}
                       </div>
                     </td>
                     <td className="text-center">
@@ -503,6 +557,9 @@ export default function OrdersList() {
                       <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>
                         {order.balance > 0 ? `Por cobrar ${formatMoney(order.balance)}` : 'Pagado'}
                       </small>
+                      {(order.refundedAmount ?? 0) > 0 && (
+                        <small className="d-block text-warning">Reembolsado {formatMoney(order.refundedAmount ?? 0)}</small>
+                      )}
                     </td>
                     <td className="text-center">
                       {canSell && order.balance > 0 && order.status !== OrderStatusConst.Cancelled ? (
@@ -552,7 +609,18 @@ export default function OrdersList() {
                 <div className="col-md-6">
                   <p className="mb-1"><strong>Orden:</strong> {selectedOrder.orderNumber}</p>
                   <p className="mb-1"><strong>Tipo:</strong> {ORDER_TYPE_LABELS[selectedOrder.orderType]}</p>
-                  <p className="mb-1"><strong>Cliente:</strong> {selectedOrder.customerName}</p>
+                  <p className="mb-1">
+                    <strong>Cliente:</strong> {selectedOrder.customerName}
+                    {selectedOrder.customerPhone && (
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                        onClick={() => setCardFor({ phone: selectedOrder.customerPhone ?? '', name: selectedOrder.customerName })}
+                      >
+                        Ver ficha
+                      </button>
+                    )}
+                  </p>
                   <p className="mb-1"><strong>Teléfono:</strong> {selectedOrder.customerPhone || '-'}</p>
                   <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
                 </div>
@@ -567,15 +635,21 @@ export default function OrdersList() {
                     </p>
                   ))}
                   <p className="mb-1"><strong>Pagado:</strong> <span className="ta-money">{formatMoney(selectedOrder.paidAmount)}</span></p>
+                  {(selectedOrder.refundedAmount ?? 0) > 0 && (
+                    <p className="mb-1">
+                      <strong>Reembolsado:</strong> <span className="ta-money text-warning">{formatMoney(selectedOrder.refundedAmount ?? 0)}</span>
+                      <span className="text-muted small"> · neto {formatMoney(selectedNetPaid)}</span>
+                    </p>
+                  )}
                   <p className="mb-1"><strong>Por cobrar:</strong> <span className="ta-money">{formatMoney(selectedOrder.balance)}</span></p>
                 </div>
               </div>
 
-              {canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel || selectedOrder.balance > 0) && (
+              {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel || selectedOrder.balance > 0)) || canRefundSelected) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
-                    {selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
+                    {canSell && selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
                       <button
                         type="button"
                         className="btn btn-sm btn-success"
@@ -585,7 +659,7 @@ export default function OrdersList() {
                         Cobrar {formatMoney(selectedOrder.balance)}
                       </button>
                     )}
-                    {selectedOrderStatusActions.map((status) => (
+                    {canSell && selectedOrderStatusActions.map((status) => (
                       <button
                         key={status}
                         type="button"
@@ -596,7 +670,7 @@ export default function OrdersList() {
                         {getStatusLabel(status)}
                       </button>
                     ))}
-                    {selectedOrder.canCancel && (
+                    {canSell && selectedOrder.canCancel && (
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-danger"
@@ -606,10 +680,33 @@ export default function OrdersList() {
                         Cancelar pedido
                       </button>
                     )}
+                    {canRefundSelected && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-warning"
+                          disabled={statusSubmitting}
+                          onClick={() => openRefundModal(selectedOrder, 'refund')}
+                        >
+                          Reembolsar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-danger"
+                          disabled={statusSubmitting}
+                          onClick={() => openRefundModal(selectedOrder, 'void')}
+                        >
+                          Anular venta
+                        </button>
+                      </>
+                    )}
                   </div>
-                  {!selectedOrder.canCancel && selectedOrder.paidAmount > 0 && (
+                  {!selectedOrder.canCancel && selectedNetPaid > 0
+                    && selectedOrder.allowedTransitions.includes(OrderStatusConst.Cancelled) && (
                     <small className="text-muted d-block mt-2">
-                      El pedido tiene pagos registrados: no se puede cancelar hasta que existan los reembolsos.
+                      {canRefund
+                        ? 'Tiene pagos registrados: para cancelarla usa «Anular venta», que devuelve el dinero.'
+                        : 'Tiene pagos registrados: solo quien puede hacer reembolsos puede anularla.'}
                     </small>
                   )}
                   {statusError && <div className="alert alert-danger mt-2 mb-0 py-2">{statusError}</div>}
@@ -634,7 +731,12 @@ export default function OrdersList() {
                           {item.productName}
                           {item.notes && <div className="text-muted small">Nota: {item.notes}</div>}
                         </td>
-                        <td className="text-center">{item.quantity}</td>
+                        <td className="text-center">
+                          {item.quantity}
+                          {(item.returnedQuantity ?? 0) > 0 && (
+                            <div className="text-warning small">{item.returnedQuantity} devuelto{item.returnedQuantity === 1 ? '' : 's'}</div>
+                          )}
+                        </td>
                         <td className="text-end">{formatMoney(item.unitPrice)}</td>
                         <td className="text-end">{formatMoney(item.totalPrice)}</td>
                       </tr>
@@ -813,6 +915,44 @@ export default function OrdersList() {
                 </div>
               )}
 
+              {(selectedOrder.refunds ?? []).length > 0 && (
+                <div className="mt-3">
+                  <h5 className="mb-2">Reembolsos</h5>
+                  <div className="table-responsive">
+                    <table className="table table-sm table-striped mb-0">
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Forma</th>
+                          <th>Motivo</th>
+                          <th>Artículos</th>
+                          <th className="text-end">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedOrder.refunds ?? []).map((refund) => (
+                          <tr key={refund.id}>
+                            <td>
+                              {toLocalDateTime(refund.refundedAt)}
+                              <div className="text-muted small">{refund.refundedBy}</div>
+                            </td>
+                            <td>{getPaymentMethodLabel(refund.method)}</td>
+                            <td>{refund.reason}</td>
+                            <td>
+                              {refund.lines.length === 0 ? '-' : refund.lines.map((line) => {
+                                const item = selectedOrder.items.find((candidate) => candidate.id === line.orderItemId);
+                                return <div key={line.orderItemId}>{line.quantity} × {item?.productName ?? 'Artículo'}</div>;
+                              })}
+                            </td>
+                            <td className="text-end text-warning">−{formatMoney(refund.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {selectedOrder.customerNotes && (
                 <div className="mt-3">
                   <strong>Notas del cliente:</strong>
@@ -830,6 +970,30 @@ export default function OrdersList() {
           )}
         </Modal.Body>
       </Modal>
+
+      {cardFor && (
+        <CustomerCardModal phone={cardFor.phone} name={cardFor.name} onClose={() => setCardFor(null)} />
+      )}
+
+      {refundTarget && (refundTarget.mode === 'void' ? (
+        <RefundOrderModal
+          mode="void"
+          order={refundTarget.order}
+          submitting={refundSubmitting}
+          error={refundError}
+          onClose={closeRefundModal}
+          onSubmit={(data) => void handleRefund({ mode: 'void', data })}
+        />
+      ) : (
+        <RefundOrderModal
+          mode="refund"
+          order={refundTarget.order}
+          submitting={refundSubmitting}
+          error={refundError}
+          onClose={closeRefundModal}
+          onSubmit={(data) => void handleRefund({ mode: 'refund', data })}
+        />
+      ))}
 
       <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down">
         <Modal.Header closeButton={!paymentSubmitting}>

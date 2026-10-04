@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ namespace FoodParkDigital.Application.WhatsApp.Queries;
 /// Resolves the tenant that owns the verify token Meta sends in the webhook
 /// subscription handshake. Returns the tenant id when the token matches.
 /// </summary>
+[AllowAnonymousRequest("Verificación pública del webhook de Meta; compara el token con el configurado.")]
 public record VerifyWhatsAppWebhookTokenQuery(string VerifyToken) : IRequest<Result<Guid>>;
 
 public class VerifyWhatsAppWebhookTokenQueryHandler

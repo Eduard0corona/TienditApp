@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Employees.DTOs;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Queries;
 
+[RequiresPermission(TenantPermission.ManageEmployees)]
 public record GetEmployeesQuery : IRequest<PaginatedList<EmployeeDto>>
 {
     public string? Search { get; init; }

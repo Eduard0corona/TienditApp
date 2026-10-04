@@ -2,6 +2,7 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -17,11 +18,15 @@ namespace FoodParkDigital.Application.Tenants.Commands;
 /// Changes how the business prices and closes its sales. It applies to sales made from now on: every
 /// order keeps the policy it was sold with, so no past total changes.
 /// </summary>
+[RequiresTenantManager]
 public record UpdateSalesPolicyCommand : IRequest<Result<TenantSalesPolicyDto>>
 {
     public bool PricesIncludeTax { get; init; }
     public decimal DefaultTaxRate { get; init; }
     public bool AutoCloseCounterSales { get; init; }
+
+    /// <summary>Null keeps the current value (the guided setup does not ask about the drawer).</summary>
+    public bool? RequireOpenCashSession { get; init; }
 }
 
 public class UpdateSalesPolicyCommandValidator : AbstractValidator<UpdateSalesPolicyCommand>
@@ -79,13 +84,17 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
         {
             settings.PricesIncludeTax,
             settings.DefaultTaxRate,
-            settings.AutoCloseCounterSales
+            settings.AutoCloseCounterSales,
+            settings.RequireOpenCashSession
         };
         settings.UpdateSalesPolicy(request.PricesIncludeTax, request.DefaultTaxRate, request.AutoCloseCounterSales);
+        if (request.RequireOpenCashSession is { } requireOpenCashSession)
+            settings.SetRequireOpenCashSession(requireOpenCashSession);
 
         var changed = previous.PricesIncludeTax != settings.PricesIncludeTax
             || previous.DefaultTaxRate != settings.DefaultTaxRate
-            || previous.AutoCloseCounterSales != settings.AutoCloseCounterSales;
+            || previous.AutoCloseCounterSales != settings.AutoCloseCounterSales
+            || previous.RequireOpenCashSession != settings.RequireOpenCashSession;
         if (changed)
         {
             // How totals are computed is a financial setting: who changed it, and from what, stays recorded.
@@ -102,7 +111,8 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
                     {
                         settings.PricesIncludeTax,
                         settings.DefaultTaxRate,
-                        settings.AutoCloseCounterSales
+                        settings.AutoCloseCounterSales,
+                        settings.RequireOpenCashSession
                     }
                 })));
         }
@@ -113,7 +123,8 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
         {
             PricesIncludeTax = settings.PricesIncludeTax,
             DefaultTaxRate = settings.DefaultTaxRate,
-            AutoCloseCounterSales = settings.AutoCloseCounterSales
+            AutoCloseCounterSales = settings.AutoCloseCounterSales,
+            RequireOpenCashSession = settings.RequireOpenCashSession
         });
     }
 }

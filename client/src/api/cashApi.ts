@@ -19,6 +19,17 @@ export const cashApi = {
   closeSession: (id: string, data: CloseCashSessionRequest) =>
     api.post<CashSessionDto>(`/cash/${id}/close`, data),
 
+  /** Shift history with expected, counted and difference per drawer. */
+  getSessions: (params?: {
+    fromDate?: string;
+    toDate?: string;
+    inventoryLocationId?: string;
+    status?: number;
+    onlyWithDifference?: boolean;
+    pageNumber?: number;
+    pageSize?: number;
+  }) => api.get<PaginatedList<CashSessionDto>>('/cash/sessions', { params }),
+
   getTransactions: (params?: {
     cashSessionId?: string;
     transactionType?: number;

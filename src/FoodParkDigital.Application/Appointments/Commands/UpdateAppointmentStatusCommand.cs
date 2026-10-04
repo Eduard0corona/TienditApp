@@ -1,8 +1,10 @@
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +12,7 @@ using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.Commands;
 
+[RequiresPermission(TenantPermission.ManageAppointments)]
 public record UpdateAppointmentStatusCommand : IRequest<Result<AppointmentDto>>
 {
     public Guid AppointmentId { get; init; }

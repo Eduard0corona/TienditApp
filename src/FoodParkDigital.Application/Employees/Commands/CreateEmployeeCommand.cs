@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Employees.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Commands;
 
+[RequiresPermission(TenantPermission.ManageEmployees)]
 public record CreateEmployeeCommand : IRequest<Result<EmployeeDto>>
 {
     public string Email { get; init; } = null!;

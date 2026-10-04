@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Identity.Entities;
 using FluentValidation;
 using MediatR;
@@ -10,6 +11,7 @@ namespace FoodParkDigital.Application.Identity.Commands.TwoFactor;
 /// Quitar el 2FA exige el segundo factor vigente: un código de la app autenticadora o, si se perdió
 /// el dispositivo, un código de recuperación. Una sesión robada no basta para desactivarlo.
 /// </summary>
+[RequiresAuthentication]
 public record Disable2FACommand(Guid UserId, string Code, bool UseRecoveryCode = false) : IRequest<Result>;
 
 public class Disable2FACommandValidator : AbstractValidator<Disable2FACommand>

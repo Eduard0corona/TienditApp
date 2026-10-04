@@ -32,12 +32,15 @@ public class MappingProfile : Profile
     public MappingProfile()
     {
         CreateMap<Order, OrderDto>()
-            .ForMember(d => d.TaxBreakdown, opt => opt.Ignore());
+            .ForMember(d => d.TaxBreakdown, opt => opt.Ignore())
+            .ForMember(d => d.NetPaidAmount, opt => opt.MapFrom(s => s.PaidAmount - s.RefundedAmount));
         CreateMap<OrderItem, OrderItemDto>();
         CreateMap<OrderStatusHistory, OrderStatusHistoryDto>();
         CreateMap<ServiceOrderDetail, ServiceOrderDetailDto>();
         CreateMap<ServiceOrderPiece, ServiceOrderPieceDto>();
         CreateMap<OrderPayment, OrderPaymentDto>();
+        CreateMap<OrderRefund, OrderRefundDto>();
+        CreateMap<OrderRefundLine, OrderRefundLineDto>();
         CreateMap<Order, KitchenOrderDto>();
 
         CreateMap<Product, ProductDto>()
@@ -61,6 +64,8 @@ public class MappingProfile : Profile
                 s.Settings != null ? s.Settings.DefaultTaxRate : VatRate.GeneralPercent))
             .ForMember(d => d.AutoCloseCounterSales, opt => opt.MapFrom(s =>
                 s.Settings == null || s.Settings.AutoCloseCounterSales))
+            .ForMember(d => d.RequireOpenCashSession, opt => opt.MapFrom(s =>
+                s.Settings != null && s.Settings.RequireOpenCashSession))
             .ForMember(d => d.OnboardingCompletedAt, opt => opt.MapFrom(s =>
                 s.Settings != null ? s.Settings.OnboardingCompletedAt : null))
             .ForMember(d => d.Street, opt => opt.MapFrom(s => s.Address != null ? s.Address.Street : null))

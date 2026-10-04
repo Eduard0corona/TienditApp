@@ -2,26 +2,31 @@
 
 ## Estado actual
 
-`BaseEntity` acumula `DomainEvent`. `ApplicationDbContext.SaveChangesAsync` primero persiste con EF Core y luego publica los eventos mediante MediatR. Antes de publicar, los eventos se limpian; handlers de órdenes crean auditoría, actualizan inventario y ejecutan SignalR/WhatsApp. Algunos handlers vuelven a llamar `SaveChangesAsync`; una bandera evita recursión infinita.
-
-El flujo comprobado es:
+`BaseEntity` acumula `DomainEvent`. Al guardar, `OutboxSaveChangesInterceptor` copia cada evento a `OutboxMessages` en la misma transacción; después del commit, `ApplicationDbContext` publica los eventos con MediatR solo para los handlers en proceso (SignalR), y el `OutboxDispatcher` ejecuta en segundo plano los handlers durables (`IOutboxEventHandler<T>`: auditoría y avisos de WhatsApp), con reintentos y registro por handler (ver [ADR 0006](../adr/0006-domain-events-and-outbox.md)).
 
 ```mermaid
 sequenceDiagram
     participant UseCase as Handler Application
     participant DB as SQL Server
     participant MediatR
-    participant SideEffect as Audit/SignalR/WhatsApp
-    UseCase->>DB: SaveChangesAsync
+    participant Worker as OutboxDispatcher
+    participant SideEffect as Auditoría/WhatsApp
+    UseCase->>DB: SaveChangesAsync (agregado + OutboxMessages)
     DB-->>UseCase: commit completado
-    UseCase->>MediatR: Publish DomainEvent
-    MediatR->>SideEffect: ejecutar handlers
-    SideEffect->>DB: SaveChangesAsync adicional cuando aplica
+    UseCase->>MediatR: Publish (solo SignalR, best-effort)
+    Worker->>DB: reclama mensajes pendientes
+    Worker->>SideEffect: handler en el scope del tenant
+    Worker->>DB: marca el handler como procesado
 ```
+
+Otras colas con la misma mecánica:
+
+- **Inbox del webhook:** cada entrega de Meta se guarda en `InboxMessages` (deduplicada por hash) y se procesa en segundo plano; los mensajes ya guardados se reconocen por su id de proveedor.
+- **Mensajes salientes:** campañas y recordatorios se encolan en `OutgoingMessages` con una clave de deduplicación única por negocio; el worker de mensajería los envía, reintenta y guarda su resultado. Iniciar una campaña encola todos sus mensajes en un solo `SaveChanges` (todo o nada).
 
 ## Implicaciones
 
-El commit original y los handlers no son atómicos. Si falla un handler después del primer commit, el dato principal queda persistido, el evento ya fue limpiado y algunos side effects pueden faltar. SignalR/WhatsApp tampoco comparten transacción con SQL. Por eso no se denomina “transaccional” a este proceso.
+El dato principal y sus efectos durables comparten transacción, pero los efectos ocurren después y pueden repetirse ante un reintento: por eso los handlers son idempotentes (la auditoría se guarda junto con el registro de que el handler terminó) y los envíos a proveedores aceptan el riesgo de un duplicado tras un timeout. SignalR sigue sin entrega garantizada.
 
 ## Reglas
 
@@ -30,11 +35,10 @@ El commit original y los handlers no son atómicos. Si falla un handler después
 - Todo handler susceptible a reintento es idempotente y usa claves/constraints de deduplicación.
 - Un caso de uso coordina cambios sin esconder commits intermedios.
 - Si varias escrituras deben ser atómicas (registro de negocio/cliente, confirmación de teléfono), el caso de uso usa `IApplicationDbContext.ExecuteInResilientTransactionAsync`: la transacción corre dentro de la estrategia de ejecución con reintentos, cada intento parte de un `ChangeTracker` limpio y solo hace commit si el `Result` es exitoso. No llames `Database.BeginTransactionAsync` directamente: la estrategia de reintentos de SQL Server rechaza transacciones iniciadas por el usuario. Correo/SMS se envían después del commit; los eventos de dominio de un `SaveChangesAsync` dentro de esa transacción se publican antes del commit.
-- No se depende de eventos post-save para procesos críticos mientras no exista entrega durable.
+- Los efectos críticos se implementan como `IOutboxEventHandler<T>` (entrega durable); los `INotificationHandler` quedan para efectos en proceso que pueden perderse.
 - Si varias solicitudes modifican a la vez el mismo agregado (`Order`, `WhatsAppConversation`), este lleva `rowversion`. Ante `DbUpdateConcurrencyException`, el caso de uso recarga el agregado y reaplica su cambio con intentos acotados, en lugar de guardar valores absolutos calculados sobre una copia vieja.
 
-## Arquitectura objetivo
+## Pendiente
 
-Adoptar Outbox antes de hacer críticos los eventos o integraciones: persistir agregado y mensaje Outbox en la misma transacción, publicar asíncronamente, registrar intentos/estado, usar consumidores idempotentes y observabilidad/correlación. La Inbox puede añadirse para webhooks/comandos repetibles. No hay Outbox implementado actualmente.
-
-El índice único de `InventoryMovement.ExternalReference` y las verificaciones de consumo/reverso ofrecen idempotencia parcial en inventario; los folios generados por conteo y algunos side effects externos aún tienen riesgos de concurrencia/reintento.
+- Correlación de trazas entre la petición original y el procesamiento en segundo plano (hoy se registra el id del mensaje).
+- El índice único de `InventoryMovement.ExternalReference` y las verificaciones de consumo/reverso ofrecen idempotencia parcial en inventario; los folios generados por conteo aún tienen riesgos de concurrencia.

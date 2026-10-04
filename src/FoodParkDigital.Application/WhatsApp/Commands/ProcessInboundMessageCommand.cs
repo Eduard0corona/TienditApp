@@ -1,7 +1,12 @@
 using AutoMapper;
+using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.WhatsApp.DTOs;
+using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
 using MediatR;
@@ -10,6 +15,7 @@ using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.WhatsApp.Commands;
 
+[AllowAnonymousRequest("Lo envía el procesador del webhook de WhatsApp (sistema), sin usuario.")]
 public record ProcessInboundMessageCommand : IRequest<Result<ChatMessageDto>>
 {
     public Guid TenantId { get; init; }
@@ -30,6 +36,7 @@ public class ProcessInboundMessageCommandHandler
     private readonly IWhatsAppNotificationService _notificationService;
     private readonly IMapper _mapper;
     private readonly ILogger<ProcessInboundMessageCommandHandler> _logger;
+    private readonly MessagingConsentService _consent;
 
     public ProcessInboundMessageCommandHandler(
         IApplicationDbContext context,
@@ -37,7 +44,8 @@ public class ProcessInboundMessageCommandHandler
         IWhatsAppService whatsAppService,
         IWhatsAppNotificationService notificationService,
         IMapper mapper,
-        ILogger<ProcessInboundMessageCommandHandler> logger)
+        ILogger<ProcessInboundMessageCommandHandler> logger,
+        MessagingConsentService? consent = null)
     {
         _context = context;
         _aiAgentAutoReplyService = aiAgentAutoReplyService;
@@ -45,6 +53,7 @@ public class ProcessInboundMessageCommandHandler
         _notificationService = notificationService;
         _mapper = mapper;
         _logger = logger;
+        _consent = consent ?? new MessagingConsentService(context, SystemClock.Instance);
     }
 
     public async Task<Result<ChatMessageDto>> Handle(
@@ -65,7 +74,9 @@ public class ProcessInboundMessageCommandHandler
         // Notify via SignalR
         await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, messageDto);
 
-        await TryAutoReplyAsync(request, conversation, cancellationToken);
+        // BAJA / ALTA get a confirmation instead of an automatic answer.
+        if (!await TryHandleOptOutKeywordAsync(request, conversation, cancellationToken))
+            await TryAutoReplyAsync(request, conversation, cancellationToken);
 
         return Result.Success(messageDto);
     }
@@ -167,22 +178,103 @@ public class ProcessInboundMessageCommandHandler
             .IgnoreQueryFilters()
             .AnyAsync(m => m.ExternalMessageId == externalMessageId, cancellationToken);
 
+    /// <summary>
+    /// Records BAJA / ALTA (campaigns and reminders stop or resume) and confirms it to the customer, who just
+    /// wrote, so a plain text reply is inside WhatsApp's 24-hour window.
+    /// </summary>
+    /// <returns>True when the message was a keyword.</returns>
+    private async Task<bool> TryHandleOptOutKeywordAsync(
+        ProcessInboundMessageCommand request,
+        WhatsAppConversation conversation,
+        CancellationToken cancellationToken)
+    {
+        var keyword = MessagingKeywords.Parse(request.Body);
+        if (keyword == MessagingKeyword.None)
+            return false;
+
+        var optedOut = keyword == MessagingKeyword.OptOut;
+        try
+        {
+            if (await _consent.SetAsync(request.TenantId, request.FromPhone, optedOut, OptOutSource.CustomerKeyword, cancellationToken))
+            {
+                _context.AuditLogs.Add(new AuditLog(
+                    request.TenantId,
+                    "MessagingOptOut",
+                    conversation.Id.ToString(),
+                    optedOut ? "MessagingOptOut" : "MessagingOptIn",
+                    "cliente por WhatsApp",
+                    $"{{\"Source\":\"{OptOutSource.CustomerKeyword}\"}}"));
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A concurrent BAJA from the same number stores it first (unique index); discard this attempt so the
+            // rest of the webhook payload does not save it.
+            foreach (var entry in _context.ChangeTracker.Entries()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified)
+                         .Where(e => e.Entity is Domain.Messaging.Entities.MessagingOptOut or AuditLog)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            _logger.LogWarning(
+                "Opt-out keyword of conversation {ConversationId} for tenant {TenantId} could not be stored: {ErrorType}",
+                conversation.Id,
+                request.TenantId,
+                ex.GetType().Name);
+        }
+
+        await TrySendReplyAsync(
+            request,
+            conversation,
+            optedOut ? MessagingDefaults.OptOutReply : MessagingDefaults.OptInReply,
+            "Opt-out confirmation",
+            cancellationToken);
+        return true;
+    }
+
     private async Task TryAutoReplyAsync(
         ProcessInboundMessageCommand request,
         WhatsAppConversation conversation,
         CancellationToken cancellationToken)
     {
+        string? reply;
         try
         {
-            var reply = await _aiAgentAutoReplyService.BuildReplyAsync(
+            reply = await _aiAgentAutoReplyService.BuildReplyAsync(
                 request.TenantId,
                 request.Body,
                 conversation.CustomerName,
                 cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "AI auto-reply processing failed for tenant {TenantId}, conversation {ConversationId}",
+                request.TenantId,
+                conversation.Id);
+            return;
+        }
 
-            if (string.IsNullOrWhiteSpace(reply))
-                return;
+        if (string.IsNullOrWhiteSpace(reply))
+            return;
 
+        await TrySendReplyAsync(request, conversation, reply, "AI auto-reply", cancellationToken);
+    }
+
+    /// <summary>Sends a text reply and records it in the conversation; failures are logged, never thrown.</summary>
+    private async Task TrySendReplyAsync(
+        ProcessInboundMessageCommand request,
+        WhatsAppConversation conversation,
+        string reply,
+        string kind,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
             var sendResult = await _whatsAppService.SendTextMessageAsync(
                 request.TenantId,
                 conversation.CustomerPhone,
@@ -192,7 +284,8 @@ public class ProcessInboundMessageCommandHandler
             if (sendResult.IsFailure)
             {
                 _logger.LogWarning(
-                    "AI auto-reply could not be sent for tenant {TenantId}, conversation {ConversationId}: {Error}",
+                    "{ReplyKind} could not be sent for tenant {TenantId}, conversation {ConversationId}: {Error}",
+                    kind,
                     request.TenantId,
                     conversation.Id,
                     sendResult.Error);
@@ -210,14 +303,15 @@ public class ProcessInboundMessageCommandHandler
         {
             _logger.LogError(
                 ex,
-                "AI auto-reply processing failed for tenant {TenantId}, conversation {ConversationId}",
+                "{ReplyKind} processing failed for tenant {TenantId}, conversation {ConversationId}",
+                kind,
                 request.TenantId,
                 conversation.Id);
         }
     }
 
     /// <summary>
-    /// Records the reply the AI agent already sent. While the agent answered, the business often marks
+    /// Records a reply already sent (AI agent or opt-out confirmation). While it was sent, the business often marks
     /// the chat read or the customer writes again, so the reply goes into the conversation as it is now.
     /// </summary>
     private async Task<(WhatsAppConversation Conversation, WhatsAppMessage Message)> StoreAutoReplyAsync(

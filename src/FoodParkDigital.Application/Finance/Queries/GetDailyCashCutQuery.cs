@@ -1,13 +1,16 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Finance.Queries;
 
+[RequiresPermission(TenantPermission.ManageCash)]
 public record GetDailyCashCutQuery : IRequest<DailyCashCutDto>
 {
     public DateOnly? Date { get; init; }

@@ -12,5 +12,9 @@ public enum TenantPermission
     ManageWhatsApp = 8,
     ManageAiAgent = 9,
     ManageEmployees = 10,
-    ManageAppointments = 11
+    ManageAppointments = 11,
+    /// <summary>Give money back and void paid sales. Owners and admins always can; staff only when granted.</summary>
+    ProcessRefunds = 12,
+    /// <summary>Message templates, campaigns and reminders. Owners and admins always can; staff only when granted.</summary>
+    ManageCampaigns = 13
 }

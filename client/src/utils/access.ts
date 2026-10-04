@@ -33,6 +33,10 @@ export interface Access {
   whatsAppSettings: boolean;
   aiAgent: boolean;
   businessSettings: boolean;
+  /** Refund and void paid sales: owners, admins and staff with ProcessRefunds. */
+  refunds: boolean;
+  /** WhatsApp campaigns, templates, appointment reminders and opt-outs: owners, admins and ManageCampaigns. */
+  campaigns: boolean;
 }
 
 export type AccessArea = Exclude<keyof Access, 'isAdmin'>;
@@ -82,6 +86,8 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     whatsAppSettings: commerce && isAdmin,
     aiAgent: commerce && isAdmin,
     businessSettings: isAdmin,
+    refunds: commerce && isCounterRole && can('ManageOrders') && can('ProcessRefunds'),
+    campaigns: commerce && isCounterRole && can('ManageCampaigns'),
   };
 }
 

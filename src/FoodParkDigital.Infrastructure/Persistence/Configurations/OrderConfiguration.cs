@@ -22,6 +22,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.BusinessType).HasConversion<int>().IsRequired();
         builder.Property(o => o.OrderType).HasConversion<int>().IsRequired();
         builder.Property(o => o.Status).HasConversion<int>().IsRequired();
+        builder.Property(o => o.Channel).HasConversion<int>().IsRequired();
         builder.Property(o => o.CustomerName).HasMaxLength(200).IsRequired();
         builder.Property(o => o.CustomerPhone).HasMaxLength(20);
         builder.Property(o => o.CustomerNotes).HasMaxLength(500);
@@ -34,6 +35,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Tax).HasColumnType("decimal(18,2)");
         builder.Property(o => o.Total).HasColumnType("decimal(18,2)");
         builder.Property(o => o.PaidAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+        builder.Property(o => o.RefundedAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+        builder.Ignore(o => o.NetPaidAmount);
         builder.Property(o => o.TenantId).IsRequired();
 
         // Concurrency token
@@ -79,6 +82,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Navigation(o => o.Items).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.StatusHistory).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.Payments).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.HasMany(o => o.Refunds)
+            .WithOne()
+            .HasForeignKey(r => r.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.Refunds).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.ServicePieces).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Indexes

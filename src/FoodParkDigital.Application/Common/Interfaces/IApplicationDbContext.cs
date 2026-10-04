@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
+using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -33,6 +34,7 @@ public interface IApplicationDbContext
     DbSet<OrderItem> OrderItems { get; }
     DbSet<OrderStatusHistory> OrderStatusHistories { get; }
     DbSet<OrderPayment> OrderPayments { get; }
+    DbSet<OrderRefund> OrderRefunds { get; }
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }
@@ -52,6 +54,10 @@ public interface IApplicationDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<ApplicationUser> Users { get; }
     DbSet<OwnerWhatsAppConfig> OwnerWhatsAppConfigs { get; }
+    DbSet<MessageTemplate> MessageTemplates { get; }
+    DbSet<MessageCampaign> MessageCampaigns { get; }
+    DbSet<OutgoingMessage> OutgoingMessages { get; }
+    DbSet<MessagingOptOut> MessagingOptOuts { get; }
     DatabaseFacade Database { get; }
     ChangeTracker ChangeTracker { get; }
 

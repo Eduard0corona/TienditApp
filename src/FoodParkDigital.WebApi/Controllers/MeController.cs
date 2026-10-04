@@ -18,6 +18,11 @@ public class MeController : ControllerBase
         _mediator = mediator;
     }
 
+    /// <summary>Role, permissions and modules of the signed-in user in the current business, resolved by the server.</summary>
+    [HttpGet("access")]
+    public async Task<ActionResult<MyAccessDto>> GetMyAccess()
+        => Ok(await _mediator.Send(new GetMyAccessQuery()));
+
     [HttpGet("tenants")]
     public async Task<ActionResult<IReadOnlyList<MyTenantDto>>> GetMyTenants()
     {

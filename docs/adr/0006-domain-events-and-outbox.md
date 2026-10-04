@@ -1,16 +1,27 @@
 # ADR 0006: Eventos de dominio y Outbox
 
-- Estado: Aceptada como dirección objetivo
+- Estado: Aceptada e implementada (Fase 2, 2026-10-04)
 - Fecha: 2026-08-10
 
 ## Contexto
 
-Los eventos actuales se publican con MediatR después de `SaveChangesAsync`; handlers escriben auditoría e invocan SignalR/WhatsApp. No existe atomicidad ni entrega durable.
+Los eventos se publicaban con MediatR después de `SaveChangesAsync`; los handlers escribían auditoría e invocaban SignalR/WhatsApp. No había atomicidad ni entrega durable: si un handler fallaba después del commit, el efecto se perdía.
 
 ## Decisión
 
-Las entidades solo producen eventos. Side effects viven en handlers/Infrastructure y son idempotentes. Antes de depender de eventos para procesos críticos o integraciones, implementar Outbox persistido en la misma transacción, dispatcher observable y consumidores idempotentes.
+Las entidades solo producen eventos. Los efectos durables (auditoría, avisos de WhatsApp al cliente) se guardan como mensajes Outbox en la misma transacción que el agregado y los procesa un worker con reintentos; los consumidores son idempotentes. La actualización de pantallas por SignalR sigue en proceso y best-effort, porque las pantallas también recargan al reconectar y con sondeo.
+
+## Implementación
+
+- `OutboxSaveChangesInterceptor` copia cada `DomainEvent` a `OutboxMessages` (tipo, payload JSON, tenant y actor) dentro del mismo `SaveChanges`.
+- `OutboxDispatcher` (Infrastructure, `BackgroundJobs/Outbox`) reclama mensajes con `LockToken` como token de concurrencia y un lease, ejecuta cada `IOutboxEventHandler<T>` en un scope propio con el tenant y el actor del evento, y registra en `OutboxMessageConsumers` qué handler terminó, para no repetirlo en un reintento.
+- Reintentos con espera creciente (`RetrySchedule`, 10 s a 6 h); al agotar los intentos el mensaje se aparta (dead-letter) y se registra en logs y métricas. Los procesados se borran tras `RetentionDays`.
+- Los fallos transitorios de proveedores (`TransientDeliveryException`: 408, 429, 5xx, red) se reintentan; un rechazo definitivo se registra y no se repite.
+- La misma mecánica (`QueueItem`) atiende la bandeja del webhook de WhatsApp (`InboxMessages`, deduplicada por hash del payload) y la cola de mensajes salientes de campañas y recordatorios (`OutgoingMessages`, ver [mensajería](../domain/messaging.md)).
+- `BackgroundQueuesHealthCheck` degrada `/health/ready` si hay trabajo apartado en el último día o pendiente con más de 15 minutos de atraso.
 
 ## Consecuencias
 
-Hasta implementar Outbox, documentar los procesos como post-commit best-effort y no “transaccionales”. Outbox añade tabla, worker, reintentos, retención y monitoreo; se implementará en una tarea dedicada, no aquí.
+- La auditoría y los avisos ya no se pierden si el proceso cae después del commit; pueden llegar con retraso (segundos) y, ante un timeout del proveedor, un aviso podría enviarse dos veces (el proveedor no ofrece idempotencia en envíos).
+- Agregar un efecto durable es implementar `IOutboxEventHandler<T>`; los handlers de MediatR (`INotificationHandler`) quedan para efectos en proceso no críticos.
+- El evento serializado es un contrato: renombrar o quitar propiedades de un evento requiere compatibilidad con los mensajes pendientes.

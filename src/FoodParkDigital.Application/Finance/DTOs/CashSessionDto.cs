@@ -22,6 +22,24 @@ public class CashSessionDto
     public decimal NonCashInflows { get; set; }
     /// <summary>Opening amount plus cash inflows minus cash outflows.</summary>
     public decimal ExpectedBalance { get; set; }
+    public Guid? OpenedByUserId { get; set; }
+    /// <summary>True when the drawer belongs to the user asking (their payments enter it).</summary>
+    public bool IsMine { get; set; }
+    public Guid? InventoryLocationId { get; set; }
+    public string? InventoryLocationName { get; set; }
+    /// <summary>Expected cash frozen at closing.</summary>
+    public decimal? ExpectedClosingAmount { get; set; }
+    /// <summary>Counted minus expected: negative is a shortage.</summary>
+    public decimal? ClosingDifference { get; set; }
+    public string? ClosingNotes { get; set; }
+    public List<CashCountLineDto> CashCount { get; set; } = [];
+}
+
+/// <summary>Bills or coins of one denomination counted at closing.</summary>
+public class CashCountLineDto
+{
+    public decimal Denomination { get; set; }
+    public int Quantity { get; set; }
 }
 
 public class CashTransactionDto

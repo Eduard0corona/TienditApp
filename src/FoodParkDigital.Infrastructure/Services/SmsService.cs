@@ -69,7 +69,7 @@ public class SmsService : ISmsService
             return;
         }
 
-        var client = _httpClientFactory.CreateClient();
+        var client = _httpClientFactory.CreateClient("Twilio");
         var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{accountSid}:{authToken}"));
         var endpoint = $"https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json";
 

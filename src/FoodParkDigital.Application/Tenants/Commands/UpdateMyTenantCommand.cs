@@ -3,6 +3,7 @@ using System.Text.Json;
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -14,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tenants.Commands;
 
+[RequiresTenantManager]
 public record UpdateMyTenantCommand : IRequest<Result<TenantProfileDto>>
 {
     public string Name { get; init; } = null!;
@@ -173,6 +175,7 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
         dto.PricesIncludeTax = settings.PricesIncludeTax;
         dto.DefaultTaxRate = settings.DefaultTaxRate;
         dto.AutoCloseCounterSales = settings.AutoCloseCounterSales;
+        dto.RequireOpenCashSession = settings.RequireOpenCashSession;
         dto.OnboardingCompletedAt = settings.OnboardingCompletedAt;
         return Result.Success(dto);
     }

@@ -5,14 +5,14 @@
 - Importes, costos, impuestos y existencias usan `decimal`; no se encontraron `float`/`double` para dinero en Domain/Application.
 - `Order` calcula `SubTotal`, `Tax`, `Total`, `PaidAmount` y `Balance` con el desglose de IVA por tasa descrito abajo. Admite pagos parciales y rechaza sobrepago.
 - `OrderPayment` conserva método, fecha, ubicación opcional, evidencia URL, referencia y notas. La fecha del pago la pone el servidor (`PaidAt` ya no se acepta del cliente) y el importe admite máximo 2 decimales.
-- Una orden cancelada no acepta pagos y una orden con pagos no puede cancelarse hasta que existan reembolsos (ver ADR 0007); `OrderDto.CanCancel` refleja ambas reglas.
+- Una orden cancelada no acepta pagos y una orden con dinero sin reembolsar no puede cancelarse (ver [reembolsos](#reembolsos-y-anulaciones-fase-2) y ADR 0007); `OrderDto.CanCancel` refleja ambas reglas con el neto pagado.
 - La evidencia de un pago debe ser un archivo subido por el endpoint de evidencias para el mismo tenant (`OrderUploadRules`); las imágenes se re-codifican y los PDF se sirven como descarga.
 - `CashSession` conserva fondo, apertura/cierre, entradas, salidas y saldo esperado. `CashTransaction` puede referir orden, método y ubicación.
   - El signo del movimiento lo define su tipo (gasto, retiro y reembolso restan; depósito y venta suman); el importe capturado siempre es positivo con 2 decimales y la fecha es la del servidor.
   - Los movimientos manuales solo pueden ser depósito, gasto, retiro o reembolso; la orden referida debe existir.
   - `Inflows`/`Outflows` y el saldo esperado solo cuentan efectivo; tarjeta, transferencia y otros métodos se reportan aparte (`NonCashInflows`). El corte diario expone `NetCashOnlyFlow`.
-  - Solo puede haber una caja abierta por tenant (índice único filtrado) y `CashSession.Revision` es token de concurrencia: un pago concurrente con el cierre o dos cierres simultáneos fallan con 409 en lugar de sobrescribirse. El cierre exige un monto contado mayor o igual a cero.
-- Al registrar un pago, `OrderCashService` lo agrega a la sesión abierta más reciente si existe; si no hay sesión, el pago sigue registrado sin movimiento de caja.
+  - Cada cajero tiene su propia caja abierta por sucursal (índice único filtrado por negocio y cajero, ver [caja por cajero](#caja-por-cajero-fase-2)) y `CashSession.Revision` es token de concurrencia: un pago concurrente con el cierre o dos cierres simultáneos fallan con 409 en lugar de sobrescribirse. El cierre exige un monto contado mayor o igual a cero.
+- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal del pago o del negocio. Si hay varias abiertas y ninguna es suya, o no hay ninguna, el pago sigue registrado sin movimiento de caja, salvo que el negocio exija caja abierta para cobrar en efectivo.
 - Compras aceptan `TaxPercent` por línea y calculan subtotales/impuesto.
 - `DigitalWallet` existe como método de pago y subtotal del corte, no como cuenta Wallet.
 
@@ -39,6 +39,23 @@
   - un servicio pasa a `Completed` si no tiene piezas rastreadas aceptadas o en proceso.
 - El cierre se evalúa al crear la venta, al registrar un pago y cuando la orden llega a `Ready`. Queda en el historial con el usuario y no envía WhatsApp al cliente (`OrderStatusChangedEvent.NotifyCustomer = false`).
 - Inicio reporta ingresos por pagos (base de efectivo): `TotalRevenue` suma los pagos con `PaidAt` en el rango sin importar el estado de la orden, `AverageOrderValue` divide entre las órdenes que recibieron esos pagos y `OutstandingBalance`/`UnpaidOrders` muestran el saldo de las órdenes no canceladas del rango.
+
+## Caja por cajero (Fase 2)
+
+- Cada cajero abre su caja en una sucursal (`InventoryLocationId`) y queda como dueño (`OpenedByUserId`). Solo quien la abrió o un administrador la cierra o registra gastos y retiros en ella.
+- Al cerrar se guardan lo esperado (fondo + efectivo neto), lo contado, la diferencia y las notas; las notas son obligatorias si hay faltante o sobrante. El conteo por denominación es opcional y debe cuadrar con el total (`CashCountJson`).
+- `GET /api/v1/cash/sessions` lista los turnos por fecha, sucursal y estado, con filtro de solo diferencias. Caja muestra Mi caja, Turnos (el administrador puede cerrar cajas ajenas) y Corte del día.
+- `TenantSettings.RequireOpenCashSession` (apagado por defecto) rechaza cobros y reembolsos en efectivo si el cajero no tiene caja abierta; tarjeta y transferencia no la necesitan.
+- Las cajas anteriores a la Fase 2 se completaron en la migración: sucursal predeterminada del negocio, cajero por el correo con que se abrió y, en las cerradas, esperado y diferencia calculados de sus movimientos.
+
+## Reembolsos y anulaciones (Fase 2)
+
+- Un reembolso (`OrderRefund`) es un registro aparte e inmutable: importe con dos decimales, forma de pago, motivo, fecha del servidor, quién lo hizo y, opcionalmente, las unidades devueltas por línea (`OrderRefundLine`). Pagos y líneas no se editan; la orden acumula `RefundedAmount` y `OrderItem.ReturnedQuantity`, y expone `NetPaidAmount = PaidAmount − RefundedAmount`.
+- No se puede reembolsar más de lo cobrado y no devuelto, ni devolver más unidades de las vendidas y no devueltas. Una orden cancelada no admite reembolsos.
+- El efectivo devuelto sale de la caja del cajero (`CashTransactionType.Refund`); un reembolso con otra forma de pago queda registrado como salida no efectiva. Si se pide, los insumos de las unidades devueltas regresan al inventario con la referencia `ORDER:{orden}:RETURN:{reembolso}`, una sola vez.
+- **Anular venta** devuelve lo que queda de cada forma de pago con esa misma forma, regresa las unidades y cancela la orden si su estado lo permite; una venta entregada queda entregada y reembolsada por completo.
+- Solo dueños, admins y personal con `ProcessRefunds` reembolsan o anulan (`OrderRefundProcessor`). Cada reembolso emite `OrderRefundedEvent`, que se audita por el outbox.
+- Inicio descuenta los reembolsos del rango de los ingresos y las unidades devueltas de los más vendidos; el corte de caja los muestra como salidas.
 
 ## Otros cálculos
 

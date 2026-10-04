@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Domain.Tenants.Entities;
@@ -42,8 +43,24 @@ public class TenantSettings : BaseEntity
     public decimal DefaultTaxRate { get; private set; } = VatRate.GeneralPercent;
     /// <summary>Counter sales close by themselves once fully paid (food with kitchen, once ready).</summary>
     public bool AutoCloseCounterSales { get; private set; } = true;
+
+    /// <summary>
+    /// When true a cash payment is refused unless the cashier has an open drawer, so no cash goes uncounted.
+    /// Off by default: card and transfer payments never need a drawer.
+    /// </summary>
+    public bool RequireOpenCashSession { get; private set; }
     /// <summary>When the owner finished or skipped the guided setup.</summary>
     public DateTimeOffset? OnboardingCompletedAt { get; private set; }
+
+    public const int MinReminderHoursBefore = 1;
+    public const int MaxReminderHoursBefore = 72;
+    public const int DefaultReminderHoursBefore = 24;
+
+    /// <summary>WhatsApp reminders before each appointment; off until the business turns them on.</summary>
+    public bool AppointmentRemindersEnabled { get; private set; }
+    public int AppointmentReminderHoursBefore { get; private set; } = DefaultReminderHoursBefore;
+    /// <summary>The reminder template; null uses the default text.</summary>
+    public Guid? AppointmentReminderTemplateId { get; private set; }
 
     public Tenant Tenant { get; private set; } = null!;
 
@@ -68,6 +85,19 @@ public class TenantSettings : BaseEntity
         DefaultTaxRate = VatRate.Of(defaultTaxRate).Percent;
         PricesIncludeTax = pricesIncludeTax;
         AutoCloseCounterSales = autoCloseCounterSales;
+    }
+
+    public void SetRequireOpenCashSession(bool required) => RequireOpenCashSession = required;
+
+    public void UpdateAppointmentReminders(bool enabled, int hoursBefore, Guid? templateId)
+    {
+        if (hoursBefore is < MinReminderHoursBefore or > MaxReminderHoursBefore)
+            throw new DomainException(
+                $"El recordatorio se envía de {MinReminderHoursBefore} a {MaxReminderHoursBefore} horas antes de la cita.");
+
+        AppointmentRemindersEnabled = enabled;
+        AppointmentReminderHoursBefore = hoursBefore;
+        AppointmentReminderTemplateId = templateId;
     }
 
     /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>

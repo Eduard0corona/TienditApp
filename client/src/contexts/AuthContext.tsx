@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { authApi } from '../api/authApi';
 import { profileApi } from '../api/profileApi';
 import { refreshAccessToken, setAccessToken } from '../api/axios';
+import { queryKeys } from '../api/queries';
+import { queryClient } from '../api/queryClient';
+import { apiRequest } from '../api/typedClient';
 import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
 import { AuthContext, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
@@ -36,6 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(null);
     setUser(null);
     setSessionMarker(false);
+    // Cached server state belongs to the user who leaves.
+    queryClient.clear();
   }, []);
 
   useSessionSync(clearSession);
@@ -43,7 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     try {
       const { data } = await profileApi.getProfile();
-      setUser(data);
+      // The token's permission claims can be older than a change made by an admin: the server's current
+      // access wins when it answers (menus and guards only; the API checks every request itself).
+      const access = await apiRequest('get', '/api/v1/me/access').catch(() => null);
+      setUser(access?.isMember ? { ...data, permissions: access.permissions ?? data.permissions } : data);
+      queryClient.removeQueries({ queryKey: queryKeys.myAccess });
     } catch {
       setUser(null);
       setAccessToken(null);

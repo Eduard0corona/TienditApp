@@ -13,4 +13,6 @@ internal sealed class NoOpOrderInventoryService : IOrderInventoryService
     public Task ApplyConsumptionForServicePieceAsync(Order order, ServiceOrderPiece piece, CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task ReverseConsumptionForOrderAsync(Order order, string? reason, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task ReturnItemsToInventoryAsync(Order order, OrderRefund refund, CancellationToken cancellationToken) => Task.CompletedTask;
 }

@@ -1,13 +1,16 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record UploadServiceIntakePhotoCommand : IRequest<Result<UploadedFileDto>>
 {
     public Stream FileStream { get; init; } = null!;
@@ -95,6 +98,7 @@ public class UploadServiceIntakePhotoCommandHandler : IRequestHandler<UploadServ
     }
 }
 
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record UploadOrderPaymentEvidenceCommand : IRequest<Result<UploadedFileDto>>
 {
     public Stream FileStream { get; init; } = null!;

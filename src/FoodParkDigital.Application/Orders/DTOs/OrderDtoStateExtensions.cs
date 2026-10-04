@@ -14,8 +14,8 @@ public static class OrderDtoStateExtensions
     {
         var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
         order.AllowedTransitions = stateMachine.GetAllowedTransitions(order.Status).ToList();
-        // Mirrors Order.Cancel: orders with registered payments cannot be cancelled until refunds exist.
-        order.CanCancel = stateMachine.CanCancel(order.Status) && order.PaidAmount <= 0;
+        // Mirrors Order.Cancel: money still kept is refunded first (void does both in one step).
+        order.CanCancel = stateMachine.CanCancel(order.Status) && order.NetPaidAmount <= 0;
 
         // Same calculation as Order.GetTaxBreakdown, from the rate stored on each item.
         order.TaxBreakdown = OrderTaxCalculator

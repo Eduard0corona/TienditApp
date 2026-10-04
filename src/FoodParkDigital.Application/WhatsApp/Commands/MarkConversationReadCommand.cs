@@ -1,12 +1,15 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.WhatsApp.DTOs;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.WhatsApp.Commands;
 
+[RequiresPermission(TenantPermission.ManageWhatsApp)]
 public record MarkConversationReadCommand(Guid ConversationId) : IRequest<Result>;
 
 public class MarkConversationReadCommandHandler : IRequestHandler<MarkConversationReadCommand, Result>

@@ -2,11 +2,14 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Catalog.Queries;
 
+[RequiresPermission(TenantPermission.ManageCatalog)]
 public record GetCategoryTemplatesQuery : IRequest<List<CategoryTemplateDto>>;
 
 public class GetCategoryTemplatesQueryHandler : IRequestHandler<GetCategoryTemplatesQuery, List<CategoryTemplateDto>>

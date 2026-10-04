@@ -3,11 +3,14 @@ using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Audit.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Audit.Queries;
 
+[RequiresPermission(TenantPermission.ViewReports)]
 public record GetAuditLogsQuery : IRequest<PaginatedList<AuditLogDto>>
 {
     public string? EntityName { get; init; }

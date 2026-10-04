@@ -2,11 +2,14 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.AiAgents.Queries;
 
+[RequiresPermission(TenantPermission.ManageAiAgent)]
 public record GetAiAgentsQuery : IRequest<List<AiAgentDto>>
 {
     public bool? IsActive { get; init; }

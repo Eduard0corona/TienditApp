@@ -1,6 +1,10 @@
+using System.Diagnostics;
 using System.Security.Claims;
+using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Tenants.Enums;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -33,7 +37,8 @@ public class TenantResolutionMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         ICurrentTenantService tenantService,
-        ITenantAccessService tenantAccessService)
+        ITenantAccessService tenantAccessService,
+        CurrentAccessContext? accessContext = null)
     {
         // Skip for unauthenticated paths
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
@@ -107,6 +112,8 @@ public class TenantResolutionMiddleware
             }
 
             accessSnapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, context.RequestAborted);
+            // The authorization behavior reuses it instead of reading it again.
+            accessContext?.Prime(userId, tenantId, accessSnapshot);
             if (!accessSnapshot.HasActiveAccess)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -173,7 +180,20 @@ public class TenantResolutionMiddleware
         }
 
         tenantService.SetTenant(tenantId);
+        TagTelemetry(context, tenantId);
         await _next(context);
+    }
+
+    /// <summary>
+    /// Adds the tenant to the request trace and to the built-in HTTP metrics (http.server.request.duration),
+    /// so error rates and latency can be charted and alerted per business.
+    /// </summary>
+    private static void TagTelemetry(HttpContext context, Guid tenantId)
+    {
+        var tenant = tenantId.ToString();
+        context.Features.Get<IHttpMetricsTagsFeature>()?.Tags.Add(
+            new KeyValuePair<string, object?>(TienditAppMetrics.TenantTag, tenant));
+        Activity.Current?.SetTag(TienditAppMetrics.TenantTag, tenant);
     }
 
     private static bool IsExcludedPath(string path) =>
@@ -194,6 +214,7 @@ public class TenantResolutionMiddleware
     private static bool IsTenantScopedPath(string path) =>
         path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/auth/my-tenant", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
@@ -232,6 +253,7 @@ public class TenantResolutionMiddleware
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
             || IsTenantOrdersPath(path)
             || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
@@ -291,6 +313,13 @@ public class TenantResolutionMiddleware
         if (path.StartsWith("/api/v1/marketing", StringComparison.Ordinal))
             return [TenantPermission.ManageWhatsApp];
 
+        // Recording a customer's opt-out is also part of attending them.
+        if (path.StartsWith("/api/v1/messaging/opt-outs", StringComparison.Ordinal))
+            return [TenantPermission.ManageCampaigns, TenantPermission.ManageCustomers];
+
+        if (path.StartsWith("/api/v1/messaging", StringComparison.Ordinal))
+            return [TenantPermission.ManageCampaigns];
+
         if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
             return [TenantPermission.ManageServiceBoard];
@@ -312,6 +341,10 @@ public class TenantResolutionMiddleware
 
             return [TenantPermission.ManageCatalog];
         }
+
+        // The customer card is read from the chat and the orders screen too.
+        if (path.StartsWith("/api/v1/customers/card", StringComparison.Ordinal) && isReadRequest)
+            return [TenantPermission.ManageCustomers, TenantPermission.ManageWhatsApp, TenantPermission.ManageOrders];
 
         if (path.StartsWith("/api/v1/customers", StringComparison.Ordinal))
             return [TenantPermission.ManageCustomers];

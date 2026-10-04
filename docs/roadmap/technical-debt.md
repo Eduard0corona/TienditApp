@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-04 tras las Fases 0 y 1 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-04 tras las Fases 0, 1 y 2 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -14,12 +14,10 @@ Actualizada el 2026-10-04 tras las Fases 0 y 1 del roadmap de producto (la audit
 ## Alta
 
 - Movimientos manuales de inventario registrados desde la pantalla antes de la corrección del 2026-10-04: se guardaron con el tipo y el motivo siguientes al elegido. Movieron las existencias en sentido contrario, y las "Salidas" guardadas como `Entry` promediaron su costo como si fueran compras. Falta revisarlos con cada tenant y compensarlos ([procedimiento y consulta de solo lectura](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md)). El dominio no tiene una operación para revaluar el costo promedio.
-- Eventos se limpian/publican después del commit sin Outbox; side effects pueden perderse o duplicarse.
-- `SUPER_ADMIN` y `TENANT_ADMIN` omiten permisos/capabilities en partes del middleware; el claim `role` es el rol global y no el de la membresía; autorización distribuida por strings de ruta.
+- El claim `role` es el rol global y no el de la membresía: un `TENANT_ADMIN` tendría todos los permisos en cualquier negocio al que se le agregue como empleado. La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, el paso de contraseña del login no cuenta intentos fallidos (`lockoutOnFailure: false`; el 2FA sí usa lockout) y el login distingue cuentas sin confirmar o bloqueadas.
 - Folios de órdenes y movimientos por conteo (una colisión responde 500); la recepción de compra no tiene idempotency key estable.
-- No existen reembolsos: una orden con pagos no se puede cancelar.
 - Contratos de error mezclan `ProblemDetails` con objetos `{ error }`; el cliente ya los lee con un solo helper (`src/api/errors.ts`), pero el servidor sigue respondiendo en varias formas y con algunos mensajes de dominio en inglés.
 - Controllers no propagan `CancellationToken`.
 - Política de contraseña (longitud mínima 6) pendiente de evaluación.
@@ -38,7 +36,7 @@ Actualizada el 2026-10-04 tras las Fases 0 y 1 del roadmap de producto (la audit
 - Inicio carga en memoria las órdenes y pagos del rango; con volumen alto conviene un modelo de lectura.
 - Consultas con varias colecciones incluidas no usan `AsSplitQuery`.
 - `client/README.md` sigue siendo template genérico.
-- Pago puede persistirse sin movimiento de caja cuando no hay sesión abierta; solo hay una caja abierta por tenant, no por sucursal.
+- Un pago puede guardarse sin movimiento de caja si el cajero no tiene caja abierta y hay varias o ninguna en la sucursal, salvo que el negocio active `RequireOpenCashSession`.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - `Product.StockQuantity` es informativo: las ventas no lo descuentan.
 - Un administrador puede activar cualquier capability desde `PUT /auth/my-tenant`; es un bypass si los módulos dependen del plan contratado.
@@ -106,16 +104,34 @@ Pendientes detectados en la Fase 1:
 - No hay staging: la decisión fue publicar solo desde `master` sin slot de prueba.
 - Una venta sin conexión no se puede registrar; Vender solo conserva el borrador.
 
+## Resuelto el 2026-10-04 (Fase 2: operación confiable)
+
+- Outbox: los efectos durables de los eventos (auditoría y avisos de WhatsApp) se guardan en la misma transacción y los procesa un worker con reintentos, registro por handler y dead-letter (migración `AddOutboxAndWebhookInbox`); bandeja del webhook (`InboxMessages`) y resiliencia HTTP (timeouts y circuit breaker, sin reintentos inmediatos de POST).
+- Observabilidad: OpenTelemetry (trazas, métricas y logs) hacia Azure Monitor u OTLP, métricas propias por negocio y `/health/live` y `/health/ready` con el estado de las colas.
+- Caja por cajero y sucursal, historial de turnos con diferencias y notas, conteo por denominación y política `RequireOpenCashSession` (migración `CashSessionsPerCashier`).
+- Reembolsos parciales con devolución de unidades e insumos, y anulación de ventas pagadas (migración `AddOrderRefunds`, permiso `ProcessRefunds`).
+- Campañas, plantillas, bajas BAJA/ALTA y recordatorios de citas por WhatsApp, enviados en segundo plano con historial por mensaje (migración `AddMessagingCampaignsAndReminders`, permiso `ManageCampaigns`).
+- Pedido desde el chat (canal WhatsApp en la orden, migración `AddOrderChannel`) y ficha del cliente.
+- Autorización v2: regla declarada en cada caso de uso, deny by default con prueba de cobertura, `GET /api/v1/me/access`; cliente de API generado desde OpenAPI con TanStack Query.
+
+Pendientes detectados en la Fase 2:
+
+- El mismo celular mexicano se guarda como `+52…` (capturado) o `+521…` (WhatsApp): la ficha del cliente y las campañas los reconcilian, pero el cliente temporal y la conversación pueden quedar duplicados. Unificar la normalización exige migrar datos y revisar la búsqueda de conversaciones.
+- Un envío a Meta que expira puede haberse entregado: el reintento puede duplicar un aviso o un mensaje de campaña (Meta no ofrece idempotencia en envíos).
+- Los índices únicos filtrados nuevos (deduplicación de mensajes, caja abierta por cajero, bajas por número) se validan con las migraciones del CI y pruebas InMemory; faltan pruebas de concurrencia contra SQL Server.
+- `OutgoingMessages` no tiene retención y las campañas no respetan horario de envío.
+- Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`types/index.ts`) y generados.
+- La actualización de pantallas por SignalR sigue siendo best-effort.
+
 ## Decisiones humanas pendientes
 
 - Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.
 - Modelo de autorización definitivo: policies/resource handlers, rol por tenant en el token y alcance administrativo cross-tenant.
 - Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
 - Responsable legal-contable de la política fiscal (descuentos, IEPS, retenciones y CFDI).
-- Semántica cuando no hay caja abierta, caja por sucursal y diseño de reembolsos/ajustes/CxC/Wallet.
+- Cuentas por cobrar, saldo a favor y Wallet (los reembolsos ya existen; los ajustes contables no).
 - Estrategia para reconciliar `master`/`develop` y migraciones.
 - Cuándo agregar staging con swap antes de producción.
-- Prioridad de Outbox frente a integraciones críticas.
 - AutoMapper: licencia comercial o reemplazo.
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.

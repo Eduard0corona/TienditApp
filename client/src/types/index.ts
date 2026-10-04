@@ -163,6 +163,8 @@ export interface TenantProfileDto {
   defaultTaxRate: number;
   /** Counter sales close by themselves once fully paid. */
   autoCloseCounterSales: boolean;
+  /** Cash payments are refused unless the cashier has an open drawer. */
+  requireOpenCashSession?: boolean;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -183,6 +185,8 @@ export interface TenantSalesPolicyDto {
   pricesIncludeTax: boolean;
   defaultTaxRate: number;
   autoCloseCounterSales: boolean;
+  /** Refuse cash payments when the cashier has no open drawer. Omitted keeps the current value. */
+  requireOpenCashSession?: boolean;
 }
 
 export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
@@ -908,6 +912,22 @@ export interface CashSessionDto {
   /** Card, transfer and other payments: recorded in the session but not in the drawer. */
   nonCashInflows: number;
   expectedBalance: number;
+  openedByUserId?: string | null;
+  /** The drawer belongs to the current user: their cash payments enter it. */
+  isMine: boolean;
+  inventoryLocationId?: string | null;
+  inventoryLocationName?: string | null;
+  /** Expected cash frozen at closing. */
+  expectedClosingAmount?: number | null;
+  /** Counted minus expected: negative is a shortage. */
+  closingDifference?: number | null;
+  closingNotes?: string | null;
+  cashCount: CashCountLineDto[];
+}
+
+export interface CashCountLineDto {
+  denomination: number;
+  quantity: number;
 }
 
 export interface CashTransactionDto {
@@ -959,11 +979,16 @@ export interface DailyCashCutDto {
 export interface OpenCashSessionRequest {
   openingAmount: number;
   notes?: string;
+  /** Branch of the drawer; the default one when omitted. */
+  inventoryLocationId?: string;
 }
 
 export interface CloseCashSessionRequest {
   closingAmount: number;
+  /** Required when the count differs from the expected cash. */
   notes?: string;
+  /** Optional count by denomination; must add up to closingAmount. */
+  cashCount?: CashCountLineDto[];
 }
 
 export interface AddCashTransactionRequest {
@@ -1047,10 +1072,164 @@ export interface AuditLogDto {
 
 // ==================== Marketing ====================
 
-export interface SendPromotionRequest {
-  message: string;
-  minimumCompletedOrders: number;
-  lastPurchaseFrom?: string;
+// ==================== Messaging (campaigns, reminders, opt-outs) ====================
+
+export const MessagePurpose = {
+  Campaign: 0,
+  AppointmentReminder: 1,
+} as const;
+export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
+
+export const OutgoingMessageStatus = {
+  Pending: 0,
+  Sent: 1,
+  Failed: 2,
+  Skipped: 3,
+  Cancelled: 4,
+} as const;
+export type OutgoingMessageStatus = (typeof OutgoingMessageStatus)[keyof typeof OutgoingMessageStatus];
+
+export const CampaignStatus = {
+  Scheduled: 0,
+  Sending: 1,
+  Completed: 2,
+  Cancelled: 3,
+} as const;
+export type CampaignStatus = (typeof CampaignStatus)[keyof typeof CampaignStatus];
+
+export const CampaignAudienceKind = {
+  AllCustomers: 0,
+  Buyers: 1,
+  Lapsed: 2,
+} as const;
+export type CampaignAudienceKind = (typeof CampaignAudienceKind)[keyof typeof CampaignAudienceKind];
+
+export const OptOutSource = {
+  CustomerKeyword: 0,
+  Staff: 1,
+} as const;
+export type OptOutSource = (typeof OptOutSource)[keyof typeof OptOutSource];
+
+export interface MessageTemplateDto {
+  id: string;
+  name: string;
+  purpose: MessagePurpose;
+  body: string;
+  /** Template approved in Meta; without it the text only reaches customers who wrote in the last 24 hours. */
+  providerTemplateName?: string;
+  languageCode: string;
+  isActive: boolean;
+  /** Placeholders in the order they become the Meta template parameters. */
+  parameters: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SaveMessageTemplateRequest {
+  name: string;
+  purpose?: MessagePurpose;
+  body: string;
+  providerTemplateName?: string;
+  languageCode?: string;
+  isActive?: boolean;
+}
+
+export interface CampaignProgressDto {
+  pending: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  skipped: number;
+  cancelled: number;
+}
+
+export interface CampaignDto {
+  id: string;
+  name: string;
+  templateId: string;
+  templateName?: string;
+  audienceKind: CampaignAudienceKind;
+  audienceMinimumOrders: number;
+  audienceDays?: number;
+  status: CampaignStatus;
+  scheduledAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  recipientCount: number;
+  excludedCount: number;
+  createdBy?: string;
+  createdAt: string;
+  progress: CampaignProgressDto;
+}
+
+export interface CampaignAudienceRequest {
+  templateId: string;
+  audienceKind: CampaignAudienceKind;
+  minimumOrders: number;
+  days?: number;
+}
+
+export interface CreateCampaignRequest extends CampaignAudienceRequest {
+  name: string;
+  /** Empty starts now. */
+  scheduledAt?: string;
+}
+
+export interface CampaignPreviewDto {
+  recipientCount: number;
+  excludedCount: number;
+  truncated: boolean;
+  maxRecipients: number;
+  usesApprovedTemplate: boolean;
+  samples: Array<{ recipientName?: string; phone: string; text: string }>;
+}
+
+export interface OutgoingMessageDto {
+  id: string;
+  purpose: MessagePurpose;
+  campaignId?: string;
+  appointmentId?: string;
+  phone: string;
+  recipientName?: string;
+  body: string;
+  status: OutgoingMessageStatus;
+  attempts: number;
+  createdAt: string;
+  nextAttemptAt: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  lastError?: string;
+}
+
+export interface MessagingOptOutDto {
+  id: string;
+  phone: string;
+  source: OptOutSource;
+  optedOutAt: string;
+  resubscribedAt?: string;
+  isActive: boolean;
+}
+
+export interface MessagingSettingsDto {
+  whatsAppConnected: boolean;
+  appointmentsEnabled: boolean;
+  appointmentRemindersEnabled: boolean;
+  appointmentReminderHoursBefore: number;
+  appointmentReminderTemplateId?: string;
+  defaultReminderBody: string;
+  minReminderHoursBefore: number;
+  maxReminderHoursBefore: number;
+  campaignPlaceholders: string[];
+  reminderPlaceholders: string[];
+}
+
+export interface UpdateAppointmentRemindersRequest {
+  enabled: boolean;
+  hoursBefore: number;
+  templateId?: string;
 }
 
 // ==================== Customers ====================
@@ -1120,6 +1299,8 @@ export interface OrderItemDto {
   productId: string;
   productName: string;
   quantity: number;
+  /** Units given back with refunds; the sold quantity never changes. */
+  returnedQuantity?: number;
   unitPrice: number;
   totalPrice: number;
   notes?: string;
@@ -1232,8 +1413,13 @@ export interface OrderDto {
   tax: number;
   total: number;
   taxBreakdown: OrderTaxLineDto[];
+  channel?: OrderChannel;
   paidAmount: number;
   balance: number;
+  /** Money given back; payments are never edited. */
+  refundedAmount?: number;
+  /** Paid minus refunded. */
+  netPaidAmount?: number;
   cancellationReason?: string;
   createdAt: string;
   updatedAt?: string;
@@ -1242,12 +1428,76 @@ export interface OrderDto {
   serviceDetail?: ServiceOrderDetailDto;
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
+  refunds?: OrderRefundDto[];
+}
+
+export interface OrderRefundDto {
+  id: string;
+  amount: number;
+  method: OrderPaymentMethod;
+  reason: string;
+  refundedAt: string;
+  refundedBy: string;
+  reference?: string;
+  restockItems: boolean;
+  lines: Array<{ orderItemId: string; quantity: number }>;
+}
+
+export interface RefundOrderRequest {
+  amount: number;
+  method: OrderPaymentMethod;
+  reason: string;
+  /** Re-enter the recipe supplies of the returned units. */
+  restockItems: boolean;
+  items: Array<{ orderItemId: string; quantity: number }>;
+  reference?: string;
+}
+
+export interface VoidOrderRequest {
+  reason: string;
+  restockItems: boolean;
 }
 
 export interface CreateOrderItemRequest {
   productId: string;
   quantity: number;
   notes?: string;
+}
+
+export const OrderChannel = {
+  Counter: 0,
+  WhatsApp: 1,
+  Online: 2,
+} as const;
+export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
+
+export interface CustomerCardDto {
+  phone?: string;
+  name?: string;
+  customerId?: string;
+  email?: string;
+  ordersCount: number;
+  /** Paid minus refunded, over orders that were not cancelled. */
+  totalSpent: number;
+  averageTicket: number;
+  balance: number;
+  firstOrderAt?: string;
+  lastOrderAt?: string;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    createdAt: string;
+    status: OrderStatus;
+    channel: OrderChannel;
+    total: number;
+    balance: number;
+  }>;
+  favoriteProducts: Array<{ productId: string; productName: string; quantity: number }>;
+  upcomingAppointments: Array<{ id: string; serviceName: string; startAt: string; status: number }>;
+  lastVisitAt?: string;
+  optedOut: boolean;
+  optedOutAt?: string;
+  conversationId?: string;
 }
 
 export interface CreateOrderRequest {
@@ -1264,6 +1514,8 @@ export interface CreateOrderRequest {
   payments?: CreateOrderPaymentRequest[];
   /** Total shown to the customer; the API rejects the sale if a price changed meanwhile. */
   expectedTotal?: number;
+  /** Counter (default) or WhatsApp when the order is taken from a chat. */
+  channel?: OrderChannel;
 }
 
 export interface CreateOrderPaymentRequest {

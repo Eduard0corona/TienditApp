@@ -9,13 +9,19 @@ using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
+using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
+using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Persistence;
 
@@ -39,8 +45,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     {
         var result = await base.SaveChangesAsync(cancellationToken);
 
-        // Dispatch domain events AFTER save completes (outside interceptor pipeline).
-        // The flag prevents infinite recursion when event handlers call SaveChangesAsync.
+        // Realtime handlers (SignalR) run in-process right after the save, best-effort. Durable side effects
+        // (audit, customer messages) come from the copies OutboxSaveChangesInterceptor stored in the same
+        // transaction, dispatched in the background. The flag prevents recursion when a handler saves.
         if (!_isDispatchingEvents)
         {
             _isDispatchingEvents = true;
@@ -56,7 +63,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
                 entities.ForEach(e => e.ClearDomainEvents());
 
                 foreach (var domainEvent in domainEvents)
-                    await _mediator.Publish(domainEvent, cancellationToken);
+                {
+                    try
+                    {
+                        await _mediator.Publish(domainEvent, cancellationToken);
+                    }
+                    catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        // The change is committed: a failed screen refresh must not turn it into an error.
+                        // Screens also reload when SignalR reconnects and on their polling fallback.
+                        LogRealtimeFailure(ex, domainEvent);
+                    }
+                }
             }
             finally
             {
@@ -68,6 +86,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     }
 
     private Guid CurrentTenantId => _tenantService.TenantId;
+
+    private void LogRealtimeFailure(Exception exception, DomainEvent domainEvent)
+    {
+        try
+        {
+            this.GetService<ILoggerFactory>()
+                .CreateLogger<ApplicationDbContext>()
+                .LogError(
+                    LogRedaction.RedactDatabaseMessages(exception),
+                    "Realtime handler failed for {EventType} {EventId}",
+                    domainEvent.GetType().Name,
+                    domainEvent.EventId);
+        }
+        catch (InvalidOperationException)
+        {
+            // No logger available (a context built by hand in tests).
+        }
+    }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<TenantUser> TenantUsers => Set<TenantUser>();
@@ -84,6 +120,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
     public DbSet<OrderPayment> OrderPayments => Set<OrderPayment>();
+    public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
     public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
@@ -102,6 +139,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<InventoryMovementLine> InventoryMovementLines => Set<InventoryMovementLine>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OwnerWhatsAppConfig> OwnerWhatsAppConfigs => Set<OwnerWhatsAppConfig>();
+    public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
+    public DbSet<MessageCampaign> MessageCampaigns => Set<MessageCampaign>();
+    public DbSet<OutgoingMessage> OutgoingMessages => Set<OutgoingMessage>();
+    public DbSet<MessagingOptOut> MessagingOptOuts => Set<MessagingOptOut>();
+
+    // Background queues: infrastructure only, read across tenants by the workers (not on IApplicationDbContext).
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<OutboxMessageConsumer> OutboxMessageConsumers => Set<OutboxMessageConsumer>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

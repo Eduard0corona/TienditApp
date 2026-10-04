@@ -6,14 +6,22 @@ public class AuditLog : BaseEntity, ITenantScoped
 {
     private AuditLog() { }
 
-    public AuditLog(Guid tenantId, string entityName, string entityId, string action, string performedBy, string? metadata = null)
+    /// <param name="timestamp">When it happened; entries written later by a background handler pass the event time.</param>
+    public AuditLog(
+        Guid tenantId,
+        string entityName,
+        string entityId,
+        string action,
+        string performedBy,
+        string? metadata = null,
+        DateTimeOffset? timestamp = null)
     {
         TenantId = tenantId;
         EntityName = entityName;
         EntityId = entityId;
         Action = action;
         PerformedBy = performedBy;
-        Timestamp = DateTimeOffset.UtcNow;
+        Timestamp = timestamp ?? DateTimeOffset.UtcNow;
         Metadata = metadata;
     }
 

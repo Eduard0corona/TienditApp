@@ -1,13 +1,17 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
+[RequiresPermission(TenantPermission.ManageServiceBoard)]
+[RequiresCapability(TenantCapability.Service)]
 public record GetServiceBoardPiecesQuery : IRequest<PaginatedList<ServiceBoardPieceDto>>
 {
     public string? Search { get; init; }

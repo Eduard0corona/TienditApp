@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
@@ -97,7 +98,7 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         return session;
     }
 
-    public CreateOrderCommandHandler CreateOrderHandler()
+    public CreateOrderCommandHandler CreateOrderHandler(IOrderInventoryService? orderInventoryService = null)
     {
         var phoneNormalization = new PhoneNormalizationService();
         var customerLookup = new CustomerLookupService(
@@ -114,12 +115,12 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             customerLookup,
             Clock,
             phoneNormalization,
-            orderInventoryService: null,
-            orderCashService: new OrderCashService(Context));
+            orderInventoryService: orderInventoryService,
+            orderCashService: new OrderCashService(Context, CurrentUser));
     }
 
     public AddOrderPaymentCommandHandler AddPaymentHandler()
-        => new(Context, Clock, Mapper, new OrderCashService(Context), CurrentUser);
+        => new(Context, Clock, Mapper, new OrderCashService(Context, CurrentUser), CurrentUser);
 
     public ValueTask DisposeAsync() => Context.DisposeAsync();
 }
@@ -138,6 +139,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
         // InMemory provider does not generate rowversion; allow test inserts.
         modelBuilder.Entity<Order>()
             .Property(o => o.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<WhatsAppConversation>()
+            .Property<byte[]>("Version")
             .IsRequired(false)
             .ValueGeneratedNever();
     }

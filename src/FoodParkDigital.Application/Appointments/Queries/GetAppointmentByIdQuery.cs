@@ -1,11 +1,14 @@
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Appointments.Queries;
 
+[RequiresPermission(TenantPermission.ManageAppointments)]
 public record GetAppointmentByIdQuery(Guid Id) : IRequest<AppointmentDto>;
 
 public class GetAppointmentByIdQueryHandler : IRequestHandler<GetAppointmentByIdQuery, AppointmentDto>

@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 
@@ -36,6 +37,11 @@ public class OrderItem : BaseEntity
     public Guid ProductId { get; private set; }
     public string ProductName { get; private set; } = null!;
     public int Quantity { get; private set; }
+
+    /// <summary>Units given back with refunds; the sold quantity is never edited.</summary>
+    public int ReturnedQuantity { get; private set; }
+
+    public int ReturnableQuantity => Quantity - ReturnedQuantity;
     public decimal UnitPrice { get; private set; }
     public decimal TotalPrice { get; private set; }
     public string? Notes { get; private set; }
@@ -44,4 +50,14 @@ public class OrderItem : BaseEntity
     public bool IsTaxExempt { get; private set; }
 
     public VatRate VatRate => new(TaxRate, IsTaxExempt);
+
+    internal void RegisterReturn(int quantity)
+    {
+        if (quantity <= 0)
+            throw new DomainException("La cantidad devuelta debe ser mayor a cero.");
+        if (quantity > ReturnableQuantity)
+            throw new DomainException($"De '{ProductName}' solo quedan {ReturnableQuantity} por devolver.");
+
+        ReturnedQuantity += quantity;
+    }
 }

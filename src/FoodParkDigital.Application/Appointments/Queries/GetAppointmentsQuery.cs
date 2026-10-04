@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Appointments.Queries;
 
+[RequiresPermission(TenantPermission.ManageAppointments)]
 public record GetAppointmentsQuery : IRequest<PaginatedList<AppointmentDto>>
 {
     public AppointmentStatus? Status { get; init; }
