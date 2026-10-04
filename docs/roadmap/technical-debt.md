@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
+Actualizada el 2026-10-04 tras la Fase 0 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -10,7 +10,7 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 4. Archivos: el contenido se valida por firma, las fotos se re-codifican y el borrado por URL está confinado a `{área}/{tenantId}` en almacenamiento local y Azure Blob (rechaza traversal, otros tenants/áreas y URLs ajenas al contenedor). Pendiente: `/uploads` es estático y público (las evidencias de pago se descargan sin autorización), los PDF no pasan por un escaneo de malware, `UploadAsync` no valida carpeta y nombre, hay que sanear filas heredadas cuyo `ImageUrl`/`LogoUrl`/`AvatarUrl` apunte fuera de su carpeta (el borrado se rechaza con un warning y el archivo queda huérfano) y falta un namespace por usuario para avatares (el usuario es global y un avatar subido con otra membresía no se borra desde otro tenant).
 5. Webhook WhatsApp (actualizado 2026-10-02): la firma `X-Hub-Signature-256` se verifica fail-closed (503 sin `WhatsApp:AppSecret`, 401 sin firma válida; `WhatsApp:AllowUnsignedWebhooks` solo se respeta en Development), `PhoneNumberId` y `ExternalMessageId` tienen índices únicos filtrados (migración `AddWhatsAppWebhookUniqueIndexes`, verificada en SQL Server LocalDB) y las entregas repetidas o concurrentes son idempotentes; si dos primeros mensajes de un número nuevo llegan a la vez, el índice único `(TenantId, CustomerPhone)` deja crear una sola conversación y el otro mensaje se guarda en ella. Lo mismo ocurre si el negocio escribe a un número nuevo mientras llega su primer mensaje, o si dos envíos del negocio coinciden: `POST /api/v1/whatsapp/chat/send` guarda el mensaje, ya entregado, en la conversación ganadora de su tenant en lugar de responder 500 (verificado en SQL Server LocalDB con y sin `READ_COMMITTED_SNAPSHOT`). `WhatsAppConversation` tiene token de concurrencia `rowversion` (migración `AddWhatsAppConversationVersion`, verificada en SQL Server LocalDB con y sin `READ_COMMITTED_SNAPSHOT`; se aplica antes de desplegar el código que la usa): mensajes simultáneos del mismo cliente, auto-respuestas, envíos del negocio y "marcar leído" recargan la conversación y reaplican su cambio, hasta 10 intentos, en lugar de sobrescribir `UnreadCount` y el último mensaje. Cada mensaje del payload se procesa por separado y el `POST` responde 500 si alguno, o la actualización de estados, no se pudo procesar, para que Meta reenvíe la entrega (hasta 7 días); los mensajes ya guardados se ignoran por `ExternalMessageId`. JSON inválido y `PhoneNumberId` desconocido se confirman con 200. Como Meta no firma un timestamp, el replay se mitiga con esa idempotencia. Pendiente: un mensaje que falle siempre se reintenta y registra error durante esos 7 días; el envío del negocio llama a Meta antes de guardar y no hay Outbox, así que si el guardado falla por otra causa el mensaje entregado queda fuera del historial y la API responde 500; si una conversación recibe más de 10 escrituras simultáneas, la que agota los intentos falla (el webhook responde 500 y Meta reenvía, pero un envío del negocio o una auto-respuesta ya entregados quedan fuera del historial); `AppSecret` es global, así que un tenant con app de Meta propia (flujo que hoy sugiere la UI) será rechazado hasta definir secretos por tenant; la propiedad del `PhoneNumberId` no se verifica contra Meta (un admin podría reclamar primero el ID de otro negocio); faltan pruebas automatizadas de pipeline HTTP y contra SQL Server.
 6. AutoMapper 13.0.1 tiene un advisory alto (`GHSA-rvv3-g6hj-g44x`, DoS por recursión) que solo se corrige en 15.1.1+/16.1.1+, versiones con licencia comercial. Hay que decidir entre licenciar, migrar a mapeo manual u otra librería. El riesgo práctico actual es bajo: solo mapea entidades de la base con profundidad acotada. `SQLitePCLRaw.lib.e_sqlite3` 2.1.10 (`GHSA-2m69-gcr7-jv3q`) tampoco tiene versión corregida, pero solo lo usan las pruebas con SQLite.
-7. .NET 9 dejó de tener soporte en mayo de 2026: planear la migración de la API a .NET 10 (LTS) junto con EF Core y ASP.NET Core 10.
+7. El soporte de .NET 9 (STS) termina el 10 de noviembre de 2026: migrar la API a .NET 10 (LTS) junto con EF Core y ASP.NET Core 10 antes de esa fecha.
 
 ## Alta
 
@@ -21,7 +21,7 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, el paso de contraseña del login no cuenta intentos fallidos (`lockoutOnFailure: false`; el 2FA sí usa lockout) y el login distingue cuentas sin confirmar o bloqueadas.
 - Folios de órdenes y movimientos por conteo (una colisión responde 500); la recepción de compra no tiene idempotency key estable.
 - No existen reembolsos: una orden con pagos no se puede cancelar.
-- Contratos de error mezclan `ProblemDetails` con objetos `{ error }`.
+- Contratos de error mezclan `ProblemDetails` con objetos `{ error }`; el cliente ya los lee con un solo helper (`src/api/errors.ts`), pero el servidor sigue respondiendo en varias formas y con algunos mensajes de dominio en inglés.
 - Controllers no propagan `CancellationToken`.
 - Política de contraseña (longitud mínima 6) pendiente de evaluación.
 - `OrderItem.Quantity` es entero aunque existen unidades Kg, Litro, Metro y Hora.
@@ -66,6 +66,25 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 - Borrado de archivos confinado al namespace del tenant.
 - Logs sin códigos OTP ni PII de mensajería y con el teléfono del cliente enmascarado fuera de Development.
 
+## Resuelto el 2026-10-04 (Fase 0 del roadmap de producto)
+
+- Cocina en vivo: eventos de `OrderHub` del grupo del tenant, recarga al reconectar, sondeo cada 30 segundos y solo pedidos de alimentos (sin órdenes de servicio); notas del pedido y por artículo visibles.
+- Menú deslizable en celular (modo `full` de Hyper, fondo y cierre al navegar) y tableta contraída; montos de caja con signo.
+- Permisos alineados: Dashboard para empleados con `ViewReports`, Cocina para cualquier rol con `ManageServiceBoard`, cambio de estado y cancelación para el mostrador con `ManageOrders`, chat visible para empleados con `ManageWhatsApp`; matriz única en el cliente (`src/utils/access.ts`) para menú, rutas, página de entrada y botones.
+- Ventas a público en general sin teléfono (migración `AllowWalkInSalesWithoutCustomer`) y 400 en español para teléfonos inválidos.
+- Estados en español en la app y en las plantillas de WhatsApp (`OrderStatusLabels`, `src/utils/labels.ts`).
+- Marca TienditApp en lugar de los restos de Hyper y FoodPark Digital; encabezado sin campana ni enlaces muertos.
+- Límite de peticiones solo en credenciales y códigos; el cliente ya no cierra sesión ante un 429.
+- Reenvío del código de teléfono por `userId` y página `/confirm-email` para el enlace del correo.
+- Un solo helper de errores en el cliente.
+
+Pendientes detectados en la Fase 0:
+
+- El emisor que ven las apps autenticadoras sale del `JwtSettings:Issuer` ("FoodParkDigital"); cambiarlo exige separar el nombre visible del emisor del JWT.
+- `POST /api/v1/twofactor/disable` no pide un código ni la contraseña.
+- La confirmación de teléfono no permite corregir el número capturado.
+- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio).
+
 ## Decisiones humanas pendientes
 
 - Modelo de autorización definitivo: policies/resource handlers, rol por tenant en el token y alcance administrativo cross-tenant.
@@ -73,7 +92,7 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 - Política fiscal/redondeo, si los precios incluyen IVA y responsable legal-contable.
 - Semántica cuando no hay caja abierta, caja por sucursal y diseño de reembolsos/ajustes/CxC/Wallet.
 - Estrategia para reconciliar `master`/`develop` y migraciones.
-- Versión objetivo de .NET (9 ya sin soporte) y del SDK de tests.
+- Versión objetivo de .NET (9 sin soporte desde el 10 de noviembre de 2026) y del SDK de tests.
 - Prioridad de Outbox frente a integraciones críticas.
 - AutoMapper: licencia comercial o reemplazo.
 - Cantidades fraccionarias y control de stock por producto.
