@@ -206,7 +206,7 @@ export default function BusinessSettings() {
     }
   };
 
-  const logoSrc = tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo-placeholder.png';
+  const logoSrc = tenant?.logoImages?.medium || tenant?.logoUrl || '/images/placeholders/store.svg';
 
   const formatAddress = () => {
     const parts = [

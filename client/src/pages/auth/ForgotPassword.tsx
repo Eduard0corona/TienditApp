@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
+import BrandLogo from '../../components/common/BrandLogo';
 
 interface ForgotPasswordForm {
   email: string;
@@ -47,7 +48,7 @@ export default function ForgotPassword() {
               <div className="card">
                 <div className="card-header py-4 text-center bg-primary">
                   <Link to="/">
-                    <img src="/images/logo.png" alt="logo" height="22" />
+                    <BrandLogo tone="light" />
                   </Link>
                 </div>
 

@@ -39,7 +39,7 @@ export default function Dashboard() {
       const { data } = await dashboardApi.getMetrics({ from, to });
       setMetrics(data);
     } catch {
-      setError('No se pudieron cargar las metricas del dashboard.');
+      setError('No se pudieron cargar las métricas del dashboard.');
     } finally {
       setLoading(false);
     }
@@ -72,16 +72,16 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageTitle title="Dashboard" subtitle="Operacion" />
+      <PageTitle title="Dashboard" subtitle="Operación" />
 
       <div className="row">
         <div className="col-12">
           <div className="card widget-inline">
             <div className="card-body d-flex justify-content-between flex-wrap gap-3">
               <div>
-                <h4 className="mt-0 mb-1">Bienvenido, {user?.firstName}!</h4>
+                <h4 className="mt-0 mb-1">¡Hola, {user?.firstName}!</h4>
                 <p className="text-muted mb-0">
-                  Vista operativa para monitorear ordenes, ingresos y productos vendidos.
+                  Vista operativa para monitorear órdenes, ingresos y productos vendidos.
                 </p>
               </div>
               <div className="d-flex flex-wrap gap-2">
@@ -127,7 +127,7 @@ export default function Dashboard() {
           <div className="card tilebox-one">
             <div className="card-body">
               <i className="ri-shopping-basket-2-line float-end text-muted"></i>
-              <h6 className="text-muted text-uppercase mt-0">Ordenes</h6>
+              <h6 className="text-muted text-uppercase mt-0">Órdenes</h6>
               <h2 className="m-b-20">{loading ? '-' : metrics?.totalOrders ?? 0}</h2>
               <span className="badge bg-primary">
                 En progreso: {loading ? '-' : metrics?.inProgressOrders ?? 0}
@@ -153,7 +153,7 @@ export default function Dashboard() {
           <div className="card tilebox-one">
             <div className="card-body">
               <i className="ri-vip-diamond-line float-end text-muted"></i>
-              <h6 className="text-muted text-uppercase mt-0">Catalogo activo</h6>
+              <h6 className="text-muted text-uppercase mt-0">Catálogo activo</h6>
               <h2 className="m-b-20">
                 {loading ? '-' : `${metrics?.activeProducts ?? 0} / ${metrics?.activeServices ?? 0}`}
               </h2>
@@ -166,7 +166,7 @@ export default function Dashboard() {
           <div className="card tilebox-one">
             <div className="card-body">
               <i className="ri-group-line float-end text-muted"></i>
-              <h6 className="text-muted text-uppercase mt-0">Clientes unicos</h6>
+              <h6 className="text-muted text-uppercase mt-0">Clientes únicos</h6>
               <h2 className="m-b-20">{loading ? '-' : metrics?.uniqueCustomers ?? 0}</h2>
               <span className="badge bg-warning">
                 Completadas: {loading ? '-' : metrics?.completedOrders ?? 0}

@@ -4,6 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import type { LoginRequest } from '../../types';
 import TwoFactorLoginStep from './TwoFactorLoginStep';
+import BrandLogo from '../../components/common/BrandLogo';
 
 export default function Login() {
   const { login } = useAuth();
@@ -60,7 +61,7 @@ export default function Login() {
                 {/* Logo */}
                 <div className="card-header py-4 text-center bg-primary">
                   <Link to="/">
-                    <img src="/images/logo.png" alt="logo" height="22" />
+                    <BrandLogo tone="light" />
                   </Link>
                 </div>
 
@@ -171,7 +172,7 @@ export default function Login() {
       </div>
 
       <footer className="footer footer-alt">
-        {new Date().getFullYear()} &copy; FoodPark Digital
+        {new Date().getFullYear()} &copy; TienditApp
       </footer>
     </div>
   );

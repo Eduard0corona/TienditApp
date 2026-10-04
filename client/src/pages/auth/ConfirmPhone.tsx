@@ -2,6 +2,7 @@
 import { useForm } from 'react-hook-form';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
+import BrandLogo from '../../components/common/BrandLogo';
 
 interface ConfirmPhoneForm {
   code: string;
@@ -54,7 +55,7 @@ export default function ConfirmPhone() {
               <div className="card">
                 <div className="card-header py-4 text-center bg-primary">
                   <Link to="/">
-                    <img src="/images/logo.png" alt="logo" height="22" />
+                    <BrandLogo tone="light" />
                   </Link>
                 </div>
 

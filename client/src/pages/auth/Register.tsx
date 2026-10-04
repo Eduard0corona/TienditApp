@@ -5,6 +5,7 @@ import { authApi } from '../../api/authApi';
 import type { RegisterBusinessRequest, RegisterCustomerRequest } from '../../types';
 import { BusinessType } from '../../types';
 import './register.css';
+import BrandLogo from '../../components/common/BrandLogo';
 
 type AccountType = 'business' | 'customer' | null;
 
@@ -108,7 +109,7 @@ export default function Register() {
                 {/* Logo */}
                 <div className="card-header py-4 text-center bg-primary">
                   <Link to="/">
-                    <img src="/images/logo.png" alt="logo" height="22" />
+                    <BrandLogo tone="light" />
                   </Link>
                 </div>
 
@@ -589,7 +590,7 @@ export default function Register() {
       </div>
 
       <footer className="footer footer-alt">
-        {new Date().getFullYear()} &copy; FoodPark Digital
+        {new Date().getFullYear()} &copy; TienditApp
       </footer>
     </div>
   );

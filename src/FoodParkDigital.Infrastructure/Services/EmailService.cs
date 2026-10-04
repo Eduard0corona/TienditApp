@@ -26,9 +26,9 @@ public class EmailService : IEmailService
         var appUrl = _configuration["AppUrl"] ?? "https://localhost:5001";
         var confirmationLink = $"{appUrl}/api/v1/auth/confirm-email?userId={userId}&token={Uri.EscapeDataString(token)}";
 
-        var subject = "Confirma tu email - FoodPark Digital";
+        var subject = "Confirma tu correo - TienditApp";
         var body = $@"
-            <h2>Bienvenido a FoodPark Digital</h2>
+            <h2>Bienvenido a TienditApp</h2>
             <p>Por favor confirma tu email haciendo clic en el siguiente enlace:</p>
             <p><a href='{confirmationLink}'>Confirmar Email</a></p>
             <p>Si no creaste una cuenta, puedes ignorar este mensaje.</p>
@@ -42,7 +42,7 @@ public class EmailService : IEmailService
         var appUrl = _configuration["AppUrl"] ?? "https://localhost:5001";
         var resetLink = $"{appUrl}/reset-password?userId={userId}&token={Uri.EscapeDataString(token)}";
 
-        var subject = "Restablecer contraseña - FoodPark Digital";
+        var subject = "Restablecer contraseña - TienditApp";
         var body = $@"
             <h2>Restablecer Contraseña</h2>
             <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace:</p>
@@ -68,7 +68,7 @@ public class EmailService : IEmailService
         var username = _configuration["EmailSettings:Smtp:Username"];
         var password = _configuration["EmailSettings:Smtp:Password"];
         var fromEmail = _configuration["EmailSettings:FromEmail"];
-        var fromName = _configuration["EmailSettings:FromName"] ?? "FoodPark Digital";
+        var fromName = _configuration["EmailSettings:FromName"] ?? "TienditApp";
         var enableSsl = bool.TryParse(_configuration["EmailSettings:Smtp:EnableSsl"], out var ssl) && ssl;
 
         if (string.IsNullOrWhiteSpace(host)

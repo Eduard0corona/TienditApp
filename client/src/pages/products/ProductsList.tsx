@@ -176,7 +176,7 @@ export default function ProductsList() {
                   <>
                     <td>
                       <img
-                        src={product.images?.thumbnail || '/images/svg/file-manager.svg'}
+                        src={product.images?.thumbnail || '/images/placeholders/product.svg'}
                         alt={product.name}
                         className="rounded"
                         height="48"

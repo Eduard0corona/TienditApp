@@ -13,7 +13,7 @@ export default function PageTitle({ title, subtitle }: PageTitleProps) {
           <div className="page-title-right">
             <ol className="breadcrumb m-0">
               <li className="breadcrumb-item">
-                <Link to="/dashboard">FoodPark</Link>
+                <Link to="/">Inicio</Link>
               </li>
               {subtitle && <li className="breadcrumb-item">{subtitle}</li>}
               <li className="breadcrumb-item active">{title}</li>

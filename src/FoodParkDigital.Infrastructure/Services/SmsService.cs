@@ -42,7 +42,7 @@ public class SmsService : ISmsService
         if (await TrySendVerificationByOwnerWhatsAppAsync(phoneNumber, code))
             return;
 
-        var message = $"Tu codigo de verificacion FoodPark Digital es: {code}";
+        var message = $"Tu código de verificación de TienditApp es: {code}";
         await SendSmsAsync(phoneNumber, message);
     }
 

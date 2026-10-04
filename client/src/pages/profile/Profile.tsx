@@ -109,7 +109,7 @@ export default function Profile() {
     }
   };
 
-  const avatarSrc = user?.avatarImages?.medium || '/images/users/avatar-1.jpg';
+  const avatarSrc = user?.avatarImages?.medium || '/images/placeholders/avatar.svg';
 
   return (
     <>

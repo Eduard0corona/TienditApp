@@ -4,7 +4,7 @@ export default function Footer() {
       <div className="container-fluid">
         <div className="row">
           <div className="col-md-6">
-            {new Date().getFullYear()} &copy; FoodPark Digital
+            {new Date().getFullYear()} &copy; TienditApp
           </div>
         </div>
       </div>

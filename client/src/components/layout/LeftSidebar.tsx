@@ -2,6 +2,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
+import BrandLogo from '../common/BrandLogo';
+
+const AVATAR_PLACEHOLDER = '/images/placeholders/avatar.svg';
 
 interface LeftSidebarProps {
   /** Closes the slide-out menu on phones (the close button only shows in that mode). */
@@ -21,37 +24,30 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
     access.inventory || access.cash || access.orders || access.serviceBoard || access.kitchen
     || access.customers || access.chat || access.employees || access.appointments || access.reports;
   const showSettingsSection = access.aiAgent || access.businessSettings || access.whatsAppSettings || access.audit;
-  const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo.png';
-  const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '/images/logo-sm.png';
+  // The business logo when it uploaded one; otherwise the TienditApp mark.
+  const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '';
+  const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '';
+  const tenantLogoAlt = tenant?.name ? `Logotipo de ${tenant.name}` : 'Logotipo';
 
   return (
     <div className="leftside-menu">
-      <Link to="/dashboard" className="logo logo-light">
+      <Link to="/" className="logo logo-light">
         <span className="logo-lg">
-          <img src={tenantLogoLg} alt="logo" />
+          {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="light" />}
         </span>
         <span className="logo-sm">
-          <img src={tenantLogoSm} alt="small logo" />
+          {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" tone="light" />}
         </span>
       </Link>
 
-      <Link to="/dashboard" className="logo logo-dark">
+      <Link to="/" className="logo logo-dark">
         <span className="logo-lg">
-          <img src={tenantLogoLg} alt="dark logo" />
+          {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="dark" />}
         </span>
         <span className="logo-sm">
-          <img src={tenantLogoSm} alt="small logo" />
+          {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" tone="dark" />}
         </span>
       </Link>
-
-      <div
-        className="button-sm-hover"
-        data-bs-toggle="tooltip"
-        data-bs-placement="right"
-        title="Show Full Sidebar"
-      >
-        <i className="ri-checkbox-blank-circle-line align-middle"></i>
-      </div>
 
       <button
         type="button"
@@ -66,8 +62,8 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
         <div className="leftbar-user">
           <Link to="/profile">
             <img
-              src={user?.avatarImages?.thumbnail || '/images/users/avatar-1.jpg'}
-              alt="user"
+              src={user?.avatarImages?.thumbnail || AVATAR_PLACEHOLDER}
+              alt=""
               height="42"
               className="rounded-circle shadow-sm"
             />
@@ -78,7 +74,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
         </div>
 
         <ul className="side-nav">
-          {access.dashboard && <li className="side-nav-title">Navigation</li>}
+          {access.dashboard && <li className="side-nav-title">Principal</li>}
 
           {access.dashboard && (
             <li className={`side-nav-item ${isActive('/dashboard') ? 'menuitem-active' : ''}`}>
@@ -89,7 +85,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
             </li>
           )}
 
-          {access.catalog && <li className="side-nav-title">Catalogo</li>}
+          {access.catalog && <li className="side-nav-title">Catálogo</li>}
 
           {access.catalog && (
             <li className={`side-nav-item ${isActive('/products') ? 'menuitem-active' : ''}`}>
@@ -104,7 +100,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
             <li className={`side-nav-item ${isActive('/categories') ? 'menuitem-active' : ''}`}>
               <Link to="/categories" className="side-nav-link">
                 <i className="ri-list-check-2"></i>
-                <span>Categorias</span>
+                <span>Categorías</span>
               </Link>
             </li>
           )}
@@ -118,7 +114,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
             </li>
           )}
 
-          {showOperationSection && <li className="side-nav-title">Operacion</li>}
+          {showOperationSection && <li className="side-nav-title">Operación</li>}
 
           {access.inventory && (
             <li className={`side-nav-item ${isActive('/inventory') ? 'menuitem-active' : ''}`}>
@@ -169,7 +165,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
             <li className={`side-nav-item ${isActive('/orders') ? 'menuitem-active' : ''}`}>
               <Link to="/orders" className="side-nav-link">
                 <i className="ri-file-list-3-line"></i>
-                <span>Ordenes</span>
+                <span>Órdenes</span>
               </Link>
             </li>
           )}
@@ -178,7 +174,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
             <li className={`side-nav-item ${isServiceBoardActive ? 'menuitem-active' : ''}`}>
               <Link to="/services/board" className="side-nav-link">
                 <i className="ri-dashboard-line"></i>
-                <span>Tablero Servicios</span>
+                <span>Tablero de servicios</span>
               </Link>
             </li>
           )}
@@ -205,7 +201,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
             <li className={`side-nav-item ${isActive('/whatsapp/chat') ? 'menuitem-active' : ''}`}>
               <Link to="/whatsapp/chat" className="side-nav-link">
                 <i className="ri-chat-3-line"></i>
-                <span>Chat WhatsApp</span>
+                <span>Chat de WhatsApp</span>
               </Link>
             </li>
           )}
@@ -242,7 +238,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
           <li className={`side-nav-item ${isActive('/profile') ? 'menuitem-active' : ''}`}>
             <Link to="/profile" className="side-nav-link">
               <i className="ri-user-3-line"></i>
-              <span>Mi Perfil</span>
+              <span>Mi perfil</span>
             </Link>
           </li>
 
@@ -260,7 +256,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
                 <li className={`side-nav-item ${isActive('/settings/business') ? 'menuitem-active' : ''}`}>
                   <Link to="/settings/business" className="side-nav-link">
                     <i className="ri-store-2-line"></i>
-                    <span>Mi Empresa</span>
+                    <span>Mi empresa</span>
                   </Link>
                 </li>
               )}
@@ -276,7 +272,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
                 <li className={`side-nav-item ${isActive('/audit') ? 'menuitem-active' : ''}`}>
                   <Link to="/audit" className="side-nav-link">
                     <i className="ri-shield-check-line"></i>
-                    <span>Auditoria</span>
+                    <span>Auditoría</span>
                   </Link>
                 </li>
               )}
