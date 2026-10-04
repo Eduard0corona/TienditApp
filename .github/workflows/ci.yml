@@ -50,6 +50,171 @@ jobs:
             --configuration Release \
             --no-build
 
+  # Production does not migrate on startup: before each merge to master the team runs
+  # database/production/<MigrationId>/apply.sql (the SET block below plus the output of
+  # `dotnet ef migrations script --idempotent`) with `sqlcmd -b`. SQL Server compiles each
+  # migration of that script as one batch, so a statement naming a column added in the same
+  # migration fails there even though `dotnet ef database update` passes. This job runs the
+  # same script over a database in production's state.
+  migrations:
+    name: Migrations (SQL Server 2022, sqlcmd)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # dotnet ef builds the API host, which outside Development requires a JWT secret.
+      ASPNETCORE_ENVIRONMENT: Development
+      # A migration production already has, ideally its last one. The script runs over a database
+      # in this state because from an empty one it fails in
+      # 20260217004713_AddOrderServiceAndTenantCapabilities, which is applied and cannot be edited.
+      # Move it forward when production does; an older value only tests more migrations.
+      PRODUCTION_BASELINE: 20261004090406_AllowWalkInSalesWithoutCustomer
+      MSSQL_DATABASE: TienditAppCi
+      EF_PROJECTS: >-
+        --project src/FoodParkDigital.Infrastructure
+        --startup-project src/FoodParkDigital.WebApi
+        --configuration Release
+        --no-build
+      # The runner has no sqlcmd: this is the classic one from the SQL Server image, as in
+      # production. -b stops at the first error with a non-zero exit code; -r0 prints errors to
+      # stderr, so they show even when the output goes to a file.
+      SQLCMD: docker exec mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -r0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build src/FoodParkDigital.WebApi --configuration Release
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 10.0.12
+
+      # Started by a step instead of a service container so the SA password is created inside
+      # the job: it is never in the repository, and the runner masks it in the logs.
+      - name: Start SQL Server 2022
+        run: |
+          password="$(openssl rand -hex 24)Aa1"
+          echo "::add-mask::$password"
+          echo "MSSQL_CONNECTION=Server=127.0.0.1,1433;User ID=sa;Password=$password;Encrypt=True;TrustServerCertificate=True" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/sql"
+          MSSQL_SA_PASSWORD="$password" SQLCMDPASSWORD="$password" docker run --detach --name mssql \
+            --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD --env SQLCMDPASSWORD \
+            --publish 127.0.0.1:1433:1433 --volume "$RUNNER_TEMP/sql:/scripts:ro" \
+            mcr.microsoft.com/mssql/server:2022-latest
+          for _ in $(seq 60); do
+            if $SQLCMD -l 2 -Q "SELECT 1" > /dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs mssql
+          echo "::error::SQL Server did not accept connections."
+          exit 1
+
+      # Development logs the SQL of every command; `env` silences only that category (its name has
+      # dots, so it cannot be a shell variable).
+      - name: Create the database at the production baseline
+        run: |
+          env 'Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore.Database.Command=Warning' \
+            dotnet ef database update "$PRODUCTION_BASELINE" --connection "$MSSQL_CONNECTION;Database=$MSSQL_DATABASE" $EF_PROJECTS
+
+      # The same content as an apply.sql: the SET block of the production scripts and the whole
+      # idempotent script, whose batches for applied migrations are compiled and skipped. Classic
+      # sqlcmd starts with QUOTED_IDENTIFIER OFF, which filtered indexes reject, and EF Core does
+      # not add XACT_ABORT. The BOM that EF writes goes away: sqlcmd rejects one mid-file.
+      - name: Generate the idempotent script
+        run: |
+          cat > "$RUNNER_TEMP/set-options.sql" <<'SQL'
+          SET ANSI_NULLS ON;
+          SET ANSI_PADDING ON;
+          SET ANSI_WARNINGS ON;
+          SET ARITHABORT ON;
+          SET CONCAT_NULL_YIELDS_NULL ON;
+          SET NUMERIC_ROUNDABORT OFF;
+          SET QUOTED_IDENTIFIER ON;
+          SET XACT_ABORT ON;
+          GO
+          SQL
+          dotnet ef migrations script --idempotent --output "$RUNNER_TEMP/ef-apply.sql" $EF_PROJECTS
+          sed '1s/^\xEF\xBB\xBF//' "$RUNNER_TEMP/ef-apply.sql" | cat "$RUNNER_TEMP/set-options.sql" - > "$RUNNER_TEMP/sql/apply.sql"
+
+      - name: Apply the script
+        run: |
+          $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/apply.sql
+          pending=$(dotnet ef migrations list --connection "$MSSQL_CONNECTION;Database=$MSSQL_DATABASE" --json --prefix-output $EF_PROJECTS \
+            | sed -n 's/^data: *//p' | jq '[.[] | select(.applied != true)] | length')
+          if [ "$pending" != 0 ]; then
+            echo "::error::$pending migrations are still pending after the script."
+            exit 1
+          fi
+
+      - name: Apply the script again (must change nothing)
+        run: |
+          # Applied migrations, and every object with its last change (ALTER or index included).
+          state() {
+            $SQLCMD -d "$MSSQL_DATABASE" -h -1 -W -s ' ' -Q "SET NOCOUNT ON;
+              SELECT [MigrationId] FROM [__EFMigrationsHistory] ORDER BY [MigrationId];
+              SELECT [type], SCHEMA_NAME([schema_id]), [name], [modify_date]
+              FROM sys.objects WHERE [is_ms_shipped] = 0 ORDER BY [schema_id], [name];"
+          }
+          state > "$RUNNER_TEMP/state-before.txt"
+          # A later run in production compiles every batch again, including the ones it skips, so a
+          # batch naming a column that a newer migration dropped fails there. Without this, SQL Server
+          # reuses the plans of the first run and that error goes unnoticed.
+          $SQLCMD -Q "DBCC FREEPROCCACHE WITH NO_INFOMSGS;"
+          $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/apply.sql
+          state > "$RUNNER_TEMP/state-after.txt"
+          if ! diff -u "$RUNNER_TEMP/state-before.txt" "$RUNNER_TEMP/state-after.txt"; then
+            echo "::error::The second run changed the database."
+            exit 1
+          fi
+
+      # The Down of every migration after the production baseline, newest first (what the
+      # rollback.sql files run), and then the script again.
+      - name: Roll back to the production baseline and apply again
+        run: |
+          latest=$(dotnet ef migrations list --no-connect --json --prefix-output $EF_PROJECTS \
+            | sed -n 's/^data: *//p' | jq -r '.[-1].id')
+          if [ "$latest" = "$PRODUCTION_BASELINE" ]; then
+            echo "No migrations after $PRODUCTION_BASELINE: nothing to roll back."
+            exit 0
+          fi
+          last_migration() {
+            $SQLCMD -d "$MSSQL_DATABASE" -h -1 -W -Q "SET NOCOUNT ON; SELECT MAX([MigrationId]) FROM [__EFMigrationsHistory];"
+          }
+          dotnet ef migrations script "$latest" "$PRODUCTION_BASELINE" --idempotent --output "$RUNNER_TEMP/ef-rollback.sql" $EF_PROJECTS
+          sed '1s/^\xEF\xBB\xBF//' "$RUNNER_TEMP/ef-rollback.sql" | cat "$RUNNER_TEMP/set-options.sql" - > "$RUNNER_TEMP/sql/rollback.sql"
+          $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/rollback.sql
+          if [ "$(last_migration)" != "$PRODUCTION_BASELINE" ]; then
+            echo "::error::The rollback did not return the database to $PRODUCTION_BASELINE."
+            exit 1
+          fi
+          $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/apply.sql
+          if [ "$(last_migration)" != "$latest" ]; then
+            echo "::error::After the rollback, the script did not reach $latest again."
+            exit 1
+          fi
+
+      # How a new database (local development, tests) is created: every migration, one statement
+      # at a time.
+      - name: Create a new database with dotnet ef database update
+        run: |
+          env 'Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore.Database.Command=Warning' \
+            dotnet ef database update --connection "$MSSQL_CONNECTION;Database=TienditAppCiNew" $EF_PROJECTS
+
+      - name: Upload the scripts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-scripts
+          path: ${{ runner.temp }}/sql/
+          if-no-files-found: ignore
+
   frontend:
     name: Frontend (lint, build, audit)
     runs-on: ubuntu-latest
