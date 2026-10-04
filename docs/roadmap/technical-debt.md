@@ -79,11 +79,11 @@ Actualizada el 2026-10-04 tras la Fase 0 del roadmap de producto y la migración
 - Límite de peticiones solo en credenciales y códigos; el cliente ya no cierra sesión ante un 429.
 - Reenvío del código de teléfono por `userId` y página `/confirm-email` para el enlace del correo.
 - Un solo helper de errores en el cliente.
+- Desactivar el 2FA exige un código TOTP o de recuperación, con el lockout de Identity y el rate limit `auth`; Perfil pide el código.
 
 Pendientes detectados en la Fase 0:
 
 - El emisor que ven las apps autenticadoras sale del `JwtSettings:Issuer` ("FoodParkDigital"); cambiarlo exige separar el nombre visible del emisor del JWT.
-- `POST /api/v1/twofactor/disable` no pide un código ni la contraseña.
 - La confirmación de teléfono no permite corregir el número capturado.
 - El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio).
 

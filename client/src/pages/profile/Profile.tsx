@@ -8,6 +8,10 @@ import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 
+interface DisableTwoFactorForm {
+  code: string;
+}
+
 export default function Profile() {
   const { user, refreshProfile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -23,6 +27,10 @@ export default function Profile() {
 
   // Password state
   const [passwordMsg, setPasswordMsg] = useState<{ type: string; text: string } | null>(null);
+
+  // Two-factor state
+  const [twoFactorMsg, setTwoFactorMsg] = useState<{ type: string; text: string } | null>(null);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
 
   // Profile form
   const {
@@ -44,6 +52,14 @@ export default function Profile() {
     reset: resetPassword,
     formState: { errors: passwordErrors, isSubmitting: passwordSubmitting },
   } = useForm<ChangePasswordRequest>();
+
+  // Disable 2FA form
+  const {
+    register: regTwoFactor,
+    handleSubmit: handleTwoFactor,
+    reset: resetTwoFactor,
+    formState: { errors: twoFactorErrors, isSubmitting: twoFactorSubmitting },
+  } = useForm<DisableTwoFactorForm>();
 
   const onUpdateProfile = async (data: UpdateProfileRequest) => {
     setProfileMsg(null);
@@ -101,6 +117,30 @@ export default function Profile() {
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, 'Error al cambiar la contraseña.');
       setPasswordMsg({ type: 'danger', text: msg });
+    }
+  };
+
+  const toggleTwoFactorCodeType = () => {
+    setUseRecoveryCode((current) => !current);
+    setTwoFactorMsg(null);
+    resetTwoFactor({ code: '' });
+  };
+
+  const onDisableTwoFactor = async (data: DisableTwoFactorForm) => {
+    setTwoFactorMsg(null);
+    try {
+      await profileApi.disableTwoFactor({ code: data.code, useRecoveryCode });
+      resetTwoFactor({ code: '' });
+      setUseRecoveryCode(false);
+      // Set before refreshing: once `user` reports 2FA off, only this message keeps the card visible.
+      setTwoFactorMsg({
+        type: 'success',
+        text: 'Verificación en dos pasos desactivada. Tu cuenta ya solo pide la contraseña para iniciar sesión.',
+      });
+      await refreshProfile();
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, 'No se pudo desactivar la verificación en dos pasos.');
+      setTwoFactorMsg({ type: 'danger', text: msg });
     }
   };
 
@@ -387,6 +427,83 @@ export default function Profile() {
               </form>
             </div>
           </div>
+
+          {/* Two-factor authentication */}
+          {(user?.twoFactorEnabled || twoFactorMsg) && (
+            <div className="card">
+              <div className="card-body">
+                <h4 className="header-title mt-0 mb-3">Verificación en dos pasos</h4>
+
+                {twoFactorMsg && (
+                  <div className={`alert alert-${twoFactorMsg.type}`} role="alert">
+                    {twoFactorMsg.text}
+                  </div>
+                )}
+
+                {user?.twoFactorEnabled && (
+                  <form onSubmit={handleTwoFactor(onDisableTwoFactor)}>
+                    <p className="text-muted">
+                      Tu cuenta pide un código de tu app de autenticación al iniciar sesión. Para desactivar la
+                      verificación, ingresa ese código o, si perdiste el dispositivo, uno de tus códigos de
+                      recuperación.
+                    </p>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <div className="mb-3">
+                          <label htmlFor="disableTwoFactorCode" className="form-label">
+                            {useRecoveryCode ? 'Código de recuperación' : 'Código de verificación'}
+                          </label>
+                          <input
+                            key={useRecoveryCode ? 'recovery' : 'authenticator'}
+                            id="disableTwoFactorCode"
+                            type="text"
+                            className={`form-control ${twoFactorErrors.code ? 'is-invalid' : ''}`}
+                            autoComplete={useRecoveryCode ? 'off' : 'one-time-code'}
+                            inputMode={useRecoveryCode ? 'text' : 'numeric'}
+                            maxLength={useRecoveryCode ? 32 : 7}
+                            placeholder={useRecoveryCode ? 'XXXXX-XXXXX' : '000000'}
+                            aria-invalid={twoFactorErrors.code ? 'true' : 'false'}
+                            aria-describedby={twoFactorErrors.code ? 'disableTwoFactorCodeError' : undefined}
+                            {...regTwoFactor('code', {
+                              required: useRecoveryCode
+                                ? 'El código de recuperación es requerido'
+                                : 'El código es requerido',
+                              validate: (value) =>
+                                useRecoveryCode ||
+                                /^\d{6}$/.test(value.replace(/[\s-]/g, '')) ||
+                                'El código debe tener 6 dígitos',
+                            })}
+                          />
+                          {twoFactorErrors.code && (
+                            <div id="disableTwoFactorCodeError" className="invalid-feedback">
+                              {twoFactorErrors.code.message}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-md-6 d-flex align-items-end">
+                        <div className="mb-3">
+                          <button className="btn btn-danger" type="submit" disabled={twoFactorSubmitting}>
+                            {twoFactorSubmitting ? 'Desactivando...' : 'Desactivar 2FA'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm text-muted p-0"
+                      onClick={toggleTwoFactorCodeType}
+                      disabled={twoFactorSubmitting}
+                    >
+                      {useRecoveryCode
+                        ? 'Usar el código de la app de autenticación'
+                        : 'Usar un código de recuperación'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

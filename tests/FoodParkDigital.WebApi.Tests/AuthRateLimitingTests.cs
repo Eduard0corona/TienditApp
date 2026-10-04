@@ -23,6 +23,7 @@ public class AuthRateLimitingTests
     [InlineData(typeof(AuthController), nameof(AuthController.ChangePassword))]
     [InlineData(typeof(TwoFactorController), nameof(TwoFactorController.Login2FA))]
     [InlineData(typeof(TwoFactorController), nameof(TwoFactorController.Verify2FA))]
+    [InlineData(typeof(TwoFactorController), nameof(TwoFactorController.Disable2FA))]
     public void CredentialAndCodeEndpoints_ShouldBeRateLimited(Type controller, string action)
     {
         Assert.Equal("auth", PolicyOf(controller, action));

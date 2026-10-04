@@ -5,6 +5,7 @@ import type {
   ChangePasswordRequest,
   AvatarImageUrlsDto,
   ApiMessage,
+  DisableTwoFactorRequest,
 } from '../types';
 
 export const profileApi = {
@@ -27,4 +28,8 @@ export const profileApi = {
 
   changePassword: (data: ChangePasswordRequest) =>
     api.post<ApiMessage>('/auth/profile/change-password', data),
+
+  /** Needs a current authenticator code or an unused recovery code; the session alone is not enough. */
+  disableTwoFactor: (data: DisableTwoFactorRequest) =>
+    api.post<ApiMessage>('/twofactor/disable', data),
 };

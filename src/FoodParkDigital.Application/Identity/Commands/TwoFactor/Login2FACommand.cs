@@ -56,7 +56,7 @@ public class Login2FACommandHandler : IRequestHandler<Login2FACommand, Result<Au
         if (await _userManager.IsLockedOutAsync(user))
             return Result.Failure<AuthResponse>(LockedOutError);
 
-        if (!await VerifyCodeAsync(user, request.Code, request.UseRecoveryCode))
+        if (!await _userManager.VerifyTwoFactorCodeAsync(user, request.Code, request.UseRecoveryCode))
         {
             // Mismo contador y bloqueo de Identity que SignInManager aplica al segundo factor.
             var accessFailed = await _userManager.AccessFailedAsync(user);
@@ -78,25 +78,5 @@ public class Login2FACommandHandler : IRequestHandler<Login2FACommand, Result<Au
             return Result.Failure<AuthResponse>(InvalidChallengeError);
 
         return Result.Success(await _authSessionIssuer.IssueAsync(user, cancellationToken));
-    }
-
-    private async Task<bool> VerifyCodeAsync(ApplicationUser user, string? code, bool useRecoveryCode)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-            return false;
-
-        if (useRecoveryCode)
-        {
-            // Identity elimina el código al canjearlo, así que cada código de recuperación sirve una sola vez.
-            var recoveryCode = code.Replace(" ", string.Empty).ToUpperInvariant();
-            var redeemed = await _userManager.RedeemTwoFactorRecoveryCodeAsync(user, recoveryCode);
-            return redeemed.Succeeded;
-        }
-
-        var verificationCode = code.Replace(" ", string.Empty).Replace("-", string.Empty);
-        return await _userManager.VerifyTwoFactorTokenAsync(
-            user,
-            _userManager.Options.Tokens.AuthenticatorTokenProvider,
-            verificationCode);
     }
 }

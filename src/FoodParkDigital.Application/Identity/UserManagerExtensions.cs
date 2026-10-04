@@ -30,4 +30,33 @@ public static class UserManagerExtensions
 
     public static string ToErrorMessage(this IdentityResult result)
         => string.Join(", ", result.Errors.Select(e => e.Description));
+
+    /// <summary>
+    /// Checks a second-factor code for a user with 2FA: an authenticator (TOTP) code, or a recovery
+    /// code when <paramref name="useRecoveryCode"/> is set. Does not count failed attempts; callers
+    /// decide how to apply lockout.
+    /// </summary>
+    public static async Task<bool> VerifyTwoFactorCodeAsync(
+        this UserManager<ApplicationUser> userManager,
+        ApplicationUser user,
+        string? code,
+        bool useRecoveryCode)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return false;
+
+        if (useRecoveryCode)
+        {
+            // Identity elimina el código al canjearlo, así que cada código de recuperación sirve una sola vez.
+            var recoveryCode = code.Replace(" ", string.Empty).ToUpperInvariant();
+            var redeemed = await userManager.RedeemTwoFactorRecoveryCodeAsync(user, recoveryCode);
+            return redeemed.Succeeded;
+        }
+
+        var verificationCode = code.Replace(" ", string.Empty).Replace("-", string.Empty);
+        return await userManager.VerifyTwoFactorTokenAsync(
+            user,
+            userManager.Options.Tokens.AuthenticatorTokenProvider,
+            verificationCode);
+    }
 }
