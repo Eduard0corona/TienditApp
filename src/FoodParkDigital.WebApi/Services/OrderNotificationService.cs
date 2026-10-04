@@ -22,13 +22,6 @@ public class OrderNotificationService : IOrderNotificationService
         await _hubContext.Clients
             .Group($"tenant_{tenantId}")
             .SendAsync("OrderCreated", payload);
-
-        if (businessType == BusinessType.Food)
-        {
-            await _hubContext.Clients
-                .Group($"kitchen_{tenantId}")
-                .SendAsync("OrderCreated", payload);
-        }
     }
 
     public async Task NotifyOrderStatusChanged(Guid tenantId, Guid orderId, OrderStatus previousStatus, OrderStatus newStatus)
@@ -38,10 +31,6 @@ public class OrderNotificationService : IOrderNotificationService
         await _hubContext.Clients
             .Group($"tenant_{tenantId}")
             .SendAsync("OrderStatusChanged", payload);
-
-        await _hubContext.Clients
-            .Group($"kitchen_{tenantId}")
-            .SendAsync("OrderStatusChanged", payload);
     }
 
     public async Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason)
@@ -50,10 +39,6 @@ public class OrderNotificationService : IOrderNotificationService
 
         await _hubContext.Clients
             .Group($"tenant_{tenantId}")
-            .SendAsync("OrderCancelled", payload);
-
-        await _hubContext.Clients
-            .Group($"kitchen_{tenantId}")
             .SendAsync("OrderCancelled", payload);
     }
 

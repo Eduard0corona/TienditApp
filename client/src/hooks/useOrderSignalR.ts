@@ -30,12 +30,15 @@ export interface ServiceBoardPieceUpdatedPayload {
 
 export function useOrderSignalR() {
   const connectionRef = useRef<HubConnection | null>(null);
+  const connectedListenersRef = useRef(new Set<() => void>());
 
   useEffect(() => {
     let isDisposed = false;
     const connection = createHubConnection('/hubs/orders');
     connectionRef.current = connection;
-    const stop = keepHubConnected(connection, 'OrderHub', () => isDisposed);
+    const stop = keepHubConnected(connection, 'OrderHub', () => isDisposed, () => {
+      connectedListenersRef.current.forEach((listener) => listener());
+    });
 
     return () => {
       isDisposed = true;
@@ -75,5 +78,14 @@ export function useOrderSignalR() {
     return () => conn.off('ServiceBoardPieceUpdated', callback);
   }, []);
 
-  return { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated };
+  /** Runs each time the hub (re)connects; events sent while disconnected are not replayed. */
+  const onConnected = useCallback((callback: () => void) => {
+    const listeners = connectedListenersRef.current;
+    listeners.add(callback);
+    return () => {
+      listeners.delete(callback);
+    };
+  }, []);
+
+  return { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated, onConnected };
 }

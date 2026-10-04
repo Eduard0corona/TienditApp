@@ -107,6 +107,7 @@ public class KitchenOrderDto
     public OrderStatus Status { get; set; }
     public string CustomerName { get; set; } = null!;
     public string? TableNumber { get; set; }
+    public string? CustomerNotes { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public List<OrderItemDto> Items { get; set; } = new();
 }

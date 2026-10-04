@@ -8,7 +8,9 @@ namespace FoodParkDigital.WebApi.Hubs;
 [Authorize]
 public class OrderHub : Hub
 {
-    // Order events feed the order list, the service and kitchen boards and the dashboard.
+    // Order events feed the order list, the service and kitchen boards and the dashboard. Every
+    // connection joins its tenant group only: the kitchen board needs ManageServiceBoard, so it already
+    // receives the same events there (a separate kitchen group duplicated them and checked roles).
     private static readonly TenantPermission[] OrderEventPermissions =
     [
         TenantPermission.ManageOrders,
@@ -34,24 +36,6 @@ public class OrderHub : Hub
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"tenant_{access.TenantId}");
         await base.OnConnectedAsync();
-    }
-
-    public async Task JoinKitchenGroup()
-    {
-        var access = await HubTenantAccess.ResolveAsync(Context.User, _tenantAccessService, Context.ConnectionAborted);
-        if (access is not null && (access.Role is "KITCHEN" || access.IsTenantAdmin || access.IsSuperAdmin))
-        {
-            await Groups.AddToGroupAsync(Context.ConnectionId, $"kitchen_{access.TenantId}");
-        }
-    }
-
-    public async Task LeaveKitchenGroup()
-    {
-        var tenantId = Context.User?.FindFirst("tenant_id")?.Value;
-        if (tenantId is not null)
-        {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"kitchen_{tenantId}");
-        }
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

@@ -23,16 +23,29 @@ export function createHubConnection(url: string): HubConnection {
  * Starts the connection and keeps it alive until <paramref name="isDisposed"/> returns true: the first
  * start is retried (automatic reconnect only covers connections that were established) and a closed
  * connection (e.g. the server ended it because the token expired) is started again.
+ *
+ * <paramref name="onConnected"/> runs every time the connection is (re)established, including automatic
+ * reconnects: events sent while it was down are lost, so screens use it to reload their data.
  */
-export function keepHubConnected(connection: HubConnection, hubName: string, isDisposed: () => boolean) {
+export function keepHubConnected(
+  connection: HubConnection,
+  hubName: string,
+  isDisposed: () => boolean,
+  onConnected?: () => void,
+) {
   let attempt = 0;
   let retryTimeoutId: number | undefined;
+
+  const notifyConnected = () => {
+    if (!isDisposed()) onConnected?.();
+  };
 
   const start = async () => {
     if (isDisposed() || connection.state !== HubConnectionState.Disconnected) return;
     try {
       await connection.start();
       attempt = 0;
+      notifyConnected();
     } catch (err) {
       if (isDisposed()) return;
       const message = err instanceof Error ? err.message : String(err);
@@ -56,6 +69,7 @@ export function keepHubConnected(connection: HubConnection, hubName: string, isD
   connection.onclose(() => {
     if (!isDisposed()) scheduleStart();
   });
+  connection.onreconnected(notifyConnected);
 
   // Delay start one tick to avoid StrictMode mount/unmount negotiation races in dev.
   retryTimeoutId = window.setTimeout(() => void start(), 0);
