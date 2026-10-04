@@ -10,7 +10,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize(Roles = "KITCHEN,TENANT_ADMIN")]
+// Any employee role: TenantResolutionMiddleware requires ManageServiceBoard and the Kitchen capability,
+// the same rule that shows the kitchen board in the menu.
+[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF,KITCHEN")]
 public class KitchenController : ControllerBase
 {
     private readonly IMediator _mediator;

@@ -7,6 +7,8 @@ import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { ordersApi } from '../../api/ordersApi';
 import { inventoryApi } from '../../api/inventoryApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
 import type { InventoryLocationDto, OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
 import {
   OrderPaymentMethod as OrderPaymentMethodConst,
@@ -14,6 +16,7 @@ import {
   OrderType as OrderTypeConst,
 } from '../../types';
 import { isSafeFileUrl } from '../../utils/safeUrl';
+import { getAccess } from '../../utils/access';
 
 const STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
   { value: 0, label: 'Pendiente' },
@@ -181,6 +184,11 @@ export default function OrdersList() {
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
+  // roles can read orders but move food orders from the kitchen board.
+  const canSell = getAccess(user, capabilities).sell;
 
   // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
   // and is blocked while the order has payments).
@@ -281,6 +289,8 @@ export default function OrdersList() {
   }, [loadOrders]);
 
   useEffect(() => {
+    // Branches are only used to register payments.
+    if (!canSell) return;
     const loadLocations = async () => {
       try {
         const { data } = await inventoryApi.getLocations({ isActive: true });
@@ -291,7 +301,7 @@ export default function OrdersList() {
     };
 
     void loadLocations();
-  }, []);
+  }, [canSell]);
 
   useEffect(() => {
     const createdOff = onOrderCreated((payload) => {
@@ -547,10 +557,12 @@ export default function OrdersList() {
                     >
                       Limpiar filtros
                     </button>
-                    <Link to="/orders/cart" className="btn btn-primary btn-sm">
-                      <i className="ri-add-line me-1"></i>
-                      Generar Orden
-                    </Link>
+                    {canSell && (
+                      <Link to="/orders/cart" className="btn btn-primary btn-sm">
+                        <i className="ri-add-line me-1"></i>
+                        Generar Orden
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
@@ -628,16 +640,26 @@ export default function OrdersList() {
                       </small>
                     </td>
                     <td className="text-center">
-                      <div className="d-flex justify-content-center">
+                      {canSell ? (
+                        <div className="d-flex justify-content-center">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-soft-success"
+                            disabled={order.balance <= 0 || order.status === 99}
+                            onClick={() => openPaymentModal(order)}
+                          >
+                            Registrar pago
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
-                          className="btn btn-sm btn-soft-success"
-                          disabled={order.balance <= 0 || order.status === 99}
-                          onClick={() => openPaymentModal(order)}
+                          className="btn btn-sm btn-light"
+                          onClick={() => setSelectedOrder(order)}
                         >
-                          Registrar pago
+                          Ver detalle
                         </button>
-                      </div>
+                      )}
                     </td>
                   </>
                 )}
@@ -680,7 +702,7 @@ export default function OrdersList() {
                 </div>
               </div>
 
-              {(selectedOrderStatusActions.length > 0 || selectedOrder.canCancel) && (
+              {canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
@@ -852,7 +874,8 @@ export default function OrdersList() {
                               <select
                                 className="form-select form-select-sm"
                                 value=""
-                                disabled={getPieceAllowedTransitions(piece.status).length === 0}
+                                aria-label={`Actualizar estado de ${piece.itemName}`}
+                                disabled={!canSell || getPieceAllowedTransitions(piece.status).length === 0}
                                 onChange={(e) =>
                                   handleServicePieceStatusChange(selectedOrder.id, piece.id, e.target.value)
                                 }

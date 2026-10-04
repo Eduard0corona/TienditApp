@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import LoadingSpinner from './LoadingSpinner';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
-import { getLandingPath } from '../../utils/landing';
+import { getLandingPath } from '../../utils/access';
 
 export default function HomeRedirect() {
   const { user, isAuthenticated, isLoading } = useAuth();

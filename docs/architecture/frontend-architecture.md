@@ -2,7 +2,7 @@
 
 ## Estado actual comprobado
 
-`client` usa React 19.2, TypeScript 5.9, Vite 7, React Router 7, Axios, React Hook Form, Bootstrap/React Bootstrap y SignalR. `App.tsx` define rutas con `lazy` y `Suspense`; `ProtectedRoute` comprueba sesión y `CapabilityRoute` decide visibilidad por capabilities.
+`client` usa React 19.2, TypeScript 5.9, Vite 7, React Router 7, Axios, React Hook Form, Bootstrap/React Bootstrap y SignalR. `App.tsx` define rutas con `lazy` y `Suspense`; `ProtectedRoute` comprueba sesión y `AccessRoute` decide si la pantalla aplica al usuario con la matriz de `src/utils/access.ts` (rol, permiso y capability, igual que la API).
 
 Estructura principal:
 
@@ -22,7 +22,7 @@ Sesión y tiempo real:
 - Un refresh rechazado emite `expired` y la sesión se cierra; un error de red la conserva. Si un refresh devuelve otro tenant (otra pestaña cambió de tenant), la pestaña recarga.
 - `useSessionSync` propaga logout y cambio de tenant a las demás pestañas con `BroadcastChannel`; cambiar de tenant recarga la aplicación.
 - `src/api/signalr.ts` crea las conexiones: reintenta indefinidamente, reintenta el primer arranque, reinicia tras un cierre del servidor y pide un token vigente en cada (re)conexión.
-- `HomeRedirect`/`PermissionRoute` llevan a cada usuario a la primera página que puede abrir; `isSafeFileUrl` solo deja enlazar archivos de `/uploads` o https; `estimateOrderTotals` replica la regla de impuesto del backend para el carrito (el total definitivo es el de la API).
+- `HomeRedirect`/`AccessRoute` llevan a cada usuario a la pantalla de su trabajo (`getLandingPath`); `isSafeFileUrl` solo deja enlazar archivos de `/uploads` o https; `estimateOrderTotals` replica la regla de impuesto del backend para el carrito (el total definitivo es el de la API).
 
 ## Guardrails
 
@@ -40,7 +40,7 @@ Sesión y tiempo real:
 
 - `InventoryManagement.tsx` supera 2,400 líneas; `OrdersCart.tsx`, `OrdersList.tsx` y `types/index.ts` rondan o superan 1,000. Son candidatos a refactor por feature/componente, no deben reescribirse incidentalmente.
 - No se encontró framework ni suite de pruebas frontend.
-- Capabilities se aplican a muchas rutas; el guard de permisos (`PermissionRoute`) solo protege el dashboard.
+- `AccessRoute` cubre las rutas del layout; los botones de acción dentro de cada pantalla todavía se condicionan caso por caso (por ahora, órdenes).
 - La búsqueda de `DataTable` filtra únicamente la página cargada, y el POS carga como máximo 200 productos, servicios y clientes (ahora lo avisa).
 - Accesibilidad: muchas etiquetas no están asociadas a su campo y hay botones de solo icono sin nombre accesible.
 - `client/README.md` aún es el texto genérico del template Vite.

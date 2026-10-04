@@ -67,6 +67,39 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Theory]
+    [InlineData(nameof(TenantPermission.ViewReports), true)]
+    [InlineData(nameof(TenantPermission.ManageOrders), false)]
+    public async Task Dashboard_ShouldFollowViewReports_ForStaff(string permission, bool allowed)
+    {
+        var result = await InvokeAsync("/api/v1/dashboard/metrics", "GET", "STAFF",
+            new FakeTenantAccessService(active: true, permissions: [permission]));
+
+        Assert.Equal(allowed, result.NextCalled);
+        Assert.Equal(allowed ? StatusCodes.Status200OK : StatusCodes.Status403Forbidden, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Kitchen_ShouldRequireManageServiceBoardAndTheKitchenCapability()
+    {
+        const TenantCapability foodWithKitchen = TenantCapability.Food | TenantCapability.Kitchen;
+        string[] boardPermission = [nameof(TenantPermission.ManageServiceBoard)];
+
+        var allowed = await InvokeAsync("/api/v1/kitchen/orders", "GET", "KITCHEN",
+            new FakeTenantAccessService(active: true, boardPermission, foodWithKitchen));
+        var staffAllowed = await InvokeAsync("/api/v1/kitchen/orders", "GET", "STAFF",
+            new FakeTenantAccessService(active: true, boardPermission, foodWithKitchen));
+        var withoutPermission = await InvokeAsync("/api/v1/kitchen/orders", "GET", "STAFF",
+            new FakeTenantAccessService(active: true, [nameof(TenantPermission.ManageOrders)], foodWithKitchen));
+        var withoutCapability = await InvokeAsync("/api/v1/kitchen/orders", "GET", "KITCHEN",
+            new FakeTenantAccessService(active: true, boardPermission, TenantCapability.Food));
+
+        Assert.True(allowed.NextCalled);
+        Assert.True(staffAllowed.NextCalled);
+        Assert.Equal(StatusCodes.Status403Forbidden, withoutPermission.StatusCode);
+        Assert.Equal(StatusCodes.Status403Forbidden, withoutCapability.StatusCode);
+    }
+
+    [Theory]
     [InlineData("/api/v1/auth/login")]
     [InlineData("/api/v1/auth/refresh-token")]
     [InlineData("/api/v1/auth/register/business")]
@@ -164,7 +197,11 @@ public class TenantResolutionMiddlewareTests
         public void SetTenant(Guid tenantId) => TenantId = tenantId;
     }
 
-    private sealed class FakeTenantAccessService(bool active, IReadOnlyCollection<string> permissions) : ITenantAccessService
+    private sealed class FakeTenantAccessService(
+        bool active,
+        IReadOnlyCollection<string> permissions,
+        TenantCapability capabilities = TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food | TenantCapability.Inventory)
+        : ITenantAccessService
     {
         public int Calls { get; private set; }
 
@@ -173,7 +210,7 @@ public class TenantResolutionMiddlewareTests
             Calls++;
             return Task.FromResult(new TenantAccessSnapshot(
                 active,
-                TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food | TenantCapability.Inventory,
+                capabilities,
                 active ? permissions : []));
         }
 
