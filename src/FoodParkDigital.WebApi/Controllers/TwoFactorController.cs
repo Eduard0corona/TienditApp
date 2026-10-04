@@ -52,13 +52,18 @@ public class TwoFactorController : ControllerBase
     }
 
     [HttpPost("disable")]
-    public async Task<ActionResult> Disable2FA()
+    [EnableRateLimiting("auth")]
+    public async Task<ActionResult> Disable2FA(
+        [FromBody] Disable2FARequest request,
+        CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return Unauthorized(new { error = "Usuario no autenticado." });
 
-        var result = await _mediator.Send(new Disable2FACommand(userId));
+        var result = await _mediator.Send(
+            new Disable2FACommand(userId, request.Code, request.UseRecoveryCode),
+            cancellationToken);
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 
@@ -85,3 +90,5 @@ public class TwoFactorController : ControllerBase
 }
 
 public record VerifyRequest(string Code);
+
+public record Disable2FARequest(string Code, bool UseRecoveryCode = false);

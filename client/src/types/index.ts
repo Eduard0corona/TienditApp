@@ -111,6 +111,11 @@ export interface TwoFactorLoginRequest {
   useRecoveryCode: boolean;
 }
 
+export interface DisableTwoFactorRequest {
+  code: string;
+  useRecoveryCode: boolean;
+}
+
 export interface UpdateProfileRequest {
   firstName: string;
   lastName: string;
