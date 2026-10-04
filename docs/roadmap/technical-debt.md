@@ -14,6 +14,7 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 
 ## Alta
 
+- Movimientos manuales de inventario registrados desde la pantalla antes de la corrección del 2026-10-04: se guardaron con el tipo y el motivo siguientes al elegido. Movieron las existencias en sentido contrario, y las "Salidas" guardadas como `Entry` promediaron su costo como si fueran compras. Falta revisarlos con cada tenant y compensarlos ([procedimiento y consulta de solo lectura](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md)). El dominio no tiene una operación para revaluar el costo promedio.
 - Eventos se limpian/publican después del commit sin Outbox; side effects pueden perderse o duplicarse.
 - Impuesto fijo `subtotal × 16%`, sin desglose fiscal persistido y sin decidir si los precios del catálogo incluyen IVA (si lo incluyen, se sobrecobra).
 - `SUPER_ADMIN` y `TENANT_ADMIN` omiten permisos/capabilities en partes del middleware; el claim `role` es el rol global y no el de la membresía; autorización distribuida por strings de ruta.
@@ -30,6 +31,7 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 
 - Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
 - Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
+- `types/index.ts` copia a mano los enums numéricos del dominio. `ClientEnumContractTests` compara sus objetos `as const` con el dominio, pero no genera los tipos ni revisa las uniones literales duplicadas (`PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99` y similares).
 - Sin pruebas frontend ni de integración con SQL Server.
 - Producción .NET 9 y tests `net10.0` (el CI instala ambos SDK); no hay `global.json`.
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
@@ -66,8 +68,13 @@ Actualizada el 2026-10-01 tras la auditoría del proyecto y sus correcciones.
 - Borrado de archivos confinado al namespace del tenant.
 - Logs sin códigos OTP ni PII de mensajería y con el teléfono del cliente enmascarado fuera de Development.
 
+## Resuelto el 2026-10-04
+
+- La pantalla de inventario usa los mismos números que el dominio para tipos y motivos de movimiento (desde 1, `Other = 99`). Ya se registran "Entrada" y "Compra"; cada tipo mueve las existencias en su sentido; filtros y etiquetas coinciden con lo guardado, incluidos los movimientos del sistema. `ClientEnumContractTests` falla si una copia de enum en el cliente difiere del dominio, e `InventoryEnumValuesTests` fija los valores persistidos.
+
 ## Decisiones humanas pendientes
 
+- Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.
 - Modelo de autorización definitivo: policies/resource handlers, rol por tenant en el token y alcance administrativo cross-tenant.
 - Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
 - Política fiscal/redondeo, si los precios incluyen IVA y responsable legal-contable.

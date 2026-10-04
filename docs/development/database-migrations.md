@@ -51,6 +51,8 @@ Antes de publicarlos:
 1. Ejecútalos con `sqlcmd` contra bases desechables de LocalDB en los estados posibles de producción: vacía, en la migración anterior con datos y con datos que la migración rechaza.
 2. Vuelve a ejecutarlos para confirmar que la segunda vez no hacen nada.
 
+Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación.
+
 ## Deuda actual
 
 - `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
