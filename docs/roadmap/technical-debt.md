@@ -117,7 +117,7 @@ Pendientes detectados en la Fase 2:
 
 - El mismo celular mexicano se guarda como `+52…` (capturado) o `+521…` (WhatsApp): la ficha del cliente y las campañas los reconcilian, pero el cliente temporal y la conversación pueden quedar duplicados. Unificar la normalización exige migrar datos y revisar la búsqueda de conversaciones.
 - Un envío a Meta que expira puede haberse entregado: el reintento puede duplicar un aviso o un mensaje de campaña (Meta no ofrece idempotencia en envíos).
-- Los índices únicos filtrados nuevos (deduplicación de mensajes, caja abierta por cajero, bajas por número) se validan con las migraciones del CI y pruebas InMemory; faltan pruebas de concurrencia contra SQL Server.
+- Los índices únicos filtrados nuevos (deduplicación de mensajes, caja abierta por cajero, bajas por número) tienen pruebas InMemory y se crearon sin errores en SQL Server 2022 al probar los scripts de producción (el CI no aplica migraciones); faltan pruebas de concurrencia contra SQL Server.
 - `OutgoingMessages` no tiene retención y las campañas no respetan horario de envío.
 - Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`types/index.ts`) y generados.
 - La actualización de pantallas por SignalR sigue siendo best-effort.
