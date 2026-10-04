@@ -125,7 +125,7 @@ Pendientes detectados en la Fase 2:
 
 - El mismo celular mexicano se guarda como `+52…` (capturado) o `+521…` (WhatsApp): la ficha del cliente y las campañas los reconcilian, pero el cliente temporal y la conversación pueden quedar duplicados. Unificar la normalización exige migrar datos y revisar la búsqueda de conversaciones.
 - Un envío a Meta que expira puede haberse entregado: el reintento puede duplicar un aviso o un mensaje de campaña (Meta no ofrece idempotencia en envíos).
-- Los índices únicos filtrados nuevos (deduplicación de mensajes, caja abierta por cajero, bajas por número) tienen pruebas InMemory y se crearon sin errores en SQL Server 2022 al probar los scripts de producción (el CI no aplica migraciones); faltan pruebas de concurrencia contra SQL Server.
+- Los índices únicos filtrados nuevos (deduplicación de mensajes, caja abierta por cajero, bajas por número) tienen pruebas InMemory y se crearon sin errores en SQL Server 2022 al probar los scripts de producción, y el CI los crea en cada PR (job `Migrations`); faltan pruebas de concurrencia contra SQL Server.
 - `OutgoingMessages` no tiene retención y las campañas no respetan horario de envío.
 - Pantallas aún sin TanStack Query ni tipos generados; conviven tipos manuales (`types/index.ts`) y generados.
 - La actualización de pantallas por SignalR sigue siendo best-effort.
@@ -139,6 +139,7 @@ Pendientes detectados en la Fase 2:
 - Consola de plataforma: planes con módulos y límites, suscripción por negocio con prueba, pago vencido y suspensión, y pagos registrados (migración `AddPlansAndSubscriptions`). Los módulos de un negocio con plan se recortan al plan.
 - Vender sin conexión: ventas de mostrador cobradas guardadas en el dispositivo y enviadas al volver la conexión con clave de idempotencia (migración `AddOfflineSaleIdempotency`).
 - La migración de sucursales fallaba en el script idempotente (SQL que usaba columnas agregadas en el mismo lote) y su `Down` siempre se habría negado si un negocio no tenía ubicaciones: ambas cosas se corrigieron antes de publicarla y los scripts de la Fase 3 se probaron en SQL Server 2022.
+- El CI aplica las migraciones en SQL Server 2022 como producción (job `Migrations`): el script idempotente con el bloque `SET` y `sqlcmd -b` sobre una base en una migración que producción ya tiene, una segunda ejecución sin cambios, el `Down` hasta esa migración y una base nueva con `dotnet ef database update`. Con la migración de sucursales sin corregir falla con el mismo `Invalid column name 'BranchId'`.
 
 Pendientes detectados en la Fase 3:
 
@@ -148,7 +149,7 @@ Pendientes detectados en la Fase 3:
 - Cada ubicación de inventario se volvió sucursal: las que solo eran almacén hay que desactivarlas a mano después de aplicar la migración.
 - Los pagos de planes los registra la plataforma a mano; falta el adaptador de un proveedor de pagos con verificación de firma.
 - Sin conexión no se puede recargar la página ni iniciar sesión (no hay service worker y el token vive en memoria); la cocina no ve la venta hasta que se envía, y una venta cuyo precio cambió mientras tanto se rechaza y hay que registrarla de nuevo.
-- Con EF Core 10, el script idempotente desde una base vacía falla en una migración de febrero ya aplicada en producción; una base nueva se crea con `dotnet ef database update`. Falta validar las migraciones contra SQL Server en el CI.
+- Con EF Core 10, el script idempotente desde una base vacía falla en una migración de febrero ya aplicada en producción; una base nueva se crea con `dotnet ef database update`.
 
 ## Resuelto el 2026-10-04 (Fase 4: cerrar el diagnóstico)
 

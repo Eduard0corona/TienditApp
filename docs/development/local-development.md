@@ -93,6 +93,6 @@ npm run lint
 npm run build
 ```
 
-El workflow `CI` (`.github/workflows/ci.yml`) ejecuta lo mismo en cada PR, además de `dotnet ef migrations has-pending-model-changes` y `npm audit --omit=dev --audit-level=high`.
+El workflow `CI` (`.github/workflows/ci.yml`) ejecuta lo mismo en cada PR, además de `dotnet ef migrations has-pending-model-changes`, `npm audit --omit=dev --audit-level=high` y el job `Migrations`, que aplica las migraciones con `sqlcmd` en SQL Server 2022 (ver [migraciones](database-migrations.md)).
 
 Si falla por infraestructura o baseline, registra comando y salida; no cambies producción para forzar verde sin diagnosticar.
