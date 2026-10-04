@@ -2,7 +2,7 @@
 
 ## Requisitos
 
-- .NET SDK 9 para la aplicación. En el estado actual, los proyectos de tests apuntan a `net10.0` y requieren SDK 10 para ejecutarse localmente.
+- .NET SDK 10: la API y las pruebas apuntan a `net10.0` desde `Directory.Build.props`.
 - Node.js y npm. Los workflows usan Node.js 20 (Vite 7 requiere 20.19 o posterior); `client/package-lock.json` es la fuente de dependencias.
 - SQL Server; `docker-compose.yml` ofrece SQL Server 2022 y la API.
 - Opcional: Docker Desktop y `dotnet-ef` para administrar migraciones manualmente.

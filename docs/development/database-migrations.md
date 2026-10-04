@@ -41,10 +41,10 @@ Como producción no migra al arrancar, cada migración nueva deja en `database/p
 - **`verify.sql`:** consultas de solo lectura para antes y después. Muestra las migraciones aplicadas, los datos que harían fallar la migración y las filas afectadas.
 - **`apply.sql`:** la salida de `dotnet ef migrations script --idempotent`, que aplica solo las migraciones que faltan en `__EFMigrationsHistory`. Va precedida de un bloque `SET` con dos partes:
   - las opciones que exigen los índices filtrados, porque el `sqlcmd` clásico arranca con `QUOTED_IDENTIFIER OFF`;
-  - `XACT_ABORT ON`. EF Core 9 ejecuta todas las migraciones del script en una sola transacción y no lo incluye; sin él, un error que solo termina una sentencia deja que el `COMMIT` confirme lo demás.
+  - `XACT_ABORT ON`. EF Core 10 envuelve cada migración del script en su propia transacción (EF Core 9 usaba una sola para todas) y no lo incluye; sin él, un error que solo termina una sentencia deja que el `COMMIT` confirme el resto de esa migración. Si una migración falla, las anteriores ya quedaron confirmadas: corrige la causa y vuelve a ejecutar el script, que salta las aplicadas.
 - **`rollback.sql`:** el `Down` idempotente de la migración, para usarlo después de volver al código anterior.
 
-El orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `develop` o `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR.
+El orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR.
 
 Antes de publicarlos:
 
