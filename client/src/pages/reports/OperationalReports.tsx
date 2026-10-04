@@ -5,8 +5,10 @@ import { getPaymentMethodLabel } from '../../utils/labels';
 import { marketingApi } from '../../api/marketingApi';
 import type { OperationalReportDto } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
 
 export default function OperationalReports() {
+  const { confirm } = useConfirm();
   const [report, setReport] = useState<OperationalReportDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -52,7 +54,12 @@ export default function OperationalReports() {
       return;
     }
 
-    if (!window.confirm('Se enviara el mensaje por WhatsApp a todos los clientes que cumplan el filtro. ¿Continuar?')) return;
+    const accepted = await confirm({
+      title: 'Enviar promoción por WhatsApp',
+      message: 'Se enviará el mensaje a todos los clientes que cumplan el filtro. Cada mensaje puede tener costo en WhatsApp.',
+      confirmLabel: 'Enviar',
+    });
+    if (!accepted) return;
 
     setSendingPromotion(true);
     try {

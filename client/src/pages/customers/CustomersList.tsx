@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
@@ -6,6 +7,7 @@ import DataTable from '../../components/common/DataTable';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const COLUMNS = [
   { header: 'Nombre' },
@@ -17,6 +19,11 @@ const COLUMNS = [
 ];
 
 export default function CustomersList() {
+  const { confirm } = useConfirm();
+  const [searchParams] = useSearchParams();
+  // A customer opened from the global search (Ctrl K) arrives with its name or phone.
+  const initialSearch = searchParams.get('search')?.trim() ?? '';
+  const [search, setSearch] = useState(initialSearch);
   const [data, setData] = useState<PaginatedList<CustomerDto>>({
     items: [],
     pageNumber: 1,
@@ -52,6 +59,7 @@ export default function CustomersList() {
     try {
       const params: {
         isActive?: boolean;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -60,6 +68,7 @@ export default function CustomersList() {
       };
 
       if (filterActive !== '') params.isActive = filterActive === 'true';
+      if (search) params.search = search;
 
       const { data: response } = await customersApi.getAll(params);
       setData(response);
@@ -68,7 +77,7 @@ export default function CustomersList() {
     } finally {
       setLoading(false);
     }
-  }, [filterActive, pageNumber, pageSize]);
+  }, [filterActive, pageNumber, pageSize, search]);
 
   useEffect(() => {
     loadCustomers();
@@ -137,7 +146,13 @@ export default function CustomersList() {
 
   const handleDelete = async (customer: CustomerDto) => {
     if (customer.isPublicGeneral) return;
-    if (!window.confirm('Deseas eliminar este cliente?')) return;
+    const accepted = await confirm({
+      title: 'Eliminar cliente',
+      message: `Se eliminará a ${customer.name}. Sus pedidos se conservan.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!accepted) return;
 
     try {
       await customersApi.delete(customer.id);
@@ -194,11 +209,8 @@ export default function CustomersList() {
                 keyExtractor={(customer) => customer.id}
                 loading={loading}
                 emptyMessage="No hay clientes registrados."
-                searchFilter={(customer, search) =>
-                  customer.name.toLowerCase().includes(search) ||
-                  (customer.phone || '').toLowerCase().includes(search) ||
-                  (customer.email || '').toLowerCase().includes(search)
-                }
+                searchPlaceholder="Nombre, teléfono o correo"
+                initialSearch={initialSearch}
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -206,6 +218,10 @@ export default function CustomersList() {
                   onPageChange: setPageNumber,
                   onPageSizeChange: (size) => {
                     setPageSize(size);
+                    setPageNumber(1);
+                  },
+                  onSearchChange: (term) => {
+                    setSearch(term);
                     setPageNumber(1);
                   },
                 }}

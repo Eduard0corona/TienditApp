@@ -13,6 +13,8 @@ export const productsApi = {
     isAvailable?: boolean;
     onlyAvailableNow?: boolean;
     itemType?: 'Product' | 'Service';
+    /** Name, SKU or exact barcode; searched on the server. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) =>

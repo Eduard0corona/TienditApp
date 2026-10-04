@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
+import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import { tenantApi } from '../../api/tenantApi';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
@@ -222,7 +223,7 @@ export default function BusinessSettings() {
   if (loading) {
     return (
       <>
-        <PageTitle title="Mi Empresa" subtitle="Configuración" />
+        <PageTitle title="Mi negocio" subtitle="Configuración" />
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Cargando...</span>
@@ -239,7 +240,7 @@ export default function BusinessSettings() {
         title="Subiendo logo"
         description="Estamos actualizando el logo de tu empresa."
       />
-      <PageTitle title="Mi Empresa" subtitle="Configuración" />
+      <PageTitle title="Mi negocio" subtitle="Configuración" />
 
       {/* Business Header */}
       <div className="row">
@@ -311,6 +312,8 @@ export default function BusinessSettings() {
           <button type="button" className="btn-close" onClick={() => setMsg(null)} />
         </div>
       )}
+
+      <SalesPolicyCard />
 
       <div className="row">
         {/* Left Column */}

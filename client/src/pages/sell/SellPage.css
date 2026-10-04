@@ -1,0 +1,256 @@
+/* Vender: catalog on the left, ticket on the right (sticky); on phones the ticket is a bottom sheet. */
+.sell-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 992px) {
+  .sell-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+  }
+
+  .sell-cart {
+    position: sticky;
+    top: calc(var(--ct-topbar-height, 70px) + 1rem);
+    max-height: calc(100vh - var(--ct-topbar-height, 70px) - 2rem);
+    overflow-y: auto;
+  }
+}
+
+.sell-search {
+  position: relative;
+  margin-bottom: 0.75rem;
+}
+
+.sell-search i {
+  position: absolute;
+  left: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+  color: var(--ct-secondary-color);
+}
+
+.sell-search .form-control {
+  padding-left: 2.6rem;
+  border-radius: var(--ta-radius);
+}
+
+.sell-chips {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  scrollbar-width: thin;
+}
+
+.sell-chips .btn {
+  flex: none;
+  border-radius: 999px;
+}
+
+.sell-products {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.sell-product {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-height: 104px;
+  padding: 0.85rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius);
+  background: var(--ta-surface);
+  color: var(--ct-body-color);
+  text-align: left;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.06s;
+}
+
+.sell-product:hover {
+  border-color: rgba(var(--ct-primary-rgb), 0.5);
+}
+
+.sell-product:active {
+  transform: scale(0.98);
+}
+
+.sell-product:focus-visible {
+  outline: 3px solid rgba(var(--ct-primary-rgb), 0.45);
+  outline-offset: 2px;
+}
+
+.sell-product.in-cart {
+  border-color: var(--ct-primary);
+  box-shadow: 0 0 0 1px var(--ct-primary) inset;
+}
+
+.sell-product-image {
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--ta-radius-sm);
+}
+
+.sell-product-name {
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.sell-product-price {
+  font-weight: 800;
+  color: var(--ct-primary-text-emphasis);
+}
+
+.sell-product-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ct-secondary-color);
+}
+
+.sell-product-count {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--ct-primary);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  line-height: 1.6rem;
+  text-align: center;
+}
+
+.sell-product-skeleton {
+  background: linear-gradient(90deg, var(--ct-tertiary-bg) 25%, var(--ct-secondary-bg) 50%, var(--ct-tertiary-bg) 75%);
+  background-size: 200% 100%;
+  animation: sell-skeleton 1.2s infinite;
+}
+
+@keyframes sell-skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sell-product-skeleton {
+    animation: none;
+  }
+}
+
+.sell-empty {
+  text-align: center;
+  padding: 2rem 0.5rem;
+}
+
+.sell-empty i {
+  font-size: 2.2rem;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.sell-line {
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.sell-line-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sell-stepper {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.sell-stepper .btn {
+  min-width: var(--ta-touch);
+  min-height: var(--ta-touch);
+}
+
+.sell-stepper .form-control {
+  width: 4rem;
+  border-radius: 0;
+}
+
+.sell-details {
+  padding: 0.75rem;
+  border-radius: var(--ta-radius-sm);
+  background: var(--ct-tertiary-bg);
+}
+
+.sell-totals {
+  border-top: 2px solid var(--ct-border-color);
+  padding-top: 0.6rem;
+}
+
+.sell-total {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.sell-kbd {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+@media (hover: none) {
+  .sell-kbd {
+    display: none;
+  }
+}
+
+.sell-phone-bar {
+  position: fixed;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 1010;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: var(--ta-radius-lg);
+  background: var(--ta-surface);
+  box-shadow: 0 8px 24px rgba(20, 32, 27, 0.2);
+}
+
+@media (max-width: 767.98px) {
+  /* Above the tab bar. */
+  .sell-phone-bar {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 991.98px) {
+  /* Room for the phone bar so the last products are not hidden behind it. */
+  .sell-page {
+    padding-bottom: 90px;
+  }
+}
+
+.sell-sheet.offcanvas-bottom {
+  height: auto;
+  max-height: 88vh;
+  border-top-left-radius: var(--ta-radius-lg);
+  border-top-right-radius: var(--ta-radius-lg);
+}

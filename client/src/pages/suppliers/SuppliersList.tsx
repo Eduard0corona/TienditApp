@@ -56,15 +56,17 @@ export default function SuppliersList() {
   const [editing, setEditing] = useState<SupplierDto | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SupplierFormState>(buildEmptyForm());
+  const [search, setSearch] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: { isActive?: boolean; pageNumber: number; pageSize: number } = {
+      const params: { isActive?: boolean; search?: string; pageNumber: number; pageSize: number } = {
         pageNumber,
         pageSize,
       };
       if (activeFilter !== '') params.isActive = activeFilter === 'true';
+      if (search) params.search = search;
       const response = await suppliersApi.getAll(params);
       setData(response.data);
     } catch (err: unknown) {
@@ -72,7 +74,7 @@ export default function SuppliersList() {
     } finally {
       setLoading(false);
     }
-  }, [activeFilter, pageNumber, pageSize]);
+  }, [activeFilter, pageNumber, pageSize, search]);
 
   useEffect(() => {
     loadData();
@@ -193,12 +195,7 @@ export default function SuppliersList() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay proveedores registrados."
-            searchFilter={(item, search) =>
-              item.name.toLowerCase().includes(search) ||
-              (item.contactName || '').toLowerCase().includes(search) ||
-              (item.phone || '').toLowerCase().includes(search) ||
-              (item.email || '').toLowerCase().includes(search)
-            }
+            searchPlaceholder="Nombre, contacto, teléfono o correo"
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,
@@ -206,6 +203,10 @@ export default function SuppliersList() {
               onPageChange: setPageNumber,
               onPageSizeChange: (size) => {
                 setPageSize(size);
+                setPageNumber(1);
+              },
+              onSearchChange: (term) => {
+                setSearch(term);
                 setPageNumber(1);
               },
             }}

@@ -6,6 +6,7 @@ import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { ProductDto, CategoryDto, PaginatedList } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const COLUMNS = [
   { header: 'Imagen', width: 60 },
@@ -19,6 +20,7 @@ const COLUMNS = [
 ];
 
 export default function ProductsList() {
+  const { confirm } = useConfirm();
   const [data, setData] = useState<PaginatedList<ProductDto>>({
     items: [],
     pageNumber: 1,
@@ -28,6 +30,7 @@ export default function ProductsList() {
     hasNextPage: false,
   });
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -52,6 +55,7 @@ export default function ProductsList() {
     try {
       const params: Record<string, unknown> = { pageNumber, pageSize };
       params.itemType = 'Product';
+      if (search) params.search = search;
       if (filterCategory) params.categoryId = filterCategory;
       if (filterAvailability) params.isAvailable = filterAvailability === 'true';
       const { data } = await productsApi.getAll(params as Parameters<typeof productsApi.getAll>[0]);
@@ -61,7 +65,7 @@ export default function ProductsList() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, filterCategory, filterAvailability]);
+  }, [pageNumber, pageSize, filterCategory, filterAvailability, search]);
 
   useEffect(() => {
     loadCategories();
@@ -81,7 +85,14 @@ export default function ProductsList() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Deseas eliminar este producto?')) return;
+    const product = data.items.find((item) => item.id === id);
+    const accepted = await confirm({
+      title: 'Eliminar producto',
+      message: `Se eliminará ${product ? `“${product.name}”` : 'el producto'} del catálogo. Las ventas anteriores no cambian.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!accepted) return;
     try {
       await productsApi.delete(id);
       await loadProducts();
@@ -157,10 +168,7 @@ export default function ProductsList() {
                 keyExtractor={(p) => p.id}
                 loading={loading}
                 emptyMessage="No hay productos registrados."
-                searchFilter={(p, search) =>
-                  p.name.toLowerCase().includes(search) ||
-                  (p.sku || '').toLowerCase().includes(search)
-                }
+                searchPlaceholder="Nombre, SKU o código de barras"
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -168,6 +176,10 @@ export default function ProductsList() {
                   onPageChange: setPageNumber,
                   onPageSizeChange: (size) => {
                     setPageSize(size);
+                    setPageNumber(1);
+                  },
+                  onSearchChange: (term) => {
+                    setSearch(term);
                     setPageNumber(1);
                   },
                 }}

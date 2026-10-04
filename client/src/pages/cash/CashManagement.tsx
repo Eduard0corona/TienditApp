@@ -16,6 +16,7 @@ import { CashTransactionType as CashTransactionTypeConst } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const EMPTY_PAGINATED = {
   items: [],
@@ -62,6 +63,7 @@ const transactionTypeLabel = (type: CashTransactionType) => {
 };
 
 export default function CashManagement() {
+  const { confirm } = useConfirm();
   const today = getTodayInputDate();
   const [session, setSession] = useState<CashSessionDto | null>(null);
   const [transactions, setTransactions] = useState<PaginatedList<CashTransactionDto>>(EMPTY_PAGINATED);
@@ -187,12 +189,21 @@ export default function CashManagement() {
       return;
     }
     const difference = amount - session.expectedBalance;
-    const confirmed = window.confirm(
-      `Esperado: ${formatMoney(session.expectedBalance)}\n` +
-      `Contado: ${formatMoney(amount)}\n` +
-      `Diferencia: ${formatMoney(difference)}\n\n` +
-      '¿Cerrar la caja? Esta acción no se puede deshacer.',
-    );
+    const confirmed = await confirm({
+      title: 'Cerrar la caja',
+      message: (
+        <>
+          <div className="d-flex justify-content-between"><span>Esperado</span><strong>{formatMoney(session.expectedBalance)}</strong></div>
+          <div className="d-flex justify-content-between"><span>Contado</span><strong>{formatMoney(amount)}</strong></div>
+          <div className={`d-flex justify-content-between ${difference === 0 ? '' : 'text-danger'}`}>
+            <span>Diferencia</span><strong>{formatSignedMoney(difference)}</strong>
+          </div>
+          <p className="text-muted small mt-2 mb-0">El cierre no se puede deshacer.</p>
+        </>
+      ),
+      confirmLabel: 'Cerrar caja',
+      danger: difference !== 0,
+    });
     if (!confirmed) return;
 
     setSubmitting(true);

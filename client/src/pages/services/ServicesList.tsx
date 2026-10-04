@@ -13,6 +13,10 @@ import type {
   UnitType,
 } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useTenant } from '../../hooks/useTenant';
+import { formatMoney } from '../../utils/money';
+import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface ServiceFormData {
   categoryId: string;
@@ -27,6 +31,7 @@ interface ServiceFormData {
   sortOrder: number;
   isTrackable: boolean;
   notifyCustomer: boolean;
+  vatOption: VatOption;
 }
 
 const COLUMNS = [
@@ -55,6 +60,8 @@ const UNIT_OPTIONS: Array<{ value: UnitType; label: string }> = [
 ];
 
 export default function ServicesList() {
+  const { tenant } = useTenant();
+  const { confirm } = useConfirm();
   const [data, setData] = useState<PaginatedList<ProductDto>>({
     items: [],
     pageNumber: 1,
@@ -64,6 +71,7 @@ export default function ServicesList() {
     hasNextPage: false,
   });
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -123,6 +131,7 @@ export default function ServicesList() {
     try {
       const params: Record<string, unknown> = {
         itemType: 'Service',
+        search: search || undefined,
         pageNumber,
         pageSize,
       };
@@ -139,7 +148,7 @@ export default function ServicesList() {
     } finally {
       setLoading(false);
     }
-  }, [filterAvailability, filterCategory, pageNumber, pageSize]);
+  }, [filterAvailability, filterCategory, pageNumber, pageSize, search]);
 
   useEffect(() => {
     loadCategories();
@@ -164,6 +173,7 @@ export default function ServicesList() {
       sortOrder: 0,
       isTrackable: false,
       notifyCustomer: false,
+      vatOption: '',
     });
     setShowModal(true);
   };
@@ -183,6 +193,7 @@ export default function ServicesList() {
       sortOrder: service.sortOrder,
       isTrackable: service.isTrackable ?? false,
       notifyCustomer: service.notifyCustomer ?? false,
+      vatOption: toVatOption(service),
     });
     setShowModal(true);
   };
@@ -211,6 +222,8 @@ export default function ServicesList() {
       availableToTime: form.availableToTime ? `${form.availableToTime}:00` : undefined,
       isTrackable: form.isTrackable,
       notifyCustomer: form.notifyCustomer,
+      // Sent every time: an update without it would reset the service to the business rate.
+      ...fromVatOption(form.vatOption),
     };
 
     try {
@@ -229,7 +242,14 @@ export default function ServicesList() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Deseas eliminar este servicio?')) return;
+    const service = data.items.find((item) => item.id === id);
+    const accepted = await confirm({
+      title: 'Eliminar servicio',
+      message: `Se eliminará ${service ? `“${service.name}”` : 'el servicio'} del catálogo.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!accepted) return;
 
     try {
       await productsApi.delete(id);
@@ -311,10 +331,7 @@ export default function ServicesList() {
                 keyExtractor={(service) => service.id}
                 loading={loading}
                 emptyMessage="No hay servicios registrados."
-                searchFilter={(service, search) =>
-                  service.name.toLowerCase().includes(search) ||
-                  (service.description || '').toLowerCase().includes(search)
-                }
+                searchPlaceholder="Nombre del servicio"
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -324,13 +341,17 @@ export default function ServicesList() {
                     setPageSize(size);
                     setPageNumber(1);
                   },
+                  onSearchChange: (term) => {
+                    setSearch(term);
+                    setPageNumber(1);
+                  },
                 }}
                 renderRow={(service) => (
                   <>
                     <td className="fw-semibold">{service.name}</td>
                     <td>{categoryMap.get(service.categoryId) || '-'}</td>
                     <td className="text-end">
-                      ${service.priceAmount.toFixed(2)} {service.priceCurrency}
+                      {formatMoney(service.priceAmount)}
                     </td>
                     <td className="text-center">{UNIT_LABELS[service.unit ?? 52] || '-'}</td>
                     <td className="text-center">
@@ -450,6 +471,15 @@ export default function ServicesList() {
                   <option value="MXN">MXN</option>
                   <option value="USD">USD</option>
                 </select>
+              </div>
+              <div className="col-12 mb-3">
+                <label className="form-label" htmlFor="service-vat">IVA</label>
+                <select id="service-vat" className="form-select" {...register('vatOption')}>
+                  {getVatOptions(tenant?.defaultTaxRate ?? 16).map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <div className="form-text">Algunos servicios están exentos (por ejemplo, consultas médicas).</div>
               </div>
             </div>
 

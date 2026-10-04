@@ -4,6 +4,7 @@ import { aiAgentsApi } from '../../api/aiAgentsApi';
 import type { AiAgentDto, CreateAiAgentRequest, UpdateAiAgentRequest } from '../../types';
 import { tenantApi } from '../../api/tenantApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
 
 type AgentTab = 'General' | 'Mensajes' | 'Captura de Datos' | 'Configuracion IA';
 
@@ -57,6 +58,7 @@ const toUpdateRequest = (agent: AiAgentDto): UpdateAiAgentRequest => ({
 });
 
 export default function AiAgentSettings() {
+  const { confirm } = useConfirm();
   const [agents, setAgents] = useState<AiAgentDto[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<AgentTab>('General');
@@ -121,9 +123,9 @@ export default function AiAgentSettings() {
       setAgents((current) => [...current, data].sort((a, b) => a.name.localeCompare(b.name)));
       setSelectedAgentId(data.id);
       setActiveTab('General');
-      setFeedback({ type: 'success', text: 'Agente IA creado correctamente.' });
+      setFeedback({ type: 'success', text: 'Respuestas automáticas creadas.' });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo crear el agente IA.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudieron crear las respuestas automáticas.') });
     } finally {
       setCreating(false);
     }
@@ -131,7 +133,13 @@ export default function AiAgentSettings() {
 
   const deleteAgent = async () => {
     if (!selectedAgent) return;
-    if (!window.confirm(`Deseas eliminar el agente "${selectedAgent.name}"?`)) return;
+    const accepted = await confirm({
+      title: 'Eliminar respuestas automáticas',
+      message: `Se eliminará “${selectedAgent.name}” y dejará de contestar mensajes.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!accepted) return;
 
     setDeleting(true);
     setFeedback(null);
@@ -145,7 +153,7 @@ export default function AiAgentSettings() {
 
       setFeedback({ type: 'success', text: 'Agente eliminado correctamente.' });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo eliminar el agente IA.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudieron eliminar las respuestas automáticas.') });
     } finally {
       setDeleting(false);
     }
@@ -172,7 +180,7 @@ export default function AiAgentSettings() {
       setAgents((current) => current.map((agent) => (agent.id === data.id ? data : agent)));
       setFeedback({ type: 'success', text: 'Configuracion del agente guardada correctamente.' });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo guardar el agente IA.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudieron guardar las respuestas automáticas.') });
     } finally {
       setSaving(false);
     }
@@ -206,7 +214,7 @@ export default function AiAgentSettings() {
   if (loading) {
     return (
       <>
-        <PageTitle title="Agente IA" subtitle="Administracion" />
+        <PageTitle title="Respuestas automáticas" subtitle="Configuración" />
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Cargando...</span>
@@ -218,7 +226,7 @@ export default function AiAgentSettings() {
 
   return (
     <>
-      <PageTitle title="Agente IA" subtitle="Administracion" />
+      <PageTitle title="Respuestas automáticas" subtitle="Configuración" />
 
       {feedback && (
         <div className={`alert alert-${feedback.type} alert-dismissible fade show`}>

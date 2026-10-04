@@ -93,7 +93,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
 export function getLandingPath(user: UserProfileDto | null, capabilities: number | null): string {
   const access = getAccess(user, capabilities);
   if (access.isAdmin && access.dashboard) return '/dashboard';
-  if (access.sell) return '/orders/cart';
+  if (access.sell) return '/sell';
   if (access.kitchen) return '/kitchen';
   if (access.serviceBoard) return '/services/board';
   if (access.orders) return '/orders';

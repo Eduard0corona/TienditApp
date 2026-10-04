@@ -10,6 +10,7 @@ import type {
   CreateCategoryRequest,
 } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const COLUMNS = [
   { header: 'Nombre' },
@@ -20,6 +21,7 @@ const COLUMNS = [
 ];
 
 export default function CategoriesList() {
+  const { confirm } = useConfirm();
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -138,7 +140,14 @@ export default function CategoriesList() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Deseas eliminar esta categoría?')) return;
+    const category = categories.find((item) => item.id === id);
+    const accepted = await confirm({
+      title: 'Eliminar categoría',
+      message: `Se eliminará ${category ? `“${category.name}”` : 'la categoría'}.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (!accepted) return;
     try {
       await categoriesApi.delete(id);
       await loadCategories();
