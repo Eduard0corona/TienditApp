@@ -9,14 +9,22 @@ import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
 import BranchPicker from '../../components/branches/BranchPicker';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
+import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import SaleTicket from '../../components/sales/SaleTicket';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { usePendingSales } from '../../hooks/usePendingSales';
 import { useWorkingBranch } from '../../hooks/useWorkingBranch';
+import { loadCatalogSnapshot, saveCatalogSnapshot } from '../../offline/catalogCache';
+import { buildOfflineTicketOrder } from '../../offline/offlineTicket';
+import { enqueueSale, isNetworkError } from '../../offline/saleQueue';
+import { newUuid } from '../../utils/uuid';
 import type { CategoryDto, CreateOrderRequest, OrderDto, ProductDto } from '../../types';
 import { BusinessType, OrderChannel, OrderType, TenantCapability, UnitType } from '../../types';
 import { getAccess } from '../../utils/access';
+import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
@@ -45,6 +53,8 @@ const MAX_QUANTITY_PER_LINE = 10_000;
 const MAX_LINES = 200;
 // The largest page the API serves; a bigger catalog is searched on the server.
 const CATALOG_PAGE_SIZE = 500;
+// How often Vender tries to replace the catalog saved on the device while the server does not answer.
+const CATALOG_RETRY_MS = 60_000;
 
 interface CartLine {
   /** Product plus its options: the same product with other options is another line. */
@@ -114,6 +124,8 @@ interface CompletedSale {
   cashReceived: number;
   /** Saved without charging (a WhatsApp order paid on delivery). */
   unpaid?: boolean;
+  /** Charged without connection: kept on the device until it reaches the server. */
+  offline?: boolean;
 }
 
 /** The chat a sale was started from (Vender opened with ?phone=&name=&conversation=). */
@@ -161,6 +173,7 @@ export default function SellPage() {
   const defaultTaxRate = tenant?.defaultTaxRate ?? 16;
   const isFood = tenant?.businessType === BusinessType.Food;
   const canReceiveServices = hasCapability(capabilities, TenantCapability.Service);
+  const hasKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
 
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -182,6 +195,13 @@ export default function SellPage() {
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
   const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
+  const online = useOnlineStatus();
+  const pendingSales = usePendingSales();
+  const [showPendingSales, setShowPendingSales] = useState(false);
+  // When the catalog on screen is the one saved on the device (the connection dropped while loading).
+  const [offlineCatalogAt, setOfflineCatalogAt] = useState<string | null>(null);
+  // Key of the sale being charged: kept across retries until it is recorded, so a retry never charges twice.
+  const saleKey = useRef<string | null>(null);
   const workingBranch = useWorkingBranch();
   // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
   const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
@@ -227,14 +247,27 @@ export default function SellPage() {
   const loadCatalog = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const [productsResponse, categoriesResponse] = await Promise.all([
-        productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, pageNumber: 1, pageSize: CATALOG_PAGE_SIZE }),
-        categoriesApi.getAll(),
-      ]);
-      const loaded = productsResponse.data.items;
+      let loaded: ProductDto[];
+      try {
+        const [productsResponse, categoriesResponse] = await Promise.all([
+          productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, pageNumber: 1, pageSize: CATALOG_PAGE_SIZE }),
+          categoriesApi.getAll(),
+        ]);
+        loaded = productsResponse.data.items;
+        setCategories(categoriesResponse.data);
+        setCatalogTruncated(productsResponse.data.totalCount > loaded.length);
+        setOfflineCatalogAt(null);
+        void saveCatalogSnapshot(tenantId, loaded, categoriesResponse.data);
+      } catch (err: unknown) {
+        // Without connection, keep selling with the catalog this device saved the last time.
+        const snapshot = isNetworkError(err) ? await loadCatalogSnapshot(tenantId) : null;
+        if (!snapshot) throw err;
+        loaded = snapshot.products;
+        setCategories(snapshot.categories);
+        setCatalogTruncated(false);
+        setOfflineCatalogAt(snapshot.savedAt);
+      }
       setProducts(loaded);
-      setCategories(categoriesResponse.data);
-      setCatalogTruncated(productsResponse.data.totalCount > loaded.length);
       setLoadError('');
 
       const byId = new Map(loaded.map((product) => [product.id, product]));
@@ -298,6 +331,19 @@ export default function SellPage() {
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  // With the saved catalog on screen, or after a failed load, bring the current one (prices may have changed) when
+  // the connection comes back; the browser does not notice when only the server was unreachable, so retry each minute.
+  useEffect(() => {
+    if (!offlineCatalogAt && !loadError) return;
+    const reload = () => void loadCatalog();
+    window.addEventListener('online', reload);
+    const timer = offlineCatalogAt ? window.setInterval(reload, CATALOG_RETRY_MS) : undefined;
+    return () => {
+      window.removeEventListener('online', reload);
+      window.clearInterval(timer);
+    };
+  }, [offlineCatalogAt, loadError, loadCatalog]);
 
   // The customer is already in the form: a reload must not fill it again.
   useEffect(() => {
@@ -495,6 +541,7 @@ export default function SellPage() {
   };
 
   const clearSale = () => {
+    saleKey.current = null;
     setCart([]);
     setCustomerName('');
     setCustomerPhone('');
@@ -588,6 +635,39 @@ export default function SellPage() {
     branchId: saleBranchId,
   });
 
+  /** Keeps a charged sale on the device when the connection is down; it is sent with its key when it comes back. */
+  const queueOfflineSale = async (request: CreateOrderRequest, charge: ChargeResult) => {
+    if (!tenantId || !user) return false;
+    const capturedAt = new Date().toISOString();
+    try {
+      const pending = await enqueueSale({
+        id: request.idempotencyKey ?? newUuid(),
+        tenantId,
+        userId: user.id,
+        request: { ...request, idempotencyKey: undefined },
+        total: totals.total,
+        capturedAt,
+      });
+      const order = buildOfflineTicketOrder({
+        folio: pending.folio,
+        capturedAt,
+        lines: cart,
+        totals,
+        pricesIncludeTax,
+        payments: charge.payments.map((payment) => ({ amount: payment.amount, method: payment.method, reference: payment.reference })),
+        customerName: request.customerName,
+        tableNumber: request.tableNumber,
+      });
+      clearSale();
+      setChargeOpen(false);
+      setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived, offline: true });
+      return true;
+    } catch {
+      // No IndexedDB on this device (private window): the sale needs the connection.
+      return false;
+    }
+  };
+
   const submitSale = async (charge: ChargeResult | null) => {
     if (!validateSale()) {
       setChargeOpen(false);
@@ -595,17 +675,26 @@ export default function SellPage() {
     }
     setSubmitting(true);
     setSaleError('');
+    // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid or a service
+    // (its pieces are picked up with the server's folio) need the server.
+    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices;
+    const request: CreateOrderRequest = {
+      ...buildOrderRequest(),
+      // The same key on a retry returns this sale instead of charging twice.
+      idempotencyKey: (saleKey.current ??= newUuid()),
+      payments: charge?.payments.map((payment) => ({
+        amount: payment.amount,
+        method: payment.method,
+        reference: payment.reference,
+        evidenceUrl: payment.evidenceUrl,
+      })),
+    };
+    if (canQueue && !navigator.onLine && await queueOfflineSale(request, charge)) {
+      setSubmitting(false);
+      return;
+    }
     try {
-      const request = buildOrderRequest();
-      const { data: order } = await ordersApi.create({
-        ...request,
-        payments: charge?.payments.map((payment) => ({
-          amount: payment.amount,
-          method: payment.method,
-          reference: payment.reference,
-          evidenceUrl: payment.evidenceUrl,
-        })),
-      });
+      const { data: order } = await ordersApi.create(request);
       clearSale();
       setChargeOpen(false);
       if (charge) {
@@ -617,6 +706,7 @@ export default function SellPage() {
         toast.success(`Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`);
       }
     } catch (err: unknown) {
+      if (canQueue && isNetworkError(err) && await queueOfflineSale(request, charge)) return;
       const message = getApiErrorMessage(err, 'No se pudo registrar la venta.');
       setSaleError(message);
       if (!charge) toast.error(message);
@@ -684,6 +774,7 @@ export default function SellPage() {
     businessName,
     change: completedSale.change,
     cashReceived: completedSale.cashReceived,
+    provisional: completedSale.offline,
   }) : '';
 
   const cartPanel = (
@@ -926,6 +1017,18 @@ export default function SellPage() {
       <div className="sell-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h1 className="h3 mb-0">Vender</h1>
         <div className="d-flex flex-wrap align-items-center gap-2">
+          {!online && (
+            <span className="badge text-bg-warning" role="status">
+              <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>Sin conexión
+            </span>
+          )}
+          {pendingSales.sales.length > 0 && (
+            <button type="button" className={`btn btn-sm ${pendingSales.failedCount > 0 ? 'btn-danger' : 'btn-warning'}`}
+              onClick={() => setShowPendingSales(true)}>
+              <i className="ri-upload-cloud-2-line me-1" aria-hidden="true"></i>
+              {pendingSales.sales.length} {pendingSales.sales.length === 1 ? 'venta sin enviar' : 'ventas sin enviar'}
+            </button>
+          )}
           {workingBranch.hasSeveral && (drawerBranch ? (
             <span className="badge text-bg-light border" title="Las ventas se registran en la sucursal de tu caja abierta">
               <i className="ri-store-3-line me-1" aria-hidden="true"></i>{drawerBranch.name} · tu caja
@@ -950,6 +1053,14 @@ export default function SellPage() {
           )}
         </div>
       </div>
+
+      {offlineCatalogAt && (
+        <div className="alert alert-warning mt-3 mb-0" role="status">
+          <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
+          Sin conexión: vendes con el catálogo guardado ({formatDateTime(offlineCatalogAt)}). Las ventas cobradas se guardan
+          en este dispositivo y se envían solas al volver la conexión.
+        </div>
+      )}
 
       {cashClosed && (
         <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-0" role="status">
@@ -1263,18 +1374,30 @@ export default function SellPage() {
         </Modal.Body>
       </Modal>
 
+      {showPendingSales && <PendingSalesModal onClose={() => setShowPendingSales(false)} />}
+
       <Modal show={!!completedSale} onHide={startNewSale} centered fullscreen="sm-down">
         <Modal.Header closeButton>
           <Modal.Title as="h2" className="h5">
             <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
-            {completedSale?.unpaid
-              ? `Pedido ${completedSale.order.orderNumber} guardado`
-              : `Venta ${completedSale?.order.orderNumber} cobrada`}
+            {completedSale?.offline
+              ? `Venta ${completedSale.order.orderNumber} guardada sin conexión`
+              : completedSale?.unpaid
+                ? `Pedido ${completedSale.order.orderNumber} guardado`
+                : `Venta ${completedSale?.order.orderNumber} cobrada`}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {completedSale && (
             <>
+              {completedSale.offline && (
+                <div className="alert alert-warning small" role="status">
+                  <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
+                  Sin conexión: la venta quedó guardada en este dispositivo y se envía sola cuando vuelva. Su folio definitivo
+                  aparecerá en Pedidos.
+                  {hasKitchen && ' La cocina no la verá hasta que se envíe: avísale o entrégale el ticket impreso.'}
+                </div>
+              )}
               {completedSale.change > 0 && (
                 <div className="charge-change has-change mb-3" aria-live="polite">
                   <span>Cambio</span>
@@ -1286,6 +1409,7 @@ export default function SellPage() {
                 businessName={businessName}
                 change={completedSale.change}
                 cashReceived={completedSale.cashReceived}
+                provisional={completedSale.offline}
               />
             </>
           )}

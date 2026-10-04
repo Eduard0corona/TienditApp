@@ -10642,6 +10642,16 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "capturedOfflineAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -13497,6 +13507,11 @@
           "branchId": {
             "type": "string",
             "format": "uuid",
+            "nullable": true
+          },
+          "capturedOfflineAt": {
+            "type": "string",
+            "format": "date-time",
             "nullable": true
           },
           "subTotal": {

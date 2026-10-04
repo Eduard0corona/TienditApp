@@ -121,6 +121,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => new { o.TenantId, o.OrderNumber }).IsUnique();
         builder.HasIndex(o => new { o.TenantId, o.CustomerUserId });
         builder.HasIndex(o => new { o.TenantId, o.TemporaryCustomerId });
+        // A device's key identifies one sale per business: retries return it instead of creating another.
+        builder.HasIndex(o => new { o.TenantId, o.ClientRequestId })
+            .IsUnique()
+            .HasFilter("[ClientRequestId] IS NOT NULL")
+            .HasDatabaseName("IX_Orders_TenantId_ClientRequestId");
         builder.HasIndex(o => new { o.TenantId, o.OpenTableId })
             .IsUnique()
             .HasFilter("[OpenTableId] IS NOT NULL")

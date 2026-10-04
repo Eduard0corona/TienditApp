@@ -24,6 +24,8 @@ public class OrderDto
     public OrderChannel Channel { get; set; }
     /// <summary>Branch where the sale was made.</summary>
     public Guid? BranchId { get; set; }
+    /// <summary>When the device captured it without connection; the sale reached the server later.</summary>
+    public DateTimeOffset? CapturedOfflineAt { get; set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; set; }
     public decimal Tax { get; set; }

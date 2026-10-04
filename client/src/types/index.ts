@@ -1545,6 +1545,8 @@ export interface OrderDto {
   isOpenTab?: boolean;
   diningTableId?: string | null;
   kitchenTickets?: KitchenTicketSummaryDto[];
+  /** When the device captured it without connection; it reached the server later. */
+  capturedOfflineAt?: string | null;
 }
 
 export interface OrderRefundDto {
@@ -1639,6 +1641,10 @@ export interface CreateOrderRequest {
   diningTableId?: string;
   /** Branch where the sale is made; the cashier's drawer branch or the default one when omitted. */
   branchId?: string;
+  /** Key of this sale on the device: sending it again returns the same sale instead of charging twice. */
+  idempotencyKey?: string;
+  /** When the device captured it without connection. */
+  capturedOfflineAt?: string;
 }
 
 export interface CreateOrderPaymentRequest {

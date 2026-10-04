@@ -13,6 +13,8 @@ public static class OrderLimits
     public const int MaxQuantityPerLine = 10_000;
     public const int MaxServicePiecesPerOrder = 500;
     public const int MaxPaymentsPerSale = 10;
+    /// <summary>A sale captured without connection must reach the server within these days.</summary>
+    public const int MaxOfflineSaleAgeDays = 7;
 
     /// <summary>
     /// Adds the line quantity to the running total of the product and returns an error when the

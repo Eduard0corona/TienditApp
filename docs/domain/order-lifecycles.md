@@ -131,6 +131,16 @@ stateDiagram-v2
 - Cada línea guarda una copia de lo elegido (`OrderItemOption`: grupo, opción y precio). Editar el producto conserva el id de grupos y opciones que siguen existiendo; los quitados no alteran ventas pasadas.
 - Ticket, cocina, cuenta y CFDI muestran las opciones ("Latte (Grande, Almendra)"). Las recetas de inventario son del producto; las opciones aún no consumen insumos propios.
 
+## Ventas sin conexión (Fase 3)
+
+- Cada venta de Vender lleva una clave generada en el dispositivo (`CreateOrderCommand.IdempotencyKey`, guardada como `Order.ClientRequestId` con índice único filtrado por tenant). Repetir la petición con la misma clave (un reintento tras un timeout o una venta enviada al volver la conexión) devuelve la venta ya creada en vez de cobrar dos veces; si dos peticiones con la misma clave llegan a la vez, el índice deja guardar una y la otra devuelve esa.
+- Sin conexión, una venta de mostrador cobrada en ese momento se guarda en el dispositivo (IndexedDB `tienditapp-offline`, por negocio y cajero) con un folio provisional (`SC-0001`) y el ticket lo indica. No se guardan sin conexión las rondas de mesa, los pedidos del chat, las ventas sin cobrar ni las de servicios (su folio se usa para recoger las piezas).
+- Al volver la conexión (evento del navegador, al abrir la app y cada 30 segundos mientras haya pendientes) se envían en orden, cada una con su clave y la hora de captura (`CapturedOfflineAt`). Solo las envía el cajero que las cobró, en el negocio donde las cobró: los pagos entran a su caja abierta en ese momento.
+- El servidor vuelve a calcular cada venta con las reglas de siempre: rechaza la que tenga un total distinto (un precio cambió), un producto que ya no se vende o que se capturó hace más de 7 días (o más de 5 minutos en el futuro, por el reloj del dispositivo). La venta rechazada queda en el dispositivo como "No aceptada" con el motivo, para reintentarla o descartarla (con confirmación) y registrarla de nuevo. Sin red, con la sesión vencida (401), con demasiadas peticiones o con el servidor caído (502-504) el envío espera al siguiente intento; un error propio del servidor (500) se reintenta hasta 10 veces antes de marcarla como no aceptada.
+- `Order.CapturedOfflineAt` guarda la hora del dispositivo como dato de auditoría; la venta y sus pagos llevan la hora del servidor (los cortes y los reportes cuentan por la hora de registro).
+- Vender guarda el último catálogo cargado del negocio; si la API no responde, vende con él y lo avisa, y lo reemplaza al volver la conexión (o cada minuto mientras el servidor no responda).
+- Límites: recargar la página o iniciar sesión sin conexión no funciona (no hay service worker y el token vive en memoria); la cocina no ve la venta hasta que se envía; cerrar sesión con ventas pendientes pide confirmación y se envían cuando ese usuario vuelve a entrar en ese dispositivo.
+
 ## Deuda e inconsistencias
 
 - Las máquinas permiten saltos amplios (por ejemplo Pending a Delivered/Completed). Se documentan porque existen, no como flujo operativo ideal.

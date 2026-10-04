@@ -102,7 +102,7 @@ Pendientes detectados en la Fase 1:
 
 - El efectivo recibido y el cambio no se guardan en la venta (solo salen en el ticket).
 - No hay staging: la decisión fue publicar solo desde `master` sin slot de prueba.
-- Una venta sin conexión no se puede registrar; Vender solo conserva el borrador.
+- Una venta sin conexión no se puede registrar; Vender solo conserva el borrador. (Resuelto en la Fase 3 para ventas de mostrador cobradas; ver [ventas sin conexión](../domain/order-lifecycles.md#ventas-sin-conexión-fase-3).)
 
 ## Resuelto el 2026-10-04 (Fase 2: operación confiable)
 

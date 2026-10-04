@@ -7,6 +7,7 @@ import BottomTabBar from './BottomTabBar';
 import GlobalSearch from './GlobalSearch';
 import PastDueBanner from './PastDueBanner';
 import SuspendedNotice from './SuspendedNotice';
+import PendingSalesSync from '../sales/PendingSalesSync';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
@@ -136,6 +137,8 @@ export default function Layout() {
       </div>
       <BottomTabBar onOpenMenu={toggleSidebar} isMenuOpen={isMobileMenuOpen} />
       <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
+      {/* Sales charged without connection are sent from any screen once it comes back. */}
+      {canSell && !isSuspended && <PendingSalesSync />}
     </div>
   );
 }

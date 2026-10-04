@@ -10,6 +10,8 @@ export interface TicketExtras {
   /** Cash handed over and change, known only at the counter right after charging. */
   cashReceived?: number;
   change?: number;
+  /** Charged without connection: the folio is the device's until the server gives the real one. */
+  provisional?: boolean;
 }
 
 /** "2 ×" for pieces, "1.255 kg" for what is weighed or measured. */
@@ -32,6 +34,7 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
   const lines: string[] = [
     `*${extras.businessName}*`,
     `Ticket ${order.orderNumber} · ${formatTicketDate(order.createdAt)}`,
+    ...(extras.provisional ? ['_Folio provisional: venta registrada sin conexión._'] : []),
     '',
     ...order.items.map((item) => {
       const note = item.notes ? `\n   _${item.notes}_` : '';

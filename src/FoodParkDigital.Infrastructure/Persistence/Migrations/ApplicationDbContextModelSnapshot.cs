@@ -2202,8 +2202,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<DateTimeOffset?>("CapturedOfflineAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<int>("Channel")
                         .HasColumnType("int");
+
+                    b.Property<Guid?>("ClientRequestId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -2308,6 +2314,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("OpenTableId");
 
                     b.HasIndex("TemporaryCustomerId");
+
+                    b.HasIndex("TenantId", "ClientRequestId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Orders_TenantId_ClientRequestId")
+                        .HasFilter("[ClientRequestId] IS NOT NULL");
 
                     b.HasIndex("TenantId", "CreatedAt")
                         .IsDescending(false, true);

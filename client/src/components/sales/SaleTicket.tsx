@@ -9,7 +9,7 @@ interface SaleTicketProps extends TicketExtras {
 }
 
 /** Customer ticket: what was bought, the IVA breakdown computed by the server and how it was paid. */
-export default function SaleTicket({ order, businessName, cashReceived, change }: SaleTicketProps) {
+export default function SaleTicket({ order, businessName, cashReceived, change, provisional }: SaleTicketProps) {
   const taxLines = order.taxBreakdown.filter((line) => line.taxAmount > 0);
   const showCustomer = order.customerName && order.customerName !== 'Público en general';
 
@@ -18,6 +18,7 @@ export default function SaleTicket({ order, businessName, cashReceived, change }
       <div className="text-center mb-2">
         <div className="ta-ticket-business">{businessName}</div>
         <div className="small">Ticket {order.orderNumber}</div>
+        {provisional && <div className="small">Folio provisional: venta registrada sin conexión</div>}
         <div className="small">{formatTicketDate(order.createdAt)}</div>
         {order.tableNumber && <div className="small">Mesa/Ref.: {order.tableNumber}</div>}
         {showCustomer && <div className="small">Cliente: {order.customerName}</div>}

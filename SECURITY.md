@@ -34,6 +34,10 @@ La política actual de contraseñas exige mayúscula, minúscula, dígito y long
 
 El alta de usuarios por API está acotada por caso de uso: `register/business` solo crea `TENANT_ADMIN`, `register/customer` solo `CUSTOMER` y `/api/v1/employees` limita el rol de aplicación a `TenantAdmin`, `Staff` o `Kitchen`. Se eliminó `POST /api/v1/auth/register`, que aceptaba cualquier `UserRole` (incluido `SuperAdmin`) de un `TENANT_ADMIN`. No existe camino de API para crear o promover `SUPER_ADMIN`; solo lo crea el seed de Development. `UserRole.SuperAdmin` vale `0`, el valor por defecto del enum y de `ApplicationUser.Role`, así que un rol omitido equivale al privilegio máximo: todo request que reciba `UserRole` debe rechazar `SuperAdmin` en su validador, y `RoleAssignmentGuardTests` lo verifica.
 
+### Datos en el dispositivo
+
+Vender guarda en el navegador (IndexedDB `tienditapp-offline`) el último catálogo del negocio y las ventas cobradas sin conexión hasta que el servidor las recibe, incluidos el nombre y teléfono del cliente si se capturaron; no guarda tokens. Cada venta pendiente queda ligada al negocio y al usuario que la cobró, y solo esa sesión la envía, así una venta no puede registrarse en otro negocio ni a nombre de otro cajero (el servidor además resuelve productos y sucursal con el filtro del tenant de la sesión). Cerrar sesión no borra las pendientes para no perder cobros: en un equipo compartido conviene enviarlas o descartarlas antes. La clave de idempotencia es un UUID aleatorio por venta y el índice único es por tenant.
+
 ### CORS y rate limiting
 
 CORS usa la allowlist `Cors:AllowedOrigins` por entorno (vacía por defecto; `http://localhost:5173` en Development). Un origen fuera de la lista no recibe cabeceras CORS. La API agrega `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` y HSTS fuera de Development.

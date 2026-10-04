@@ -88,6 +88,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// snapshots rely on it never moving.
     /// </summary>
     public Guid? BranchId { get; private set; }
+    /// <summary>
+    /// Key the device sent with the sale: a retry with the same key (a sale captured without connection and sent
+    /// later, or a request repeated after a timeout) returns this order instead of creating another one.
+    /// </summary>
+    public Guid? ClientRequestId { get; private set; }
+    /// <summary>When the device captured the sale without connection (its own clock; payments keep the server time).</summary>
+    public DateTimeOffset? CapturedOfflineAt { get; private set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }
@@ -119,6 +126,17 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public Guid? OpenTableId { get; private set; }
 
     public bool IsOpenTab => IsTab && !IsClosedStatus(Status);
+
+    /// <summary>Records the device's key of the sale (once) and, for a sale captured without connection, when it was captured.</summary>
+    public void IdentifyClientRequest(Guid clientRequestId, DateTimeOffset? capturedOfflineAt)
+    {
+        if (clientRequestId == Guid.Empty)
+            throw new DomainException("La clave de la venta no es válida.");
+        if (ClientRequestId.HasValue && ClientRequestId != clientRequestId)
+            throw new DomainException("La venta ya tiene otra clave.");
+        ClientRequestId = clientRequestId;
+        CapturedOfflineAt = capturedOfflineAt;
+    }
     public int CurrentRound => _items.Count == 0 ? 0 : _items.Max(item => item.Round);
 
     /// <param name="unitPrice">Price of one unit with the chosen options.</param>

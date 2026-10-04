@@ -7587,6 +7587,10 @@ export interface components {
             diningTableId?: string | null;
             /** Format: uuid */
             branchId?: string | null;
+            /** Format: uuid */
+            idempotencyKey?: string | null;
+            /** Format: date-time */
+            capturedOfflineAt?: string | null;
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -8458,6 +8462,8 @@ export interface components {
             channel: components["schemas"]["OrderChannel"];
             /** Format: uuid */
             branchId?: string | null;
+            /** Format: date-time */
+            capturedOfflineAt?: string | null;
             /** Format: double */
             subTotal: number;
             /** Format: double */
