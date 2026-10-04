@@ -41,6 +41,25 @@ public class EmailService : IEmailService
     internal static string BuildEmailConfirmationLink(string appUrl, string userId, string token)
         => $"{appUrl.TrimEnd('/')}/confirm-email?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}";
 
+    public async Task SendTeamInvitationAsync(string email, string businessName, string invitationPath)
+    {
+        var appUrl = _configuration["AppUrl"] ?? "https://localhost:5001";
+        var link = $"{appUrl.TrimEnd('/')}{invitationPath}";
+        // The name is typed by the business: one line in the subject, encoded in the body.
+        var businessLine = businessName.ReplaceLineEndings(" ").Trim();
+        var business = System.Net.WebUtility.HtmlEncode(businessLine);
+
+        var subject = $"Te invitaron al equipo de {businessLine} - TienditApp";
+        var body = $@"
+            <h2>Te invitaron al equipo de {business}</h2>
+            <p>Elige tu contraseña con el siguiente enlace para entrar a TienditApp (vale 7 días):</p>
+            <p><a href='{link}'>Aceptar invitación</a></p>
+            <p>Si no esperabas esta invitación, puedes ignorar este mensaje.</p>
+        ";
+
+        await SendEmailAsync(email, subject, body);
+    }
+
     public async Task SendPasswordResetEmailAsync(string email, string userId, string token)
     {
         var appUrl = _configuration["AppUrl"] ?? "https://localhost:5001";

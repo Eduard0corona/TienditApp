@@ -45,25 +45,27 @@ public class SetEmployeeActiveCommandHandler : IRequestHandler<SetEmployeeActive
         if (tenantUser is null)
             return Result.Failure("Empleado no encontrado.");
 
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Id == tenantUser.UserId, cancellationToken);
+        if (user is null)
+            return Result.Failure("Empleado no encontrado.");
+
         if (request.IsActive)
         {
-            if (tenantUser.Status != TenantUserStatus.Active)
+            // A pending invitation already holds its seat; a disabled person takes one back.
+            if (tenantUser.Status == TenantUserStatus.Disabled)
             {
                 var planError = await SubscriptionRules.CheckUserLimitAsync(_context, tenantUser.TenantId, cancellationToken);
                 if (planError is not null)
                     return Result.Failure(planError);
             }
 
-            tenantUser.SetStatus(TenantUserStatus.Active);
+            // Someone who never chose a password keeps (or gets back) their invitation, not an access they cannot use.
+            tenantUser.SetStatus(user.PasswordHash is null ? TenantUserStatus.Invited : TenantUserStatus.Active);
             await _context.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }
-
-        var user = await _context.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(x => x.Id == tenantUser.UserId, cancellationToken);
-        if (user is null)
-            return Result.Failure("Empleado no encontrado.");
 
         if (!Guid.TryParse(_currentUserService.UserId, out var currentUserId))
             return Result.Failure("Usuario no válido.");

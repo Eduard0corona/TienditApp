@@ -58,6 +58,9 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
             return Result.Failure($"Error al restablecer la contraseña: {errors}");
         }
 
+        // Recuperar la contraseña también levanta un bloqueo por intentos fallidos.
+        await AccountSecurity.UnlockAsync(_userManager, user);
+
         // Revocar todos los refresh tokens por seguridad
         await _jwtTokenService.RevokeAllUserRefreshTokensAsync(user.Id);
 

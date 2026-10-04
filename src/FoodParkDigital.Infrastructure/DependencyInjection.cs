@@ -80,7 +80,7 @@ public static class DependencyInjection
         // Identity
         services.AddIdentity<ApplicationUser, ApplicationRole>(ConfigureIdentityOptions)
         .AddEntityFrameworkStores<ApplicationDbContext>()
-        .AddDefaultTokenProviders();
+        .AddTienditAppIdentityDefaults();
 
         // JWT
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()!;
@@ -206,5 +206,13 @@ public static class DependencyInjection
         options.Password.RequireUppercase = true;
         options.Password.RequireLowercase = true;
         options.User.RequireUniqueEmail = true;
+        // Per account, besides the per-IP limit of the auth endpoints: guessing a password or an SMS code from many
+        // addresses locks the account for a while. Recovering the password unlocks it.
+        options.Lockout.AllowedForNewUsers = true;
+        options.Lockout.MaxFailedAccessAttempts = MaxFailedAccessAttempts;
+        options.Lockout.DefaultLockoutTimeSpan = LockoutDuration;
     }
+
+    public const int MaxFailedAccessAttempts = 5;
+    public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 }

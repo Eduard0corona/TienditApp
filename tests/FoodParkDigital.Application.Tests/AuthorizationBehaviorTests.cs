@@ -44,10 +44,11 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal(
         [
-            "ConfirmEmailCommand", "ConfirmPhoneCommand", "ForgotPasswordCommand", "GetPublicMenuQuery", "Login2FACommand", "LoginCommand",
-            "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand", "RegisterBusinessCommand",
-            "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand", "ResetPasswordCommand",
-            "VerifyWhatsAppWebhookTokenQuery"
+            "AcceptInvitationCommand", "ChangeUnconfirmedPhoneCommand", "ConfirmEmailCommand", "ConfirmPhoneCommand",
+            "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicMenuQuery", "Login2FACommand",
+            "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand",
+            "RegisterBusinessCommand", "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand",
+            "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);
     }
 
@@ -67,6 +68,36 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal("ok", await Behavior<NeedsCash>(Staff(permissions: ["managecash"])).Handle(new NeedsCash(), Next, CancellationToken.None));
         Assert.Equal("ok", await Behavior<NeedsCash>(Staff(permissions: [], tenantRole: "OWNER")).Handle(new NeedsCash(), Next, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Waiter_ShouldTakeOrdersButNotCharge()
+    {
+        var waiter = Staff(permissions: ["ManageOrders"]);
+        var cashier = Staff(permissions: ["ManageOrders", "ChargeOrders"]);
+        var owner = Staff(permissions: [], tenantRole: "OWNER");
+
+        Assert.Equal("ok", await Behavior<SaleShape>(waiter).Handle(new SaleShape(Charged: false), Next, CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<SaleShape>(waiter).Handle(new SaleShape(Charged: true), Next, CancellationToken.None));
+        Assert.Equal(AuthorizationBehavior<SaleShape, string>.ChargeNotAllowedMessage, refused.Message);
+        Assert.Equal("ok", await Behavior<SaleShape>(cashier).Handle(new SaleShape(Charged: true), Next, CancellationToken.None));
+        Assert.Equal("ok", await Behavior<SaleShape>(owner).Handle(new SaleShape(Charged: true), Next, CancellationToken.None));
+    }
+
+    [Fact]
+    public void Sales_ShouldNeedTheChargePermissionOnlyWithPayments()
+    {
+        Assert.Empty(new Orders.Commands.CreateOrderCommand().RequiredPermissions());
+        Assert.Equal(
+            [TenantPermission.ChargeOrders],
+            new Orders.Commands.CreateOrderCommand { Payments = [new() { Amount = 10m }] }.RequiredPermissions());
+        Assert.Equal(
+            TenantPermission.ChargeOrders,
+            Assert.Single(typeof(Orders.Commands.AddOrderPaymentCommand).GetCustomAttribute<RequiresPermissionAttribute>()!.AnyOf));
+        Assert.Equal(
+            TenantPermission.ChargeOrders,
+            Assert.Single(typeof(Orders.Commands.UploadOrderPaymentEvidenceCommand).GetCustomAttribute<RequiresPermissionAttribute>()!.AnyOf));
     }
 
     [Fact]
@@ -194,6 +225,13 @@ public class AuthorizationBehaviorTests
 
     [RequiresTenantManager]
     private sealed record ManagersOnly : IRequest<string>;
+
+    /// <summary>Like a sale: taking it needs ManageOrders, charging it in the same request needs ChargeOrders too.</summary>
+    [RequiresPermission(TenantPermission.ManageOrders)]
+    private sealed record SaleShape(bool Charged) : IRequest<string>, IRequiresContentPermissions
+    {
+        public IEnumerable<TenantPermission> RequiredPermissions() => Charged ? [TenantPermission.ChargeOrders] : [];
+    }
 
     private sealed class FakeAccess : ICurrentUserService, ICurrentTenantService, ITenantAccessService
     {

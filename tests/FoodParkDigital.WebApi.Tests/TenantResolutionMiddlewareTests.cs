@@ -84,6 +84,23 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Theory]
+    [InlineData("/api/v1/orders/9a4b8f0e-2f6c-4a51-9d39-0d6f1f4f3b11/payments", "POST")]
+    [InlineData("/api/v1/orders/uploads/payment-evidence", "POST")]
+    public async Task Charging_ShouldNeedChargeOrders_NotJustTakingOrders(string path, string method)
+    {
+        var waiter = await InvokeAsync(path, method, "STAFF",
+            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders)]));
+        var cashier = await InvokeAsync(path, method, "STAFF",
+            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ChargeOrders)]));
+        var takingAnOrder = await InvokeAsync("/api/v1/orders", "POST", "STAFF",
+            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders)]));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, waiter.StatusCode);
+        Assert.True(cashier.NextCalled);
+        Assert.True(takingAnOrder.NextCalled);
+    }
+
+    [Theory]
     [InlineData(nameof(TenantPermission.ViewReports), true)]
     [InlineData(nameof(TenantPermission.ManageOrders), false)]
     public async Task Dashboard_ShouldFollowViewReports_ForStaff(string permission, bool allowed)

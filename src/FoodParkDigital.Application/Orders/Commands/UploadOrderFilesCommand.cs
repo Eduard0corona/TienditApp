@@ -98,7 +98,8 @@ public class UploadServiceIntakePhotoCommandHandler : IRequestHandler<UploadServ
     }
 }
 
-[RequiresPermission(TenantPermission.ManageOrders)]
+/// <summary>The transfer receipt of a payment: part of charging, like registering the payment itself.</summary>
+[RequiresPermission(TenantPermission.ChargeOrders)]
 public record UploadOrderPaymentEvidenceCommand : IRequest<Result<UploadedFileDto>>
 {
     public Stream FileStream { get; init; } = null!;

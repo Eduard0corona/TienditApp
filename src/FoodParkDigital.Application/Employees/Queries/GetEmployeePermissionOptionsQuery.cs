@@ -14,3 +14,12 @@ public class GetEmployeePermissionOptionsQueryHandler : IRequestHandler<GetEmplo
     public Task<IReadOnlyList<EmployeePermissionOptionDto>> Handle(GetEmployeePermissionOptionsQuery request, CancellationToken cancellationToken)
         => Task.FromResult<IReadOnlyList<EmployeePermissionOptionDto>>(EmployeeDefinitions.PermissionOptions);
 }
+
+[RequiresPermission(TenantPermission.ManageEmployees)]
+public record GetEmployeeRolePresetsQuery : IRequest<IReadOnlyList<EmployeeRolePresetDto>>;
+
+public class GetEmployeeRolePresetsQueryHandler : IRequestHandler<GetEmployeeRolePresetsQuery, IReadOnlyList<EmployeeRolePresetDto>>
+{
+    public Task<IReadOnlyList<EmployeeRolePresetDto>> Handle(GetEmployeeRolePresetsQuery request, CancellationToken cancellationToken)
+        => Task.FromResult(EmployeeDefinitions.RolePresets);
+}

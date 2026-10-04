@@ -59,6 +59,24 @@ public class EmployeesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Named roles (Gerente, Cajero, Mesero, Cocina, Técnico) that fill the role and the permissions.</summary>
+    [HttpGet("role-presets")]
+    public async Task<ActionResult<IReadOnlyList<EmployeeRolePresetDto>>> GetRolePresets()
+    {
+        var result = await _mediator.Send(new GetEmployeeRolePresetsQuery());
+        return Ok(result);
+    }
+
+    [HttpPost("{tenantUserId:guid}/resend-invitation")]
+    public async Task<ActionResult<EmployeeInvitationDto>> ResendInvitation(Guid tenantUserId)
+    {
+        var result = await _mediator.Send(new ResendEmployeeInvitationCommand(tenantUserId));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        return Ok(result.Value);
+    }
+
     [HttpPost]
     public async Task<ActionResult<EmployeeDto>> Create([FromBody] CreateEmployeeCommand command)
     {

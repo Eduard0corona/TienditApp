@@ -6,7 +6,7 @@ import { queryKeys } from '../api/queries';
 import { queryClient } from '../api/queryClient';
 import { apiRequest } from '../api/typedClient';
 import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
-import { AuthContext, type LoginResult } from './AuthContextDefinition';
+import { AuthContext, type AcceptInvitationRequest, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 const SESSION_MARKER_KEY = 'fpd_has_session';
@@ -116,6 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await startSession(data.accessToken);
   };
 
+  const acceptInvitation = async (request: AcceptInvitationRequest) => {
+    const data = await apiRequest('post', '/api/v1/auth/accept-invitation', { body: request });
+    await startSession(data.accessToken ?? undefined);
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -145,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         completeTwoFactorLogin,
+        acceptInvitation,
         logout,
         refreshProfile,
         switchTenant,

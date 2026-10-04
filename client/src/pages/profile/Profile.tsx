@@ -7,6 +7,7 @@ import { getUserRoleLabel } from '../../utils/labels';
 import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import PhoneChangeCard from '../../components/profile/PhoneChangeCard';
 
 interface DisableTwoFactorForm {
   code: string;
@@ -41,7 +42,6 @@ export default function Profile() {
     values: {
       firstName: user?.firstName || '',
       lastName: user?.lastName || '',
-      phoneNumber: user?.phoneNumber || '',
     },
   });
 
@@ -250,18 +250,6 @@ export default function Profile() {
                       {...regProfile('lastName', { required: true })}
                     />
                   </div>
-                  <div className="mb-3">
-                    <label className="form-label">Teléfono</label>
-                    <input
-                      className="form-control"
-                      type="tel"
-                      placeholder="+521234567890"
-                      {...regProfile('phoneNumber')}
-                    />
-                    <small className="text-muted">
-                      Si cambias el teléfono, deberás verificarlo de nuevo.
-                    </small>
-                  </div>
                   <button
                     className="btn btn-primary"
                     type="submit"
@@ -315,6 +303,8 @@ export default function Profile() {
               )}
             </div>
           </div>
+
+          <PhoneChangeCard />
 
           {/* Avatar Section */}
           <div className="card">

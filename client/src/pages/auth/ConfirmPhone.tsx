@@ -1,9 +1,10 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
+import { apiRequest } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
-import BrandLogo from '../../components/common/BrandLogo';
+import AuthCard from '../../components/auth/AuthCard';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -11,6 +12,15 @@ interface ConfirmPhoneForm {
   code: string;
 }
 
+interface ChangePhoneForm {
+  phoneNumber: string;
+  password: string;
+}
+
+/**
+ * The code sent at registration. A number typed wrong is fixed here, with the password of the account, before
+ * the account can sign in.
+ */
 export default function ConfirmPhone() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -20,8 +30,9 @@ export default function ConfirmPhone() {
   const userId = searchParams.get('userId') || routerState?.userId || '';
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [resendMessage, setResendMessage] = useState('');
+  const [info, setInfo] = useState('');
   const [resending, setResending] = useState(false);
+  const [changingPhone, setChangingPhone] = useState(false);
   // Coming straight from registration the first code was just sent: wait before offering another one.
   const [cooldown, setCooldown] = useState(() => (routerState?.userId ? RESEND_COOLDOWN_SECONDS : 0));
 
@@ -31,15 +42,12 @@ export default function ConfirmPhone() {
     return () => window.clearTimeout(timeoutId);
   }, [cooldown]);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<ConfirmPhoneForm>();
+  const confirmForm = useForm<ConfirmPhoneForm>();
+  const changeForm = useForm<ChangePhoneForm>();
 
   const onSubmit = async (data: ConfirmPhoneForm) => {
     setError('');
-    setResendMessage('');
+    setInfo('');
     try {
       await authApi.confirmPhone(userId, data.code);
       setSuccess('Número confirmado. Ahora puedes iniciar sesión.');
@@ -53,10 +61,10 @@ export default function ConfirmPhone() {
     if (!userId || cooldown > 0 || resending) return;
     setResending(true);
     setError('');
-    setResendMessage('');
+    setInfo('');
     try {
       await authApi.resendPhoneConfirmation(userId);
-      setResendMessage('Te enviamos un código nuevo. Puede tardar un minuto en llegar.');
+      setInfo('Te enviamos un código nuevo. Puede tardar un minuto en llegar.');
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo reenviar el código. Intenta de nuevo en un momento.'));
@@ -65,109 +73,133 @@ export default function ConfirmPhone() {
     }
   };
 
+  const onChangePhone = async (data: ChangePhoneForm) => {
+    setError('');
+    setInfo('');
+    try {
+      await apiRequest('post', '/api/v1/auth/change-unconfirmed-phone', {
+        body: { userId, password: data.password, phoneNumber: data.phoneNumber },
+      });
+      changeForm.reset();
+      setChangingPhone(false);
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+      setInfo('Te enviamos un código al número nuevo.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo cambiar el número.'));
+    }
+  };
+
   return (
-    <div className="authentication-bg position-relative" style={{ minHeight: '100vh' }}>
-      <div className="position-absolute start-0 end-0 start-0 bottom-0 w-100 h-100">
-        <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 800 800">
-          <g fillOpacity="0.22">
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.1)' }} cx="400" cy="400" r="600" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.2)' }} cx="400" cy="400" r="500" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.3)' }} cx="400" cy="400" r="300" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.4)' }} cx="400" cy="400" r="200" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.5)' }} cx="400" cy="400" r="100" />
-          </g>
-        </svg>
-      </div>
-      <div className="account-pages pt-2 pt-sm-5 pb-4 pb-sm-5 position-relative">
-        <div className="container">
-          <div className="row justify-content-center">
-            <div className="col-xxl-4 col-lg-5">
-              <div className="card">
-                <div className="card-header py-4 text-center bg-primary">
-                  <Link to="/">
-                    <BrandLogo tone="light" />
-                  </Link>
-                </div>
+    <AuthCard
+      title="Confirmar teléfono"
+      subtitle="Escribe el código de 5 o 6 dígitos que te enviamos por SMS o WhatsApp."
+      footer={<Link to="/login" className="text-muted fw-bold">Volver a iniciar sesión</Link>}
+    >
+      {error && <div className="alert alert-danger" role="alert">{error}</div>}
+      {success && <div className="alert alert-success" role="status">{success}</div>}
+      {info && <div className="alert alert-info" role="status">{info}</div>}
 
-                <div className="card-body p-4">
-                  <div className="text-center w-75 m-auto">
-                    <h4 className="text-dark-50 text-center pb-0 fw-bold">Confirmar teléfono</h4>
-                    <p className="text-muted mb-4">
-                      Escribe el código de 5 o 6 dígitos que te enviamos por SMS o WhatsApp.
-                    </p>
-                  </div>
-
-                  {error && <div className="alert alert-danger" role="alert">{error}</div>}
-                  {success && <div className="alert alert-success" role="status">{success}</div>}
-                  {resendMessage && <div className="alert alert-info" role="status">{resendMessage}</div>}
-
-                  {!userId ? (
-                    <div className="alert alert-warning mb-0" role="alert">
-                      No encontramos la cuenta por confirmar. Abre esta pantalla desde el registro o{' '}
-                      <Link to="/login">inicia sesión</Link>.
-                    </div>
-                  ) : (
-                  <form onSubmit={handleSubmit(onSubmit)}>
-                    <div className="mb-3">
-                      <label htmlFor="code" className="form-label">Código</label>
-                      <input
-                        className={`form-control text-center ${errors.code ? 'is-invalid' : ''}`}
-                        type="text"
-                        id="code"
-                        maxLength={6}
-                        placeholder="000000"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
-                        autoComplete="one-time-code"
-                        {...register('code', {
-                          required: 'Escribe el código.',
-                          minLength: { value: 5, message: 'El código tiene 5 o 6 dígitos.' },
-                          maxLength: { value: 6, message: 'El código tiene 5 o 6 dígitos.' },
-                          pattern: { value: /^\d{5,6}$/, message: 'Solo se permiten dígitos (5 o 6).' },
-                        })}
-                      />
-                      {errors.code && <div className="invalid-feedback">{errors.code.message}</div>}
-                    </div>
-
-                    <div className="mb-3 text-center">
-                      <button className="btn btn-primary" type="submit" disabled={isSubmitting || Boolean(success)}>
-                        {isSubmitting ? 'Verificando…' : 'Verificar'}
-                      </button>
-                    </div>
-
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        className="btn btn-link btn-sm"
-                        onClick={() => void handleResend()}
-                        disabled={cooldown > 0 || resending || Boolean(success)}
-                      >
-                        {resending
-                          ? 'Enviando…'
-                          : cooldown > 0
-                            ? `Reenviar código en ${cooldown} s`
-                            : '¿No te llegó? Reenviar código'}
-                      </button>
-                    </div>
-                  </form>
-                  )}
-                </div>
-              </div>
-
-              <div className="row mt-3">
-                <div className="col-12 text-center">
-                  <p className="text-muted">
-                    <Link to="/login" className="text-muted ms-1">
-                      <b>Volver a iniciar sesión</b>
-                    </Link>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+      {!userId ? (
+        <div className="alert alert-warning mb-0" role="alert">
+          No encontramos la cuenta por confirmar. Abre esta pantalla desde el registro o{' '}
+          <Link to="/login">inicia sesión</Link>.
         </div>
-      </div>
-    </div>
+      ) : changingPhone ? (
+        // Its own key: React must not reuse the inputs of the other form (they are uncontrolled and keep their text).
+        <form key="change-phone" onSubmit={changeForm.handleSubmit(onChangePhone)} noValidate>
+          <div className="mb-3">
+            <label htmlFor="new-phone" className="form-label">Número correcto</label>
+            <input
+              id="new-phone"
+              type="tel"
+              autoComplete="tel"
+              className={`form-control ${changeForm.formState.errors.phoneNumber ? 'is-invalid' : ''}`}
+              placeholder="10 dígitos"
+              {...changeForm.register('phoneNumber', { required: 'Escribe tu número.' })}
+            />
+            {changeForm.formState.errors.phoneNumber && (
+              <div className="invalid-feedback">{changeForm.formState.errors.phoneNumber.message}</div>
+            )}
+          </div>
+          <div className="mb-3">
+            <label htmlFor="change-phone-password" className="form-label">Tu contraseña</label>
+            <input
+              id="change-phone-password"
+              type="password"
+              autoComplete="current-password"
+              className={`form-control ${changeForm.formState.errors.password ? 'is-invalid' : ''}`}
+              {...changeForm.register('password', { required: 'Escribe la contraseña con la que te registraste.' })}
+            />
+            {changeForm.formState.errors.password && (
+              <div className="invalid-feedback">{changeForm.formState.errors.password.message}</div>
+            )}
+            <div className="form-text">La que elegiste al registrarte: así sabemos que la cuenta es tuya.</div>
+          </div>
+          <div className="d-flex justify-content-end gap-2">
+            <button type="button" className="btn btn-light" onClick={() => setChangingPhone(false)}>Cancelar</button>
+            <button className="btn btn-primary" type="submit" disabled={changeForm.formState.isSubmitting || cooldown > 0}>
+              {cooldown > 0 ? `Espera ${cooldown} s` : 'Enviar código'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form key="confirm" onSubmit={confirmForm.handleSubmit(onSubmit)}>
+          <div className="mb-3">
+            <label htmlFor="code" className="form-label">Código</label>
+            <input
+              className={`form-control text-center ${confirmForm.formState.errors.code ? 'is-invalid' : ''}`}
+              type="text"
+              id="code"
+              maxLength={6}
+              placeholder="000000"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+              autoComplete="one-time-code"
+              {...confirmForm.register('code', {
+                required: 'Escribe el código.',
+                minLength: { value: 5, message: 'El código tiene 5 o 6 dígitos.' },
+                maxLength: { value: 6, message: 'El código tiene 5 o 6 dígitos.' },
+                pattern: { value: /^\d{5,6}$/, message: 'Solo se permiten dígitos (5 o 6).' },
+              })}
+            />
+            {confirmForm.formState.errors.code && <div className="invalid-feedback">{confirmForm.formState.errors.code.message}</div>}
+          </div>
+
+          <div className="mb-3 text-center">
+            <button className="btn btn-primary" type="submit" disabled={confirmForm.formState.isSubmitting || Boolean(success)}>
+              {confirmForm.formState.isSubmitting ? 'Verificando…' : 'Verificar'}
+            </button>
+          </div>
+
+          <div className="d-flex flex-wrap justify-content-center gap-2">
+            <button
+              type="button"
+              className="btn btn-link btn-sm"
+              onClick={() => void handleResend()}
+              disabled={cooldown > 0 || resending || Boolean(success)}
+            >
+              {resending
+                ? 'Enviando…'
+                : cooldown > 0
+                  ? `Reenviar código en ${cooldown} s`
+                  : '¿No te llegó? Reenviar código'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-link btn-sm"
+              onClick={() => {
+                setError('');
+                setInfo('');
+                setChangingPhone(true);
+              }}
+              disabled={Boolean(success)}
+            >
+              ¿Número equivocado? Cambiarlo
+            </button>
+          </div>
+        </form>
+      )}
+    </AuthCard>
   );
 }

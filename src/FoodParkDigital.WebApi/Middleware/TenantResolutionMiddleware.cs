@@ -326,6 +326,12 @@ public class TenantResolutionMiddleware
             || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal))
             return [TenantPermission.ManageInventory];
 
+        // Charging is its own permission (a waiter takes orders, the cashier charges them): payments and their receipts.
+        if (path.StartsWith("/api/v1/orders/", StringComparison.Ordinal) && !isReadRequest
+            && (path.EndsWith("/payments", StringComparison.Ordinal)
+                || path.Equals("/api/v1/orders/uploads/payment-evidence", StringComparison.Ordinal)))
+            return [TenantPermission.ChargeOrders];
+
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal) || IsTenantOrdersPath(path))
             return [TenantPermission.ManageOrders];
 

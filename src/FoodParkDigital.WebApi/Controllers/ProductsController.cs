@@ -96,7 +96,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var result = await _mediator.Send(new DeleteProductCommand(id));

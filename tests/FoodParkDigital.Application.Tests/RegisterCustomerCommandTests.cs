@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Customers.Enums;
+using FoodParkDigital.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,8 @@ namespace FoodParkDigital.Application.Tests;
 public class RegisterCustomerCommandTests
 {
     private const string PhoneNormalized = "+525512345678";
-    private static readonly IdentityErrorDescriber IdentityErrors = new();
+    // The messages Identity gives in production (in Spanish).
+    private static readonly IdentityErrorDescriber IdentityErrors = new SpanishIdentityErrorDescriber();
 
     [Fact]
     public async Task RegisterCustomer_ShouldNotPersistAnything_WhenPasswordViolatesIdentityPolicy()

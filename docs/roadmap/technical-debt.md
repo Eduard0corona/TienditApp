@@ -16,7 +16,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Movimientos manuales de inventario registrados desde la pantalla antes de la corrección del 2026-10-04: se guardaron con el tipo y el motivo siguientes al elegido. Movieron las existencias en sentido contrario, y las "Salidas" guardadas como `Entry` promediaron su costo como si fueran compras. Falta revisarlos con cada tenant y compensarlos ([procedimiento y consulta de solo lectura](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md)). El dominio no tiene una operación para revaluar el costo promedio.
 - La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
-- Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, el paso de contraseña del login no cuenta intentos fallidos (`lockoutOnFailure: false`; el 2FA sí usa lockout) y el login distingue cuentas sin confirmar o bloqueadas.
+- Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso y el login distingue cuentas sin confirmar o bloqueadas. (Los intentos fallidos ya bloquean la cuenta: Fase 4E.)
 - Folios de órdenes y movimientos por conteo (una colisión responde 500); la recepción de compra no tiene idempotency key estable.
 - Contratos de error mezclan `ProblemDetails` con objetos `{ error }`; el cliente ya los lee con un solo helper (`src/api/errors.ts`), pero el servidor sigue respondiendo en varias formas y con algunos mensajes de dominio en inglés.
 - Controllers no propagan `CancellationToken`.
@@ -174,6 +174,11 @@ Pendientes detectados en la Fase 3:
 - Respuestas automáticas por palabras completas sin acentos, en pausa cuando una persona atiende el chat, sin preguntas en cada respuesta y con enlace al menú en línea; sin campos de IA en su pantalla.
 - Chat: palomitas reales (se guarda el `wamid`) en vivo, marcadores para fotos, notas de voz y ubicaciones, y el mismo hilo para `+52` y `+521`.
 - Clientes con teléfono normalizado, notas y direcciones de entrega (migración `AddCustomerAddressesAndChatPause`), visibles en la ficha del chat; la cuenta de cliente ve sus pedidos de todos los negocios en "Mis pedidos".
+- Equipo por invitación: la persona elige su contraseña desde un enlace (correo o WhatsApp) que vale 7 días y sirve una vez; las invitaciones pendientes ocupan lugar en el plan y se reenvían o cancelan desde Equipo.
+- Roles con nombre (Gerente, Cajero, Mesero, Cocina, Técnico) y permiso de cobro separado (`ChargeOrders`): el mesero toma pedidos y la caja los cobra; la migración `AddChargePermissionAndSmsCooldown` conserva el cobro de quien ya lo hacía. "Sin acceso" se guarda a propósito y ya no se confunde con "los del rol".
+- Permisos que se ofrecían al personal y no funcionaban (categorías, borrar productos, respuestas automáticas) ya funcionan; "Equipo" se quitó de los permisos del personal.
+- Recuperar la contraseña por SMS al teléfono confirmado; el teléfono solo cambia con la contraseña y un código al número nuevo (el admin ya no lo cambia) y el número mal escrito al registrarse se corrige con la contraseña.
+- Bloqueo por cuenta (5 intentos, 15 minutos) en login y códigos, un código SMS por minuto por cuenta, mensajes de Identity en español y reintento con espera al renovar la sesión ante 429.
 
 ## Decisiones humanas pendientes
 

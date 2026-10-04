@@ -1035,6 +1035,193 @@
         }
       }
     },
+    "/api/v1/auth/forgot-password/sms": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordBySmsCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordBySmsCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordBySmsCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset-password/sms": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithSmsCodeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithSmsCodeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithSmsCodeCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/change-unconfirmed-phone": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUnconfirmedPhoneCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUnconfirmedPhoneCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUnconfirmedPhoneCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/invitation": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/accept-invitation": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/profile": {
       "get": {
         "tags": [
@@ -1162,6 +1349,68 @@
         "tags": [
           "Auth"
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/profile/phone": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneChangeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneChangeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneChangeCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/profile/phone/confirm": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneChangeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneChangeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneChangeCommand"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -3329,6 +3578,84 @@
                   "items": {
                     "$ref": "#/components/schemas/EmployeePermissionOptionDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/role-presets": {
+      "get": {
+        "tags": [
+          "Employees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmployeeRolePresetDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmployeeRolePresetDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmployeeRolePresetDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/{tenantUserId}/resend-invitation": {
+      "post": {
+        "tags": [
+          "Employees"
+        ],
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationDto"
                 }
               }
             }
@@ -8926,6 +9253,27 @@
   },
   "components": {
     "schemas": {
+      "AcceptInvitationCommand": {
+        "required": [
+          "newPassword",
+          "token",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "AddCashTransactionRequest": {
         "required": [
           "amount",
@@ -10406,6 +10754,27 @@
         },
         "additionalProperties": false
       },
+      "ChangeUnconfirmedPhoneCommand": {
+        "required": [
+          "password",
+          "phoneNumber",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "password": {
+            "type": "string"
+          },
+          "phoneNumber": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatMessageDto": {
         "required": [
           "body",
@@ -10503,6 +10872,22 @@
               "$ref": "#/components/schemas/CashCountLineDto"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfirmPhoneChangeCommand": {
+        "required": [
+          "code",
+          "phoneNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -10932,8 +11317,6 @@
           "email",
           "firstName",
           "lastName",
-          "password",
-          "permissions",
           "tenantRole"
         ],
         "type": "object",
@@ -10942,7 +11325,8 @@
             "type": "string"
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "firstName": {
             "type": "string"
@@ -10964,7 +11348,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -12518,6 +12903,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "invitationUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -12564,6 +12953,22 @@
         },
         "additionalProperties": false
       },
+      "EmployeeInvitationDto": {
+        "required": [
+          "email",
+          "invitationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "invitationUrl": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "EmployeePermissionOptionDto": {
         "required": [
           "code",
@@ -12580,6 +12985,41 @@
           },
           "description": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmployeeRolePresetDto": {
+        "required": [
+          "appRole",
+          "description",
+          "key",
+          "name",
+          "permissions",
+          "tenantRole"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "appRole": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "tenantRole": {
+            "$ref": "#/components/schemas/TenantUserRole"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -12613,6 +13053,18 @@
           "days": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ForgotPasswordBySmsCommand": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -13362,6 +13814,29 @@
           "hasNextPage": {
             "type": "boolean",
             "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "InvitationDto": {
+        "required": [
+          "businesses",
+          "email",
+          "firstName"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "businesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -16346,6 +16821,22 @@
         },
         "additionalProperties": false
       },
+      "RequestPhoneChangeCommand": {
+        "required": [
+          "currentPassword",
+          "phoneNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string"
+          },
+          "currentPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ResendConfirmationEmailCommand": {
         "required": [
           "email"
@@ -16385,6 +16876,26 @@
             "type": "string"
           },
           "token": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResetPasswordWithSmsCodeCommand": {
+        "required": [
+          "code",
+          "email",
+          "newPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "code": {
             "type": "string"
           },
           "newPassword": {
@@ -18294,7 +18805,6 @@
           "appRole",
           "firstName",
           "lastName",
-          "permissions",
           "tenantRole",
           "tenantUserId"
         ],
@@ -18310,10 +18820,6 @@
           "lastName": {
             "type": "string"
           },
-          "phoneNumber": {
-            "type": "string",
-            "nullable": true
-          },
           "appRole": {
             "$ref": "#/components/schemas/UserRole"
           },
@@ -18324,7 +18830,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18947,10 +19454,6 @@
           },
           "lastName": {
             "type": "string"
-          },
-          "phoneNumber": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false

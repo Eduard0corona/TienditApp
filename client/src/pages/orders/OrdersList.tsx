@@ -145,6 +145,7 @@ export default function OrdersList() {
   // roles can read orders but move food orders from the kitchen board. Refunds also need ProcessRefunds.
   const access = getAccess(user, capabilities);
   const canSell = access.sell;
+  const canCharge = access.charge;
   const canRefund = access.refunds;
 
   // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
@@ -595,7 +596,7 @@ export default function OrdersList() {
                       )}
                     </td>
                     <td className="text-center">
-                      {canSell && order.balance > 0 && order.status !== OrderStatusConst.Cancelled ? (
+                      {canCharge && order.balance > 0 && order.status !== OrderStatusConst.Cancelled ? (
                         <div className="d-flex justify-content-center">
                           <button
                             type="button"
@@ -678,13 +679,14 @@ export default function OrdersList() {
                 </div>
               </div>
 
-              {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel || selectedOrder.balance > 0))
+              {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel))
+                || (canCharge && selectedOrder.balance > 0)
                 || canRefundSelected
                 || (canSell && selectedOrder.status !== OrderStatusConst.Cancelled)) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
-                    {canSell && selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
+                    {canCharge && selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
                       <button
                         type="button"
                         className="btn btn-sm btn-success"

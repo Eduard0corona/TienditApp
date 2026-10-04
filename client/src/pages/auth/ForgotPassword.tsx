@@ -1,109 +1,210 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
-import BrandLogo from '../../components/common/BrandLogo';
+import { apiRequest } from '../../api/typedClient';
+import { getApiErrorMessage } from '../../api/errors';
+import AuthCard from '../../components/auth/AuthCard';
 
-interface ForgotPasswordForm {
+type Channel = 'email' | 'sms';
+
+interface RequestForm {
   email: string;
 }
 
+interface SmsResetForm {
+  code: string;
+  newPassword: string;
+}
+
+const RESEND_COOLDOWN_SECONDS = 60;
+// Mirrors the Identity policy configured in the API (6+ characters, upper, lower and digit).
+const PASSWORD_RULES = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
+
+/**
+ * Recover the password: a link by email, or a code by SMS to the phone the account confirmed (for whoever does not
+ * check their email). Both answer the same whether the account exists or not.
+ */
 export default function ForgotPassword() {
-  const [success, setSuccess] = useState(false);
+  const [channel, setChannel] = useState<Channel>('email');
+  const [emailSent, setEmailSent] = useState(false);
+  const [smsEmail, setSmsEmail] = useState('');
+  const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [cooldown, setCooldown] = useState(0);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<ForgotPasswordForm>();
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timeoutId = window.setTimeout(() => setCooldown((seconds) => seconds - 1), 1000);
+    return () => window.clearTimeout(timeoutId);
+  }, [cooldown]);
 
-  const onSubmit = async (data: ForgotPasswordForm) => {
+  const requestForm = useForm<RequestForm>();
+  const resetForm = useForm<SmsResetForm>();
+
+  const chooseChannel = (next: Channel) => {
+    setChannel(next);
+    setError('');
+    setInfo('');
+    setEmailSent(false);
+    setSmsEmail('');
+  };
+
+  const requestCode = async (email: string) => {
+    await apiRequest('post', '/api/v1/auth/forgot-password/sms', { body: { email } });
+    setSmsEmail(email);
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+    setInfo('Si tu cuenta tiene un teléfono confirmado, te enviamos un código por SMS. Puede tardar un minuto.');
+  };
+
+  const onRequest = async ({ email }: RequestForm) => {
+    setError('');
+    setInfo('');
+    try {
+      if (channel === 'email') {
+        await authApi.forgotPassword(email.trim());
+        setEmailSent(true);
+      } else {
+        await requestCode(email.trim());
+      }
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo enviar. Intenta de nuevo en un momento.'));
+    }
+  };
+
+  const onReset = async ({ code, newPassword }: SmsResetForm) => {
     setError('');
     try {
-      await authApi.forgotPassword(data.email);
-      setSuccess(true);
-    } catch {
-      setError('Error al enviar el correo de recuperación.');
+      await apiRequest('post', '/api/v1/auth/reset-password/sms', { body: { email: smsEmail, code, newPassword } });
+      setDone(true);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'El código no es válido o ya expiró. Pide uno nuevo.'));
+    }
+  };
+
+  const resend = async () => {
+    if (cooldown > 0) return;
+    setError('');
+    try {
+      await requestCode(smsEmail);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo reenviar el código.'));
     }
   };
 
   return (
-    <div className="authentication-bg position-relative" style={{ minHeight: '100vh' }}>
-      <div className="position-absolute start-0 end-0 start-0 bottom-0 w-100 h-100">
-        <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 800 800">
-          <g fillOpacity="0.22">
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.1)' }} cx="400" cy="400" r="600" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.2)' }} cx="400" cy="400" r="500" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.3)' }} cx="400" cy="400" r="300" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.4)' }} cx="400" cy="400" r="200" />
-            <circle style={{ fill: 'rgba(var(--ct-primary-rgb), 0.5)' }} cx="400" cy="400" r="100" />
-          </g>
-        </svg>
-      </div>
-      <div className="account-pages pt-2 pt-sm-5 pb-4 pb-sm-5 position-relative">
-        <div className="container">
-          <div className="row justify-content-center">
-            <div className="col-xxl-4 col-lg-5">
-              <div className="card">
-                <div className="card-header py-4 text-center bg-primary">
-                  <Link to="/">
-                    <BrandLogo tone="light" />
-                  </Link>
-                </div>
-
-                <div className="card-body p-4">
-                  <div className="text-center w-75 m-auto">
-                    <h4 className="text-dark-50 text-center pb-0 fw-bold">Recuperar Contraseña</h4>
-                    <p className="text-muted mb-4">
-                      Ingresa tu email y te enviaremos instrucciones para restablecer tu contraseña.
-                    </p>
-                  </div>
-
-                  {error && <div className="alert alert-danger">{error}</div>}
-
-                  {success ? (
-                    <div className="alert alert-success text-center">
-                      <i className="ri-check-line me-1"></i>
-                      Si el email existe en nuestro sistema, recibirás un correo con instrucciones.
-                    </div>
-                  ) : (
-                    <form onSubmit={handleSubmit(onSubmit)}>
-                      <div className="mb-3">
-                        <label htmlFor="emailaddress" className="form-label">Email</label>
-                        <input
-                          className={`form-control ${errors.email ? 'is-invalid' : ''}`}
-                          type="email"
-                          id="emailaddress"
-                          placeholder="Ingresa tu email"
-                          {...register('email', { required: 'El email es requerido' })}
-                        />
-                        {errors.email && <div className="invalid-feedback">{errors.email.message}</div>}
-                      </div>
-
-                      <div className="mb-0 text-center">
-                        <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                          {isSubmitting ? 'Enviando...' : 'Enviar'}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </div>
-
-              <div className="row mt-3">
-                <div className="col-12 text-center">
-                  <p className="text-muted">
-                    <Link to="/login" className="text-muted ms-1">
-                      <b>Volver al login</b>
-                    </Link>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+    <AuthCard
+      title="Recuperar contraseña"
+      subtitle={channel === 'email'
+        ? 'Escribe tu correo y te mandamos un enlace para elegir una contraseña nueva.'
+        : 'Escribe tu correo y te mandamos un código por SMS al teléfono que confirmaste.'}
+      footer={<Link to="/login" className="text-muted fw-bold">Volver a iniciar sesión</Link>}
+    >
+      {done ? (
+        <div className="alert alert-success text-center mb-0" role="status">
+          Tu contraseña se actualizó. Ya puedes <Link to="/login">iniciar sesión</Link>.
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <div className="btn-group w-100 mb-3" role="group" aria-label="Cómo recuperarla">
+            <button
+              type="button"
+              className={`btn btn-sm ${channel === 'email' ? 'btn-primary' : 'btn-light'}`}
+              aria-pressed={channel === 'email'}
+              onClick={() => chooseChannel('email')}
+            >
+              <i className="ri-mail-line me-1" aria-hidden="true"></i>Por correo
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${channel === 'sms' ? 'btn-primary' : 'btn-light'}`}
+              aria-pressed={channel === 'sms'}
+              onClick={() => chooseChannel('sms')}
+            >
+              <i className="ri-message-2-line me-1" aria-hidden="true"></i>Por SMS
+            </button>
+          </div>
+
+          {error && <div className="alert alert-danger" role="alert">{error}</div>}
+          {info && <div className="alert alert-info" role="status">{info}</div>}
+
+          {emailSent ? (
+            <div className="alert alert-success text-center mb-0" role="status">
+              Si el correo está registrado, te llegará un enlace para elegir tu contraseña nueva.
+            </div>
+          ) : channel === 'sms' && smsEmail ? (
+            // Its own key: React must not reuse the inputs of the other form (they are uncontrolled and keep their text).
+            <form key="sms-reset" onSubmit={resetForm.handleSubmit(onReset)} noValidate>
+              <div className="mb-3">
+                <label htmlFor="sms-code" className="form-label">Código</label>
+                <input
+                  id="sms-code"
+                  className={`form-control text-center ${resetForm.formState.errors.code ? 'is-invalid' : ''}`}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="000000"
+                  style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                  {...resetForm.register('code', {
+                    required: 'Escribe el código.',
+                    pattern: { value: /^\d{5,6}$/, message: 'El código tiene 5 o 6 dígitos.' },
+                  })}
+                />
+                {resetForm.formState.errors.code && <div className="invalid-feedback">{resetForm.formState.errors.code.message}</div>}
+              </div>
+              <div className="mb-3">
+                <label htmlFor="sms-new-password" className="form-label">Contraseña nueva</label>
+                <input
+                  id="sms-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  className={`form-control ${resetForm.formState.errors.newPassword ? 'is-invalid' : ''}`}
+                  {...resetForm.register('newPassword', {
+                    required: 'Escribe la contraseña nueva.',
+                    pattern: { value: PASSWORD_RULES, message: 'Usa al menos 6 caracteres, con mayúscula, minúscula y número.' },
+                  })}
+                />
+                {resetForm.formState.errors.newPassword && (
+                  <div className="invalid-feedback">{resetForm.formState.errors.newPassword.message}</div>
+                )}
+              </div>
+              <div className="d-grid gap-2">
+                <button className="btn btn-primary" type="submit" disabled={resetForm.formState.isSubmitting}>
+                  {resetForm.formState.isSubmitting ? 'Guardando…' : 'Guardar contraseña'}
+                </button>
+                <button type="button" className="btn btn-link btn-sm" onClick={() => void resend()} disabled={cooldown > 0}>
+                  {cooldown > 0 ? `Pedir otro código en ${cooldown} s` : '¿No te llegó? Pedir otro código'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form key="request" onSubmit={requestForm.handleSubmit(onRequest)} noValidate>
+              <div className="mb-3">
+                <label htmlFor="recover-email" className="form-label">Correo</label>
+                <input
+                  id="recover-email"
+                  type="email"
+                  autoComplete="email"
+                  className={`form-control ${requestForm.formState.errors.email ? 'is-invalid' : ''}`}
+                  placeholder="tu@correo.com"
+                  {...requestForm.register('email', { required: 'Escribe tu correo.' })}
+                />
+                {requestForm.formState.errors.email && (
+                  <div className="invalid-feedback">{requestForm.formState.errors.email.message}</div>
+                )}
+              </div>
+              <div className="d-grid">
+                <button className="btn btn-primary" type="submit" disabled={requestForm.formState.isSubmitting}>
+                  {requestForm.formState.isSubmitting
+                    ? 'Enviando…'
+                    : channel === 'email' ? 'Enviar enlace' : 'Enviar código'}
+                </button>
+              </div>
+            </form>
+          )}
+        </>
+      )}
+    </AuthCard>
   );
 }

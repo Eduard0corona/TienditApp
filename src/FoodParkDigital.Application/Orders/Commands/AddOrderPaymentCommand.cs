@@ -14,7 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-[RequiresPermission(TenantPermission.ManageOrders)]
+[RequiresPermission(TenantPermission.ChargeOrders)]
 public record AddOrderPaymentCommand : IRequest<Result<OrderDto>>
 {
     public Guid OrderId { get; init; }

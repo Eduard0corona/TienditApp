@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 
 namespace FoodParkDigital.Application.Common.Behaviors;
@@ -12,6 +13,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
     where TRequest : notnull
 {
     public const string NotAllowedMessage = "No tienes permiso para hacer esto.";
+    public const string ChargeNotAllowedMessage = "No tienes permiso para cobrar: guarda el pedido sin cobrar para que lo cobre la caja.";
 
     private readonly CurrentAccessContext _access;
 
@@ -65,7 +67,24 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
             throw new ForbiddenAccessException("El módulo no está activo en este negocio.");
         }
 
+        if (request is IRequiresContentPermissions content)
+            await RequireContentPermissionsAsync(content, cancellationToken);
+
         return await next();
+    }
+
+    private async Task RequireContentPermissionsAsync(IRequiresContentPermissions content, CancellationToken cancellationToken)
+    {
+        var required = content.RequiredPermissions().Distinct().ToList();
+        if (required.Count == 0 || await _access.IsTenantManagerAsync(cancellationToken))
+            return;
+
+        var granted = await _access.GetPermissionsAsync(cancellationToken);
+        foreach (var permission in required)
+        {
+            if (!granted.Contains(permission.ToString(), StringComparer.OrdinalIgnoreCase))
+                throw new ForbiddenAccessException(permission == TenantPermission.ChargeOrders ? ChargeNotAllowedMessage : NotAllowedMessage);
+        }
     }
 
     private void RequireAuthenticated()

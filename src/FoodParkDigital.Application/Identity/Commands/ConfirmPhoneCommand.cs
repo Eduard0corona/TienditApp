@@ -3,7 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Services;
-using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -36,6 +36,8 @@ public class ConfirmPhoneCommandValidator : AbstractValidator<ConfirmPhoneComman
 
 public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, Result>
 {
+    public const string ConfirmFromProfileMessage = "Inicia sesión y confirma tu teléfono desde tu perfil.";
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
     private readonly ITemporaryCustomerClaimService _claimService;
@@ -72,10 +74,16 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
             if (user.PhoneNumberConfirmed)
                 return Result.Success();
 
+            // Only an account being registered confirms its phone here, before it can sign in. Once it signs in (or
+            // while an invitation waits to be accepted) the number is confirmed from the profile, with the password:
+            // whoever typed it must not take over the account by recovering its password by SMS.
+            if (user.EmailConfirmed || user.PasswordHash is null)
+                return Result.Failure(ConfirmFromProfileMessage);
+
             if (string.IsNullOrEmpty(user.PhoneNumber))
                 return Result.Failure("El usuario no tiene un número de teléfono registrado.");
 
-            var normalizedCode = NormalizeVerificationCode(request.Code);
+            var normalizedCode = AccountSecurity.NormalizeCode(request.Code);
             if (normalizedCode is null)
                 return Result.Failure("Codigo invalido o expirado.");
 
@@ -86,7 +94,7 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
             if (user.Role == UserRole.Customer)
             {
                 await _claimService.ClaimByPhoneAsync(user.PhoneNumber, user.Id, "MX", ct);
-                await AssignPhoneToCustomerProfileAsync(user, user.PhoneNumber, ct);
+                await CustomerPhoneOwnershipRules.AssignConfirmedPhoneAsync(_context, _phoneNormalizationService, user, user.PhoneNumber, ct);
             }
             else
             {
@@ -95,66 +103,6 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
 
             return Result.Success();
         }, cancellationToken);
-    }
-
-    /// <summary>
-    /// The user just proved the number is theirs, so their profile takes it and orders placed with it
-    /// are linked to them from now on. The number is taken from a profile whose account never
-    /// confirmed it, never from an account that confirmed it first.
-    /// </summary>
-    private async Task AssignPhoneToCustomerProfileAsync(
-        ApplicationUser user,
-        string phoneNumber,
-        CancellationToken cancellationToken)
-    {
-        var phoneNormalized = _phoneNormalizationService.NormalizeToE164(
-            phoneNumber,
-            CustomerPhoneOwnershipRules.DefaultCountry);
-        var holder = await CustomerPhoneOwnershipRules.FindHolderAsync(
-            _context,
-            _phoneNormalizationService,
-            phoneNormalized,
-            cancellationToken);
-
-        if (holder is not null && holder.UserId != user.Id)
-        {
-            if (holder.IsVerified)
-                return;
-
-            // The phone is unique across profiles, so the unverified one must release it first.
-            // Its account is kept; it just stops holding a number it never proved.
-            var unverifiedProfile = await _context.CustomerProfiles
-                .FirstOrDefaultAsync(x => x.UserId == holder.UserId, cancellationToken);
-            if (unverifiedProfile is not null)
-            {
-                _context.CustomerProfiles.Remove(unverifiedProfile);
-                await _context.SaveChangesAsync(cancellationToken);
-            }
-        }
-
-        var profile = await _context.CustomerProfiles
-            .FirstOrDefaultAsync(x => x.UserId == user.Id, cancellationToken);
-
-        if (profile is null)
-        {
-            _context.CustomerProfiles.Add(new CustomerProfile(
-                user.Id,
-                phoneNormalized,
-                $"{user.FirstName} {user.LastName}".Trim(),
-                user.FirstName,
-                user.LastName));
-        }
-        else if (profile.PhoneNormalized != phoneNormalized)
-        {
-            // The account confirmed a different number, so its previous one stops identifying it.
-            profile.UpdateProfile(phoneNormalized, profile.DisplayName, profile.FirstName, profile.LastName);
-        }
-        else
-        {
-            return;
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureTenantContextForUser(ApplicationUser user, CancellationToken cancellationToken)
@@ -179,17 +127,5 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
             user.DefaultTenantId = membership.TenantId;
 
         await _context.SaveChangesAsync(cancellationToken);
-    }
-
-    private static string? NormalizeVerificationCode(string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-            return null;
-
-        var digits = new string(code.Where(char.IsDigit).ToArray());
-        if (digits.Length == 5)
-            return digits.PadLeft(6, '0');
-
-        return digits.Length == 6 ? digits : null;
     }
 }

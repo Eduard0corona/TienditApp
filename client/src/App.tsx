@@ -12,6 +12,7 @@ const ConfirmPhone = lazy(() => import('./pages/auth/ConfirmPhone'));
 const ConfirmEmail = lazy(() => import('./pages/auth/ConfirmEmail'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
+const AcceptInvitation = lazy(() => import('./pages/auth/AcceptInvitation'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/profile/Profile'));
 const MyOrders = lazy(() => import('./pages/account/MyOrders'));
@@ -68,6 +69,8 @@ export default function App() {
             <Route path="/confirm-email" element={<ConfirmEmail />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            {/* The link of an invitation to a team (from the email or shared by WhatsApp). */}
+            <Route path="/aceptar-invitacion" element={<AcceptInvitation />} />
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
 

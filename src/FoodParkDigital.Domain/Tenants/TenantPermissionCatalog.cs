@@ -5,6 +5,12 @@ namespace FoodParkDigital.Domain.Tenants;
 
 public static class TenantPermissionCatalog
 {
+    /// <summary>
+    /// Stored when a person was saved without any permission on purpose ("sin acceso"). A null value still means the
+    /// defaults of their role.
+    /// </summary>
+    public const string NoAccessValue = "None";
+
     private static readonly HashSet<string> ValidCodes = Enum.GetNames<TenantPermission>()
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -36,6 +42,9 @@ public static class TenantPermissionCatalog
         UserRole userRole,
         TenantUserRole tenantRole)
     {
+        if (string.Equals(explicitCodes?.Trim(), NoAccessValue, StringComparison.OrdinalIgnoreCase))
+            return [];
+
         var normalized = NormalizeCodes(
             string.IsNullOrWhiteSpace(explicitCodes)
                 ? []
@@ -80,6 +89,7 @@ public static class TenantPermissionCatalog
         [
             nameof(TenantPermission.ManageCatalog),
             nameof(TenantPermission.ManageOrders),
+            nameof(TenantPermission.ChargeOrders),
             nameof(TenantPermission.ManageServiceBoard),
             nameof(TenantPermission.ManageInventory),
             nameof(TenantPermission.ManageCash),
@@ -95,4 +105,7 @@ public static class TenantPermissionCatalog
         var normalized = NormalizeCodes(codes);
         return normalized.Count == 0 ? null : string.Join(',', normalized);
     }
+
+    /// <summary>What was chosen, where choosing nothing is "sin acceso" rather than the role's defaults.</summary>
+    public static string ToExplicitStoredValue(IEnumerable<string> codes) => ToStoredValue(codes) ?? NoAccessValue;
 }

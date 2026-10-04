@@ -22,8 +22,12 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.Commands;
 
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record CreateOrderCommand : IRequest<Result<OrderDto>>
+public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions
 {
+    /// <summary>Taking an order needs ManageOrders; charging it at once also needs ChargeOrders.</summary>
+    public IEnumerable<TenantPermission> RequiredPermissions()
+        => Payments is { Count: > 0 } ? [TenantPermission.ChargeOrders] : [];
+
     public Guid? CustomerId { get; init; }
     public string? CustomerName { get; init; }
     public string? CustomerPhone { get; init; }

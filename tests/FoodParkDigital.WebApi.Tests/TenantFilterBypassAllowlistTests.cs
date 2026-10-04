@@ -11,16 +11,19 @@ public class TenantFilterBypassAllowlistTests
     {
         // Identity and session: accounts are not tenant-scoped, and login, refresh, confirmations and the business switch run before or across a business.
         ["src/FoodParkDigital.Application/Common/Utils/MyTenantResolver.cs"] = 2,
+        ["src/FoodParkDigital.Application/Identity/Commands/AcceptInvitationCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ConfirmEmailCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ConfirmPhoneCommand.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Commands/ForgotPasswordCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/LoginCommand.cs"] = 1,
+        ["src/FoodParkDigital.Application/Identity/Commands/PhoneChangeCommands.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RefreshTokenCommand.cs"] = 3,
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterBusinessCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterCustomerCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResendConfirmationEmailCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResendPhoneConfirmationCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResetPasswordCommand.cs"] = 1,
+        ["src/FoodParkDigital.Application/Identity/Commands/SmsPasswordResetCommands.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Commands/SwitchTenantCommand.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Commands/UpdateOwnerWhatsAppConfigCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Queries/GetMyTenantsQuery.cs"] = 2,
@@ -31,10 +34,13 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Tenants/Commands/CreateBusinessCommand.cs"] = 2,
         // Employees: the account (ApplicationUser) is shared by the businesses of a person.
         ["src/FoodParkDigital.Application/Employees/Commands/CreateEmployeeCommand.cs"] = 1,
+        ["src/FoodParkDigital.Application/Employees/Commands/ResendEmployeeInvitationCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Employees/Commands/SetEmployeeActiveCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Employees/Commands/UpdateEmployeeCommand.cs"] = 2,
         ["src/FoodParkDigital.Application/Employees/Queries/GetEmployeeByIdQuery.cs"] = 1,
         ["src/FoodParkDigital.Application/Employees/Queries/GetEmployeesQuery.cs"] = 1,
+        // Accepting an invitation happens before any business is selected, for every pending invitation of the account.
+        ["src/FoodParkDigital.Application/Employees/EmployeeInvitations.cs"] = 2,
         // Platform console and plans: platform-wide reads (the platform admin), and actions that set the target business first.
         ["src/FoodParkDigital.Application/Billing/PlanFeature.cs"] = 5,
         ["src/FoodParkDigital.Application/Billing/PlatformQueries.cs"] = 6,

@@ -51,6 +51,8 @@ public class ConfirmPhoneCommandTests
             LastName = "Demo",
             PhoneNumber = "+525511112222",
             PhoneNumberConfirmed = false,
+            // Registered with a password, like every account that confirms its phone before signing in.
+            PasswordHash = "registered",
             Role = UserRole.TenantAdmin,
             DefaultTenantId = tenant.Id,
             IsActive = true

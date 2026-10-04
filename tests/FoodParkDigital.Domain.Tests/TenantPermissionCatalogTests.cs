@@ -25,6 +25,26 @@ public class TenantPermissionCatalogTests
     }
 
     [Fact]
+    public void NoPermissionsChosen_ShouldBeNoAccess_WhileNothingSavedStillMeansTheRoleDefaults()
+    {
+        var chosenNone = TenantPermissionCatalog.ToExplicitStoredValue([]);
+
+        Assert.Equal(TenantPermissionCatalog.NoAccessValue, chosenNone);
+        Assert.Empty(TenantPermissionCatalog.ResolveEffectiveCodes(chosenNone, UserRole.Staff, TenantUserRole.Staff));
+        Assert.Equal(
+            TenantPermissionCatalog.GetDefaultCodes(UserRole.Staff, TenantUserRole.Staff),
+            TenantPermissionCatalog.ResolveEffectiveCodes(null, UserRole.Staff, TenantUserRole.Staff));
+        Assert.Equal("ManageOrders", TenantPermissionCatalog.ToExplicitStoredValue(["ManageOrders", "Unknown"]));
+    }
+
+    [Fact]
+    public void Staff_ShouldChargeByDefault_AndKitchenShouldNot()
+    {
+        Assert.Contains("ChargeOrders", TenantPermissionCatalog.GetDefaultCodes(UserRole.Staff, TenantUserRole.Staff));
+        Assert.DoesNotContain("ChargeOrders", TenantPermissionCatalog.GetDefaultCodes(UserRole.Kitchen, TenantUserRole.Staff));
+    }
+
+    [Fact]
     public void GetDefaultCodes_ForAdminRole_ShouldReturnAllCodes()
     {
         var adminCodes = TenantPermissionCatalog.GetDefaultCodes(UserRole.TenantAdmin, TenantUserRole.Admin);

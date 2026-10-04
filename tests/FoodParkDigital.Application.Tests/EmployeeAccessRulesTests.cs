@@ -124,6 +124,21 @@ public class EmployeeAccessRulesTests
         Assert.Equal(TenantUserRole.Owner, (await fixture.MembershipAsync(ownerOfB)).Role);
     }
 
+    [Fact]
+    public async Task SharedAccount_ShouldKeepItsName_WhenOneOfItsBusinessesEditsIt()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var owner = await fixture.AddMemberAsync(TenantA, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var ownerOfB = await fixture.AddMemberAsync(TenantB, UserRole.TenantAdmin, TenantUserRole.Owner);
+        var helper = await fixture.AddMembershipAsync(TenantA, ownerOfB.UserId, TenantUserRole.Staff);
+
+        var renamed = await fixture.UpdateAsync(owner, helper, UserRole.Staff, TenantUserRole.Staff, firstName: "Otro");
+
+        // Business B shows the same account: only the person renames it, from their profile.
+        Assert.Equal(UpdateEmployeeCommandHandler.SharedAccountNameMessage, renamed.Error);
+        Assert.Equal("Persona", (await fixture.UserAsync(helper)).FirstName);
+    }
+
     private sealed record Member(Guid TenantUserId, Guid UserId, Guid TenantId, string Role);
 
     private sealed class Fixture : IAsyncDisposable
@@ -181,7 +196,7 @@ public class EmployeeAccessRulesTests
         }
 
         public Task<Result<EmployeeDto>> UpdateAsync(
-            Member actor, Member employee, UserRole appRole, TenantUserRole tenantRole, string firstName = "Empleado")
+            Member actor, Member employee, UserRole appRole, TenantUserRole tenantRole, string firstName = "Persona")
         {
             _tenantService.SetTenant(employee.TenantId);
             var handler = new UpdateEmployeeCommandHandler(

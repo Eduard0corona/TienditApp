@@ -25,6 +25,14 @@ public class ControllerRoleAuthorizationTests
     [InlineData(typeof(OrdersController), nameof(OrdersController.AddPayment), "STAFF", true)]
     [InlineData(typeof(WhatsAppChatController), nameof(WhatsAppChatController.SendMessage), "STAFF", true)]
     [InlineData(typeof(WhatsAppChatController), nameof(WhatsAppChatController.SendMessage), "KITCHEN", false)]
+    // Permissions offered to staff work for staff: the request still checks the permission itself.
+    [InlineData(typeof(AiAgentsController), nameof(AiAgentsController.GetAll), "STAFF", true)]
+    [InlineData(typeof(AiAgentsController), nameof(AiAgentsController.GetAll), "KITCHEN", false)]
+    [InlineData(typeof(CategoriesController), nameof(CategoriesController.Create), "STAFF", true)]
+    [InlineData(typeof(ProductsController), nameof(ProductsController.Delete), "STAFF", true)]
+    // The team stays with owners and admins: managing permissions would let anyone give themselves all of them.
+    [InlineData(typeof(EmployeesController), nameof(EmployeesController.Create), "STAFF", false)]
+    [InlineData(typeof(EmployeesController), nameof(EmployeesController.ResendInvitation), "TENANT_ADMIN", true)]
     public void Endpoint_ShouldAcceptTheRolesOfThePermissionMatrix(Type controller, string? action, string role, bool expected)
     {
         Assert.Equal(expected, AllowsRole(controller, action, role));

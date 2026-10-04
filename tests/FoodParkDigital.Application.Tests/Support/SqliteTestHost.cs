@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Interceptors;
 using FoodParkDigital.Infrastructure.Services;
@@ -67,20 +68,21 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddIdentityCore<ApplicationUser>(InfrastructureDependencyInjection.ConfigureIdentityOptions)
             .AddRoles<ApplicationRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddDefaultTokenProviders();
+            .AddTienditAppIdentityDefaults();
 
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddScoped<ICustomerLookupService, CustomerLookupService>();
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IEmailService>(Email);
         services.AddSingleton<ISmsService>(Sms);
-        services.AddSingleton<IJwtTokenService, FakeJwtTokenService>();
+        services.AddSingleton<IJwtTokenService>(Jwt);
         services.AddSingleton<IMapper>(new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper());
 
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
     public RecordingEmailService Email { get; } = new();
+    public FakeJwtTokenService Jwt { get; } = new();
     public RecordingSmsService Sms { get; } = new();
     public BeforeSaveInterceptor BeforeSave { get; } = new();
     public CommandFaultInterceptor CommandFaults { get; } = new();
@@ -191,8 +193,11 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         public DateTimeOffset UtcNow => new(2026, 2, 16, 16, 0, 0, TimeSpan.Zero);
     }
 
-    private sealed class FakeJwtTokenService : IJwtTokenService
+    internal sealed class FakeJwtTokenService : IJwtTokenService
     {
+        /// <summary>Accounts whose sessions were ended (password recovered).</summary>
+        public List<Guid> RevokedUsers { get; } = [];
+
         public string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null)
             => $"access-token-{user.Id}";
 
@@ -201,7 +206,11 @@ internal sealed class SqliteTestHost : IAsyncDisposable
 
         public Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken) => throw new NotSupportedException();
         public Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null) => throw new NotSupportedException();
-        public Task RevokeAllUserRefreshTokensAsync(Guid userId) => throw new NotSupportedException();
+        public Task RevokeAllUserRefreshTokensAsync(Guid userId)
+        {
+            RevokedUsers.Add(userId);
+            return Task.CompletedTask;
+        }
         public Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken) => throw new NotSupportedException();
         public System.Security.Claims.ClaimsPrincipal? GetPrincipalFromExpiredToken(string token) => throw new NotSupportedException();
     }

@@ -297,19 +297,19 @@ public class CustomerPhoneOwnershipTests
         Assert.True(result.IsSuccess, result.Error);
     }
 
-    /// <summary>Changes the account's phone like the profile endpoint does, which resets its confirmation.</summary>
-    private static Task ChangePhoneAsync(SqliteTestHost host, Guid userId, string phoneNumber)
-        => host.InScopeAsync(async services =>
-        {
-            var handler = ActivatorUtilities.CreateInstance<UpdateUserProfileCommandHandler>(
-                services,
-                new SignedInUser(userId));
-            var result = await handler.Handle(
-                new UpdateUserProfileCommand { FirstName = "Cliente", LastName = "Demo", PhoneNumber = phoneNumber },
-                CancellationToken.None);
+    /// <summary>
+    /// Changes the number of an account that has not confirmed it yet, like the confirmation screen does (with the
+    /// password). The new number stays unconfirmed until its code is entered.
+    /// </summary>
+    private static async Task ChangePhoneAsync(SqliteTestHost host, Guid userId, string phoneNumber)
+    {
+        host.SetTenant(Guid.Empty);
+        var result = await host.HandleAsync<ChangeUnconfirmedPhoneCommandHandler, Result>(handler => handler.Handle(
+            new ChangeUnconfirmedPhoneCommand { UserId = userId, Password = "Secreto1", PhoneNumber = phoneNumber },
+            CancellationToken.None));
 
-            Assert.True(result.IsSuccess, result.Error);
-        });
+        Assert.True(result.IsSuccess, result.Error);
+    }
 
     private static Task UpdateUserAsync(SqliteTestHost host, Guid userId, Action<ApplicationUser> change)
         => host.InScopeAsync(async services =>
@@ -326,16 +326,4 @@ public class CustomerPhoneOwnershipTests
     /// <summary>Phone held by each customer profile, keyed by account.</summary>
     private static Task<Dictionary<Guid, string>> ProfilePhonesAsync(SqliteTestHost host)
         => host.QueryAsync(db => db.CustomerProfiles.ToDictionaryAsync(p => p.UserId, p => p.PhoneNormalized));
-
-    private sealed class SignedInUser : ICurrentUserService
-    {
-        public SignedInUser(Guid userId) => UserId = userId.ToString();
-
-        public string? UserId { get; }
-        public string? UserName => null;
-        public string? Role => "Customer";
-        public string? TenantRole => null;
-        public IReadOnlyCollection<string> Permissions => [];
-        public Guid? TenantId => null;
-    }
 }

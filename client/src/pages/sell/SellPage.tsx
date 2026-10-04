@@ -170,6 +170,7 @@ export default function SellPage() {
   const { tenant, capabilities } = useTenant();
   const toast = useToast();
   const access = getAccess(user, capabilities);
+  const canCharge = access.charge;
   const tenantId = tenant?.id ?? '';
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? false;
   const defaultTaxRate = tenant?.defaultTaxRate ?? 16;
@@ -602,12 +603,13 @@ export default function SellPage() {
   };
 
   const openCharge = useCallback(() => {
-    // A table's round is sent to the kitchen and charged when the table leaves (Mesas).
-    if (cart.length === 0 || submitting || tabTarget) return;
+    // A table's round is sent to the kitchen and charged when the table leaves (Mesas). Without the charge
+    // permission (a waiter) the order is saved for the cashier.
+    if (cart.length === 0 || submitting || tabTarget || !canCharge) return;
     setSaleError('');
     setCartOpenOnPhone(false);
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget]);
+  }, [cart.length, submitting, tabTarget, canCharge]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -708,7 +710,9 @@ export default function SellPage() {
         // From a chat the summary goes back to the customer, paid or not.
         setCompletedSale({ order, change: 0, cashReceived: 0, unpaid: true });
       } else {
-        toast.success(`Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`);
+        toast.success(canCharge
+          ? `Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`
+          : `Pedido ${order.orderNumber} guardado: la caja lo cobra desde Pedidos.`);
       }
     } catch (err: unknown) {
       if (canQueue && isNetworkError(err) && await queueOfflineSale(request, charge)) return;
@@ -994,7 +998,7 @@ export default function SellPage() {
           </button>
           <Link to="/tables" className="btn btn-light btn-touch">Cancelar</Link>
         </div>
-      ) : (
+      ) : canCharge ? (
         <div className="d-grid gap-2 mt-3">
           <button
             type="button"
@@ -1012,6 +1016,18 @@ export default function SellPage() {
           >
             Guardar sin cobrar
           </button>
+        </div>
+      ) : (
+        <div className="d-grid gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-touch btn-touch-lg"
+            onClick={() => void submitSale(null)}
+            disabled={cart.length === 0 || submitting}
+          >
+            {submitting ? 'Guardando…' : `Guardar pedido · ${formatMoney(totals.total)}`}
+          </button>
+          <p className="small text-muted text-center mb-0">La caja lo cobra desde Pedidos.</p>
         </div>
       )}
     </div>
@@ -1223,10 +1239,10 @@ export default function SellPage() {
         <button
           type="button"
           className="btn btn-primary btn-touch"
-          onClick={tabTarget ? () => void sendToKitchen() : openCharge}
+          onClick={tabTarget ? () => void sendToKitchen() : canCharge ? openCharge : () => void submitSale(null)}
           disabled={cart.length === 0 || submitting}
         >
-          {tabTarget ? 'Enviar' : 'Cobrar'}
+          {tabTarget ? 'Enviar' : canCharge ? 'Cobrar' : 'Guardar'}
         </button>
       </div>
       <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet">

@@ -1,4 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Identity.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Common.Rules;
@@ -38,6 +40,62 @@ public static class CustomerPhoneOwnershipRules
             && IsSamePhone(phoneNormalizationService, holder.PhoneNumber, phoneNormalized);
 
         return new CustomerPhoneHolder(holder.UserId, isVerified);
+    }
+
+    /// <summary>
+    /// The account just proved <paramref name="phoneNumber"/> is theirs, so their profile takes it and orders placed
+    /// with it are linked to them from now on. The number is taken from a profile whose account never confirmed it,
+    /// never from an account that confirmed it first.
+    /// </summary>
+    public static async Task AssignConfirmedPhoneAsync(
+        IApplicationDbContext context,
+        IPhoneNormalizationService phoneNormalizationService,
+        ApplicationUser user,
+        string phoneNumber,
+        CancellationToken cancellationToken)
+    {
+        var phoneNormalized = phoneNormalizationService.NormalizeToE164(phoneNumber, DefaultCountry);
+        var holder = await FindHolderAsync(context, phoneNormalizationService, phoneNormalized, cancellationToken);
+
+        if (holder is not null && holder.UserId != user.Id)
+        {
+            if (holder.IsVerified)
+                return;
+
+            // The phone is unique across profiles, so the unverified one must release it first.
+            // Its account is kept; it just stops holding a number it never proved.
+            var unverifiedProfile = await context.CustomerProfiles
+                .FirstOrDefaultAsync(x => x.UserId == holder.UserId, cancellationToken);
+            if (unverifiedProfile is not null)
+            {
+                context.CustomerProfiles.Remove(unverifiedProfile);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        var profile = await context.CustomerProfiles
+            .FirstOrDefaultAsync(x => x.UserId == user.Id, cancellationToken);
+
+        if (profile is null)
+        {
+            context.CustomerProfiles.Add(new CustomerProfile(
+                user.Id,
+                phoneNormalized,
+                $"{user.FirstName} {user.LastName}".Trim(),
+                user.FirstName,
+                user.LastName));
+        }
+        else if (profile.PhoneNormalized != phoneNormalized)
+        {
+            // The account confirmed a different number, so its previous one stops identifying it.
+            profile.UpdateProfile(phoneNormalized, profile.DisplayName, profile.FirstName, profile.LastName);
+        }
+        else
+        {
+            return;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static bool IsSamePhone(

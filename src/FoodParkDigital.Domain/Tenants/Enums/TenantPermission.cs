@@ -16,5 +16,10 @@ public enum TenantPermission
     /// <summary>Give money back and void paid sales. Owners and admins always can; staff only when granted.</summary>
     ProcessRefunds = 12,
     /// <summary>Message templates, campaigns and reminders. Owners and admins always can; staff only when granted.</summary>
-    ManageCampaigns = 13
+    ManageCampaigns = 13,
+    /// <summary>
+    /// Charge: register payments and close sales. <see cref="ManageOrders"/> takes orders; without this a waiter leaves
+    /// them for the cashier.
+    /// </summary>
+    ChargeOrders = 14
 }

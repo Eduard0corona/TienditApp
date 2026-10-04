@@ -65,33 +65,6 @@ export interface EmployeeDto {
   permissions: string[];
 }
 
-export interface EmployeePermissionOptionDto {
-  code: string;
-  name: string;
-  description: string;
-}
-
-export interface CreateEmployeeRequest {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber?: string;
-  appRole: number;
-  tenantRole: number;
-  permissions: string[];
-}
-
-export interface UpdateEmployeeRequest {
-  tenantUserId: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber?: string;
-  appRole: number;
-  tenantRole: number;
-  permissions: string[];
-}
-
 export interface MyTenantDto {
   tenantId: string;
   name: string;
@@ -119,7 +92,6 @@ export interface DisableTwoFactorRequest {
 export interface UpdateProfileRequest {
   firstName: string;
   lastName: string;
-  phoneNumber?: string;
 }
 
 export interface ChangePasswordRequest {

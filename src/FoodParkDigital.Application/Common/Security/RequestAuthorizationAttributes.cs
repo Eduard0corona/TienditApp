@@ -69,3 +69,12 @@ public sealed class RequiresCapabilityAttribute : Attribute
 
     public TenantCapability AnyOf { get; }
 }
+
+/// <summary>
+/// A request whose content needs more than its declared permission: a sale charged at once also needs
+/// <see cref="TenantPermission.ChargeOrders"/>. Checked after the declared rule; owners and admins have them all.
+/// </summary>
+public interface IRequiresContentPermissions
+{
+    IEnumerable<TenantPermission> RequiredPermissions();
+}

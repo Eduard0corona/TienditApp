@@ -1297,6 +1297,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset?>("SmsCodeSentAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
 

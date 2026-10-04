@@ -12,6 +12,8 @@ public class ApplicationUser : IdentityUser<Guid>
     public string? AvatarUrl { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    /// <summary>When the last SMS code of this account was sent: one per minute, whatever the screen asking.</summary>
+    public DateTimeOffset? SmsCodeSentAt { get; set; }
 
     public string FullName => $"{FirstName} {LastName}";
 }

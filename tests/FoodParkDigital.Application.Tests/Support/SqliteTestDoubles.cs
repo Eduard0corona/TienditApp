@@ -141,15 +141,25 @@ internal sealed class RecordingEmailService : IEmailService
     public Task SendPasswordResetEmailAsync(string email, string userId, string token) => Task.CompletedTask;
 
     public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
+
+    public List<(string Email, string Business, string Path)> Invitations { get; } = [];
+
+    public Task SendTeamInvitationAsync(string email, string businessName, string invitationPath)
+    {
+        Invitations.Add((email, businessName, invitationPath));
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class RecordingSmsService : ISmsService
 {
     public List<string> VerificationRecipients { get; } = [];
+    public List<(string Phone, string Code)> Codes { get; } = [];
 
     public Task SendVerificationCodeAsync(string phoneNumber, string code)
     {
         VerificationRecipients.Add(phoneNumber);
+        Codes.Add((phoneNumber, code));
         return Task.CompletedTask;
     }
 

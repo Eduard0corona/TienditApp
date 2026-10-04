@@ -199,6 +199,68 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Contraseña restablecida exitosamente." });
     }
 
+    /// <summary>Recover the password with a code sent by SMS to the phone the account confirmed.</summary>
+    [HttpPost("forgot-password/sms")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ForgotPasswordBySms([FromBody] ForgotPasswordBySmsCommand command)
+    {
+        await _mediator.Send(command);
+        return Ok(new { message = "Si tu cuenta tiene un teléfono confirmado, te enviamos un código por SMS." });
+    }
+
+    [HttpPost("reset-password/sms")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ResetPasswordWithSmsCode([FromBody] ResetPasswordWithSmsCodeCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Contraseña restablecida exitosamente." });
+    }
+
+    /// <summary>Fix the number typed at registration (with the password) and receive the code there.</summary>
+    [HttpPost("change-unconfirmed-phone")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<ActionResult> ChangeUnconfirmedPhone([FromBody] ChangeUnconfirmedPhoneCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Te enviamos un código al número nuevo." });
+    }
+
+    /// <summary>What an invitation to a team shows before the person chooses their password.</summary>
+    [HttpGet("invitation")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<ActionResult<InvitationDto>> GetInvitation([FromQuery] Guid userId, [FromQuery] string token)
+    {
+        var result = await _mediator.Send(new GetInvitationQuery(userId, token));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    /// <summary>The invited person chooses their password and the session starts.</summary>
+    [HttpPost("accept-invitation")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthResponse>> AcceptInvitation([FromBody] AcceptInvitationCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        var response = result.Value;
+        if (response.RefreshToken is not null)
+            SetRefreshTokenCookie(response.RefreshToken);
+
+        return Ok(response with { RefreshToken = null });
+    }
+
     [HttpGet("profile")]
     [Authorize]
     public async Task<ActionResult<UserProfileDto>> GetProfile()
@@ -247,6 +309,29 @@ public class AuthController : ControllerBase
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
         return NoContent();
+    }
+
+    /// <summary>Change the phone of the account: with the password, a code goes to the new number.</summary>
+    [HttpPost("profile/phone")]
+    [EnableRateLimiting("auth")]
+    [Authorize]
+    public async Task<IActionResult> RequestPhoneChange([FromBody] RequestPhoneChangeCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Te enviamos un código al número nuevo." });
+    }
+
+    [HttpPost("profile/phone/confirm")]
+    [EnableRateLimiting("auth")]
+    [Authorize]
+    public async Task<IActionResult> ConfirmPhoneChange([FromBody] ConfirmPhoneChangeCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(new { message = "Número de teléfono confirmado exitosamente." });
     }
 
     [HttpPost("profile/change-password")]

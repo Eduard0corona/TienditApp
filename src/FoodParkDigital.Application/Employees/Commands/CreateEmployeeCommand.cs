@@ -12,20 +12,28 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Employees.Commands;
 
+/// <summary>
+/// Adds a person to the team. Someone new receives an invitation to choose their own password (the response carries
+/// the link to share it by WhatsApp); someone who already has an account joins with it, without touching it.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageEmployees)]
 public record CreateEmployeeCommand : IRequest<Result<EmployeeDto>>
 {
     public string Email { get; init; } = null!;
-    public string Password { get; init; } = null!;
+    /// <summary>Optional, for API callers that still set one; the app always invites.</summary>
+    public string? Password { get; init; }
     public string FirstName { get; init; } = null!;
     public string LastName { get; init; } = null!;
     public string? PhoneNumber { get; init; }
     public UserRole AppRole { get; init; } = UserRole.Staff;
     public TenantUserRole TenantRole { get; init; } = TenantUserRole.Staff;
-    public List<string> Permissions { get; init; } = [];
+    /// <summary>Null takes the defaults of the role; an empty list is "sin acceso".</summary>
+    public List<string>? Permissions { get; init; }
 }
 
 public class CreateEmployeeCommandValidator : AbstractValidator<CreateEmployeeCommand>
@@ -33,7 +41,7 @@ public class CreateEmployeeCommandValidator : AbstractValidator<CreateEmployeeCo
     public CreateEmployeeCommandValidator()
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(6);
+        RuleFor(x => x.Password).MinimumLength(6).When(x => !string.IsNullOrEmpty(x.Password));
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.PhoneNumber).MaximumLength(30);
@@ -52,17 +60,23 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IEmailService? _emailService;
+    private readonly ILogger<CreateEmployeeCommandHandler> _logger;
 
     public CreateEmployeeCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IEmailService? emailService = null,
+        ILogger<CreateEmployeeCommandHandler>? logger = null)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
         _userManager = userManager;
+        _emailService = emailService;
+        _logger = logger ?? NullLogger<CreateEmployeeCommandHandler>.Instance;
     }
 
     public async Task<Result<EmployeeDto>> Handle(CreateEmployeeCommand request, CancellationToken cancellationToken)
@@ -70,15 +84,31 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
         if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
             return Result.Failure<EmployeeDto>("No tienes permisos para crear empleados.");
 
+        var tenantId = _tenantService.TenantId;
         var email = request.Email.Trim();
+        // Accounts are shared by every business of a person.
         var existingUser = await _context.Users
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.NormalizedEmail == email.ToUpper(), cancellationToken);
 
         if (existingUser is not null)
-            return Result.Failure<EmployeeDto>("Ya existe un usuario con ese email.");
+        {
+            if (existingUser.Role is UserRole.Customer)
+                return Result.Failure<EmployeeDto>("Ese correo es de una cuenta de cliente: pídele otro correo para el equipo.");
+            if (existingUser.Role is UserRole.SuperAdmin)
+                return Result.Failure<EmployeeDto>("Esa cuenta no se puede agregar al equipo.");
 
-        var planError = await SubscriptionRules.CheckUserLimitAsync(_context, _tenantService.TenantId, cancellationToken);
+            var membership = await _context.TenantUsers
+                .FirstOrDefaultAsync(x => x.UserId == existingUser.Id, cancellationToken);
+            if (membership is not null)
+            {
+                return Result.Failure<EmployeeDto>(membership.Status == TenantUserStatus.Disabled
+                    ? "Ya está en el equipo, desactivado: actívalo desde la lista."
+                    : "Ya es parte del equipo.");
+            }
+        }
+
+        var planError = await SubscriptionRules.CheckUserLimitAsync(_context, tenantId, cancellationToken);
         if (planError is not null)
             return Result.Failure<EmployeeDto>(planError);
 
@@ -86,47 +116,52 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
             ? TenantUserRole.Admin
             : request.TenantRole;
 
-        var permissions = TenantPermissionCatalog.NormalizeCodes(request.Permissions);
-        if (permissions.Count == 0)
+        var user = existingUser;
+        // Someone already invited elsewhere who has not chosen a password yet is invited here too.
+        var invite = user is not null && !await _userManager.HasPasswordAsync(user);
+        if (user is null)
         {
-            permissions = TenantPermissionCatalog.GetDefaultCodes(request.AppRole, tenantRole);
-        }
+            user = new ApplicationUser
+            {
+                DefaultTenantId = tenantId,
+                UserName = email,
+                Email = email,
+                FirstName = request.FirstName.Trim(),
+                LastName = request.LastName.Trim(),
+                PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
+                Role = request.AppRole,
+                // Confirmed when the person accepts the invitation (or right away with a password set by the API).
+                EmailConfirmed = !string.IsNullOrEmpty(request.Password),
+                IsActive = true
+            };
 
-        var user = new ApplicationUser
-        {
-            DefaultTenantId = _tenantService.TenantId,
-            UserName = email,
-            Email = email,
-            FirstName = request.FirstName.Trim(),
-            LastName = request.LastName.Trim(),
-            PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
-            Role = request.AppRole,
-            EmailConfirmed = true,
-            IsActive = true
-        };
+            invite = string.IsNullOrEmpty(request.Password);
+            var createResult = invite
+                ? await _userManager.CreateAsync(user)
+                : await _userManager.CreateAsync(user, request.Password!);
+            if (!createResult.Succeeded)
+                return Result.Failure<EmployeeDto>(string.Join(", ", createResult.Errors.Select(e => e.Description)));
 
-        var createResult = await _userManager.CreateAsync(user, request.Password);
-        if (!createResult.Succeeded)
-        {
-            var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
-            return Result.Failure<EmployeeDto>(errors);
-        }
-
-        var roleResult = await _userManager.AddToRoleAsync(user, EmployeeDefinitions.ToIdentityRole(request.AppRole));
-        if (!roleResult.Succeeded)
-        {
-            var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
-            return Result.Failure<EmployeeDto>(errors);
+            var roleResult = await _userManager.AddToRoleAsync(user, EmployeeDefinitions.ToIdentityRole(request.AppRole));
+            if (!roleResult.Succeeded)
+                return Result.Failure<EmployeeDto>(string.Join(", ", roleResult.Errors.Select(e => e.Description)));
         }
 
         var tenantUser = new TenantUser(
-            _tenantService.TenantId,
+            tenantId,
             user.Id,
             tenantRole,
-            TenantUserStatus.Active,
-            permissions);
+            invite ? TenantUserStatus.Invited : TenantUserStatus.Active);
+        if (request.Permissions is null)
+            tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(request.AppRole, tenantRole));
+        else
+            tenantUser.SetExplicitPermissions(request.Permissions);
         _context.TenantUsers.Add(tenantUser);
         await _context.SaveChangesAsync(cancellationToken);
+
+        var invitationPath = invite
+            ? await EmployeeInvitations.IssueAsync(_userManager, _emailService, _context, user, tenantId, _logger, cancellationToken)
+            : null;
 
         return Result.Success(new EmployeeDto
         {
@@ -139,9 +174,10 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
             AppRole = user.Role.ToString(),
             TenantRole = tenantUser.Role.ToString(),
             Status = tenantUser.Status.ToString(),
-            IsActive = true,
+            IsActive = tenantUser.Status == TenantUserStatus.Active,
             CreatedAt = tenantUser.CreatedAt,
-            Permissions = permissions.ToList()
+            Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(tenantUser.PermissionCodes, user.Role, tenantRole).ToList(),
+            InvitationUrl = invitationPath
         });
     }
 }
