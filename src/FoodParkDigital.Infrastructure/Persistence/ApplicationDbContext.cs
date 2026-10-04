@@ -118,6 +118,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<CustomerAddress> CustomerAddresses => Set<CustomerAddress>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public DbSet<TemporaryCustomer> TemporaryCustomers => Set<TemporaryCustomer>();
     public DbSet<Order> Orders => Set<Order>();

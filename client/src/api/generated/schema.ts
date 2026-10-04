@@ -2333,6 +2333,166 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/customers/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCustomerNotesRequest"];
+                    "text/json": components["schemas"]["UpdateCustomerNotesRequest"];
+                    "application/*+json": components["schemas"]["UpdateCustomerNotesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/{id}/addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CustomerAddressRequest"];
+                    "text/json": components["schemas"]["CustomerAddressRequest"];
+                    "application/*+json": components["schemas"]["CustomerAddressRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/{id}/addresses/{addressId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    addressId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CustomerAddressRequest"];
+                    "text/json": components["schemas"]["CustomerAddressRequest"];
+                    "application/*+json": components["schemas"]["CustomerAddressRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    addressId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/metrics": {
         parameters: {
             query?: never;
@@ -3606,6 +3766,46 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyOrderDtoPaginatedList"];
+                        "application/json": components["schemas"]["MyOrderDtoPaginatedList"];
+                        "text/json": components["schemas"]["MyOrderDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7006,6 +7206,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/whatsapp/chat/{id}/auto-replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetAutoRepliesRequest"];
+                    "text/json": components["schemas"]["SetAutoRepliesRequest"];
+                    "application/*+json": components["schemas"]["SetAutoRepliesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ConversationDto"];
+                        "application/json": components["schemas"]["ConversationDto"];
+                        "text/json": components["schemas"]["ConversationDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/whatsapp/webhook": {
         parameters: {
             query?: never;
@@ -7557,6 +7802,8 @@ export interface components {
             lastMessageAt: string;
             /** Format: int32 */
             unreadCount: number;
+            /** Format: date-time */
+            autoRepliesPausedUntil?: string | null;
         };
         ConversationDtoPaginatedList: {
             items: components["schemas"]["ConversationDto"][];
@@ -7649,6 +7896,7 @@ export interface components {
             name: string;
             phone?: string | null;
             email?: string | null;
+            notes?: string | null;
         };
         CreateDiningTableCommand: {
             name: string;
@@ -7891,6 +8139,20 @@ export interface components {
             defaultCountry: string;
             items: components["schemas"]["CreateOrderItemDto"][];
         };
+        CustomerAddressDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            addressLine: string;
+            references?: string | null;
+            isDefault: boolean;
+        };
+        CustomerAddressRequest: {
+            addressLine: string;
+            label?: string | null;
+            references?: string | null;
+            isDefault: boolean;
+        };
         CustomerCardAppointmentDto: {
             /** Format: uuid */
             id: string;
@@ -7905,6 +8167,8 @@ export interface components {
             /** Format: uuid */
             customerId?: string | null;
             email?: string | null;
+            notes?: string | null;
+            addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: int32 */
             ordersCount: number;
             /** Format: double */
@@ -7956,6 +8220,8 @@ export interface components {
             email?: string | null;
             isPublicGeneral: boolean;
             isActive: boolean;
+            notes?: string | null;
+            addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -8512,6 +8778,39 @@ export interface components {
             permissions: string[];
             /** Format: int32 */
             capabilities: number;
+        };
+        MyOrderDto: {
+            /** Format: uuid */
+            id: string;
+            orderNumber: string;
+            businessName: string;
+            businessSlug: string;
+            canOrderAgain: boolean;
+            status: components["schemas"]["OrderStatus"];
+            orderType: components["schemas"]["OrderType"];
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            paidAmount: number;
+            /** Format: date-time */
+            createdAt: string;
+            items: components["schemas"]["MyOrderItemDto"][];
+        };
+        MyOrderDtoPaginatedList: {
+            items: components["schemas"]["MyOrderDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        MyOrderItemDto: {
+            productName: string;
+            /** Format: double */
+            quantity: number;
         };
         MyTenantDto: {
             /** Format: uuid */
@@ -9437,6 +9736,9 @@ export interface components {
         SetAiAgentActiveRequest: {
             isActive: boolean;
         };
+        SetAutoRepliesRequest: {
+            paused: boolean;
+        };
         SetBranchActiveRequest: {
             isActive: boolean;
         };
@@ -9803,6 +10105,10 @@ export interface components {
             name: string;
             phone?: string | null;
             email?: string | null;
+            notes?: string | null;
+        };
+        UpdateCustomerNotesRequest: {
+            notes?: string | null;
         };
         UpdateDiningTableCommand: {
             /** Format: uuid */

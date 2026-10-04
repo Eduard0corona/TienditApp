@@ -45,6 +45,10 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Una compra con recepción parcial no se puede cerrar sin esperar el resto (cancelarla se rechaza porque ya hay mercancía recibida).
 - Las rondas de una cuenta de mesa no se revisan contra existencias; la cuenta consume al cerrarse y ahí no se rechaza.
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
+- Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
+- Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
+- Las conversaciones partidas antes de la Fase 4 (`+52` y `+521` del mismo número) siguen como dos hilos; cada mensaje nuevo va al hilo con la misma forma del número.
+- Los puntos de lealtad de `CustomerProfile` siguen sin usarse.
 
 ## Resuelto el 2026-10-01
 
@@ -167,6 +171,9 @@ Pendientes detectados en la Fase 3:
 - Categorías: archivar pasa los productos a otra categoría y se pueden restaurar.
 - Compras: detalle de la orden, recepción parcial con el costo de la factura, enviar un borrador y cancelar mientras no llegue nada.
 - Política de existencias por negocio: bloquear la venta nombrando el insumo que falta (por defecto) o vender y avisar al cajero.
+- Respuestas automáticas por palabras completas sin acentos, en pausa cuando una persona atiende el chat, sin preguntas en cada respuesta y con enlace al menú en línea; sin campos de IA en su pantalla.
+- Chat: palomitas reales (se guarda el `wamid`) en vivo, marcadores para fotos, notas de voz y ubicaciones, y el mismo hilo para `+52` y `+521`.
+- Clientes con teléfono normalizado, notas y direcciones de entrega (migración `AddCustomerAddressesAndChatPause`), visibles en la ficha del chat; la cuenta de cliente ve sus pedidos de todos los negocios en "Mis pedidos".
 
 ## Decisiones humanas pendientes
 

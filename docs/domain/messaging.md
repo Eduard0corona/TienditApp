@@ -29,6 +29,15 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 - El negocio también puede registrar o reactivar una baja a petición del cliente (permiso `ManageCampaigns` o `ManageCustomers`). Cada cambio se audita.
 - La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) siguen llegando: el cliente los pidió al hacer el pedido. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador.
 
+## Chat y respuestas automáticas (Fase 4)
+
+- "Respuestas automáticas" (`AiAgentAutoReplyService`) reconoce palabras completas sin importar mayúsculas ni acentos (`AutoReplyKeywords`): "menú" coincide con "menu" y "hi" ya no coincide dentro de "chilaquiles". No hay modelo de lenguaje: contesta con los textos del negocio.
+- Saludo: el mensaje de bienvenida y, solo ahí, los datos que pide (nombre si WhatsApp no lo da, correo, dirección). Precios, menú o pedido: los productos del negocio y el enlace a su menú en línea (`{AppUrl}/m/{slug}`) cuando está prendido; si no, invita a escribir lo que quiere para que el equipo tome el pedido. "Gracias", "ok" y similares reciben el mensaje de cierre.
+- No contestan cuando una persona del equipo escribió en el chat en las últimas 12 horas (`WhatsAppConversation.AutoRepliesPausedUntil`), cuando el chat las pausó a mano (un día, `PUT /whatsapp/chat/{id}/auto-replies`) ni a fotos, notas de voz y demás medios.
+- Fotos, videos, notas de voz, documentos, stickers, ubicaciones (con enlace al mapa) y contactos se guardan como un marcador ("📷 Foto: …"); antes se descartaban. Las reacciones se ignoran.
+- Cada mensaje enviado desde el chat y cada respuesta automática guarda su `wamid`, así que las palomitas avanzan (enviado, entregado, leído, no entregado) y el chat las recibe en vivo (`MessageStatus` en el hub).
+- Un número mexicano llega de WhatsApp como `+521…` y se escribe como `+52…`: el chat, la ficha, las bajas y los pedidos lo tratan como el mismo (`MessagingPhone`). Una conversación iniciada desde el negocio recibe la respuesta del cliente en el mismo hilo.
+
 ## Cola y worker
 
 - `OutgoingMessages` es la cola y el historial. `MessagingWorker` (Infrastructure, `BackgroundJobs/Messaging`) reclama mensajes con token de concurrencia y lease, envía cada uno en el contexto de su negocio y pausa 100 ms entre envíos (unos 10 por segundo).

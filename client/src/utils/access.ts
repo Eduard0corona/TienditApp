@@ -41,6 +41,8 @@ export interface Access {
   campaigns: boolean;
   /** Platform console (businesses, plans and billing): the platform admin only. */
   platform: boolean;
+  /** A customer account's own orders in every business (GET /me/orders). */
+  myOrders: boolean;
 }
 
 export type AccessArea = Exclude<keyof Access, 'isAdmin'>;
@@ -94,6 +96,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     refunds: commerce && isCounterRole && can('ManageOrders') && can('ProcessRefunds'),
     campaigns: commerce && isCounterRole && can('ManageCampaigns'),
     platform: role === 'superadmin',
+    myOrders: role === 'customer',
   };
 }
 
@@ -113,5 +116,6 @@ export function getLandingPath(user: UserProfileDto | null, capabilities: number
   if (access.appointments) return '/appointments';
   if (access.inventory) return '/inventory';
   if (access.dashboard) return '/dashboard';
+  if (access.myOrders) return '/mis-pedidos';
   return '/profile';
 }

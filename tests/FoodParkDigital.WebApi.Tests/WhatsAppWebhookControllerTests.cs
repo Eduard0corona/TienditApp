@@ -249,6 +249,45 @@ public class WhatsAppWebhookControllerTests
     }
 
     [Fact]
+    public async Task Process_ShouldKeepPhotosVoiceNotesAndLocationsAsMarkers()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = WebhookPayload(TenantBPhoneNumberId, """
+            "contacts": [{ "profile": { "name": "Cliente" }, "wa_id": "5215511112222" }],
+            "messages": [
+              { "from": "5215511112222", "id": "wamid.photo", "type": "image", "image": { "id": "m1", "caption": "así lo quiero" } },
+              { "from": "5215511112222", "id": "wamid.voice", "type": "audio", "audio": { "id": "m2", "voice": true } },
+              { "from": "5215511112222", "id": "wamid.place", "type": "location", "location": { "latitude": 19.4326, "longitude": -99.1332, "name": "Mi casa" } },
+              { "from": "5215511112222", "id": "wamid.like", "type": "reaction", "reaction": { "message_id": "wamid.x", "emoji": "👍" } }
+            ]
+            """);
+
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
+
+        Assert.Equal(0, outcome.FailedItems);
+        var commands = fixture.Mediator.Requests.OfType<ProcessInboundMessageCommand>().ToList();
+        Assert.Equal(
+            ["📷 Foto: así lo quiero", "🎤 Nota de voz", "📍 Ubicación: Mi casa https://maps.google.com/?q=19.4326,-99.1332"],
+            commands.Select(c => c.Body));
+        Assert.All(commands, c => Assert.True(c.IsMedia));
+    }
+
+    [Fact]
+    public async Task Process_ShouldPushTheNewStatusToTheChat()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        await fixture.SeedSentMessageAsync(fixture.TenantB, "wamid.sent");
+        var notifications = new RecordingChatNotifications();
+        var body = StatusPayload(TenantBPhoneNumberId, "wamid.sent", "delivered");
+
+        await fixture.CreateProcessor(notifications: notifications).ProcessAsync(Encoding.UTF8.GetString(body));
+
+        var pushed = Assert.Single(notifications.Statuses);
+        Assert.Equal(fixture.TenantB, pushed.TenantId);
+        Assert.Equal("Delivered", pushed.Status);
+    }
+
+    [Fact]
     public async Task Process_ShouldReportAFailure_WhenStatusUpdateCannotBeSaved()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -445,12 +484,14 @@ public class WhatsAppWebhookControllerTests
 
         public WhatsAppWebhookProcessor CreateProcessor(
             ILogger<WhatsAppWebhookProcessor>? logger = null,
-            string environmentName = "Production")
+            string environmentName = "Production",
+            IWhatsAppNotificationService? notifications = null)
             => new(
                 Mediator,
                 Context,
                 new TestHostEnvironment(environmentName),
-                logger ?? NullLogger<WhatsAppWebhookProcessor>.Instance);
+                logger ?? NullLogger<WhatsAppWebhookProcessor>.Instance,
+                notifications);
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
 
@@ -459,6 +500,22 @@ public class WhatsAppWebhookControllerTests
             var config = new WhatsAppConfig(tenantId);
             config.Update(true, "test-access-token", phoneNumberId, "test-waba-id", null, verifyToken);
             return config;
+        }
+    }
+
+    private sealed class RecordingChatNotifications : IWhatsAppNotificationService
+    {
+        public List<(Guid TenantId, Guid MessageId, string Status)> Statuses { get; } = [];
+
+        public Task NotifyNewMessage(Guid tenantId, Application.WhatsApp.DTOs.ConversationDto conversation, Application.WhatsApp.DTOs.ChatMessageDto message)
+            => Task.CompletedTask;
+
+        public Task NotifyConversationUpdated(Guid tenantId, Application.WhatsApp.DTOs.ConversationDto conversation) => Task.CompletedTask;
+
+        public Task NotifyMessageStatus(Guid tenantId, Guid conversationId, Guid messageId, string status)
+        {
+            Statuses.Add((tenantId, messageId, status));
+            return Task.CompletedTask;
         }
     }
 

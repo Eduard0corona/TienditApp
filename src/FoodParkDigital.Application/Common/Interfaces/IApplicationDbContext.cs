@@ -32,6 +32,7 @@ public interface IApplicationDbContext
     DbSet<Category> Categories { get; }
     DbSet<Product> Products { get; }
     DbSet<Customer> Customers { get; }
+    DbSet<CustomerAddress> CustomerAddresses { get; }
     DbSet<CustomerProfile> CustomerProfiles { get; }
     DbSet<TemporaryCustomer> TemporaryCustomers { get; }
     DbSet<Order> Orders { get; }

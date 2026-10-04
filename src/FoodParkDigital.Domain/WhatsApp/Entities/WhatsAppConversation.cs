@@ -5,6 +5,9 @@ namespace FoodParkDigital.Domain.WhatsApp.Entities;
 
 public class WhatsAppConversation : AuditableEntity, ITenantScoped
 {
+    /// <summary>How long automatic replies stay quiet after a person of the team writes in the chat.</summary>
+    public static readonly TimeSpan HumanReplyPause = TimeSpan.FromHours(12);
+
     private readonly List<WhatsAppMessage> _messages = new();
 
     private WhatsAppConversation() { }
@@ -24,6 +27,8 @@ public class WhatsAppConversation : AuditableEntity, ITenantScoped
     public DateTimeOffset LastMessageAt { get; private set; }
     public int UnreadCount { get; private set; }
     public bool IsArchived { get; private set; }
+    /// <summary>Automatic replies stay quiet until then, so they never answer over a person of the team.</summary>
+    public DateTimeOffset? AutoRepliesPausedUntil { get; private set; }
 
     public IReadOnlyCollection<WhatsAppMessage> Messages => _messages.AsReadOnly();
 
@@ -45,6 +50,13 @@ public class WhatsAppConversation : AuditableEntity, ITenantScoped
     {
         UnreadCount = 0;
     }
+
+    /// <summary>A person took the conversation (or paused the replies by hand): the bot stays out until then.</summary>
+    public void PauseAutoReplies(DateTimeOffset until) => AutoRepliesPausedUntil = until;
+
+    public void ResumeAutoReplies() => AutoRepliesPausedUntil = null;
+
+    public bool AutoRepliesPausedAt(DateTimeOffset now) => AutoRepliesPausedUntil is { } until && until > now;
 
     public void UpdateCustomerName(string? name)
     {

@@ -27,4 +27,11 @@ public class WhatsAppNotificationService : IWhatsAppNotificationService
             .Group($"chat_{tenantId}")
             .SendAsync("ConversationUpdated", conversation);
     }
+
+    public async Task NotifyMessageStatus(Guid tenantId, Guid conversationId, Guid messageId, string status)
+    {
+        await _hubContext.Clients
+            .Group($"chat_{tenantId}")
+            .SendAsync("MessageStatus", new { ConversationId = conversationId, MessageId = messageId, Status = status });
+    }
 }

@@ -58,6 +58,7 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Infrastructure/Services/WhatsAppService.cs"] = 1,
         ["src/FoodParkDigital.Infrastructure/Services/WhatsAppWebhookProcessor.cs"] = 3,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).
+        ["src/FoodParkDigital.Application/Orders/Queries/GetMyOrdersQuery.cs"] = 1, // a customer account's own orders, filtered by its user id
         ["src/FoodParkDigital.Application/Orders/Commands/CreateOrderCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Orders/Commands/CreateTenantOrderCommand.cs"] = 4,
         ["src/FoodParkDigital.Infrastructure/Services/CustomerLookupService.cs"] = 2,

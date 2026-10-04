@@ -369,6 +369,11 @@ public class TenantResolutionMiddleware
         if (path.StartsWith("/api/v1/customers/card", StringComparison.Ordinal) && isReadRequest)
             return [TenantPermission.ManageCustomers, TenantPermission.ManageWhatsApp, TenantPermission.ManageOrders];
 
+        // Notes and delivery addresses are kept from the chat and the orders screen too.
+        if (path.StartsWith("/api/v1/customers/", StringComparison.Ordinal)
+            && (path.EndsWith("/notes", StringComparison.Ordinal) || path.Contains("/addresses", StringComparison.Ordinal)))
+            return [TenantPermission.ManageCustomers, TenantPermission.ManageWhatsApp, TenantPermission.ManageOrders];
+
         if (path.StartsWith("/api/v1/customers", StringComparison.Ordinal))
             return [TenantPermission.ManageCustomers];
 

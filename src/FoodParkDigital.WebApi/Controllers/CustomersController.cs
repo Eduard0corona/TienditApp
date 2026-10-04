@@ -101,7 +101,45 @@ public class CustomersController : ControllerBase
             return BadRequest(new { error = result.Error });
         return NoContent();
     }
+
+    [HttpPut("{id:guid}/notes")]
+    public async Task<ActionResult<CustomerDto>> UpdateNotes(Guid id, [FromBody] UpdateCustomerNotesRequest request)
+        => ToResult(await _mediator.Send(new UpdateCustomerNotesCommand(id, request.Notes)));
+
+    [HttpPost("{id:guid}/addresses")]
+    public async Task<ActionResult<CustomerDto>> AddAddress(Guid id, [FromBody] CustomerAddressRequest request)
+        => ToResult(await _mediator.Send(new AddCustomerAddressCommand
+        {
+            CustomerId = id,
+            Label = request.Label,
+            AddressLine = request.AddressLine,
+            References = request.References,
+            IsDefault = request.IsDefault
+        }));
+
+    [HttpPut("{id:guid}/addresses/{addressId:guid}")]
+    public async Task<ActionResult<CustomerDto>> UpdateAddress(Guid id, Guid addressId, [FromBody] CustomerAddressRequest request)
+        => ToResult(await _mediator.Send(new UpdateCustomerAddressCommand
+        {
+            CustomerId = id,
+            AddressId = addressId,
+            Label = request.Label,
+            AddressLine = request.AddressLine,
+            References = request.References,
+            IsDefault = request.IsDefault
+        }));
+
+    [HttpDelete("{id:guid}/addresses/{addressId:guid}")]
+    public async Task<ActionResult<CustomerDto>> RemoveAddress(Guid id, Guid addressId)
+        => ToResult(await _mediator.Send(new RemoveCustomerAddressCommand(id, addressId)));
+
+    private ActionResult<CustomerDto> ToResult(Result<CustomerDto> result)
+        => result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
 }
 
 public record SetCustomerActiveRequest(bool IsActive);
+
+public record UpdateCustomerNotesRequest(string? Notes);
+
+public record CustomerAddressRequest(string AddressLine, string? Label = null, string? References = null, bool IsDefault = false);
 

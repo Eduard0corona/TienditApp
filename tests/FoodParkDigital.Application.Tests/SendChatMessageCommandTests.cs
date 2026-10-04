@@ -218,7 +218,8 @@ public class SendChatMessageCommandTests
                 Notifier,
                 new TestCurrentTenantService(TenantId),
                 _mapper,
-                NullLogger<SendChatMessageCommandHandler>.Instance);
+                NullLogger<SendChatMessageCommandHandler>.Instance,
+                new FoodParkDigital.Infrastructure.Services.PhoneNormalizationService());
 
         public SendChatMessageCommand Send() => new()
         {

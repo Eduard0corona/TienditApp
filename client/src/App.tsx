@@ -14,6 +14,7 @@ const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/profile/Profile'));
+const MyOrders = lazy(() => import('./pages/account/MyOrders'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
@@ -87,6 +88,14 @@ export default function App() {
                 )}
               />
               <Route path="/profile" element={<Profile />} />
+              <Route
+                path="/mis-pedidos"
+                element={(
+                  <AccessRoute area="myOrders">
+                    <MyOrders />
+                  </AccessRoute>
+                )}
+              />
               <Route
                 path="/products"
                 element={(

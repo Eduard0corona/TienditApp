@@ -286,6 +286,8 @@ export interface ConversationDto {
   lastMessageBody?: string;
   lastMessageAt: string;
   unreadCount: number;
+  /** The automatic replies stay quiet until then (a person answered or paused them). */
+  autoRepliesPausedUntil?: string | null;
 }
 
 export interface ChatMessageDto {
@@ -1332,13 +1334,25 @@ export interface UpdateAppointmentRemindersRequest {
 
 // ==================== Customers ====================
 
+export interface CustomerAddressDto {
+  id: string;
+  label: string;
+  addressLine: string;
+  references?: string | null;
+  isDefault: boolean;
+}
+
 export interface CustomerDto {
   id: string;
   name: string;
+  /** E.164 (+52 and ten digits for Mexican numbers). */
   phone?: string;
   email?: string;
   isPublicGeneral: boolean;
   isActive: boolean;
+  notes?: string | null;
+  /** Only in the detail of one customer. */
+  addresses?: CustomerAddressDto[];
   createdAt: string;
   updatedAt?: string;
 }
@@ -1347,6 +1361,7 @@ export interface CreateCustomerRequest {
   name: string;
   phone: string;
   email?: string;
+  notes?: string;
 }
 
 export interface UpdateCustomerRequest extends CreateCustomerRequest {

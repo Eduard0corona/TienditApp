@@ -3,7 +3,6 @@ using FoodParkDigital.Application.Audit.DTOs;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Catalog.DTOs;
-using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Inventory.DTOs;
@@ -16,7 +15,6 @@ using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
-using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -64,7 +62,6 @@ public class MappingProfile : Profile
             .ForMember(d => d.Options, opt => opt.MapFrom(s => s.Options.OrderBy(o => o.SortOrder)));
         CreateMap<ProductOption, ProductOptionDto>();
         CreateMap<Category, CategoryDto>();
-        CreateMap<Customer, CustomerDto>();
 
         CreateMap<Tenant, TenantProfileDto>()
             .ForMember(d => d.LogoUrl, opt => opt.MapFrom(s =>

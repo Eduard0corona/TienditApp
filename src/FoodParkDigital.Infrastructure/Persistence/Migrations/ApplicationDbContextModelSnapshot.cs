@@ -811,6 +811,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
@@ -835,6 +839,55 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Phone");
 
                     b.ToTable("Customers", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerAddress", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<string>("References")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("TenantId", "CustomerId");
+
+                    b.ToTable("CustomerAddresses", (string)null);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerProfile", b =>
@@ -3331,6 +3384,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("AutoRepliesPausedUntil")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -3724,6 +3780,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasOne("FoodParkDigital.Domain.Catalog.Entities.Product", null)
                         .WithMany("OptionGroups")
                         .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerAddress", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Customers.Entities.Customer", null)
+                        .WithMany("Addresses")
+                        .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -4260,6 +4325,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductOptionGroup", b =>
                 {
                     b.Navigation("Options");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.Customer", b =>
+                {
+                    b.Navigation("Addresses");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>

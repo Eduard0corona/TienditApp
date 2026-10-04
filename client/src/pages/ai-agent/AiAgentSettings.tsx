@@ -6,7 +6,7 @@ import { tenantApi } from '../../api/tenantApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 
-type AgentTab = 'General' | 'Mensajes' | 'Captura de Datos' | 'Configuración IA';
+type AgentTab = 'General' | 'Mensajes' | 'Datos que pide' | 'Comportamiento';
 
 const createDefaultAgentPayload = (name: string): CreateAiAgentRequest => ({
   name,
@@ -84,7 +84,7 @@ export default function AiAgentSettings() {
         return data[0]?.id || '';
       });
     } catch {
-      setFeedback({ type: 'danger', text: 'No se pudieron cargar los agentes IA.' });
+      setFeedback({ type: 'danger', text: 'No se pudieron cargar las respuestas automáticas.' });
     } finally {
       setLoading(false);
     }
@@ -114,7 +114,7 @@ export default function AiAgentSettings() {
       }
 
       const nextNumber = agents.length + 1;
-      const payload = createDefaultAgentPayload(`Agente ${nextNumber}`);
+      const payload = createDefaultAgentPayload(`Respuestas ${nextNumber}`);
       if (tenantInfo?.name) {
         payload.businessName = tenantInfo.name;
       }
@@ -151,7 +151,7 @@ export default function AiAgentSettings() {
       setAgents(nextAgents);
       setSelectedAgentId(nextAgents[0]?.id || '');
 
-      setFeedback({ type: 'success', text: 'Agente eliminado correctamente.' });
+      setFeedback({ type: 'success', text: 'Respuestas automáticas eliminadas.' });
     } catch (err: unknown) {
       setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudieron eliminar las respuestas automáticas.') });
     } finally {
@@ -163,12 +163,12 @@ export default function AiAgentSettings() {
     if (!selectedAgent) return;
 
     if (!selectedAgent.name.trim()) {
-      setFeedback({ type: 'danger', text: 'El nombre del agente es obligatorio.' });
+      setFeedback({ type: 'danger', text: 'Escribe un nombre.' });
       return;
     }
 
     if (!selectedAgent.role.trim()) {
-      setFeedback({ type: 'danger', text: 'El rol del agente es obligatorio.' });
+      setFeedback({ type: 'danger', text: 'Escribe para qué las usas.' });
       return;
     }
 
@@ -178,7 +178,7 @@ export default function AiAgentSettings() {
     try {
       const { data } = await aiAgentsApi.update(selectedAgent.id, toUpdateRequest(selectedAgent));
       setAgents((current) => current.map((agent) => (agent.id === data.id ? data : agent)));
-      setFeedback({ type: 'success', text: 'Configuración del agente guardada correctamente.' });
+      setFeedback({ type: 'success', text: 'Respuestas automáticas guardadas.' });
     } catch (err: unknown) {
       setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudieron guardar las respuestas automáticas.') });
     } finally {
@@ -202,10 +202,10 @@ export default function AiAgentSettings() {
       );
       setFeedback({
         type: 'success',
-        text: nextStatus ? 'Agente activado correctamente.' : 'Agente desactivado correctamente.',
+        text: nextStatus ? 'Respuestas automáticas activadas.' : 'Respuestas automáticas desactivadas.',
       });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo actualizar el estado del agente.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo cambiar el estado.') });
     } finally {
       setTogglingActive(false);
     }
@@ -240,7 +240,7 @@ export default function AiAgentSettings() {
           <div className="card">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-3">
-                <h4 className="header-title mb-0">Agentes IA</h4>
+                <h4 className="header-title mb-0">Configuraciones</h4>
                 <button type="button" className="btn btn-sm btn-primary" onClick={addAgent} disabled={creating}>
                   <i className="ri-add-line me-1"></i>{creating ? 'Creando...' : 'Nuevo'}
                 </button>
@@ -248,7 +248,7 @@ export default function AiAgentSettings() {
 
               {agents.length === 0 ? (
                 <div className="text-muted small">
-                  No hay agentes creados todavia.
+                  Todavía no hay respuestas automáticas.
                 </div>
               ) : (
                 <div className="list-group">
@@ -266,7 +266,7 @@ export default function AiAgentSettings() {
                     >
                       <div className="d-flex justify-content-between align-items-start gap-2">
                         <div>
-                          <div className="fw-semibold">{agent.name || 'Agente sin nombre'}</div>
+                          <div className="fw-semibold">{agent.name || 'Sin nombre'}</div>
                           <small className={agent.id === selectedAgentId ? 'text-white' : 'text-muted'}>
                             {agent.role || 'Sin rol'}
                           </small>
@@ -287,18 +287,23 @@ export default function AiAgentSettings() {
           {!selectedAgent ? (
             <div className="card">
               <div className="card-body text-center py-5">
-                <h5 className="mb-2">Sin agentes IA</h5>
-                <p className="text-muted mb-3">Crea tu primer agente para comenzar la configuración.</p>
+                <h5 className="mb-2">Sin respuestas automáticas</h5>
+                <p className="text-muted mb-3">Crea las respuestas que tu negocio manda por WhatsApp cuando nadie del equipo contesta.</p>
                 <button type="button" className="btn btn-primary" onClick={addAgent} disabled={creating}>
-                  <i className="ri-add-line me-1"></i>Crear agente
+                  <i className="ri-add-line me-1"></i>Crear respuestas
                 </button>
               </div>
             </div>
           ) : (
             <div className="card">
               <div className="card-body">
+                <div className="alert alert-light border small">
+                  Reconocen palabras completas (saludos, precios, menú, horario y ubicación) y contestan con tus textos;
+                  no usan inteligencia artificial. Se pausan solas 12 horas cuando alguien del equipo escribe en el chat
+                  y nunca contestan fotos ni notas de voz.
+                </div>
                 <ul className="nav nav-tabs nav-bordered mb-3">
-                  {(['General', 'Mensajes', 'Captura de Datos', 'Configuración IA'] as AgentTab[]).map((tab) => (
+                  {(['General', 'Mensajes', 'Datos que pide', 'Comportamiento'] as AgentTab[]).map((tab) => (
                     <li className="nav-item" key={tab}>
                       <button
                         type="button"
@@ -313,11 +318,11 @@ export default function AiAgentSettings() {
 
                 {activeTab === 'General' && (
                   <div>
-                    <h5 className="mb-3">Datos del agente</h5>
+                    <h5 className="mb-3">Datos</h5>
                     <div className="row">
                       <div className="col-md-6">
                         <div className="mb-3">
-                          <label className="form-label">Nombre del Agente</label>
+                          <label className="form-label">Nombre</label>
                           <input
                             type="text"
                             className="form-control"
@@ -333,7 +338,7 @@ export default function AiAgentSettings() {
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
-                          <label className="form-label">Rol del agente</label>
+                          <label className="form-label">Para qué la usas</label>
                           <input
                             type="text"
                             className="form-control"
@@ -349,66 +354,7 @@ export default function AiAgentSettings() {
                       </div>
                     </div>
 
-                    <h5 className="mb-3 mt-2">Estilo de comunicacion</h5>
-                    <div className="row">
-                      <div className="col-md-4">
-                        <div className="mb-3">
-                          <label className="form-label">Personalidad</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={selectedAgent.personality}
-                            onChange={(e) =>
-                              updateSelectedAgent((agent) => ({
-                                ...agent,
-                                personality: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="mb-3">
-                          <label className="form-label">Idioma</label>
-                          <select
-                            className="form-select"
-                            value={selectedAgent.language}
-                            onChange={(e) =>
-                              updateSelectedAgent((agent) => ({
-                                ...agent,
-                                language: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="Espanol">Espanol</option>
-                            <option value="Ingles">Ingles</option>
-                            <option value="Portugues">Portugues</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-4">
-                        <div className="mb-3">
-                          <label className="form-label">Tono</label>
-                          <select
-                            className="form-select"
-                            value={selectedAgent.tone}
-                            onChange={(e) =>
-                              updateSelectedAgent((agent) => ({
-                                ...agent,
-                                tone: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="Amigable">Amigable</option>
-                            <option value="Formal">Formal</option>
-                            <option value="Directo">Directo</option>
-                            <option value="Consultivo">Consultivo</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <h5 className="mb-3 mt-2">Información del Negocio</h5>
+                    <h5 className="mb-3 mt-2">Información del negocio</h5>
                     <div className="mb-3">
                       <label className="form-label">Nombre de la empresa</label>
                       <input
@@ -457,7 +403,7 @@ export default function AiAgentSettings() {
 
                 {activeTab === 'Mensajes' && (
                   <div>
-                    <h5 className="mb-3">Mensajes del agente</h5>
+                    <h5 className="mb-3">Mensajes</h5>
                     <div className="mb-3">
                       <label className="form-label">Mensaje de bienvenida</label>
                       <textarea
@@ -503,9 +449,10 @@ export default function AiAgentSettings() {
                   </div>
                 )}
 
-                {activeTab === 'Captura de Datos' && (
+                {activeTab === 'Datos que pide' && (
                   <div>
-                    <h5 className="mb-3">Campos de captura</h5>
+                    <h5 className="mb-1">Datos que pide al saludar</h5>
+                    <p className="text-muted small">Se piden una sola vez, junto con el mensaje de bienvenida.</p>
                     <div className="form-check mb-2">
                       <input
                         type="checkbox"
@@ -519,22 +466,7 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
-                      <label className="form-check-label" htmlFor="ask-name">Solicitar nombre</label>
-                    </div>
-                    <div className="form-check mb-2">
-                      <input
-                        type="checkbox"
-                        className="form-check-input"
-                        id="ask-phone"
-                        checked={selectedAgent.askForPhone}
-                        onChange={(e) =>
-                          updateSelectedAgent((agent) => ({
-                            ...agent,
-                            askForPhone: e.target.checked,
-                          }))
-                        }
-                      />
-                      <label className="form-check-label" htmlFor="ask-phone">Solicitar teléfono</label>
+                      <label className="form-check-label" htmlFor="ask-name">Nombre (si WhatsApp no lo da)</label>
                     </div>
                     <div className="form-check mb-2">
                       <input
@@ -549,7 +481,7 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
-                      <label className="form-check-label" htmlFor="ask-email">Solicitar email</label>
+                      <label className="form-check-label" htmlFor="ask-email">Correo</label>
                     </div>
                     <div className="form-check mb-3">
                       <input
@@ -564,106 +496,16 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
-                      <label className="form-check-label" htmlFor="ask-address">Solicitar dirección</label>
+                      <label className="form-check-label" htmlFor="ask-address">Dirección de entrega</label>
                     </div>
 
-                    <div className="mb-0">
-                      <label className="form-label">Preguntas personalizadas</label>
-                      <textarea
-                        className="form-control"
-                        rows={4}
-                        placeholder="Una pregunta por linea"
-                        value={selectedAgent.customQuestions || ''}
-                        onChange={(e) =>
-                          updateSelectedAgent((agent) => ({
-                            ...agent,
-                            customQuestions: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
                   </div>
                 )}
 
-                {activeTab === 'Configuración IA' && (
+                {activeTab === 'Comportamiento' && (
                   <div>
-                    <h5 className="mb-3">Motor de IA</h5>
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Modelo</label>
-                          <select
-                            className="form-select"
-                            value={selectedAgent.model}
-                            onChange={(e) =>
-                              updateSelectedAgent((agent) => ({
-                                ...agent,
-                                model: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-                            <option value="gpt-4.1">gpt-4.1</option>
-                            <option value="gpt-4o-mini">gpt-4o-mini</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Máximo de tokens</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            min={100}
-                            max={4000}
-                            value={selectedAgent.maxTokens}
-                            onChange={(e) =>
-                              updateSelectedAgent((agent) => ({
-                                ...agent,
-                                maxTokens: Number(e.target.value || 100),
-                              }))
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-3">
-                      <label className="form-label">Temperatura: {selectedAgent.temperature.toFixed(1)}</label>
-                      <input
-                        type="range"
-                        className="form-range"
-                        min={0}
-                        max={1}
-                        step={0.1}
-                        value={selectedAgent.temperature}
-                        onChange={(e) =>
-                          updateSelectedAgent((agent) => ({
-                            ...agent,
-                            temperature: Number(e.target.value),
-                          }))
-                        }
-                      />
-                    </div>
-
-                    <div className="form-check mb-2">
-                      <input
-                        type="checkbox"
-                        className="form-check-input"
-                        id="conversation-memory"
-                        checked={selectedAgent.useConversationMemory}
-                        onChange={(e) =>
-                          updateSelectedAgent((agent) => ({
-                            ...agent,
-                            useConversationMemory: e.target.checked,
-                          }))
-                        }
-                      />
-                      <label className="form-check-label" htmlFor="conversation-memory">
-                        Usar memoria conversacional
-                      </label>
-                    </div>
-                    <div className="form-check mb-0">
+                    <h5 className="mb-3">Cuando no reconoce la pregunta</h5>
+                    <div className="form-check mb-1">
                       <input
                         type="checkbox"
                         className="form-check-input"
@@ -676,8 +518,11 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
-                      <label className="form-check-label" htmlFor="strict-mode">Modo estricto</label>
+                      <label className="form-check-label" htmlFor="strict-mode">Contestar solo el mensaje de respaldo</label>
                     </div>
+                    <p className="text-muted small mb-0">
+                      Si lo desactivas, el mensaje de respaldo va seguido de la descripción del negocio.
+                    </p>
                   </div>
                 )}
 
@@ -692,8 +537,8 @@ export default function AiAgentSettings() {
                       {togglingActive
                         ? 'Actualizando...'
                         : selectedAgent.isActive
-                          ? 'Desactivar agente'
-                          : 'Activar agente'}
+                          ? 'Desactivar'
+                          : 'Activar'}
                     </button>
                     <button
                       type="button"
@@ -701,7 +546,7 @@ export default function AiAgentSettings() {
                       onClick={deleteAgent}
                       disabled={deleting || saving || togglingActive}
                     >
-                      {deleting ? 'Eliminando...' : 'Eliminar agente'}
+                      {deleting ? 'Eliminando...' : 'Eliminar'}
                     </button>
                   </div>
                   <button type="button" className="btn btn-primary" onClick={saveAgent} disabled={saving || deleting}>

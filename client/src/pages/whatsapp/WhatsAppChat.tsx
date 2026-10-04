@@ -23,6 +23,20 @@ function appendUnique(messages: ChatMessageDto[], message: ChatMessageDto): Chat
   return messages.some((existing) => existing.id === message.id) ? messages : [...messages, message];
 }
 
+/** The ticks of WhatsApp: one when sent, two when delivered, blue when read, a warning when it failed. */
+function MessageTicks({ status }: { status: string }) {
+  switch (status) {
+    case 'Read':
+      return <i className="ri-check-double-line ms-1 text-info" title="Leído" aria-label="Leído"></i>;
+    case 'Delivered':
+      return <i className="ri-check-double-line ms-1" title="Entregado" aria-label="Entregado"></i>;
+    case 'Failed':
+      return <i className="ri-error-warning-line ms-1 text-danger" title="No se entregó" aria-label="No se entregó"></i>;
+    default:
+      return <i className="ri-check-line ms-1" title="Enviado" aria-label="Enviado"></i>;
+  }
+}
+
 export default function WhatsAppChat() {
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -38,7 +52,9 @@ export default function WhatsAppChat() {
   const [newChatMessage, setNewChatMessage] = useState('');
   const [startingChat, setStartingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { onNewMessage, onConversationUpdated } = useChatSignalR();
+  const { onNewMessage, onConversationUpdated, onMessageStatus } = useChatSignalR();
+  const [now, setNow] = useState(() => Date.now());
+  const [togglingReplies, setTogglingReplies] = useState(false);
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const access = getAccess(user, capabilities);
@@ -50,6 +66,12 @@ export default function WhatsAppChat() {
   // Latest selection, read by async callbacks that finish after the user moved to another conversation.
   const selectedIdRef = useRef<string | null>(selectedId);
   selectedIdRef.current = selectedId;
+
+  // The pause of the automatic replies expires by itself: the header follows the clock.
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(clock);
+  }, []);
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -164,6 +186,30 @@ export default function WhatsAppChat() {
     });
   }, [onConversationUpdated]);
 
+  // SignalR: the ticks of a sent message move as WhatsApp reports them.
+  useEffect(() => {
+    return onMessageStatus((update) => {
+      if (update.conversationId !== selectedIdRef.current) return;
+      setMessages((prev) => prev.map((m) => (m.id === update.messageId ? { ...m, status: update.status } : m)));
+    });
+  }, [onMessageStatus]);
+
+  const pausedUntil = selectedConvo?.autoRepliesPausedUntil ? new Date(selectedConvo.autoRepliesPausedUntil) : null;
+  const repliesPaused = !!pausedUntil && pausedUntil.getTime() > now;
+
+  const toggleAutoReplies = async () => {
+    if (!selectedConvo || togglingReplies) return;
+    setTogglingReplies(true);
+    try {
+      const { data } = await chatApi.setAutoReplies(selectedConvo.id, !repliesPaused);
+      setConversations((prev) => prev.map((c) => (c.id === data.id ? { ...c, ...data } : c)));
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudo cambiar las respuestas automáticas.'));
+    } finally {
+      setTogglingReplies(false);
+    }
+  };
+
   // Start new conversation
   const handleStartChat = async () => {
     if (!newChatPhone.trim() || !newChatMessage.trim()) return;
@@ -263,7 +309,7 @@ export default function WhatsAppChat() {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="Teléfono (+5215512345678)"
+                  placeholder="Teléfono a 10 dígitos"
                   value={newChatPhone}
                   onChange={(e) => setNewChatPhone(e.target.value)}
                 />
@@ -423,6 +469,19 @@ export default function WhatsAppChat() {
                     {selectedConvo?.customerName && (
                       <small className="text-muted">{selectedConvo.customerPhone}</small>
                     )}
+                    <small className={`d-block ${repliesPaused ? 'text-warning-emphasis' : 'text-muted'}`}>
+                      {repliesPaused && pausedUntil
+                        ? `Respuestas automáticas en pausa hasta las ${pausedUntil.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`
+                        : 'Respuestas automáticas activas'}
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                        onClick={toggleAutoReplies}
+                        disabled={togglingReplies}
+                      >
+                        {repliesPaused ? 'Reanudar' : 'Pausar'}
+                      </button>
+                    </small>
                   </div>
                   <div className="d-flex gap-2 flex-shrink-0">
                     {access.sell && selectedConvo && (
@@ -484,17 +543,7 @@ export default function WhatsAppChat() {
                                   hour: '2-digit',
                                   minute: '2-digit',
                                 })}
-                                {isOutbound && (
-                                  <i
-                                    className={`ri-check-double-line ms-1 ${
-                                      msg.status === 'Read'
-                                        ? 'text-primary'
-                                        : msg.status === 'Delivered'
-                                          ? 'text-muted'
-                                          : ''
-                                    }`}
-                                  ></i>
-                                )}
+                                {isOutbound && <MessageTicks status={msg.status} />}
                               </small>
                             </div>
                           </div>

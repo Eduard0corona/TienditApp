@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -24,13 +22,11 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
-    public GetCustomersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IMapper mapper)
+    public GetCustomersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedList<CustomerDto>> Handle(GetCustomersQuery request, CancellationToken cancellationToken)
@@ -60,7 +56,19 @@ public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, Pagin
             .OrderByDescending(c => c.IsPublicGeneral)
             .ThenBy(c => c.Name);
 
-        var projected = query.ProjectTo<CustomerDto>(_mapper.ConfigurationProvider);
+        // The list carries the notes but not the addresses: the detail loads them.
+        var projected = query.Select(c => new CustomerDto
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Phone = c.Phone,
+            Email = c.Email,
+            IsPublicGeneral = c.IsPublicGeneral,
+            IsActive = c.IsActive,
+            Notes = c.Notes,
+            CreatedAt = c.CreatedAt,
+            UpdatedAt = c.UpdatedAt
+        });
         return await PaginatedList<CustomerDto>.CreateAsync(
             projected,
             request.PageNumber,

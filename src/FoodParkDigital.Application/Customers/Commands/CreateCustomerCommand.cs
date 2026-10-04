@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -18,6 +17,7 @@ public record CreateCustomerCommand : IRequest<Result<CustomerDto>>
     public string Name { get; init; } = null!;
     public string? Phone { get; init; }
     public string? Email { get; init; }
+    public string? Notes { get; init; }
 }
 
 public class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCommand>
@@ -29,6 +29,7 @@ public class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCo
             .NotEmpty().WithMessage("El teléfono es obligatorio.")
             .MaximumLength(20);
         RuleFor(x => x.Email).MaximumLength(200).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.Email));
+        RuleFor(x => x.Notes).MaximumLength(Customer.NotesMaxLength);
     }
 }
 
@@ -36,16 +37,16 @@ public class CreateCustomerCommandHandler : IRequestHandler<CreateCustomerComman
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
+    private readonly IPhoneNormalizationService _phones;
 
     public CreateCustomerCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        IMapper mapper)
+        IPhoneNormalizationService phones)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
+        _phones = phones;
     }
 
     public async Task<Result<CustomerDto>> Handle(CreateCustomerCommand request, CancellationToken cancellationToken)
@@ -58,16 +59,19 @@ public class CreateCustomerCommandHandler : IRequestHandler<CreateCustomerComman
             return Result.Failure<CustomerDto>("El negocio no tiene habilitado el módulo de clientes.");
 
         var name = request.Name.Trim();
-        var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
 
-        if (phone is null)
+        if (string.IsNullOrWhiteSpace(request.Phone))
             return Result.Failure<CustomerDto>("El teléfono es obligatorio.");
+        if (!CustomerPhones.TryNormalize(_phones, request.Phone, out var phone))
+            return Result.Failure<CustomerDto>(CustomerPhones.InvalidMessage);
 
+        // The same number is the same person, however it was typed before.
+        var forms = CustomerPhones.StoredForms(phone);
         var exists = await _context.Customers
-            .AnyAsync(c => c.Name == name && c.Phone == phone, cancellationToken);
+            .AnyAsync(c => c.Phone != null && forms.Contains(c.Phone) && !c.IsPublicGeneral, cancellationToken);
         if (exists)
-            return Result.Failure<CustomerDto>("Ya existe un cliente con esos datos.");
+            return Result.Failure<CustomerDto>("Ya existe un cliente con ese teléfono.");
 
         var customer = new Customer(
             tenantId: _tenantService.TenantId,
@@ -75,10 +79,11 @@ public class CreateCustomerCommandHandler : IRequestHandler<CreateCustomerComman
             phone: phone,
             email: email,
             isPublicGeneral: false);
+        customer.UpdateNotes(request.Notes);
 
         _context.Customers.Add(customer);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(_mapper.Map<CustomerDto>(customer));
+        return Result.Success(CustomerDto.From(customer));
     }
 }

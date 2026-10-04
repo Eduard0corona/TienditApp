@@ -71,4 +71,16 @@ public class WhatsAppChatController : ControllerBase
             return BadRequest(new { error = result.Error });
         return Ok(new { message = "Conversación marcada como leída." });
     }
+
+    /// <summary>Pauses (for a day) or resumes the automatic replies of one conversation.</summary>
+    [HttpPut("{id:guid}/auto-replies")]
+    public async Task<ActionResult<ConversationDto>> SetAutoReplies(Guid id, [FromBody] SetAutoRepliesRequest request)
+    {
+        var result = await _mediator.Send(new SetConversationAutoRepliesCommand(id, request.Paused));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
 }
+
+public record SetAutoRepliesRequest(bool Paused);

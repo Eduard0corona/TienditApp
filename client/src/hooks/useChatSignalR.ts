@@ -8,6 +8,13 @@ interface NewMessagePayload {
   message: ChatMessageDto;
 }
 
+/** A sent message was delivered, read or failed (the ticks). */
+export interface MessageStatusPayload {
+  conversationId: string;
+  messageId: string;
+  status: string;
+}
+
 export function useChatSignalR() {
   const connectionRef = useRef<HubConnection | null>(null);
 
@@ -45,5 +52,16 @@ export function useChatSignalR() {
     []
   );
 
-  return { onNewMessage, onConversationUpdated };
+  const onMessageStatus = useCallback(
+    (callback: (data: MessageStatusPayload) => void) => {
+      const conn = connectionRef.current;
+      if (!conn) return () => {};
+
+      conn.on('MessageStatus', callback);
+      return () => conn.off('MessageStatus', callback);
+    },
+    []
+  );
+
+  return { onNewMessage, onConversationUpdated, onMessageStatus };
 }
