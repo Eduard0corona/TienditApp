@@ -432,30 +432,32 @@ export interface UpdateCategoryRequest extends CreateCategoryRequest {
 
 // ==================== Inventory ====================
 
+// Same numbers as FoodParkDigital.Domain.Inventory.Enums: the API exchanges them as integers and the
+// database stores them, so they never change. ClientEnumContractTests (WebApi.Tests) compares both sides.
 export const InventoryMovementType = {
-  Entry: 0,
-  Exit: 1,
-  AdjustmentIncrease: 2,
-  AdjustmentDecrease: 3,
-  TransferIn: 4,
-  TransferOut: 5,
-  ReturnFromProduction: 6,
-  ReturnToSupplier: 7,
+  Entry: 1,
+  Exit: 2,
+  AdjustmentIncrease: 3,
+  AdjustmentDecrease: 4,
+  TransferIn: 5,
+  TransferOut: 6,
+  ReturnFromProduction: 7,
+  ReturnToSupplier: 8,
 } as const;
 export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof InventoryMovementType];
 
 export const InventoryMovementReason = {
-  Purchase: 0,
-  Sale: 1,
-  Production: 2,
-  Consumption: 3,
-  Waste: 4,
-  Damaged: 5,
-  InventoryCount: 6,
-  InitialLoad: 7,
-  Return: 8,
-  ManualAdjustment: 9,
-  Other: 10,
+  Purchase: 1,
+  Sale: 2,
+  Production: 3,
+  Consumption: 4,
+  Waste: 5,
+  Damaged: 6,
+  InventoryCount: 7,
+  InitialLoad: 8,
+  Return: 9,
+  ManualAdjustment: 10,
+  Other: 99,
 } as const;
 export type InventoryMovementReason = (typeof InventoryMovementReason)[keyof typeof InventoryMovementReason];
 
