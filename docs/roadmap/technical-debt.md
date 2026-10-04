@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-04 tras la Fase 0 del roadmap de producto y la migración a .NET 10 (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-04 tras las Fases 0 y 1 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -15,7 +15,6 @@ Actualizada el 2026-10-04 tras la Fase 0 del roadmap de producto y la migración
 
 - Movimientos manuales de inventario registrados desde la pantalla antes de la corrección del 2026-10-04: se guardaron con el tipo y el motivo siguientes al elegido. Movieron las existencias en sentido contrario, y las "Salidas" guardadas como `Entry` promediaron su costo como si fueran compras. Falta revisarlos con cada tenant y compensarlos ([procedimiento y consulta de solo lectura](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md)). El dominio no tiene una operación para revaluar el costo promedio.
 - Eventos se limpian/publican después del commit sin Outbox; side effects pueden perderse o duplicarse.
-- Impuesto fijo `subtotal × 16%`, sin desglose fiscal persistido y sin decidir si los precios del catálogo incluyen IVA (si lo incluyen, se sobrecobra).
 - `SUPER_ADMIN` y `TENANT_ADMIN` omiten permisos/capabilities en partes del middleware; el claim `role` es el rol global y no el de la membresía; autorización distribuida por strings de ruta.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso, el paso de contraseña del login no cuenta intentos fallidos (`lockoutOnFailure: false`; el 2FA sí usa lockout) y el login distingue cuentas sin confirmar o bloqueadas.
@@ -36,7 +35,7 @@ Actualizada el 2026-10-04 tras la Fase 0 del roadmap de producto y la migración
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Auto-migrate/seed solo existe en Development contra un servidor local, pero falta el proceso productivo de migraciones.
 - Listados pequeños aún materializan colecciones sin paginación (categorías, AI agents, ubicaciones, kitchen).
-- El dashboard carga en memoria todas las órdenes del rango y su ticket promedio incluye órdenes canceladas y pendientes.
+- Inicio carga en memoria las órdenes y pagos del rango; con volumen alto conviene un modelo de lectura.
 - Consultas con varias colecciones incluidas no usan `AsSplitQuery`.
 - `client/README.md` sigue siendo template genérico.
 - Pago puede persistirse sin movimiento de caja cuando no hay sesión abierta; solo hay una caja abierta por tenant, no por sucursal.
@@ -44,7 +43,7 @@ Actualizada el 2026-10-04 tras la Fase 0 del roadmap de producto y la migración
 - `Product.StockQuantity` es informativo: las ventas no lo descuentan.
 - Un administrador puede activar cualquier capability desde `PUT /auth/my-tenant`; es un bypass si los módulos dependen del plan contratado.
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
-- La búsqueda de `DataTable` filtra solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono.
+- Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.
 
 ## Resuelto el 2026-10-01
 
@@ -92,12 +91,27 @@ Pendientes detectados en la Fase 0:
 - API, pruebas e imagen Docker en .NET 10 (LTS) con EF Core y ASP.NET Core 10.0.12 y Serilog.AspNetCore 10, antes del fin de soporte de .NET 9 (10 de noviembre de 2026). El App Service debe usar el stack .NET 10 porque el despliegue es dependiente del framework.
 - Solo `master` despliega: `develop` salió de los disparadores y una ejecución manual desde otra rama se omite.
 
+## Resuelto el 2026-10-04 (Fase 1: vender rápido)
+
+- Política de IVA por negocio (precios con IVA incluido o sumado), tasa por producto (16, 8, 0 % o exento) y desglose por tasa calculado en el servidor y guardado por línea (migración `AddTaxPolicyAndCounterSaleClosing`). Los negocios existentes conservan el IVA sumado al 16 %, con los mismos totales.
+- Vender cobra en el mismo paso: efectivo con cambio, pago mixto, comprobante de transferencia y ticket impreso o por WhatsApp; la venta y sus pagos se guardan juntos y la API rechaza la venta si el total mostrado ya no coincide.
+- Las ventas de mostrador pagadas se cierran solas (configurable) y Inicio reporta ingresos por pagos registrados, ticket promedio por pedido pagado y saldo por cobrar.
+- Nuevo shell: menú por trabajo, "Nueva venta" visible, búsqueda global (Ctrl K) con búsqueda en servidor de pedidos, clientes y productos, selector de negocio en cualquier tamaño y barra inferior en celular.
+- Tema propio sobre Bootstrap (tokens, fuente, botones táctiles), avisos (toasts), diálogo de confirmación y `DataTable` con búsqueda en servidor en pedidos, clientes, productos, servicios, empleados, proveedores y citas.
+- Arranque guiado con módulos, IVA, catálogos de ejemplo por giro y lista de primeros pasos.
+
+Pendientes detectados en la Fase 1:
+
+- El efectivo recibido y el cambio no se guardan en la venta (solo salen en el ticket).
+- No hay staging: la decisión fue publicar solo desde `master` sin slot de prueba.
+- Una venta sin conexión no se puede registrar; Vender solo conserva el borrador.
+
 ## Decisiones humanas pendientes
 
 - Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.
 - Modelo de autorización definitivo: policies/resource handlers, rol por tenant en el token y alcance administrativo cross-tenant.
 - Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
-- Política fiscal/redondeo, si los precios incluyen IVA y responsable legal-contable.
+- Responsable legal-contable de la política fiscal (descuentos, IEPS, retenciones y CFDI).
 - Semántica cuando no hay caja abierta, caja por sucursal y diseño de reembolsos/ajustes/CxC/Wallet.
 - Estrategia para reconciliar `master`/`develop` y migraciones.
 - Cuándo agregar staging con swap antes de producción.
