@@ -196,22 +196,37 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>
     /// Closes a fully paid counter sale: the customer leaves with what they bought, so nobody has to mark
-    /// it delivered by hand. Food that goes through the kitchen closes only once it is ready. The customer
-    /// is not messaged about it: they are at the counter.
+    /// it delivered by hand. Food that goes through the kitchen closes only once it is ready, and a service
+    /// only when none of its tracked pieces is still being worked on (those close when their pieces are
+    /// completed). The customer is not messaged about it: they are at the counter.
     /// </summary>
     /// <returns>True when the order was closed.</returns>
     public bool CloseIfPaidCounterSale(IOrderStateMachine stateMachine, bool waitsForKitchen, string? performedBy)
     {
-        if (!CreatedByBusiness || OrderType != OrderType.Retail || _items.Count == 0 || Balance > 0)
+        if (!CreatedByBusiness || _items.Count == 0 || Balance > 0)
             return false;
 
-        if (waitsForKitchen && Status != OrderStatus.Ready)
+        OrderStatus closedStatus;
+        if (OrderType == OrderType.Service)
+        {
+            if (_servicePieces.Any(piece => piece.IsTrackable
+                    && piece.Status is ServiceOrderPieceStatus.Accepted or ServiceOrderPieceStatus.InProgress))
+                return false;
+
+            closedStatus = OrderStatus.Completed;
+        }
+        else
+        {
+            if (waitsForKitchen && Status != OrderStatus.Ready)
+                return false;
+
+            closedStatus = OrderStatus.Delivered;
+        }
+
+        if (!stateMachine.GetAllowedTransitions(Status).Contains(closedStatus))
             return false;
 
-        if (!stateMachine.GetAllowedTransitions(Status).Contains(OrderStatus.Delivered))
-            return false;
-
-        Transition(OrderStatus.Delivered, stateMachine, performedBy, notifyCustomer: false);
+        Transition(closedStatus, stateMachine, performedBy, notifyCustomer: false);
         return true;
     }
 

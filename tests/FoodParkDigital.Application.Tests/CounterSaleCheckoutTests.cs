@@ -1,5 +1,7 @@
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -219,6 +221,42 @@ public class CounterSaleCheckoutTests
 
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(OrderStatus.Delivered, result.Value.Status);
+    }
+
+    [Fact]
+    public async Task ServiceSale_PaidAtTheCounter_ShouldCloseUnlessItsPiecesAreInTheWorkshop()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service, pricesIncludeTax: true);
+        var category = new Category(tenant.Id, "Servicios", null);
+        var haircut = new Product(tenant.Id, category.Id, "Corte", null, 150m, "MXN", unit: UnitType.Service);
+        var laundry = new Product(tenant.Id, category.Id, "Lavado", null, 90m, "MXN", unit: UnitType.Service, isTrackable: true);
+        fixture.Context.Categories.Add(category);
+        fixture.Context.Products.AddRange(haircut, laundry);
+        await fixture.Context.SaveChangesAsync();
+
+        var haircutSale = await fixture.CreateOrderHandler().Handle(
+            new CreateOrderCommand
+            {
+                OrderType = OrderType.Service,
+                Items = [new CreateOrderItemDto { ProductId = haircut.Id, Quantity = 1 }],
+                Payments = [new CreateOrderPaymentDto { Amount = 150m, Method = OrderPaymentMethod.Cash }]
+            },
+            CancellationToken.None);
+        var laundrySale = await fixture.CreateOrderHandler().Handle(
+            new CreateOrderCommand
+            {
+                OrderType = OrderType.Service,
+                Items = [new CreateOrderItemDto { ProductId = laundry.Id, Quantity = 1 }],
+                Payments = [new CreateOrderPaymentDto { Amount = 90m, Method = OrderPaymentMethod.Cash }]
+            },
+            CancellationToken.None);
+
+        Assert.True(haircutSale.IsSuccess, haircutSale.Error);
+        Assert.Equal(OrderStatus.Completed, haircutSale.Value.Status);
+        Assert.True(laundrySale.IsSuccess, laundrySale.Error);
+        Assert.Equal(OrderStatus.Accepted, laundrySale.Value.Status);
+        Assert.Single(laundrySale.Value.ServicePieces);
     }
 
     [Fact]

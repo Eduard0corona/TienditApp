@@ -73,16 +73,36 @@ public class CounterSaleClosingTests
     }
 
     [Fact]
-    public void ServiceOrder_ShouldNotBeClosedAsACounterSale()
+    public void PaidServiceWithoutTrackedPieces_ShouldBeCompleted()
+    {
+        // A haircut charged at the counter: the work is done when it is paid.
+        var order = NewServiceOrder();
+        order.RegisterPayment(order.Total, OrderPaymentMethod.Cash, Now, null, null, null, null);
+
+        Assert.True(order.CloseIfPaidCounterSale(new ServiceOrderStateMachine(), waitsForKitchen: false, "cajero"));
+        Assert.Equal(OrderStatus.Completed, order.Status);
+    }
+
+    [Fact]
+    public void PaidServiceWithPiecesInTheWorkshop_ShouldStayOpen()
+    {
+        // Laundry paid in advance: it closes when its pieces are completed, not when it is paid.
+        var order = NewServiceOrder();
+        order.AddServicePiece("Camisa", null, null, null, null, null, null, "Lavado", null, isTrackable: true);
+        order.RegisterPayment(order.Total, OrderPaymentMethod.Cash, Now, null, null, null, null);
+
+        Assert.False(order.CloseIfPaidCounterSale(new ServiceOrderStateMachine(), waitsForKitchen: false, "cajero"));
+        Assert.Equal(OrderStatus.Accepted, order.Status);
+    }
+
+    private static Order NewServiceOrder()
     {
         var order = new Order(
             Guid.NewGuid(), null, null, true, "ORD-000002", BusinessType.Service, OrderType.Service,
             "Cliente", null, null, null);
-        order.AddItem(Guid.NewGuid(), "Lavado", 1, 100m);
-        order.RegisterPayment(order.Total, OrderPaymentMethod.Cash, Now, null, null, null, null);
-
-        Assert.False(order.CloseIfPaidCounterSale(new ServiceOrderStateMachine(), waitsForKitchen: false, "cajero"));
-        Assert.Equal(OrderStatus.Pending, order.Status);
+        order.AddItem(Guid.NewGuid(), "Servicio", 1, 100m);
+        order.TransitionTo(OrderStatus.Accepted, new ServiceOrderStateMachine(), "cajero");
+        return order;
     }
 
     private static Order NewConfirmedOrder(BusinessType businessType, bool createdByBusiness)
