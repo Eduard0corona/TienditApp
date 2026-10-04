@@ -2,8 +2,8 @@
 
 ## Estrategia vigente
 
-- `master`: producción o versión estable.
-- `develop`: integración activa mientras se resuelve la divergencia.
+- `master`: producción. Es la única rama que despliega: cada push publica la API y la SPA (workflow `Deploy WebApp`), y una ejecución manual desde otra rama se omite.
+- `develop`: integración activa mientras se resuelve la divergencia; ya no despliega a producción.
 - Ramas de trabajo cortas desde la rama objetivo.
 - Pull Requests pequeños, con una intención y validación reproducible.
 - Preferencia por squash merge para historial funcional claro, si el equipo la aprueba.
