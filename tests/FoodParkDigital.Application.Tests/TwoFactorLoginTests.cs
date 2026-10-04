@@ -1,7 +1,5 @@
-using System.Buffers.Binary;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
@@ -10,6 +8,7 @@ using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.Commands.TwoFactor;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Identity.Services;
+using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -427,47 +426,6 @@ public class TwoFactorLoginTests
         {
             UserManager.Dispose();
             await Context.DisposeAsync();
-        }
-    }
-
-    /// <summary>TOTP RFC 6238 (HMAC-SHA1, 30 s, 6 dígitos), como una app autenticadora.</summary>
-    private static class Totp
-    {
-        private const string Base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-
-        public static string Compute(string base32Key, DateTimeOffset timestamp)
-        {
-            var counter = new byte[sizeof(long)];
-            BinaryPrimitives.WriteInt64BigEndian(counter, timestamp.ToUnixTimeSeconds() / 30);
-            var hash = HMACSHA1.HashData(FromBase32(base32Key), counter);
-
-            var offset = hash[^1] & 0x0F;
-            var binaryCode = ((hash[offset] & 0x7F) << 24)
-                | (hash[offset + 1] << 16)
-                | (hash[offset + 2] << 8)
-                | hash[offset + 3];
-
-            return (binaryCode % 1_000_000).ToString("D6", CultureInfo.InvariantCulture);
-        }
-
-        private static byte[] FromBase32(string input)
-        {
-            var output = new List<byte>();
-            var buffer = 0;
-            var bitsLeft = 0;
-
-            foreach (var c in input.TrimEnd('=').ToUpperInvariant())
-            {
-                buffer = ((buffer << 5) | Base32Alphabet.IndexOf(c)) & 0xFFFF;
-                bitsLeft += 5;
-                if (bitsLeft >= 8)
-                {
-                    output.Add((byte)(buffer >> (bitsLeft - 8)));
-                    bitsLeft -= 8;
-                }
-            }
-
-            return output.ToArray();
         }
     }
 

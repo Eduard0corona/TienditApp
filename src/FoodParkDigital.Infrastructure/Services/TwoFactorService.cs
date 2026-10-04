@@ -24,12 +24,13 @@ public class TwoFactorService : ITwoFactorService
         var manualEntryKey = FormatKeyForManualEntry(authenticatorKey);
 
         var twoFactorAuthenticator = new TwoFactorAuthenticator();
+        // Identity's authenticator key is already Base32; AuthenticatorTokenProvider decodes it as such.
         var setupInfo = twoFactorAuthenticator.GenerateSetupCode(
             issuer,
             email,
             authenticatorKey,
-            false,
-            3);
+            secretIsBase32: true,
+            qrPixelsPerModule: 3);
 
         var qrCodeUrl = setupInfo.QrCodeSetupImageUrl;
 
