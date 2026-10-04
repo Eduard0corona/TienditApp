@@ -1,0 +1,12 @@
+/*
+ * Fixes on top of the Hyper theme (app.min.css). Loaded after it.
+ */
+
+/* Hyper paints disabled "soft" buttons with the same color for text and background, so a disabled
+   "Registrar pago" looked like an empty colored block. Keep the soft look and let opacity show it. */
+.btn[class*='btn-soft-']:disabled,
+.btn[class*='btn-soft-'].disabled {
+  --ct-btn-disabled-color: var(--ct-btn-color);
+  --ct-btn-disabled-bg: var(--ct-btn-bg);
+  --ct-btn-disabled-border-color: transparent;
+}

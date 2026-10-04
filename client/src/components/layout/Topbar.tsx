@@ -23,7 +23,12 @@ function writeAutoSwitchMarker() {
   }
 }
 
-export default function Topbar() {
+interface TopbarProps {
+  onToggleSidebar: () => void;
+  isMobileMenuOpen: boolean;
+}
+
+export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProps) {
   const { user, logout, switchTenant } = useAuth();
   const { tenant, refreshTenant } = useTenant();
   const [availableTenants, setAvailableTenants] = useState<MyTenantDto[]>([]);
@@ -110,23 +115,6 @@ export default function Topbar() {
     }
   };
 
-  const handleToggleSidebar = () => {
-    const html = document.documentElement;
-    const size = html.getAttribute('data-sidenav-size');
-
-    if (window.innerWidth < 768) {
-      // Mobile: toggle sidebar overlay
-      html.classList.toggle('sidebar-enable');
-    } else {
-      // Desktop: toggle between condensed and default
-      if (size === 'condensed') {
-        html.setAttribute('data-sidenav-size', 'default');
-      } else {
-        html.setAttribute('data-sidenav-size', 'condensed');
-      }
-    }
-  };
-
   const handleFullscreen = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     if (!document.fullscreenElement) {
@@ -167,8 +155,14 @@ export default function Topbar() {
           </div>
 
           {/* Sidebar Menu Toggle Button */}
-          <button className="button-toggle-menu" onClick={handleToggleSidebar}>
-            <i className="ri-menu-5-line"></i>
+          <button
+            type="button"
+            className="button-toggle-menu"
+            onClick={onToggleSidebar}
+            aria-label="Mostrar u ocultar el menú"
+            aria-expanded={isMobileMenuOpen}
+          >
+            <i className="ri-menu-5-line" aria-hidden="true"></i>
           </button>
         </div>
 

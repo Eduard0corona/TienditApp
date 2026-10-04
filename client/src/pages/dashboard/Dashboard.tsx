@@ -83,16 +83,18 @@ export default function Dashboard() {
                   Vista operativa para monitorear ordenes, ingresos y productos vendidos.
                 </p>
               </div>
-              <div className="d-flex gap-2">
+              <div className="d-flex flex-wrap gap-2">
                 <input
                   type="date"
-                  className="form-control form-control-sm"
+                  className="form-control form-control-sm w-auto flex-grow-1"
+                  aria-label="Desde"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
                 />
                 <input
                   type="date"
-                  className="form-control form-control-sm"
+                  className="form-control form-control-sm w-auto flex-grow-1"
+                  aria-label="Hasta"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
                 />

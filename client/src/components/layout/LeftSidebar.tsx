@@ -4,7 +4,12 @@ import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
 import { COMMERCE_CAPABILITIES, hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 
-export default function LeftSidebar() {
+interface LeftSidebarProps {
+  /** Closes the slide-out menu on phones (the close button only shows in that mode). */
+  onClose: () => void;
+}
+
+export default function LeftSidebar({ onClose }: LeftSidebarProps) {
   const { pathname } = useLocation();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
@@ -80,9 +85,14 @@ export default function LeftSidebar() {
         <i className="ri-checkbox-blank-circle-line align-middle"></i>
       </div>
 
-      <div className="button-close-fullsidebar">
-        <i className="ri-close-fill align-middle"></i>
-      </div>
+      <button
+        type="button"
+        className="button-close-fullsidebar border-0 bg-transparent p-0"
+        onClick={onClose}
+        aria-label="Cerrar el menú"
+      >
+        <i className="ri-close-fill align-middle" aria-hidden="true"></i>
+      </button>
 
       <div className="h-100" id="leftside-menu-container" data-simplebar>
         <div className="leftbar-user">

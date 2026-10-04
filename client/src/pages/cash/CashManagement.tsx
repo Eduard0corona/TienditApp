@@ -13,6 +13,8 @@ import type {
   PaginatedList,
 } from '../../types';
 import { CashTransactionType as CashTransactionTypeConst } from '../../types';
+import { getPaymentMethodLabel } from '../../utils/labels';
+import { formatMoney, formatSignedMoney } from '../../utils/money';
 
 const EMPTY_PAGINATED = {
   items: [],
@@ -188,9 +190,9 @@ export default function CashManagement() {
     }
     const difference = amount - session.expectedBalance;
     const confirmed = window.confirm(
-      `Esperado: $${session.expectedBalance.toFixed(2)}\n` +
-      `Contado: $${amount.toFixed(2)}\n` +
-      `Diferencia: $${difference.toFixed(2)}\n\n` +
+      `Esperado: ${formatMoney(session.expectedBalance)}\n` +
+      `Contado: ${formatMoney(amount)}\n` +
+      `Diferencia: ${formatMoney(difference)}\n\n` +
       '¿Cerrar la caja? Esta acción no se puede deshacer.',
     );
     if (!confirmed) return;
@@ -297,7 +299,7 @@ export default function CashManagement() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Apertura</div>
-                  <div className="h4 mb-0">${session.openingAmount.toFixed(2)}</div>
+                  <div className="h4 mb-0">{formatMoney(session.openingAmount)}</div>
                 </div>
               </div>
             </div>
@@ -305,7 +307,7 @@ export default function CashManagement() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Entradas de efectivo</div>
-                  <div className="h4 mb-0 text-success">${session.inflows.toFixed(2)}</div>
+                  <div className="h4 mb-0 text-success">{formatMoney(session.inflows)}</div>
                 </div>
               </div>
             </div>
@@ -313,7 +315,7 @@ export default function CashManagement() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Salidas de efectivo</div>
-                  <div className="h4 mb-0 text-danger">${session.outflows.toFixed(2)}</div>
+                  <div className="h4 mb-0 text-danger">{formatMoney(session.outflows)}</div>
                 </div>
               </div>
             </div>
@@ -323,7 +325,7 @@ export default function CashManagement() {
                   <div className="text-muted small" title="Tarjeta, transferencia y otros: no forman parte del efectivo en caja">
                     Otros métodos
                   </div>
-                  <div className="h4 mb-0 text-info">${session.nonCashInflows.toFixed(2)}</div>
+                  <div className="h4 mb-0 text-info">{formatMoney(session.nonCashInflows)}</div>
                 </div>
               </div>
             </div>
@@ -331,7 +333,7 @@ export default function CashManagement() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Efectivo esperado</div>
-                  <div className="h4 mb-0">${session.expectedBalance.toFixed(2)}</div>
+                  <div className="h4 mb-0">{formatMoney(session.expectedBalance)}</div>
                 </div>
               </div>
             </div>
@@ -459,15 +461,15 @@ export default function CashManagement() {
               ) : (
                 <>
                   <div className="row g-2 mb-2">
-                    <div className="col-md-3"><strong>Ventas:</strong> ${dailyCut.salesPaymentsTotal.toFixed(2)}</div>
+                    <div className="col-md-3"><strong>Ventas:</strong> {formatMoney(dailyCut.salesPaymentsTotal)}</div>
                     <div className="col-md-3"><strong>Pagos:</strong> {dailyCut.salesPaymentsCount}</div>
-                    <div className="col-md-3"><strong>Ingreso manual:</strong> ${dailyCut.manualIncomeTotal.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Gasto manual:</strong> ${dailyCut.manualExpenseTotal.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Efectivo:</strong> ${dailyCut.cashTotal.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Tarjeta:</strong> ${dailyCut.cardTotal.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Transferencia:</strong> ${dailyCut.transferTotal.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Neto (todos los métodos):</strong> ${dailyCut.netCashFlow.toFixed(2)}</div>
-                    <div className="col-md-3"><strong>Neto en efectivo:</strong> ${dailyCut.netCashOnlyFlow.toFixed(2)}</div>
+                    <div className="col-md-3"><strong>Ingreso manual:</strong> {formatMoney(dailyCut.manualIncomeTotal)}</div>
+                    <div className="col-md-3"><strong>Gasto manual:</strong> {formatMoney(dailyCut.manualExpenseTotal)}</div>
+                    <div className="col-md-3"><strong>Efectivo:</strong> {formatMoney(dailyCut.cashTotal)}</div>
+                    <div className="col-md-3"><strong>Tarjeta:</strong> {formatMoney(dailyCut.cardTotal)}</div>
+                    <div className="col-md-3"><strong>Transferencia:</strong> {formatMoney(dailyCut.transferTotal)}</div>
+                    <div className="col-md-3"><strong>Neto (todos los métodos):</strong> {formatMoney(dailyCut.netCashFlow)}</div>
+                    <div className="col-md-3"><strong>Neto en efectivo:</strong> {formatMoney(dailyCut.netCashOnlyFlow)}</div>
                   </div>
 
                   <div className="row">
@@ -479,7 +481,7 @@ export default function CashManagement() {
                         ) : (
                           dailyCut.byUser.map((item) => (
                             <li key={`${item.userName}-${item.paymentsCount}`}>
-                              {item.userName}: {item.paymentsCount} pagos / ${item.totalAmount.toFixed(2)}
+                              {item.userName}: {item.paymentsCount} pagos / {formatMoney(item.totalAmount)}
                             </li>
                           ))
                         )}
@@ -493,7 +495,7 @@ export default function CashManagement() {
                         ) : (
                           dailyCut.byLocation.map((item) => (
                             <li key={`${item.inventoryLocationId || 'none'}-${item.paymentsCount}`}>
-                              {item.locationName}: {item.paymentsCount} pagos / ${item.totalAmount.toFixed(2)}
+                              {item.locationName}: {item.paymentsCount} pagos / {formatMoney(item.totalAmount)}
                             </li>
                           ))
                         )}
@@ -550,9 +552,15 @@ export default function CashManagement() {
                 renderRow={(item) => (
                   <>
                     <td className="text-center">{new Date(item.occurredAt).toLocaleString('es-MX')}</td>
-                    <td>{transactionTypeLabel(item.transactionType)}</td>
-                    <td className={`text-end ${item.amount >= 0 ? 'text-success' : 'text-danger'}`}>
-                      ${item.amount.toFixed(2)}
+                    <td>
+                      {transactionTypeLabel(item.transactionType)}
+                      {item.paymentMethod !== undefined && item.paymentMethod !== null && (
+                        <div className="text-muted small">{getPaymentMethodLabel(item.paymentMethod)}</div>
+                      )}
+                    </td>
+                    {/* The API stores the signed amount (outflows are negative), so the sign decides the color. */}
+                    <td className={`text-end text-nowrap ${item.amount >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {formatSignedMoney(item.amount)}
                     </td>
                     <td>
                       <div>{item.reference || '-'}</div>
