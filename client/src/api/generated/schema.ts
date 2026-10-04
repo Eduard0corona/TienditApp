@@ -300,7 +300,36 @@ export interface paths {
                 };
             };
         };
-        put?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAppointmentCommand"];
+                    "text/json": components["schemas"]["UpdateAppointmentCommand"];
+                    "application/*+json": components["schemas"]["UpdateAppointmentCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AppointmentDto"];
+                        "application/json": components["schemas"]["AppointmentDto"];
+                        "text/json": components["schemas"]["AppointmentDto"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -1806,7 +1835,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    includeArchived?: boolean;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -5741,6 +5772,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/purchaseorders/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurchaseOrderDto"];
+                        "application/json": components["schemas"]["PurchaseOrderDto"];
+                        "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchaseorders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurchaseOrderDto"];
+                        "application/json": components["schemas"]["PurchaseOrderDto"];
+                        "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/operational-summary": {
         parameters: {
             query?: never;
@@ -7021,6 +7130,10 @@ export interface components {
             customerPhone: string;
             serviceName: string;
             staffName?: string | null;
+            /** Format: uuid */
+            serviceProductId?: string | null;
+            /** Format: uuid */
+            staffUserId?: string | null;
             /** Format: date-time */
             startAt: string;
             /** Format: date-time */
@@ -7312,6 +7425,8 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isActive: boolean;
+            /** Format: int32 */
+            productCount: number;
         };
         CategoryTemplateDto: {
             id: string;
@@ -7482,8 +7597,12 @@ export interface components {
         CreateAppointmentCommand: {
             customerName: string;
             customerPhone: string;
-            serviceName: string;
+            serviceName?: string | null;
+            /** Format: uuid */
+            serviceProductId?: string | null;
             staffName?: string | null;
+            /** Format: uuid */
+            staffUserId?: string | null;
             /** Format: date-time */
             startAt: string;
             /** Format: date-time */
@@ -8043,6 +8162,11 @@ export interface components {
             /** Format: int32 */
             productsCreated: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        InsufficientStockPolicy: 0 | 1;
         InventoryAlertItemDto: {
             /** Format: uuid */
             supplyItemId: string;
@@ -8528,6 +8652,7 @@ export interface components {
             /** Format: uuid */
             diningTableId?: string | null;
             kitchenTickets: components["schemas"]["KitchenTicketSummaryDto"][];
+            stockWarnings: string[];
         };
         OrderDtoPaginatedList: {
             items: components["schemas"]["OrderDto"][];
@@ -9064,6 +9189,8 @@ export interface components {
             purchaseOrderLineId: string;
             /** Format: double */
             quantityReceived: number;
+            /** Format: double */
+            unitCost?: number | null;
         };
         ReceivePurchaseOrderRequest: {
             /** Format: date-time */
@@ -9518,6 +9645,7 @@ export interface components {
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
+            insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
@@ -9541,6 +9669,7 @@ export interface components {
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
+            insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
         };
         TenantSetupDto: {
             businessType: components["schemas"]["BusinessType"];
@@ -9573,6 +9702,8 @@ export interface components {
         };
         ToggleCategoryActiveRequest: {
             isActive: boolean;
+            /** Format: uuid */
+            moveProductsToCategoryId?: string | null;
         };
         TopSellingItemDto: {
             /** Format: uuid */
@@ -9615,6 +9746,23 @@ export interface components {
             maxTokens: number;
             useConversationMemory: boolean;
             strictMode: boolean;
+        };
+        UpdateAppointmentCommand: {
+            /** Format: uuid */
+            appointmentId: string;
+            customerName: string;
+            customerPhone: string;
+            serviceName?: string | null;
+            /** Format: uuid */
+            serviceProductId?: string | null;
+            staffName?: string | null;
+            /** Format: uuid */
+            staffUserId?: string | null;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            notes?: string | null;
         };
         UpdateAppointmentRemindersCommand: {
             enabled: boolean;
@@ -9808,6 +9956,7 @@ export interface components {
             autoCloseCounterSales: boolean;
             requireOpenCashSession?: boolean | null;
             orderNotificationPolicy?: components["schemas"]["OrderNotificationPolicy"];
+            insufficientStockPolicy?: components["schemas"]["InsufficientStockPolicy"];
         };
         UpdateServiceOrderPieceStatusRequest: {
             newStatus: components["schemas"]["ServiceOrderPieceStatus"];

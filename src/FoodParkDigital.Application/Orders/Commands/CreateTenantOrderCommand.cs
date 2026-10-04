@@ -258,7 +258,11 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         if (request.CreatedByBusiness)
             ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
 
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        // An order the customer placed (chat bot) is reviewed by the business; one the team captures follows its policy.
+        var shortages = await _orderInventoryService.ApplyConsumptionForOrderAsync(
+            order,
+            cancellationToken,
+            request.CreatedByBusiness ? StockShortageHandling.TenantPolicy : StockShortageHandling.Allow);
 
         order.MarkAsCreated();
         _context.Orders.Add(order);
@@ -266,6 +270,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
 
         var dto = _mapper.Map<OrderDto>(order);
         dto.ApplyStateMetadata();
+        dto.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
         return Result.Success(dto);
     }
 

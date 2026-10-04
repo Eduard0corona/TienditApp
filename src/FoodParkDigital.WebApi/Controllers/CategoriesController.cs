@@ -20,9 +20,9 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<CategoryDto>>> GetAll()
+    public async Task<ActionResult<List<CategoryDto>>> GetAll([FromQuery] bool includeArchived = false)
     {
-        var result = await _mediator.Send(new GetCategoriesQuery());
+        var result = await _mediator.Send(new GetCategoriesQuery { IncludeArchived = includeArchived });
         return Ok(result);
     }
 
@@ -94,7 +94,8 @@ public class CategoriesController : ControllerBase
         var result = await _mediator.Send(new ToggleCategoryActiveCommand
         {
             Id = id,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            MoveProductsToCategoryId = request.MoveProductsToCategoryId
         });
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
@@ -102,4 +103,4 @@ public class CategoriesController : ControllerBase
     }
 }
 
-public record ToggleCategoryActiveRequest(bool IsActive);
+public record ToggleCategoryActiveRequest(bool IsActive, Guid? MoveProductsToCategoryId = null);

@@ -58,17 +58,6 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
 
         await AppointmentNotifier.NotifyStatusChangedAsync(_whatsAppService, _logger, entity, cancellationToken);
 
-        return Result.Success(new AppointmentDto
-        {
-            Id = entity.Id,
-            CustomerName = entity.CustomerName,
-            CustomerPhone = entity.CustomerPhone,
-            ServiceName = entity.ServiceName,
-            StaffName = entity.StaffName,
-            StartAt = entity.StartAt,
-            EndAt = entity.EndAt,
-            Status = entity.Status,
-            Notes = entity.Notes
-        });
+        return Result.Success(AppointmentDto.From(entity));
     }
 }

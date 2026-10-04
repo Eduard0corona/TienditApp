@@ -422,6 +422,63 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/appointments/{id}/status": {
@@ -2099,6 +2156,16 @@
       "get": {
         "tags": [
           "Categories"
+        ],
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -7054,6 +7121,86 @@
         }
       }
     },
+    "/api/v1/purchaseorders/{id}/send": {
+      "post": {
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchaseorders/{id}/cancel": {
+      "post": {
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports/operational-summary": {
       "get": {
         "tags": [
@@ -8672,6 +8819,16 @@
             "type": "string",
             "nullable": true
           },
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "startAt": {
             "type": "string",
             "format": "date-time"
@@ -9576,6 +9733,7 @@
           "id",
           "isActive",
           "name",
+          "productCount",
           "sortOrder"
         ],
         "type": "object",
@@ -9597,6 +9755,10 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "productCount": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -10196,7 +10358,6 @@
           "customerName",
           "customerPhone",
           "endAt",
-          "serviceName",
           "startAt"
         ],
         "type": "object",
@@ -10208,10 +10369,21 @@
             "type": "string"
           },
           "serviceName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
+          },
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           },
           "staffName": {
             "type": "string",
+            "nullable": true
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
             "nullable": true
           },
           "startAt": {
@@ -12101,6 +12273,14 @@
         },
         "additionalProperties": false
       },
+      "InsufficientStockPolicy": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
       "InventoryAlertItemDto": {
         "required": [
           "deficit",
@@ -13500,6 +13680,7 @@
           "servicePieces",
           "status",
           "statusHistory",
+          "stockWarnings",
           "subTotal",
           "tax",
           "taxBreakdown",
@@ -13671,6 +13852,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/KitchenTicketSummaryDto"
+            }
+          },
+          "stockWarnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         },
@@ -15390,6 +15577,11 @@
           "quantityReceived": {
             "type": "number",
             "format": "double"
+          },
+          "unitCost": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -16874,6 +17066,7 @@
           "createdAt",
           "defaultTaxRate",
           "id",
+          "insufficientStockPolicy",
           "name",
           "onlineMenuMode",
           "orderNotificationPolicy",
@@ -16936,6 +17129,9 @@
           },
           "orderNotificationPolicy": {
             "$ref": "#/components/schemas/OrderNotificationPolicy"
+          },
+          "insufficientStockPolicy": {
+            "$ref": "#/components/schemas/InsufficientStockPolicy"
           },
           "onlineMenuMode": {
             "$ref": "#/components/schemas/OnlineMenuMode"
@@ -17000,6 +17196,7 @@
         "required": [
           "autoCloseCounterSales",
           "defaultTaxRate",
+          "insufficientStockPolicy",
           "orderNotificationPolicy",
           "pricesIncludeTax",
           "requireOpenCashSession"
@@ -17021,6 +17218,9 @@
           },
           "orderNotificationPolicy": {
             "$ref": "#/components/schemas/OrderNotificationPolicy"
+          },
+          "insufficientStockPolicy": {
+            "$ref": "#/components/schemas/InsufficientStockPolicy"
           }
         },
         "additionalProperties": false
@@ -17127,6 +17327,11 @@
         "properties": {
           "isActive": {
             "type": "boolean"
+          },
+          "moveProductsToCategoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17281,6 +17486,59 @@
           },
           "strictMode": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateAppointmentCommand": {
+        "required": [
+          "appointmentId",
+          "customerName",
+          "customerPhone",
+          "endAt",
+          "startAt"
+        ],
+        "type": "object",
+        "properties": {
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "serviceName": {
+            "type": "string",
+            "nullable": true
+          },
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffName": {
+            "type": "string",
+            "nullable": true
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17954,6 +18212,9 @@
           },
           "orderNotificationPolicy": {
             "$ref": "#/components/schemas/OrderNotificationPolicy"
+          },
+          "insufficientStockPolicy": {
+            "$ref": "#/components/schemas/InsufficientStockPolicy"
           }
         },
         "additionalProperties": false

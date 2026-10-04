@@ -129,7 +129,8 @@ public class CloseTabCommandHandler : IRequestHandler<CloseTabCommand, Result<Or
         }
 
         order.CloseTab(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), _currentUserService.UserName);
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        // The rounds were served and paid already: missing supplies never keep the table's tab open.
+        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
         return await TabLoader.SaveAsync(_context, _mapper, order, cancellationToken);
     }
 }

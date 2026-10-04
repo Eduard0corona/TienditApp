@@ -91,15 +91,24 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
         Status = PurchaseOrderStatus.Sent;
     }
 
+    /// <summary>Only an order with nothing received yet: received goods already are stock and spend.</summary>
     public void Cancel()
     {
+        if (Status == PurchaseOrderStatus.Cancelled)
+            throw new DomainException("La compra ya está cancelada.");
         if (Status == PurchaseOrderStatus.Received)
             throw new DomainException("No se puede cancelar una compra ya recibida.");
+        if (_lines.Any(x => x.ReceivedQuantity > 0))
+            throw new DomainException("La compra ya tiene mercancía recibida; no se puede cancelar.");
 
         Status = PurchaseOrderStatus.Cancelled;
     }
 
-    public void RegisterReception(Dictionary<Guid, decimal> receivedByLineId, DateTimeOffset receivedAt)
+    /// <param name="unitCostByLineId">The supplier's actual price per line when it differs from the ordered one.</param>
+    public void RegisterReception(
+        IReadOnlyDictionary<Guid, decimal> receivedByLineId,
+        DateTimeOffset receivedAt,
+        IReadOnlyDictionary<Guid, decimal>? unitCostByLineId = null)
     {
         if (Status == PurchaseOrderStatus.Cancelled)
             throw new DomainException("No se puede recibir una compra cancelada.");
@@ -113,6 +122,8 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
             if (!receivedByLineId.TryGetValue(line.Id, out var qty) || qty <= 0)
                 continue;
 
+            if (unitCostByLineId is not null && unitCostByLineId.TryGetValue(line.Id, out var unitCost))
+                line.UpdateUnitCost(unitCost);
             line.Receive(qty);
             anyReceived = true;
         }
@@ -120,6 +131,7 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
         if (!anyReceived)
             throw new DomainException("Debes indicar al menos una línea con cantidad recibida.");
 
+        RecalculateTotals();
         ReceivedAt = receivedAt;
         Status = _lines.All(x => x.PendingQuantity <= 0)
             ? PurchaseOrderStatus.Received

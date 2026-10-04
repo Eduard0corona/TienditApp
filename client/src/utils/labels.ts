@@ -1,4 +1,4 @@
-import type { OrderPaymentMethod, OrderStatus, OrderType, ServiceOrderPieceStatus } from '../types';
+import type { OrderPaymentMethod, OrderStatus, OrderType, PurchaseOrderStatus, ServiceOrderPieceStatus } from '../types';
 
 // Single catalog of the Spanish labels shown for backend enums. REST responses carry enums as numbers
 // and SignalR payloads (and some report dictionaries) carry their C# names, so each label is reachable
@@ -133,4 +133,21 @@ export function getUserRoleLabel(role: string | null | undefined, tenantRole: st
 export function getCatalogItemTypeLabel(type: string | null | undefined): string {
   if (!type) return '';
   return CATALOG_ITEM_TYPE_LABELS[type] ?? type;
+}
+
+const PURCHASE_ORDER_STATUS: Record<PurchaseOrderStatus, { label: string; badge: string }> = {
+  0: { label: 'Borrador', badge: 'bg-secondary' },
+  1: { label: 'Enviada', badge: 'bg-primary' },
+  2: { label: 'Recepción parcial', badge: 'bg-info' },
+  3: { label: 'Recibida', badge: 'bg-success' },
+  99: { label: 'Cancelada', badge: 'bg-danger' },
+};
+
+export function getPurchaseOrderStatusLabel(status: PurchaseOrderStatus): string {
+  return PURCHASE_ORDER_STATUS[status]?.label ?? String(status);
+}
+
+/** Badge class of a purchase order status. */
+export function getPurchaseOrderStatusBadge(status: PurchaseOrderStatus): string {
+  return PURCHASE_ORDER_STATUS[status]?.badge ?? 'bg-secondary';
 }

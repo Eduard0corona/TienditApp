@@ -9,4 +9,5 @@ public class TenantSalesPolicyDto
     public bool AutoCloseCounterSales { get; set; }
     public bool RequireOpenCashSession { get; set; }
     public OrderNotificationPolicy OrderNotificationPolicy { get; set; }
+    public InsufficientStockPolicy InsufficientStockPolicy { get; set; }
 }

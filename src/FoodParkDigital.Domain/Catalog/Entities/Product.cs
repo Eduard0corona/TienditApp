@@ -294,6 +294,14 @@ public class Product : AuditableEntity, ITenantScoped
     /// <summary>IVA of the product when sold by a business whose default rate is <paramref name="defaultTaxRate"/>.</summary>
     public VatRate GetVatRate(decimal defaultTaxRate) => VatRate.ForProduct(TaxRate, IsTaxExempt, defaultTaxRate);
 
+    /// <summary>Moves the product to another category of the business (for example, before archiving its own).</summary>
+    public void MoveToCategory(Guid categoryId)
+    {
+        if (categoryId == Guid.Empty)
+            throw new DomainException("La categoría es obligatoria.");
+        CategoryId = categoryId;
+    }
+
     public void SetImage(string? imageUrl) => ImageUrl = imageUrl;
 
     public void SetAvailability(bool isAvailable) => IsAvailable = isAvailable;

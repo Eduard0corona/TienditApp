@@ -41,6 +41,10 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
 - Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.
+- Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
+- Una compra con recepción parcial no se puede cerrar sin esperar el resto (cancelarla se rechaza porque ya hay mercancía recibida).
+- Las rondas de una cuenta de mesa no se revisan contra existencias; la cuenta consume al cerrarse y ahí no se rechaza.
+- `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 
 ## Resuelto el 2026-10-01
 
@@ -158,6 +162,11 @@ Pendientes detectados en la Fase 3:
 - Logs por OpenTelemetry con negocio y usuario por id.
 - Acentos en 123 textos de la interfaz y 112 mensajes del servidor; la palabra "tenant" sale de los mensajes y de Equipo.
 - "Abrir otro negocio" con la misma cuenta; Más vendidos cuenta lo cobrado; un teléfono inválido en un pedido de cliente responde 400 en español.
+- Taller: insignias de prioridad (Urgente, Baja) y de entrega en palabras ("Atrasada 2 h", "Entrega en 35 min"), prioridad al recibir la pieza y detalle con fotos, lista de revisión y el resto del pedido.
+- Agenda: abre con hoy, reprograma (avisa al cliente), liga el servicio del catálogo y a la persona del equipo, y no deja dos citas traslapadas a la misma persona (migración `AddAppointmentResourcesAndStockPolicy`).
+- Categorías: archivar pasa los productos a otra categoría y se pueden restaurar.
+- Compras: detalle de la orden, recepción parcial con el costo de la factura, enviar un borrador y cancelar mientras no llegue nada.
+- Política de existencias por negocio: bloquear la venta nombrando el insumo que falta (por defecto) o vender y avisar al cajero.
 
 ## Decisiones humanas pendientes
 

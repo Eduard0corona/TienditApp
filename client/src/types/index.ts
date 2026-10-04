@@ -169,6 +169,8 @@ export interface TenantProfileDto {
   onlineMenuMode?: OnlineMenuMode;
   /** Which orders send the customer WhatsApp messages (paid templates). */
   orderNotificationPolicy?: OrderNotificationPolicy;
+  /** Refuse (default) or warn when a sale's recipe supplies are short. */
+  insufficientStockPolicy?: InsufficientStockPolicy;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -193,6 +195,8 @@ export interface TenantSalesPolicyDto {
   requireOpenCashSession?: boolean;
   /** Which orders send the customer WhatsApp messages. Omitted keeps the current value. */
   orderNotificationPolicy?: OrderNotificationPolicy;
+  /** Refuse or warn when a sale's recipe supplies are short. Omitted keeps the current value. */
+  insufficientStockPolicy?: InsufficientStockPolicy;
 }
 
 export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
@@ -391,6 +395,16 @@ export const OrderNotificationPolicy = {
 } as const;
 export type OrderNotificationPolicy = (typeof OrderNotificationPolicy)[keyof typeof OrderNotificationPolicy];
 
+/**
+ * Same numbers as Domain.Tenants.Enums.InsufficientStockPolicy: a sale made by the team whose recipe supplies are
+ * short is refused naming them (Block, the default) or goes through and warns (Warn).
+ */
+export const InsufficientStockPolicy = {
+  Block: 0,
+  Warn: 1,
+} as const;
+export type InsufficientStockPolicy = (typeof InsufficientStockPolicy)[keyof typeof InsufficientStockPolicy];
+
 /** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
 export const CfdiTaxObject = {
   NotSubject: 1,
@@ -470,6 +484,8 @@ export interface CategoryDto {
   description?: string;
   sortOrder: number;
   isActive: boolean;
+  /** Products filed under it (archiving asks where to move them). */
+  productCount: number;
 }
 
 export interface CategoryTemplateItemDto {
@@ -929,6 +945,8 @@ export interface CreatePurchaseOrderRequest {
 export interface ReceivePurchaseOrderLineRequest {
   purchaseOrderLineId: string;
   quantityReceived: number;
+  /** Supplier's actual price when it differs from the ordered one; the stock is valued at it. */
+  unitCost?: number;
 }
 
 export interface ReceivePurchaseOrderRequest {
@@ -1095,6 +1113,10 @@ export interface AppointmentDto {
   customerPhone: string;
   serviceName: string;
   staffName?: string;
+  /** The service of the catalog it books (older appointments only have the name). */
+  serviceProductId?: string | null;
+  /** The team member who attends it. */
+  staffUserId?: string | null;
   startAt: string;
   endAt: string;
   status: AppointmentStatus;
@@ -1104,8 +1126,11 @@ export interface AppointmentDto {
 export interface CreateAppointmentRequest {
   customerName: string;
   customerPhone: string;
-  serviceName: string;
+  /** Free name; with serviceProductId the catalog name is used. */
+  serviceName?: string;
+  serviceProductId?: string;
   staffName?: string;
+  staffUserId?: string;
   startAt: string;
   endAt: string;
   notes?: string;
@@ -1560,6 +1585,8 @@ export interface OrderDto {
   isOpenTab?: boolean;
   diningTableId?: string | null;
   kitchenTickets?: KitchenTicketSummaryDto[];
+  /** Only in the answer to a new sale: recipe supplies it took below zero ("Tortilla quedó en -3"). */
+  stockWarnings?: string[];
   /** When the device captured it without connection; it reached the server later. */
   capturedOfflineAt?: string | null;
 }

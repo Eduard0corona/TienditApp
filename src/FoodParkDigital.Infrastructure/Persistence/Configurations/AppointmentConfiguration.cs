@@ -24,5 +24,7 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.HasIndex(x => new { x.TenantId, x.StartAt });
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.CustomerPhone });
+        // Overlaps are checked per team member.
+        builder.HasIndex(x => new { x.TenantId, x.StaffUserId, x.StartAt });
     }
 }

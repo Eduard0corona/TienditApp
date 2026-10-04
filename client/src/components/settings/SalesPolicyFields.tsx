@@ -1,4 +1,4 @@
-import { OrderNotificationPolicy, type TenantSalesPolicyDto } from '../../types';
+import { InsufficientStockPolicy, OrderNotificationPolicy, type TenantSalesPolicyDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals } from '../../utils/orderTotals';
 
@@ -7,6 +7,8 @@ interface SalesPolicyFieldsProps {
   onChange: (value: TenantSalesPolicyDto) => void;
   disabled?: boolean;
   idPrefix: string;
+  /** Only businesses with inventory (recipes consume supplies) choose what a short sale does. */
+  showStockPolicy?: boolean;
 }
 
 const RATE_OPTIONS = [
@@ -33,13 +35,26 @@ const NOTIFICATION_OPTIONS: { value: OrderNotificationPolicy; label: string; hel
   },
 ];
 
+const STOCK_OPTIONS: { value: InsufficientStockPolicy; label: string; help: string }[] = [
+  {
+    value: InsufficientStockPolicy.Block,
+    label: 'No vender y decir qué insumo falta',
+    help: 'La venta no se registra hasta que des entrada al insumo en Inventario. Las existencias nunca quedan en negativo.',
+  },
+  {
+    value: InsufficientStockPolicy.Warn,
+    label: 'Vender y avisar',
+    help: 'La venta se registra, el insumo queda en negativo y el cajero ve un aviso con su nombre para corregir el inventario.',
+  },
+];
+
 /** How a $100 product is charged with each policy, computed like the server does. */
 function example(pricesIncludeTax: boolean, rate: number) {
   return estimateOrderTotals([{ unitPrice: 100, quantity: 1, ratePercent: rate, isExempt: false }], pricesIncludeTax);
 }
 
 /** Sales policy of the business: IVA, the general rate, closing paid sales, the drawer and customer messages. */
-export default function SalesPolicyFields({ value, onChange, disabled, idPrefix }: SalesPolicyFieldsProps) {
+export default function SalesPolicyFields({ value, onChange, disabled, idPrefix, showStockPolicy }: SalesPolicyFieldsProps) {
   const included = example(true, value.defaultTaxRate);
   const added = example(false, value.defaultTaxRate);
 
@@ -172,6 +187,32 @@ export default function SalesPolicyFields({ value, onChange, disabled, idPrefix 
             <div id={`${idPrefix}-notifications-help`} className="form-text">
               {NOTIFICATION_OPTIONS.find((option) => option.value === value.orderNotificationPolicy)?.help}
               {' '}Cada aviso es un mensaje de plantilla que Meta cobra.
+            </div>
+          </div>
+        )}
+        {showStockPolicy && value.insufficientStockPolicy !== undefined && (
+          <div className="col-md-6">
+            <label className="form-label fw-semibold" htmlFor={`${idPrefix}-stock`}>
+              Si no alcanzan los insumos de la receta
+            </label>
+            <select
+              id={`${idPrefix}-stock`}
+              className="form-select"
+              value={value.insufficientStockPolicy}
+              onChange={(event) => onChange({
+                ...value,
+                insufficientStockPolicy: Number(event.target.value) as InsufficientStockPolicy,
+              })}
+              disabled={disabled}
+              aria-describedby={`${idPrefix}-stock-help`}
+            >
+              {STOCK_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <div id={`${idPrefix}-stock-help`} className="form-text">
+              {STOCK_OPTIONS.find((option) => option.value === value.insufficientStockPolicy)?.help}
+              {' '}Los pedidos del menú en línea o de WhatsApp y las ventas capturadas sin conexión nunca se rechazan.
             </div>
           </div>
         )}

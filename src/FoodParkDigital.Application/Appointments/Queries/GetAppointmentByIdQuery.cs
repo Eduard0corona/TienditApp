@@ -32,6 +32,8 @@ public class GetAppointmentByIdQueryHandler : IRequestHandler<GetAppointmentById
                 CustomerPhone = x.CustomerPhone,
                 ServiceName = x.ServiceName,
                 StaffName = x.StaffName,
+                ServiceProductId = x.ServiceProductId,
+                StaffUserId = x.StaffUserId,
                 StartAt = x.StartAt,
                 EndAt = x.EndAt,
                 Status = x.Status,

@@ -892,15 +892,15 @@ export default function InventoryManagement() {
       const line = movementForm.lines[index];
       const quantity = Number(line.quantity);
       if (!line.supplyItemId || !line.inventoryLocationId) {
-        setError(`Linea ${index + 1}: insumo y ubicación son obligatorios.`);
+        setError(`Línea ${index + 1}: insumo y ubicación son obligatorios.`);
         return;
       }
       if (Number.isNaN(quantity) || quantity <= 0) {
-        setError(`Linea ${index + 1}: cantidad inválida.`);
+        setError(`Línea ${index + 1}: cantidad inválida.`);
         return;
       }
       if (line.unitCost && (Number.isNaN(Number(line.unitCost)) || Number(line.unitCost) < 0)) {
-        setError(`Linea ${index + 1}: costo unitario inválido.`);
+        setError(`Línea ${index + 1}: costo unitario inválido.`);
         return;
       }
     }
@@ -990,17 +990,17 @@ export default function InventoryManagement() {
       const wastePercent = Number(line.wastePercent);
 
       if (!line.supplyItemId) {
-        setError(`Linea ${index + 1}: el insumo es obligatorio.`);
+        setError(`Línea ${index + 1}: el insumo es obligatorio.`);
         return;
       }
 
       if (Number.isNaN(quantity) || quantity <= 0) {
-        setError(`Linea ${index + 1}: cantidad inválida.`);
+        setError(`Línea ${index + 1}: cantidad inválida.`);
         return;
       }
 
       if (Number.isNaN(wastePercent) || wastePercent < 0 || wastePercent > 100) {
-        setError(`Linea ${index + 1}: merma inválida (0 a 100).`);
+        setError(`Línea ${index + 1}: merma inválida (0 a 100).`);
         return;
       }
     }
@@ -2299,7 +2299,7 @@ export default function InventoryManagement() {
           {movementForm.lines.map((line, index) => (
             <div className="border rounded p-2 mb-2" key={`line-${index}`}>
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <strong>Linea {index + 1}</strong>
+                <strong>Línea {index + 1}</strong>
                 {movementForm.lines.length > 1 && (
                   <button
                     type="button"

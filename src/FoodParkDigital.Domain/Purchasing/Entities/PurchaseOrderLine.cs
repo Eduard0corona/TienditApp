@@ -55,6 +55,16 @@ public class PurchaseOrderLine : AuditableEntity, ITenantScoped
 
     public PurchaseOrder PurchaseOrder { get; private set; } = null!;
 
+    /// <summary>The price the supplier actually charged, captured at reception; the line total follows it.</summary>
+    public void UpdateUnitCost(decimal unitCost)
+    {
+        if (unitCost < 0)
+            throw new DomainException("El costo unitario no puede ser negativo.");
+
+        UnitCost = unitCost;
+        RecalculateTotals();
+    }
+
     public void Receive(decimal quantity)
     {
         if (quantity <= 0)

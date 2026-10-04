@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { appointmentsApi } from '../../api/appointmentsApi';
+import { employeesApi } from '../../api/employeesApi';
+import { productsApi } from '../../api/productsApi';
 import type {
   AppointmentDto,
   AppointmentStatus,
   CreateAppointmentRequest,
+  EmployeeDto,
   PaginatedList,
+  ProductDto,
 } from '../../types';
 import { AppointmentStatus as AppointmentStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useToast } from '../../hooks/useToast';
 
 const COLUMNS = [
   { header: 'Cliente' },
@@ -29,11 +34,18 @@ const EMPTY_PAGINATED = {
   hasNextPage: false,
 };
 
+/** A free service name typed by hand instead of one of the catalog. */
+const OTHER_SERVICE = 'other';
+const DEFAULT_DURATION_MINUTES = 60;
+
+type View = 'upcoming' | 'history';
+
 interface FormState {
   customerName: string;
   customerPhone: string;
+  serviceProductId: string;
   serviceName: string;
-  staffName: string;
+  staffUserId: string;
   startAt: string;
   endAt: string;
   notes: string;
@@ -42,12 +54,35 @@ interface FormState {
 const buildForm = (): FormState => ({
   customerName: '',
   customerPhone: '',
+  serviceProductId: '',
   serviceName: '',
-  staffName: '',
+  staffUserId: '',
   startAt: '',
   endAt: '',
   notes: '',
 });
+
+/** "2026-10-05T10:30" for a datetime-local input, in the device's time. */
+function toInputDateTime(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function addMinutes(input: string, minutes: number): string {
+  return toInputDateTime(new Date(new Date(input).getTime() + minutes * 60_000));
+}
+
+/** Same minute: the server may answer with seconds or another offset notation. */
+function sameMinute(a: string, b: string): boolean {
+  return Math.floor(new Date(a).getTime() / 60_000) === Math.floor(new Date(b).getTime() / 60_000);
+}
+
+function startOfToday(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
 
 const statusLabel = (status: AppointmentStatus) => {
   switch (status) {
@@ -72,29 +107,56 @@ const statusBadge = (status: AppointmentStatus) => {
   }
 };
 
+const isClosed = (status: AppointmentStatus) =>
+  status === AppointmentStatusConst.Completed
+  || status === AppointmentStatusConst.NoShow
+  || status === AppointmentStatusConst.Cancelled;
+
+function formatSlot(item: AppointmentDto): string {
+  const start = new Date(item.startAt);
+  const end = new Date(item.endAt);
+  const sameDay = start.toDateString() === end.toDateString();
+  const day = start.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
+  const from = start.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const to = sameDay
+    ? end.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    : end.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+  return `${day} · ${from} a ${to}`;
+}
+
 export default function AppointmentsList() {
+  const toast = useToast();
   const [data, setData] = useState<PaginatedList<AppointmentDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<View>('upcoming');
   const [statusFilter, setStatusFilter] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [search, setSearch] = useState('');
 
+  const [editing, setEditing] = useState<AppointmentDto | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   const [form, setForm] = useState<FormState>(buildForm());
-  const [search, setSearch] = useState('');
+  const [services, setServices] = useState<ProductDto[]>([]);
+  const [staff, setStaff] = useState<EmployeeDto[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      // Upcoming opens with today, the soonest first; history reads from the newest back.
       const params: {
         status?: AppointmentStatus;
         search?: string;
+        fromDate?: string;
+        toDate?: string;
         pageNumber: number;
         pageSize: number;
-      } = { pageNumber, pageSize };
+      } = view === 'upcoming'
+        ? { pageNumber, pageSize, fromDate: startOfToday().toISOString() }
+        : { pageNumber, pageSize, toDate: new Date().toISOString() };
       if (statusFilter !== '') params.status = Number(statusFilter) as AppointmentStatus;
       if (search) params.search = search;
       const { data } = await appointmentsApi.getAll(params);
@@ -104,29 +166,97 @@ export default function AppointmentsList() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, search, statusFilter]);
+  }, [pageNumber, pageSize, search, statusFilter, view]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
+  // The catalog's services and the active team, for the form.
+  useEffect(() => {
+    if (!showModal || (services.length > 0 && staff.length > 0)) return;
+    let cancelled = false;
+    Promise.all([
+      productsApi.getAll({ itemType: 'Service', isAvailable: true, pageSize: 200 }).catch(() => null),
+      employeesApi.getAll({ status: 'Active', pageSize: 200 }).catch(() => null),
+    ]).then(([servicesResponse, staffResponse]) => {
+      if (cancelled) return;
+      if (servicesResponse) setServices(servicesResponse.data.items);
+      if (staffResponse) setStaff(staffResponse.data.items.filter((member) => member.isActive));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showModal, services.length, staff.length]);
+
+  const serviceById = useMemo(() => new Map(services.map((service) => [service.id, service])), [services]);
+
+  const openNew = () => {
+    setEditing(null);
+    setForm(buildForm());
+    setFormError('');
+    setShowModal(true);
+  };
+
+  const openEdit = (item: AppointmentDto) => {
+    setEditing(item);
+    setForm({
+      customerName: item.customerName,
+      customerPhone: item.customerPhone,
+      serviceProductId: item.serviceProductId ?? OTHER_SERVICE,
+      serviceName: item.serviceName,
+      staffUserId: item.staffUserId ?? '',
+      startAt: toInputDateTime(item.startAt),
+      endAt: toInputDateTime(item.endAt),
+      notes: item.notes ?? '',
+    });
+    setFormError('');
+    setShowModal(true);
+  };
+
+  const durationOf = (serviceProductId: string) =>
+    serviceById.get(serviceProductId)?.preparationTimeMinutes || DEFAULT_DURATION_MINUTES;
+
+  const changeService = (serviceProductId: string) => {
+    setForm((current) => ({
+      ...current,
+      serviceProductId,
+      // Changing the service keeps the start and moves the end to its duration.
+      endAt: current.startAt && serviceProductId !== OTHER_SERVICE ? addMinutes(current.startAt, durationOf(serviceProductId)) : current.endAt,
+    }));
+  };
+
+  const changeStart = (startAt: string) => {
+    setForm((current) => {
+      const duration = current.startAt && current.endAt
+        ? Math.max(5, Math.round((new Date(current.endAt).getTime() - new Date(current.startAt).getTime()) / 60_000))
+        : durationOf(current.serviceProductId);
+      return { ...current, startAt, endAt: startAt ? addMinutes(startAt, duration) : current.endAt };
+    });
+  };
+
   const submit = async () => {
-    setError('');
-    setSuccess('');
-    if (!form.customerName.trim() || !form.customerPhone.trim() || !form.serviceName.trim()) {
-      setError('Cliente, teléfono y servicio son obligatorios.');
+    setFormError('');
+    const usesCatalog = form.serviceProductId !== '' && form.serviceProductId !== OTHER_SERVICE;
+    if (!form.customerName.trim() || !form.customerPhone.trim()) {
+      setFormError('El nombre y el teléfono del cliente son obligatorios.');
       return;
     }
-    if (!form.startAt || !form.endAt) {
-      setError('Debes indicar horario de inicio y fin.');
+    if (!usesCatalog && !form.serviceName.trim()) {
+      setFormError('Elige el servicio o escribe cuál es.');
+      return;
+    }
+    if (!form.startAt || !form.endAt || new Date(form.endAt) <= new Date(form.startAt)) {
+      setFormError('Indica el inicio y un fin posterior al inicio.');
       return;
     }
 
     const payload: CreateAppointmentRequest = {
       customerName: form.customerName.trim(),
       customerPhone: form.customerPhone.trim(),
-      serviceName: form.serviceName.trim(),
-      staffName: form.staffName.trim() || undefined,
+      serviceProductId: usesCatalog ? form.serviceProductId : undefined,
+      serviceName: usesCatalog ? undefined : form.serviceName.trim(),
+      staffUserId: form.staffUserId || undefined,
       startAt: new Date(form.startAt).toISOString(),
       endAt: new Date(form.endAt).toISOString(),
       notes: form.notes.trim() || undefined,
@@ -134,13 +264,17 @@ export default function AppointmentsList() {
 
     try {
       setSaving(true);
-      await appointmentsApi.create(payload);
-      setSuccess('Cita registrada.');
+      if (editing) {
+        await appointmentsApi.update(editing.id, payload);
+        toast.success(sameMinute(editing.startAt, payload.startAt) ? 'Cita actualizada.' : 'Cita reprogramada: el cliente recibe el aviso.');
+      } else {
+        await appointmentsApi.create(payload);
+        toast.success('Cita registrada.');
+      }
       setShowModal(false);
-      setForm(buildForm());
       await loadData();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo registrar la cita.'));
+      setFormError(getApiErrorMessage(err, 'No se pudo guardar la cita.'));
     } finally {
       setSaving(false);
     }
@@ -148,10 +282,9 @@ export default function AppointmentsList() {
 
   const updateStatus = async (item: AppointmentDto, newStatus: AppointmentStatus) => {
     setError('');
-    setSuccess('');
     try {
       await appointmentsApi.updateStatus(item.id, newStatus);
-      setSuccess('Estado de cita actualizado.');
+      toast.success('Estado de la cita actualizado.');
       await loadData();
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo actualizar el estado.'));
@@ -160,28 +293,41 @@ export default function AppointmentsList() {
 
   return (
     <>
-      <PageTitle title="Citas" subtitle="Agenda del negocio" />
+      <PageTitle title="Agenda" subtitle="Operación diaria" />
 
       {error && (
-        <div className="alert alert-danger alert-dismissible fade show">
+        <div className="alert alert-danger alert-dismissible fade show" role="alert">
           {error}
-          <button type="button" className="btn-close" onClick={() => setError('')}></button>
-        </div>
-      )}
-      {success && (
-        <div className="alert alert-success alert-dismissible fade show">
-          {success}
-          <button type="button" className="btn-close" onClick={() => setSuccess('')}></button>
+          <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setError('')}></button>
         </div>
       )}
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <div className="d-flex align-items-center gap-2">
-              <label className="form-label mb-0">Estado</label>
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div className="d-flex flex-wrap align-items-center gap-2">
+              <div className="btn-group btn-group-sm" role="group" aria-label="Qué citas ver">
+                <button
+                  type="button"
+                  className={`btn ${view === 'upcoming' ? 'btn-primary' : 'btn-light'}`}
+                  aria-pressed={view === 'upcoming'}
+                  onClick={() => { setView('upcoming'); setPageNumber(1); }}
+                >
+                  Próximas
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${view === 'history' ? 'btn-primary' : 'btn-light'}`}
+                  aria-pressed={view === 'history'}
+                  onClick={() => { setView('history'); setPageNumber(1); }}
+                >
+                  Anteriores
+                </button>
+              </div>
+              <label className="form-label mb-0" htmlFor="appointments-status">Estado</label>
               <select
-                className="form-select form-select-sm"
+                id="appointments-status"
+                className="form-select form-select-sm w-auto"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -197,8 +343,8 @@ export default function AppointmentsList() {
                 <option value={AppointmentStatusConst.Cancelled}>Cancelada</option>
               </select>
             </div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-              <i className="ri-add-line me-1"></i>Nueva cita
+            <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
+              <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
             </button>
           </div>
 
@@ -207,7 +353,7 @@ export default function AppointmentsList() {
             columns={COLUMNS}
             keyExtractor={(item) => item.id}
             loading={loading}
-            emptyMessage="No hay citas registradas."
+            emptyMessage={view === 'upcoming' ? 'No hay citas de hoy en adelante.' : 'No hay citas anteriores.'}
             searchPlaceholder="Cliente, teléfono, servicio o persona"
             serverSide={{
               totalCount: data.totalCount,
@@ -231,28 +377,41 @@ export default function AppointmentsList() {
                 </td>
                 <td>
                   <div>{item.serviceName}</div>
-                  <div className="text-muted small">{item.staffName || '-'}</div>
+                  <div className="text-muted small">{item.staffName || 'Sin asignar'}</div>
                 </td>
-                <td>
-                  <div>{new Date(item.startAt).toLocaleString('es-MX')}</div>
-                  <div className="text-muted small">a {new Date(item.endAt).toLocaleString('es-MX')}</div>
-                </td>
+                <td>{formatSlot(item)}</td>
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
                 </td>
                 <td className="text-center">
-                  <select
-                    className="form-select form-select-sm"
-                    value={item.status}
-                    onChange={(e) => updateStatus(item, Number(e.target.value) as AppointmentStatus)}
-                  >
-                    <option value={AppointmentStatusConst.Scheduled}>Programada</option>
-                    <option value={AppointmentStatusConst.Confirmed}>Confirmada</option>
-                    <option value={AppointmentStatusConst.InService}>En servicio</option>
-                    <option value={AppointmentStatusConst.Completed}>Completada</option>
-                    <option value={AppointmentStatusConst.NoShow}>No asistió</option>
-                    <option value={AppointmentStatusConst.Cancelled}>Cancelada</option>
-                  </select>
+                  {isClosed(item.status) ? (
+                    <span className="text-muted small">Cerrada</span>
+                  ) : (
+                    <div className="d-flex gap-1 justify-content-center">
+                      <select
+                        className="form-select form-select-sm w-auto"
+                        aria-label={`Estado de la cita de ${item.customerName}`}
+                        value={item.status}
+                        onChange={(e) => void updateStatus(item, Number(e.target.value) as AppointmentStatus)}
+                      >
+                        <option value={AppointmentStatusConst.Scheduled}>Programada</option>
+                        <option value={AppointmentStatusConst.Confirmed}>Confirmada</option>
+                        <option value={AppointmentStatusConst.InService}>En servicio</option>
+                        <option value={AppointmentStatusConst.Completed}>Completada</option>
+                        <option value={AppointmentStatusConst.NoShow}>No asistió</option>
+                        <option value={AppointmentStatusConst.Cancelled}>Cancelada</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => openEdit(item)}
+                        aria-label={`Editar o reprogramar la cita de ${item.customerName}`}
+                        title="Editar o reprogramar"
+                      >
+                        <i className="ri-calendar-event-line" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  )}
                 </td>
               </>
             )}
@@ -260,46 +419,70 @@ export default function AppointmentsList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+      <Modal show={showModal} onHide={() => !saving && setShowModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Nueva cita</Modal.Title>
+          <Modal.Title as="h2" className="h5">{editing ? 'Editar o reprogramar la cita' : 'Nueva cita'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row">
             <div className="col-md-6 mb-2">
-              <label className="form-label">Cliente *</label>
-              <input className="form-control" value={form.customerName} onChange={(e) => setForm((x) => ({ ...x, customerName: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-customer">Cliente *</label>
+              <input id="appointment-customer" className="form-control" value={form.customerName} onChange={(e) => setForm((x) => ({ ...x, customerName: e.target.value }))} />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Teléfono *</label>
-              <input className="form-control" value={form.customerPhone} onChange={(e) => setForm((x) => ({ ...x, customerPhone: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-phone">Teléfono *</label>
+              <input id="appointment-phone" type="tel" className="form-control" value={form.customerPhone} onChange={(e) => setForm((x) => ({ ...x, customerPhone: e.target.value }))} />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Servicio *</label>
-              <input className="form-control" value={form.serviceName} onChange={(e) => setForm((x) => ({ ...x, serviceName: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-service">Servicio *</label>
+              <select id="appointment-service" className="form-select" value={form.serviceProductId} onChange={(e) => changeService(e.target.value)}>
+                <option value="">Elige un servicio</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>{service.name}</option>
+                ))}
+                <option value={OTHER_SERVICE}>Otro (escribirlo)</option>
+              </select>
+              {form.serviceProductId === OTHER_SERVICE && (
+                <input
+                  className="form-control mt-2"
+                  aria-label="Nombre del servicio"
+                  placeholder="Nombre del servicio"
+                  value={form.serviceName}
+                  onChange={(e) => setForm((x) => ({ ...x, serviceName: e.target.value }))}
+                />
+              )}
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Colaborador</label>
-              <input className="form-control" value={form.staffName} onChange={(e) => setForm((x) => ({ ...x, staffName: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-staff">Atiende</label>
+              <select id="appointment-staff" className="form-select" value={form.staffUserId} onChange={(e) => setForm((x) => ({ ...x, staffUserId: e.target.value }))}>
+                <option value="">Sin asignar</option>
+                {staff.map((member) => (
+                  <option key={member.userId} value={member.userId}>{member.firstName} {member.lastName}</option>
+                ))}
+              </select>
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Inicio *</label>
-              <input type="datetime-local" className="form-control" value={form.startAt} onChange={(e) => setForm((x) => ({ ...x, startAt: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-start">Inicio *</label>
+              <input id="appointment-start" type="datetime-local" className="form-control" value={form.startAt} onChange={(e) => changeStart(e.target.value)} />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Fin *</label>
-              <input type="datetime-local" className="form-control" value={form.endAt} onChange={(e) => setForm((x) => ({ ...x, endAt: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-end">Fin *</label>
+              <input id="appointment-end" type="datetime-local" className="form-control" value={form.endAt} onChange={(e) => setForm((x) => ({ ...x, endAt: e.target.value }))} />
             </div>
             <div className="col-12 mb-0">
-              <label className="form-label">Notas</label>
-              <textarea className="form-control" rows={2} value={form.notes} onChange={(e) => setForm((x) => ({ ...x, notes: e.target.value }))} />
+              <label className="form-label" htmlFor="appointment-notes">Notas</label>
+              <textarea id="appointment-notes" className="form-control" rows={2} value={form.notes} onChange={(e) => setForm((x) => ({ ...x, notes: e.target.value }))} />
             </div>
           </div>
+          {editing && form.startAt && !sameMinute(editing.startAt, form.startAt) && (
+            <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo horario.</div>
+          )}
+          {formError && <div className="alert alert-danger mt-3 mb-0" role="alert">{formError}</div>}
         </Modal.Body>
         <Modal.Footer>
-          <button className="btn btn-light" onClick={() => setShowModal(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Guardando...' : 'Registrar cita'}
+          <button type="button" className="btn btn-light" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={saving}>
+            {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Registrar cita'}
           </button>
         </Modal.Footer>
       </Modal>

@@ -175,9 +175,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<Guid?>("ServiceProductId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("StaffName")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid?>("StaffUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("StartAt")
                         .HasColumnType("datetimeoffset");
@@ -201,6 +207,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "StartAt");
 
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "StaffUserId", "StartAt");
 
                     b.ToTable("Appointments", (string)null);
                 });
@@ -3173,6 +3181,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<decimal>("DefaultTaxRate")
                         .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("InsufficientStockPolicy")
+                        .HasColumnType("int");
 
                     b.Property<int>("MaxConcurrentOrders")
                         .HasColumnType("int");

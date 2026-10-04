@@ -58,6 +58,16 @@ public class AppointmentsController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
+    /// <summary>Edits an open appointment, including moving it to another time.</summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<AppointmentDto>> Update(Guid id, [FromBody] UpdateAppointmentCommand command)
+    {
+        var result = await _mediator.Send(command with { AppointmentId = id });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpPut("{id:guid}/status")]
     public async Task<ActionResult<AppointmentDto>> UpdateStatus(Guid id, [FromBody] UpdateAppointmentStatusRequest request)
     {

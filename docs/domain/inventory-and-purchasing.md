@@ -12,6 +12,9 @@ Reglas vigentes:
 - Solo las entradas (`Entry`) modifican el costo promedio; transferencias, ajustes y devoluciones se valoran al promedio vigente.
 - Los movimientos manuales no pueden usar los prefijos reservados `ORDER:` y `PO:` ni repetir una referencia externa existente, ni fecharse en el futuro.
 - Una recepción no puede repetir líneas ni fecharse en el futuro; el stock sube con las cantidades que la compra aceptó.
+- Ciclo de una compra: se crea como borrador o enviada; un borrador se envía (`POST /purchaseorders/{id}/send`); llega por partes (`Recepción parcial`) hasta quedar `Recibida`. Se cancela (`POST /purchaseorders/{id}/cancel`) solo mientras no ha llegado nada: lo recibido ya es existencia y gasto. Cerrar una compra parcial sin esperar el resto todavía no existe.
+- Cada línea recibida puede traer el costo real de la factura (`unitCost`): el movimiento de entrada, el costo promedio y el total de la línea usan ese costo; sin él se usa el pactado.
+- Política de existencias por negocio (`TenantSettings.InsufficientStockPolicy`, migración `AddAppointmentResourcesAndStockPolicy`): si las recetas de una venta piden más insumo del que hay, `Block` (por defecto, el comportamiento anterior) rechaza la venta con un mensaje que nombra cada insumo, lo que hay y lo que se necesita; `Warn` registra la venta, deja el insumo en negativo y la respuesta trae `stockWarnings` ("Tortilla quedó en -3") que Vender muestra al cajero. La política aplica a lo que el equipo vende o confirma en ese momento (venta de mostrador, pedido capturado desde el chat, confirmar un pedido, completar una pieza). Nunca se rechazan: las ventas capturadas sin conexión, los pedidos que hace el cliente (menú en línea, bot de WhatsApp) y el cierre de una cuenta de mesa, porque la mercancía ya salió o el negocio revisa el pedido.
 - Cambiar el insumo de una línea de receta reemplaza el requisito (antes se ignoraba y se seguía consumiendo el insumo anterior).
 - `InventoryStock.OnHandQuantity`, `SupplyItem.AverageCost` y `PurchaseOrderLine.ReceivedQuantity` son tokens de concurrencia: dos operaciones simultáneas sobre el mismo stock, costo o línea ya no se sobrescriben; la segunda falla con 409 (el comando de piezas de servicio reintenta).
 
@@ -36,5 +39,6 @@ Reglas vigentes:
 - Folios `INV-yyyyMMdd-nnnn` se generan contando registros y pueden colisionar; el índice único detecta, pero no evita el conflicto.
 - El movimiento manual permite tipos TransferIn/TransferOut, pero no se observó un caso de uso atómico que exija origen y destino.
 - La recepción de compra genera `ExternalReference` con timestamp, por lo que un retry no deduplica de forma determinista; además el avance de línea puede impedir/alterar el segundo intento, pero no es una garantía idempotente formal.
-- `allowNegative: true` aparece al revertir consumo; sumar una devolución no produce negativo, por lo que la excepción merece revisión.
+- `allowNegative: true` aparece al revertir consumo (sumar una devolución no produce negativo) y en el consumo de órdenes, después de que la política de existencias aceptó el faltante; fuera de esos casos una salida no deja negativo.
+- Las rondas de una cuenta de mesa no se revisan contra existencias: la cuenta consume al cerrar y ahí ya no se rechaza.
 - No existe prueba de integración SQL Server para locks, constraints e idempotencia concurrente.

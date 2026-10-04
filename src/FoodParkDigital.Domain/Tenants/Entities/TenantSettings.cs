@@ -56,6 +56,12 @@ public class TenantSettings : BaseEntity
     /// <summary>Which orders send the customer WhatsApp messages: by default not counter sales (the customer is there).</summary>
     public OrderNotificationPolicy OrderNotificationPolicy { get; private set; } = OrderNotificationPolicy.RemoteAndServices;
 
+    /// <summary>
+    /// Whether a sale whose recipes need more supplies than there are is refused (default) or goes through with a
+    /// warning. Orders customers place themselves and work already done (tabs, completed services) never block.
+    /// </summary>
+    public InsufficientStockPolicy InsufficientStockPolicy { get; private set; } = InsufficientStockPolicy.Block;
+
     public const int MinReminderHoursBefore = 1;
     public const int MaxReminderHoursBefore = 72;
     public const int DefaultReminderHoursBefore = 24;
@@ -98,6 +104,13 @@ public class TenantSettings : BaseEntity
         if (!Enum.IsDefined(policy))
             throw new DomainException("La política de avisos no es válida.");
         OrderNotificationPolicy = policy;
+    }
+
+    public void SetInsufficientStockPolicy(InsufficientStockPolicy policy)
+    {
+        if (!Enum.IsDefined(policy))
+            throw new DomainException("La política de existencias no es válida.");
+        InsufficientStockPolicy = policy;
     }
 
     public void UpdateAppointmentReminders(bool enabled, int hoursBefore, Guid? templateId)

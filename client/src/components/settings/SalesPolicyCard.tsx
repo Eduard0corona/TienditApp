@@ -4,7 +4,8 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { OrderNotificationPolicy, type TenantSalesPolicyDto } from '../../types';
+import { InsufficientStockPolicy, OrderNotificationPolicy, TenantCapability, type TenantSalesPolicyDto } from '../../types';
+import { hasCapability } from '../../utils/tenantCapabilities';
 import SalesPolicyFields from './SalesPolicyFields';
 
 /** "Impuestos y ventas" in Mi negocio: the IVA policy applies to sales made from now on. */
@@ -18,6 +19,7 @@ export default function SalesPolicyCard() {
     autoCloseCounterSales: tenant?.autoCloseCounterSales ?? true,
     requireOpenCashSession: tenant?.requireOpenCashSession ?? false,
     orderNotificationPolicy: tenant?.orderNotificationPolicy ?? OrderNotificationPolicy.RemoteAndServices,
+    insufficientStockPolicy: tenant?.insufficientStockPolicy ?? InsufficientStockPolicy.Block,
   };
   const [draft, setDraft] = useState<TenantSalesPolicyDto | null>(null);
   const [saving, setSaving] = useState(false);
@@ -27,7 +29,8 @@ export default function SalesPolicyCard() {
     || value.defaultTaxRate !== saved.defaultTaxRate
     || value.autoCloseCounterSales !== saved.autoCloseCounterSales
     || value.requireOpenCashSession !== saved.requireOpenCashSession
-    || value.orderNotificationPolicy !== saved.orderNotificationPolicy;
+    || value.orderNotificationPolicy !== saved.orderNotificationPolicy
+    || value.insufficientStockPolicy !== saved.insufficientStockPolicy;
 
   const save = async () => {
     const taxChanged = value.pricesIncludeTax !== saved.pricesIncludeTax || value.defaultTaxRate !== saved.defaultTaxRate;
@@ -58,7 +61,13 @@ export default function SalesPolicyCard() {
       <div className="card-body">
         <h4 className="header-title mt-0 mb-1">Impuestos y ventas</h4>
         <p className="text-muted small mb-3">Se aplica a las ventas nuevas. Las ventas anteriores no cambian.</p>
-        <SalesPolicyFields value={value} onChange={setDraft} disabled={saving} idPrefix="settings-policy" />
+        <SalesPolicyFields
+          value={value}
+          onChange={setDraft}
+          disabled={saving}
+          idPrefix="settings-policy"
+          showStockPolicy={hasCapability(tenant?.capabilities, TenantCapability.Inventory)}
+        />
         {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
         <div className="d-flex justify-content-end gap-2 mt-3">
           {changed && (

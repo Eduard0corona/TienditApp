@@ -30,6 +30,22 @@ public static class AppointmentNotifier
             cancellationToken);
     }
 
+    public static async Task NotifyRescheduledAsync(
+        IApplicationDbContext context,
+        IWhatsAppService whatsAppService,
+        ILogger logger,
+        Appointment appointment,
+        CancellationToken cancellationToken)
+    {
+        var localStart = await ToTenantTimeAsync(context, appointment.TenantId, appointment.StartAt, cancellationToken);
+        await SendAsync(
+            whatsAppService,
+            logger,
+            appointment,
+            $"Tu cita para {appointment.ServiceName} cambió al {localStart:dd/MM/yyyy} a las {localStart:HH:mm}.",
+            cancellationToken);
+    }
+
     public static Task NotifyStatusChangedAsync(
         IWhatsAppService whatsAppService,
         ILogger logger,
@@ -39,7 +55,7 @@ public static class AppointmentNotifier
             whatsAppService,
             logger,
             appointment,
-            $"Tu cita ({appointment.ServiceName}) ahora esta: {ToSpanish(appointment.Status)}.",
+            $"Tu cita ({appointment.ServiceName}) ahora está: {ToSpanish(appointment.Status)}.",
             cancellationToken);
 
     public static async Task<DateTimeOffset> ToTenantTimeAsync(

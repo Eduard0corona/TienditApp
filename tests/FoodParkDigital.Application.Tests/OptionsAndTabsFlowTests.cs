@@ -302,18 +302,23 @@ public class OptionsAndTabsFlowTests
     {
         public int Consumed { get; private set; }
 
-        public Task ApplyConsumptionForOrderAsync(FoodParkDigital.Domain.Orders.Entities.Order order, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>> ApplyConsumptionForOrderAsync(
+            FoodParkDigital.Domain.Orders.Entities.Order order,
+            CancellationToken cancellationToken,
+            FoodParkDigital.Application.Common.Models.StockShortageHandling shortageHandling)
         {
             // Mirrors OrderInventoryService: open tabs consume when they close.
             if (!order.IsOpenTab)
                 Consumed++;
-            return Task.CompletedTask;
+            return Task.FromResult<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>>([]);
         }
 
-        public Task ApplyConsumptionForServicePieceAsync(
+        public Task<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>> ApplyConsumptionForServicePieceAsync(
             FoodParkDigital.Domain.Orders.Entities.Order order,
             FoodParkDigital.Domain.Orders.Entities.ServiceOrderPiece piece,
-            CancellationToken cancellationToken) => Task.CompletedTask;
+            CancellationToken cancellationToken,
+            FoodParkDigital.Application.Common.Models.StockShortageHandling shortageHandling)
+            => Task.FromResult<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>>([]);
 
         public Task ReverseConsumptionForOrderAsync(FoodParkDigital.Domain.Orders.Entities.Order order, string? reason, CancellationToken cancellationToken)
             => Task.CompletedTask;

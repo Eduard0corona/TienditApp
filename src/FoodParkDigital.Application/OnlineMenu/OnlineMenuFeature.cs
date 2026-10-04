@@ -380,7 +380,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
                 accepted = false;
         }
 
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        // The customer's order is never refused for recipe stock: the business sees it and decides.
+        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
         order.MarkAsCreated();
         _context.Orders.Add(order);
         try

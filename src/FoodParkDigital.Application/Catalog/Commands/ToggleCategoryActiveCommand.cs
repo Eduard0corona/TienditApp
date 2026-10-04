@@ -15,6 +15,8 @@ public record ToggleCategoryActiveCommand : IRequest<Result>
 {
     public Guid Id { get; init; }
     public bool IsActive { get; init; }
+    /// <summary>Archiving a category with products moves them here first (another active category).</summary>
+    public Guid? MoveProductsToCategoryId { get; init; }
 }
 
 public class ToggleCategoryActiveCommandValidator : AbstractValidator<ToggleCategoryActiveCommand>
@@ -48,9 +50,29 @@ public class ToggleCategoryActiveCommandHandler : IRequestHandler<ToggleCategory
             return Result.Failure("El negocio no tiene habilitado el módulo de catálogo.");
 
         if (request.IsActive)
+        {
             category.Activate();
+        }
         else
+        {
+            // An archived category leaves the menus: its products must live in another one to stay editable.
+            var products = await _context.Products.Where(p => p.CategoryId == category.Id).ToListAsync(cancellationToken);
+            if (products.Count > 0)
+            {
+                if (request.MoveProductsToCategoryId is not { } targetId)
+                    return Result.Failure($"La categoría tiene {products.Count} productos: elige a qué categoría pasarlos antes de archivarla.");
+
+                var targetIsValid = targetId != category.Id && await _context.Categories
+                    .AnyAsync(c => c.Id == targetId && c.IsActive, cancellationToken);
+                if (!targetIsValid)
+                    return Result.Failure("Elige otra categoría activa para los productos.");
+
+                foreach (var product in products)
+                    product.MoveToCategory(targetId);
+            }
+
             category.Deactivate();
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();

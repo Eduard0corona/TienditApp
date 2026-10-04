@@ -9,6 +9,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { formatMoney } from '../../utils/money';
+import { SERVICE_PRIORITY_OPTIONS } from '../../utils/serviceDetail';
 import { getApiErrorMessage } from '../../api/errors';
 import './OrdersCart.css';
 import type {
@@ -20,6 +21,7 @@ import type {
   UploadedFileDto,
 } from '../../types';
 import { BusinessType as BusinessTypeConst, OrderType as OrderTypeConst, UnitType } from '../../types';
+import { STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
 
 // Same limit as the API (OrderLimits.MaxQuantityPerLine).
 const MAX_QUANTITY_PER_LINE = 10_000;
@@ -104,7 +106,7 @@ export default function OrdersCart() {
   const [productSearch, setProductSearch] = useState('');
   const [serviceReceivedAt, setServiceReceivedAt] = useState(() => toLocalDateTimeInput(new Date()));
   const [servicePromisedAt, setServicePromisedAt] = useState('');
-  const [servicePriority, setServicePriority] = useState(1);
+  const [servicePriority, setServicePriority] = useState(3);
   const [serviceIntakeNotes, setServiceIntakeNotes] = useState('');
   const [serviceDeliveryNotes, setServiceDeliveryNotes] = useState('');
   const [serviceChecklist, setServiceChecklist] = useState<ServiceChecklistItem[]>([
@@ -448,6 +450,8 @@ export default function OrdersCart() {
       setSubmitting(true);
       const { data: order } = await ordersApi.create(payload);
       toast.success(`Orden ${order.orderNumber} registrada.`);
+      const stockWarning = stockWarningMessage(order.stockWarnings);
+      if (stockWarning) toast.warning(stockWarning, { title: STOCK_WARNING_TITLE });
       navigate('/orders');
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo generar la orden.'));
@@ -678,11 +682,9 @@ export default function OrdersCart() {
                         value={servicePriority}
                         onChange={(e) => setServicePriority(Number(e.target.value))}
                       >
-                        <option value={1}>Baja</option>
-                        <option value={2}>Media-baja</option>
-                        <option value={3}>Media</option>
-                        <option value={4}>Media-alta</option>
-                        <option value={5}>Alta</option>
+                        {SERVICE_PRIORITY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>

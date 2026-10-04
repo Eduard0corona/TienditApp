@@ -12,6 +12,7 @@ import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
+import { getServicePriorityLabel, parseChecklist, parsePhotos } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -63,16 +64,6 @@ const COLUMNS = [
   { header: 'Acciones', className: 'text-center' },
 ];
 
-type ParsedChecklistItem = {
-  label?: string;
-  checked?: boolean;
-};
-
-type ParsedPhotoItem = {
-  url?: string;
-  fileName?: string;
-};
-
 function toLocalDateTime(date: string) {
   return new Date(date).toLocaleString('es-MX', {
     year: 'numeric',
@@ -93,16 +84,6 @@ function getTodayInputDate(): string {
 
 function getStatusLabel(status: OrderStatus): string {
   return getOrderStatusLabel(status);
-}
-
-function safeParseArray<T>(raw?: string): T[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
-  } catch {
-    return [];
-  }
 }
 
 // Several realtime events usually arrive together; one reload covers all of them.
@@ -185,21 +166,17 @@ export default function OrdersList() {
     [selectedOrder],
   );
   const selectedOrderIntakeChecklist = useMemo(
-    () => safeParseArray<ParsedChecklistItem>(selectedOrder?.serviceDetail?.intakeChecklistJson),
+    () => parseChecklist(selectedOrder?.serviceDetail?.intakeChecklistJson),
     [selectedOrder],
   );
-  const selectedOrderBeforePhotos = useMemo(() => {
-    const raw = safeParseArray<ParsedPhotoItem | string>(selectedOrder?.serviceDetail?.beforePhotosJson);
-    return raw
-      .map((item) => (typeof item === 'string' ? { url: item } : item))
-      .filter((item) => isSafeFileUrl(item.url));
-  }, [selectedOrder]);
-  const selectedOrderAfterPhotos = useMemo(() => {
-    const raw = safeParseArray<ParsedPhotoItem | string>(selectedOrder?.serviceDetail?.afterPhotosJson);
-    return raw
-      .map((item) => (typeof item === 'string' ? { url: item } : item))
-      .filter((item) => isSafeFileUrl(item.url));
-  }, [selectedOrder]);
+  const selectedOrderBeforePhotos = useMemo(
+    () => parsePhotos(selectedOrder?.serviceDetail?.beforePhotosJson),
+    [selectedOrder],
+  );
+  const selectedOrderAfterPhotos = useMemo(
+    () => parsePhotos(selectedOrder?.serviceDetail?.afterPhotosJson),
+    [selectedOrder],
+  );
   // A silent reload (realtime event, reconnection) keeps the table on screen: no spinner, no lost scroll.
   const loadOrders = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     const requestId = ++latestRequestRef.current;
@@ -828,7 +805,7 @@ export default function OrdersList() {
                         ? toLocalDateTime(selectedOrder.serviceDetail.promisedAt)
                         : '-'}
                     </div>
-                    <div className="col-md-6"><strong>Prioridad:</strong> {selectedOrder.serviceDetail.priority}</div>
+                    <div className="col-md-6"><strong>Prioridad:</strong> {getServicePriorityLabel(selectedOrder.serviceDetail.priority)}</div>
                   </div>
                   {selectedOrder.serviceDetail.intakeNotes && (
                     <div className="mt-2">

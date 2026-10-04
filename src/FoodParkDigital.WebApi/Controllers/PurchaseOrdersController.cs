@@ -68,13 +68,32 @@ public class PurchaseOrdersController : ControllerBase
             Lines = request.Lines.Select(x => new ReceivePurchaseOrderLineRequest
             {
                 PurchaseOrderLineId = x.PurchaseOrderLineId,
-                QuantityReceived = x.QuantityReceived
+                QuantityReceived = x.QuantityReceived,
+                UnitCost = x.UnitCost
             }).ToList()
         });
 
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 
+        return Ok(result.Value);
+    }
+
+    [HttpPost("{id:guid}/send")]
+    public async Task<ActionResult<PurchaseOrderDto>> Send(Guid id)
+    {
+        var result = await _mediator.Send(new SendPurchaseOrderCommand(id));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<ActionResult<PurchaseOrderDto>> Cancel(Guid id)
+    {
+        var result = await _mediator.Send(new CancelPurchaseOrderCommand(id));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
         return Ok(result.Value);
     }
 }
@@ -89,4 +108,6 @@ public class ReceivePurchaseOrderLineItemRequest
 {
     public Guid PurchaseOrderLineId { get; init; }
     public decimal QuantityReceived { get; init; }
+    /// <summary>The supplier's actual price when it differs from the ordered one.</summary>
+    public decimal? UnitCost { get; init; }
 }

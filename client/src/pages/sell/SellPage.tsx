@@ -48,6 +48,7 @@ import {
   hasOptions,
 } from '../../utils/productOptions';
 import './SellPage.css';
+import { STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
 
 // Same limits as the API (OrderLimits).
 const MAX_QUANTITY_PER_LINE = 10_000;
@@ -697,6 +698,8 @@ export default function SellPage() {
     }
     try {
       const { data: order } = await ordersApi.create(request);
+      const stockWarning = stockWarningMessage(order.stockWarnings);
+      if (stockWarning) toast.warning(stockWarning, { title: STOCK_WARNING_TITLE });
       clearSale();
       setChargeOpen(false);
       if (charge) {

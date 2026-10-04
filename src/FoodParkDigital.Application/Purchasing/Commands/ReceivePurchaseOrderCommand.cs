@@ -17,6 +17,8 @@ public record ReceivePurchaseOrderLineRequest
 {
     public Guid PurchaseOrderLineId { get; init; }
     public decimal QuantityReceived { get; init; }
+    /// <summary>The supplier's actual price when it differs from the ordered one; the stock is valued at it.</summary>
+    public decimal? UnitCost { get; init; }
 }
 
 [RequiresPermission(TenantPermission.ManageInventory)]
@@ -45,6 +47,10 @@ public class ReceivePurchaseOrderCommandValidator : AbstractValidator<ReceivePur
         {
             line.RuleFor(x => x.PurchaseOrderLineId).NotEmpty();
             line.RuleFor(x => x.QuantityReceived).GreaterThan(0);
+            line.RuleFor(x => x.UnitCost)
+                .GreaterThanOrEqualTo(0)
+                .When(x => x.UnitCost.HasValue)
+                .WithMessage("El costo unitario no puede ser negativo.");
         });
     }
 }
@@ -78,6 +84,7 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
         var receivedAt = request.ReceivedAt ?? DateTimeOffset.UtcNow;
         var lineMap = purchaseOrder.Lines.ToDictionary(x => x.Id);
         var reception = new Dictionary<Guid, decimal>();
+        var actualCosts = new Dictionary<Guid, decimal>();
 
         foreach (var line in request.Lines)
         {
@@ -85,9 +92,11 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
                 return Result.Failure<PurchaseOrderDto>("Una línea no pertenece a la compra seleccionada.");
 
             reception[line.PurchaseOrderLineId] = line.QuantityReceived;
+            if (line.UnitCost is { } unitCost)
+                actualCosts[line.PurchaseOrderLineId] = unitCost;
         }
 
-        purchaseOrder.RegisterReception(reception, receivedAt);
+        purchaseOrder.RegisterReception(reception, receivedAt, actualCosts);
 
         var affectedSupplyIds = purchaseOrder.Lines.Select(x => x.SupplyItemId).Distinct().ToList();
         var affectedLocationIds = purchaseOrder.Lines.Select(x => x.InventoryLocationId).Distinct().ToList();
@@ -123,7 +132,7 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
             counterpartyName: purchaseOrder.Supplier.Name,
             notes: $"Recepción de compra {purchaseOrder.OrderNumber}");
 
-        // Stock follows the quantities the purchase order accepted.
+        // Stock follows the quantities the purchase order accepted, valued at the cost captured on arrival.
         foreach (var (lineId, quantityReceived) in reception)
         {
             var line = lineMap[lineId];
@@ -163,7 +172,7 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = await BuildDtoAsync(purchaseOrder.Id, cancellationToken);
+        var dto = await PurchaseOrderReader.LoadAsync(_context, purchaseOrder.Id, cancellationToken);
         return Result.Success(dto);
     }
 
@@ -176,74 +185,5 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
             .CountAsync(x => x.MovementDate >= date && x.MovementDate < date.AddDays(1), cancellationToken);
 
         return $"{prefix}-{count + 1:0000}";
-    }
-
-    private async Task<PurchaseOrderDto> BuildDtoAsync(Guid purchaseOrderId, CancellationToken cancellationToken)
-    {
-        var header = await (
-            from po in _context.PurchaseOrders.AsNoTracking()
-            join supplier in _context.Suppliers.AsNoTracking() on po.SupplierId equals supplier.Id
-            where po.Id == purchaseOrderId
-            select new
-            {
-                po.Id,
-                po.SupplierId,
-                SupplierName = supplier.Name,
-                po.OrderNumber,
-                po.Status,
-                po.OrderedAt,
-                po.ExpectedDeliveryAt,
-                po.ReceivedAt,
-                po.ReferenceNumber,
-                po.Notes,
-                po.SubTotal,
-                po.Tax,
-                po.Total
-            })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new EntityNotFoundException("PurchaseOrder", purchaseOrderId);
-
-        var lines = await (
-            from line in _context.PurchaseOrderLines.AsNoTracking()
-            join supply in _context.SupplyItems.AsNoTracking() on line.SupplyItemId equals supply.Id
-            join location in _context.InventoryLocations.AsNoTracking() on line.InventoryLocationId equals location.Id
-            where line.PurchaseOrderId == purchaseOrderId
-            orderby line.CreatedAt
-            select new PurchaseOrderLineDto
-            {
-                Id = line.Id,
-                SupplyItemId = line.SupplyItemId,
-                SupplyItemName = supply.Name,
-                InventoryLocationId = line.InventoryLocationId,
-                InventoryLocationName = location.Name,
-                Quantity = line.Quantity,
-                ReceivedQuantity = line.ReceivedQuantity,
-                PendingQuantity = line.Quantity - line.ReceivedQuantity,
-                UnitCost = line.UnitCost,
-                TaxPercent = line.TaxPercent,
-                SubTotal = line.SubTotal,
-                TaxAmount = line.TaxAmount,
-                Total = line.Total,
-                Notes = line.Notes
-            })
-            .ToListAsync(cancellationToken);
-
-        return new PurchaseOrderDto
-        {
-            Id = header.Id,
-            SupplierId = header.SupplierId,
-            SupplierName = header.SupplierName,
-            OrderNumber = header.OrderNumber,
-            Status = header.Status,
-            OrderedAt = header.OrderedAt,
-            ExpectedDeliveryAt = header.ExpectedDeliveryAt,
-            ReceivedAt = header.ReceivedAt,
-            ReferenceNumber = header.ReferenceNumber,
-            Notes = header.Notes,
-            SubTotal = header.SubTotal,
-            Tax = header.Tax,
-            Total = header.Total,
-            Lines = lines
-        };
     }
 }

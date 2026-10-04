@@ -61,8 +61,11 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
                 (x.StaffName != null && x.StaffName.ToLower().Contains(search)));
         }
 
-        var projected = query
-            .OrderBy(x => x.StartAt)
+        // The past (only an end date) reads from the newest back; anything else from the soonest on, so the
+        // agenda of the day opens with today.
+        var history = !request.FromDate.HasValue && request.ToDate.HasValue;
+        var ordered = history ? query.OrderByDescending(x => x.StartAt) : query.OrderBy(x => x.StartAt);
+        var projected = ordered
             .Select(x => new AppointmentDto
             {
                 Id = x.Id,
@@ -70,6 +73,8 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
                 CustomerPhone = x.CustomerPhone,
                 ServiceName = x.ServiceName,
                 StaffName = x.StaffName,
+                ServiceProductId = x.ServiceProductId,
+                StaffUserId = x.StaffUserId,
                 StartAt = x.StartAt,
                 EndAt = x.EndAt,
                 Status = x.Status,

@@ -103,7 +103,8 @@ public record ServiceOrderDetailInput
 {
     public DateTimeOffset? ReceivedAt { get; init; }
     public DateTimeOffset? PromisedAt { get; init; }
-    public int Priority { get; init; } = 1;
+    /// <summary>1 low, 3 normal, 5 urgent (the intake offers those three).</summary>
+    public int Priority { get; init; } = 3;
     public string? IntakeNotes { get; init; }
     public string? DeliveryNotes { get; init; }
     public string? IntakeChecklistJson { get; init; }
@@ -486,7 +487,12 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (request.CreatedByBusiness)
             CounterSaleClosing.TryClose(order, salesSettings, tenantCapabilities, _currentUserService.UserName);
 
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        // A sale captured offline already happened, and a customer's own order is reviewed by the business: only a
+        // sale the team is making now can be refused for missing supplies.
+        var shortages = await _orderInventoryService.ApplyConsumptionForOrderAsync(
+            order,
+            cancellationToken,
+            request.CreatedByBusiness && request.CapturedOfflineAt is null ? StockShortageHandling.TenantPolicy : StockShortageHandling.Allow);
 
         if (request.IdempotencyKey is { } requestKey)
             order.IdentifyClientRequest(requestKey, request.CapturedOfflineAt);
@@ -513,6 +519,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
         var dto = _mapper.Map<OrderDto>(order);
         dto.ApplyStateMetadata();
+        dto.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
         return Result.Success(dto);
     }
 

@@ -56,6 +56,11 @@ public class OrderDto
     public Guid? DiningTableId { get; set; }
     /// <summary>Rounds of the tab sent to the kitchen.</summary>
     public List<KitchenTicketSummaryDto> KitchenTickets { get; set; } = new();
+    /// <summary>
+    /// Only in the answer to the sale that just happened: recipe supplies it took below zero ("Tortilla quedó en -3"),
+    /// when the business sells and warns instead of refusing.
+    /// </summary>
+    public List<string> StockWarnings { get; set; } = new();
 }
 
 public class KitchenTicketSummaryDto
