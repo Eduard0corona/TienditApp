@@ -3,8 +3,10 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { useAuth } from '../../hooks/useAuth';
+import { getUserRoleLabel } from '../../utils/labels';
 import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 export default function Profile() {
   const { user, refreshProfile } = useAuth();
@@ -51,9 +53,7 @@ export default function Profile() {
       setEditMode(false);
       setProfileMsg({ type: 'success', text: 'Perfil actualizado correctamente.' });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al actualizar el perfil.';
+      const msg = getApiErrorMessage(err, 'Error al actualizar el perfil.');
       setProfileMsg({ type: 'danger', text: msg });
     }
   };
@@ -69,9 +69,7 @@ export default function Profile() {
       await refreshProfile();
       setAvatarMsg({ type: 'success', text: 'Avatar actualizado.' });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al subir el avatar.';
+      const msg = getApiErrorMessage(err, 'Error al subir el avatar.');
       setAvatarMsg({ type: 'danger', text: msg });
     } finally {
       setAvatarLoading(false);
@@ -101,14 +99,12 @@ export default function Profile() {
       resetPassword();
       setPasswordMsg({ type: 'success', text: 'Contraseña actualizada. Tu sesión se cerrará pronto.' });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al cambiar la contraseña.';
+      const msg = getApiErrorMessage(err, 'Error al cambiar la contraseña.');
       setPasswordMsg({ type: 'danger', text: msg });
     }
   };
 
-  const avatarSrc = user?.avatarImages?.medium || '/images/users/avatar-1.jpg';
+  const avatarSrc = user?.avatarImages?.medium || '/images/placeholders/avatar.svg';
 
   return (
     <>
@@ -142,7 +138,7 @@ export default function Profile() {
                         <h4 className="mt-1 mb-1 text-white">
                           {user?.firstName} {user?.lastName}
                         </h4>
-                        <p className="font-13 text-white-50">{user?.role}</p>
+                        <p className="font-13 text-white-50">{getUserRoleLabel(user?.role, user?.tenantRole)}</p>
                         <ul className="mb-0 list-inline text-light">
                           <li className="list-inline-item me-3">
                             <h5 className="mb-1 text-white">{user?.email}</h5>
@@ -255,7 +251,7 @@ export default function Profile() {
                   </p>
                   <p className="text-muted">
                     <strong>Rol:</strong>{' '}
-                    <span className="ms-2">{user?.role}</span>
+                    <span className="ms-2">{getUserRoleLabel(user?.role, user?.tenantRole)}</span>
                   </p>
                   <p className="text-muted">
                     <strong>2FA:</strong>{' '}

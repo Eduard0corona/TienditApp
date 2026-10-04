@@ -11,7 +11,6 @@ namespace FoodParkDigital.WebApi.Controllers;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Authorize]
-[EnableRateLimiting("auth")]
 public class TwoFactorController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -38,6 +37,7 @@ public class TwoFactorController : ControllerBase
     }
 
     [HttpPost("verify")]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<Verify2FAResponse>> Verify2FA([FromBody] VerifyRequest request)
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -67,6 +67,7 @@ public class TwoFactorController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<AuthResponse>> Login2FA(
         [FromBody] Login2FACommand command,
         CancellationToken cancellationToken)

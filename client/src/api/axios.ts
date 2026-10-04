@@ -65,6 +65,10 @@ async function requestNewAccessToken(): Promise<string> {
   return data.accessToken as string;
 }
 
+function isRejectedRefresh(status: number | undefined): boolean {
+  return status === 400 || status === 401 || status === 403;
+}
+
 /** Single-flight refresh shared by every request, hub connection and tab. */
 export function refreshAccessToken(): Promise<string> {
   if (!refreshInFlight) {
@@ -84,8 +88,9 @@ export function refreshAccessToken(): Promise<string> {
         return token;
       })
       .catch((error: unknown) => {
-        // A rejected refresh ends the session; a network error keeps it so the next call can retry.
-        if (axios.isAxiosError(error) && error.response && error.response.status < 500) {
+        // Only a refresh the server rejects (400/401/403) ends the session. Rate limiting (429), server
+        // errors and network failures are transient: the session stays and the next call retries.
+        if (axios.isAxiosError(error) && isRejectedRefresh(error.response?.status)) {
           accessToken = null;
           emitSessionEvent('expired');
         }

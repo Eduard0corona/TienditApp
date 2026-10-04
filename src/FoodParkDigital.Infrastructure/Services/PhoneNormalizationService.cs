@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
 
@@ -6,9 +7,30 @@ namespace FoodParkDigital.Infrastructure.Services;
 public class PhoneNormalizationService : IPhoneNormalizationService
 {
     public string NormalizeToE164(string rawPhone, string defaultCountry = "MX")
+        => TryNormalize(rawPhone, defaultCountry, out var phoneNormalized, out var error)
+            ? phoneNormalized
+            : throw new ArgumentException(error, nameof(rawPhone));
+
+    public bool TryNormalizeToE164(string? rawPhone, string defaultCountry, [NotNullWhen(true)] out string? phoneNormalized)
     {
+        if (TryNormalize(rawPhone, defaultCountry, out var normalized, out _))
+        {
+            phoneNormalized = normalized;
+            return true;
+        }
+
+        phoneNormalized = null;
+        return false;
+    }
+
+    private static bool TryNormalize(string? rawPhone, string defaultCountry, out string phoneNormalized, out string error)
+    {
+        phoneNormalized = string.Empty;
         if (string.IsNullOrWhiteSpace(rawPhone))
-            throw new ArgumentException("Phone is required.", nameof(rawPhone));
+        {
+            error = "Phone is required.";
+            return false;
+        }
 
         var compact = rawPhone.Trim();
         compact = compact.StartsWith("00", StringComparison.Ordinal)
@@ -16,14 +38,14 @@ public class PhoneNormalizationService : IPhoneNormalizationService
             : compact;
 
         if (compact.StartsWith('+'))
-        {
-            var digits = Regex.Replace(compact[1..], @"\D", "");
-            return ValidateE164(digits);
-        }
+            return TryValidateE164(Regex.Replace(compact[1..], @"\D", ""), out phoneNormalized, out error);
 
         var normalizedDigits = Regex.Replace(compact, @"\D", "");
         if (string.IsNullOrEmpty(normalizedDigits))
-            throw new ArgumentException("Phone contains no digits.", nameof(rawPhone));
+        {
+            error = "Phone contains no digits.";
+            return false;
+        }
 
         var country = defaultCountry.ToUpperInvariant();
         var e164Digits = country switch
@@ -35,17 +57,26 @@ public class PhoneNormalizationService : IPhoneNormalizationService
             _ => normalizedDigits
         };
 
-        return ValidateE164(e164Digits);
+        return TryValidateE164(e164Digits, out phoneNormalized, out error);
     }
 
-    private static string ValidateE164(string digits)
+    private static bool TryValidateE164(string digits, out string phoneNormalized, out string error)
     {
+        phoneNormalized = string.Empty;
         if (digits.Length is < 8 or > 15)
-            throw new ArgumentException("Phone must contain between 8 and 15 digits in E.164 format.");
+        {
+            error = "Phone must contain between 8 and 15 digits in E.164 format.";
+            return false;
+        }
 
         if (digits[0] == '0')
-            throw new ArgumentException("E.164 phone cannot start with zero after country code.");
+        {
+            error = "E.164 phone cannot start with zero after country code.";
+            return false;
+        }
 
-        return $"+{digits}";
+        error = string.Empty;
+        phoneNormalized = $"+{digits}";
+        return true;
     }
 }

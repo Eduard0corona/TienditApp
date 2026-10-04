@@ -40,7 +40,7 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         RuleFor(x => x.Phone).NotEmpty().MaximumLength(50);
         RuleFor(x => x.Name).MaximumLength(200);
         RuleFor(x => x.OrderType).IsInEnum();
-        RuleFor(x => x.Items).NotEmpty().WithMessage("Order must have at least one item.");
+        RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
             .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
@@ -152,7 +152,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
                 ?? throw new EntityNotFoundException("Product", itemDto.ProductId);
 
             if (!product.IsAvailableAt(localTimeOfDay))
-                throw new DomainException($"Product '{product.Name}' is not available at this time.");
+                throw new DomainException($"El producto '{product.Name}' no está disponible en este horario.");
 
             if (!request.CreatedByBusiness && !OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
             {

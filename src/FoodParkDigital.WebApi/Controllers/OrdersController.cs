@@ -59,8 +59,10 @@ public class OrdersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
+    // Counter roles, like creating orders and registering payments; the middleware requires ManageOrders.
+    // Kitchen moves food orders through KitchenController.
     [HttpPut("{id:guid}/status")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusRequest request)
     {
         var result = await _mediator.Send(new UpdateOrderStatusCommand
@@ -78,7 +80,7 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/cancel")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request)
     {
         var result = await _mediator.Send(new CancelOrderCommand

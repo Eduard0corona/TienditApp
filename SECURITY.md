@@ -36,7 +36,7 @@ El alta de usuarios por API está acotada por caso de uso: `register/business` s
 
 CORS usa la allowlist `Cors:AllowedOrigins` por entorno (vacía por defecto; `http://localhost:5173` en Development). Un origen fuera de la lista no recibe cabeceras CORS. La API agrega `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` y HSTS fuera de Development.
 
-Existen políticas de rate limiting para autenticación y API, pero la política general `api` no se observó aplicada globalmente ni en controllers; se requiere verificación y cobertura de endpoints sensibles, webhooks y hubs.
+La política `auth` (10 solicitudes por minuto por IP fuera de Development) se aplica por acción solo a endpoints de credenciales y códigos: login, registro, confirmación y reenvío de correo y teléfono, olvido y restablecimiento de contraseña, cambio de contraseña y los códigos de 2FA (`AuthRateLimitingTests`). Refresh, logout, perfil y cambio de negocio no tienen límite: corren en cada pantalla de cada dispositivo, a menudo detrás de una sola IP, y el cliente cerraba la sesión al recibir 429; ahora el cliente solo la cierra si el servidor rechaza el refresh (400, 401 o 403). Falta limitar también por cuenta (lockout de Identity) y la política general `api` sigue definida sin aplicarse; webhooks y hubs requieren su propia revisión.
 
 ### Archivos
 

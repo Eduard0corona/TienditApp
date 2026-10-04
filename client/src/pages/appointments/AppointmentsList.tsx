@@ -10,6 +10,7 @@ import type {
   PaginatedList,
 } from '../../types';
 import { AppointmentStatus as AppointmentStatusConst } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Cliente' },
@@ -47,9 +48,6 @@ const buildForm = (): FormState => ({
   endAt: '',
   notes: '',
 });
-
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
 
 const statusLabel = (status: AppointmentStatus) => {
   switch (status) {
@@ -99,7 +97,7 @@ export default function AppointmentsList() {
       const { data } = await appointmentsApi.getAll(params);
       setData(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudieron cargar las citas.'));
+      setError(getApiErrorMessage(err, 'No se pudieron cargar las citas.'));
     } finally {
       setLoading(false);
     }
@@ -139,7 +137,7 @@ export default function AppointmentsList() {
       setForm(buildForm());
       await loadData();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo registrar la cita.'));
+      setError(getApiErrorMessage(err, 'No se pudo registrar la cita.'));
     } finally {
       setSaving(false);
     }
@@ -153,7 +151,7 @@ export default function AppointmentsList() {
       setSuccess('Estado de cita actualizado.');
       await loadData();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo actualizar el estado.'));
+      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado.'));
     }
   };
 

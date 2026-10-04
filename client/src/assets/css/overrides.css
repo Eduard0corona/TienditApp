@@ -1,0 +1,54 @@
+/*
+ * Fixes on top of the Hyper theme (app.min.css). Loaded after it.
+ */
+
+/* Hyper paints disabled "soft" buttons with the same color for text and background, so a disabled
+   "Registrar pago" looked like an empty colored block. Keep the soft look and let opacity show it. */
+.btn[class*='btn-soft-']:disabled,
+.btn[class*='btn-soft-'].disabled {
+  --ct-btn-disabled-color: var(--ct-btn-color);
+  --ct-btn-disabled-bg: var(--ct-btn-bg);
+  --ct-btn-disabled-border-color: transparent;
+}
+
+/* TienditApp mark (BrandLogo). Sized to sit where Hyper expected its 22px logo image. */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  vertical-align: middle;
+}
+
+.brand-logo-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+}
+
+.brand-logo-light {
+  color: #fff;
+}
+
+.brand-logo-light .brand-logo-accent {
+  color: #6fe0b0;
+}
+
+.brand-logo-dark {
+  color: #14201b;
+}
+
+.brand-logo-dark .brand-logo-accent {
+  color: #0e7a5c;
+}
+
+[data-bs-theme='dark'] .brand-logo-dark {
+  color: #fff;
+}
+
+[data-bs-theme='dark'] .brand-logo-dark .brand-logo-accent {
+  color: #6fe0b0;
+}

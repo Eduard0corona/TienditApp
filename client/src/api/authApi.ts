@@ -25,8 +25,15 @@ export const authApi = {
   confirmPhone: (userId: string, code: string) =>
     api.post<ApiMessage>('/auth/confirm-phone', { userId, code }),
 
-  resendPhoneConfirmation: (phoneNumber: string) =>
-    api.post<ApiMessage>('/auth/resend-phone-confirmation', { phoneNumber }),
+  /** New SMS code for the account created at registration (identified by its user id). */
+  resendPhoneConfirmation: (userId: string) =>
+    api.post<ApiMessage>('/auth/resend-phone-confirmation', { userId }),
+
+  confirmEmail: (userId: string, token: string) =>
+    api.get<ApiMessage>('/auth/confirm-email', { params: { userId, token } }),
+
+  resendConfirmationEmail: (email: string) =>
+    api.post<ApiMessage>('/auth/resend-confirmation-email', { email }),
 
   forgotPassword: (email: string) =>
     api.post<ApiMessage>('/auth/forgot-password', { email }),

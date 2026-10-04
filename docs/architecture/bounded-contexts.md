@@ -16,7 +16,7 @@ Los límites son módulos lógicos dentro de un monolito y una base compartida; 
 | Clientes | `Customer`, `CustomerProfile`, `TemporaryCustomer` | Clientes legacy por tenant, perfil registrado global y cliente temporal reclamable. |
 | Citas | `Appointment` | Agenda y estados de citas por tenant. |
 | Cocina/fulfillment | `KitchenController`, `GetKitchenOrdersQuery`, `OrderHub` | Vista y avances de preparación para capability Kitchen. |
-| WhatsApp/chat/notificaciones | conversaciones, mensajes, webhook, servicios y hubs | Mensajería, chat, plantillas y notificación SignalR. |
+| WhatsApp/chat/notificaciones | conversaciones, mensajes, webhook, servicios y hubs | Mensajería, chat, plantillas y notificación SignalR. Las plantillas llevan el estado en español (`OrderStatusLabels`) y montos con formato fijo ($1,234.50). |
 | Auditoría y reportes | `AuditLog`, dashboards, reportes operativos | Trazabilidad parcial y agregaciones de operación. |
 | Agente de respuestas | `AiAgent`, `AiAgentAutoReplyService` | Configura mensajes y responde por coincidencia de palabras clave. No llama a un LLM. |
 | Marketing | `SendPromotionalMessageCommand` | Envío promocional; su superficie es pequeña y depende de WhatsApp. |

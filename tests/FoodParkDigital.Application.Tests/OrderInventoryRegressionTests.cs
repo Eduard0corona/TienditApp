@@ -56,6 +56,26 @@ public class OrderInventoryRegressionTests
     }
 
     [Fact]
+    public async Task KitchenBoard_ShouldSkipServiceOrdersOfAFoodBusiness()
+    {
+        var (context, tenant, _) = CreateContext();
+        await using var _ = context;
+        context.TenantSettings.Add(new TenantSettings(
+            tenant.TenantId,
+            TenantCapability.Food | TenantCapability.Service | TenantCapability.Kitchen));
+        var ticket = NewOrder(tenant.TenantId, BusinessType.Food, OrderType.Retail, "ORD-000001");
+        var serviceOrder = NewOrder(tenant.TenantId, BusinessType.Food, OrderType.Service, "ORD-000002");
+        Assert.Equal(OrderStatus.Pending, serviceOrder.Status);
+        context.Orders.AddRange(ticket, serviceOrder);
+        await context.SaveChangesAsync();
+
+        var result = await new GetKitchenOrdersQueryHandler(context, tenant, CreateMapper())
+            .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
+
+        Assert.Equal([ticket.Id], result.Select(x => x.Id));
+    }
+
+    [Fact]
     public async Task CompletingPiece_ShouldConsumeItsRecipeInTheSameSave()
     {
         var (context, tenant, _) = CreateContext();

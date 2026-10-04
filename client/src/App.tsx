@@ -2,15 +2,13 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import ProtectedRoute from './components/common/ProtectedRoute';
-import CapabilityRoute from './components/common/CapabilityRoute';
 import HomeRedirect from './components/common/HomeRedirect';
-import PermissionRoute from './components/common/PermissionRoute';
-import { TenantCapability } from './types';
-import { COMMERCE_CAPABILITIES } from './utils/tenantCapabilities';
+import AccessRoute from './components/common/AccessRoute';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
 const ConfirmPhone = lazy(() => import('./pages/auth/ConfirmPhone'));
+const ConfirmEmail = lazy(() => import('./pages/auth/ConfirmEmail'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
@@ -51,6 +49,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/confirm-phone" element={<ConfirmPhone />} />
+          <Route path="/confirm-email" element={<ConfirmEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
 
@@ -65,187 +64,194 @@ export default function App() {
             <Route
               path="/dashboard"
               element={(
-                <PermissionRoute permission="ViewReports">
+                <AccessRoute area="dashboard">
                   <Dashboard />
-                </PermissionRoute>
+                </AccessRoute>
               )}
             />
             <Route path="/profile" element={<Profile />} />
             <Route
               path="/products"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="catalog">
                   <ProductsList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/products/new"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="catalog">
                   <ProductForm />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/products/:id/edit"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="catalog">
                   <ProductForm />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/categories"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="catalog">
                   <CategoriesList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/services"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="catalog">
                   <ServicesList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/services/board"
               element={(
-                <CapabilityRoute required={TenantCapability.Service}>
+                <AccessRoute area="serviceBoard">
                   <ServiceBoard />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/inventory"
               element={(
-                <CapabilityRoute required={TenantCapability.Inventory}>
+                <AccessRoute area="inventory">
                   <InventoryManagement />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/branches"
               element={(
-                <CapabilityRoute required={TenantCapability.Inventory}>
+                <AccessRoute area="inventory">
                   <BranchesList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/suppliers"
               element={(
-                <CapabilityRoute required={TenantCapability.Inventory}>
+                <AccessRoute area="inventory">
                   <SuppliersList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/purchases"
               element={(
-                <CapabilityRoute required={TenantCapability.Inventory}>
+                <AccessRoute area="inventory">
                   <PurchaseOrdersList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/cash"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="cash">
                   <CashManagement />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/appointments"
               element={(
-                <CapabilityRoute required={TenantCapability.Appointments}>
+                <AccessRoute area="appointments">
                   <AppointmentsList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/reports"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="reports">
                   <OperationalReports />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/kitchen"
               element={(
-                <CapabilityRoute required={TenantCapability.Kitchen}>
+                <AccessRoute area="kitchen">
                   <KitchenBoard />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/audit"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="audit">
                   <AuditLogs />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/orders"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="orders">
                   <OrdersList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/orders/cart"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="sell">
                   <OrdersCart />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/customers"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="customers">
                   <CustomersList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/employees"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="employees">
                   <EmployeesList />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/ai-agent"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="aiAgent">
                   <AiAgentSettings />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
-            <Route path="/settings/business" element={<BusinessSettings />} />
+            <Route
+              path="/settings/business"
+              element={(
+                <AccessRoute area="businessSettings">
+                  <BusinessSettings />
+                </AccessRoute>
+              )}
+            />
             <Route
               path="/settings/whatsapp"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="whatsAppSettings">
                   <WhatsAppSettings />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
             <Route
               path="/whatsapp/chat"
               element={(
-                <CapabilityRoute required={COMMERCE_CAPABILITIES} mode="any">
+                <AccessRoute area="chat">
                   <WhatsAppChat />
-                </CapabilityRoute>
+                </AccessRoute>
               )}
             />
           </Route>

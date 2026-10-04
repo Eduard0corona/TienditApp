@@ -4,8 +4,14 @@ import { authApi } from '../../api/authApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import type { MyTenantDto } from '../../types';
+import { getRoleLabel, getUserRoleLabel } from '../../utils/labels';
+import { getAccess } from '../../utils/access';
+import { getApiErrorMessage } from '../../api/errors';
+import BrandLogo from '../common/BrandLogo';
+import { applyTheme, storeTheme } from '../../utils/theme';
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
+const AVATAR_PLACEHOLDER = '/images/placeholders/avatar.svg';
 
 function readAutoSwitchMarker(): boolean {
   try {
@@ -23,9 +29,15 @@ function writeAutoSwitchMarker() {
   }
 }
 
-export default function Topbar() {
+interface TopbarProps {
+  onToggleSidebar: () => void;
+  isMobileMenuOpen: boolean;
+}
+
+export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProps) {
   const { user, logout, switchTenant } = useAuth();
-  const { tenant, refreshTenant } = useTenant();
+  const { tenant, capabilities, refreshTenant } = useTenant();
+  const canOpenBusinessSettings = getAccess(user, capabilities).businessSettings;
   const [availableTenants, setAvailableTenants] = useState<MyTenantDto[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [switchingTenant, setSwitchingTenant] = useState(false);
@@ -36,8 +48,10 @@ export default function Topbar() {
     () => tenant?.id ?? user?.tenantId ?? '',
     [tenant?.id, user?.tenantId],
   );
-  const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '/images/logo.png';
-  const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '/images/logo-sm.png';
+  // The business logo when it uploaded one; otherwise the TienditApp mark.
+  const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '';
+  const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '';
+  const tenantLogoAlt = tenant?.name ? `Logotipo de ${tenant.name}` : 'Logotipo';
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -100,30 +114,9 @@ export default function Topbar() {
       await switchTenant(nextTenantId);
       await refreshTenant();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.error ||
-        (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.detail ||
-        'No se pudo cambiar el tenant.';
-      setTenantError(msg);
+      setTenantError(getApiErrorMessage(err, 'No se pudo cambiar de negocio.'));
     } finally {
       setSwitchingTenant(false);
-    }
-  };
-
-  const handleToggleSidebar = () => {
-    const html = document.documentElement;
-    const size = html.getAttribute('data-sidenav-size');
-
-    if (window.innerWidth < 768) {
-      // Mobile: toggle sidebar overlay
-      html.classList.toggle('sidebar-enable');
-    } else {
-      // Desktop: toggle between condensed and default
-      if (size === 'condensed') {
-        html.setAttribute('data-sidenav-size', 'default');
-      } else {
-        html.setAttribute('data-sidenav-size', 'condensed');
-      }
     }
   };
 
@@ -137,9 +130,9 @@ export default function Topbar() {
   }, []);
 
   const handleDarkModeToggle = useCallback(() => {
-    const html = document.documentElement;
-    const current = html.getAttribute('data-bs-theme');
-    html.setAttribute('data-bs-theme', current === 'dark' ? 'light' : 'dark');
+    const next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    storeTheme(next);
   }, []);
 
   return (
@@ -148,27 +141,33 @@ export default function Topbar() {
         <div className="d-flex align-items-center gap-lg-2 gap-1">
           {/* Topbar Brand Logo */}
           <div className="logo-topbar">
-            <Link to="/dashboard" className="logo-light">
+            <Link to="/" className="logo-light">
               <span className="logo-lg">
-                <img src={tenantLogoLg} alt="logo" />
+                {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="light" />}
               </span>
               <span className="logo-sm">
-                <img src={tenantLogoSm} alt="small logo" />
+                {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" tone="light" />}
               </span>
             </Link>
-            <Link to="/dashboard" className="logo-dark">
+            <Link to="/" className="logo-dark">
               <span className="logo-lg">
-                <img src={tenantLogoLg} alt="dark logo" />
+                {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="dark" />}
               </span>
               <span className="logo-sm">
-                <img src={tenantLogoSm} alt="small logo" />
+                {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" tone="dark" />}
               </span>
             </Link>
           </div>
 
           {/* Sidebar Menu Toggle Button */}
-          <button className="button-toggle-menu" onClick={handleToggleSidebar}>
-            <i className="ri-menu-5-line"></i>
+          <button
+            type="button"
+            className="button-toggle-menu"
+            onClick={onToggleSidebar}
+            aria-label="Mostrar u ocultar el menú"
+            aria-expanded={isMobileMenuOpen}
+          >
+            <i className="ri-menu-5-line" aria-hidden="true"></i>
           </button>
         </div>
 
@@ -180,128 +179,36 @@ export default function Topbar() {
                 value={selectedTenantId}
                 onChange={handleSwitchTenant}
                 disabled={loadingTenants || switchingTenant}
-                title={tenantError || 'Cambiar tenant'}
+                title={tenantError || 'Cambiar de negocio'}
+                aria-label="Cambiar de negocio"
               >
                 {availableTenants.map((entry) => (
                   <option key={entry.tenantId} value={entry.tenantId}>
-                    {entry.name} ({entry.role})
+                    {entry.name} ({getRoleLabel(entry.role)})
                   </option>
                 ))}
               </select>
             </li>
           )}
 
-          {/* Notification Bell */}
-          <li className="dropdown notification-list">
-            <a
-              className="nav-link dropdown-toggle arrow-none"
-              data-bs-toggle="dropdown"
-              href="#"
-              role="button"
-              aria-haspopup="false"
-              aria-expanded="false"
-            >
-              <i className="ri-notification-3-line font-22"></i>
-              <span className="noti-icon-badge"></span>
-            </a>
-            <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated dropdown-lg py-0">
-              <div className="p-2 border-top-0 border-start-0 border-end-0 border-dashed border">
-                <div className="row align-items-center">
-                  <div className="col">
-                    <h6 className="m-0 font-16 fw-semibold">Notificaciones</h6>
-                  </div>
-                  <div className="col-auto">
-                    <a href="#" className="text-dark text-decoration-underline">
-                      <small>Limpiar todo</small>
-                    </a>
-                  </div>
-                </div>
-              </div>
-              <div className="px-2" style={{ maxHeight: 300 }} data-simplebar>
-                <div className="text-center py-4">
-                  <p className="text-muted mb-0">No hay notificaciones nuevas</p>
-                </div>
-              </div>
-              <a href="#" className="dropdown-item text-center text-primary notify-item border-top py-2">
-                Ver todas
-              </a>
-            </div>
-          </li>
-
-          {/* Apps Grid Dropdown */}
-          <li className="dropdown d-none d-sm-inline-block">
-            <a
-              className="nav-link dropdown-toggle arrow-none"
-              data-bs-toggle="dropdown"
-              href="#"
-              role="button"
-              aria-haspopup="false"
-              aria-expanded="false"
-            >
-              <i className="ri-apps-2-line font-22"></i>
-            </a>
-            <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated dropdown-lg p-0">
-              <div className="p-2">
-                <div className="row g-0">
-                  <div className="col">
-                    <a className="dropdown-icon-item" href="#">
-                      <i className="ri-dashboard-line font-24 text-primary"></i>
-                      <span>Dashboard</span>
-                    </a>
-                  </div>
-                  <div className="col">
-                    <a className="dropdown-icon-item" href="#">
-                      <i className="ri-shopping-bag-3-line font-24 text-success"></i>
-                      <span>Pedidos</span>
-                    </a>
-                  </div>
-                  <div className="col">
-                    <a className="dropdown-icon-item" href="#">
-                      <i className="ri-store-2-line font-24 text-info"></i>
-                      <span>Productos</span>
-                    </a>
-                  </div>
-                </div>
-                <div className="row g-0">
-                  <div className="col">
-                    <a className="dropdown-icon-item" href="#">
-                      <i className="ri-group-line font-24 text-warning"></i>
-                      <span>Usuarios</span>
-                    </a>
-                  </div>
-                  <div className="col">
-                    <a className="dropdown-icon-item" href="#">
-                      <i className="ri-bar-chart-2-line font-24 text-danger"></i>
-                      <span>Reportes</span>
-                    </a>
-                  </div>
-                  <div className="col">
-                    <a className="dropdown-icon-item" href="#">
-                      <i className="ri-settings-3-line font-24 text-muted"></i>
-                      <span>Config</span>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </li>
-
           {/* Dark/Light mode toggle */}
           <li className="d-none d-sm-inline-block">
-            <div
-              className="nav-link"
+            <button
+              type="button"
+              className="nav-link border-0 bg-transparent"
               id="light-dark-mode"
               onClick={handleDarkModeToggle}
-              style={{ cursor: 'pointer' }}
+              aria-label="Cambiar entre modo claro y oscuro"
+              title="Modo claro u oscuro"
             >
-              <i className="ri-moon-line font-22"></i>
-            </div>
+              <i className="ri-moon-line font-22" aria-hidden="true"></i>
+            </button>
           </li>
 
           {/* Fullscreen Toggle */}
           <li className="d-none d-md-inline-block">
-            <a className="nav-link" href="#" onClick={handleFullscreen}>
-              <i className="ri-fullscreen-line font-22"></i>
+            <a className="nav-link" href="#" onClick={handleFullscreen} aria-label="Pantalla completa" title="Pantalla completa">
+              <i className="ri-fullscreen-line font-22" aria-hidden="true"></i>
             </a>
           </li>
 
@@ -317,8 +224,8 @@ export default function Topbar() {
             >
               <span className="account-user-avatar">
                 <img
-                  src={user?.avatarImages?.thumbnail || '/images/users/avatar-1.jpg'}
-                  alt="user"
+                  src={user?.avatarImages?.thumbnail || AVATAR_PLACEHOLDER}
+                  alt=""
                   width="32"
                   className="rounded-circle"
                 />
@@ -327,37 +234,30 @@ export default function Topbar() {
                 <h5 className="my-0">
                   {user ? `${user.firstName} ${user.lastName}` : 'Usuario'}
                 </h5>
-                <h6 className="my-0 fw-normal">{user?.role || ''}</h6>
+                <h6 className="my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</h6>
               </span>
             </a>
             <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated profile-dropdown">
               {/* Welcome header */}
               <div className="dropdown-header noti-title">
-                <h6 className="text-overflow m-0">Bienvenido!</h6>
+                <h6 className="text-overflow m-0">¡Hola{user?.firstName ? `, ${user.firstName}` : ''}!</h6>
               </div>
 
-              {/* My Account */}
               <Link to="/profile" className="dropdown-item">
                 <i className="ri-user-smile-line font-16 me-1"></i>
-                <span>Mi Cuenta</span>
+                <span>Mi perfil</span>
               </Link>
 
-              {/* Settings */}
-              <Link to="/settings" className="dropdown-item">
-                <i className="ri-user-settings-line font-16 me-1"></i>
-                <span>Configuración</span>
-              </Link>
+              {canOpenBusinessSettings && (
+                <Link to="/settings/business" className="dropdown-item">
+                  <i className="ri-store-2-line font-16 me-1"></i>
+                  <span>Mi empresa</span>
+                </Link>
+              )}
 
-              {/* Support */}
-              <a href="#" className="dropdown-item">
-                <i className="ri-lifebuoy-line font-16 me-1"></i>
-                <span>Soporte</span>
-              </a>
-
-              {/* Logout */}
               <a href="#" className="dropdown-item" onClick={handleLogout}>
                 <i className="ri-login-circle-line font-16 me-1"></i>
-                <span>Cerrar Sesión</span>
+                <span>Cerrar sesión</span>
               </a>
             </div>
           </li>

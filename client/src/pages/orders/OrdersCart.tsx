@@ -7,6 +7,7 @@ import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
 import { useTenant } from '../../hooks/useTenant';
 import { ORDER_TAX_RATE_PERCENT, estimateOrderTotals } from '../../utils/orderTotals';
+import { getApiErrorMessage } from '../../api/errors';
 import './OrdersCart.css';
 import type {
   CreateOrderRequest,
@@ -39,6 +40,12 @@ interface ServicePhotoItem {
   id: string;
   url: string;
   fileName: string;
+}
+
+// Quick feedback only; the API normalizes and validates the number (PhoneNormalizationService).
+function isPlausiblePhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 8 && digits.length <= 15;
 }
 
 function toLocalDateTimeInput(date: Date): string {
@@ -339,11 +346,17 @@ export default function OrdersCart() {
   );
   const selectedCustomerPhone = selectedCustomer?.phone?.trim() || '';
   const requiresPhoneCapture = !selectedCustomer || selectedCustomer.isPublicGeneral || !selectedCustomerPhone;
+  // Same rule as CreateOrderCommand: a sale to the general public may skip the phone; a named customer
+  // is linked to their orders through it.
+  const phoneIsOptional = !selectedCustomer || selectedCustomer.isPublicGeneral;
   const effectiveCustomerPhone = (
     selectedCustomer?.isPublicGeneral || !selectedCustomerPhone
       ? customerPhoneOverride.trim()
       : selectedCustomerPhone
   ).trim();
+  const phoneFormatError = effectiveCustomerPhone && !isPlausiblePhone(effectiveCustomerPhone)
+    ? 'Revisa el teléfono: escribe 10 dígitos o el número con lada internacional (+52…).'
+    : '';
 
   const handleCreateOrder = async () => {
     setError('');
@@ -358,8 +371,13 @@ export default function OrdersCart() {
       return;
     }
 
-    if (!effectiveCustomerPhone) {
-      setError('Debes capturar un telefono del cliente para generar la orden.');
+    if (!effectiveCustomerPhone && !phoneIsOptional) {
+      setError('Captura el teléfono del cliente seleccionado para generar la orden.');
+      return;
+    }
+
+    if (phoneFormatError) {
+      setError(phoneFormatError);
       return;
     }
 
@@ -391,7 +409,7 @@ export default function OrdersCart() {
     const payload: CreateOrderRequest = {
       customerId: selectedCustomerId || undefined,
       customerName: customerNameOverride.trim() || undefined,
-      customerPhone: effectiveCustomerPhone,
+      customerPhone: effectiveCustomerPhone || undefined,
       customerNotes: customerNotes.trim() || undefined,
       tableNumber: showsTableReferenceField ? tableNumber.trim() || undefined : undefined,
       orderType: resolvedOrderType,
@@ -421,20 +439,7 @@ export default function OrdersCart() {
       await ordersApi.create(payload);
       navigate('/orders');
     } catch (err: unknown) {
-      const response = (err as {
-        response?: {
-          data?: {
-            error?: string;
-            detail?: string;
-          };
-        };
-      })?.response?.data;
-
-      const msg =
-        response?.error ||
-        response?.detail ||
-        'Error al generar la orden.';
-      setError(msg);
+      setError(getApiErrorMessage(err, 'No se pudo generar la orden.'));
     } finally {
       setSubmitting(false);
     }
@@ -562,7 +567,7 @@ export default function OrdersCart() {
                 >
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
-                      {customer.name}{customer.isPublicGeneral ? ' (Publico en general)' : ''}
+                      {customer.isPublicGeneral ? 'Público en general' : customer.name}
                     </option>
                   ))}
                 </select>
@@ -584,14 +589,29 @@ export default function OrdersCart() {
 
               {requiresPhoneCapture && (
                 <div className="mb-2">
-                  <label className="form-label">Telefono para la orden *</label>
+                  <label className="form-label" htmlFor="order-customer-phone">
+                    {phoneIsOptional ? 'Teléfono (opcional)' : 'Teléfono del cliente *'}
+                  </label>
                   <input
-                    type="text"
-                    className="form-control"
+                    id="order-customer-phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    className={`form-control ${phoneFormatError ? 'is-invalid' : ''}`}
                     value={customerPhoneOverride}
                     onChange={(e) => setCustomerPhoneOverride(e.target.value)}
                     placeholder="Ejemplo: 55 1234 5678"
+                    aria-describedby="order-customer-phone-help"
                   />
+                  {phoneFormatError ? (
+                    <div className="invalid-feedback">{phoneFormatError}</div>
+                  ) : (
+                    <div id="order-customer-phone-help" className="form-text">
+                      {phoneIsOptional
+                        ? 'Sin teléfono la venta queda como público en general y no se envían avisos por WhatsApp.'
+                        : 'Con el teléfono la orden queda en el historial del cliente.'}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -601,7 +621,7 @@ export default function OrdersCart() {
                   <div className="fw-semibold">{selectedCustomer?.name}</div>
                   <div className="small">{selectedCustomer?.phone || 'Sin telefono registrado'}</div>
                   {!selectedCustomer?.phone && (
-                    <div className="small text-danger">Captura telefono para poder generar la orden.</div>
+                    <div className="small text-danger">Captura el teléfono para poder generar la orden.</div>
                   )}
                 </div>
               )}

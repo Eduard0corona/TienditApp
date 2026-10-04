@@ -21,4 +21,25 @@ public class PhoneNormalizationServiceTests
     {
         Assert.Throws<ArgumentException>(() => _service.NormalizeToE164("abc", "MX"));
     }
+
+    [Theory]
+    [InlineData("55 1234 5678", "+525512345678")]
+    [InlineData("+52 55 1234 5678", "+525512345678")]
+    public void TryNormalizeToE164_ShouldNormalizeValidPhones(string rawPhone, string expected)
+    {
+        Assert.True(_service.TryNormalizeToE164(rawPhone, "MX", out var normalized));
+        Assert.Equal(expected, normalized);
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("123")]
+    [InlineData("+0 55 1234 5678")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void TryNormalizeToE164_ShouldReturnFalse_InsteadOfThrowing(string? rawPhone)
+    {
+        Assert.False(_service.TryNormalizeToE164(rawPhone, "MX", out var normalized));
+        Assert.Null(normalized);
+    }
 }

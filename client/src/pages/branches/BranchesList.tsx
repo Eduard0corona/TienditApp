@@ -8,6 +8,7 @@ import type {
   CreateBranchRequest,
   UpdateBranchRequest,
 } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Sucursal' },
@@ -47,11 +48,6 @@ const buildEmptyForm = (): BranchFormState => ({
   isDefault: false,
 });
 
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.error ||
-  (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.detail ||
-  fallback;
-
 export default function BranchesList() {
   const [branches, setBranches] = useState<BranchDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +68,7 @@ export default function BranchesList() {
       const response = await branchesApi.getAll(params);
       setBranches(response.data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudieron cargar las sucursales.'));
+      setError(getApiErrorMessage(err, 'No se pudieron cargar las sucursales.'));
     } finally {
       setLoading(false);
     }
@@ -153,7 +149,7 @@ export default function BranchesList() {
       setShowModal(false);
       await loadData();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo guardar la sucursal.'));
+      setError(getApiErrorMessage(err, 'No se pudo guardar la sucursal.'));
     } finally {
       setSaving(false);
     }
@@ -168,7 +164,7 @@ export default function BranchesList() {
       setSuccess('Estado actualizado.');
       await loadData();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo actualizar el estado.'));
+      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado.'));
     }
   };
 

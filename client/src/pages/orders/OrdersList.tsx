@@ -7,6 +7,8 @@ import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { ordersApi } from '../../api/ordersApi';
 import { inventoryApi } from '../../api/inventoryApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
 import type { InventoryLocationDto, OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
 import {
   OrderPaymentMethod as OrderPaymentMethodConst,
@@ -14,65 +16,31 @@ import {
   OrderType as OrderTypeConst,
 } from '../../types';
 import { isSafeFileUrl } from '../../utils/safeUrl';
+import { getAccess } from '../../utils/access';
+import {
+  ORDER_TYPE_LABELS,
+  SERVICE_PIECE_STATUS_LABELS,
+  getOrderStatusLabel,
+  getPaymentMethodLabel,
+} from '../../utils/labels';
+import { getApiErrorMessage } from '../../api/errors';
 
-const STATUS_OPTIONS: Array<{ value: OrderStatus; label: string }> = [
-  { value: 0, label: 'Pendiente' },
-  { value: 1, label: 'Confirmada' },
-  { value: 2, label: 'En preparación' },
-  { value: 3, label: 'Lista' },
-  { value: 4, label: 'Aceptada' },
-  { value: 5, label: 'En progreso' },
-  { value: 6, label: 'Entregada' },
-  { value: 7, label: 'Completada' },
-  { value: 99, label: 'Cancelada' },
-];
+const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
-const STATUS_LABELS = new Map<number, string>(STATUS_OPTIONS.map((s) => [s.value, s.label]));
+const toStatusOptions = (statuses: OrderStatus[]) =>
+  statuses.map((value) => ({ value, label: getOrderStatusLabel(value) }));
 
-const ORDER_TYPE_LABELS: Record<OrderType, string> = {
-  [OrderTypeConst.Retail]: 'Retail',
-  [OrderTypeConst.Service]: 'Servicio',
-};
+const STATUS_OPTIONS = toStatusOptions(ALL_STATUSES);
 
 const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; label: string }>> = {
-  [OrderTypeConst.Retail]: [
-    { value: 0, label: 'Pendiente' },
-    { value: 1, label: 'Confirmada' },
-    { value: 2, label: 'En preparacion' },
-    { value: 3, label: 'Lista' },
-    { value: 6, label: 'Entregada' },
-    { value: 99, label: 'Cancelada' },
-  ],
-  [OrderTypeConst.Service]: [
-    { value: 0, label: 'Pendiente' },
-    { value: 4, label: 'Aceptada' },
-    { value: 5, label: 'En progreso' },
-    { value: 7, label: 'Completada' },
-    { value: 99, label: 'Cancelada' },
-  ],
+  [OrderTypeConst.Retail]: toStatusOptions([0, 1, 2, 3, 6, 99]),
+  [OrderTypeConst.Service]: toStatusOptions([0, 4, 5, 7, 99]),
 };
 
-const PAYMENT_METHOD_LABELS: Record<number, string> = {
-  [OrderPaymentMethodConst.Cash]: 'Efectivo',
-  [OrderPaymentMethodConst.Card]: 'Tarjeta',
-  [OrderPaymentMethodConst.Transfer]: 'Transferencia',
-  [OrderPaymentMethodConst.DigitalWallet]: 'Billetera',
-  [OrderPaymentMethodConst.Other]: 'Otro',
-};
-
-const SERVICE_PIECE_STATUS_LABELS: Record<number, string> = {
-  0: 'Aceptada',
-  1: 'En progreso',
-  2: 'Completada',
-  99: 'Cancelada',
-};
-
-const SERVICE_PIECE_STATUS_OPTIONS = [
-  { value: 0, label: 'Aceptada' },
-  { value: 1, label: 'En progreso' },
-  { value: 2, label: 'Completada' },
-  { value: 99, label: 'Cancelada' },
-] as const;
+const SERVICE_PIECE_STATUS_OPTIONS = ([0, 1, 2, 99] as const).map((value) => ({
+  value,
+  label: SERVICE_PIECE_STATUS_LABELS[value],
+}));
 
 const STATUS_BADGE_CLASS: Record<number, string> = {
   0: 'bg-warning',
@@ -124,19 +92,9 @@ function getTodayInputDate(): string {
   return `${year}-${month}-${day}`;
 }
 
-function getStatusLabel(status: OrderStatus, orderType?: OrderType): string {
-  if (orderType !== undefined) {
-    const option = ORDER_TYPE_STATUS_OPTIONS[orderType].find((item) => item.value === status);
-    if (option) return option.label;
-  }
-
-  return STATUS_LABELS.get(status) ?? String(status);
+function getStatusLabel(status: OrderStatus): string {
+  return getOrderStatusLabel(status);
 }
-
-const getApiErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-  (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-  fallback;
 
 function safeParseArray<T>(raw?: string): T[] {
   if (!raw) return [];
@@ -181,6 +139,11 @@ export default function OrdersList() {
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
+  // roles can read orders but move food orders from the kitchen board.
+  const canSell = getAccess(user, capabilities).sell;
 
   // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
   // and is blocked while the order has payments).
@@ -281,6 +244,8 @@ export default function OrdersList() {
   }, [loadOrders]);
 
   useEffect(() => {
+    // Branches are only used to register payments.
+    if (!canSell) return;
     const loadLocations = async () => {
       try {
         const { data } = await inventoryApi.getLocations({ isActive: true });
@@ -291,7 +256,7 @@ export default function OrdersList() {
     };
 
     void loadLocations();
-  }, []);
+  }, [canSell]);
 
   useEffect(() => {
     const createdOff = onOrderCreated((payload) => {
@@ -299,7 +264,7 @@ export default function OrdersList() {
       loadOrders();
     });
     const changedOff = onOrderStatusChanged((payload) => {
-      setRealtimeMessage(`Orden actualizada: ${payload.newStatus}`);
+      setRealtimeMessage(`Una orden cambió a: ${getOrderStatusLabel(payload.newStatus)}`);
       loadOrders();
     });
     const cancelledOff = onOrderCancelled((payload) => {
@@ -345,10 +310,7 @@ export default function OrdersList() {
       setPaymentEvidenceUrl(data.url);
       setPaymentEvidenceName(data.fileName);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo subir el comprobante.';
+      const msg = getApiErrorMessage(err, 'No se pudo subir el comprobante.');
       setPaymentError(msg);
     } finally {
       setPaymentUploadingEvidence(false);
@@ -450,10 +412,7 @@ export default function OrdersList() {
       await ordersApi.updateServicePieceStatus(orderId, pieceId, Number(newStatus) as 0 | 1 | 2 | 99);
       await Promise.all([loadOrders(), refreshSelectedOrder(orderId)]);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo actualizar el estado de la pieza.';
+      const msg = getApiErrorMessage(err, 'No se pudo actualizar el estado de la pieza.');
       setError(msg);
     }
   };
@@ -547,10 +506,12 @@ export default function OrdersList() {
                     >
                       Limpiar filtros
                     </button>
-                    <Link to="/orders/cart" className="btn btn-primary btn-sm">
-                      <i className="ri-add-line me-1"></i>
-                      Generar Orden
-                    </Link>
+                    {canSell && (
+                      <Link to="/orders/cart" className="btn btn-primary btn-sm">
+                        <i className="ri-add-line me-1"></i>
+                        Generar Orden
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
@@ -617,7 +578,7 @@ export default function OrdersList() {
                     </td>
                     <td className="text-center">
                       <span className={`badge ${STATUS_BADGE_CLASS[order.status] ?? 'bg-secondary'}`}>
-                        {getStatusLabel(order.status, order.orderType)}
+                        {getStatusLabel(order.status)}
                       </span>
                     </td>
                     <td className="text-center">{toLocalDateTime(order.createdAt)}</td>
@@ -628,16 +589,26 @@ export default function OrdersList() {
                       </small>
                     </td>
                     <td className="text-center">
-                      <div className="d-flex justify-content-center">
+                      {canSell ? (
+                        <div className="d-flex justify-content-center">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-soft-success"
+                            disabled={order.balance <= 0 || order.status === 99}
+                            onClick={() => openPaymentModal(order)}
+                          >
+                            Registrar pago
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
-                          className="btn btn-sm btn-soft-success"
-                          disabled={order.balance <= 0 || order.status === 99}
-                          onClick={() => openPaymentModal(order)}
+                          className="btn btn-sm btn-light"
+                          onClick={() => setSelectedOrder(order)}
                         >
-                          Registrar pago
+                          Ver detalle
                         </button>
-                      </div>
+                      )}
                     </td>
                   </>
                 )}
@@ -671,7 +642,7 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
                 </div>
                 <div className="col-md-6">
-                  <p className="mb-1"><strong>Estado:</strong> {getStatusLabel(selectedOrder.status, selectedOrder.orderType)}</p>
+                  <p className="mb-1"><strong>Estado:</strong> {getStatusLabel(selectedOrder.status)}</p>
                   <p className="mb-1"><strong>Fecha:</strong> {toLocalDateTime(selectedOrder.createdAt)}</p>
                   <p className="mb-1"><strong>Items:</strong> {selectedOrderTotalItems}</p>
                   <p className="mb-1"><strong>Total:</strong> ${selectedOrder.total.toFixed(2)}</p>
@@ -680,7 +651,7 @@ export default function OrdersList() {
                 </div>
               </div>
 
-              {(selectedOrderStatusActions.length > 0 || selectedOrder.canCancel) && (
+              {canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
@@ -692,7 +663,7 @@ export default function OrdersList() {
                         disabled={statusSubmitting}
                         onClick={() => void handleStatusChange(selectedOrder, status)}
                       >
-                        {getStatusLabel(status, selectedOrder.orderType)}
+                        {getStatusLabel(status)}
                       </button>
                     ))}
                     {selectedOrder.canCancel && (
@@ -847,12 +818,13 @@ export default function OrdersList() {
                           <tr key={piece.id}>
                             <td>{piece.itemName}</td>
                             <td>{piece.notifyCustomer ? 'Si' : 'No'}</td>
-                            <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] || piece.status}</td>
+                            <td>{SERVICE_PIECE_STATUS_LABELS[piece.status] ?? piece.status}</td>
                             <td className="text-end" style={{ minWidth: 220 }}>
                               <select
                                 className="form-select form-select-sm"
                                 value=""
-                                disabled={getPieceAllowedTransitions(piece.status).length === 0}
+                                aria-label={`Actualizar estado de ${piece.itemName}`}
+                                disabled={!canSell || getPieceAllowedTransitions(piece.status).length === 0}
                                 onChange={(e) =>
                                   handleServicePieceStatusChange(selectedOrder.id, piece.id, e.target.value)
                                 }
@@ -893,7 +865,7 @@ export default function OrdersList() {
                         {selectedOrder.payments.map((payment) => (
                           <tr key={payment.id}>
                             <td>{toLocalDateTime(payment.paidAt)}</td>
-                            <td>{PAYMENT_METHOD_LABELS[payment.method] || payment.method}</td>
+                            <td>{getPaymentMethodLabel(payment.method)}</td>
                             <td>{payment.inventoryLocationId ? (locationNameById.get(payment.inventoryLocationId) || 'Sucursal') : '-'}</td>
                             <td>
                               {isSafeFileUrl(payment.evidenceUrl) ? (
@@ -975,7 +947,7 @@ export default function OrdersList() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Metodo de pago</label>
+                <label className="form-label">Método de pago</label>
                 <select
                   className="form-select"
                   value={paymentMethod}
@@ -986,7 +958,7 @@ export default function OrdersList() {
                     .filter((value): value is OrderPaymentMethod => typeof value === 'number')
                     .map((value) => (
                       <option key={value} value={value}>
-                        {PAYMENT_METHOD_LABELS[value] || value}
+                        {getPaymentMethodLabel(value)}
                       </option>
                     ))}
                 </select>

@@ -8,7 +8,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+// Same audience as ReportsController: TenantResolutionMiddleware requires ViewReports, which staff
+// have by default. Admin-only roles here made the default landing page answer 403 to every employee.
+[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
 public class DashboardController : ControllerBase
 {
     private readonly IMediator _mediator;

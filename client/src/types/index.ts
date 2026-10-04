@@ -1264,6 +1264,7 @@ export interface KitchenOrderDto {
   status: OrderStatus;
   customerName: string;
   tableNumber?: string;
+  customerNotes?: string;
   createdAt: string;
   items: OrderItemDto[];
 }

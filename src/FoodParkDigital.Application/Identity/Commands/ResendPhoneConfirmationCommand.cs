@@ -8,18 +8,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+/// <summary>
+/// Sends a new phone confirmation code. The confirmation screen identifies the account by the user id
+/// it received at registration (the phone is stored as typed, so it may not match an E.164 search).
+/// </summary>
 public record ResendPhoneConfirmationCommand : IRequest<Result>
 {
-    public string PhoneNumber { get; init; } = null!;
+    public Guid? UserId { get; init; }
+    public string? PhoneNumber { get; init; }
 }
 
 public class ResendPhoneConfirmationCommandValidator : AbstractValidator<ResendPhoneConfirmationCommand>
 {
     public ResendPhoneConfirmationCommandValidator()
     {
+        RuleFor(x => x)
+            .Must(x => x.UserId.HasValue || !string.IsNullOrWhiteSpace(x.PhoneNumber))
+            .WithName("UserId")
+            .WithMessage("Indica la cuenta o el teléfono al que se envía el código.");
+
         RuleFor(x => x.PhoneNumber)
-            .NotEmpty()
             .Matches(@"^\+[1-9]\d{6,14}$")
+            .When(x => !x.UserId.HasValue && !string.IsNullOrWhiteSpace(x.PhoneNumber))
             .WithMessage("El número de teléfono debe estar en formato E.164 (ej: +5215512345678).");
     }
 }
@@ -42,12 +52,13 @@ public class ResendPhoneConfirmationCommandHandler : IRequestHandler<ResendPhone
 
     public async Task<Result> Handle(ResendPhoneConfirmationCommand request, CancellationToken cancellationToken)
     {
-        var user = await _context.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber, cancellationToken);
+        var users = _context.Users.IgnoreQueryFilters();
+        var user = request.UserId.HasValue
+            ? await users.FirstOrDefaultAsync(u => u.Id == request.UserId.Value, cancellationToken)
+            : await users.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber, cancellationToken);
 
         // Por seguridad, no revelamos si el usuario existe o no
-        if (user is null || user.PhoneNumberConfirmed)
+        if (user is null || user.PhoneNumberConfirmed || string.IsNullOrWhiteSpace(user.PhoneNumber))
             return Result.Success();
 
         var code = await _userManager.GenerateChangePhoneNumberTokenAsync(user, user.PhoneNumber!);

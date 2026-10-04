@@ -12,6 +12,7 @@ import type {
   ProductDto,
   UnitType,
 } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 interface ServiceFormData {
   categoryId: string;
@@ -222,9 +223,7 @@ export default function ServicesList() {
       closeModal();
       await loadServices();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al guardar el servicio.';
+      const msg = getApiErrorMessage(err, 'Error al guardar el servicio.');
       setError(msg);
     }
   };
@@ -236,9 +235,7 @@ export default function ServicesList() {
       await productsApi.delete(id);
       await loadServices();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al eliminar el servicio.';
+      const msg = getApiErrorMessage(err, 'Error al eliminar el servicio.');
       setError(msg);
     }
   };

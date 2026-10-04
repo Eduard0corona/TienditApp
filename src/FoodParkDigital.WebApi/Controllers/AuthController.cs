@@ -16,7 +16,9 @@ namespace FoodParkDigital.WebApi.Controllers;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Authorize]
-[EnableRateLimiting("auth")]
+// Only credential and code endpoints are rate limited ("auth": 10 per minute per IP outside Development).
+// Refresh, profile and tenant endpoints run on every screen of every device of a business, often behind
+// one IP: limiting them answered 429 and the client ended the session.
 public class AuthController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -34,6 +36,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginCommand command)
     {
@@ -91,6 +94,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register/business")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command)
     {
@@ -106,6 +110,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register/customer")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult<AuthResponse>> RegisterCustomer([FromBody] RegisterCustomerCommand command)
     {
@@ -135,6 +140,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("confirm-email")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
     {
@@ -145,6 +151,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("resend-confirmation-email")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult> ResendConfirmationEmail([FromBody] ResendConfirmationEmailCommand command)
     {
@@ -153,6 +160,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("confirm-phone")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult> ConfirmPhone([FromBody] ConfirmPhoneCommand command)
     {
@@ -163,6 +171,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("resend-phone-confirmation")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult> ResendPhoneConfirmation([FromBody] ResendPhoneConfirmationCommand command)
     {
@@ -171,6 +180,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordCommand command)
     {
@@ -179,6 +189,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("reset-password")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordCommand command)
     {
@@ -239,6 +250,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("profile/change-password")]
+    [EnableRateLimiting("auth")]
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordCommand command)
     {

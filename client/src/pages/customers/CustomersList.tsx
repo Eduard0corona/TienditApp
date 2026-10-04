@@ -5,6 +5,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Nombre' },
@@ -119,9 +120,7 @@ export default function CustomersList() {
       closeModal();
       await loadCustomers();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al guardar cliente.';
+      const msg = getApiErrorMessage(err, 'Error al guardar cliente.');
       setError(msg);
     }
   };
@@ -131,9 +130,7 @@ export default function CustomersList() {
       await customersApi.setActive(customer.id, !customer.isActive);
       await loadCustomers();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'No se pudo actualizar el estado.';
+      const msg = getApiErrorMessage(err, 'No se pudo actualizar el estado.');
       setError(msg);
     }
   };
@@ -146,9 +143,7 @@ export default function CustomersList() {
       await customersApi.delete(customer.id);
       await loadCustomers();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'No se pudo eliminar el cliente.';
+      const msg = getApiErrorMessage(err, 'No se pudo eliminar el cliente.');
       setError(msg);
     }
   };

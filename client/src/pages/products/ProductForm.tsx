@@ -6,6 +6,7 @@ import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { CreateProductRequest, CategoryDto, ProductDto, UnitType } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const UNIT_TYPE_OPTIONS = [
   { value: '', label: 'Sin unidad' },
@@ -162,9 +163,7 @@ export default function ProductForm() {
 
       navigate('/products');
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al guardar el producto.';
+      const msg = getApiErrorMessage(err, 'Error al guardar el producto.');
       setError(msg);
     }
   };

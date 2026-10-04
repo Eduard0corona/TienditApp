@@ -73,7 +73,7 @@ public class OrderStatusChangedEventHandler : INotificationHandler<OrderStatusCh
                     order.CustomerPhone,
                     "order_status_update",
                     "es_MX",
-                    [order.OrderNumber, notification.NewStatus.ToString()],
+                    [order.OrderNumber, OrderStatusLabels.ToSpanish(notification.NewStatus)],
                     cancellationToken);
             }
         }

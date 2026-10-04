@@ -9,6 +9,7 @@ import type {
   CategoryTemplateDto,
   CreateCategoryRequest,
 } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Nombre' },
@@ -103,9 +104,7 @@ export default function CategoriesList() {
       closeModal();
       await loadCategories();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al guardar la categoría.';
+      const msg = getApiErrorMessage(err, 'Error al guardar la categoría.');
       setError(msg);
     }
   };
@@ -122,9 +121,7 @@ export default function CategoriesList() {
       await loadCategories();
       closeTemplatesModal();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al instalar la plantilla.';
+      const msg = getApiErrorMessage(err, 'Error al instalar la plantilla.');
       setError(msg);
     } finally {
       setInstallingTemplateId(null);
@@ -146,9 +143,7 @@ export default function CategoriesList() {
       await categoriesApi.delete(id);
       await loadCategories();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al eliminar la categoría.';
+      const msg = getApiErrorMessage(err, 'Error al eliminar la categoría.');
       setError(msg);
     }
   };

@@ -10,9 +10,25 @@ Un capability no concede permiso y un permiso no habilita un capability. La auto
 
 ## Estado actual
 
-ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessService` resuelve membresía, capabilities normalizadas y permisos; si no hay permisos explícitos usa defaults por rol. `TenantResolutionMiddleware` aplica permisos/capabilities por prefijos de ruta y los controllers además usan `[Authorize]` y, con frecuencia, `[Authorize(Roles=...)]`. Los hubs repiten la validación de membresía y permiso al conectar. El frontend usa `ProtectedRoute`, `CapabilityRoute` y `PermissionRoute` para UX.
+ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessService` resuelve membresía, capabilities normalizadas y permisos; si no hay permisos explícitos usa defaults por rol. `TenantResolutionMiddleware` aplica permisos/capabilities por prefijos de ruta y los controllers además usan `[Authorize]` y, con frecuencia, `[Authorize(Roles=...)]`. Los hubs repiten la validación de membresía y permiso al conectar. El frontend usa `ProtectedRoute` y `AccessRoute` para UX.
+
+### Matriz alineada (Fase 0)
+
+El rol de un controller no debe contradecir el permiso que exige el middleware: si el menú ofrece una pantalla por permiso, el endpoint acepta ese rol. `ControllerRoleAuthorizationTests` fija estos casos.
+
+| Área | Roles del controller | Permiso (middleware) | Capability |
+| --- | --- | --- | --- |
+| Dashboard y reportes | `SUPER_ADMIN`, `TENANT_ADMIN`, `STAFF` | `ViewReports` | comercio |
+| Cocina | `SUPER_ADMIN`, `TENANT_ADMIN`, `STAFF`, `KITCHEN` | `ManageServiceBoard` | `Kitchen` |
+| Ver órdenes | `SUPER_ADMIN`, `TENANT_ADMIN`, `STAFF`, `KITCHEN` | `ManageOrders` | comercio |
+| Crear, cobrar, cambiar estado y cancelar órdenes | `SUPER_ADMIN`, `TENANT_ADMIN`, `STAFF` | `ManageOrders` | comercio |
+| Chat de WhatsApp | `SUPER_ADMIN`, `TENANT_ADMIN`, `STAFF` | `ManageWhatsApp` | comercio |
+
+En el cliente, `src/utils/access.ts` (`getAccess`) traduce la misma matriz para el menú, las rutas (`AccessRoute`), la página de entrada (`getLandingPath`: administradores al Dashboard, el resto a la pantalla de su trabajo: Vender, Cocina o Taller) y los botones de acción. Es ayuda de navegación: la API sigue decidiendo.
 
 Cambiar de tenant rota el refresh token de la sesión (el anterior se revoca).
+
+La verificación de teléfono identifica la cuenta por el `userId` que devuelve el registro: viaja en la URL de `/confirm-phone` (recargar ya no pierde el estado) y `POST /auth/resend-phone-confirmation` acepta `{ userId }` para reenviar el código (o un teléfono E.164), sin revelar si la cuenta existe y con el límite `auth`. El enlace del correo de confirmación abre la página `/confirm-email` de la app, que confirma contra `GET /auth/confirm-email` y, si el enlace venció o está incompleto, ofrece pedir uno nuevo.
 
 ## Guardrails
 

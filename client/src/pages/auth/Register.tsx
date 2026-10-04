@@ -5,6 +5,8 @@ import { authApi } from '../../api/authApi';
 import type { RegisterBusinessRequest, RegisterCustomerRequest } from '../../types';
 import { BusinessType } from '../../types';
 import './register.css';
+import BrandLogo from '../../components/common/BrandLogo';
+import { getApiErrorMessage } from '../../api/errors';
 
 type AccountType = 'business' | 'customer' | null;
 
@@ -60,15 +62,19 @@ export default function Register() {
   // Customer form
   const customerForm = useForm<RegisterCustomerRequest>();
 
+  // The account id goes in the URL so the confirmation screen survives a reload.
+  const goToPhoneConfirmation = (userId?: string) =>
+    navigate(userId ? `/confirm-phone?userId=${encodeURIComponent(userId)}` : '/confirm-phone', {
+      state: { userId },
+    });
+
   const onSubmitBusiness = async (data: RegisterBusinessRequest) => {
     setError('');
     try {
       const response = await authApi.registerBusiness(data);
-      navigate('/confirm-phone', { state: { userId: response.data.userId } });
+      goToPhoneConfirmation(response.data.userId);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al registrar la empresa.';
+      const msg = getApiErrorMessage(err, 'Error al registrar la empresa.');
       setError(msg);
     }
   };
@@ -77,11 +83,9 @@ export default function Register() {
     setError('');
     try {
       const response = await authApi.registerCustomer(data);
-      navigate('/confirm-phone', { state: { userId: response.data.userId } });
+      goToPhoneConfirmation(response.data.userId);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al registrar la cuenta.';
+      const msg = getApiErrorMessage(err, 'Error al registrar la cuenta.');
       setError(msg);
     }
   };
@@ -108,7 +112,7 @@ export default function Register() {
                 {/* Logo */}
                 <div className="card-header py-4 text-center bg-primary">
                   <Link to="/">
-                    <img src="/images/logo.png" alt="logo" height="22" />
+                    <BrandLogo tone="light" />
                   </Link>
                 </div>
 
@@ -589,7 +593,7 @@ export default function Register() {
       </div>
 
       <footer className="footer footer-alt">
-        {new Date().getFullYear()} &copy; FoodPark Digital
+        {new Date().getFullYear()} &copy; TienditApp
       </footer>
     </div>
   );

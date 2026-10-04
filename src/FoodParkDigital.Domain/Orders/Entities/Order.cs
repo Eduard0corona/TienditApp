@@ -34,8 +34,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         TemporaryCustomerId = temporaryCustomerId;
         CreatedByBusiness = createdByBusiness;
 
-        if (CustomerUserId.HasValue == TemporaryCustomerId.HasValue)
-            throw new DomainException("Order must reference either a registered customer or a temporary customer.");
+        if (CustomerUserId.HasValue && TemporaryCustomerId.HasValue)
+            throw new DomainException("La orden no puede referir a un cliente registrado y a uno temporal a la vez.");
+
+        // A counter sale to the general public ("público en general") has no phone and therefore no
+        // customer to link; an order placed by a customer always references one.
+        if (!CustomerUserId.HasValue && !TemporaryCustomerId.HasValue && !createdByBusiness)
+            throw new DomainException("La orden de un cliente debe referir a un cliente registrado o temporal.");
 
         OrderNumber = orderNumber;
         BusinessType = businessType;

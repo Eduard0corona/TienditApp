@@ -72,7 +72,7 @@ public class OrderCreatedEventHandler : INotificationHandler<OrderCreatedEvent>
                     order.CustomerPhone,
                     "order_confirmed",
                     "es_MX",
-                    [notification.OrderNumber, notification.Total.ToString("C2")],
+                    [notification.OrderNumber, OrderStatusLabels.FormatMoney(notification.Total)],
                     cancellationToken);
             }
         }
