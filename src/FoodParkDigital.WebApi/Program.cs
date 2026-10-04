@@ -70,7 +70,8 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsync(message, token);
     };
 
-    // Auth endpoints rate limit per IP (relaxed in Development for hot-reload)
+    // Credential and code endpoints (login, registration, confirmation codes, password reset, 2FA codes),
+    // per IP and relaxed in Development for hot-reload. Applied per action with [EnableRateLimiting("auth")].
     var isDev = builder.Environment.IsDevelopment();
     options.AddPolicy("auth", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -106,7 +107,7 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "FoodPark Digital API",
+        Title = "TienditApp API",
         Version = "v1",
         Description = "Multi-tenant SaaS platform API for Food Park Digital"
     });
