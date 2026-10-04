@@ -6,6 +6,16 @@
 
 El CI ejecuta `dotnet ef migrations has-pending-model-changes` en cada PR, por lo que una configuración sin migración rompe el build.
 
+Además, el job `Migrations` de `.github/workflows/ci.yml` aplica las migraciones en SQL Server 2022 (Docker) en cada PR y en cada push a `master`:
+
+1. Crea con `dotnet ef database update` una base en `PRODUCTION_BASELINE`, una migración que producción ya tiene (idealmente la última; hoy `20261004165450_AddOfflineSaleIdempotency`, la de la Fase 3).
+2. Le aplica con el `sqlcmd` clásico y `-b` el mismo contenido que un `apply.sql`: el bloque `SET` de los scripts de producción y la salida de `dotnet ef migrations script --idempotent`.
+3. Lo ejecuta otra vez con la caché de planes vacía y falla si cambia el historial o algún objeto. Así SQL Server vuelve a compilar todos los lotes, incluidos los que salta, como en una ejecución posterior en producción: un lote viejo que nombra una columna que una migración nueva borró falla ahí.
+4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE` y aplica el script de nuevo.
+5. Crea otra base vacía con `dotnet ef database update`, como se crea una base nueva.
+
+La contraseña de SA se genera en el job y el runner la enmascara en los logs. Cuando producción avance, sube `PRODUCTION_BASELINE`; un valor más viejo solo prueba más migraciones. Si el job falla, sus scripts quedan como artefacto `migration-scripts` de la ejecución.
+
 Migraciones recientes con notas operativas:
 
 - `CashSessionSingleOpenAndRevision`: agrega `CashSessions.Revision` y el índice único filtrado `IX_CashSessions_TenantId_SingleOpen`. Antes de crear el índice cierra las cajas abiertas duplicadas de un mismo tenant (conserva la más reciente y deja una nota); ese paso de datos no se revierte con `Down`.
@@ -56,6 +66,8 @@ Antes de publicarlos:
 1. Ejecútalos con `sqlcmd` contra bases desechables (LocalDB o SQL Server en Docker) en los estados posibles de producción: en la versión productiva previa con datos, en la migración anterior y con datos que la migración rechaza. Prueba también los `rollback.sql` de la más nueva a la más vieja.
 2. Vuelve a ejecutarlos para confirmar que la segunda vez no hacen nada.
 
+El job `Migrations` repite estos pasos en cada PR sobre una base sin datos y con scripts que genera él mismo; los estados con datos y los archivos de la carpeta se siguen probando a mano.
+
 Los scripts de la Fase 3 se probaron así en SQL Server 2022 (Docker): desde un respaldo en la Fase 0 con negocios con y sin ubicaciones, ventas, pagos y cajas, el `apply.sql` de `20261004165450_AddOfflineSaleIdempotency` aplicó las Fases 1, 2 y 3; los `rollback.sql` revirtieron la Fase 3 (las guardas 50003 y 50005 se detuvieron sin cambiar nada) y volver a aplicar y repetir el script no hizo nada la segunda vez.
 
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación.
@@ -63,6 +75,6 @@ Las reparaciones de datos sin cambio de esquema van en `database/production/data
 ## Deuda actual
 
 - `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
-- Falta automatización que valide migraciones contra SQL Server desde cero y desde baseline.
+- El CI no prueba migraciones con datos ni ejecuta los `apply.sql`/`rollback.sql` versionados: regenera el script, así que un archivo que quedó desactualizado frente a su migración no se detecta.
 - Falta el proceso productivo: generar `migrations script --idempotent` como artefacto del pipeline, revisarlo y aplicarlo en un paso controlado antes de desplegar.
 - La divergencia de ramas puede contener historias de migración distintas; se resuelve en tarea separada antes de promover esquema.
