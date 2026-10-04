@@ -1519,7 +1519,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Orders", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Orders_CustomerLink", "(([CustomerUserId] IS NOT NULL AND [TemporaryCustomerId] IS NULL) OR ([CustomerUserId] IS NULL AND [TemporaryCustomerId] IS NOT NULL))");
+                            t.HasCheckConstraint("CK_Orders_CustomerLink", "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)");
                         });
                 });
 

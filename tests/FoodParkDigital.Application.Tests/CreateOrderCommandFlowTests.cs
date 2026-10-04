@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Mappings;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -232,6 +233,92 @@ public class CreateOrderCommandFlowTests
     }
 
     [Fact]
+    public async Task CreateOrder_ShouldCreateWalkInSale_WhenThePublicGeneralCustomerHasNoPhone()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (tenant, product) = await fixture.SeedCatalogAsync();
+        var publicGeneral = new Customer(tenant.Id, "Publico en general", null, null, isPublicGeneral: true);
+        fixture.Context.Customers.Add(publicGeneral);
+        await fixture.Context.SaveChangesAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                CustomerId = publicGeneral.Id,
+                Items = [new CreateOrderItemDto { ProductId = product.Id, Quantity = 1 }]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var order = await fixture.Context.Orders.AsNoTracking().SingleAsync();
+        Assert.Equal("Publico en general", order.CustomerName);
+        Assert.Null(order.CustomerPhone);
+        Assert.Null(order.CustomerUserId);
+        Assert.Null(order.TemporaryCustomerId);
+        Assert.Empty(await fixture.Context.TemporaryCustomers.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateOrder_ShouldCreateWalkInSale_WithoutCustomerOrPhone()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (_, product) = await fixture.SeedCatalogAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                TableNumber = "Mesa 3",
+                Items = [new CreateOrderItemDto { ProductId = product.Id, Quantity = 2 }]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal("Público en general", result.Value.CustomerName);
+        Assert.Null(result.Value.CustomerPhone);
+    }
+
+    [Fact]
+    public async Task CreateOrder_ShouldRequirePhone_WhenTheOrderIsPlacedByTheCustomer()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (_, product) = await fixture.SeedCatalogAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                CreatedByBusiness = false,
+                CustomerName = "Cliente en línea",
+                Items = [new CreateOrderItemDto { ProductId = product.Id, Quantity = 1 }]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(await fixture.Context.Orders.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("12345")]
+    [InlineData("tel. de casa")]
+    public async Task CreateOrder_ShouldRejectInvalidPhone_WithASpanishMessage(string phone)
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var (_, product) = await fixture.SeedCatalogAsync();
+
+        var result = await fixture.CreateHandler().Handle(
+            new CreateOrderCommand
+            {
+                CustomerPhone = phone,
+                Items = [new CreateOrderItemDto { ProductId = product.Id, Quantity = 1 }]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(PhoneNumberRules.InvalidPhoneMessage, result.Error);
+        Assert.Empty(await fixture.Context.Orders.ToListAsync());
+        Assert.Empty(await fixture.Context.TemporaryCustomers.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
     public async Task CreateOrder_ShouldFail_WhenProductIsOutsideAvailabilitySchedule()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -417,7 +504,8 @@ public class CreateOrderCommandFlowTests
                 _currentUserService,
                 Mapper,
                 customerLookup,
-                _dateTimeProvider);
+                _dateTimeProvider,
+                new PhoneNormalizationService());
         }
 
         public async Task<(Tenant Tenant, Product Product)> SeedCatalogAsync()

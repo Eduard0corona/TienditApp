@@ -11,9 +11,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
     public void Configure(EntityTypeBuilder<Order> builder)
     {
         builder.ToTable("Orders");
+        // Mirrors the Order constructor: never both customer links, and only counter sales created by the
+        // business (walk-in, without phone) may have neither.
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_Orders_CustomerLink",
-            "(([CustomerUserId] IS NOT NULL AND [TemporaryCustomerId] IS NULL) OR ([CustomerUserId] IS NULL AND [TemporaryCustomerId] IS NOT NULL))"));
+            "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)"));
         builder.HasKey(o => o.Id);
 
         builder.Property(o => o.OrderNumber).HasMaxLength(20).IsRequired();

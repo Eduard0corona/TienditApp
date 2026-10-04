@@ -216,6 +216,7 @@ public class CoreBusinessFlowSmokeTests
                 Mapper,
                 customerLookup,
                 _dateTimeProvider,
+                new PhoneNormalizationService(),
                 orderInventoryService);
         }
 

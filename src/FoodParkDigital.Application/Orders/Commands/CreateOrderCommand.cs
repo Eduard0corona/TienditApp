@@ -74,7 +74,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.CustomerName).MaximumLength(200);
         RuleFor(x => x.CustomerPhone).MaximumLength(50);
         RuleFor(x => x.OrderType).IsInEnum();
-        RuleFor(x => x.Items).NotEmpty().WithMessage("Order must have at least one item.");
+        RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
             .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
@@ -100,12 +100,15 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
 
 public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Result<OrderDto>>
 {
+    private const string WalkInCustomerName = "Público en general";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IMapper _mapper;
     private readonly ICustomerLookupService _customerLookupService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IOrderInventoryService _orderInventoryService;
 
     public CreateOrderCommandHandler(
@@ -115,6 +118,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         IMapper mapper,
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
+        IPhoneNormalizationService phoneNormalizationService,
         IOrderInventoryService? orderInventoryService = null)
     {
         _context = context;
@@ -123,6 +127,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         _mapper = mapper;
         _customerLookupService = customerLookupService;
         _dateTimeProvider = dateTimeProvider;
+        _phoneNormalizationService = phoneNormalizationService;
         _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
     }
 
@@ -146,6 +151,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
         string? customerName = request.CustomerName;
         string? customerPhone = request.CustomerPhone;
+        var isPublicGeneralCustomer = false;
 
         if (request.CustomerId.HasValue)
         {
@@ -157,21 +163,37 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
             customerName ??= legacyCustomer.Name;
             customerPhone ??= legacyCustomer.Phone;
+            isPublicGeneralCustomer = legacyCustomer.IsPublicGeneral;
         }
 
-        if (string.IsNullOrWhiteSpace(customerPhone))
+        // The phone links the order to a customer (history, claims, notifications). A counter sale to the
+        // general public may skip it; a named customer or an order placed by the customer may not.
+        CustomerLookupResult? linkedCustomer = null;
+        if (!string.IsNullOrWhiteSpace(customerPhone))
         {
-            return request.CustomerId.HasValue
-                ? Result.Failure<OrderDto>("El cliente seleccionado no tiene telefono. Captura uno para continuar.")
-                : Result.Failure<OrderDto>("Se requiere telefono del cliente para crear la orden.");
-        }
+            if (!_phoneNormalizationService.TryNormalizeToE164(
+                    customerPhone,
+                    CustomerPhoneOwnershipRules.DefaultCountry,
+                    out var phoneNormalized))
+            {
+                return Result.Failure<OrderDto>(PhoneNumberRules.InvalidPhoneMessage);
+            }
 
-        var linkedCustomer = await _customerLookupService.ResolveForOrderAsync(
-            _tenantService.TenantId,
-            customerPhone,
-            customerName,
-            "MX",
-            cancellationToken);
+            linkedCustomer = await _customerLookupService.ResolveForOrderAsync(
+                _tenantService.TenantId,
+                phoneNormalized,
+                customerName,
+                CustomerPhoneOwnershipRules.DefaultCountry,
+                cancellationToken);
+        }
+        else if (!request.CreatedByBusiness)
+        {
+            return Result.Failure<OrderDto>("Se requiere el teléfono del cliente para crear la orden.");
+        }
+        else if (request.CustomerId.HasValue && !isPublicGeneralCustomer)
+        {
+            return Result.Failure<OrderDto>("El cliente seleccionado no tiene telefono. Captura uno para continuar.");
+        }
 
         var tenantTimeZoneId = await _context.TenantSettings
             .AsNoTracking()
@@ -186,14 +208,14 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
         var order = new Order(
             tenantId: _tenantService.TenantId,
-            customerUserId: linkedCustomer.CustomerUserId,
-            temporaryCustomerId: linkedCustomer.TemporaryCustomerId,
+            customerUserId: linkedCustomer?.CustomerUserId,
+            temporaryCustomerId: linkedCustomer?.TemporaryCustomerId,
             createdByBusiness: request.CreatedByBusiness,
             orderNumber: orderNumber,
             businessType: tenant.BusinessType,
             orderType: request.OrderType,
-            customerName: string.IsNullOrWhiteSpace(customerName) ? (linkedCustomer.ResolvedName ?? customerPhone) : customerName,
-            customerPhone: linkedCustomer.PhoneNormalized,
+            customerName: ResolveCustomerName(customerName, linkedCustomer, customerPhone),
+            customerPhone: linkedCustomer?.PhoneNormalized,
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
@@ -206,7 +228,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 ?? throw new EntityNotFoundException("Product", itemDto.ProductId);
 
             if (!product.IsAvailableAt(localTimeOfDay))
-                throw new DomainException($"Product '{product.Name}' is not available at this time.");
+                throw new DomainException($"El producto '{product.Name}' no está disponible en este horario.");
 
             if (!request.CreatedByBusiness && !OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
             {
@@ -310,6 +332,14 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         var dto = _mapper.Map<OrderDto>(order);
         dto.ApplyStateMetadata();
         return Result.Success(dto);
+    }
+
+    private static string ResolveCustomerName(string? requestedName, CustomerLookupResult? linkedCustomer, string? rawPhone)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedName))
+            return requestedName.Trim();
+
+        return linkedCustomer?.ResolvedName ?? rawPhone ?? WalkInCustomerName;
     }
 
     private static void ApplyBusinessDefaultStatus(Order order, string? performedBy)

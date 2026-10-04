@@ -68,9 +68,14 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         if (existingUser)
             return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electronico.");
 
-        var phoneNormalized = _phoneNormalizationService.NormalizeToE164(
-            request.PhoneNumber,
-            CustomerPhoneOwnershipRules.DefaultCountry);
+        if (!_phoneNormalizationService.TryNormalizeToE164(
+                request.PhoneNumber,
+                CustomerPhoneOwnershipRules.DefaultCountry,
+                out var phoneNormalized))
+        {
+            return Result.Failure<AuthResponse>(PhoneNumberRules.InvalidPhoneMessage);
+        }
+
         var phoneHolder = await CustomerPhoneOwnershipRules.FindHolderAsync(
             _context,
             _phoneNormalizationService,
