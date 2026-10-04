@@ -21,6 +21,7 @@ public class ProductDto
     public string PriceCurrency { get; set; } = null!;
     public decimal? CompareAtPrice { get; set; }
     public decimal? TaxRate { get; set; }
+    public bool IsTaxExempt { get; set; }
     public bool HasDiscount { get; set; }
 
     // Media

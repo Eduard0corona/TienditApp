@@ -170,6 +170,10 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
         var dto = _mapper.Map<TenantProfileDto>(tenant);
         dto.Capabilities = settings.Capabilities;
+        dto.PricesIncludeTax = settings.PricesIncludeTax;
+        dto.DefaultTaxRate = settings.DefaultTaxRate;
+        dto.AutoCloseCounterSales = settings.AutoCloseCounterSales;
+        dto.OnboardingCompletedAt = settings.OnboardingCompletedAt;
         return Result.Success(dto);
     }
 }

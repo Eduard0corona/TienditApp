@@ -69,7 +69,8 @@ public class ProductTests
             availableFromTime: null,
             availableToTime: null,
             isTrackable: false,
-            notifyCustomer: false);
+            notifyCustomer: false,
+            isTaxExempt: false);
 
         Assert.Equal("Lavado express", product.Name);
         Assert.Equal("https://cdn.test/products/actual", product.ImageUrl);

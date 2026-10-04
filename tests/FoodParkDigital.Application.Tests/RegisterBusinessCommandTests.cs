@@ -120,7 +120,12 @@ public class RegisterBusinessCommandTests
 
         var tenant = Assert.Single(stored.Tenants);
         Assert.Equal("taqueria-demo", tenant.Slug);
-        Assert.Equal(tenant.Id, Assert.Single(stored.Settings).TenantId);
+        var settings = Assert.Single(stored.Settings);
+        Assert.Equal(tenant.Id, settings.TenantId);
+        // A new business starts with prices that include IVA and is offered the guided setup.
+        Assert.True(settings.PricesIncludeTax);
+        Assert.Equal(16m, settings.DefaultTaxRate);
+        Assert.Null(settings.OnboardingCompletedAt);
         var publicGeneral = Assert.Single(stored.Customers);
         Assert.Equal(tenant.Id, publicGeneral.TenantId);
         Assert.True(publicGeneral.IsPublicGeneral);

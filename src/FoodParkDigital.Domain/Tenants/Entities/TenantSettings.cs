@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Domain.Tenants.Entities;
@@ -7,7 +8,14 @@ public class TenantSettings : BaseEntity
 {
     private TenantSettings() { }
 
-    public TenantSettings(Guid tenantId, TenantCapability capabilities = TenantCapability.Inventory)
+    /// <param name="pricesIncludeTax">
+    /// IVA policy: new businesses start with prices that include it (what a Mexican customer reads on a
+    /// menu); omitted, the settings keep IVA added on top, as every business sold before tax policies.
+    /// </param>
+    public TenantSettings(
+        Guid tenantId,
+        TenantCapability capabilities = TenantCapability.Inventory,
+        bool pricesIncludeTax = false)
     {
         TenantId = tenantId;
         Currency = "USD";
@@ -15,6 +23,9 @@ public class TenantSettings : BaseEntity
         AutoAcceptOrders = false;
         MaxConcurrentOrders = 50;
         Capabilities = capabilities;
+        PricesIncludeTax = pricesIncludeTax;
+        DefaultTaxRate = VatRate.GeneralPercent;
+        AutoCloseCounterSales = true;
     }
 
     public Guid TenantId { get; private set; }
@@ -24,6 +35,15 @@ public class TenantSettings : BaseEntity
     public int MaxConcurrentOrders { get; private set; }
     public TenantCapability Capabilities { get; private set; }
     public string? SettingsJson { get; private set; }
+
+    /// <summary>True when catalog prices already include IVA; false when IVA is added on top.</summary>
+    public bool PricesIncludeTax { get; private set; }
+    /// <summary>IVA rate in percent for products without their own: 16 in general, 8 in the border region.</summary>
+    public decimal DefaultTaxRate { get; private set; } = VatRate.GeneralPercent;
+    /// <summary>Counter sales close by themselves once fully paid (food with kitchen, once ready).</summary>
+    public bool AutoCloseCounterSales { get; private set; } = true;
+    /// <summary>When the owner finished or skipped the guided setup.</summary>
+    public DateTimeOffset? OnboardingCompletedAt { get; private set; }
 
     public Tenant Tenant { get; private set; } = null!;
 
@@ -38,6 +58,22 @@ public class TenantSettings : BaseEntity
     public void UpdateCapabilities(TenantCapability capabilities)
     {
         Capabilities = capabilities;
+    }
+
+    /// <summary>
+    /// Changes how future sales are priced and closed. Orders keep the policy they were sold with.
+    /// </summary>
+    public void UpdateSalesPolicy(bool pricesIncludeTax, decimal defaultTaxRate, bool autoCloseCounterSales)
+    {
+        DefaultTaxRate = VatRate.Of(defaultTaxRate).Percent;
+        PricesIncludeTax = pricesIncludeTax;
+        AutoCloseCounterSales = autoCloseCounterSales;
+    }
+
+    /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>
+    public void CompleteOnboarding(DateTimeOffset completedAt)
+    {
+        OnboardingCompletedAt ??= completedAt;
     }
 
     public bool HasCapability(TenantCapability capability)

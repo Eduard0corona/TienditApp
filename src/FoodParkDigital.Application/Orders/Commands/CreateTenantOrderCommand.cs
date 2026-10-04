@@ -112,12 +112,8 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             request.DefaultCountry,
             cancellationToken);
 
-        var tenantTimeZoneId = await _context.TenantSettings
-            .AsNoTracking()
-            .Where(x => x.TenantId == request.TenantId)
-            .Select(x => x.TimeZone)
-            .FirstOrDefaultAsync(cancellationToken);
-        var tenantZone = TenantDateTimeResolver.Resolve(tenantTimeZoneId);
+        var salesSettings = await TenantSalesSettings.ReadAsync(_context, request.TenantId, cancellationToken);
+        var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
         var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, tenantZone);
 
         var orderCountForTenant = await _context.Orders
@@ -140,7 +136,8 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             customerName: resolvedName,
             customerPhone: linkedCustomer.PhoneNormalized,
             customerNotes: request.CustomerNotes,
-            tableNumber: request.TableNumber);
+            tableNumber: request.TableNumber,
+            pricesIncludeTax: salesSettings.PricesIncludeTax);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
         var quantitiesByProduct = new Dictionary<Guid, int>();
 
@@ -165,7 +162,13 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             if (quantityError is not null)
                 return Result.Failure<OrderDto>(quantityError);
 
-            order.AddItem(product.Id, product.Name, itemDto.Quantity, product.PriceAmount, itemDto.Notes);
+            order.AddItem(
+                product.Id,
+                product.Name,
+                itemDto.Quantity,
+                product.PriceAmount,
+                itemDto.Notes,
+                product.GetVatRate(salesSettings.DefaultTaxRate));
 
             if (OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
                 checklistCandidates.Add((product, itemDto));

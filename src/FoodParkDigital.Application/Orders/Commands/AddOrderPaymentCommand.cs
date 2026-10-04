@@ -1,6 +1,7 @@
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -42,64 +43,48 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IMapper _mapper;
     private readonly IOrderCashService _orderCashService;
+    private readonly ICurrentUserService? _currentUserService;
 
     public AddOrderPaymentCommandHandler(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
         IMapper mapper,
-        IOrderCashService? orderCashService = null)
+        IOrderCashService? orderCashService = null,
+        ICurrentUserService? currentUserService = null)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
         _mapper = mapper;
         _orderCashService = orderCashService ?? NoOpOrderCashService.Instance;
+        _currentUserService = currentUserService;
     }
 
     public async Task<Result<OrderDto>> Handle(AddOrderPaymentCommand request, CancellationToken cancellationToken)
     {
         var order = await _context.Orders
+            .Include(o => o.Items)
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        if (order.Status == OrderStatus.Cancelled)
-            return Result.Failure<OrderDto>("No se pueden registrar pagos en una orden cancelada.");
+        var registrar = new OrderPaymentRegistrar(_context, _orderCashService, _dateTimeProvider);
+        var payment = await registrar.RegisterAsync(
+            order,
+            new OrderPaymentInput(
+                request.Amount,
+                request.Method,
+                request.InventoryLocationId,
+                request.EvidenceUrl,
+                request.Reference,
+                request.Notes),
+            cancellationToken);
+        if (payment.IsFailure)
+            return Result.Failure<OrderDto>(payment.Error!);
 
-        // The evidence is shown to staff as a link: it must be a file uploaded for this tenant.
-        if (!OrderUploadRules.IsOwnPaymentEvidence(request.EvidenceUrl, order.TenantId))
-            return Result.Failure<OrderDto>("La evidencia del pago debe subirse desde el sistema.");
-
-        Guid? inventoryLocationId = request.InventoryLocationId;
-        if (inventoryLocationId.HasValue)
-        {
-            var exists = await _context.InventoryLocations
-                .AnyAsync(
-                    x => x.Id == inventoryLocationId.Value
-                      && x.TenantId == order.TenantId
-                      && x.IsActive,
-                    cancellationToken);
-
-            if (!exists)
-                return Result.Failure<OrderDto>("La sucursal seleccionada no es valida.");
-        }
-        else
-        {
-            inventoryLocationId = await _context.InventoryLocations
-                .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
-                .Select(x => (Guid?)x.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
-        var payment = order.RegisterPayment(
-            amount: request.Amount,
-            method: request.Method,
-            // Stamped by the server: a client-provided date could rewrite already reported cuts.
-            paidAt: _dateTimeProvider.UtcNow,
-            inventoryLocationId: inventoryLocationId,
-            evidenceUrl: request.EvidenceUrl?.Trim(),
-            reference: request.Reference?.Trim(),
-            notes: request.Notes?.Trim());
-        await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);
+        // The payment that settles a counter sale also closes it (when the business keeps that policy).
+        var salesSettings = await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
+        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, order.TenantId, cancellationToken);
+        CounterSaleClosing.TryClose(order, salesSettings, capabilities, _currentUserService?.UserName);
 
         await _context.SaveChangesAsync(cancellationToken);
 

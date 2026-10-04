@@ -143,9 +143,10 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         if (!string.IsNullOrWhiteSpace(request.ContactPhone))
             tenant.Update(tenant.Name, tenant.ContactEmail, request.ContactPhone, tenant.LogoUrl);
 
-        // Create tenant settings with defaults
+        // Create tenant settings with defaults. A new business starts with prices that include IVA (what
+        // its customers read on a menu); the guided setup lets the owner change it before the first sale.
         var capabilities = TenantCapabilityDefaults.FromBusinessType(request.BusinessType);
-        var settings = new TenantSettings(tenant.Id, capabilities);
+        var settings = new TenantSettings(tenant.Id, capabilities, pricesIncludeTax: true);
 
         var publicGeneralCustomer = new Customer(
             tenantId: tenant.Id,

@@ -17,7 +17,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -337,6 +337,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsFeatured")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTaxExempt")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsTrackable")
@@ -1463,6 +1466,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasDefaultValue(0m);
 
+                    b.Property<bool>("PricesIncludeTax")
+                        .HasColumnType("bit");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -1528,6 +1534,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("IsTaxExempt")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
@@ -1545,6 +1554,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal>("TotalPrice")
                         .HasColumnType("decimal(18,2)");
@@ -2099,6 +2111,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("AutoAcceptOrders")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AutoCloseCounterSales")
+                        .HasColumnType("bit");
+
                     b.Property<int>("Capabilities")
                         .HasColumnType("int");
 
@@ -2107,8 +2122,17 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("nvarchar(3)");
 
+                    b.Property<decimal>("DefaultTaxRate")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<int>("MaxConcurrentOrders")
                         .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("OnboardingCompletedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("PricesIncludeTax")
+                        .HasColumnType("bit");
 
                     b.Property<string>("SettingsJson")
                         .HasColumnType("nvarchar(max)");

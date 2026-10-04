@@ -15,6 +15,8 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
         builder.Property(i => i.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(i => i.TotalPrice).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(i => i.Notes).HasMaxLength(300);
+        builder.Property(i => i.TaxRate).HasColumnType("decimal(5,2)");
+        builder.Ignore(i => i.VatRate);
 
         builder.HasIndex(i => i.OrderId);
     }

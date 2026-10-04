@@ -46,7 +46,8 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
         _context.Tenants.Add(tenant);
 
         var capabilities = TenantCapabilityDefaults.FromBusinessType(request.BusinessType);
-        var settings = new TenantSettings(tenant.Id, capabilities);
+        // New businesses start with prices that include IVA, like those that register themselves.
+        var settings = new TenantSettings(tenant.Id, capabilities, pricesIncludeTax: true);
         _context.TenantSettings.Add(settings);
 
         var publicGeneralCustomer = new Customer(
