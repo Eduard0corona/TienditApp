@@ -6,7 +6,7 @@ TienditApp (los proyectos conservan el nombre histórico `FoodParkDigital`) es u
 
 La decisión vigente es un monolito modular con Clean Architecture, DDD ligero y CQRS mediante MediatR:
 
-- Backend: ASP.NET Core/.NET 9, EF Core 9, SQL Server, ASP.NET Identity, JWT, refresh tokens, 2FA, FluentValidation, AutoMapper, SignalR y Serilog.
+- Backend: ASP.NET Core/.NET 10 (LTS), EF Core 10, SQL Server, ASP.NET Identity, JWT, refresh tokens, 2FA, FluentValidation, AutoMapper, SignalR y Serilog.
 - Frontend: React 19, TypeScript, Vite, React Router, Axios, React Hook Form y Bootstrap.
 - Pruebas: xUnit en proyectos de Domain y Application. No se encontraron proyectos de pruebas de WebApi, Infrastructure ni frontend.
 
@@ -14,7 +14,7 @@ Consulta [la documentación](docs/README.md) para distinguir estado actual, deci
 
 ## Inicio rápido
 
-Requisitos comprobados: .NET SDK 9 o posterior, Node.js/npm y SQL Server accesible. El workflow usa Node.js 20 y .NET 9; los proyectos de pruebas apuntan actualmente a `net10.0`, diferencia registrada como deuda.
+Requisitos comprobados: .NET SDK 10, Node.js/npm y SQL Server accesible. La API y las pruebas apuntan a `net10.0` (`Directory.Build.props`); los workflows usan Node.js 20 y .NET 10.
 
 ```powershell
 dotnet restore FoodParkDigital.sln

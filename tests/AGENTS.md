@@ -7,4 +7,4 @@
 - InMemory no demuestra semántica SQL Server; usa integración SQL Server para filtros, migraciones, rowversion, constraints y concurrencia.
 - Prueba autorización por rol, permiso y capability de forma independiente.
 - Mantén Domain.Tests para invariantes puras y Application.Tests para casos de uso; crea suites específicas cuando se añadan API/Infrastructure/frontend.
-- Reporta el SDK usado: producción apunta a `net9.0` y los tests actuales a `net10.0`.
+- Reporta el SDK usado: producción y tests apuntan a `net10.0` (`Directory.Build.props`).

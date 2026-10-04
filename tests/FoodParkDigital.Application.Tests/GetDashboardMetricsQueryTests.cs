@@ -108,16 +108,17 @@ public class GetDashboardMetricsQueryTests
             .ToQueryString();
         _output.WriteLine(sql);
 
-        // Global tenant filters must stay enabled for every tenant-scoped set in the query.
-        Assert.Matches(@"FROM \[Orders\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @__ef_filter__CurrentTenantId_\d+", sql);
-        Assert.Matches(@"FROM \[Products\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @__ef_filter__CurrentTenantId_\d+", sql);
+        // Global tenant filters must stay enabled for every tenant-scoped set in the query
+        // (EF Core 10 names the filter parameter @ef_filter__CurrentTenantId).
+        Assert.Matches(@"FROM \[Orders\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @ef_filter__CurrentTenantId\d*\b", sql);
+        Assert.Matches(@"FROM \[Products\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @ef_filter__CurrentTenantId\d*\b", sql);
 
         // Explicit predicate on the orders (the alias carrying the date range), bound to the current tenant.
         var ordersAlias = Regex.Match(sql, @"\[(\w+)\]\.\[CreatedAt\] >= @");
         Assert.True(ordersAlias.Success, "Orders date range predicate not found.");
         var explicitTenantPredicate = Regex.Match(
             sql,
-            $@"\[{ordersAlias.Groups[1].Value}\]\.\[TenantId\] = @(?<parameter>(?!__ef_filter__)\w+)");
+            $@"\[{ordersAlias.Groups[1].Value}\]\.\[TenantId\] = @(?<parameter>(?!ef_filter__)\w+)");
         Assert.True(explicitTenantPredicate.Success, "Explicit tenant predicate on orders not found.");
         Assert.Matches(
             new Regex(
