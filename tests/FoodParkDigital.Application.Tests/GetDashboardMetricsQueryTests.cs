@@ -60,6 +60,33 @@ public class GetDashboardMetricsQueryTests
     }
 
     [Fact]
+    public async Task Revenue_ShouldCountThePaymentsOfTheRange_WhateverTheOrderStatus()
+    {
+        await using var fixture = TestFixture.Create();
+        var tenant = await fixture.AddTenantAsync("tenant-a", TenantCapability.Retail);
+        var product = await fixture.AddProductAsync(tenant, "Producto", UnitType.Unit, 100m);
+        // Paid in full and delivered: 116.
+        await fixture.AddCompletedOrderAsync(tenant, OrderType.Retail, product, quantity: 1);
+        // Still open: 50 paid in the range, 20 the day before, 162 still owed.
+        var open = new Order(tenant.Id, null, Guid.NewGuid(), true, "ORD-900001", tenant.BusinessType, OrderType.Retail,
+            "Cliente", "5511111111", null, null);
+        open.AddItem(product.Id, product.Name, 2, product.PriceAmount);
+        open.RegisterPayment(20m, OrderPaymentMethod.Cash, OrderDate.AddDays(-2), null, null, null, null);
+        open.RegisterPayment(50m, OrderPaymentMethod.Card, OrderDate, null, null, null, null);
+        open.CreatedAt = OrderDate;
+        fixture.Context.Orders.Add(open);
+        await fixture.Context.SaveChangesAsync();
+
+        var metrics = await fixture.GetMetricsAsync(tenant);
+
+        Assert.Equal(166m, metrics.TotalRevenue);
+        Assert.Equal(2, metrics.PaidOrders);
+        Assert.Equal(83m, metrics.AverageOrderValue);
+        Assert.Equal(1, metrics.UnpaidOrders);
+        Assert.Equal(232m - 70m, metrics.OutstandingBalance);
+    }
+
+    [Fact]
     public async Task TopSellingItems_ShouldKeepInactiveAndDeletedProducts()
     {
         await using var fixture = TestFixture.Create();
@@ -186,6 +213,8 @@ public class GetDashboardMetricsQueryTests
                 customerNotes: null,
                 tableNumber: null);
             order.AddItem(product.Id, product.Name, quantity, product.PriceAmount);
+            // Paid in full: revenue counts registered payments.
+            order.RegisterPayment(order.Total, OrderPaymentMethod.Cash, OrderDate, null, null, null, null);
 
             var completedStatus = orderType == OrderType.Service ? OrderStatus.Completed : OrderStatus.Delivered;
             order.TransitionTo(completedStatus, OrderStateMachineFactory.Create(tenant.BusinessType, orderType), "test");

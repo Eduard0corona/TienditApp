@@ -66,6 +66,32 @@ public class OrderNotificationLabelsTests
         Assert.Equal(["ORD-000001", "En preparación"], parameters);
     }
 
+    [Fact]
+    public async Task CounterSaleClosedWhenPaid_ShouldNotMessageTheCustomer()
+    {
+        var tenantService = new FixedTenantService();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new InMemoryContext(options, tenantService);
+        var order = new Order(tenantService.TenantId, Guid.NewGuid(), null, true, "ORD-000001",
+            BusinessType.Retail, OrderType.Retail, "Karla", "+525511112222", null, null);
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+        var whatsApp = new RecordingWhatsAppService();
+
+        var handler = new OrderStatusChangedEventHandler(
+            context, new FixedUserService(), new NoOpOrderNotificationService(), whatsApp,
+            NullLogger<OrderStatusChangedEventHandler>.Instance);
+        await handler.Handle(
+            new OrderStatusChangedEvent(order.Id, tenantService.TenantId, OrderStatus.Confirmed, OrderStatus.Delivered, NotifyCustomer: false),
+            CancellationToken.None);
+
+        // The change is still audited; only the customer message is skipped.
+        Assert.Empty(whatsApp.Templates);
+        Assert.Single(await context.AuditLogs.ToListAsync());
+    }
+
     private sealed class InMemoryContext(DbContextOptions<ApplicationDbContext> options, ICurrentTenantService tenantService)
         : ApplicationDbContext(options, tenantService, new NoOpMediator())
     {

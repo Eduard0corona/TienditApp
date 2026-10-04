@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 
 namespace FoodParkDigital.Domain.Catalog.Entities;
@@ -33,7 +34,8 @@ public class Product : AuditableEntity, ITenantScoped
         TimeSpan? availableFromTime = null,
         TimeSpan? availableToTime = null,
         bool isTrackable = false,
-        bool notifyCustomer = false)
+        bool notifyCustomer = false,
+        bool isTaxExempt = false)
     {
         TenantId = tenantId;
         CategoryId = categoryId;
@@ -49,7 +51,7 @@ public class Product : AuditableEntity, ITenantScoped
         IsFeatured = isFeatured;
         Tags = tags;
         CompareAtPrice = compareAtPrice;
-        TaxRate = taxRate;
+        SetTax(taxRate, isTaxExempt);
         Calories = calories;
         Allergens = allergens;
         StockQuantity = stockQuantity;
@@ -79,7 +81,10 @@ public class Product : AuditableEntity, ITenantScoped
     public decimal PriceAmount { get; private set; }
     public string PriceCurrency { get; private set; } = "USD";
     public decimal? CompareAtPrice { get; private set; }
+    /// <summary>IVA rate in percent; null uses the business default rate.</summary>
     public decimal? TaxRate { get; private set; }
+    /// <summary>Exempt from IVA ("exento"), which an invoice tells apart from a 0 % rate.</summary>
+    public bool IsTaxExempt { get; private set; }
 
     // Media
     public string? ImageUrl { get; private set; }
@@ -130,7 +135,8 @@ public class Product : AuditableEntity, ITenantScoped
         TimeSpan? availableFromTime,
         TimeSpan? availableToTime,
         bool isTrackable,
-        bool notifyCustomer)
+        bool notifyCustomer,
+        bool isTaxExempt)
     {
         CategoryId = categoryId;
         Name = name;
@@ -144,7 +150,7 @@ public class Product : AuditableEntity, ITenantScoped
         IsFeatured = isFeatured;
         Tags = tags;
         CompareAtPrice = compareAtPrice;
-        TaxRate = taxRate;
+        SetTax(taxRate, isTaxExempt);
         Calories = calories;
         Allergens = allergens;
         StockQuantity = stockQuantity;
@@ -155,6 +161,18 @@ public class Product : AuditableEntity, ITenantScoped
         NotifyCustomer = notifyCustomer;
         SetAvailabilitySchedule(availableFromTime, availableToTime);
     }
+
+    private void SetTax(decimal? taxRate, bool isTaxExempt)
+    {
+        if (isTaxExempt && taxRate.HasValue)
+            throw new DomainException("Un producto exento de IVA no lleva tasa.");
+
+        TaxRate = taxRate.HasValue ? VatRate.Of(taxRate.Value).Percent : null;
+        IsTaxExempt = isTaxExempt;
+    }
+
+    /// <summary>IVA of the product when sold by a business whose default rate is <paramref name="defaultTaxRate"/>.</summary>
+    public VatRate GetVatRate(decimal defaultTaxRate) => VatRate.ForProduct(TaxRate, IsTaxExempt, defaultTaxRate);
 
     public void SetImage(string? imageUrl) => ImageUrl = imageUrl;
 

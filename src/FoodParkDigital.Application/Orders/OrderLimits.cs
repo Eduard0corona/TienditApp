@@ -12,6 +12,7 @@ public static class OrderLimits
     public const int MaxItemsPerOrder = 200;
     public const int MaxQuantityPerLine = 10_000;
     public const int MaxServicePiecesPerOrder = 500;
+    public const int MaxPaymentsPerSale = 10;
 
     /// <summary>
     /// Adds the line quantity to the running total of the product and returns an error when the

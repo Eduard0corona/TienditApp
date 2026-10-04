@@ -17,9 +17,14 @@ public class OrderDto
     public string? CustomerPhone { get; set; }
     public string? CustomerNotes { get; set; }
     public string? TableNumber { get; set; }
+    /// <summary>True when item prices include IVA; false when IVA was added on top.</summary>
+    public bool PricesIncludeTax { get; set; }
+    /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
+    /// <summary>IVA by rate, computed by the server from the items (see Order.GetTaxBreakdown).</summary>
+    public List<OrderTaxLineDto> TaxBreakdown { get; set; } = new();
     public decimal PaidAmount { get; set; }
     public decimal Balance { get; set; }
     public string? CancellationReason { get; set; }
@@ -43,6 +48,17 @@ public class OrderItemDto
     public decimal UnitPrice { get; set; }
     public decimal TotalPrice { get; set; }
     public string? Notes { get; set; }
+    public decimal TaxRate { get; set; }
+    public bool IsTaxExempt { get; set; }
+}
+
+public class OrderTaxLineDto
+{
+    public decimal RatePercent { get; set; }
+    public bool IsExempt { get; set; }
+    public decimal TaxableBase { get; set; }
+    public decimal TaxAmount { get; set; }
+    public decimal Total { get; set; }
 }
 
 public class OrderStatusHistoryDto
@@ -124,8 +140,14 @@ public class DashboardMetricsDto
     public int UniqueCustomers { get; set; }
     public int ActiveProducts { get; set; }
     public int ActiveServices { get; set; }
+    /// <summary>Payments registered in the range, whatever the status of their orders.</summary>
     public decimal TotalRevenue { get; set; }
+    /// <summary>Revenue divided by the orders that received those payments.</summary>
     public decimal AverageOrderValue { get; set; }
+    public int PaidOrders { get; set; }
+    /// <summary>Balance still owed by the orders of the range that are not cancelled.</summary>
+    public decimal OutstandingBalance { get; set; }
+    public int UnpaidOrders { get; set; }
     public Dictionary<string, int> OrdersByStatus { get; set; } = new();
     public List<TopSellingItemDto> TopSellingItems { get; set; } = new();
 }

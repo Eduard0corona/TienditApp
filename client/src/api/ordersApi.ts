@@ -16,6 +16,8 @@ export const ordersApi = {
     status?: OrderStatus;
     fromDate?: string;
     toDate?: string;
+    /** Folio, customer name or phone digits; searched on the server. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) =>

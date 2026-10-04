@@ -6,7 +6,9 @@ import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { customersApi } from '../../api/customersApi';
 import { useTenant } from '../../hooks/useTenant';
-import { ORDER_TAX_RATE_PERCENT, estimateOrderTotals } from '../../utils/orderTotals';
+import { useToast } from '../../hooks/useToast';
+import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
+import { formatMoney } from '../../utils/money';
 import { getApiErrorMessage } from '../../api/errors';
 import './OrdersCart.css';
 import type {
@@ -28,6 +30,8 @@ interface CartLine {
   unitPrice: number;
   quantity: number;
   isService: boolean;
+  ratePercent: number;
+  isExempt: boolean;
 }
 
 interface ServiceChecklistItem {
@@ -85,6 +89,9 @@ function buildPhoto(uploaded: UploadedFileDto): ServicePhotoItem {
 export default function OrdersCart() {
   const navigate = useNavigate();
   const { tenant } = useTenant();
+  const toast = useToast();
+  const pricesIncludeTax = tenant?.pricesIncludeTax ?? false;
+  const defaultTaxRate = tenant?.defaultTaxRate ?? 16;
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -278,6 +285,7 @@ export default function OrdersCart() {
         );
       }
 
+      const vat = resolveProductVat(product, defaultTaxRate);
       return [
         ...current,
         {
@@ -286,6 +294,8 @@ export default function OrdersCart() {
           unitPrice: product.priceAmount,
           quantity: 1,
           isService: isService(product),
+          ratePercent: vat.ratePercent,
+          isExempt: vat.isExempt,
         },
       ];
     });
@@ -315,8 +325,8 @@ export default function OrdersCart() {
     setCart((current) => current.filter((line) => line.productId !== productId));
   };
 
-  // Subtotal, tax and total as the API will compute them; the cart used to show the subtotal as "Total".
-  const totals = useMemo(() => estimateOrderTotals(cart), [cart]);
+  // Subtotal, IVA and total as the API will compute them, with the business IVA policy.
+  const totals = useMemo(() => estimateOrderTotals(cart, pricesIncludeTax), [cart, pricesIncludeTax]);
   const hasServiceItems = useMemo(() => cart.some((line) => line.isService), [cart]);
   const hasProductItems = useMemo(() => cart.some((line) => !line.isService), [cart]);
   const resolvedOrderType = useMemo(
@@ -436,7 +446,8 @@ export default function OrdersCart() {
 
     try {
       setSubmitting(true);
-      await ordersApi.create(payload);
+      const { data: order } = await ordersApi.create(payload);
+      toast.success(`Orden ${order.orderNumber} registrada.`);
       navigate('/orders');
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo generar la orden.'));
@@ -452,7 +463,7 @@ export default function OrdersCart() {
         title="Subiendo imagenes"
         description={uploadingMessage}
       />
-      <PageTitle title="Generar Orden" subtitle="Carrito" />
+      <PageTitle title="Orden detallada" subtitle="Pedidos" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">
@@ -509,8 +520,8 @@ export default function OrdersCart() {
                         </div>
                         <div className="text-muted small mb-2">{product.description || '-'}</div>
                         <div className="mt-auto d-flex justify-content-between align-items-center">
-                          <span className="fw-semibold">
-                            ${product.priceAmount.toFixed(2)} {product.priceCurrency}
+                          <span className="fw-semibold ta-money">
+                            {formatMoney(product.priceAmount)}
                           </span>
                           <span className="text-muted small">Click para agregar</span>
                         </div>
@@ -994,7 +1005,7 @@ export default function OrdersCart() {
                               />
                             </td>
                             <td className="text-end">
-                              ${(line.unitPrice * line.quantity).toFixed(2)}
+                              {formatMoney(line.unitPrice * line.quantity)}
                             </td>
                             <td className="text-end">
                               <button
@@ -1011,17 +1022,21 @@ export default function OrdersCart() {
                     </table>
                   </div>
 
-                  <div className="d-flex justify-content-between align-items-center">
-                    <span>Subtotal</span>
-                    <span>${totals.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <span>IVA ({ORDER_TAX_RATE_PERCENT}%)</span>
-                    <span>${totals.tax.toFixed(2)}</span>
-                  </div>
+                  {!pricesIncludeTax && (
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span>Subtotal</span>
+                      <span className="ta-money">{formatMoney(totals.subtotal)}</span>
+                    </div>
+                  )}
+                  {totals.breakdown.filter((line) => line.taxAmount > 0).map((line) => (
+                    <div className="d-flex justify-content-between align-items-center" key={`${line.ratePercent}-${line.isExempt}`}>
+                      <span>{pricesIncludeTax ? `Incluye ${getVatLabel(line)}` : getVatLabel(line)}</span>
+                      <span className="ta-money">{formatMoney(line.taxAmount)}</span>
+                    </div>
+                  ))}
                   <div className="d-flex justify-content-between align-items-center">
                     <span className="fw-semibold">Total</span>
-                    <span className="fw-bold">${totals.total.toFixed(2)}</span>
+                    <span className="fw-bold ta-money">{formatMoney(totals.total)}</span>
                   </div>
                   <small className="text-muted d-block mb-3">
                     El total definitivo lo calcula el sistema al generar la orden.
@@ -1036,7 +1051,7 @@ export default function OrdersCart() {
                   disabled={submitting}
                   onClick={handleCreateOrder}
                 >
-                  {submitting ? 'Generando...' : 'Generar Orden'}
+                  {submitting ? 'Registrando...' : 'Registrar orden'}
                 </button>
                 <Link to="/orders" className="btn btn-light">
                   Cancelar

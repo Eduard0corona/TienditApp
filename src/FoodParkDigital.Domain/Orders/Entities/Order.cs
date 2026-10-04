@@ -1,8 +1,10 @@
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
 using FoodParkDigital.Domain.Orders.StateMachines;
+using FoodParkDigital.Domain.Orders.Taxes;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Domain.Orders.Entities;
@@ -27,7 +29,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string customerName,
         string? customerPhone,
         string? customerNotes,
-        string? tableNumber)
+        string? tableNumber,
+        bool pricesIncludeTax = false)
     {
         TenantId = tenantId;
         CustomerUserId = customerUserId;
@@ -49,6 +52,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         CustomerPhone = customerPhone;
         CustomerNotes = customerNotes;
         TableNumber = tableNumber;
+        // The business policy at the time of the sale: later changes to it never alter this order.
+        PricesIncludeTax = pricesIncludeTax;
 
         var stateMachine = OrderStateMachineFactory.Create(businessType, orderType);
         Status = stateMachine.GetInitialStatus();
@@ -68,6 +73,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? CustomerPhone { get; private set; }
     public string? CustomerNotes { get; private set; }
     public string? TableNumber { get; private set; }
+    /// <summary>True when item prices already include IVA; false when IVA is added on top of them.</summary>
+    public bool PricesIncludeTax { get; private set; }
+    /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }
     public decimal Total { get; private set; }
@@ -82,12 +90,19 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
     public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
 
-    public void AddItem(Guid productId, string productName, int quantity, decimal unitPrice, string? notes = null)
+    /// <param name="vatRate">IVA of the line; the general rate (16 %) when omitted.</param>
+    public void AddItem(
+        Guid productId,
+        string productName,
+        int quantity,
+        decimal unitPrice,
+        string? notes = null,
+        VatRate? vatRate = null)
     {
         if (Status != OrderStatus.Pending)
             throw new DomainException("Cannot add items to an order that is not pending.");
 
-        var item = new OrderItem(Id, productId, productName, quantity, unitPrice, notes);
+        var item = new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General);
         _items.Add(item);
         RecalculateTotals();
     }
@@ -177,12 +192,51 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     }
 
     public void TransitionTo(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
+        => Transition(newStatus, stateMachine, performedBy, notifyCustomer: true);
+
+    /// <summary>
+    /// Closes a fully paid counter sale: the customer leaves with what they bought, so nobody has to mark
+    /// it delivered by hand. Food that goes through the kitchen closes only once it is ready, and a service
+    /// only when none of its tracked pieces is still being worked on (those close when their pieces are
+    /// completed). The customer is not messaged about it: they are at the counter.
+    /// </summary>
+    /// <returns>True when the order was closed.</returns>
+    public bool CloseIfPaidCounterSale(IOrderStateMachine stateMachine, bool waitsForKitchen, string? performedBy)
+    {
+        if (!CreatedByBusiness || _items.Count == 0 || Balance > 0)
+            return false;
+
+        OrderStatus closedStatus;
+        if (OrderType == OrderType.Service)
+        {
+            if (_servicePieces.Any(piece => piece.IsTrackable
+                    && piece.Status is ServiceOrderPieceStatus.Accepted or ServiceOrderPieceStatus.InProgress))
+                return false;
+
+            closedStatus = OrderStatus.Completed;
+        }
+        else
+        {
+            if (waitsForKitchen && Status != OrderStatus.Ready)
+                return false;
+
+            closedStatus = OrderStatus.Delivered;
+        }
+
+        if (!stateMachine.GetAllowedTransitions(Status).Contains(closedStatus))
+            return false;
+
+        Transition(closedStatus, stateMachine, performedBy, notifyCustomer: false);
+        return true;
+    }
+
+    private void Transition(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy, bool notifyCustomer)
     {
         stateMachine.ValidateTransition(Status, newStatus);
         var previousStatus = Status;
         Status = newStatus;
         _statusHistory.Add(new OrderStatusHistory(Id, previousStatus, newStatus, performedBy));
-        AddDomainEvent(new OrderStatusChangedEvent(Id, TenantId, previousStatus, newStatus));
+        AddDomainEvent(new OrderStatusChangedEvent(Id, TenantId, previousStatus, newStatus, notifyCustomer));
     }
 
     public void Cancel(IOrderStateMachine stateMachine, string? performedBy, string? reason = null)
@@ -252,10 +306,17 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         return payment;
     }
 
+    /// <summary>IVA by rate, computed from the items and the policy the order was sold with.</summary>
+    public IReadOnlyList<OrderTaxLine> GetTaxBreakdown()
+        => OrderTaxCalculator.Calculate(
+            PricesIncludeTax,
+            _items.Select(item => new TaxableAmount(item.TotalPrice, item.VatRate)));
+
     private void RecalculateTotals()
     {
-        SubTotal = _items.Sum(i => i.TotalPrice);
-        Tax = Math.Round(SubTotal * 0.16m, 2);
+        var breakdown = GetTaxBreakdown();
+        SubTotal = breakdown.Sum(line => line.TaxableBase);
+        Tax = breakdown.Sum(line => line.TaxAmount);
         Total = SubTotal + Tax;
         if (PaidAmount > Total)
             PaidAmount = Total;

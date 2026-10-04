@@ -55,6 +55,10 @@ public class OrderStatusChangedEventHandler : INotificationHandler<OrderStatusCh
             notification.PreviousStatus,
             notification.NewStatus);
 
+        // A counter sale closed when paid: the customer is at the counter and needs no message.
+        if (!notification.NotifyCustomer)
+            return;
+
         // Send WhatsApp notification
         try
         {

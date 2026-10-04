@@ -157,6 +157,14 @@ export interface TenantProfileDto {
   logoImages?: LogoImageUrlsDto;
   capabilities: TenantCapability;
   createdAt: string;
+  /** True when catalog prices already include IVA; false when IVA is added on top. */
+  pricesIncludeTax: boolean;
+  /** IVA rate in percent for products without their own (16, 8 or 0). */
+  defaultTaxRate: number;
+  /** Counter sales close by themselves once fully paid. */
+  autoCloseCounterSales: boolean;
+  /** When the owner finished or skipped the guided setup; null while it is pending. */
+  onboardingCompletedAt?: string | null;
   rfc?: string;
   legalName?: string;
   industry?: string;
@@ -169,6 +177,46 @@ export interface TenantProfileDto {
   city?: string;
   state?: string;
   country?: string;
+}
+
+export interface TenantSalesPolicyDto {
+  pricesIncludeTax: boolean;
+  defaultTaxRate: number;
+  autoCloseCounterSales: boolean;
+}
+
+export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
+
+export interface TenantSetupStepDto {
+  key: TenantSetupStepKey;
+  done: boolean;
+}
+
+export interface StarterCatalogDto {
+  id: string;
+  name: string;
+  description: string;
+  businessType: BusinessType;
+  productCount: number;
+  categories: string[];
+}
+
+export interface TenantSetupDto {
+  businessType: BusinessType;
+  capabilities: TenantCapability;
+  pricesIncludeTax: boolean;
+  defaultTaxRate: number;
+  completedAt?: string | null;
+  hasProducts: boolean;
+  steps: TenantSetupStepDto[];
+  starterCatalogs: StarterCatalogDto[];
+}
+
+export interface InstallStarterCatalogResultDto {
+  templateId: string;
+  templateName: string;
+  categoriesCreated: number;
+  productsCreated: number;
 }
 
 export interface UpdateTenantRequest {
@@ -335,7 +383,9 @@ export interface ProductDto {
   priceAmount: number;
   priceCurrency: string;
   compareAtPrice?: number;
-  taxRate?: number;
+  /** IVA rate in percent; empty uses the business default. */
+  taxRate?: number | null;
+  isTaxExempt: boolean;
   hasDiscount: boolean;
   imageUrl?: string;
   images?: ProductImageUrlsDto;
@@ -407,7 +457,8 @@ export interface CreateProductRequest {
   isFeatured: boolean;
   tags?: string;
   compareAtPrice?: number;
-  taxRate?: number;
+  taxRate?: number | null;
+  isTaxExempt?: boolean;
   calories?: number;
   allergens?: string;
   stockQuantity?: number;
@@ -1072,6 +1123,18 @@ export interface OrderItemDto {
   unitPrice: number;
   totalPrice: number;
   notes?: string;
+  /** IVA rate in percent the line was sold with (0 when exempt). */
+  taxRate: number;
+  isTaxExempt: boolean;
+}
+
+/** IVA of the lines of one rate, as computed by the server. */
+export interface OrderTaxLineDto {
+  ratePercent: number;
+  isExempt: boolean;
+  taxableBase: number;
+  taxAmount: number;
+  total: number;
 }
 
 export interface OrderStatusHistoryDto {
@@ -1162,9 +1225,13 @@ export interface OrderDto {
   customerPhone?: string;
   customerNotes?: string;
   tableNumber?: string;
+  /** True when item prices included IVA; false when IVA was added on top. */
+  pricesIncludeTax: boolean;
+  /** Taxable base: item amounts without IVA. */
   subTotal: number;
   tax: number;
   total: number;
+  taxBreakdown: OrderTaxLineDto[];
   paidAmount: number;
   balance: number;
   cancellationReason?: string;
@@ -1193,6 +1260,19 @@ export interface CreateOrderRequest {
   orderType?: OrderType;
   serviceDetail?: CreateServiceOrderDetailRequest;
   items: CreateOrderItemRequest[];
+  /** Payments taken with the sale: stored with the order or not at all. */
+  payments?: CreateOrderPaymentRequest[];
+  /** Total shown to the customer; the API rejects the sale if a price changed meanwhile. */
+  expectedTotal?: number;
+}
+
+export interface CreateOrderPaymentRequest {
+  amount: number;
+  method: OrderPaymentMethod;
+  inventoryLocationId?: string;
+  evidenceUrl?: string;
+  reference?: string;
+  notes?: string;
 }
 
 export interface CreateServiceOrderPieceRequest {
@@ -1257,8 +1337,14 @@ export interface DashboardMetricsDto {
   uniqueCustomers: number;
   activeProducts: number;
   activeServices: number;
+  /** Payments registered in the range, whatever the status of their orders. */
   totalRevenue: number;
+  /** Revenue divided by the orders that received those payments. */
   averageOrderValue: number;
+  paidOrders: number;
+  /** Balance still owed by the orders of the range that are not cancelled. */
+  outstandingBalance: number;
+  unpaidOrders: number;
   ordersByStatus: Record<string, number>;
   topSellingItems: TopSellingItemDto[];
 }

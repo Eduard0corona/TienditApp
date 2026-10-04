@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
-import UploadLoadingModal from '../../components/common/UploadLoadingModal';
+import StatusChip from '../../components/common/StatusChip';
+import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
+import SaleTicket from '../../components/sales/SaleTicket';
 import { ordersApi } from '../../api/ordersApi';
-import { inventoryApi } from '../../api/inventoryApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
-import type { InventoryLocationDto, OrderDto, OrderPaymentMethod, OrderStatus, OrderType, PaginatedList } from '../../types';
+import { useConfirm } from '../../hooks/useConfirm';
+import { useToast } from '../../hooks/useToast';
+import type { OrderDto, OrderStatus, OrderType, PaginatedList } from '../../types';
 import {
-  OrderPaymentMethod as OrderPaymentMethodConst,
   OrderStatus as OrderStatusConst,
   OrderType as OrderTypeConst,
 } from '../../types';
 import { isSafeFileUrl } from '../../utils/safeUrl';
 import { getAccess } from '../../utils/access';
+import { formatMoney } from '../../utils/money';
+import { getVatLabel } from '../../utils/orderTotals';
+import { buildTicketText, buildWhatsAppTicketUrl, printTicket } from '../../utils/ticket';
 import {
   ORDER_TYPE_LABELS,
   SERVICE_PIECE_STATUS_LABELS,
@@ -41,18 +46,6 @@ const SERVICE_PIECE_STATUS_OPTIONS = ([0, 1, 2, 99] as const).map((value) => ({
   value,
   label: SERVICE_PIECE_STATUS_LABELS[value],
 }));
-
-const STATUS_BADGE_CLASS: Record<number, string> = {
-  0: 'bg-warning',
-  1: 'bg-info',
-  2: 'bg-primary',
-  3: 'bg-secondary',
-  4: 'bg-info',
-  5: 'bg-primary',
-  6: 'bg-success',
-  7: 'bg-success',
-  99: 'bg-danger',
-};
 
 const COLUMNS = [
   { header: 'Orden' },
@@ -108,6 +101,9 @@ function safeParseArray<T>(raw?: string): T[] {
 
 export default function OrdersList() {
   const today = getTodayInputDate();
+  const [searchParams] = useSearchParams();
+  // A search from the global search (Ctrl K) or a link looks in every date, not only today.
+  const initialSearch = searchParams.get('search')?.trim() ?? '';
   const [data, setData] = useState<PaginatedList<OrderDto>>({
     items: [],
     pageNumber: 1,
@@ -120,27 +116,24 @@ export default function OrdersList() {
   const [error, setError] = useState('');
   const [selectedOrderType, setSelectedOrderType] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
-  const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(today);
+  const [fromDate, setFromDate] = useState(initialSearch ? '' : today);
+  const [toDate, setToDate] = useState(initialSearch ? '' : today);
+  const [search, setSearch] = useState(initialSearch);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderDto | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<OrderPaymentMethod>(OrderPaymentMethodConst.Cash);
-  const [paymentLocationId, setPaymentLocationId] = useState('');
-  const [paymentEvidenceUrl, setPaymentEvidenceUrl] = useState('');
-  const [paymentEvidenceName, setPaymentEvidenceName] = useState('');
-  const [paymentUploadingEvidence, setPaymentUploadingEvidence] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
-  const [locations, setLocations] = useState<InventoryLocationDto[]>([]);
+  const [paidReceipt, setPaidReceipt] = useState<{ order: OrderDto; change: number; cashReceived: number } | null>(null);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
   const { user } = useAuth();
-  const { capabilities } = useTenant();
+  const { tenant, capabilities } = useTenant();
+  const { prompt } = useConfirm();
+  const toast = useToast();
   // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
   // roles can read orders but move food orders from the kitchen board.
   const canSell = getAccess(user, capabilities).sell;
@@ -176,34 +169,6 @@ export default function OrdersList() {
       .map((item) => (typeof item === 'string' ? { url: item } : item))
       .filter((item) => isSafeFileUrl(item.url));
   }, [selectedOrder]);
-  const locationNameById = useMemo(
-    () => new Map(locations.map((location) => [location.id, location.name])),
-    [locations],
-  );
-  const paymentSummary = useMemo(() => {
-    if (!paymentOrder) {
-      return {
-        pendingBefore: 0,
-        paidBefore: 0,
-        total: 0,
-        amountToSettle: 0,
-        pendingAfter: 0,
-      };
-    }
-
-    const parsedAmount = Number(paymentAmount);
-    const amount = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
-    const pendingBefore = Number(paymentOrder.balance.toFixed(2));
-
-    return {
-      total: Number(paymentOrder.total.toFixed(2)),
-      paidBefore: Number(paymentOrder.paidAmount.toFixed(2)),
-      pendingBefore,
-      amountToSettle: pendingBefore,
-      pendingAfter: Number(Math.max(0, pendingBefore - amount).toFixed(2)),
-    };
-  }, [paymentAmount, paymentOrder]);
-
   const loadOrders = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -213,6 +178,7 @@ export default function OrdersList() {
         status?: OrderStatus;
         fromDate?: string;
         toDate?: string;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -224,15 +190,16 @@ export default function OrdersList() {
       if (selectedStatus !== '') params.status = Number(selectedStatus) as OrderStatus;
       if (fromDate) params.fromDate = new Date(`${fromDate}T00:00:00`).toISOString();
       if (toDate) params.toDate = new Date(`${toDate}T23:59:59`).toISOString();
+      if (search) params.search = search;
 
       const { data: response } = await ordersApi.getAll(params);
       setData(response);
-    } catch {
-      setError('Error al cargar las órdenes.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'No se pudieron cargar los pedidos.'));
     } finally {
       setLoading(false);
     }
-  }, [fromDate, pageNumber, pageSize, selectedOrderType, selectedStatus, toDate]);
+  }, [fromDate, pageNumber, pageSize, search, selectedOrderType, selectedStatus, toDate]);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     const { data: order } = await ordersApi.getById(orderId);
@@ -242,21 +209,6 @@ export default function OrdersList() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
-
-  useEffect(() => {
-    // Branches are only used to register payments.
-    if (!canSell) return;
-    const loadLocations = async () => {
-      try {
-        const { data } = await inventoryApi.getLocations({ isActive: true });
-        setLocations(data);
-      } catch {
-        setLocations([]);
-      }
-    };
-
-    void loadLocations();
-  }, [canSell]);
 
   useEffect(() => {
     const createdOff = onOrderCreated((payload) => {
@@ -281,40 +233,13 @@ export default function OrdersList() {
 
   const openPaymentModal = (order: OrderDto) => {
     setPaymentOrder(order);
-    setPaymentAmount(order.balance.toFixed(2));
-    setPaymentMethod(OrderPaymentMethodConst.Cash);
-    setPaymentLocationId('');
-    setPaymentEvidenceUrl('');
-    setPaymentEvidenceName('');
     setPaymentError('');
   };
 
   const closePaymentModal = () => {
-    if (paymentSubmitting || paymentUploadingEvidence) return;
+    if (paymentSubmitting) return;
     setPaymentOrder(null);
-    setPaymentAmount('');
-    setPaymentMethod(OrderPaymentMethodConst.Cash);
-    setPaymentLocationId('');
-    setPaymentEvidenceUrl('');
-    setPaymentEvidenceName('');
     setPaymentError('');
-  };
-
-  const handleUploadPaymentEvidence = async (file: File | undefined) => {
-    if (!file) return;
-
-    setPaymentError('');
-    setPaymentUploadingEvidence(true);
-    try {
-      const { data } = await ordersApi.uploadPaymentEvidence(file);
-      setPaymentEvidenceUrl(data.url);
-      setPaymentEvidenceName(data.fileName);
-    } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'No se pudo subir el comprobante.');
-      setPaymentError(msg);
-    } finally {
-      setPaymentUploadingEvidence(false);
-    }
   };
 
   const handleStatusChange = async (order: OrderDto, newStatus: OrderStatus) => {
@@ -333,65 +258,62 @@ export default function OrdersList() {
 
   const handleCancelOrder = async (order: OrderDto) => {
     if (statusSubmitting) return;
-    const reason = window.prompt(`Motivo de la cancelación de ${order.orderNumber} (opcional):`);
+    const reason = await prompt({
+      title: `Cancelar el pedido ${order.orderNumber}`,
+      message: `El pedido de ${order.customerName} por ${formatMoney(order.total)} quedará cancelado y saldrá de la cocina o del taller.`,
+      inputLabel: 'Motivo (opcional)',
+      placeholder: 'Ej. el cliente ya no lo quiso',
+      maxLength: 500,
+      confirmLabel: 'Cancelar pedido',
+      cancelLabel: 'No cancelar',
+      danger: true,
+    });
     if (reason === null) return;
 
     setStatusSubmitting(true);
     setStatusError('');
     try {
-      await ordersApi.cancel(order.id, reason.trim() || undefined);
+      await ordersApi.cancel(order.id, reason || undefined);
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
+      toast.success(`Pedido ${order.orderNumber} cancelado.`);
     } catch (err: unknown) {
-      setStatusError(getApiErrorMessage(err, 'No se pudo cancelar la orden.'));
+      setStatusError(getApiErrorMessage(err, 'No se pudo cancelar el pedido.'));
     } finally {
       setStatusSubmitting(false);
     }
   };
 
-  const handleAddPayment = async () => {
+  // Payments are registered one by one (a mixed payment is several calls); the server closes the sale
+  // with the payment that settles it.
+  const handleAddPayment = async (charge: ChargeResult) => {
     if (!paymentOrder || paymentSubmitting) return;
-
-    const amount = Number(paymentAmount);
-    if (!/^\d+(\.\d{1,2})?$/.test(paymentAmount.trim()) || amount <= 0) {
-      setPaymentError('Monto de pago invalido: usa un número mayor a 0 con máximo 2 decimales.');
-      return;
-    }
-
-    if (amount > paymentOrder.balance) {
-      setPaymentError('El monto no puede ser mayor al saldo pendiente.');
-      return;
-    }
-
-    if (!Object.values(OrderPaymentMethodConst).includes(paymentMethod)) {
-      setPaymentError('Metodo de pago invalido.');
-      return;
-    }
 
     setPaymentSubmitting(true);
     setPaymentError('');
-
+    let updated: OrderDto | null = null;
     try {
-      await ordersApi.addPayment(paymentOrder.id, {
-        amount,
-        method: paymentMethod,
-        inventoryLocationId: paymentLocationId || undefined,
-        evidenceUrl: paymentEvidenceUrl || undefined,
-      });
-      await loadOrders();
-
-      if (selectedOrder?.id === paymentOrder.id) {
-        await refreshSelectedOrder(paymentOrder.id);
+      for (const payment of charge.payments) {
+        const { data } = await ordersApi.addPayment(paymentOrder.id, {
+          amount: payment.amount,
+          method: payment.method,
+          reference: payment.reference,
+          evidenceUrl: payment.evidenceUrl,
+        });
+        updated = data;
       }
-
       setPaymentOrder(null);
-      setPaymentAmount('');
-      setPaymentMethod(OrderPaymentMethodConst.Cash);
-      setPaymentLocationId('');
-      setPaymentEvidenceUrl('');
-      setPaymentEvidenceName('');
-      setPaymentError('');
+      if (updated) {
+        setPaidReceipt({ order: updated, change: charge.change, cashReceived: charge.cashReceived });
+        if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
+      }
+      await loadOrders();
     } catch (err: unknown) {
       setPaymentError(getApiErrorMessage(err, 'No se pudo registrar el pago.'));
+      // Earlier payments of a mixed charge may already be saved: show the order as it is now.
+      if (updated) {
+        setPaymentOrder(updated);
+        await loadOrders();
+      }
     } finally {
       setPaymentSubmitting(false);
     }
@@ -419,12 +341,7 @@ export default function OrdersList() {
 
   return (
     <>
-      <UploadLoadingModal
-        show={paymentUploadingEvidence}
-        title="Subiendo comprobante"
-        description="Estamos cargando la evidencia de pago."
-      />
-      <PageTitle title="Órdenes" subtitle="Operación" />
+      <PageTitle title="Pedidos" subtitle="Operación diaria" />
 
       <div className="row">
         <div className="col-12">
@@ -507,9 +424,9 @@ export default function OrdersList() {
                       Limpiar filtros
                     </button>
                     {canSell && (
-                      <Link to="/orders/cart" className="btn btn-primary btn-sm">
-                        <i className="ri-add-line me-1"></i>
-                        Generar Orden
+                      <Link to="/sell" className="btn btn-primary btn-sm">
+                        <i className="ri-add-line me-1" aria-hidden="true"></i>
+                        Nueva venta
                       </Link>
                     )}
                   </div>
@@ -535,12 +452,9 @@ export default function OrdersList() {
                 columns={COLUMNS}
                 keyExtractor={(order) => order.id}
                 loading={loading}
-                emptyMessage="No hay órdenes registradas."
-                searchFilter={(order, search) =>
-                  order.orderNumber.toLowerCase().includes(search) ||
-                  order.customerName.toLowerCase().includes(search) ||
-                  (order.customerPhone || '').toLowerCase().includes(search)
-                }
+                emptyMessage={search ? 'No hay pedidos que coincidan con la búsqueda.' : 'No hay pedidos en estas fechas.'}
+                searchPlaceholder="Folio, cliente o teléfono"
+                initialSearch={initialSearch}
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -548,6 +462,10 @@ export default function OrdersList() {
                   onPageChange: setPageNumber,
                   onPageSizeChange: (size) => {
                     setPageSize(size);
+                    setPageNumber(1);
+                  },
+                  onSearchChange: (term) => {
+                    setSearch(term);
                     setPageNumber(1);
                   },
                 }}
@@ -577,27 +495,24 @@ export default function OrdersList() {
                       {order.customerPhone && <small className="text-muted">{order.customerPhone}</small>}
                     </td>
                     <td className="text-center">
-                      <span className={`badge ${STATUS_BADGE_CLASS[order.status] ?? 'bg-secondary'}`}>
-                        {getStatusLabel(order.status)}
-                      </span>
+                      <StatusChip status={order.status} />
                     </td>
                     <td className="text-center">{toLocalDateTime(order.createdAt)}</td>
                     <td className="text-end fw-semibold">
-                      <div>${order.total.toFixed(2)}</div>
+                      <div className="ta-money">{formatMoney(order.total)}</div>
                       <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>
-                        Saldo: ${order.balance.toFixed(2)}
+                        {order.balance > 0 ? `Por cobrar ${formatMoney(order.balance)}` : 'Pagado'}
                       </small>
                     </td>
                     <td className="text-center">
-                      {canSell ? (
+                      {canSell && order.balance > 0 && order.status !== OrderStatusConst.Cancelled ? (
                         <div className="d-flex justify-content-center">
                           <button
                             type="button"
                             className="btn btn-sm btn-soft-success"
-                            disabled={order.balance <= 0 || order.status === 99}
                             onClick={() => openPaymentModal(order)}
                           >
-                            Registrar pago
+                            Cobrar
                           </button>
                         </div>
                       ) : (
@@ -628,7 +543,7 @@ export default function OrdersList() {
         centered
       >
         <Modal.Header closeButton>
-          <Modal.Title>Detalle de Orden</Modal.Title>
+          <Modal.Title>Pedido {selectedOrder?.orderNumber}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedOrder && (
@@ -642,19 +557,34 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
                 </div>
                 <div className="col-md-6">
-                  <p className="mb-1"><strong>Estado:</strong> {getStatusLabel(selectedOrder.status)}</p>
+                  <p className="mb-1"><strong>Estado:</strong> <StatusChip status={selectedOrder.status} /></p>
                   <p className="mb-1"><strong>Fecha:</strong> {toLocalDateTime(selectedOrder.createdAt)}</p>
-                  <p className="mb-1"><strong>Items:</strong> {selectedOrderTotalItems}</p>
-                  <p className="mb-1"><strong>Total:</strong> ${selectedOrder.total.toFixed(2)}</p>
-                  <p className="mb-1"><strong>Pagado:</strong> ${selectedOrder.paidAmount.toFixed(2)}</p>
-                  <p className="mb-1"><strong>Saldo:</strong> ${selectedOrder.balance.toFixed(2)}</p>
+                  <p className="mb-1"><strong>Artículos:</strong> {selectedOrderTotalItems}</p>
+                  <p className="mb-1"><strong>Total:</strong> <span className="ta-money">{formatMoney(selectedOrder.total)}</span></p>
+                  {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (
+                    <p className="mb-1 small text-muted" key={`${line.ratePercent}-${line.isExempt}`}>
+                      {selectedOrder.pricesIncludeTax ? 'Incluye ' : ''}{getVatLabel(line)}: {formatMoney(line.taxAmount)}
+                    </p>
+                  ))}
+                  <p className="mb-1"><strong>Pagado:</strong> <span className="ta-money">{formatMoney(selectedOrder.paidAmount)}</span></p>
+                  <p className="mb-1"><strong>Por cobrar:</strong> <span className="ta-money">{formatMoney(selectedOrder.balance)}</span></p>
                 </div>
               </div>
 
-              {canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel) && (
+              {canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel || selectedOrder.balance > 0) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
+                    {selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-success"
+                        disabled={statusSubmitting}
+                        onClick={() => openPaymentModal(selectedOrder)}
+                      >
+                        Cobrar {formatMoney(selectedOrder.balance)}
+                      </button>
+                    )}
                     {selectedOrderStatusActions.map((status) => (
                       <button
                         key={status}
@@ -673,13 +603,13 @@ export default function OrdersList() {
                         disabled={statusSubmitting}
                         onClick={() => void handleCancelOrder(selectedOrder)}
                       >
-                        Cancelar orden
+                        Cancelar pedido
                       </button>
                     )}
                   </div>
                   {!selectedOrder.canCancel && selectedOrder.paidAmount > 0 && (
                     <small className="text-muted d-block mt-2">
-                      La orden tiene pagos registrados: no se puede cancelar hasta registrar el reembolso.
+                      El pedido tiene pagos registrados: no se puede cancelar hasta que existan los reembolsos.
                     </small>
                   )}
                   {statusError && <div className="alert alert-danger mt-2 mb-0 py-2">{statusError}</div>}
@@ -693,8 +623,8 @@ export default function OrdersList() {
                     <tr>
                       <th>Producto</th>
                       <th className="text-center">Cantidad</th>
-                      <th className="text-end">Precio Unit.</th>
-                      <th className="text-end">Total</th>
+                      <th className="text-end">Precio</th>
+                      <th className="text-end">Importe</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -705,8 +635,8 @@ export default function OrdersList() {
                           {item.notes && <div className="text-muted small">Nota: {item.notes}</div>}
                         </td>
                         <td className="text-center">{item.quantity}</td>
-                        <td className="text-end">${item.unitPrice.toFixed(2)}</td>
-                        <td className="text-end">${item.totalPrice.toFixed(2)}</td>
+                        <td className="text-end">{formatMoney(item.unitPrice)}</td>
+                        <td className="text-end">{formatMoney(item.totalPrice)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -855,9 +785,9 @@ export default function OrdersList() {
                       <thead>
                         <tr>
                           <th>Fecha</th>
-                          <th>Metodo</th>
-                          <th>Sucursal</th>
-                          <th>Evidencia</th>
+                          <th>Forma de pago</th>
+                          <th>Referencia</th>
+                          <th>Comprobante</th>
                           <th className="text-end">Monto</th>
                         </tr>
                       </thead>
@@ -866,7 +796,7 @@ export default function OrdersList() {
                           <tr key={payment.id}>
                             <td>{toLocalDateTime(payment.paidAt)}</td>
                             <td>{getPaymentMethodLabel(payment.method)}</td>
-                            <td>{payment.inventoryLocationId ? (locationNameById.get(payment.inventoryLocationId) || 'Sucursal') : '-'}</td>
+                            <td>{payment.reference || '-'}</td>
                             <td>
                               {isSafeFileUrl(payment.evidenceUrl) ? (
                                 <a href={payment.evidenceUrl} target="_blank" rel="noopener noreferrer">
@@ -874,7 +804,7 @@ export default function OrdersList() {
                                 </a>
                               ) : '-'}
                             </td>
-                            <td className="text-end">${payment.amount.toFixed(2)}</td>
+                            <td className="text-end">{formatMoney(payment.amount)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -901,131 +831,80 @@ export default function OrdersList() {
         </Modal.Body>
       </Modal>
 
-      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered>
-        <Modal.Header closeButton={!paymentSubmitting && !paymentUploadingEvidence}>
-          <Modal.Title>Registrar pago</Modal.Title>
+      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down">
+        <Modal.Header closeButton={!paymentSubmitting}>
+          <Modal.Title as="h2" className="h5">
+            Cobrar {paymentOrder?.orderNumber}
+            <span className="d-block small text-muted fw-normal">{paymentOrder?.customerName}</span>
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {paymentOrder && (
+            <ChargePanel
+              amountDue={paymentOrder.balance}
+              allowPartial
+              confirmLabel="Registrar"
+              submitting={paymentSubmitting}
+              error={paymentError}
+              onSubmit={(charge) => void handleAddPayment(charge)}
+              onCancel={closePaymentModal}
+              uploadEvidence={async (file) => {
+                const { data } = await ordersApi.uploadPaymentEvidence(file);
+                return { url: data.url, fileName: data.fileName };
+              }}
+            />
+          )}
+        </Modal.Body>
+      </Modal>
+
+      <Modal show={!!paidReceipt} onHide={() => setPaidReceipt(null)} centered fullscreen="sm-down">
+        <Modal.Header closeButton>
+          <Modal.Title as="h2" className="h5">
+            <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
+            Pago registrado en {paidReceipt?.order.orderNumber}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {paidReceipt && (
             <>
-              <div className="mb-3">
-                <div><strong>Orden:</strong> {paymentOrder.orderNumber}</div>
-                <div><strong>Cliente:</strong> {paymentOrder.customerName}</div>
-              </div>
-
-              <div className="border rounded p-3 mb-3 bg-light-subtle">
-                <div className="d-flex justify-content-between mb-1">
-                  <span>Total de la orden</span>
-                  <strong>${paymentSummary.total.toFixed(2)}</strong>
+              {paidReceipt.change > 0 && (
+                <div className="charge-change has-change mb-3" aria-live="polite">
+                  <span>Cambio</span>
+                  <strong className="ta-money">{formatMoney(paidReceipt.change)}</strong>
                 </div>
-                <div className="d-flex justify-content-between mb-1">
-                  <span>Abonado previamente</span>
-                  <strong>${paymentSummary.paidBefore.toFixed(2)}</strong>
-                </div>
-                <div className="d-flex justify-content-between mb-1">
-                  <span>Pendiente actual</span>
-                  <strong className="text-danger">${paymentSummary.pendingBefore.toFixed(2)}</strong>
-                </div>
-                <div className="d-flex justify-content-between">
-                  <span>Liquida con</span>
-                  <strong className="text-success">${paymentSummary.amountToSettle.toFixed(2)}</strong>
-                </div>
-              </div>
-
-              <div className="mb-3">
-                <label className="form-label">Monto a registrar</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  min="0.01"
-                  max={paymentSummary.pendingBefore}
-                  step="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  disabled={paymentSubmitting || paymentUploadingEvidence}
-                />
-              </div>
-
-              <div className="mb-3">
-                <label className="form-label">Método de pago</label>
-                <select
-                  className="form-select"
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(Number(e.target.value) as OrderPaymentMethod)}
-                  disabled={paymentSubmitting || paymentUploadingEvidence}
-                >
-                  {Object.values(OrderPaymentMethodConst)
-                    .filter((value): value is OrderPaymentMethod => typeof value === 'number')
-                    .map((value) => (
-                      <option key={value} value={value}>
-                        {getPaymentMethodLabel(value)}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div className="mb-3">
-                <label className="form-label">Sucursal (opcional)</label>
-                <select
-                  className="form-select"
-                  value={paymentLocationId}
-                  onChange={(e) => setPaymentLocationId(e.target.value)}
-                  disabled={paymentSubmitting || paymentUploadingEvidence}
-                >
-                  <option value="">Sin sucursal especifica</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-3">
-                <label className="form-label">Comprobante (imagen o PDF)</label>
-                <input
-                  type="file"
-                  className="form-control"
-                  accept="image/*,.pdf"
-                  disabled={paymentSubmitting || paymentUploadingEvidence}
-                  onChange={(e) => {
-                    void handleUploadPaymentEvidence(e.target.files?.[0]);
-                    e.currentTarget.value = '';
-                  }}
-                />
-                {paymentEvidenceUrl && (
-                  <small className="text-success d-block mt-1">
-                    Archivo listo: {paymentEvidenceName || 'Comprobante'}
-                  </small>
-                )}
-              </div>
-
-              <div className="border rounded p-2 bg-light-subtle">
-                <small>
-                  Saldo despues del pago: <strong>${paymentSummary.pendingAfter.toFixed(2)}</strong>
-                </small>
-              </div>
-
-              {paymentError && <div className="alert alert-danger mt-3 mb-0">{paymentError}</div>}
+              )}
+              <SaleTicket
+                order={paidReceipt.order}
+                businessName={tenant?.name ?? 'TienditApp'}
+                change={paidReceipt.change}
+                cashReceived={paidReceipt.cashReceived}
+              />
             </>
           )}
         </Modal.Body>
-        <Modal.Footer>
-          <button
-            type="button"
-            className="btn btn-light"
-            onClick={closePaymentModal}
-            disabled={paymentSubmitting || paymentUploadingEvidence}
-          >
-            Cancelar
+        <Modal.Footer className="flex-wrap">
+          <button type="button" className="btn btn-light btn-touch" onClick={printTicket}>
+            <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleAddPayment}
-            disabled={paymentSubmitting || paymentUploadingEvidence || !paymentOrder}
-          >
-            {paymentSubmitting ? 'Guardando...' : 'Registrar pago'}
+          {paidReceipt && (
+            <a
+              className="btn btn-light btn-touch"
+              href={buildWhatsAppTicketUrl(
+                buildTicketText(paidReceipt.order, {
+                  businessName: tenant?.name ?? 'TienditApp',
+                  change: paidReceipt.change,
+                  cashReceived: paidReceipt.cashReceived,
+                }),
+                paidReceipt.order.customerPhone,
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
+            </a>
+          )}
+          <button type="button" className="btn btn-primary btn-touch flex-grow-1" onClick={() => setPaidReceipt(null)} autoFocus>
+            Listo
           </button>
         </Modal.Footer>
       </Modal>

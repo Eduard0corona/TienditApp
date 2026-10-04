@@ -74,6 +74,7 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
                 o.Id,
                 o.Status,
                 o.Total,
+                o.PaidAmount,
                 o.CustomerUserId,
                 o.TemporaryCustomerId,
                 o.CustomerPhone
@@ -81,6 +82,28 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             .ToListAsync(cancellationToken);
 
         var inProgressStatuses = new[] { OrderStatus.Confirmed, OrderStatus.Accepted, OrderStatus.InPreparation, OrderStatus.InProgress, OrderStatus.Ready };
+
+        // Revenue is what was charged: payments registered in the range, whatever the status of their
+        // orders. A counter sale paid today counts today even if it is delivered tomorrow, and an unpaid
+        // order counts nothing until it is paid.
+        var paymentsQuery = _context.OrderPayments
+            .AsNoTracking()
+            .Where(p => p.PaidAt >= rangeFromUtc && p.PaidAt <= rangeToUtc);
+        if (canReadRetailOrders && !canReadServiceOrders)
+            paymentsQuery = paymentsQuery.Where(p => p.Order.OrderType == OrderType.Retail);
+        else if (!canReadRetailOrders && canReadServiceOrders)
+            paymentsQuery = paymentsQuery.Where(p => p.Order.OrderType == OrderType.Service);
+        else if (!canReadRetailOrders && !canReadServiceOrders)
+            paymentsQuery = paymentsQuery.Where(_ => false);
+
+        var payments = await paymentsQuery
+            .Select(p => new { p.OrderId, p.Amount })
+            .ToListAsync(cancellationToken);
+        var revenue = payments.Sum(p => p.Amount);
+        var paidOrders = payments.Select(p => p.OrderId).Distinct().Count();
+        var openOrders = orders
+            .Where(o => o.Status != OrderStatus.Cancelled && o.Total - o.PaidAmount > 0)
+            .ToList();
 
         var activeProducts = canReadRetailOrders
             ? await _context.Products
@@ -125,8 +148,11 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
                 .Count(),
             ActiveProducts = activeProducts,
             ActiveServices = activeServices,
-            TotalRevenue = orders.Where(o => CompletedStatuses.Contains(o.Status)).Sum(o => o.Total),
-            AverageOrderValue = orders.Count > 0 ? orders.Average(o => o.Total) : 0,
+            TotalRevenue = revenue,
+            PaidOrders = paidOrders,
+            AverageOrderValue = paidOrders > 0 ? Math.Round(revenue / paidOrders, 2) : 0,
+            OutstandingBalance = openOrders.Sum(o => o.Total - o.PaidAmount),
+            UnpaidOrders = openOrders.Count,
             OrdersByStatus = orders
                 .GroupBy(o => o.Status.ToString())
                 .ToDictionary(g => g.Key, g => g.Count()),

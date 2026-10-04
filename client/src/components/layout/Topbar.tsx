@@ -32,12 +32,14 @@ function writeAutoSwitchMarker() {
 interface TopbarProps {
   onToggleSidebar: () => void;
   isMobileMenuOpen: boolean;
+  onOpenSearch: () => void;
 }
 
-export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProps) {
+export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch }: TopbarProps) {
   const { user, logout, switchTenant } = useAuth();
   const { tenant, capabilities, refreshTenant } = useTenant();
-  const canOpenBusinessSettings = getAccess(user, capabilities).businessSettings;
+  const access = getAccess(user, capabilities);
+  const canOpenBusinessSettings = access.businessSettings;
   const [availableTenants, setAvailableTenants] = useState<MyTenantDto[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
   const [switchingTenant, setSwitchingTenant] = useState(false);
@@ -104,8 +106,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
     ensureTenantContext();
   }, [autoSwitchAttempted, availableTenants, refreshTenant, selectedTenantId, switchTenant, switchingTenant]);
 
-  const handleSwitchTenant = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextTenantId = event.target.value;
+  const handleSwitchTenant = async (nextTenantId: string) => {
     if (!nextTenantId || nextTenantId === selectedTenantId) return;
 
     setTenantError('');
@@ -120,15 +121,6 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
     }
   };
 
-  const handleFullscreen = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
-  }, []);
-
   const handleDarkModeToggle = useCallback(() => {
     const next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
     applyTheme(next);
@@ -138,7 +130,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
   return (
     <div className="navbar-custom">
       <div className="topbar container-fluid">
-        <div className="d-flex align-items-center gap-lg-2 gap-1">
+        <div className="topbar-start d-flex align-items-center gap-lg-2 gap-1">
           {/* Topbar Brand Logo */}
           <div className="logo-topbar">
             <Link to="/" className="logo-light">
@@ -169,25 +161,64 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
           >
             <i className="ri-menu-5-line" aria-hidden="true"></i>
           </button>
-        </div>
 
-        <ul className="topbar-menu d-flex align-items-center gap-3">
-          {availableTenants.length > 1 && (
-            <li className="d-none d-lg-inline-block" style={{ minWidth: 260 }}>
-              <select
-                className="form-select form-select-sm"
-                value={selectedTenantId}
-                onChange={handleSwitchTenant}
+          {/* Business switcher: visible at every size when the person works for more than one business. */}
+          {availableTenants.length > 1 ? (
+            <div className="dropdown topbar-business">
+              <button
+                type="button"
+                className="btn btn-light btn-sm dropdown-toggle topbar-business-button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
                 disabled={loadingTenants || switchingTenant}
                 title={tenantError || 'Cambiar de negocio'}
-                aria-label="Cambiar de negocio"
               >
+                <i className="ri-store-2-line me-1" aria-hidden="true"></i>
+                <span className="visually-hidden">Negocio actual: </span>
+                <span className="text-truncate">{switchingTenant ? 'Cambiando…' : tenant?.name ?? 'Negocio'}</span>
+              </button>
+              <div className="dropdown-menu">
+                <h6 className="dropdown-header">Cambiar de negocio</h6>
                 {availableTenants.map((entry) => (
-                  <option key={entry.tenantId} value={entry.tenantId}>
-                    {entry.name} ({getRoleLabel(entry.role)})
-                  </option>
+                  <button
+                    key={entry.tenantId}
+                    type="button"
+                    className={`dropdown-item d-flex align-items-center gap-2 ${entry.tenantId === selectedTenantId ? 'active' : ''}`}
+                    aria-current={entry.tenantId === selectedTenantId ? 'true' : undefined}
+                    onClick={() => void handleSwitchTenant(entry.tenantId)}
+                  >
+                    <span className="flex-grow-1">
+                      {entry.name}
+                      <small className="d-block opacity-75">{getRoleLabel(entry.role)}</small>
+                    </span>
+                    {entry.tenantId === selectedTenantId && <i className="ri-check-line" aria-hidden="true"></i>}
+                  </button>
                 ))}
-              </select>
+                {tenantError && <div className="dropdown-item-text text-danger small">{tenantError}</div>}
+              </div>
+            </div>
+          ) : (
+            tenant?.name && <span className="topbar-business-name d-none d-md-inline text-truncate">{tenant.name}</span>
+          )}
+        </div>
+
+        <ul className="topbar-menu d-flex align-items-center gap-2 gap-md-3">
+          {/* Global search (Ctrl K) */}
+          <li>
+            <button type="button" className="topbar-search-button" onClick={onOpenSearch} aria-label="Buscar (Ctrl K)">
+              <i className="ri-search-line" aria-hidden="true"></i>
+              <span className="d-none d-lg-inline">Buscar pedidos, clientes…</span>
+              <kbd className="d-none d-xl-inline">Ctrl K</kbd>
+            </button>
+          </li>
+
+          {access.sell && (
+            <li className="d-none d-md-inline-block">
+              <Link to="/sell" className="btn btn-primary btn-sm topbar-sell-button" title="Nueva venta (F2)">
+                <i className="ri-add-line" aria-hidden="true"></i>
+                <span className="ms-1">Nueva venta</span>
+                <kbd className="d-none d-xl-inline ms-2">F2</kbd>
+              </Link>
             </li>
           )}
 
@@ -203,13 +234,6 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen }: TopbarProp
             >
               <i className="ri-moon-line font-22" aria-hidden="true"></i>
             </button>
-          </li>
-
-          {/* Fullscreen Toggle */}
-          <li className="d-none d-md-inline-block">
-            <a className="nav-link" href="#" onClick={handleFullscreen} aria-label="Pantalla completa" title="Pantalla completa">
-              <i className="ri-fullscreen-line font-22" aria-hidden="true"></i>
-            </a>
           </li>
 
           {/* User Dropdown */}

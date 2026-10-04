@@ -108,6 +108,14 @@ export default function KitchenBoard() {
     }
   };
 
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen().catch(() => undefined);
+    }
+  };
+
   const handleStart = (orderId: string) =>
     runAction(orderId, () => kitchenApi.startPreparation(orderId), 'No se pudo iniciar la preparación.');
 
@@ -124,9 +132,15 @@ export default function KitchenBoard() {
             ? `${orders.length} ${orders.length === 1 ? 'comanda' : 'comandas'} · actualizado a las ${lastUpdated.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
             : 'Cargando comandas…'}
         </div>
-        <button type="button" className="btn btn-sm btn-light" onClick={() => void loadOrders()}>
-          <i className="mdi mdi-refresh me-1" aria-hidden="true"></i>Actualizar
-        </button>
+        <div className="d-flex gap-2">
+          <button type="button" className="btn btn-sm btn-light" onClick={() => void loadOrders()}>
+            <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
+          </button>
+          {/* Kitchen screens and TVs show the board alone. */}
+          <button type="button" className="btn btn-sm btn-light" onClick={toggleFullscreen}>
+            <i className="ri-fullscreen-line me-1" aria-hidden="true"></i>Pantalla completa
+          </button>
+        </div>
       </div>
 
       {actionError && (

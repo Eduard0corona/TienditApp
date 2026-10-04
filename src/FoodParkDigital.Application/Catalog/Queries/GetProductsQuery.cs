@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,8 +24,18 @@ public record GetProductsQuery : IRequest<PaginatedList<ProductDto>>
     public bool? IsAvailable { get; init; }
     public bool OnlyAvailableNow { get; init; }
     public ProductCatalogItemType? ItemType { get; init; }
+    /// <summary>Name, SKU or barcode (a scanned code matches its product exactly).</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+}
+
+public class GetProductsQueryValidator : AbstractValidator<GetProductsQuery>
+{
+    public GetProductsQueryValidator()
+    {
+        RuleFor(x => x.Search).MaximumLength(100);
+    }
 }
 
 public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, PaginatedList<ProductDto>>
@@ -65,6 +76,16 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
 
         if (request.IsAvailable.HasValue)
             query = query.Where(p => p.IsAvailable == request.IsAvailable.Value);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            // Lower-cased on both sides so the match does not depend on the database collation.
+            var term = request.Search.Trim().ToLowerInvariant();
+            query = query.Where(p =>
+                p.Name.ToLower().Contains(term)
+                || (p.Sku != null && p.Sku.ToLower().Contains(term))
+                || (p.Barcode != null && p.Barcode.ToLower() == term));
+        }
 
         if (request.OnlyAvailableNow)
         {

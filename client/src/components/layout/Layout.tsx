@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import LeftSidebar from './LeftSidebar';
 import Topbar from './Topbar';
 import Footer from './Footer';
+import BottomTabBar from './BottomTabBar';
+import GlobalSearch from './GlobalSearch';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
+import { getAccess } from '../../utils/access';
 
 type DesktopSidenavSize = 'default' | 'condensed';
 
@@ -31,6 +36,11 @@ function writeStoredSize(size: DesktopSidenavSize) {
 
 export default function Layout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  const canSell = getAccess(user, capabilities).sell;
+  const [searchOpen, setSearchOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
   const [desktopSize, setDesktopSize] = useState<DesktopSidenavSize>(
     () => readStoredSize() ?? (window.matchMedia(TABLET_QUERY).matches ? 'condensed' : 'default'),
@@ -83,10 +93,26 @@ export default function Layout() {
   }, [desktopSize, isMobile, pathname]);
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpenedAt(null), []);
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+
+  // Shortcuts on every screen: Ctrl/Cmd K searches, F2 starts a sale.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+      } else if (event.key === 'F2' && canSell) {
+        event.preventDefault();
+        navigate('/sell');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canSell, navigate]);
 
   return (
     <div className="wrapper">
-      <Topbar onToggleSidebar={toggleSidebar} isMobileMenuOpen={isMobileMenuOpen} />
+      <Topbar onToggleSidebar={toggleSidebar} isMobileMenuOpen={isMobileMenuOpen} onOpenSearch={openSearch} />
       <LeftSidebar onClose={closeMobileMenu} />
       {isMobileMenuOpen && <div className="offcanvas-backdrop fade show" onClick={closeMobileMenu} aria-hidden="true" />}
       <div className="content-page">
@@ -97,6 +123,8 @@ export default function Layout() {
         </div>
         <Footer />
       </div>
+      <BottomTabBar onOpenMenu={toggleSidebar} isMenuOpen={isMobileMenuOpen} />
+      <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

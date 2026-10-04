@@ -7,6 +7,11 @@ import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { CreateProductRequest, CategoryDto, ProductDto, UnitType } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useTenant } from '../../hooks/useTenant';
+import { useToast } from '../../hooks/useToast';
+import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
+
+type ProductFormValues = CreateProductRequest & { vatOption: VatOption };
 
 const UNIT_TYPE_OPTIONS = [
   { value: '', label: 'Sin unidad' },
@@ -32,6 +37,8 @@ export default function ProductForm() {
   const navigate = useNavigate();
   const isEditing = !!id;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { tenant } = useTenant();
+  const toast = useToast();
 
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [product, setProduct] = useState<ProductDto | null>(null);
@@ -45,7 +52,7 @@ export default function ProductForm() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<CreateProductRequest>({
+  } = useForm<ProductFormValues>({
     values: product
       ? {
           categoryId: product.categoryId,
@@ -59,7 +66,7 @@ export default function ProductForm() {
           isFeatured: product.isFeatured,
           tags: product.tags || '',
           compareAtPrice: product.compareAtPrice ?? undefined,
-          taxRate: product.taxRate ?? undefined,
+          vatOption: toVatOption(product),
           calories: product.calories ?? undefined,
           allergens: product.allergens || '',
           stockQuantity: product.stockQuantity ?? undefined,
@@ -81,6 +88,7 @@ export default function ProductForm() {
           sortOrder: 0,
           isFeatured: false,
           tags: '',
+          vatOption: '',
           allergens: '',
           availableFromTime: undefined,
           availableToTime: undefined,
@@ -117,15 +125,15 @@ export default function ProductForm() {
     setImagePreview(URL.createObjectURL(file));
   };
 
-  const onSubmit = async (data: CreateProductRequest) => {
+  const onSubmit = async ({ vatOption, ...data }: ProductFormValues) => {
     setError('');
 
     // Clean optional numeric fields
     const payload: CreateProductRequest = {
       ...data,
+      ...fromVatOption(vatOption),
       unit: data.unit != null && data.unit !== ('' as unknown) ? (Number(data.unit) as UnitType) : undefined,
       compareAtPrice: data.compareAtPrice ? Number(data.compareAtPrice) : undefined,
-      taxRate: data.taxRate != null && data.taxRate !== ('' as unknown) ? Number(data.taxRate) : undefined,
       calories: data.calories ? Number(data.calories) : undefined,
       stockQuantity: data.stockQuantity != null && data.stockQuantity !== ('' as unknown) ? Number(data.stockQuantity) : undefined,
       lowStockThreshold: data.lowStockThreshold ? Number(data.lowStockThreshold) : undefined,
@@ -155,12 +163,13 @@ export default function ProductForm() {
           setImagePreview(uploaded.medium || uploaded.original);
         } catch {
           // Product saved, but image failed — show warning but still navigate
-          alert('El producto se guardó pero hubo un error al subir la imagen.');
+          toast.warning('El producto se guardó, pero la imagen no se pudo subir. Inténtalo de nuevo desde Editar.');
         } finally {
           setImageUploading(false);
         }
       }
 
+      toast.success(isEditing ? 'Producto actualizado.' : 'Producto creado.');
       navigate('/products');
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, 'Error al guardar el producto.');
@@ -317,14 +326,15 @@ export default function ProductForm() {
                     />
                   </div>
                   <div className="col-md-3 mb-3">
-                    <label className="form-label">Impuesto (%)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="form-control"
-                      placeholder="ej: 16"
-                      {...register('taxRate')}
-                    />
+                    <label className="form-label" htmlFor="product-vat">IVA</label>
+                    <select id="product-vat" className="form-select" {...register('vatOption')}>
+                      {getVatOptions(tenant?.defaultTaxRate ?? 16).map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <div className="form-text">
+                      {tenant?.pricesIncludeTax ? 'El precio ya incluye el IVA.' : 'El IVA se suma al precio.'}
+                    </div>
                   </div>
                 </div>
               </div>

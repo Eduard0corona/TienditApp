@@ -63,6 +63,7 @@ export default function EmployeesList() {
   const [pageSize, setPageSize] = useState(10);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterRole, setFilterRole] = useState('');
+  const [search, setSearch] = useState('');
 
   const {
     register,
@@ -99,6 +100,7 @@ export default function EmployeesList() {
       const params: {
         status?: string;
         appRole?: string;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -108,6 +110,7 @@ export default function EmployeesList() {
 
       if (filterStatus) params.status = filterStatus;
       if (filterRole) params.appRole = filterRole;
+      if (search) params.search = search;
 
       const { data: response } = await employeesApi.getAll(params);
       setData(response);
@@ -116,7 +119,7 @@ export default function EmployeesList() {
     } finally {
       setLoading(false);
     }
-  }, [filterRole, filterStatus, pageNumber, pageSize]);
+  }, [filterRole, filterStatus, pageNumber, pageSize, search]);
 
   const loadPermissionOptions = useCallback(async () => {
     try {
@@ -291,11 +294,7 @@ export default function EmployeesList() {
                 keyExtractor={(item) => item.tenantUserId}
                 loading={loading}
                 emptyMessage="No hay empleados registrados."
-                searchFilter={(item, search) =>
-                  item.email.toLowerCase().includes(search) ||
-                  item.firstName.toLowerCase().includes(search) ||
-                  item.lastName.toLowerCase().includes(search)
-                }
+                searchPlaceholder="Nombre o correo"
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -303,6 +302,10 @@ export default function EmployeesList() {
                   onPageChange: setPageNumber,
                   onPageSizeChange: (size) => {
                     setPageSize(size);
+                    setPageNumber(1);
+                  },
+                  onSearchChange: (term) => {
+                    setSearch(term);
                     setPageNumber(1);
                   },
                 }}

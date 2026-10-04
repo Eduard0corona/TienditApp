@@ -16,3 +16,7 @@ Correcciones futuras serán ajustes crédito/débito inmutables y relacionados c
 ## Consecuencias
 
 El cálculo fijo actual queda como deuda, no solución fiscal. Implementar requiere definición contable/legal, modelo y migración compatible, pruebas y rollout; no se afirma que CFDI, SAT, notas de crédito o módulos de ajuste existan hoy.
+
+## Actualización 2026-10-04 (Fase 1)
+
+Primera etapa implementada: política de IVA por negocio (incluido o sumado), tasa por producto (16, 8, 0 % o exento), tasa guardada por línea, política guardada por orden y desglose calculado en el servidor con redondeo bancario por tasa (`OrderTaxCalculator`). Los negocios existentes conservan el IVA sumado al 16 %, que da los mismos totales que el cálculo anterior. Siguen pendientes descuentos, otros impuestos, datos CFDI, reembolsos y ajustes.

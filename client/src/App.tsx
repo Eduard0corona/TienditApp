@@ -29,6 +29,8 @@ const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
+const SellPage = lazy(() => import('./pages/sell/SellPage'));
+const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const EmployeesList = lazy(() => import('./pages/employees/EmployeesList'));
 const AiAgentSettings = lazy(() => import('./pages/ai-agent/AiAgentSettings'));
@@ -203,6 +205,22 @@ export default function App() {
               element={(
                 <AccessRoute area="sell">
                   <OrdersCart />
+                </AccessRoute>
+              )}
+            />
+            <Route
+              path="/sell"
+              element={(
+                <AccessRoute area="sell">
+                  <SellPage />
+                </AccessRoute>
+              )}
+            />
+            <Route
+              path="/setup"
+              element={(
+                <AccessRoute area="businessSettings">
+                  <SetupPage />
                 </AccessRoute>
               )}
             />

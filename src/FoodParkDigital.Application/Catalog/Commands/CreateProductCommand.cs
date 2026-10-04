@@ -28,7 +28,10 @@ public record CreateProductCommand : IRequest<Result<ProductDto>>
     public bool IsFeatured { get; init; }
     public string? Tags { get; init; }
     public decimal? CompareAtPrice { get; init; }
+    /// <summary>IVA rate in percent (16, 8 or 0); null uses the business default rate.</summary>
     public decimal? TaxRate { get; init; }
+    /// <summary>Exempt from IVA; an exempt product has no rate.</summary>
+    public bool IsTaxExempt { get; init; }
     public int? Calories { get; init; }
     public string? Allergens { get; init; }
     public int? StockQuantity { get; init; }
@@ -60,8 +63,14 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x)
             .Must(x => !x.CompareAtPrice.HasValue || x.CompareAtPrice.Value > x.PriceAmount)
             .WithMessage("El precio anterior debe ser mayor al precio actual.");
+        RuleFor(x => x.TaxRate!.Value)
+            .Must(VatRateRules.IsAllowed)
+            .When(x => x.TaxRate.HasValue)
+            .WithMessage(VatRateRules.InvalidRateMessage);
         RuleFor(x => x.TaxRate)
-            .InclusiveBetween(0, 100).When(x => x.TaxRate.HasValue);
+            .Null()
+            .When(x => x.IsTaxExempt)
+            .WithMessage("Un producto exento de IVA no lleva tasa.");
         RuleFor(x => x.Calories)
             .GreaterThanOrEqualTo(0).When(x => x.Calories.HasValue);
         RuleFor(x => x.StockQuantity)
@@ -94,9 +103,6 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
             RuleFor(x => x.CompareAtPrice)
                 .Must(v => !v.HasValue)
                 .WithMessage("Los servicios no admiten precio anterior.");
-            RuleFor(x => x.TaxRate)
-                .Must(v => !v.HasValue)
-                .WithMessage("Los servicios no admiten tasa de impuesto.");
             RuleFor(x => x.Calories)
                 .Must(v => !v.HasValue)
                 .WithMessage("Los servicios no admiten calorías.");
@@ -200,7 +206,8 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
             availableFromTime: request.AvailableFromTime,
             availableToTime: request.AvailableToTime,
             isTrackable: request.IsTrackable,
-            notifyCustomer: request.NotifyCustomer);
+            notifyCustomer: request.NotifyCustomer,
+            isTaxExempt: request.IsTaxExempt);
 
         _context.Products.Add(product);
         await _context.SaveChangesAsync(cancellationToken);

@@ -121,7 +121,8 @@ public static class SeedData
             {
                 context.TenantSettings.Add(new TenantSettings(
                     tenant.Id,
-                    defaultCapabilities));
+                    defaultCapabilities,
+                    pricesIncludeTax: true));
             }
             else if (tenantSettings.Capabilities == 0)
             {

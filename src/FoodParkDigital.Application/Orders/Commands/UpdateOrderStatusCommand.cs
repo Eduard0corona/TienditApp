@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -48,6 +49,7 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
             var order = await _context.Orders
+                .Include(o => o.Items)
                 .Include(o => o.StatusHistory)
                 .Include(o => o.ServicePieces)
                 .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
@@ -72,6 +74,14 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
             {
                 order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
                 await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+
+                // A counter sale paid while the kitchen prepared it is handed over once it is ready.
+                if (request.NewStatus == OrderStatus.Ready)
+                {
+                    var salesSettings = await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
+                    var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, order.TenantId, cancellationToken);
+                    CounterSaleClosing.TryClose(order, salesSettings, capabilities, _currentUserService.UserName);
+                }
             }
 
             try

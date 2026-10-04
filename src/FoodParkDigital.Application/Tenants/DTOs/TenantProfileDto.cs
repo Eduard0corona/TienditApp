@@ -40,6 +40,12 @@ public class TenantProfileDto
     public TenantCapability Capabilities { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
+    // Sales policy (TenantSettings)
+    public bool PricesIncludeTax { get; set; }
+    public decimal DefaultTaxRate { get; set; } = 16m;
+    public bool AutoCloseCounterSales { get; set; } = true;
+    public DateTimeOffset? OnboardingCompletedAt { get; set; }
+
     // MX Business fields
     public string? Rfc { get; set; }
     public string? LegalName { get; set; }

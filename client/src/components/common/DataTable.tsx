@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './DataTable.css';
 
 export interface DataTableColumn {
@@ -13,7 +13,15 @@ interface ServerSideConfig {
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  /**
+   * Searches on the server, over every page (called 300 ms after typing stops). Without it the box only
+   * filters the rows already loaded.
+   */
+  onSearchChange?: (search: string) => void;
 }
+
+// Waiting for a pause in typing keeps one request per search instead of one per key.
+const SERVER_SEARCH_DELAY_MS = 300;
 
 interface DataTableProps<T> {
   data: T[];
@@ -25,6 +33,9 @@ interface DataTableProps<T> {
   loading?: boolean;
   emptyMessage?: string;
   pageSizeOptions?: number[];
+  searchPlaceholder?: string;
+  /** Text already in the search box (a search that came in the link). */
+  initialSearch?: string;
 }
 
 const DEFAULT_PAGE_SIZES = [10, 25, 50, 100];
@@ -39,18 +50,40 @@ export default function DataTable<T>({
   loading = false,
   emptyMessage = 'No hay registros.',
   pageSizeOptions = DEFAULT_PAGE_SIZES,
+  searchPlaceholder = 'Buscar...',
+  initialSearch = '',
 }: DataTableProps<T>) {
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(pageSizeOptions[0]);
 
   const isServerSide = !!serverSide;
+  const onServerSearch = serverSide?.onSearchChange;
+  const searchesOnServer = !!onServerSearch;
+  const onServerSearchRef = useRef(onServerSearch);
+  // The page already loaded the initial search: only later changes are sent.
+  const lastServerSearch = useRef(initialSearch.trim());
 
-  // Filter data by search (always client-side)
+  useEffect(() => {
+    onServerSearchRef.current = onServerSearch;
+  }, [onServerSearch]);
+
+  useEffect(() => {
+    if (!searchesOnServer) return;
+    const term = search.trim();
+    if (term === lastServerSearch.current) return;
+    const timeoutId = window.setTimeout(() => {
+      lastServerSearch.current = term;
+      onServerSearchRef.current?.(term);
+    }, SERVER_SEARCH_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [search, searchesOnServer]);
+
+  // Server search: the page already comes filtered. Otherwise filter the rows loaded.
   const filteredData = useMemo(() => {
-    if (!search || !searchFilter) return data;
+    if (searchesOnServer || !search || !searchFilter) return data;
     return data.filter((item) => searchFilter(item, search.toLowerCase()));
-  }, [data, search, searchFilter]);
+  }, [data, search, searchFilter, searchesOnServer]);
 
   // Pagination values
   const page = isServerSide ? serverSide.page : clientPage;
@@ -130,7 +163,8 @@ export default function DataTable<T>({
           <input
             type="search"
             className="form-control form-control-sm w-100"
-            placeholder="Buscar..."
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
           />

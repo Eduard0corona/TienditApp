@@ -84,16 +84,19 @@ export default function AppointmentsList() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(buildForm());
+  const [search, setSearch] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const params: {
         status?: AppointmentStatus;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = { pageNumber, pageSize };
       if (statusFilter !== '') params.status = Number(statusFilter) as AppointmentStatus;
+      if (search) params.search = search;
       const { data } = await appointmentsApi.getAll(params);
       setData(data);
     } catch (err: unknown) {
@@ -101,7 +104,7 @@ export default function AppointmentsList() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, statusFilter]);
+  }, [pageNumber, pageSize, search, statusFilter]);
 
   useEffect(() => {
     loadData();
@@ -205,12 +208,7 @@ export default function AppointmentsList() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay citas registradas."
-            searchFilter={(item, search) =>
-              item.customerName.toLowerCase().includes(search) ||
-              item.customerPhone.toLowerCase().includes(search) ||
-              item.serviceName.toLowerCase().includes(search) ||
-              (item.staffName || '').toLowerCase().includes(search)
-            }
+            searchPlaceholder="Cliente, teléfono, servicio o persona"
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,
@@ -218,6 +216,10 @@ export default function AppointmentsList() {
               onPageChange: setPageNumber,
               onPageSizeChange: (size) => {
                 setPageSize(size);
+                setPageNumber(1);
+              },
+              onSearchChange: (term) => {
+                setSearch(term);
                 setPageNumber(1);
               },
             }}

@@ -15,6 +15,7 @@ using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -30,7 +31,8 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-        CreateMap<Order, OrderDto>();
+        CreateMap<Order, OrderDto>()
+            .ForMember(d => d.TaxBreakdown, opt => opt.Ignore());
         CreateMap<OrderItem, OrderItemDto>();
         CreateMap<OrderStatusHistory, OrderStatusHistoryDto>();
         CreateMap<ServiceOrderDetail, ServiceOrderDetailDto>();
@@ -53,6 +55,14 @@ public class MappingProfile : Profile
                 LogoImageUrlsDto.FromBaseUrl(s.LogoUrl)))
             .ForMember(d => d.Capabilities, opt => opt.MapFrom(s =>
                 s.Settings != null ? s.Settings.Capabilities : 0))
+            .ForMember(d => d.PricesIncludeTax, opt => opt.MapFrom(s =>
+                s.Settings != null && s.Settings.PricesIncludeTax))
+            .ForMember(d => d.DefaultTaxRate, opt => opt.MapFrom(s =>
+                s.Settings != null ? s.Settings.DefaultTaxRate : VatRate.GeneralPercent))
+            .ForMember(d => d.AutoCloseCounterSales, opt => opt.MapFrom(s =>
+                s.Settings == null || s.Settings.AutoCloseCounterSales))
+            .ForMember(d => d.OnboardingCompletedAt, opt => opt.MapFrom(s =>
+                s.Settings != null ? s.Settings.OnboardingCompletedAt : null))
             .ForMember(d => d.Street, opt => opt.MapFrom(s => s.Address != null ? s.Address.Street : null))
             .ForMember(d => d.ExteriorNumber, opt => opt.MapFrom(s => s.Address != null ? s.Address.ExteriorNumber : null))
             .ForMember(d => d.InteriorNumber, opt => opt.MapFrom(s => s.Address != null ? s.Address.InteriorNumber : null))

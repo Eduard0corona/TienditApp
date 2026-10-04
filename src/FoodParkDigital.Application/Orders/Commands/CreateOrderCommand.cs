@@ -29,6 +29,23 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>
     public OrderType OrderType { get; init; } = OrderType.Retail;
     public ServiceOrderDetailInput? ServiceDetail { get; init; }
     public List<CreateOrderItemDto> Items { get; init; } = new();
+    /// <summary>Payments taken at the counter with the sale: stored with the order or not at all.</summary>
+    public List<CreateOrderPaymentDto> Payments { get; init; } = new();
+    /// <summary>
+    /// Total shown to the customer. When it differs from the server total (a price changed meanwhile)
+    /// the sale is rejected instead of charging a different amount.
+    /// </summary>
+    public decimal? ExpectedTotal { get; init; }
+}
+
+public record CreateOrderPaymentDto
+{
+    public decimal Amount { get; init; }
+    public OrderPaymentMethod Method { get; init; }
+    public Guid? InventoryLocationId { get; init; }
+    public string? EvidenceUrl { get; init; }
+    public string? Reference { get; init; }
+    public string? Notes { get; init; }
 }
 
 public record CreateOrderItemDto
@@ -82,11 +99,33 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         {
             item.RuleFor(i => i.ProductId).NotEmpty();
             item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine);
+            item.RuleFor(i => i.Notes).MaximumLength(300);
         });
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
             .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
+
+        RuleFor(x => x.Payments)
+            .Empty()
+            .When(x => !x.CreatedByBusiness)
+            .WithMessage("Solo el negocio registra pagos al crear una venta.");
+        RuleFor(x => x.Payments.Count)
+            .LessThanOrEqualTo(OrderLimits.MaxPaymentsPerSale)
+            .WithMessage($"Una venta admite como maximo {OrderLimits.MaxPaymentsPerSale} pagos.");
+        RuleForEach(x => x.Payments).ChildRules(payment =>
+        {
+            // Stored with 2 decimals, like every payment (see AddOrderPaymentCommand).
+            payment.RuleFor(p => p.Amount).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
+            payment.RuleFor(p => p.Method).IsInEnum();
+            payment.RuleFor(p => p.EvidenceUrl).MaximumLength(1000);
+            payment.RuleFor(p => p.Reference).MaximumLength(120);
+            payment.RuleFor(p => p.Notes).MaximumLength(1000);
+        });
+        RuleFor(x => x.ExpectedTotal)
+            .GreaterThanOrEqualTo(0)
+            .PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .When(x => x.ExpectedTotal.HasValue);
 
         When(x => x.OrderType == OrderType.Service && !x.CreatedByBusiness, () =>
         {
@@ -110,6 +149,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IOrderInventoryService _orderInventoryService;
+    private readonly IOrderCashService _orderCashService;
 
     public CreateOrderCommandHandler(
         IApplicationDbContext context,
@@ -119,7 +159,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
         IPhoneNormalizationService phoneNormalizationService,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService? orderInventoryService = null,
+        IOrderCashService? orderCashService = null)
     {
         _context = context;
         _tenantService = tenantService;
@@ -129,6 +170,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         _dateTimeProvider = dateTimeProvider;
         _phoneNormalizationService = phoneNormalizationService;
         _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderCashService = orderCashService ?? NoOpOrderCashService.Instance;
     }
 
     public async Task<Result<OrderDto>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
@@ -195,12 +237,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             return Result.Failure<OrderDto>("El cliente seleccionado no tiene telefono. Captura uno para continuar.");
         }
 
-        var tenantTimeZoneId = await _context.TenantSettings
-            .AsNoTracking()
-            .Where(x => x.TenantId == _tenantService.TenantId)
-            .Select(x => x.TimeZone)
-            .FirstOrDefaultAsync(cancellationToken);
-        var tenantZone = TenantDateTimeResolver.Resolve(tenantTimeZoneId);
+        var salesSettings = await TenantSalesSettings.ReadAsync(_context, _tenantService.TenantId, cancellationToken);
+        var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
         var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, tenantZone);
 
         var orderCount = await _context.Orders.CountAsync(cancellationToken);
@@ -217,7 +255,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             customerName: ResolveCustomerName(customerName, linkedCustomer, customerPhone),
             customerPhone: linkedCustomer?.PhoneNormalized,
             customerNotes: request.CustomerNotes,
-            tableNumber: request.TableNumber);
+            tableNumber: request.TableNumber,
+            pricesIncludeTax: salesSettings.PricesIncludeTax);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
         var quantitiesByProduct = new Dictionary<Guid, int>();
 
@@ -241,7 +280,13 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             if (quantityError is not null)
                 return Result.Failure<OrderDto>(quantityError);
 
-            order.AddItem(product.Id, product.Name, itemDto.Quantity, product.PriceAmount, itemDto.Notes);
+            order.AddItem(
+                product.Id,
+                product.Name,
+                itemDto.Quantity,
+                product.PriceAmount,
+                string.IsNullOrWhiteSpace(itemDto.Notes) ? null : itemDto.Notes.Trim(),
+                product.GetVatRate(salesSettings.DefaultTaxRate));
 
             if (OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
                 checklistCandidates.Add((product, itemDto));
@@ -322,6 +367,40 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
         if (request.CreatedByBusiness)
             ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
+
+        if (request.ExpectedTotal.HasValue && request.ExpectedTotal.Value != order.Total)
+        {
+            return Result.Failure<OrderDto>(
+                $"El total de la venta es {OrderStatusLabels.FormatMoney(order.Total)} y no " +
+                $"{OrderStatusLabels.FormatMoney(request.ExpectedTotal.Value)}: algun precio cambio. " +
+                "Revisa la venta antes de cobrar.");
+        }
+
+        if (request.Payments.Count > 0)
+        {
+            if (request.Payments.Sum(p => p.Amount) > order.Total)
+                return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
+
+            var registrar = new OrderPaymentRegistrar(_context, _orderCashService, _dateTimeProvider);
+            foreach (var paymentDto in request.Payments)
+            {
+                var payment = await registrar.RegisterAsync(
+                    order,
+                    new OrderPaymentInput(
+                        paymentDto.Amount,
+                        paymentDto.Method,
+                        paymentDto.InventoryLocationId,
+                        paymentDto.EvidenceUrl,
+                        paymentDto.Reference,
+                        paymentDto.Notes),
+                    cancellationToken);
+                if (payment.IsFailure)
+                    return Result.Failure<OrderDto>(payment.Error!);
+            }
+        }
+
+        if (request.CreatedByBusiness)
+            CounterSaleClosing.TryClose(order, salesSettings, tenantCapabilities, _currentUserService.UserName);
 
         await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
 

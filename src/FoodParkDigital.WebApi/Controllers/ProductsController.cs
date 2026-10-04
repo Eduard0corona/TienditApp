@@ -27,6 +27,7 @@ public class ProductsController : ControllerBase
         [FromQuery] bool? isAvailable,
         [FromQuery] ProductCatalogItemType? itemType = null,
         [FromQuery] bool onlyAvailableNow = false,
+        [FromQuery] string? search = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -36,6 +37,7 @@ public class ProductsController : ControllerBase
             IsAvailable = isAvailable,
             OnlyAvailableNow = onlyAvailableNow,
             ItemType = itemType,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         });
