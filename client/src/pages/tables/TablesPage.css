@@ -1,0 +1,60 @@
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.table-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-height: 7rem;
+  padding: 0.85rem;
+  border: 2px solid var(--ct-border-color);
+  border-radius: var(--ta-radius);
+  background: var(--ct-secondary-bg);
+  color: var(--ct-body-color);
+  text-align: left;
+}
+
+.table-card.free {
+  border-style: dashed;
+  border-color: var(--ct-success);
+}
+
+.table-card.busy {
+  border-color: var(--ct-primary);
+  background: var(--ct-primary-bg-subtle);
+}
+
+.table-card:focus-visible {
+  outline: 3px solid var(--ct-primary);
+  outline-offset: 2px;
+}
+
+.table-card-name {
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.table-card-total {
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--ct-primary-text-emphasis);
+}
+
+.table-card-skeleton {
+  border-style: solid;
+  background: var(--ct-tertiary-bg);
+  animation: table-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes table-pulse {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-card-skeleton { animation: none; }
+}

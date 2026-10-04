@@ -28,6 +28,8 @@ public class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, P
     {
         var product = await _context.Products
             .AsNoTracking()
+            .Include(p => p.OptionGroups)
+            .ThenInclude(g => g.Options)
             .FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.Id);
 

@@ -7,6 +7,21 @@ import type {
   UpdateProductRequest,
 } from '../types';
 
+export interface ProductOptionInput {
+  id?: string | null;
+  name: string;
+  priceDelta: number;
+  isAvailable: boolean;
+}
+
+export interface ProductOptionGroupInput {
+  id?: string | null;
+  name: string;
+  minSelections: number;
+  maxSelections: number;
+  options: ProductOptionInput[];
+}
+
 export const productsApi = {
   getAll: (params?: {
     categoryId?: string;
@@ -34,6 +49,10 @@ export const productsApi = {
 
   toggleAvailability: (id: string, isAvailable: boolean) =>
     api.patch(`/products/${id}/availability`, { isAvailable }),
+
+  /** Replaces the variants and extras; groups and options sent with their id keep it. */
+  setOptionGroups: (id: string, groups: ProductOptionGroupInput[]) =>
+    api.put<ProductDto>(`/products/${id}/option-groups`, { groups }),
 
   uploadImage: (id: string, file: File) => {
     const formData = new FormData();

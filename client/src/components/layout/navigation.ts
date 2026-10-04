@@ -30,6 +30,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Inicio', path: '/dashboard', icon: 'ri-home-4-line', area: 'dashboard', keywords: 'resumen ventas hoy dashboard' },
       { label: 'Vender', path: '/sell', icon: 'ri-shopping-basket-2-line', area: 'sell', keywords: 'nueva venta cobrar punto de venta caja registradora' },
+      { label: 'Mesas', path: '/tables', icon: 'ri-restaurant-line', area: 'tables', keywords: 'cuentas abiertas comandas rondas salón' },
       { label: 'Pedidos', path: '/orders', icon: 'ri-file-list-3-line', area: 'orders', keywords: 'ordenes órdenes tickets folios' },
       { label: 'Cocina', path: '/kitchen', icon: 'ri-restaurant-2-line', area: 'kitchen', keywords: 'comandas preparar' },
       { label: 'Taller', path: '/services/board', icon: 'ri-tools-line', area: 'serviceBoard', keywords: 'tablero de servicios piezas reparaciones lavado' },
@@ -57,11 +58,18 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Mi negocio', path: '/settings/business', icon: 'ri-store-2-line', area: 'businessSettings', keywords: 'empresa datos fiscales iva impuestos módulos logotipo' },
       { label: 'Primeros pasos', path: '/setup', icon: 'ri-rocket-2-line', area: 'businessSettings', keywords: 'arranque guiado plantillas configuración inicial' },
-      { label: 'Sucursales', path: '/branches', icon: 'ri-store-3-line', area: 'inventory' },
+      { label: 'Sucursales', path: '/branches', icon: 'ri-store-3-line', area: 'businessSettings', keywords: 'tiendas locales puntos de venta matriz' },
       { label: 'Equipo', path: '/employees', icon: 'ri-user-settings-line', area: 'employees', keywords: 'empleados usuarios permisos' },
       { label: 'WhatsApp', path: '/settings/whatsapp', icon: 'ri-whatsapp-line', area: 'whatsAppSettings' },
       { label: 'Respuestas automáticas', path: '/ai-agent', icon: 'ri-robot-2-line', area: 'aiAgent', keywords: 'agente ia bot' },
       { label: 'Auditoría', path: '/audit', icon: 'ri-shield-check-line', area: 'audit', keywords: 'bitácora actividad' },
+    ],
+  },
+  {
+    title: 'Plataforma',
+    items: [
+      { label: 'Negocios', path: '/platform', icon: 'ri-building-4-line', area: 'platform', exact: true, keywords: 'consola tenants suscripciones cobranza suspendidos' },
+      { label: 'Planes', path: '/platform/plans', icon: 'ri-price-tag-3-line', area: 'platform', keywords: 'precios módulos límites prueba gratis' },
     ],
   },
 ];

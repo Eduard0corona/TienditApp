@@ -1,6 +1,7 @@
 import api from './axios';
 import type {
   AddOrderPaymentRequest,
+  CreateOrderItemRequest,
   CreateOrderRequest,
   OrderDto,
   OrderStatus,
@@ -66,4 +67,19 @@ export const ordersApi = {
 
   updateServicePieceStatus: (orderId: string, pieceId: string, newStatus: ServiceOrderPieceStatus) =>
     api.put(`/orders/${orderId}/service-pieces/${pieceId}/status`, { newStatus }),
+
+  /** Adds a round to an open tab and sends it to the kitchen. */
+  addRound: (orderId: string, items: CreateOrderItemRequest[]) =>
+    api.post<OrderDto>(`/orders/${orderId}/rounds`, { items }),
+
+  /** Closes a paid tab and frees its table. */
+  closeTab: (orderId: string) =>
+    api.post<OrderDto>(`/orders/${orderId}/close-tab`, {}),
+
+  moveTab: (orderId: string, diningTableId: string) =>
+    api.put<OrderDto>(`/orders/${orderId}/table`, { diningTableId }),
+
+  /** The waiter took a ready round to the table. */
+  markRoundServed: (ticketId: string) =>
+    api.put(`/orders/kitchen-tickets/${ticketId}/served`, {}),
 };

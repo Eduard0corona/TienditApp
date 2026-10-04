@@ -15,7 +15,9 @@ public sealed class OrderRealtimeNotifications :
     INotificationHandler<OrderCreatedEvent>,
     INotificationHandler<OrderStatusChangedEvent>,
     INotificationHandler<OrderCancelledEvent>,
-    INotificationHandler<ServiceOrderPieceStatusChangedEvent>
+    INotificationHandler<ServiceOrderPieceStatusChangedEvent>,
+    INotificationHandler<TabRoundSentEvent>,
+    INotificationHandler<KitchenTicketChangedEvent>
 {
     private readonly IApplicationDbContext _context;
     private readonly IOrderNotificationService _notificationService;
@@ -52,6 +54,18 @@ public sealed class OrderRealtimeNotifications :
             notification.OrderId,
             notification.PreviousStatus,
             notification.Reason));
+
+    public Task Handle(TabRoundSentEvent notification, CancellationToken cancellationToken)
+        => NotifyAsync(notification, () => _notificationService.NotifyKitchenTicketsChanged(
+            notification.TenantId,
+            notification.OrderId,
+            notification.Round));
+
+    public Task Handle(KitchenTicketChangedEvent notification, CancellationToken cancellationToken)
+        => NotifyAsync(notification, () => _notificationService.NotifyKitchenTicketsChanged(
+            notification.TenantId,
+            notification.OrderId,
+            notification.Round));
 
     public Task Handle(ServiceOrderPieceStatusChangedEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, async () =>

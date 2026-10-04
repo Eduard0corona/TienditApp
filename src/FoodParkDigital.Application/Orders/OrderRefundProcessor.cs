@@ -15,7 +15,7 @@ public sealed record OrderRefundInput(
     OrderPaymentMethod Method,
     string Reason,
     bool RestockItems,
-    IReadOnlyCollection<(Guid OrderItemId, int Quantity)> ReturnedItems,
+    IReadOnlyCollection<(Guid OrderItemId, decimal Quantity)> ReturnedItems,
     Guid? InventoryLocationId = null,
     string? Reference = null);
 

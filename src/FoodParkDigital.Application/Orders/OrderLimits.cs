@@ -13,12 +13,14 @@ public static class OrderLimits
     public const int MaxQuantityPerLine = 10_000;
     public const int MaxServicePiecesPerOrder = 500;
     public const int MaxPaymentsPerSale = 10;
+    /// <summary>A sale captured without connection must reach the server within these days.</summary>
+    public const int MaxOfflineSaleAgeDays = 7;
 
     /// <summary>
     /// Adds the line quantity to the running total of the product and returns an error when the
     /// product's MaxQuantityPerOrder is exceeded.
     /// </summary>
-    public static string? TrackProductQuantity(Dictionary<Guid, int> quantitiesByProduct, Product product, int quantity)
+    public static string? TrackProductQuantity(Dictionary<Guid, decimal> quantitiesByProduct, Product product, decimal quantity)
     {
         quantitiesByProduct.TryGetValue(product.Id, out var current);
         var total = current + quantity;
@@ -40,7 +42,7 @@ public static class OrderLimits
     {
         var piecesToCreate = manualPieces.Count > 0
             ? manualPieces.Count
-            : trackableServiceLines.Sum(line => line.Item.Quantity);
+            : (int)trackableServiceLines.Sum(line => decimal.Ceiling(line.Item.Quantity));
 
         if (piecesToCreate > MaxServicePiecesPerOrder)
             return $"Una orden puede generar como maximo {MaxServicePiecesPerOrder} piezas de servicio.";

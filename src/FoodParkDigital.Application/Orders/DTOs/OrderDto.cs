@@ -1,3 +1,5 @@
+using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 
@@ -20,6 +22,10 @@ public class OrderDto
     /// <summary>True when item prices include IVA; false when IVA was added on top.</summary>
     public bool PricesIncludeTax { get; set; }
     public OrderChannel Channel { get; set; }
+    /// <summary>Branch where the sale was made.</summary>
+    public Guid? BranchId { get; set; }
+    /// <summary>When the device captured it without connection; the sale reached the server later.</summary>
+    public DateTimeOffset? CapturedOfflineAt { get; set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; set; }
     public decimal Tax { get; set; }
@@ -43,6 +49,49 @@ public class OrderDto
     public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
     public List<OrderPaymentDto> Payments { get; set; } = new();
     public List<OrderRefundDto> Refunds { get; set; } = new();
+    /// <summary>The order is (or was) a tab: rounds added over time, charged when the table leaves.</summary>
+    public bool IsTab { get; set; }
+    /// <summary>A tab still taking rounds.</summary>
+    public bool IsOpenTab { get; set; }
+    public Guid? DiningTableId { get; set; }
+    /// <summary>Rounds of the tab sent to the kitchen.</summary>
+    public List<KitchenTicketSummaryDto> KitchenTickets { get; set; } = new();
+}
+
+public class KitchenTicketSummaryDto
+{
+    public Guid Id { get; set; }
+    public int Round { get; set; }
+    public KitchenTicketStatus Status { get; set; }
+    public DateTimeOffset SentAt { get; set; }
+    public string? SentBy { get; set; }
+    public DateTimeOffset? ReadyAt { get; set; }
+    public DateTimeOffset? ServedAt { get; set; }
+}
+
+/// <summary>A round of an open tab on the kitchen board, with only its own lines.</summary>
+public class KitchenTicketDto
+{
+    public Guid Id { get; set; }
+    public Guid OrderId { get; set; }
+    public string OrderNumber { get; set; } = null!;
+    public string CustomerName { get; set; } = null!;
+    public string? TableNumber { get; set; }
+    public string? CustomerNotes { get; set; }
+    public int Round { get; set; }
+    public KitchenTicketStatus Status { get; set; }
+    public DateTimeOffset SentAt { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? ReadyAt { get; set; }
+    public List<OrderItemDto> Items { get; set; } = new();
+}
+
+public class OrderItemOptionDto
+{
+    public Guid OptionId { get; set; }
+    public string GroupName { get; set; } = null!;
+    public string OptionName { get; set; } = null!;
+    public decimal PriceDelta { get; set; }
 }
 
 public class OrderRefundDto
@@ -61,7 +110,7 @@ public class OrderRefundDto
 public class OrderRefundLineDto
 {
     public Guid OrderItemId { get; set; }
-    public int Quantity { get; set; }
+    public decimal Quantity { get; set; }
 }
 
 public class OrderItemDto
@@ -69,14 +118,23 @@ public class OrderItemDto
     public Guid Id { get; set; }
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
-    public int Quantity { get; set; }
-    /// <summary>Units given back with refunds.</summary>
-    public int ReturnedQuantity { get; set; }
+    /// <summary>Up to three decimals for weight, volume, length and time.</summary>
+    public decimal Quantity { get; set; }
+    /// <summary>Quantity given back with refunds.</summary>
+    public decimal ReturnedQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal TotalPrice { get; set; }
     public string? Notes { get; set; }
     public decimal TaxRate { get; set; }
     public bool IsTaxExempt { get; set; }
+    public UnitType Unit { get; set; }
+    public string SatProductCode { get; set; } = null!;
+    public string SatUnitCode { get; set; } = null!;
+    public CfdiTaxObject TaxObject { get; set; }
+    /// <summary>Round of an open tab the line was ordered in (1 for any other sale).</summary>
+    public int Round { get; set; }
+    /// <summary>Variants and extras chosen, already included in the unit price.</summary>
+    public List<OrderItemOptionDto> Options { get; set; } = new();
 }
 
 public class OrderTaxLineDto
@@ -184,6 +242,6 @@ public class TopSellingItemDto
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
     public string ItemType { get; set; } = "Product";
-    public int QuantitySold { get; set; }
+    public decimal QuantitySold { get; set; }
     public decimal TotalAmount { get; set; }
 }

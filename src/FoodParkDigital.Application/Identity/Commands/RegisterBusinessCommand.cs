@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -7,6 +8,7 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -78,19 +80,22 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
     private readonly IApplicationDbContext _context;
     private readonly IEmailService _emailService;
     private readonly ISmsService _smsService;
+    private readonly IDateTimeProvider _clock;
 
     public RegisterBusinessCommandHandler(
         UserManager<ApplicationUser> userManager,
         IJwtTokenService jwtTokenService,
         IApplicationDbContext context,
         IEmailService emailService,
-        ISmsService smsService)
+        ISmsService smsService,
+        IDateTimeProvider clock)
     {
         _userManager = userManager;
         _jwtTokenService = jwtTokenService;
         _context = context;
         _emailService = emailService;
         _smsService = smsService;
+        _clock = clock;
     }
 
     public async Task<Result<AuthResponse>> Handle(RegisterBusinessCommand request, CancellationToken cancellationToken)
@@ -157,11 +162,13 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             email: null,
             isPublicGeneral: true);
 
+        var defaultBranch = Branch.CreateDefault(tenant.Id);
         var defaultLocation = new InventoryLocation(
             tenantId: tenant.Id,
             name: "Almacen principal",
             code: "MAIN",
-            isDefault: true);
+            isDefault: true,
+            branchId: defaultBranch.Id);
 
         // Create user as TenantAdmin
         var user = new ApplicationUser
@@ -188,7 +195,13 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             _context.Tenants.Add(tenant);
             _context.TenantSettings.Add(settings);
             _context.Customers.Add(publicGeneralCustomer);
+            _context.Branches.Add(defaultBranch);
             _context.InventoryLocations.Add(defaultLocation);
+            // With a plan for new businesses the business starts its trial there (modules trimmed to the plan).
+            var trial = await SubscriptionRules.StartTrialForNewBusinessAsync(
+                _context, tenant.Id, settings, request.BusinessType, _clock.UtcNow, ct);
+            if (trial is not null)
+                _context.TenantSubscriptions.Add(trial);
             await _context.SaveChangesAsync(ct);
 
             var createResult = await _userManager.CreateAsync(user, request.Password);

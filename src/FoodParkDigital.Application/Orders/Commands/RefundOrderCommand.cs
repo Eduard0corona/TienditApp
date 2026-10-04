@@ -30,7 +30,8 @@ public record RefundOrderCommand : IRequest<Result<OrderDto>>
 public record RefundItemDto
 {
     public Guid OrderItemId { get; init; }
-    public int Quantity { get; init; }
+    /// <summary>Up to three decimals for items sold by weight, volume, length or time.</summary>
+    public decimal Quantity { get; init; }
 }
 
 public class RefundOrderCommandValidator : AbstractValidator<RefundOrderCommand>
@@ -50,7 +51,8 @@ public class RefundOrderCommandValidator : AbstractValidator<RefundOrderCommand>
         RuleForEach(x => x.Items).ChildRules(item =>
         {
             item.RuleFor(i => i.OrderItemId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine);
+            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
+                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
         });
     }
 }

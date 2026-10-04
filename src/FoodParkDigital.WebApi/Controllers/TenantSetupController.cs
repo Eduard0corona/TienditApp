@@ -1,7 +1,10 @@
+using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Catalog.Commands;
+using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Queries;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -60,4 +63,21 @@ public class TenantSetupController : ControllerBase
             return BadRequest(new { error = result.Error });
         return Ok(result.Value);
     }
+
+    /// <summary>Plan, billing status, limits in use and payments of the business (owners and admins).</summary>
+    [HttpGet("subscription")]
+    public async Task<ActionResult<SubscriptionDetailDto>> GetSubscription()
+        => Ok(await _mediator.Send(new GetMySubscriptionQuery()));
+
+    /// <summary>Turns the public menu off, on, or on with orders.</summary>
+    [HttpPut("online-menu")]
+    public async Task<ActionResult<OnlineMenuSettingsDto>> UpdateOnlineMenu([FromBody] UpdateOnlineMenuRequest request)
+    {
+        var result = await _mediator.Send(new UpdateOnlineMenuCommand(request.Mode));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
 }
+
+public record UpdateOnlineMenuRequest(OnlineMenuMode Mode);

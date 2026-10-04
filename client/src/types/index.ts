@@ -165,6 +165,8 @@ export interface TenantProfileDto {
   autoCloseCounterSales: boolean;
   /** Cash payments are refused unless the cashier has an open drawer. */
   requireOpenCashSession?: boolean;
+  /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
+  onlineMenuMode?: OnlineMenuMode;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -366,6 +368,21 @@ export const UnitType = {
 } as const;
 export type UnitType = (typeof UnitType)[keyof typeof UnitType];
 
+/** Same numbers as Domain.Tenants.Enums.OnlineMenuMode. */
+export const OnlineMenuMode = {
+  Off: 0,
+  MenuOnly: 1,
+  Orders: 2,
+} as const;
+export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
+
+/** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
+export const CfdiTaxObject = {
+  NotSubject: 1,
+  Subject: 2,
+} as const;
+export type CfdiTaxObject = (typeof CfdiTaxObject)[keyof typeof CfdiTaxObject];
+
 export interface ProductImageUrlsDto {
   original: string;
   large: string;
@@ -391,6 +408,11 @@ export interface ProductDto {
   taxRate?: number | null;
   isTaxExempt: boolean;
   hasDiscount: boolean;
+  /** CFDI ClaveProdServ; empty uses the generic 01010101. */
+  satProductCode?: string | null;
+  /** CFDI ClaveUnidad; empty uses the code of the unit. */
+  satUnitCode?: string | null;
+  taxObject: CfdiTaxObject;
   imageUrl?: string;
   images?: ProductImageUrlsDto;
   isAvailable: boolean;
@@ -406,6 +428,25 @@ export interface ProductDto {
   isLowStock: boolean;
   isTrackable: boolean;
   notifyCustomer: boolean;
+  /** Variants and extras offered with the product. */
+  optionGroups?: ProductOptionGroupDto[];
+}
+
+/** A choice offered with a product: min 1 and max 1 is a variant (size), min 0 makes extras optional. */
+export interface ProductOptionGroupDto {
+  id: string;
+  name: string;
+  minSelections: number;
+  maxSelections: number;
+  options: ProductOptionDto[];
+}
+
+export interface ProductOptionDto {
+  id: string;
+  name: string;
+  /** Added to the product price (negative for a cheaper variant). */
+  priceDelta: number;
+  isAvailable: boolean;
 }
 
 export interface CategoryDto {
@@ -463,6 +504,9 @@ export interface CreateProductRequest {
   compareAtPrice?: number;
   taxRate?: number | null;
   isTaxExempt?: boolean;
+  satProductCode?: string;
+  satUnitCode?: string;
+  taxObject?: CfdiTaxObject;
   calories?: number;
   allergens?: string;
   stockQuantity?: number;
@@ -594,6 +638,9 @@ export interface InventoryLocationDto {
   contactPhone?: string;
   isDefault: boolean;
   isActive: boolean;
+  /** Branch the stock belongs to; none for a warehouse that serves every branch. */
+  branchId?: string | null;
+  branchName?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -611,15 +658,14 @@ export interface CreateInventoryLocationRequest {
   contactName?: string;
   contactPhone?: string;
   isDefault: boolean;
+  branchId?: string;
 }
 
 export interface UpdateInventoryLocationRequest extends CreateInventoryLocationRequest {
   id: string;
+  /** Makes it a warehouse that serves every branch (without it, a missing branchId keeps the current one). */
+  detachFromBranch?: boolean;
 }
-
-export type BranchDto = InventoryLocationDto;
-export type CreateBranchRequest = CreateInventoryLocationRequest;
-export type UpdateBranchRequest = UpdateInventoryLocationRequest;
 
 export interface InventoryStockDto {
   stockId: string;
@@ -917,6 +963,9 @@ export interface CashSessionDto {
   isMine: boolean;
   inventoryLocationId?: string | null;
   inventoryLocationName?: string | null;
+  /** Branch of the drawer: payments of sales made there enter it. */
+  branchId?: string | null;
+  branchName?: string | null;
   /** Expected cash frozen at closing. */
   expectedClosingAmount?: number | null;
   /** Counted minus expected: negative is a shortage. */
@@ -958,6 +1007,13 @@ export interface DailyCashCutByLocationDto {
   totalAmount: number;
 }
 
+export interface DailyCashCutByBranchDto {
+  branchId?: string | null;
+  branchName: string;
+  paymentsCount: number;
+  totalAmount: number;
+}
+
 export interface DailyCashCutDto {
   date: string;
   salesPaymentsTotal: number;
@@ -974,13 +1030,15 @@ export interface DailyCashCutDto {
   netCashOnlyFlow: number;
   byUser: DailyCashCutByUserDto[];
   byLocation: DailyCashCutByLocationDto[];
+  /** Payments by the branch where the sale was made. */
+  byBranch: DailyCashCutByBranchDto[];
 }
 
 export interface OpenCashSessionRequest {
   openingAmount: number;
   notes?: string;
   /** Branch of the drawer; the default one when omitted. */
-  inventoryLocationId?: string;
+  branchId?: string;
 }
 
 export interface CloseCashSessionRequest {
@@ -1298,15 +1356,67 @@ export interface OrderItemDto {
   id: string;
   productId: string;
   productName: string;
+  /** Up to three decimals for weight, volume, length and time; whole for pieces. */
   quantity: number;
   /** Units given back with refunds; the sold quantity never changes. */
   returnedQuantity?: number;
+  /** Unit the line was sold in, with its CFDI codes at the time of the sale. */
+  unit?: UnitType;
+  satProductCode?: string;
+  satUnitCode?: string;
+  taxObject?: CfdiTaxObject;
   unitPrice: number;
   totalPrice: number;
   notes?: string;
   /** IVA rate in percent the line was sold with (0 when exempt). */
   taxRate: number;
   isTaxExempt: boolean;
+  /** Round of an open tab the line was ordered in (1 for any other sale). */
+  round?: number;
+  /** Variants and extras chosen, already included in the unit price. */
+  options?: OrderItemOptionDto[];
+}
+
+export interface OrderItemOptionDto {
+  optionId: string;
+  groupName: string;
+  optionName: string;
+  priceDelta: number;
+}
+
+/** Same numbers as Domain.Orders.Enums.KitchenTicketStatus: a round of an open tab in the kitchen. */
+export const KitchenTicketStatus = {
+  Pending: 0,
+  Preparing: 1,
+  Ready: 2,
+  Served: 3,
+} as const;
+export type KitchenTicketStatus = (typeof KitchenTicketStatus)[keyof typeof KitchenTicketStatus];
+
+export interface KitchenTicketSummaryDto {
+  id: string;
+  round: number;
+  status: KitchenTicketStatus;
+  sentAt: string;
+  sentBy?: string | null;
+  readyAt?: string | null;
+  servedAt?: string | null;
+}
+
+/** A round of an open tab on the kitchen board, with only its own lines. */
+export interface KitchenTicketDto {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  tableNumber?: string | null;
+  customerNotes?: string | null;
+  round: number;
+  status: KitchenTicketStatus;
+  sentAt: string;
+  startedAt?: string | null;
+  readyAt?: string | null;
+  items: OrderItemDto[];
 }
 
 /** IVA of the lines of one rate, as computed by the server. */
@@ -1429,6 +1539,14 @@ export interface OrderDto {
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
   refunds?: OrderRefundDto[];
+  /** The order is (or was) a tab: rounds added over time, charged when the table leaves. */
+  isTab?: boolean;
+  /** A tab still taking rounds. */
+  isOpenTab?: boolean;
+  diningTableId?: string | null;
+  kitchenTickets?: KitchenTicketSummaryDto[];
+  /** When the device captured it without connection; it reached the server later. */
+  capturedOfflineAt?: string | null;
 }
 
 export interface OrderRefundDto {
@@ -1462,6 +1580,8 @@ export interface CreateOrderItemRequest {
   productId: string;
   quantity: number;
   notes?: string;
+  /** Variants and extras chosen (ids of the product's options). */
+  optionIds?: string[];
 }
 
 export const OrderChannel = {
@@ -1516,6 +1636,15 @@ export interface CreateOrderRequest {
   expectedTotal?: number;
   /** Counter (default) or WhatsApp when the order is taken from a chat. */
   channel?: OrderChannel;
+  /** Opens the order as a tab: its items are the first round sent to the kitchen. */
+  openTab?: boolean;
+  diningTableId?: string;
+  /** Branch where the sale is made; the cashier's drawer branch or the default one when omitted. */
+  branchId?: string;
+  /** Key of this sale on the device: sending it again returns the same sale instead of charging twice. */
+  idempotencyKey?: string;
+  /** When the device captured it without connection. */
+  capturedOfflineAt?: string;
 }
 
 export interface CreateOrderPaymentRequest {

@@ -125,6 +125,20 @@ public class TenantResolutionMiddleware
                 });
                 return;
             }
+
+            // A business suspended or cancelled for billing keeps only what explains why (its profile and plan).
+            if (accessSnapshot.TenantSuspended && !IsAllowedWhileSuspended(path, context.Request.Method))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Status = 403,
+                    Type = TenantSuspendedProblemType,
+                    Title = "Tenant suspended",
+                    Detail = "El negocio está suspendido. Revisa tu plan en Mi negocio o contacta a soporte."
+                });
+                return;
+            }
         }
 
         if (tenantScopedPath && role is not ("SUPER_ADMIN" or "TENANT_ADMIN"))
@@ -211,6 +225,12 @@ public class TenantResolutionMiddleware
             && segments[4] == "orders";
     }
 
+    public const string TenantSuspendedProblemType = "tenant-suspended";
+
+    private static bool IsAllowedWhileSuspended(string path, string method) =>
+        HttpMethods.IsGet(method)
+        && (path == "/api/v1/auth/my-tenant" || path == "/api/v1/auth/my-tenant/subscription");
+
     private static bool IsTenantScopedPath(string path) =>
         path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
@@ -230,6 +250,7 @@ public class TenantResolutionMiddleware
         || path.StartsWith("/api/v1/employees", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/tables", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
@@ -238,20 +259,21 @@ public class TenantResolutionMiddleware
 
     private static CapabilityRequirement? GetCapabilityRequirement(string path)
     {
-        if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal))
-            return new CapabilityRequirement(TenantCapability.Inventory, CapabilityMatchMode.All);
-
         if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Inventory, CapabilityMatchMode.All);
 
         if (path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Kitchen, CapabilityMatchMode.All);
 
+        if (path.StartsWith("/api/v1/tables", StringComparison.Ordinal))
+            return new CapabilityRequirement(TenantCapability.Food, CapabilityMatchMode.All);
+
         if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Service, CapabilityMatchMode.All);
 
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
             || IsTenantOrdersPath(path)
+            || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
@@ -287,14 +309,10 @@ public class TenantResolutionMiddleware
         if (path.StartsWith("/api/v1/employees", StringComparison.Ordinal))
             return [TenantPermission.ManageEmployees];
 
-        if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal) && isReadRequest)
-        {
-            // Cash module needs active branches to register payments/cuts by branch.
-            return [TenantPermission.ManageInventory, TenantPermission.ManageCash];
-        }
-
+        // Branches are read by every member (where they sell, open their drawer, see reports) and managed by
+        // owners and admins: the use cases check it (RequiresTenantMember / RequiresTenantManager).
         if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal))
-            return [TenantPermission.ManageInventory];
+            return [];
 
         if (path.StartsWith("/api/v1/inventory/locations", StringComparison.Ordinal) && isReadRequest)
         {
@@ -312,6 +330,10 @@ public class TenantResolutionMiddleware
 
         if (path.StartsWith("/api/v1/marketing", StringComparison.Ordinal))
             return [TenantPermission.ManageWhatsApp];
+
+        // The dining room is read by whoever takes orders; tables are configured with the catalog.
+        if (path.StartsWith("/api/v1/tables", StringComparison.Ordinal))
+            return isReadRequest ? [TenantPermission.ManageOrders, TenantPermission.ManageCatalog] : [TenantPermission.ManageCatalog];
 
         // Recording a customer's opt-out is also part of attending them.
         if (path.StartsWith("/api/v1/messaging/opt-outs", StringComparison.Ordinal))

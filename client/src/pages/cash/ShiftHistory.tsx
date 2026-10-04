@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import DataTable from '../../components/common/DataTable';
+import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useToast } from '../../hooks/useToast';
-import type { CashCountLineDto, CashSessionDto, CashTransactionDto, InventoryLocationDto, PaginatedList } from '../../types';
+import type { CashCountLineDto, CashSessionDto, CashTransactionDto, PaginatedList } from '../../types';
 import { CashSessionStatus } from '../../types';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
@@ -29,7 +30,7 @@ const COLUMNS = [
 ];
 
 interface ShiftHistoryProps {
-  locations: InventoryLocationDto[];
+  branches: Branch[];
   /** Owners and admins can close a drawer that another cashier left open. */
   canCloseOthers: boolean;
   /** Changes when a drawer opens or closes elsewhere on the page, to reload. */
@@ -45,7 +46,7 @@ function toEndOfDay(date: string) {
 }
 
 /** Every drawer by date, branch and status, with what it should have held, what was counted and why it differed. */
-export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: ShiftHistoryProps) {
+export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: ShiftHistoryProps) {
   const toast = useToast();
   const [data, setData] = useState(EMPTY_SESSIONS);
   const [loading, setLoading] = useState(true);
@@ -54,7 +55,7 @@ export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: 
   const [pageSize, setPageSize] = useState(10);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [locationId, setLocationId] = useState('');
+  const [branchId, setBranchId] = useState('');
   const [onlyWithDifference, setOnlyWithDifference] = useState(false);
   const [selected, setSelected] = useState<CashSessionDto | null>(null);
   const [selectedMovements, setSelectedMovements] = useState<CashTransactionDto[]>([]);
@@ -68,7 +69,7 @@ export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: 
       const { data: page } = await cashApi.getSessions({
         fromDate: toStartOfDay(fromDate),
         toDate: toEndOfDay(toDate),
-        inventoryLocationId: locationId || undefined,
+        branchId: branchId || undefined,
         onlyWithDifference: onlyWithDifference || undefined,
         pageNumber,
         pageSize,
@@ -80,7 +81,7 @@ export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: 
     } finally {
       setLoading(false);
     }
-  }, [fromDate, locationId, onlyWithDifference, pageNumber, pageSize, toDate]);
+  }, [branchId, fromDate, onlyWithDifference, pageNumber, pageSize, toDate]);
 
   useEffect(() => {
     void load();
@@ -130,14 +131,14 @@ export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: 
             <input id="shifts-to" type="date" className="form-control" value={toDate} min={fromDate || undefined}
               onChange={(event) => { setToDate(event.target.value); resetPage(); }} />
           </div>
-          {locations.length > 1 && (
+          {branches.length > 1 && (
             <div className="col-sm-6 col-lg-3">
-              <label className="form-label" htmlFor="shifts-location">Sucursal</label>
-              <select id="shifts-location" className="form-select" value={locationId}
-                onChange={(event) => { setLocationId(event.target.value); resetPage(); }}>
+              <label className="form-label" htmlFor="shifts-branch">Sucursal</label>
+              <select id="shifts-branch" className="form-select" value={branchId}
+                onChange={(event) => { setBranchId(event.target.value); resetPage(); }}>
                 <option value="">Todas</option>
-                {locations.map((location) => (
-                  <option key={location.id} value={location.id}>{location.name}</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
               </select>
             </div>
@@ -188,7 +189,7 @@ export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: 
                   </div>
                 </td>
                 <td>{session.openedBy}{session.isMine && <span className="badge bg-light text-dark ms-1">Tú</span>}</td>
-                <td>{session.inventoryLocationName ?? '—'}</td>
+                <td>{session.branchName ?? session.inventoryLocationName ?? '—'}</td>
                 <td className="text-end ta-money">{formatMoney(isOpen ? session.expectedBalance : session.expectedClosingAmount ?? session.expectedBalance)}</td>
                 <td className="text-end ta-money">{isOpen ? '—' : formatMoney(session.closingAmount ?? 0)}</td>
                 <td className="text-center">
@@ -215,7 +216,7 @@ export default function ShiftHistory({ locations, canCloseOthers, refreshKey }: 
               <Modal.Title as="h2" className="h5">
                 Turno de {selected.openedBy}
                 <span className="d-block small text-muted fw-normal">
-                  {selected.inventoryLocationName ?? 'Sin sucursal'} · {new Date(selected.openedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
+                  {selected.branchName ?? selected.inventoryLocationName ?? 'Sin sucursal'} · {new Date(selected.openedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
                 </span>
               </Modal.Title>
             </Modal.Header>

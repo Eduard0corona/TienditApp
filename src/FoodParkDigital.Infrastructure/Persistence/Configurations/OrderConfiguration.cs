@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.CustomerName).HasMaxLength(200).IsRequired();
         builder.Property(o => o.CustomerPhone).HasMaxLength(20);
         builder.Property(o => o.CustomerNotes).HasMaxLength(500);
-        builder.Property(o => o.TableNumber).HasMaxLength(10);
+        builder.Property(o => o.TableNumber).HasMaxLength(50);
         builder.Property(o => o.CancellationReason).HasMaxLength(500);
         builder.Property(o => o.CustomerUserId).IsRequired(false);
         builder.Property(o => o.TemporaryCustomerId).IsRequired(false);
@@ -37,6 +38,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.PaidAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
         builder.Property(o => o.RefundedAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
         builder.Ignore(o => o.NetPaidAmount);
+        builder.Ignore(o => o.IsOpenTab);
+        builder.Ignore(o => o.CurrentRound);
+        builder.Property(o => o.IsTab).HasDefaultValue(false).ValueGeneratedNever();
         builder.Property(o => o.TenantId).IsRequired();
 
         // Concurrency token
@@ -78,6 +82,26 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey(o => o.TemporaryCustomerId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<FoodParkDigital.Domain.Branches.Entities.Branch>()
+            .WithMany()
+            .HasForeignKey(o => o.BranchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Open tabs: the table it was served at, and OpenTableId while it is open (one open tab per table).
+        builder.HasOne<DiningTable>()
+            .WithMany()
+            .HasForeignKey(o => o.DiningTableId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<DiningTable>()
+            .WithMany()
+            .HasForeignKey(o => o.OpenTableId)
+            .OnDelete(DeleteBehavior.NoAction);
+        builder.HasMany(o => o.KitchenTickets)
+            .WithOne()
+            .HasForeignKey(t => t.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.KitchenTickets).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Backing fields for encapsulated collections
         builder.Navigation(o => o.Items).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.StatusHistory).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -93,8 +117,18 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => new { o.TenantId, o.Status });
         builder.HasIndex(o => new { o.TenantId, o.OrderType, o.Status });
         builder.HasIndex(o => new { o.TenantId, o.CreatedAt }).IsDescending(false, true);
+        builder.HasIndex(o => new { o.TenantId, o.BranchId, o.CreatedAt });
         builder.HasIndex(o => new { o.TenantId, o.OrderNumber }).IsUnique();
         builder.HasIndex(o => new { o.TenantId, o.CustomerUserId });
         builder.HasIndex(o => new { o.TenantId, o.TemporaryCustomerId });
+        // A device's key identifies one sale per business: retries return it instead of creating another.
+        builder.HasIndex(o => new { o.TenantId, o.ClientRequestId })
+            .IsUnique()
+            .HasFilter("[ClientRequestId] IS NOT NULL")
+            .HasDatabaseName("IX_Orders_TenantId_ClientRequestId");
+        builder.HasIndex(o => new { o.TenantId, o.OpenTableId })
+            .IsUnique()
+            .HasFilter("[OpenTableId] IS NOT NULL")
+            .HasDatabaseName("IX_Orders_TenantId_OpenTableId_Open");
     }
 }

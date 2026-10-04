@@ -12,7 +12,7 @@
   - Los movimientos manuales solo pueden ser depósito, gasto, retiro o reembolso; la orden referida debe existir.
   - `Inflows`/`Outflows` y el saldo esperado solo cuentan efectivo; tarjeta, transferencia y otros métodos se reportan aparte (`NonCashInflows`). El corte diario expone `NetCashOnlyFlow`.
   - Cada cajero tiene su propia caja abierta por sucursal (índice único filtrado por negocio y cajero, ver [caja por cajero](#caja-por-cajero-fase-2)) y `CashSession.Revision` es token de concurrencia: un pago concurrente con el cierre o dos cierres simultáneos fallan con 409 en lugar de sobrescribirse. El cierre exige un monto contado mayor o igual a cero.
-- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal del pago o del negocio. Si hay varias abiertas y ninguna es suya, o no hay ninguna, el pago sigue registrado sin movimiento de caja, salvo que el negocio exija caja abierta para cobrar en efectivo.
+- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal de la venta (nunca a una de otra sucursal; las cajas de antes de las sucursales la toman si son la única abierta). Si hay varias abiertas y ninguna es suya, o no hay ninguna, el pago sigue registrado sin movimiento de caja, salvo que el negocio exija caja abierta para cobrar en efectivo.
 - Compras aceptan `TaxPercent` por línea y calculan subtotales/impuesto.
 - `DigitalWallet` existe como método de pago y subtotal del corte, no como cuenta Wallet.
 
@@ -27,7 +27,18 @@
   - exentos y tasa 0 no causan impuesto.
 - `SubTotal` es la suma de las bases, `Tax` la suma de los impuestos y `Total = SubTotal + Tax`. Con todas las líneas al 16 % sumado el resultado es idéntico al cálculo anterior (`round(SubTotal × 0.16)`), así que las órdenes existentes no cambian.
 - `OrderDto.TaxBreakdown` expone el desglose por tasa y el ticket lo imprime. El SPA lo estima con el mismo algoritmo en centavos enteros (`estimateOrderTotals`); la venta envía `ExpectedTotal` y la API la rechaza sin guardarla si un precio cambió mientras se capturaba.
-- No existen CFDI, claves SAT, descuentos por línea ni notas de crédito fiscales. El desglose persistido por línea es la base de ese trabajo.
+- No hay timbrado (PAC), descuentos por línea ni notas de crédito fiscales. Las claves SAT por línea y la vista previa del CFDI están en [cantidades decimales y CFDI](#cantidades-decimales-y-datos-para-cfdi-fase-3).
+
+## Cantidades decimales y datos para CFDI (Fase 3)
+
+- Kilo, gramo, libra, onza, litro, mililitro, metro y hora se venden con hasta 3 decimales (`UnitTypeRules`); pieza, paquete, caja, par, porción, rebanada, ración, rollo, sesión y servicio solo en enteros. El dominio rechaza 1.5 piezas y la API rechaza más de 3 decimales (`PrecisionScale(18, 3)`). Un servicio rastreable crea una pieza por unidad, así que pide cantidades enteras aunque se venda por hora.
+- `OrderItem.Quantity`, `ReturnedQuantity` y `OrderRefundLine.Quantity` son `decimal(18,3)`. El importe de la línea se redondea una vez a centavos con redondeo bancario (`TotalPrice = round(cantidad × precio, 2, ToEven)`) y Vender lo estima igual en centavos enteros (`lineAmountCents`). Los reembolsos devuelven fracciones (0.5 kg de 1.25 kg).
+- Vender pregunta "¿Cuánto?" al tocar un producto por kilo, litro, metro u hora, con atajos (¼, ½, 1, 2 kg; 100 a 1000 g; ½ a 2 h); los botones + y − suman 0.1 kg/L/m, 50 g/ml o ½ hora. El ticket imprime "1.255 kg" en lugar de "1 ×".
+- Cada producto puede tener clave de producto o servicio SAT (`SatProductCode`, 8 dígitos), clave de unidad (`SatUnitCode`) y objeto de impuesto (`TaxObject`: 02 sí objeto, 01 no objeto; un producto 01 debe ser exento o 0 %). Sin clave usa la genérica 01010101 y la unidad de su tipo (H87 pieza, KGM kilo, LTR litro, E48 servicio...).
+- Cada línea copia al venderse la unidad y las claves del producto (`OrderLineFiscalData`); cambiar el producto después no altera ventas anteriores. La migración completó las líneas existentes con la unidad actual de su producto.
+- `CfdiAmountCalculator` reparte una orden en conceptos CFDI 4.0: por tasa, las bases suman la base de la orden y los IVA de los conceptos suman el IVA de la orden. Cada IVA queda dentro del rango que acepta el SAT para su base (base ± medio centavo por la tasa, truncado y redondeado hacia arriba); el centavo que deja el redondeo por grupo pasa al concepto que más se acerca. Exentos se declaran con TipoFactor Exento, 0 % con Tasa 0.000000 y los conceptos 01 sin traslado. Una prueba con 500 órdenes aleatorias comprueba que siempre cuadra.
+- `GET /api/v1/orders/{id}/cfdi-draft` (con `ManageOrders`) devuelve la vista previa: emisor (RFC, razón social, régimen y código postal de "Mi negocio"), receptor (público en general por defecto, o el RFC, nombre, código postal, régimen y uso que se den), forma y método de pago (PUE con la forma del mayor pago si está pagada; PPD y 99 si tiene saldo), conceptos, traslados y totales. Separa lo que impide timbrar (datos del emisor faltantes, diferencia de redondeo) de los avisos (claves genéricas, reembolsos que requieren nota de crédito, factura global). Una orden cancelada no se factura.
+- Pendiente: timbrado con un PAC y certificados CSD, factura global del periodo, complementos de pago y notas de crédito (CFDI de egreso).
 
 ## Cobro en la venta y cierre automático
 
@@ -42,7 +53,7 @@
 
 ## Caja por cajero (Fase 2)
 
-- Cada cajero abre su caja en una sucursal (`InventoryLocationId`) y queda como dueño (`OpenedByUserId`). Solo quien la abrió o un administrador la cierra o registra gastos y retiros en ella.
+- Cada cajero abre su caja en una sucursal (`BranchId`; desde la Fase 3 la sucursal es entidad propia, ver [sucursales](branches-and-reporting.md)) y queda como dueño (`OpenedByUserId`). Solo quien la abrió o un administrador la cierra o registra gastos y retiros en ella.
 - Al cerrar se guardan lo esperado (fondo + efectivo neto), lo contado, la diferencia y las notas; las notas son obligatorias si hay faltante o sobrante. El conteo por denominación es opcional y debe cuadrar con el total (`CashCountJson`).
 - `GET /api/v1/cash/sessions` lista los turnos por fecha, sucursal y estado, con filtro de solo diferencias. Caja muestra Mi caja, Turnos (el administrador puede cerrar cajas ajenas) y Corte del día.
 - `TenantSettings.RequireOpenCashSession` (apagado por defecto) rechaza cobros y reembolsos en efectivo si el cajero no tiene caja abierta; tarjeta y transferencia no la necesitan.
@@ -76,11 +87,11 @@ Compras redondean línea a 4 decimales y órdenes a 2, sin política transversal
 
 ## Arquitectura objetivo: Tax Calculation Engine México
 
-`OrderTaxCalculator` cubre ya precios con impuesto incluido o separado, varias tasas, exentos, redondeo uniforme y desglose persistido por línea. Falta un componente versionado que reciba contexto de entidad legal, fecha y líneas, y cubra además:
+`OrderTaxCalculator` cubre ya precios con impuesto incluido o separado, varias tasas, exentos, redondeo uniforme y desglose persistido por línea, y `CfdiAmountCalculator` lo reparte en conceptos CFDI con claves SAT y objeto de impuesto por línea. Falta un componente versionado que reciba contexto de entidad legal, fecha y líneas, y cubra además:
 
 - reglas por artículo/servicio y entidad legal;
 - orden explícito de descuentos;
 - otros impuestos (IEPS, retenciones);
-- datos para CFDI (claves SAT, objeto de impuesto, régimen fiscal del receptor).
+- timbrado, factura global, complementos de pago y notas de crédito.
 
 La adopción requiere especificación fiscal, pruebas con casos límite, migración compatible y revisión contable/legal.

@@ -6,7 +6,7 @@ Los límites son módulos lógicos dentro de un monolito y una base compartida; 
 |---|---|---|
 | Tenant y negocio | `Tenants`, `TenantSettings`, `TenantUser`, `WhatsAppConfig` | Alta/configuración del negocio, tipo, capabilities y membresía. |
 | Identity y acceso | `ApplicationUser`, `ApplicationRole`, JWT, refresh token, 2FA | Autenticación global, tenant activo, roles y tokens. |
-| Sucursales y empleados | `InventoryLocation`, módulo `Employees` | “Sucursal” se implementa hoy como ubicación de inventario; empleados como `TenantUser` + Identity. No existe agregado `Branch`. |
+| Sucursales y empleados | `Branch`, módulo `Employees` | Desde la Fase 3 la sucursal es un agregado propio (`Branch`): ventas (`Order.BranchId`), cajas (`CashSession.BranchId`) y ubicaciones de inventario (`InventoryLocation.BranchId`) le pertenecen. Empleados como `TenantUser` + Identity. Ver [sucursales y reportes](../domain/branches-and-reporting.md). |
 | Catálogo | `Category`, `Product`, templates | Productos/servicios, unidades, disponibilidad, imágenes y agenda de disponibilidad. |
 | Órdenes y ventas | `Order`, items, pagos, state machines | Creación, cliente, importes, estados, cancelación y venta retail/food. |
 | Servicio | `ServiceOrderDetail`, `ServiceOrderPiece`, service board | Recepción, checklist/piezas, asignación y transiciones propias. |
@@ -17,9 +17,10 @@ Los límites son módulos lógicos dentro de un monolito y una base compartida; 
 | Citas | `Appointment` | Agenda y estados de citas por tenant. |
 | Cocina/fulfillment | `KitchenController`, `GetKitchenOrdersQuery`, `OrderHub` | Vista y avances de preparación para capability Kitchen. |
 | WhatsApp/chat/notificaciones | conversaciones, mensajes, webhook, servicios y hubs | Mensajería, chat, plantillas y notificación SignalR. Las plantillas llevan el estado en español (`OrderStatusLabels`) y montos con formato fijo ($1,234.50). |
-| Auditoría y reportes | `AuditLog`, dashboards, reportes operativos | Trazabilidad parcial y agregaciones de operación. |
+| Auditoría y reportes | `AuditLog`, dashboards, reportes operativos, `DailySalesSnapshot` | Trazabilidad parcial y agregaciones de operación; ventas diarias por sucursal con días cerrados guardados como modelo de lectura. |
 | Agente de respuestas | `AiAgent`, `AiAgentAutoReplyService` | Configura mensajes y responde por coincidencia de palabras clave. No llama a un LLM. |
 | Marketing | `SendPromotionalMessageCommand` | Envío promocional; su superficie es pequeña y depende de WhatsApp. |
+| Plataforma y facturación | `Plan`, `TenantSubscription`, `SubscriptionPayment`, consola `api/v1/platform` | Planes con módulos y límites, suscripción por negocio (prueba, al corriente, vencido, suspendido, cancelado) y pagos registrados por la plataforma. Ver [planes y facturación](../domain/billing-and-platform.md). |
 
 ## Reglas entre contextos
 
@@ -27,4 +28,4 @@ Los límites son módulos lógicos dentro de un monolito y una base compartida; 
 - Identificadores compartidos no autorizan acceso; todas las consultas preservan tenant y permisos.
 - Integraciones consumen puertos, eventos o handlers; las entidades no llaman providers.
 - La base compartida no permite joins cross-tenant implícitos.
-- “Membresías” aparece como categoría de plantilla y `TenantUser` se describe como membership técnica; no hay evidencia de un dominio de suscripciones. No se incluye churn/cancelación de membresías.
+- “Membresías” aparece como categoría de plantilla y `TenantUser` se describe como membership técnica. Las suscripciones de los negocios a la plataforma son el contexto “Plataforma y facturación”; no hay membresías de clientes finales.

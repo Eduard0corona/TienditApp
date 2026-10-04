@@ -18,7 +18,7 @@ public class OrderCashService : IOrderCashService
 
     public async Task<bool> RegisterOrderPaymentAsync(Order order, OrderPayment payment, CancellationToken cancellationToken)
     {
-        var session = await FindDrawerAsync(order.TenantId, payment.InventoryLocationId, cancellationToken);
+        var session = await FindDrawerAsync(order, payment.InventoryLocationId, cancellationToken);
         if (session is null)
             return false;
 
@@ -36,7 +36,7 @@ public class OrderCashService : IOrderCashService
 
     public async Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
     {
-        var session = await FindDrawerAsync(order.TenantId, refund.InventoryLocationId, cancellationToken);
+        var session = await FindDrawerAsync(order, refund.InventoryLocationId, cancellationToken);
         if (session is null)
             return false;
 
@@ -54,34 +54,60 @@ public class OrderCashService : IOrderCashService
     }
 
     private async Task<Domain.Finance.Entities.CashSession?> FindDrawerAsync(
-        Guid tenantId,
+        Order order,
         Guid? inventoryLocationId,
         CancellationToken cancellationToken)
     {
         var openSessions = await _context.CashSessions
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.Status == CashSessionStatus.Open)
-            .Select(x => new { x.Id, x.OpenedByUserId, x.InventoryLocationId })
+            .Where(x => x.TenantId == order.TenantId && x.Status == CashSessionStatus.Open)
+            .Select(x => new DrawerCandidate(x.Id, x.OpenedByUserId, x.BranchId, x.InventoryLocationId))
             .ToListAsync(cancellationToken);
         if (openSessions.Count == 0)
             return null;
 
         var userId = Guid.TryParse(_currentUserService.UserId, out var parsed) ? parsed : (Guid?)null;
-        var atBranch = inventoryLocationId is { } locationId
-            ? openSessions.Where(x => x.InventoryLocationId == locationId).ToList()
-            : [];
-
-        // The cashier's own drawer first; then a branch or a business with a single open drawer (as before
-        // drawers were per cashier). With several drawers open and none of them the cashier's, guessing would
-        // put the cash in someone else's count.
-        var sessionId = openSessions.FirstOrDefault(x => userId is not null && x.OpenedByUserId == userId)?.Id
-            ?? (atBranch.Count == 1 ? atBranch[0].Id : (Guid?)null)
-            ?? (openSessions.Count == 1 ? openSessions[0].Id : (Guid?)null);
+        var sessionId = PickDrawer(openSessions, userId, order.BranchId, inventoryLocationId);
         if (sessionId is null)
             return null;
 
         return await _context.CashSessions
             .Include(x => x.Transactions)
             .FirstAsync(x => x.Id == sessionId.Value, cancellationToken);
+    }
+
+    internal sealed record DrawerCandidate(Guid Id, Guid? OpenedByUserId, Guid? BranchId, Guid? InventoryLocationId);
+
+    /// <summary>
+    /// The cashier's own drawer first: they hold the cash, wherever the sale was made. Otherwise the only open
+    /// drawer of the sale's branch; with several open there and none of them the cashier's, guessing would put
+    /// the cash in someone else's count. Cash of a branch never goes to a drawer of another branch; drawers
+    /// opened before branches existed (no branch) still take it when they are the only open one.
+    /// </summary>
+    internal static Guid? PickDrawer(
+        IReadOnlyList<DrawerCandidate> openSessions,
+        Guid? userId,
+        Guid? branchId,
+        Guid? inventoryLocationId)
+    {
+        var own = openSessions.FirstOrDefault(x => userId is not null && x.OpenedByUserId == userId);
+        if (own is not null)
+            return own.Id;
+
+        if (branchId is { } saleBranchId)
+        {
+            var atBranch = openSessions.Where(x => x.BranchId == saleBranchId).ToList();
+            if (atBranch.Count > 0)
+                return atBranch.Count == 1 ? atBranch[0].Id : null;
+
+            return openSessions.Count == 1 && openSessions[0].BranchId is null ? openSessions[0].Id : null;
+        }
+
+        // A sale without branch (made before branches existed): by the location of the payment, then the business.
+        var atLocation = inventoryLocationId is { } locationId
+            ? openSessions.Where(x => x.InventoryLocationId == locationId).ToList()
+            : [];
+        return (atLocation.Count == 1 ? atLocation[0].Id : (Guid?)null)
+            ?? (openSessions.Count == 1 ? openSessions[0].Id : (Guid?)null);
     }
 }

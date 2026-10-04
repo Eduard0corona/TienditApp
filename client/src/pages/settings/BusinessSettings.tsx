@@ -3,6 +3,9 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
+import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
+import SubscriptionCard from '../../components/settings/SubscriptionCard';
+import { useMySubscription } from '../../hooks/useMySubscription';
 import { tenantApi } from '../../api/tenantApi';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
@@ -94,6 +97,9 @@ const CAPABILITY_PRESETS = [
 export default function BusinessSettings() {
   const { refreshTenant } = useTenant();
   const [capabilities, setCapabilities] = useState<number>(0);
+  const subscription = useMySubscription();
+  // Modules the plan lets the business turn on; null without plan (no limits).
+  const planModules = subscription.data?.hasPlan && subscription.data.plan ? subscription.data.plan.modules : null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -313,7 +319,9 @@ export default function BusinessSettings() {
         </div>
       )}
 
+      <SubscriptionCard />
       <SalesPolicyCard />
+      <OnlineMenuCard />
 
       <div className="row">
         {/* Left Column */}
@@ -373,7 +381,7 @@ export default function BusinessSettings() {
                           type="button"
                           className="btn btn-soft-secondary btn-sm"
                           onClick={() => {
-                            setCapabilities(preset.capabilities);
+                            setCapabilities(planModules === null ? preset.capabilities : preset.capabilities & planModules);
                             setValue('industry', preset.industry);
                           }}
                         >
@@ -382,24 +390,29 @@ export default function BusinessSettings() {
                       ))}
                     </div>
                     <div className="border rounded p-2">
-                      {CAPABILITY_OPTIONS.map((option) => (
-                        <div key={option.value} className="form-check mb-1">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            id={`capability-${option.value}`}
-                            checked={(capabilities & option.value) === option.value}
-                            onChange={(e) => {
-                              setCapabilities((current) =>
-                                e.target.checked ? current | option.value : current & ~option.value,
-                              );
-                            }}
-                          />
-                          <label className="form-check-label" htmlFor={`capability-${option.value}`}>
-                            {option.label}
-                          </label>
-                        </div>
-                      ))}
+                      {CAPABILITY_OPTIONS.map((option) => {
+                        const outsidePlan = planModules !== null && (planModules & option.value) !== option.value;
+                        return (
+                          <div key={option.value} className="form-check mb-1">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              id={`capability-${option.value}`}
+                              checked={(capabilities & option.value) === option.value}
+                              disabled={outsidePlan}
+                              onChange={(e) => {
+                                setCapabilities((current) =>
+                                  e.target.checked ? current | option.value : current & ~option.value,
+                                );
+                              }}
+                            />
+                            <label className="form-check-label" htmlFor={`capability-${option.value}`}>
+                              {option.label}
+                              {outsidePlan && <span className="text-muted small ms-1">(no incluido en tu plan)</span>}
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <button className="btn btn-primary" type="submit" disabled={isSubmitting}>

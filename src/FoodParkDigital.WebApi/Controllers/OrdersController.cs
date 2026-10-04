@@ -51,6 +51,86 @@ public class OrdersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Adds a round to an open tab and sends it to the kitchen.</summary>
+    [HttpPost("{id:guid}/rounds")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<OrderDto>> AddRound(Guid id, [FromBody] AddTabRoundRequest request)
+    {
+        var result = await _mediator.Send(new AddTabRoundCommand { OrderId = id, Items = request.Items });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    /// <summary>Closes a paid tab and frees its table.</summary>
+    [HttpPost("{id:guid}/close-tab")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<OrderDto>> CloseTab(Guid id)
+    {
+        var result = await _mediator.Send(new CloseTabCommand(id));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    /// <summary>Moves an open tab to another free table.</summary>
+    [HttpPut("{id:guid}/table")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<OrderDto>> MoveTab(Guid id, [FromBody] MoveTabRequest request)
+    {
+        var result = await _mediator.Send(new MoveTabCommand(id, request.DiningTableId));
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    /// <summary>The waiter took a ready round to the table.</summary>
+    [HttpPut("kitchen-tickets/{ticketId:guid}/served")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<IActionResult> MarkRoundServed(Guid ticketId)
+    {
+        var result = await _mediator.Send(new UpdateKitchenTicketStatusCommand(ticketId, KitchenTicketStatus.Served));
+        if (result.IsFailure)
+            return Conflict(new { error = result.Error });
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Previews the CFDI 4.0 invoice of the order: concepts, IVA per rate and what is missing to stamp it. Without
+    /// receiver data the sale goes to the general public. Nothing is stamped.
+    /// </summary>
+    [HttpGet("{id:guid}/cfdi-draft")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<CfdiDraftDto>> GetCfdiDraft(
+        Guid id,
+        [FromQuery] string? rfc,
+        [FromQuery] string? name,
+        [FromQuery] string? postalCode,
+        [FromQuery] string? fiscalRegime,
+        [FromQuery] string? cfdiUse)
+    {
+        var hasReceiver = !string.IsNullOrWhiteSpace(rfc) || !string.IsNullOrWhiteSpace(name)
+            || !string.IsNullOrWhiteSpace(postalCode) || !string.IsNullOrWhiteSpace(fiscalRegime)
+            || !string.IsNullOrWhiteSpace(cfdiUse);
+        var result = await _mediator.Send(new GetOrderCfdiDraftQuery
+        {
+            OrderId = id,
+            Receiver = hasReceiver
+                ? new CfdiReceiverInput
+                {
+                    Rfc = rfc,
+                    Name = name,
+                    PostalCode = postalCode,
+                    FiscalRegime = fiscalRegime,
+                    CfdiUse = cfdiUse
+                }
+                : null
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpPost]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> Create([FromBody] CreateOrderCommand command)
@@ -258,4 +338,14 @@ public class VoidOrderRequest
 {
     public string Reason { get; init; } = string.Empty;
     public bool RestockItems { get; init; } = true;
+}
+
+public class AddTabRoundRequest
+{
+    public List<CreateOrderItemDto> Items { get; init; } = [];
+}
+
+public class MoveTabRequest
+{
+    public Guid DiningTableId { get; init; }
 }

@@ -12,3 +12,10 @@ export function toDateTimeLocalInput(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** "4 oct 2026" in the browser's time zone. */
+export function formatDate(value?: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('es-MX', { dateStyle: 'medium' });
+}

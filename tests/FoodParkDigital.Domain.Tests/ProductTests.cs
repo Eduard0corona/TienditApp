@@ -108,7 +108,12 @@ public class ProductTests
         typeof(Product)
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(property => !PropertiesExpectedToChange.Contains(property.Name))
-            .ToDictionary(property => property.Name, property => property.GetValue(product));
+            .ToDictionary(property => property.Name, property => SnapshotValue(property.GetValue(product)));
+
+    // Collections are read-only wrappers created on each read: compare the items they hold instead.
+    private static object? SnapshotValue(object? value) => value is System.Collections.IEnumerable items and not string
+        ? string.Join("|", items.Cast<object>().Select(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode))
+        : value;
 
     private static List<string> ChangedProperties(Dictionary<string, object?> before, Product after) =>
         Snapshot(after)

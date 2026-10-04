@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import SalesByBranchCard from '../../components/reports/SalesByBranchCard';
 import { reportsApi } from '../../api/reportsApi';
 import { getPaymentMethodLabel } from '../../utils/labels';
+import { formatMoney } from '../../utils/money';
 import type { OperationalReportDto } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import { useAuth } from '../../hooks/useAuth';
@@ -81,9 +83,9 @@ export default function OperationalReports() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Ventas netas (sin IVA)</div>
-                  <div className="h4 mb-0">${report.netRevenue.toFixed(2)}</div>
+                  <div className="h4 mb-0">{formatMoney(report.netRevenue)}</div>
                   <div className="text-muted small">
-                    Con IVA: ${report.totalRevenue.toFixed(2)} · IVA: ${report.totalTax.toFixed(2)}
+                    Con IVA: {formatMoney(report.totalRevenue)} · IVA: {formatMoney(report.totalTax)}
                   </div>
                 </div>
               </div>
@@ -92,7 +94,7 @@ export default function OperationalReports() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Costo de ventas</div>
-                  <div className="h4 mb-0">${report.totalCogs.toFixed(2)}</div>
+                  <div className="h4 mb-0">{formatMoney(report.totalCogs)}</div>
                 </div>
               </div>
             </div>
@@ -100,7 +102,7 @@ export default function OperationalReports() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Utilidad bruta</div>
-                  <div className="h4 mb-0">${report.grossProfit.toFixed(2)}</div>
+                  <div className="h4 mb-0">{formatMoney(report.grossProfit)}</div>
                 </div>
               </div>
             </div>
@@ -108,11 +110,13 @@ export default function OperationalReports() {
               <div className="card mb-0">
                 <div className="card-body py-2">
                   <div className="text-muted small">Compras</div>
-                  <div className="h4 mb-0">${report.totalPurchases.toFixed(2)}</div>
+                  <div className="h4 mb-0">{formatMoney(report.totalPurchases)}</div>
                 </div>
               </div>
             </div>
           </div>
+
+          <SalesByBranchCard />
 
           <div className="row mb-3">
             <div className="col-md-6">
@@ -144,7 +148,7 @@ export default function OperationalReports() {
                           {paymentRows.map(([method, total]) => (
                             <tr key={method}>
                               <td>{getPaymentMethodLabel(method)}</td>
-                              <td className="text-end">${total.toFixed(2)}</td>
+                              <td className="text-end">{formatMoney(total)}</td>
                             </tr>
                           ))}
                         </tbody>

@@ -98,8 +98,51 @@ stateDiagram-v2
 - Reembolsar no cambia el estado: registra el reembolso, saca el efectivo de la caja y, si se pide, regresa insumos. "Anular venta" reembolsa lo que queda de cada pago y después cancela si la máquina lo permite; una orden ya entregada o completada queda en su estado, reembolsada por completo.
 - La auditoría y los avisos de WhatsApp de cada evento se procesan por el outbox, después del commit y con reintentos; SignalR se notifica en proceso (best-effort). Las notificaciones de citas se esperan dentro de la solicitud, son best-effort y muestran la hora del tenant; los recordatorios de citas salen por la cola de mensajería.
 
+## Cuentas abiertas por mesa (Fase 3)
+
+Un negocio con el módulo Comida puede abrir una cuenta (`Order.IsTab`) para una mesa (`DiningTable`) o a nombre de alguien (barra, "Juan"). La cuenta es una sola orden: se cobra, factura y reembolsa como cualquier otra, pero recibe productos en rondas.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Abierta: primera ronda (Vender, Enviar a cocina)
+    Abierta --> Abierta: otra ronda / cobro parcial / cambio de mesa
+    Abierta --> Cerrada: Cerrar cuenta (saldo 0) = Delivered
+    Abierta --> Cancelada: cancelar o anular
+```
+
+- Se abre desde Mesas (tocar una mesa libre) o "Cuenta sin mesa"; Vender cambia el cobro por "Enviar a cocina". Cada ronda (`OrderItem.Round`) crea una comanda (`KitchenTicket`) que la cocina avanza sola: Nueva, Preparando, Lista y Servida. El mesero marca "Servida" desde la cuenta.
+- Una mesa tiene a lo más una cuenta abierta: `Orders.OpenTableId` vale la mesa mientras la cuenta está abierta y se limpia al cerrarla o cancelarla, con índice único filtrado (`IX_Orders_TenantId_OpenTableId_Open`) además de la validación del caso de uso.
+- La cuenta queda en `Confirmed` mientras está abierta. No aparece en el tablero de pedidos (va por comandas), no admite cambios manuales de estado (solo cancelar) y el cierre automático de ventas pagadas no la cierra: se puede pagar por partes y seguir pidiendo. "Cerrar cuenta" exige saldo cero, pasa a `Delivered` con la máquina de estados y libera la mesa.
+- El inventario de una cuenta se consume una sola vez, al cerrarla, con todas sus rondas (`OrderInventoryService` omite cuentas abiertas). Así ninguna ronda queda fuera del movimiento de consumo de la orden.
+- Las rondas nuevas y los cambios de comanda emiten `TabRoundSentEvent` y `KitchenTicketChangedEvent`; Cocina y Mesas se actualizan con `KitchenTicketsChanged` de `OrderHub` y sondean como respaldo.
+- Pendiente: cancelar un platillo de una ronda ya enviada (hoy se compensa con un reembolso), dividir la cuenta entre comensales y unir mesas.
+
+## Pedidos en línea (Fase 3)
+
+- En Mi negocio, "Menú en línea" tiene tres modos (`OnlineMenuMode`): apagado (por defecto), solo menú y menú con pedidos. El enlace es `/m/{slug}`; hay QR descargable, botón para compartir por WhatsApp y QR por mesa (`?mesa=Mesa 4`, que llega como mesa del pedido).
+- El cliente arma el pedido con opciones y lo envía con su nombre y teléfono. Llega como cualquier pedido de cliente (`CreatedByBusiness = false`, canal `Online`, ligado a su cliente temporal o registrado), en `Pending` para que el negocio lo confirme, o en `Confirmed` si el negocio acepta pedidos automáticamente (`AutoAcceptOrders`). La cocina lo ve como cualquier pedido de comida.
+- Mismas reglas de precio que en mostrador (`OrderLineBuilder`); el pedido se rechaza si el total cambió desde que el cliente lo vio, si un producto ya no está disponible o es un servicio.
+- Pendiente: pago en línea, entrega a domicilio con costo de envío y aviso de confirmación automático al cliente.
+
+## Variantes y extras (Fase 3)
+
+- Un producto tiene hasta 10 grupos de opciones (`ProductOptionGroup`) con hasta 30 opciones (`ProductOption`). Mínimo 1 y máximo 1 es una variante obligatoria (tamaño); mínimo 0 hace el grupo opcional; máximo mayor a 1 permite varias (extras). Cada opción suma su precio (puede restar) y puede estar agotada.
+- `Product.ResolveOptions` valida en el servidor lo elegido: que pertenezca al producto, que esté disponible, que no se repita y que cada grupo quede entre su mínimo y su máximo; `Product.PriceWith` da el precio unitario con opciones y nunca negativo. `OrderLineBuilder` aplica estas reglas igual en ventas, rondas y pedidos en línea.
+- Cada línea guarda una copia de lo elegido (`OrderItemOption`: grupo, opción y precio). Editar el producto conserva el id de grupos y opciones que siguen existiendo; los quitados no alteran ventas pasadas.
+- Ticket, cocina, cuenta y CFDI muestran las opciones ("Latte (Grande, Almendra)"). Las recetas de inventario son del producto; las opciones aún no consumen insumos propios.
+
+## Ventas sin conexión (Fase 3)
+
+- Cada venta de Vender lleva una clave generada en el dispositivo (`CreateOrderCommand.IdempotencyKey`, guardada como `Order.ClientRequestId` con índice único filtrado por tenant). Repetir la petición con la misma clave (un reintento tras un timeout o una venta enviada al volver la conexión) devuelve la venta ya creada en vez de cobrar dos veces; si dos peticiones con la misma clave llegan a la vez, el índice deja guardar una y la otra devuelve esa.
+- Sin conexión, una venta de mostrador cobrada en ese momento se guarda en el dispositivo (IndexedDB `tienditapp-offline`, por negocio y cajero) con un folio provisional (`SC-0001`) y el ticket lo indica. No se guardan sin conexión las rondas de mesa, los pedidos del chat, las ventas sin cobrar ni las de servicios (su folio se usa para recoger las piezas).
+- Al volver la conexión (evento del navegador, al abrir la app y cada 30 segundos mientras haya pendientes) se envían en orden, cada una con su clave y la hora de captura (`CapturedOfflineAt`). Solo las envía el cajero que las cobró, en el negocio donde las cobró: los pagos entran a su caja abierta en ese momento.
+- El servidor vuelve a calcular cada venta con las reglas de siempre: rechaza la que tenga un total distinto (un precio cambió), un producto que ya no se vende o que se capturó hace más de 7 días (o más de 5 minutos en el futuro, por el reloj del dispositivo). La venta rechazada queda en el dispositivo como "No aceptada" con el motivo, para reintentarla o descartarla (con confirmación) y registrarla de nuevo. Sin red, con la sesión vencida (401), con demasiadas peticiones o con el servidor caído (502-504) el envío espera al siguiente intento; un error propio del servidor (500) se reintenta hasta 10 veces antes de marcarla como no aceptada.
+- `Order.CapturedOfflineAt` guarda la hora del dispositivo como dato de auditoría; la venta y sus pagos llevan la hora del servidor (los cortes y los reportes cuentan por la hora de registro).
+- Vender guarda el último catálogo cargado del negocio; si la API no responde, vende con él y lo avisa, y lo reemplaza al volver la conexión (o cada minuto mientras el servidor no responda).
+- Límites: recargar la página o iniciar sesión sin conexión no funciona (no hay service worker y el token vive en memoria); la cocina no ve la venta hasta que se envía; cerrar sesión con ventas pendientes pide confirmación y se envían cuando ese usuario vuelve a entrar en ese dispositivo.
+
 ## Deuda e inconsistencias
 
 - Las máquinas permiten saltos amplios (por ejemplo Pending a Delivered/Completed). Se documentan porque existen, no como flujo operativo ideal.
 - Cancelar con `UpdateOrderStatusCommand` no registra motivo; el SPA usa el endpoint de cancelación, que sí lo pide.
-- Las cantidades de `OrderItem` son enteras aunque existen unidades Kg, Litro, Metro y Hora; vender fracciones requiere una decisión de producto y una migración.
+- Desde la Fase 3 las cantidades admiten 3 decimales en kilo, litro, metro y hora (ver [finanzas](finance-payments-and-taxes.md#cantidades-decimales-y-datos-para-cfdi-fase-3)).

@@ -254,7 +254,7 @@ export default function Dashboard() {
                         <tr key={item.productId}>
                           <td>{item.productName}</td>
                           <td>{getCatalogItemTypeLabel(item.itemType)}</td>
-                          <td className="text-end">{item.quantitySold}</td>
+                          <td className="text-end">{item.quantitySold.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</td>
                           <td className="text-end">{formatMoney(item.totalAmount)}</td>
                         </tr>
                       ))}

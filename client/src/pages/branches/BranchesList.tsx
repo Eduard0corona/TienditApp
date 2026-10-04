@@ -1,24 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
-import { branchesApi } from '../../api/branchesApi';
-import type {
-  BranchDto,
-  CreateBranchRequest,
-  UpdateBranchRequest,
-} from '../../types';
+import { branchesApi, type Branch } from '../../api/branchesApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
+import { useToast } from '../../hooks/useToast';
+import { activeBranchesKey } from '../../hooks/useWorkingBranch';
 
 const COLUMNS = [
   { header: 'Sucursal' },
   { header: 'Contacto' },
   { header: 'Ciudad / Estado' },
   { header: 'Estado', className: 'text-center' },
-  { header: 'Acciones', className: 'text-center' },
+  { header: 'Acciones', className: 'text-end' },
 ];
 
-interface BranchFormState {
+interface BranchForm {
   name: string;
   code: string;
   description: string;
@@ -33,7 +32,7 @@ interface BranchFormState {
   isDefault: boolean;
 }
 
-const buildEmptyForm = (): BranchFormState => ({
+const EMPTY_FORM: BranchForm = {
   name: '',
   code: '',
   description: '',
@@ -41,182 +40,189 @@ const buildEmptyForm = (): BranchFormState => ({
   addressLine2: '',
   city: '',
   state: '',
-  country: '',
+  country: 'México',
   postalCode: '',
   contactName: '',
   contactPhone: '',
   isDefault: false,
-});
+};
 
+const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code'>; label: string; col: string; maxLength: number }> = [
+  { key: 'addressLine1', label: 'Calle y número', col: 'col-md-6', maxLength: 250 },
+  { key: 'addressLine2', label: 'Colonia o referencia', col: 'col-md-6', maxLength: 250 },
+  { key: 'city', label: 'Ciudad', col: 'col-md-4', maxLength: 120 },
+  { key: 'state', label: 'Estado', col: 'col-md-4', maxLength: 120 },
+  { key: 'postalCode', label: 'Código postal', col: 'col-md-4', maxLength: 20 },
+  { key: 'contactName', label: 'Encargado', col: 'col-md-6', maxLength: 120 },
+  { key: 'contactPhone', label: 'Teléfono', col: 'col-md-6', maxLength: 30 },
+  { key: 'country', label: 'País', col: 'col-md-6', maxLength: 120 },
+];
+
+function toForm(branch: Branch): BranchForm {
+  return {
+    name: branch.name,
+    code: branch.code,
+    description: branch.description ?? '',
+    addressLine1: branch.addressLine1 ?? '',
+    addressLine2: branch.addressLine2 ?? '',
+    city: branch.city ?? '',
+    state: branch.state ?? '',
+    country: branch.country ?? '',
+    postalCode: branch.postalCode ?? '',
+    contactName: branch.contactName ?? '',
+    contactPhone: branch.contactPhone ?? '',
+    isDefault: branch.isDefault,
+  };
+}
+
+const blankToNull = (value: string) => value.trim() || null;
+
+/**
+ * Branches of the business: where it sells. Each one has its drawers, its sales in the reports and, with
+ * inventory, its own stock. The default branch takes what names no branch and cannot be turned off.
+ */
 export default function BranchesList() {
-  const [branches, setBranches] = useState<BranchDto[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<BranchDto | null>(null);
+  const toast = useToast();
+  const { confirm } = useConfirm();
+  const queryClient = useQueryClient();
+  const [activeFilter, setActiveFilter] = useState<'' | 'true' | 'false'>('');
+  const branches = useQuery({
+    queryKey: ['branches', 'list', activeFilter],
+    queryFn: () => branchesApi.getAll(activeFilter === '' ? undefined : activeFilter === 'true'),
+  });
+  const [editing, setEditing] = useState<Branch | null>(null);
+  const [form, setForm] = useState<BranchForm | null>(null);
+  const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<BranchFormState>(buildEmptyForm());
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: { isActive?: boolean } = {};
-      if (activeFilter !== '') params.isActive = activeFilter === 'true';
-      const response = await branchesApi.getAll(params);
-      setBranches(response.data);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudieron cargar las sucursales.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [activeFilter]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['branches'] });
+    await queryClient.invalidateQueries({ queryKey: activeBranchesKey });
+  };
 
   const openCreate = () => {
     setEditing(null);
-    setForm(buildEmptyForm());
-    setShowModal(true);
+    setForm(EMPTY_FORM);
+    setFormError('');
   };
 
-  const openEdit = (branch: BranchDto) => {
+  const openEdit = (branch: Branch) => {
     setEditing(branch);
-    setForm({
-      name: branch.name,
-      code: branch.code,
-      description: branch.description || '',
-      addressLine1: branch.addressLine1 || '',
-      addressLine2: branch.addressLine2 || '',
-      city: branch.city || '',
-      state: branch.state || '',
-      country: branch.country || '',
-      postalCode: branch.postalCode || '',
-      contactName: branch.contactName || '',
-      contactPhone: branch.contactPhone || '',
-      isDefault: branch.isDefault,
-    });
-    setShowModal(true);
+    setForm(toForm(branch));
+    setFormError('');
   };
 
-  const submit = async () => {
-    setError('');
-    setSuccess('');
-
-    if (!form.name.trim()) {
-      setError('El nombre de la sucursal es obligatorio.');
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!form) return;
+    if (!form.name.trim() || !form.code.trim()) {
+      setFormError('Escribe el nombre y la clave de la sucursal.');
       return;
     }
-
-    if (!form.code.trim()) {
-      setError('El codigo de la sucursal es obligatorio.');
-      return;
-    }
-
-    const payload: CreateBranchRequest = {
+    const fields = {
       name: form.name.trim(),
       code: form.code.trim().toUpperCase(),
-      description: form.description.trim() || undefined,
-      addressLine1: form.addressLine1.trim() || undefined,
-      addressLine2: form.addressLine2.trim() || undefined,
-      city: form.city.trim() || undefined,
-      state: form.state.trim() || undefined,
-      country: form.country.trim() || undefined,
-      postalCode: form.postalCode.trim() || undefined,
-      contactName: form.contactName.trim() || undefined,
-      contactPhone: form.contactPhone.trim() || undefined,
-      isDefault: form.isDefault,
+      description: blankToNull(form.description),
+      addressLine1: blankToNull(form.addressLine1),
+      addressLine2: blankToNull(form.addressLine2),
+      city: blankToNull(form.city),
+      state: blankToNull(form.state),
+      country: blankToNull(form.country),
+      postalCode: blankToNull(form.postalCode),
+      contactName: blankToNull(form.contactName),
+      contactPhone: blankToNull(form.contactPhone),
     };
-
+    setSaving(true);
+    setFormError('');
     try {
-      setSaving(true);
       if (editing) {
-        const updatePayload: UpdateBranchRequest = {
-          ...payload,
-          id: editing.id,
-        };
-        await branchesApi.update(editing.id, updatePayload);
-        setSuccess('Sucursal actualizada.');
+        await branchesApi.update(editing.id, { ...fields, id: editing.id });
+        toast.success('Sucursal actualizada.');
       } else {
-        await branchesApi.create(payload);
-        setSuccess('Sucursal creada.');
+        await branchesApi.create({ ...fields, isDefault: form.isDefault });
+        toast.success('Sucursal creada.');
       }
-
-      setShowModal(false);
-      await loadData();
+      setForm(null);
+      await refresh();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo guardar la sucursal.'));
+      setFormError(getApiErrorMessage(err, 'No se pudo guardar la sucursal.'));
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleActive = async (branch: BranchDto) => {
-    setError('');
-    setSuccess('');
+  const makeDefault = async (branch: Branch) => {
+    const accepted = await confirm({
+      title: 'Cambiar la sucursal principal',
+      message: `Las ventas y cajas que no elijan sucursal irán a ${branch.name}.`,
+      confirmLabel: 'Hacer principal',
+    });
+    if (!accepted) return;
+    try {
+      await branchesApi.setDefault(branch.id);
+      toast.success(`${branch.name} es ahora la sucursal principal.`);
+      await refresh();
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo cambiar la sucursal principal.'));
+    }
+  };
 
+  const toggleActive = async (branch: Branch) => {
+    if (branch.isActive) {
+      const accepted = await confirm({
+        title: `Desactivar ${branch.name}`,
+        message: 'Ya no se podrá vender ni abrir caja en ella. Sus ventas siguen en los reportes.',
+        confirmLabel: 'Desactivar',
+      });
+      if (!accepted) return;
+    }
     try {
       await branchesApi.setActive(branch.id, !branch.isActive);
-      setSuccess('Estado actualizado.');
-      await loadData();
+      toast.success(branch.isActive ? 'Sucursal desactivada.' : 'Sucursal activada.');
+      await refresh();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado.'));
+      toast.error(getApiErrorMessage(err, 'No se pudo cambiar el estado de la sucursal.'));
     }
   };
 
   return (
     <>
-      <PageTitle title="Sucursales" subtitle="Operacion" />
-
-      {error && (
-        <div className="alert alert-danger alert-dismissible fade show">
-          {error}
-          <button type="button" className="btn-close" onClick={() => setError('')}></button>
-        </div>
-      )}
-      {success && (
-        <div className="alert alert-success alert-dismissible fade show">
-          {success}
-          <button type="button" className="btn-close" onClick={() => setSuccess('')}></button>
-        </div>
-      )}
+      <PageTitle title="Sucursales" subtitle="Configuración" />
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <div className="d-flex align-items-center gap-2">
-              <label className="form-label mb-0">Estado</label>
+              <label className="form-label mb-0" htmlFor="branches-filter">Mostrar</label>
               <select
+                id="branches-filter"
                 className="form-select form-select-sm"
                 value={activeFilter}
-                onChange={(e) => setActiveFilter(e.target.value)}
+                onChange={(event) => setActiveFilter(event.target.value as '' | 'true' | 'false')}
               >
-                <option value="">Todos</option>
+                <option value="">Todas</option>
                 <option value="true">Activas</option>
                 <option value="false">Inactivas</option>
               </select>
             </div>
-            <button className="btn btn-primary btn-sm" onClick={openCreate}>
-              <i className="ri-add-line me-1"></i>Nueva sucursal
+            <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
+              <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva sucursal
             </button>
           </div>
 
+          {branches.isError && (
+            <div className="alert alert-danger">{getApiErrorMessage(branches.error, 'No se pudieron cargar las sucursales.')}</div>
+          )}
+
           <DataTable
-            data={branches}
+            data={branches.data ?? []}
             columns={COLUMNS}
             keyExtractor={(item) => item.id}
-            loading={loading}
-            emptyMessage="No hay sucursales registradas."
+            loading={branches.isLoading}
+            emptyMessage="No hay sucursales."
             searchFilter={(item, search) =>
-              item.name.toLowerCase().includes(search) ||
-              item.code.toLowerCase().includes(search) ||
-              (item.city || '').toLowerCase().includes(search) ||
-              (item.state || '').toLowerCase().includes(search) ||
-              (item.contactName || '').toLowerCase().includes(search)
+              [item.name, item.code, item.city, item.state, item.contactName]
+                .some((value) => (value ?? '').toLowerCase().includes(search))
             }
             renderRow={(item) => (
               <>
@@ -224,32 +230,38 @@ export default function BranchesList() {
                   <div className="fw-semibold">{item.name}</div>
                   <div className="text-muted small">
                     {item.code}
-                    {item.isDefault && <span className="badge bg-info ms-2">Principal</span>}
+                    {item.isDefault && <span className="badge text-bg-info ms-2">Principal</span>}
                   </div>
                 </td>
                 <td>
-                  <div>{item.contactName || '-'}</div>
-                  <div className="text-muted small">{item.contactPhone || '-'}</div>
+                  <div>{item.contactName || '—'}</div>
+                  <div className="text-muted small">{item.contactPhone || '—'}</div>
                 </td>
                 <td>
-                  <div>{item.city || '-'}</div>
-                  <div className="text-muted small">{item.state || '-'}</div>
+                  <div>{item.city || '—'}</div>
+                  <div className="text-muted small">{item.state || '—'}</div>
                 </td>
                 <td className="text-center">
-                  <span className={`badge ${item.isActive ? 'bg-success' : 'bg-danger'}`}>
+                  <span className={`badge ${item.isActive ? 'text-bg-success' : 'text-bg-secondary'}`}>
                     {item.isActive ? 'Activa' : 'Inactiva'}
                   </span>
                 </td>
-                <td className="text-center">
-                  <button className="btn btn-sm btn-soft-primary me-1" onClick={() => openEdit(item)}>
-                    <i className="ri-pencil-line"></i>
+                <td className="text-end text-nowrap">
+                  {!item.isDefault && item.isActive && (
+                    <button type="button" className="btn btn-sm btn-light me-1" onClick={() => void makeDefault(item)}>
+                      Hacer principal
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-sm btn-light me-1" onClick={() => openEdit(item)}
+                    aria-label={`Editar ${item.name}`}>
+                    <i className="ri-pencil-line" aria-hidden="true"></i>
                   </button>
-                  <button
-                    className={`btn btn-sm ${item.isActive ? 'btn-soft-warning' : 'btn-soft-success'}`}
-                    onClick={() => toggleActive(item)}
-                  >
-                    <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
-                  </button>
+                  {!item.isDefault && (
+                    <button type="button" className="btn btn-sm btn-light" onClick={() => void toggleActive(item)}
+                      aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}>
+                      <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'} aria-hidden="true"></i>
+                    </button>
+                  )}
                 </td>
               </>
             )}
@@ -257,133 +269,61 @@ export default function BranchesList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title>{editing ? 'Editar sucursal' : 'Nueva sucursal'}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="row">
-            <div className="col-md-6 mb-2">
-              <label className="form-label">Nombre *</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.name}
-                onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-3 mb-2">
-              <label className="form-label">Codigo *</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.code}
-                onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-3 mb-2 d-flex align-items-end">
-              <div className="form-check">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={form.isDefault}
-                  onChange={(e) => setForm((current) => ({ ...current, isDefault: e.target.checked }))}
-                />
-                <label className="form-check-label">Sucursal principal</label>
+      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered>
+        {form && (
+          <form onSubmit={(event) => void save(event)}>
+            <Modal.Header closeButton>
+              <Modal.Title>{editing ? `Editar ${editing.name}` : 'Nueva sucursal'}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <div className="row g-2">
+                <div className="col-md-6">
+                  <label className="form-label" htmlFor="branch-name">Nombre</label>
+                  <input id="branch-name" className="form-control" maxLength={200} required placeholder="Ej. Sucursal Centro"
+                    value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+                </div>
+                <div className="col-md-3">
+                  <label className="form-label" htmlFor="branch-code">Clave</label>
+                  <input id="branch-code" className="form-control text-uppercase" maxLength={50} required placeholder="CENTRO"
+                    value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} />
+                </div>
+                {!editing && (
+                  <div className="col-md-3 d-flex align-items-end">
+                    <div className="form-check mb-2">
+                      <input id="branch-default" type="checkbox" className="form-check-input" checked={form.isDefault}
+                        onChange={(event) => setForm({ ...form, isDefault: event.target.checked })} />
+                      <label className="form-check-label" htmlFor="branch-default">Sucursal principal</label>
+                    </div>
+                  </div>
+                )}
+                <div className="col-12">
+                  <label className="form-label" htmlFor="branch-description">Descripción (opcional)</label>
+                  <input id="branch-description" className="form-control" maxLength={500}
+                    value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+                </div>
+                {TEXT_FIELDS.map((field) => (
+                  <div key={field.key} className={field.col}>
+                    <label className="form-label" htmlFor={`branch-${field.key}`}>{field.label}</label>
+                    <input id={`branch-${field.key}`} className="form-control" maxLength={field.maxLength}
+                      value={form[field.key]} onChange={(event) => setForm({ ...form, [field.key]: event.target.value })} />
+                  </div>
+                ))}
               </div>
-            </div>
-
-            <div className="col-12 mb-2">
-              <label className="form-label">Descripcion</label>
-              <textarea
-                className="form-control"
-                rows={2}
-                value={form.description}
-                onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))}
-              />
-            </div>
-
-            <div className="col-md-6 mb-2">
-              <label className="form-label">Direccion linea 1</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.addressLine1}
-                onChange={(e) => setForm((current) => ({ ...current, addressLine1: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-6 mb-2">
-              <label className="form-label">Direccion linea 2</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.addressLine2}
-                onChange={(e) => setForm((current) => ({ ...current, addressLine2: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-4 mb-2">
-              <label className="form-label">Ciudad</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.city}
-                onChange={(e) => setForm((current) => ({ ...current, city: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-4 mb-2">
-              <label className="form-label">Estado</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.state}
-                onChange={(e) => setForm((current) => ({ ...current, state: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-4 mb-2">
-              <label className="form-label">Codigo postal</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.postalCode}
-                onChange={(e) => setForm((current) => ({ ...current, postalCode: e.target.value }))}
-              />
-            </div>
-
-            <div className="col-md-6 mb-2">
-              <label className="form-label">Contacto</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.contactName}
-                onChange={(e) => setForm((current) => ({ ...current, contactName: e.target.value }))}
-              />
-            </div>
-            <div className="col-md-6 mb-2">
-              <label className="form-label">Telefono contacto</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.contactPhone}
-                onChange={(e) => setForm((current) => ({ ...current, contactPhone: e.target.value }))}
-              />
-            </div>
-            <div className="col-12 mb-0">
-              <label className="form-label">Pais</label>
-              <input
-                type="text"
-                className="form-control"
-                value={form.country}
-                onChange={(e) => setForm((current) => ({ ...current, country: e.target.value }))}
-              />
-            </div>
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <button className="btn btn-light" onClick={() => setShowModal(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={submit} disabled={saving}>
-            {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear sucursal'}
-          </button>
-        </Modal.Footer>
+              {!editing && (
+                <p className="text-muted small mt-3 mb-0">
+                  Si el negocio usa inventario, la sucursal tendrá su propio almacén y sus ventas descontarán de él.
+                </p>
+              )}
+              {formError && <div className="alert alert-danger mt-3 mb-0">{formError}</div>}
+            </Modal.Body>
+            <Modal.Footer>
+              <button type="button" className="btn btn-light" onClick={() => setForm(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear sucursal'}
+              </button>
+            </Modal.Footer>
+          </form>
+        )}
       </Modal>
     </>
   );

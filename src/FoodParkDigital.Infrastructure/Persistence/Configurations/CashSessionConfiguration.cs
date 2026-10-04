@@ -29,6 +29,7 @@ public class CashSessionConfiguration : IEntityTypeConfiguration<CashSession>
         builder.HasIndex(x => new { x.TenantId, x.Status });
         builder.HasIndex(x => new { x.TenantId, x.OpenedAt });
         builder.HasIndex(x => new { x.TenantId, x.InventoryLocationId, x.OpenedAt });
+        builder.HasIndex(x => new { x.TenantId, x.BranchId, x.OpenedAt });
 
         // Business rule: each cashier has at most one open drawer, enforced by the database. Drawers opened
         // before per-cashier sessions have no owner and are not covered (there was at most one per tenant).
@@ -36,6 +37,11 @@ public class CashSessionConfiguration : IEntityTypeConfiguration<CashSession>
             .IsUnique()
             .HasFilter("[Status] = 0 AND [OpenedByUserId] IS NOT NULL")
             .HasDatabaseName("IX_CashSessions_TenantId_OpenedByUserId_Open");
+
+        builder.HasOne<FoodParkDigital.Domain.Branches.Entities.Branch>()
+            .WithMany()
+            .HasForeignKey(x => x.BranchId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<FoodParkDigital.Domain.Inventory.Entities.InventoryLocation>()
             .WithMany()

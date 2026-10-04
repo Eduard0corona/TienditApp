@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
@@ -46,11 +47,8 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
             .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
-        RuleForEach(x => x.Items).ChildRules(item =>
-        {
-            item.RuleFor(i => i.ProductId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine);
-        });
+        RuleFor(x => x.TableNumber).MaximumLength(50);
+        RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
@@ -123,6 +121,13 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             .CountAsync(o => o.TenantId == request.TenantId, cancellationToken);
         var orderNumber = $"ORD-{orderCountForTenant + 1:D6}";
 
+        // Orders placed by customers go to the default branch of the business named by the route.
+        var defaultBranchId = await _context.Branches
+            .IgnoreQueryFilters()
+            .Where(b => b.TenantId == request.TenantId && b.IsDefault)
+            .Select(b => (Guid?)b.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var resolvedName = string.IsNullOrWhiteSpace(linkedCustomer.ResolvedName)
             ? request.Phone
             : linkedCustomer.ResolvedName!.Trim();
@@ -139,20 +144,19 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             customerPhone: linkedCustomer.PhoneNormalized,
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber,
-            pricesIncludeTax: salesSettings.PricesIncludeTax);
+            pricesIncludeTax: salesSettings.PricesIncludeTax,
+            branchId: defaultBranchId);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var quantitiesByProduct = new Dictionary<Guid, int>();
+        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate);
+        // The route names the tenant (validated by the controller), so products are narrowed to it explicitly.
+        var products = await OrderCatalog.LoadProductsAsync(
+            _context.Products.IgnoreQueryFilters().Where(p => p.TenantId == request.TenantId),
+            request.Items,
+            cancellationToken);
 
         foreach (var itemDto in request.Items)
         {
-            var product = await _context.Products
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(p => p.Id == itemDto.ProductId && p.TenantId == request.TenantId, cancellationToken)
-                ?? throw new EntityNotFoundException("Product", itemDto.ProductId);
-
-            if (!product.IsAvailableAt(localTimeOfDay))
-                throw new DomainException($"El producto '{product.Name}' no está disponible en este horario.");
-
+            var product = products[itemDto.ProductId];
             if (!request.CreatedByBusiness && !OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
             {
                 var expectedLabel = request.OrderType == OrderType.Service ? "servicio" : "producto";
@@ -160,21 +164,15 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
                     $"El item '{product.Name}' no corresponde al tipo de orden '{expectedLabel}'.");
             }
 
-            var quantityError = OrderLimits.TrackProductQuantity(quantitiesByProduct, product, itemDto.Quantity);
-            if (quantityError is not null)
-                return Result.Failure<OrderDto>(quantityError);
+            var built = lineBuilder.Build(product, itemDto);
+            if (built.IsFailure)
+                return Result.Failure<OrderDto>(built.Error!);
 
-            order.AddItem(
-                product.Id,
-                product.Name,
-                itemDto.Quantity,
-                product.PriceAmount,
-                itemDto.Notes,
-                product.GetVatRate(salesSettings.DefaultTaxRate));
-
-            if (OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable)
+            order.AddItem(built.Value.Line);
+            if (built.Value.IsTrackableService)
                 checklistCandidates.Add((product, itemDto));
         }
+        var quantitiesByProduct = lineBuilder.QuantitiesByProduct;
 
         if (request.OrderType == OrderType.Service && request.ServiceDetail is not null)
         {
@@ -226,7 +224,8 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         {
             foreach (var (product, item) in checklistCandidates)
             {
-                for (var index = 0; index < item.Quantity; index++)
+                var pieces = (int)item.Quantity;
+                for (var index = 0; index < pieces; index++)
                 {
                     var itemName = item.Quantity > 1
                         ? $"{product.Name} #{index + 1}"

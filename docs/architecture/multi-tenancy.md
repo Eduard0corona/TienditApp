@@ -10,6 +10,10 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
 - Los hubs validan al conectar membresía activa y permiso (`OrderHub`: gestionar órdenes, tablero o ver reportes; `ChatHub`: WhatsApp) y se cierran cuando expira el token.
 - El override `X-Tenant-Id` de `SUPER_ADMIN` queda registrado como evento de auditoría en el log (usuario, tenant, tenant del token, método y ruta).
 
+- Negocio suspendido (Fase 3): `TenantAccessSnapshot.TenantSuspended` (negocio `Suspended` o `Inactive`) hace que el middleware responda 403 `tenant-suspended` a todo excepto leer el perfil y el plan; los hubs no lo unen. Ver [planes y facturación](../domain/billing-and-platform.md).
+- Consola de plataforma (Fase 3): las acciones del administrador de la plataforma sobre un negocio fijan ese negocio en `ICurrentTenantService` antes de leer y escribir, y se auditan en él; los listados de toda la plataforma usan `IgnoreQueryFilters()` solo para leer.
+- Menú público (Fase 3): `GET /api/v1/public/menu/{slug}` y `POST .../orders` son anónimos y el único escenario pre-tenant que crea datos. El tenant sale del slug de un negocio activo cuyo `TenantSettings.OnlineMenuMode` lo permite (menú, o menú con pedidos) y el caso de uso fija `ICurrentTenantService` con ese negocio antes de consultar; así los filtros globales y `TenantSaveChangesInterceptor` aplican igual que en una sesión. Solo expone el catálogo publicado (productos disponibles, sin servicios ni costos), limita por IP (`public-menu` 120/min, `public-order` 6 cada 10 min) y como máximo 3 pedidos pendientes por teléfono.
+
 Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant. Muchas claves e índices incluyen `TenantId`.
 
 ## Reglas obligatorias

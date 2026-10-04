@@ -7,6 +7,8 @@ import StatusChip from '../../components/common/StatusChip';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
 import RefundOrderModal from '../../components/orders/RefundOrderModal';
+import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
+import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
@@ -125,6 +127,7 @@ export default function OrdersList() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
+  const [cfdiFor, setCfdiFor] = useState<OrderDto | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderDto | null>(null);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
@@ -157,7 +160,8 @@ export default function OrdersList() {
   const selectedNetPaid = selectedOrder ? (selectedOrder.netPaidAmount ?? selectedOrder.paidAmount) : 0;
   const canRefundSelected = canRefund && selectedNetPaid > 0;
   const selectedOrderTotalItems = useMemo(
-    () => selectedOrder?.items.reduce((acc, item) => acc + item.quantity, 0) ?? 0,
+    // A weighed line counts as one article.
+    () => selectedOrder?.items.reduce((acc, item) => acc + (allowsFractions(item.unit) ? 1 : item.quantity), 0) ?? 0,
     [selectedOrder],
   );
   const selectedOrderChecklist = useMemo(
@@ -645,7 +649,9 @@ export default function OrdersList() {
                 </div>
               </div>
 
-              {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel || selectedOrder.balance > 0)) || canRefundSelected) && (
+              {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel || selectedOrder.balance > 0))
+                || canRefundSelected
+                || (canSell && selectedOrder.status !== OrderStatusConst.Cancelled)) && (
                 <div className="border rounded p-2 mb-3">
                   <div className="fw-semibold mb-2">Acciones</div>
                   <div className="d-flex flex-wrap gap-2">
@@ -678,6 +684,15 @@ export default function OrdersList() {
                         onClick={() => void handleCancelOrder(selectedOrder)}
                       >
                         Cancelar pedido
+                      </button>
+                    )}
+                    {canSell && selectedOrder.status !== OrderStatusConst.Cancelled && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setCfdiFor(selectedOrder)}
+                      >
+                        <i className="ri-file-text-line me-1" aria-hidden="true"></i>Factura (vista previa)
                       </button>
                     )}
                     {canRefundSelected && (
@@ -729,12 +744,18 @@ export default function OrdersList() {
                       <tr key={item.id}>
                         <td>
                           {item.productName}
+                          {selectedOrder.isTab && <span className="badge bg-light text-dark ms-1">Ronda {item.round ?? 1}</span>}
+                          {item.options && item.options.length > 0 && (
+                            <div className="small text-primary-emphasis">{item.options.map((option) => option.optionName).join(', ')}</div>
+                          )}
                           {item.notes && <div className="text-muted small">Nota: {item.notes}</div>}
                         </td>
                         <td className="text-center">
-                          {item.quantity}
+                          {formatQuantity(item.quantity, item.unit)}
                           {(item.returnedQuantity ?? 0) > 0 && (
-                            <div className="text-warning small">{item.returnedQuantity} devuelto{item.returnedQuantity === 1 ? '' : 's'}</div>
+                            <div className="text-warning small">
+                              {formatQuantity(item.returnedQuantity ?? 0, item.unit)} devuelto{allowsFractions(item.unit) || item.returnedQuantity === 1 ? '' : 's'}
+                            </div>
                           )}
                         </td>
                         <td className="text-end">{formatMoney(item.unitPrice)}</td>
@@ -973,6 +994,10 @@ export default function OrdersList() {
 
       {cardFor && (
         <CustomerCardModal phone={cardFor.phone} name={cardFor.name} onClose={() => setCardFor(null)} />
+      )}
+
+      {cfdiFor && (
+        <CfdiDraftModal orderId={cfdiFor.id} orderNumber={cfdiFor.orderNumber} onClose={() => setCfdiFor(null)} />
       )}
 
       {refundTarget && (refundTarget.mode === 'void' ? (

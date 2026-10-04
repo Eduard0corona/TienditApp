@@ -51,7 +51,9 @@ public sealed class MessagingWorker
             due = (await context.MessageCampaigns
                     .IgnoreQueryFilters()
                     .AsNoTracking()
-                    .Where(c => c.Status == CampaignStatus.Scheduled && c.ScheduledAt <= now)
+                    // A business suspended for billing does not send campaigns; they start once it is active again.
+                    .Where(c => c.Status == CampaignStatus.Scheduled && c.ScheduledAt <= now
+                        && context.Tenants.Any(t => t.Id == c.TenantId && t.Status == TenantStatus.Active))
                     .OrderBy(c => c.ScheduledAt)
                     .Take(CampaignsPerPass)
                     .Select(c => new { c.Id, c.TenantId })
@@ -137,7 +139,8 @@ public sealed class MessagingWorker
             tenants = await context.TenantSettings
                 .AsNoTracking()
                 .Where(s => s.AppointmentRemindersEnabled
-                    && (s.Capabilities & TenantCapability.Appointments) == TenantCapability.Appointments)
+                    && (s.Capabilities & TenantCapability.Appointments) == TenantCapability.Appointments
+                    && context.Tenants.Any(t => t.Id == s.TenantId && t.Status == TenantStatus.Active))
                 .Select(s => s.TenantId)
                 .ToListAsync(cancellationToken);
         }

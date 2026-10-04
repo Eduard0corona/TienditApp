@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -76,6 +77,10 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
 
         if (existingUser is not null)
             return Result.Failure<EmployeeDto>("Ya existe un usuario con ese email.");
+
+        var planError = await SubscriptionRules.CheckUserLimitAsync(_context, _tenantService.TenantId, cancellationToken);
+        if (planError is not null)
+            return Result.Failure<EmployeeDto>(planError);
 
         var tenantRole = request.AppRole == UserRole.TenantAdmin
             ? TenantUserRole.Admin

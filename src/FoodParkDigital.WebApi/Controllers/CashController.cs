@@ -59,6 +59,7 @@ public class CashController : ControllerBase
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] Guid? inventoryLocationId,
+        [FromQuery] Guid? branchId,
         [FromQuery] CashSessionStatus? status,
         [FromQuery] bool onlyWithDifference = false,
         [FromQuery] int pageNumber = 1,
@@ -69,6 +70,7 @@ public class CashController : ControllerBase
             FromDate = fromDate,
             ToDate = toDate,
             InventoryLocationId = inventoryLocationId,
+            BranchId = branchId,
             Status = status,
             OnlyWithDifference = onlyWithDifference,
             PageNumber = pageNumber,
@@ -102,12 +104,14 @@ public class CashController : ControllerBase
     public async Task<ActionResult<DailyCashCutDto>> GetDailyCut(
         [FromQuery] DateOnly? date,
         [FromQuery] Guid? inventoryLocationId,
+        [FromQuery] Guid? branchId,
         [FromQuery] string? userName)
     {
         var result = await _mediator.Send(new GetDailyCashCutQuery
         {
             Date = date,
             InventoryLocationId = inventoryLocationId,
+            BranchId = branchId,
             UserName = userName
         });
 

@@ -29,6 +29,10 @@ public record UpdateInventoryLocationCommand : IRequest<Result<InventoryLocation
     public string? ContactName { get; init; }
     public string? ContactPhone { get; init; }
     public bool IsDefault { get; init; }
+    /// <summary>Moves the stock location to this branch. Left out, the location keeps its branch.</summary>
+    public Guid? BranchId { get; init; }
+    /// <summary>Makes it a warehouse that serves every branch.</summary>
+    public bool DetachFromBranch { get; init; }
 }
 
 public class UpdateInventoryLocationCommandValidator : AbstractValidator<UpdateInventoryLocationCommand>
@@ -74,6 +78,10 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
             return Result.Failure<InventoryLocationDto>("El tenant no tiene habilitado el modulo de inventario.");
 
+        var branchError = await InventoryLocationBranches.ValidateAsync(_context, entity.TenantId, request.BranchId, cancellationToken);
+        if (branchError is not null)
+            return Result.Failure<InventoryLocationDto>(branchError);
+
         var code = request.Code.Trim().ToUpperInvariant();
         if (await _context.InventoryLocations.AnyAsync(x => x.Id != request.Id && x.Code == code, cancellationToken))
             return Result.Failure<InventoryLocationDto>("Ya existe una ubicacion con ese codigo.");
@@ -90,6 +98,10 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
             postalCode: request.PostalCode?.Trim(),
             contactName: request.ContactName?.Trim(),
             contactPhone: request.ContactPhone?.Trim());
+        if (request.BranchId is not null)
+            entity.AssignToBranch(request.BranchId);
+        else if (request.DetachFromBranch)
+            entity.AssignToBranch(null);
 
         if (request.IsDefault)
         {
@@ -111,6 +123,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<InventoryLocationDto>(entity));
+        var dto = await InventoryLocationBranches.NameAsync(_context, [_mapper.Map<InventoryLocationDto>(entity)], cancellationToken);
+        return Result.Success(dto[0]);
     }
 }

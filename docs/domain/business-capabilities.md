@@ -15,7 +15,7 @@ TienditApp soporta operación multi-tenant para negocios Food, Retail y Service.
 - Configurar tenant, datos fiscales básicos, logo y WhatsApp.
 - Autenticar usuarios, rotar refresh tokens, confirmar email/teléfono y usar 2FA.
 - Administrar membresías de empleados, roles y códigos de permiso.
-- Administrar ubicaciones usadas como sucursales.
+- Administrar ubicaciones de inventario por sucursal (las sucursales son entidad propia, ver [sucursales](branches-and-reporting.md)).
 - Gestionar categorías, productos/servicios, horarios de disponibilidad e imágenes.
 - Crear órdenes retail/food y órdenes de servicio con piezas/checklist.
 - Registrar pagos parciales, sesiones/movimientos de caja y cortes.

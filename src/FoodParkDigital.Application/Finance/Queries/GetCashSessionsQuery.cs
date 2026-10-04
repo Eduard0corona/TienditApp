@@ -17,6 +17,7 @@ public record GetCashSessionsQuery : IRequest<PaginatedList<CashSessionDto>>
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
     public Guid? InventoryLocationId { get; init; }
+    public Guid? BranchId { get; init; }
     public CashSessionStatus? Status { get; init; }
 
     /// <summary>Only drawers with a shortage or surplus at closing.</summary>
@@ -57,6 +58,8 @@ public class GetCashSessionsQueryHandler : IRequestHandler<GetCashSessionsQuery,
             query = query.Where(x => x.OpenedAt <= to);
         if (request.InventoryLocationId is { } locationId)
             query = query.Where(x => x.InventoryLocationId == locationId);
+        if (request.BranchId is { } branchId)
+            query = query.Where(x => x.BranchId == branchId);
         if (request.Status is { } status)
             query = query.Where(x => x.Status == status);
         if (request.OnlyWithDifference)

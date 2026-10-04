@@ -101,6 +101,33 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    public async Task Branches_ShouldReachEveryMember_WithoutTheInventoryModule(string method)
+    {
+        // Who may read or manage them is decided by the use case (any member reads, owners and admins manage).
+        var result = await InvokeAsync("/api/v1/branches", method, "STAFF",
+            new FakeTenantAccessService(active: true, [nameof(TenantPermission.ManageOrders)], TenantCapability.Service));
+
+        Assert.True(result.NextCalled);
+        Assert.Equal(TenantId, result.TenantService.TenantId);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/orders", "GET", false)]
+    [InlineData("/api/v1/auth/my-tenant", "PUT", false)]
+    [InlineData("/api/v1/auth/my-tenant", "GET", true)]
+    [InlineData("/api/v1/auth/my-tenant/subscription", "GET", true)]
+    public async Task SuspendedBusiness_ShouldOnlyReadWhyItIsSuspended(string path, string method, bool allowed)
+    {
+        var result = await InvokeAsync(path, method, "TENANT_ADMIN",
+            new FakeTenantAccessService(active: true, [], suspended: true));
+
+        Assert.Equal(allowed, result.NextCalled);
+        Assert.Equal(allowed ? StatusCodes.Status200OK : StatusCodes.Status403Forbidden, result.StatusCode);
+    }
+
+    [Theory]
     [InlineData("/api/v1/auth/login")]
     [InlineData("/api/v1/auth/refresh-token")]
     [InlineData("/api/v1/auth/register/business")]
@@ -230,7 +257,8 @@ public class TenantResolutionMiddlewareTests
     private sealed class FakeTenantAccessService(
         bool active,
         IReadOnlyCollection<string> permissions,
-        TenantCapability capabilities = TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food | TenantCapability.Inventory)
+        TenantCapability capabilities = TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food | TenantCapability.Inventory,
+        bool suspended = false)
         : ITenantAccessService
     {
         public int Calls { get; private set; }
@@ -241,7 +269,8 @@ public class TenantResolutionMiddlewareTests
             return Task.FromResult(new TenantAccessSnapshot(
                 active,
                 capabilities,
-                active ? permissions : []));
+                active ? permissions : [],
+                suspended));
         }
 
         public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>

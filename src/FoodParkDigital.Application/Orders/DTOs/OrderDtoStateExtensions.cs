@@ -13,7 +13,11 @@ public static class OrderDtoStateExtensions
     public static void ApplyStateMetadata(this OrderDto order)
     {
         var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-        order.AllowedTransitions = stateMachine.GetAllowedTransitions(order.Status).ToList();
+        // An open tab changes state only through its own actions (rounds, close): marking it delivered by
+        // hand would free the table with the bill unpaid.
+        order.AllowedTransitions = order.IsOpenTab
+            ? []
+            : stateMachine.GetAllowedTransitions(order.Status).ToList();
         // Mirrors Order.Cancel: money still kept is refunded first (void does both in one step).
         order.CanCancel = stateMachine.CanCancel(order.Status) && order.NetPaidAmount <= 0;
 

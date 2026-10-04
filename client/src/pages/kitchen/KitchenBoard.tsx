@@ -3,9 +3,35 @@ import PageTitle from '../../components/common/PageTitle';
 import { kitchenApi } from '../../api/kitchenApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
-import { OrderStatus } from '../../types';
-import type { KitchenOrderDto } from '../../types';
+import { KitchenTicketStatus, OrderStatus } from '../../types';
+import type { KitchenOrderDto, KitchenTicketDto, OrderItemDto } from '../../types';
 import { getOrderStatusLabel } from '../../utils/labels';
+import { formatTicketQuantity } from '../../utils/ticket';
+
+function KitchenItems({ items }: { items: OrderItemDto[] }) {
+  return (
+    <ul className="list-unstyled border rounded p-2 mb-3">
+      {items.map((item) => (
+        <li key={item.id} className="py-1">
+          <span className="fw-bold fs-5 me-1">{formatTicketQuantity(item)}</span>
+          <span className="fs-5">{item.productName}</span>
+          {item.options && item.options.length > 0 && (
+            <div className="fw-semibold text-primary-emphasis">{item.options.map((option) => option.optionName).join(' · ')}</div>
+          )}
+          {item.notes && (
+            <div className="alert alert-warning py-1 px-2 mt-1 mb-0 small">{item.notes}</div>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const TICKET_STATUS_LABELS: Record<number, string> = {
+  [KitchenTicketStatus.Pending]: 'Nueva',
+  [KitchenTicketStatus.Preparing]: 'Preparando',
+  [KitchenTicketStatus.Ready]: 'Lista',
+};
 
 // Realtime events are the main signal; polling covers a dropped or blocked connection, and every
 // (re)connection reloads because events sent while it was down are lost.
@@ -42,6 +68,7 @@ function getAgeBadgeClass(minutes: number): string {
 
 export default function KitchenBoard() {
   const [orders, setOrders] = useState<KitchenOrderDto[]>([]);
+  const [tickets, setTickets] = useState<KitchenTicketDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -49,15 +76,17 @@ export default function KitchenBoard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const latestRequestRef = useRef(0);
-  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onConnected } = useOrderSignalR();
+  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onKitchenTicketsChanged, onConnected } = useOrderSignalR();
 
   const loadOrders = useCallback(async () => {
     const requestId = ++latestRequestRef.current;
     try {
-      const { data } = await kitchenApi.getOrders();
+      // Orders and the rounds of open tabs (each round is its own ticket).
+      const [{ data }, { data: rounds }] = await Promise.all([kitchenApi.getOrders(), kitchenApi.getTickets()]);
       // A slower, older reload must not overwrite a newer one.
       if (requestId !== latestRequestRef.current) return;
       setOrders(data);
+      setTickets(rounds);
       setLoadError('');
       setLastUpdated(new Date());
       setNow(Date.now());
@@ -83,6 +112,7 @@ export default function KitchenBoard() {
       onOrderCreated(scheduleReload),
       onOrderStatusChanged(scheduleReload),
       onOrderCancelled(scheduleReload),
+      onKitchenTicketsChanged(scheduleReload),
       onConnected(scheduleReload),
     ];
 
@@ -92,7 +122,7 @@ export default function KitchenBoard() {
       window.clearInterval(clockId);
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [loadOrders, onOrderCreated, onOrderStatusChanged, onOrderCancelled, onConnected]);
+  }, [loadOrders, onOrderCreated, onOrderStatusChanged, onOrderCancelled, onKitchenTicketsChanged, onConnected]);
 
   const runAction = async (orderId: string, action: () => Promise<unknown>, fallback: string) => {
     setProcessingOrderId(orderId);
@@ -122,6 +152,17 @@ export default function KitchenBoard() {
   const handleReady = (orderId: string) =>
     runAction(orderId, () => kitchenApi.markReady(orderId), 'No se pudo marcar la comanda como lista.');
 
+  const moveTicket = (ticket: KitchenTicketDto) => {
+    if (ticket.status === KitchenTicketStatus.Pending) {
+      return runAction(ticket.id, () => kitchenApi.startTicket(ticket.id), 'No se pudo iniciar la ronda.');
+    }
+    if (ticket.status === KitchenTicketStatus.Preparing) {
+      return runAction(ticket.id, () => kitchenApi.markTicketReady(ticket.id), 'No se pudo marcar la ronda como lista.');
+    }
+    return runAction(ticket.id, () => kitchenApi.markTicketServed(ticket.id), 'No se pudo marcar la ronda como entregada.');
+  };
+  const pendingCount = orders.length + tickets.filter((ticket) => ticket.status !== KitchenTicketStatus.Ready).length;
+
   return (
     <>
       <PageTitle title="Cocina" subtitle="Operación" />
@@ -129,7 +170,7 @@ export default function KitchenBoard() {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted small" aria-live="polite">
           {lastUpdated
-            ? `${orders.length} ${orders.length === 1 ? 'comanda' : 'comandas'} · actualizado a las ${lastUpdated.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+            ? `${pendingCount} ${pendingCount === 1 ? 'comanda' : 'comandas'} · actualizado a las ${lastUpdated.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
             : 'Cargando comandas…'}
         </div>
         <div className="d-flex gap-2">
@@ -162,7 +203,7 @@ export default function KitchenBoard() {
             <span className="visually-hidden">Cargando…</span>
           </div>
         </div>
-      ) : orders.length === 0 ? (
+      ) : orders.length === 0 && tickets.length === 0 ? (
         <div className="card">
           <div className="card-body text-center py-5 text-muted">
             No hay comandas pendientes. Las nuevas aparecerán aquí solas.
@@ -206,17 +247,7 @@ export default function KitchenBoard() {
                       </div>
                     )}
 
-                    <ul className="list-unstyled border rounded p-2 mb-3">
-                      {order.items.map((item) => (
-                        <li key={item.id} className="py-1">
-                          <span className="fw-bold fs-5 me-1">{item.quantity}×</span>
-                          <span className="fs-5">{item.productName}</span>
-                          {item.notes && (
-                            <div className="alert alert-warning py-1 px-2 mt-1 mb-0 small">{item.notes}</div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+                    <KitchenItems items={order.items} />
 
                     <div className="d-flex gap-2">
                       <button
@@ -236,6 +267,43 @@ export default function KitchenBoard() {
                         Lista
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {tickets.map((ticket) => {
+            const elapsed = getElapsedMinutes(ticket.sentAt, now);
+            const isProcessing = processingOrderId === ticket.id;
+            const isReady = ticket.status === KitchenTicketStatus.Ready;
+            return (
+              <div className="col-xxl-3 col-xl-4 col-md-6" key={ticket.id}>
+                <div className={`card border border-2 ${isReady ? 'border-success' : getAgeClass(elapsed)}`}>
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+                      <div>
+                        <h4 className="mb-1">{ticket.tableNumber || ticket.customerName}</h4>
+                        <div className="small text-muted">Ronda {ticket.round} · {ticket.orderNumber}</div>
+                        {!isReady && <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>}
+                      </div>
+                      <span className={`badge ${isReady ? 'bg-success' : ticket.status === KitchenTicketStatus.Preparing ? 'bg-primary' : 'bg-warning text-dark'}`}>
+                        {TICKET_STATUS_LABELS[ticket.status]}
+                      </span>
+                    </div>
+                    {ticket.customerNotes && (
+                      <div className="alert alert-warning py-1 px-2 mb-2">
+                        <strong>Nota:</strong> {ticket.customerNotes}
+                      </div>
+                    )}
+                    <KitchenItems items={ticket.items} />
+                    <button
+                      type="button"
+                      className={`btn w-100 ${isReady ? 'btn-light' : ticket.status === KitchenTicketStatus.Preparing ? 'btn-success' : 'btn-primary'}`}
+                      onClick={() => void moveTicket(ticket)}
+                      disabled={isProcessing}
+                    >
+                      {ticket.status === KitchenTicketStatus.Pending ? 'Iniciar' : isReady ? 'Entregada a la mesa' : 'Lista'}
+                    </button>
                   </div>
                 </div>
               </div>

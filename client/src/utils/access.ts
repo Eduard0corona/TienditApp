@@ -24,6 +24,8 @@ export interface Access {
   sell: boolean;
   /** KitchenController: every employee role + ManageServiceBoard + Kitchen module. */
   kitchen: boolean;
+  /** TablesController and open tabs: counter roles + ManageOrders + Food module. */
+  tables: boolean;
   serviceBoard: boolean;
   customers: boolean;
   appointments: boolean;
@@ -37,6 +39,8 @@ export interface Access {
   refunds: boolean;
   /** WhatsApp campaigns, templates, appointment reminders and opt-outs: owners, admins and ManageCampaigns. */
   campaigns: boolean;
+  /** Platform console (businesses, plans and billing): the platform admin only. */
+  platform: boolean;
 }
 
 export type AccessArea = Exclude<keyof Access, 'isAdmin'>;
@@ -78,6 +82,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     orders: commerce && isEmployeeRole && can('ManageOrders'),
     sell: commerce && isCounterRole && can('ManageOrders'),
     kitchen: hasCapability(capabilities, TenantCapability.Kitchen) && isEmployeeRole && can('ManageServiceBoard'),
+    tables: hasCapability(capabilities, TenantCapability.Food) && isCounterRole && can('ManageOrders'),
     serviceBoard: hasCapability(capabilities, TenantCapability.Service) && isEmployeeRole && can('ManageServiceBoard'),
     customers: commerce && isCounterRole && can('ManageCustomers'),
     appointments: hasCapability(capabilities, TenantCapability.Appointments) && isCounterRole && can('ManageAppointments'),
@@ -88,6 +93,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     businessSettings: isAdmin,
     refunds: commerce && isCounterRole && can('ManageOrders') && can('ProcessRefunds'),
     campaigns: commerce && isCounterRole && can('ManageCampaigns'),
+    platform: role === 'superadmin',
   };
 }
 

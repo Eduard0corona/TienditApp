@@ -8,7 +8,7 @@ internal static class CashSessionMapping
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>Maps a session whose transactions are loaded.</summary>
-    public static CashSessionDto ToDto(CashSession session, Guid? currentUserId, string? locationName) => new()
+    public static CashSessionDto ToDto(CashSession session, Guid? currentUserId, string? locationName, string? branchName) => new()
     {
         Id = session.Id,
         OpenedAt = session.OpenedAt,
@@ -17,6 +17,8 @@ internal static class CashSessionMapping
         IsMine = session.IsOwnedBy(currentUserId),
         InventoryLocationId = session.InventoryLocationId,
         InventoryLocationName = locationName,
+        BranchId = session.BranchId,
+        BranchName = branchName,
         OpeningAmount = session.OpeningAmount,
         ClosedAt = session.ClosedAt,
         ClosedBy = session.ClosedBy,

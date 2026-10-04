@@ -6,10 +6,17 @@ import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { CreateProductRequest, CategoryDto, ProductDto, UnitType } from '../../types';
+import { CfdiTaxObject } from '../../types';
+import SatFiscalFields from '../../components/catalog/SatFiscalFields';
+import { satProductCodeRules, satUnitCodeRules, toSatCodePayload } from '../../utils/satCodes';
 import { getApiErrorMessage } from '../../api/errors';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
+import { getDefaultSatUnitCode } from '../../utils/units';
+import ProductOptionsEditor from '../../components/catalog/ProductOptionsEditor';
+import type { ProductOptionGroupInput } from '../../api/productsApi';
+import { getOptionGroupsError, toOptionGroupInputs } from '../../utils/productOptions';
 
 type ProductFormValues = CreateProductRequest & { vatOption: VatOption };
 
@@ -42,6 +49,9 @@ export default function ProductForm() {
 
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [product, setProduct] = useState<ProductDto | null>(null);
+  const [optionGroups, setOptionGroups] = useState<ProductOptionGroupInput[]>([]);
+  // Saved only when edited, so a plain product update never rewrites them.
+  const [optionsTouched, setOptionsTouched] = useState(false);
   const [loading, setLoading] = useState(isEditing);
   const [error, setError] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -51,6 +61,7 @@ export default function ProductForm() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     values: product
@@ -67,6 +78,9 @@ export default function ProductForm() {
           tags: product.tags || '',
           compareAtPrice: product.compareAtPrice ?? undefined,
           vatOption: toVatOption(product),
+          satProductCode: product.satProductCode ?? '',
+          satUnitCode: product.satUnitCode ?? '',
+          taxObject: product.taxObject ?? CfdiTaxObject.Subject,
           calories: product.calories ?? undefined,
           allergens: product.allergens || '',
           stockQuantity: product.stockQuantity ?? undefined,
@@ -89,11 +103,17 @@ export default function ProductForm() {
           isFeatured: false,
           tags: '',
           vatOption: '',
+          satProductCode: '',
+          satUnitCode: '',
+          taxObject: CfdiTaxObject.Subject,
           allergens: '',
           availableFromTime: undefined,
           availableToTime: undefined,
         },
   });
+
+  const watchedUnit = watch('unit');
+  const selectedUnit = watchedUnit != null && String(watchedUnit) !== '' ? (Number(watchedUnit) as UnitType) : undefined;
 
   const loadData = useCallback(async () => {
     try {
@@ -103,6 +123,7 @@ export default function ProductForm() {
       if (id) {
         const { data: prod } = await productsApi.getById(id);
         setProduct(prod);
+        setOptionGroups(toOptionGroupInputs(prod.optionGroups));
         if (prod.images?.medium) {
           setImagePreview(prod.images.medium);
         }
@@ -127,11 +148,20 @@ export default function ProductForm() {
 
   const onSubmit = async ({ vatOption, ...data }: ProductFormValues) => {
     setError('');
+    const optionsError = optionsTouched ? getOptionGroupsError(optionGroups) : null;
+    if (optionsError) {
+      setError(optionsError);
+      return;
+    }
 
     // Clean optional numeric fields
     const payload: CreateProductRequest = {
       ...data,
       ...fromVatOption(vatOption),
+      // Sent every time: an update without them would go back to the generic codes.
+      satProductCode: toSatCodePayload(data.satProductCode),
+      satUnitCode: toSatCodePayload(data.satUnitCode),
+      taxObject: Number(data.taxObject ?? CfdiTaxObject.Subject) as CfdiTaxObject,
       unit: data.unit != null && data.unit !== ('' as unknown) ? (Number(data.unit) as UnitType) : undefined,
       compareAtPrice: data.compareAtPrice ? Number(data.compareAtPrice) : undefined,
       calories: data.calories ? Number(data.calories) : undefined,
@@ -153,6 +183,14 @@ export default function ProductForm() {
       } else {
         const { data: created } = await productsApi.create(payload, 'Product');
         productId = created.id;
+      }
+
+      if (optionsTouched && productId) {
+        await productsApi.setOptionGroups(productId, optionGroups.map((group) => ({
+          ...group,
+          name: group.name.trim(),
+          options: group.options.map((option) => ({ ...option, name: option.name.trim() })),
+        })));
       }
 
       // Upload image if selected
@@ -337,6 +375,32 @@ export default function ProductForm() {
                     </div>
                   </div>
                 </div>
+                <SatFiscalFields
+                  idPrefix="product"
+                  productCode={register('satProductCode', satProductCodeRules)}
+                  unitCode={register('satUnitCode', satUnitCodeRules)}
+                  taxObject={register('taxObject')}
+                  defaultUnitCode={getDefaultSatUnitCode(selectedUnit)}
+                  errors={{ productCode: errors.satProductCode?.message, unitCode: errors.satUnitCode?.message }}
+                />
+              </div>
+            </div>
+
+            {/* Variants and extras */}
+            <div className="card">
+              <div className="card-body">
+                <h5 className="header-title mb-1">Opciones y extras</h5>
+                <p className="text-muted small mb-3">
+                  Tamaños, tipos de leche, términos o ingredientes extra. En Vender se eligen al tocar el producto y
+                  su precio se suma al del producto.
+                </p>
+                <ProductOptionsEditor
+                  groups={optionGroups}
+                  onChange={(groups) => {
+                    setOptionGroups(groups);
+                    setOptionsTouched(true);
+                  }}
+                />
               </div>
             </div>
 

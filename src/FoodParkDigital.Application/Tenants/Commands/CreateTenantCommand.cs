@@ -1,8 +1,10 @@
+using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -35,10 +37,12 @@ public class CreateTenantCommandValidator : AbstractValidator<CreateTenantComman
 public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, Result<TenantDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
-    public CreateTenantCommandHandler(IApplicationDbContext context)
+    public CreateTenantCommandHandler(IApplicationDbContext context, IDateTimeProvider clock)
     {
         _context = context;
+        _clock = clock;
     }
 
     public async Task<Result<TenantDto>> Handle(CreateTenantCommand request, CancellationToken cancellationToken)
@@ -60,12 +64,22 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
             isPublicGeneral: true);
         _context.Customers.Add(publicGeneralCustomer);
 
+        var defaultBranch = Branch.CreateDefault(tenant.Id);
+        _context.Branches.Add(defaultBranch);
+
         var defaultLocation = new InventoryLocation(
             tenantId: tenant.Id,
             name: "Almacen principal",
             code: "MAIN",
-            isDefault: true);
+            isDefault: true,
+            branchId: defaultBranch.Id);
         _context.InventoryLocations.Add(defaultLocation);
+
+        // With a plan for new businesses the business starts its trial there (modules trimmed to the plan).
+        var trial = await SubscriptionRules.StartTrialForNewBusinessAsync(
+            _context, tenant.Id, settings, request.BusinessType, _clock.UtcNow, cancellationToken);
+        if (trial is not null)
+            _context.TenantSubscriptions.Add(trial);
 
         await _context.SaveChangesAsync(cancellationToken);
 

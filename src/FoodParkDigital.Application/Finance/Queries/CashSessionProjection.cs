@@ -10,6 +10,7 @@ internal sealed class CashSessionRow
 {
     public CashSession Session { get; init; } = null!;
     public string? LocationName { get; init; }
+    public string? BranchName { get; init; }
     public decimal Inflows { get; init; }
     public decimal Outflows { get; init; }
     public decimal NonCashInflows { get; init; }
@@ -23,6 +24,10 @@ internal static class CashSessionProjection
         LocationName = context.InventoryLocations
             .Where(l => l.Id == x.InventoryLocationId)
             .Select(l => l.Name)
+            .FirstOrDefault(),
+        BranchName = context.Branches
+            .Where(b => b.Id == x.BranchId)
+            .Select(b => b.Name)
             .FirstOrDefault(),
         // Only cash counts for the drawer; card, transfer and wallet payments are reported apart.
         Inflows = context.CashTransactions
@@ -49,6 +54,8 @@ internal static class CashSessionProjection
         IsMine = row.Session.IsOwnedBy(currentUserId),
         InventoryLocationId = row.Session.InventoryLocationId,
         InventoryLocationName = row.LocationName,
+        BranchId = row.Session.BranchId,
+        BranchName = row.BranchName,
         OpeningAmount = row.Session.OpeningAmount,
         ClosedAt = row.Session.ClosedAt,
         ClosedBy = row.Session.ClosedBy,

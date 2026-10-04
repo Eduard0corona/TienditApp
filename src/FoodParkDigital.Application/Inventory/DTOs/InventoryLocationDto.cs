@@ -16,6 +16,9 @@ public class InventoryLocationDto
     public string? ContactPhone { get; set; }
     public bool IsDefault { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Branch the stock belongs to; none for a warehouse that serves every branch.</summary>
+    public Guid? BranchId { get; set; }
+    public string? BranchName { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 }

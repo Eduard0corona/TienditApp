@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Fiscal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -27,6 +28,15 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.CompareAtPrice).HasColumnType("decimal(18,2)");
         builder.Property(p => p.TaxRate).HasColumnType("decimal(5,2)");
 
+        // Invoicing (CFDI 4.0); null codes mean the generic product code and the unit's code.
+        builder.Property(p => p.SatProductCode).HasMaxLength(8);
+        builder.Property(p => p.SatUnitCode).HasMaxLength(3);
+        builder.Property(p => p.TaxObject)
+            .HasConversion<int>()
+            .HasDefaultValue(CfdiTaxObject.Subject)
+            .ValueGeneratedNever()
+            .IsRequired();
+
         // Media
         builder.Property(p => p.ImageUrl).HasMaxLength(500);
 
@@ -39,6 +49,13 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
 
         // Tenant
         builder.Property(p => p.TenantId).IsRequired();
+
+        // Variants and extras, owned by the product.
+        builder.HasMany(p => p.OptionGroups)
+            .WithOne()
+            .HasForeignKey(g => g.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(p => p.OptionGroups).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Computed properties ignored by EF
         builder.Ignore(p => p.IsLowStock);

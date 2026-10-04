@@ -4,6 +4,7 @@ import type { OrderDto, OrderPaymentMethod, RefundOrderRequest, VoidOrderRequest
 import { OrderPaymentMethod as PaymentMethod } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, parseMoneyInput, toCents } from '../../utils/money';
+import { allowsFractions, formatQuantity, parseQuantity, roundQuantity } from '../../utils/units';
 
 type RefundModalProps = {
   order: OrderDto;
@@ -42,12 +43,14 @@ export default function RefundOrderModal(props: RefundModalProps) {
   const netPaid = order.netPaidAmount ?? order.paidAmount;
   const remaining = useMemo(() => remainingByMethod(order), [order]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  // Weighed lines take a typed quantity ("0.5"); the text is kept while it is being written.
+  const [quantityTexts, setQuantityTexts] = useState<Record<string, string>>({});
   const [amountInput, setAmountInput] = useState('');
   const [method, setMethod] = useState<OrderPaymentMethod>(remaining[0]?.method ?? PaymentMethod.Cash);
   const [reason, setReason] = useState('');
   const [restock, setRestock] = useState(true);
 
-  const returnable = order.items.filter((item) => item.quantity - (item.returnedQuantity ?? 0) > 0);
+  const returnable = order.items.filter((item) => roundQuantity(item.quantity - (item.returnedQuantity ?? 0)) > 0);
   const linesTotalCents = order.items.reduce((sum, item) => sum + toCents(item.totalPrice), 0);
   // The share of the order total of the units chosen (the total already has its IVA).
   const suggestedCents = Math.min(
@@ -116,8 +119,38 @@ export default function RefundOrderModal(props: RefundModalProps) {
                   <div className="fw-semibold mb-1">Artículos devueltos (opcional)</div>
                   <ul className="list-unstyled mb-0">
                     {returnable.map((item) => {
-                      const max = item.quantity - (item.returnedQuantity ?? 0);
+                      const max = roundQuantity(item.quantity - (item.returnedQuantity ?? 0));
                       const value = quantities[item.id] ?? 0;
+                      if (allowsFractions(item.unit)) {
+                        const text = quantityTexts[item.id] ?? '';
+                        const parsed = text.trim() === '' ? 0 : parseQuantity(text, item.unit);
+                        const invalid = parsed === null || parsed > max;
+                        return (
+                          <li key={item.id} className="d-flex align-items-center justify-content-between gap-2 border-bottom py-1">
+                            <label htmlFor={`refund-qty-${item.id}`}>
+                              {item.productName}{' '}
+                              <span className="text-muted small">({formatQuantity(max, item.unit)} disponibles)</span>
+                            </label>
+                            <input
+                              id={`refund-qty-${item.id}`}
+                              className={`form-control form-control-sm ta-money text-end ${invalid ? 'is-invalid' : ''}`}
+                              style={{ maxWidth: '7rem' }}
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={text}
+                              onChange={(event) => {
+                                const next = event.target.value;
+                                setQuantityTexts((current) => ({ ...current, [item.id]: next }));
+                                const quantity = next.trim() === '' ? 0 : parseQuantity(next, item.unit);
+                                setQuantities((current) => ({
+                                  ...current,
+                                  [item.id]: quantity !== null && quantity <= max ? quantity : 0,
+                                }));
+                              }}
+                            />
+                          </li>
+                        );
+                      }
                       return (
                         <li key={item.id} className="d-flex align-items-center justify-content-between gap-2 border-bottom py-1">
                           <span>{item.productName} <span className="text-muted small">({max} disponibles)</span></span>

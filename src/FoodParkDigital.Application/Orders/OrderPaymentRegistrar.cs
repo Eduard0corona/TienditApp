@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,7 @@ public sealed class OrderPaymentRegistrar
     private readonly IDateTimeProvider _dateTimeProvider;
     public const string NoOpenDrawerMessage = "Abre tu caja para cobrar en efectivo.";
 
+    private readonly Dictionary<Guid, Guid?> _stockLocationByBranch = [];
     private Guid? _defaultLocationId;
     private bool _defaultLocationLoaded;
     private TenantSalesSettings? _salesSettings;
@@ -71,7 +73,7 @@ public sealed class OrderPaymentRegistrar
         }
         else
         {
-            inventoryLocationId = await GetDefaultLocationIdAsync(order.TenantId, cancellationToken);
+            inventoryLocationId = await GetLocationOfBranchAsync(order, cancellationToken);
         }
 
         var payment = order.RegisterPayment(
@@ -97,14 +99,23 @@ public sealed class OrderPaymentRegistrar
         return Result.Success(payment);
     }
 
-    private async Task<Guid?> GetDefaultLocationIdAsync(Guid tenantId, CancellationToken cancellationToken)
+    /// <summary>The stock location of the order's branch (the business's default one for orders without branch).</summary>
+    private async Task<Guid?> GetLocationOfBranchAsync(Order order, CancellationToken cancellationToken)
     {
+        if (order.BranchId is { } branchId)
+        {
+            if (!_stockLocationByBranch.TryGetValue(branchId, out var locationId))
+            {
+                locationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, branchId, cancellationToken);
+                _stockLocationByBranch[branchId] = locationId;
+            }
+
+            return locationId;
+        }
+
         if (!_defaultLocationLoaded)
         {
-            _defaultLocationId = await _context.InventoryLocations
-                .Where(x => x.TenantId == tenantId && x.IsActive && x.IsDefault)
-                .Select(x => (Guid?)x.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+            _defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, null, cancellationToken);
             _defaultLocationLoaded = true;
         }
 

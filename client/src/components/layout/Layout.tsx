@@ -5,6 +5,9 @@ import Topbar from './Topbar';
 import Footer from './Footer';
 import BottomTabBar from './BottomTabBar';
 import GlobalSearch from './GlobalSearch';
+import PastDueBanner from './PastDueBanner';
+import SuspendedNotice from './SuspendedNotice';
+import PendingSalesSync from '../sales/PendingSalesSync';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
@@ -38,8 +41,11 @@ export default function Layout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { capabilities } = useTenant();
-  const canSell = getAccess(user, capabilities).sell;
+  const { tenant, capabilities } = useTenant();
+  const access = getAccess(user, capabilities);
+  const canSell = access.sell;
+  // Suspended or cancelled for billing (the platform admin keeps working on it).
+  const isSuspended = !!tenant && tenant.status !== 0 && !access.platform;
   const [searchOpen, setSearchOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
   const [desktopSize, setDesktopSize] = useState<DesktopSidenavSize>(
@@ -118,13 +124,21 @@ export default function Layout() {
       <div className="content-page">
         <div className="content">
           <div className="container-fluid">
-            <Outlet />
+            {isSuspended ? <SuspendedNotice businessName={tenant?.name} /> : (
+              <>
+                {/* Mi negocio shows it in the plan card; the platform console is not about this business. */}
+                {!pathname.startsWith('/platform') && pathname !== '/settings/business' && <PastDueBanner />}
+                <Outlet />
+              </>
+            )}
           </div>
         </div>
         <Footer />
       </div>
       <BottomTabBar onOpenMenu={toggleSidebar} isMenuOpen={isMobileMenuOpen} />
       <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
+      {/* Sales charged without connection are sent from any screen once it comes back. */}
+      {canSell && !isSuspended && <PendingSalesSync />}
     </div>
   );
 }

@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
@@ -33,6 +34,12 @@ public record UpdateProductCommand : IRequest<Result<ProductDto>>
     public decimal? TaxRate { get; init; }
     /// <summary>Exempt from IVA; an exempt product has no rate.</summary>
     public bool IsTaxExempt { get; init; }
+    /// <summary>CFDI ClaveProdServ (8 digits); empty uses the generic code 01010101.</summary>
+    public string? SatProductCode { get; init; }
+    /// <summary>CFDI ClaveUnidad (H87, KGM...); empty uses the code of the unit.</summary>
+    public string? SatUnitCode { get; init; }
+    /// <summary>CFDI ObjetoImp: subject to tax (02) unless the product is outside IVA (01).</summary>
+    public CfdiTaxObject TaxObject { get; init; } = CfdiTaxObject.Subject;
     public int? Calories { get; init; }
     public string? Allergens { get; init; }
     public int? StockQuantity { get; init; }
@@ -73,6 +80,18 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
             .Null()
             .When(x => x.IsTaxExempt)
             .WithMessage("Un producto exento de IVA no lleva tasa.");
+        RuleFor(x => x.SatProductCode)
+            .Must(code => code!.Trim().Length == 8 && code.Trim().All(char.IsAsciiDigit))
+            .When(x => !string.IsNullOrWhiteSpace(x.SatProductCode))
+            .WithMessage("La clave de producto del SAT tiene 8 dígitos (por ejemplo 50202301).");
+        RuleFor(x => x.SatUnitCode)
+            .Must(code => code!.Trim().Length is 2 or 3 && code.Trim().All(char.IsAsciiLetterOrDigit))
+            .When(x => !string.IsNullOrWhiteSpace(x.SatUnitCode))
+            .WithMessage("La clave de unidad del SAT tiene 2 o 3 letras o números (por ejemplo H87 o KGM).");
+        RuleFor(x => x.TaxObject).IsInEnum();
+        RuleFor(x => x)
+            .Must(x => x.TaxObject != CfdiTaxObject.NotSubject || x.IsTaxExempt || x.TaxRate == 0)
+            .WithMessage("Un producto que no es objeto de impuesto debe ser exento o con tasa 0 %.");
         RuleFor(x => x.Calories)
             .GreaterThanOrEqualTo(0).When(x => x.Calories.HasValue);
         RuleFor(x => x.StockQuantity)
@@ -153,7 +172,10 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
 
     public async Task<Result<ProductDto>> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
     {
+        // Options are loaded so the response carries them (the product form keeps editing with it).
         var product = await _context.Products
+            .Include(p => p.OptionGroups)
+            .ThenInclude(g => g.Options)
             .FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.Id);
 
@@ -210,6 +232,7 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
             isTrackable: request.IsTrackable,
             notifyCustomer: request.NotifyCustomer,
             isTaxExempt: request.IsTaxExempt);
+        product.SetFiscalData(request.SatProductCode, request.SatUnitCode, request.TaxObject);
 
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(_mapper.Map<ProductDto>(product));

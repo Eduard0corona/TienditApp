@@ -1,14 +1,18 @@
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Billing.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Purchasing.Entities;
+using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -58,6 +62,16 @@ public interface IApplicationDbContext
     DbSet<MessageCampaign> MessageCampaigns { get; }
     DbSet<OutgoingMessage> OutgoingMessages { get; }
     DbSet<MessagingOptOut> MessagingOptOuts { get; }
+    DbSet<ProductOptionGroup> ProductOptionGroups { get; }
+    DbSet<ProductOption> ProductOptions { get; }
+    DbSet<OrderItemOption> OrderItemOptions { get; }
+    DbSet<DiningTable> DiningTables { get; }
+    DbSet<KitchenTicket> KitchenTickets { get; }
+    DbSet<Branch> Branches { get; }
+    DbSet<DailySalesSnapshot> DailySalesSnapshots { get; }
+    DbSet<Plan> Plans { get; }
+    DbSet<TenantSubscription> TenantSubscriptions { get; }
+    DbSet<SubscriptionPayment> SubscriptionPayments { get; }
     DatabaseFacade Database { get; }
     ChangeTracker ChangeTracker { get; }
 

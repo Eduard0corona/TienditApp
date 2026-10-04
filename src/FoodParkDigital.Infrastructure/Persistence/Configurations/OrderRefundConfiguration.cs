@@ -44,6 +44,7 @@ public class OrderRefundLineConfiguration : IEntityTypeConfiguration<OrderRefund
         builder.ToTable("OrderRefundLines");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.TenantId).IsRequired();
+        builder.Property(x => x.Quantity).HasColumnType("decimal(18,3)").IsRequired();
 
         // The returned line must exist; deleting it is not possible while a return points to it.
         builder.HasOne<OrderItem>()

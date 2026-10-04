@@ -1,25 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
 import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
+import BranchPicker from '../../components/branches/BranchPicker';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
+import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import SaleTicket from '../../components/sales/SaleTicket';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { usePendingSales } from '../../hooks/usePendingSales';
+import { useWorkingBranch } from '../../hooks/useWorkingBranch';
+import { loadCatalogSnapshot, saveCatalogSnapshot } from '../../offline/catalogCache';
+import { buildOfflineTicketOrder } from '../../offline/offlineTicket';
+import { enqueueSale, isNetworkError } from '../../offline/saleQueue';
+import { newUuid } from '../../utils/uuid';
 import type { CategoryDto, CreateOrderRequest, OrderDto, ProductDto } from '../../types';
 import { BusinessType, OrderChannel, OrderType, TenantCapability, UnitType } from '../../types';
 import { getAccess } from '../../utils/access';
+import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
 import { buildTicketText, buildWhatsAppTicketUrl, printTicket } from '../../utils/ticket';
+import {
+  allowsFractions,
+  formatQuantity,
+  getQuantityStep,
+  getUnitShortLabel,
+  lineAmount,
+  parseQuantity,
+  roundQuantity,
+} from '../../utils/units';
 import { readSellDraft, writeSellDraft } from './sellDraft';
+import {
+  getLineKey,
+  getOptionsLabel,
+  getPriceWithOptions,
+  getSelectionError,
+  hasOptions,
+} from '../../utils/productOptions';
 import './SellPage.css';
 
 // Same limits as the API (OrderLimits).
@@ -27,9 +53,16 @@ const MAX_QUANTITY_PER_LINE = 10_000;
 const MAX_LINES = 200;
 // The largest page the API serves; a bigger catalog is searched on the server.
 const CATALOG_PAGE_SIZE = 500;
+// How often Vender tries to replace the catalog saved on the device while the server does not answer.
+const CATALOG_RETRY_MS = 60_000;
 
 interface CartLine {
+  /** Product plus its options: the same product with other options is another line. */
+  key: string;
   productId: string;
+  optionIds: string[];
+  /** "Grande, Almendra". */
+  optionsLabel: string;
   name: string;
   unitPrice: number;
   quantity: number;
@@ -38,6 +71,51 @@ interface CartLine {
   isService: boolean;
   ratePercent: number;
   isExempt: boolean;
+  unit?: UnitType;
+  /** Sold by weight, volume, length or time: the quantity admits three decimals. */
+  fractional: boolean;
+}
+
+/** A product with variants or extras waiting for the options and quantity. */
+interface OptionsRequest {
+  product: ProductDto;
+  optionIds: string[];
+  quantityText: string;
+}
+
+/** Where the order goes when it is not a counter sale: a new tab or a round of an open one. */
+type TabTarget =
+  | { kind: 'new'; tableId?: string; label: string }
+  | { kind: 'round'; orderId: string; label: string };
+
+function readTabTarget(params: URLSearchParams): TabTarget | null {
+  const orderId = params.get('tab');
+  if (orderId) return { kind: 'round', orderId, label: params.get('label')?.trim() || 'la cuenta' };
+  const tableId = params.get('table') ?? undefined;
+  const label = params.get('label')?.trim();
+  if (tableId || label) return { kind: 'new', tableId, label: label || 'Mesa' };
+  return null;
+}
+
+/** A weighed or measured product waiting for its quantity. */
+interface MeasureRequest {
+  product: ProductDto;
+  text: string;
+  /** The product is already in the ticket: the quantity replaces the one there. */
+  replacing: boolean;
+}
+
+/** Quick picks of the quantity dialog for each unit. */
+function getQuickQuantities(unit?: UnitType): number[] {
+  switch (unit) {
+    case UnitType.G:
+    case UnitType.Ml:
+      return [100, 250, 500, 1000];
+    case UnitType.Hour:
+      return [0.5, 1, 1.5, 2];
+    default:
+      return [0.25, 0.5, 1, 2];
+  }
 }
 
 interface CompletedSale {
@@ -46,6 +124,8 @@ interface CompletedSale {
   cashReceived: number;
   /** Saved without charging (a WhatsApp order paid on delivery). */
   unpaid?: boolean;
+  /** Charged without connection: kept on the device until it reaches the server. */
+  offline?: boolean;
 }
 
 /** The chat a sale was started from (Vender opened with ?phone=&name=&conversation=). */
@@ -93,6 +173,7 @@ export default function SellPage() {
   const defaultTaxRate = tenant?.defaultTaxRate ?? 16;
   const isFood = tenant?.businessType === BusinessType.Food;
   const canReceiveServices = hasCapability(capabilities, TenantCapability.Service);
+  const hasKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
 
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -113,27 +194,51 @@ export default function SellPage() {
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
+  const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
+  const online = useOnlineStatus();
+  const pendingSales = usePendingSales();
+  const [showPendingSales, setShowPendingSales] = useState(false);
+  // When the catalog on screen is the one saved on the device (the connection dropped while loading).
+  const [offlineCatalogAt, setOfflineCatalogAt] = useState<string | null>(null);
+  // Key of the sale being charged: kept across retries until it is recorded, so a retry never charges twice.
+  const saleKey = useRef<string | null>(null);
+  const workingBranch = useWorkingBranch();
+  // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
+  const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // A table's tab (new or a new round): read once; the sale then goes to the kitchen instead of being charged.
+  const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
+  const [tabOrder, setTabOrder] = useState<OrderDto | null>(null);
+  const [choosing, setChoosing] = useState<OptionsRequest | null>(null);
   // Read once: the link fills the customer after the saved draft is restored.
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [sendingToChat, setSendingToChat] = useState(false);
+  const [measure, setMeasure] = useState<MeasureRequest | null>(null);
+  // What the cashier is typing in a quantity box ("1." on the way to "1.5"), until the box loses focus.
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const draftLoadedFor = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const toCartLine = useCallback(
-    (product: ProductDto, quantity: number, notes = ''): CartLine => {
+    (product: ProductDto, quantity: number, notes = '', optionIds: string[] = []): CartLine => {
       const vat = resolveProductVat(product, defaultTaxRate);
       return {
+        key: getLineKey(product.id, optionIds),
         productId: product.id,
+        optionIds,
+        optionsLabel: getOptionsLabel(product.optionGroups, optionIds),
         name: product.name,
-        unitPrice: product.priceAmount,
+        unitPrice: getPriceWithOptions(product.priceAmount, product.optionGroups, optionIds),
         quantity,
         notes,
         showNotes: notes.length > 0,
         isService: isServiceProduct(product),
         ratePercent: vat.ratePercent,
         isExempt: vat.isExempt,
+        unit: product.unit,
+        fractional: allowsFractions(product.unit),
       };
     },
     [defaultTaxRate],
@@ -142,25 +247,41 @@ export default function SellPage() {
   const loadCatalog = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const [productsResponse, categoriesResponse] = await Promise.all([
-        productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, pageNumber: 1, pageSize: CATALOG_PAGE_SIZE }),
-        categoriesApi.getAll(),
-      ]);
-      const loaded = productsResponse.data.items;
+      let loaded: ProductDto[];
+      try {
+        const [productsResponse, categoriesResponse] = await Promise.all([
+          productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, pageNumber: 1, pageSize: CATALOG_PAGE_SIZE }),
+          categoriesApi.getAll(),
+        ]);
+        loaded = productsResponse.data.items;
+        setCategories(categoriesResponse.data);
+        setCatalogTruncated(productsResponse.data.totalCount > loaded.length);
+        setOfflineCatalogAt(null);
+        void saveCatalogSnapshot(tenantId, loaded, categoriesResponse.data);
+      } catch (err: unknown) {
+        // Without connection, keep selling with the catalog this device saved the last time.
+        const snapshot = isNetworkError(err) ? await loadCatalogSnapshot(tenantId) : null;
+        if (!snapshot) throw err;
+        loaded = snapshot.products;
+        setCategories(snapshot.categories);
+        setCatalogTruncated(false);
+        setOfflineCatalogAt(snapshot.savedAt);
+      }
       setProducts(loaded);
-      setCategories(categoriesResponse.data);
-      setCatalogTruncated(productsResponse.data.totalCount > loaded.length);
       setLoadError('');
 
       const byId = new Map(loaded.map((product) => [product.id, product]));
       if (draftLoadedFor.current !== tenantId) {
-        // First load for this business: bring back the sale that was being built.
+        // First load for this business: bring back the sale that was being built (a table's round starts empty).
         draftLoadedFor.current = tenantId;
-        const draft = readSellDraft(tenantId);
+        const draft = tabTarget ? null : readSellDraft(tenantId);
         if (draft) {
           setCart(draft.lines.flatMap((line) => {
             const product = byId.get(line.productId);
-            return product ? [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes)] : [];
+            const optionIds = line.optionIds ?? [];
+            // Options that changed since the draft was saved drop the line instead of selling something else.
+            if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
+            return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
           }));
           setCustomerName(draft.customerName);
           setCustomerPhone(draft.customerPhone);
@@ -180,7 +301,8 @@ export default function SellPage() {
         // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
         setCart((current) => current.flatMap((line) => {
           const product = byId.get(line.productId);
-          return product ? [{ ...toCartLine(product, line.quantity, line.notes), showNotes: line.showNotes }] : [];
+          if (!product || getSelectionError(product.optionGroups, line.optionIds)) return [];
+          return [{ ...toCartLine(product, line.quantity, line.notes, line.optionIds), showNotes: line.showNotes }];
         }));
       }
     } catch (err: unknown) {
@@ -188,11 +310,40 @@ export default function SellPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, toCartLine]);
+  }, [tabTarget, tenantId, toCartLine]);
+
+  useEffect(() => {
+    // A round goes to an open tab: show what it already has.
+    if (tabTarget?.kind !== 'round') return;
+    let cancelled = false;
+    ordersApi.getById(tabTarget.orderId)
+      .then(({ data }) => {
+        if (!cancelled) setTabOrder(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setSaleError(getApiErrorMessage(err, 'No se encontró la cuenta.'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tabTarget]);
 
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  // With the saved catalog on screen, or after a failed load, bring the current one (prices may have changed) when
+  // the connection comes back; the browser does not notice when only the server was unreachable, so retry each minute.
+  useEffect(() => {
+    if (!offlineCatalogAt && !loadError) return;
+    const reload = () => void loadCatalog();
+    window.addEventListener('online', reload);
+    const timer = offlineCatalogAt ? window.setInterval(reload, CATALOG_RETRY_MS) : undefined;
+    return () => {
+      window.removeEventListener('online', reload);
+      window.clearInterval(timer);
+    };
+  }, [offlineCatalogAt, loadError, loadCatalog]);
 
   // The customer is already in the form: a reload must not fill it again.
   useEffect(() => {
@@ -205,7 +356,9 @@ export default function SellPage() {
     let cancelled = false;
     cashApi.getCurrentSession()
       .then(({ data }) => {
-        if (!cancelled) setCashClosed(!data);
+        if (cancelled) return;
+        setCashClosed(!data);
+        setDrawerBranch(data?.isMine && data.branchId ? { id: data.branchId, name: data.branchName ?? '' } : null);
       })
       .catch(() => {
         if (!cancelled) setCashClosed(false);
@@ -216,15 +369,15 @@ export default function SellPage() {
   }, [access.cash, tenantId]);
 
   useEffect(() => {
-    if (!tenantId || draftLoadedFor.current !== tenantId) return;
+    if (!tenantId || draftLoadedFor.current !== tenantId || tabTarget) return;
     writeSellDraft(tenantId, {
-      lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes })),
+      lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
       customerName,
       customerPhone,
       tableNumber,
       orderNotes,
     });
-  }, [cart, customerName, customerPhone, orderNotes, tableNumber, tenantId]);
+  }, [cart, customerName, customerPhone, orderNotes, tableNumber, tabTarget, tenantId]);
 
   const totals = useMemo(
     () => estimateOrderTotals(
@@ -238,7 +391,8 @@ export default function SellPage() {
     ),
     [cart, pricesIncludeTax],
   );
-  const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
+  // A weighed product counts as one article, whatever it weighs.
+  const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
   const phoneError = customerPhone.trim() && !isPlausiblePhone(customerPhone)
     ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'
@@ -268,10 +422,24 @@ export default function SellPage() {
 
   const addProduct = useCallback((product: ProductDto) => {
     setSaleError('');
+    if (hasOptions(product)) {
+      // Variants and extras: choose them (and how many) before it goes to the ticket.
+      const preselected = (product.optionGroups ?? [])
+        .filter((group) => group.minSelections === 1 && group.maxSelections === 1)
+        .flatMap((group) => group.options.filter((option) => option.isAvailable).slice(0, 1).map((option) => option.id));
+      setChoosing({ product, optionIds: preselected, quantityText: '1' });
+      return;
+    }
+    if (allowsFractions(product.unit)) {
+      // Weighed or measured: ask how much instead of adding one.
+      const existing = cart.find((line) => line.key === product.id);
+      setMeasure({ product, text: existing ? String(existing.quantity) : '', replacing: Boolean(existing) });
+      return;
+    }
     setCart((current) => {
-      const existing = current.find((line) => line.productId === product.id);
+      const existing = current.find((line) => line.key === product.id);
       if (existing) {
-        return current.map((line) => (line.productId === product.id
+        return current.map((line) => (line.key === product.id
           ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_LINE) }
           : line));
       }
@@ -281,21 +449,99 @@ export default function SellPage() {
       }
       return [...current, toCartLine(product, 1)];
     });
-  }, [toCartLine, toast]);
+  }, [cart, toCartLine, toast]);
 
-  const changeQuantity = (productId: string, quantity: number) => {
-    setCart((current) => (quantity <= 0
-      ? current.filter((line) => line.productId !== productId)
-      : current.map((line) => (line.productId === productId
-        ? { ...line, quantity: Math.min(quantity, MAX_QUANTITY_PER_LINE) }
+  const chosenQuantity = choosing ? parseQuantity(choosing.quantityText, choosing.product.unit) : null;
+  const choiceError = choosing ? getSelectionError(choosing.product.optionGroups, choosing.optionIds) : null;
+
+  const toggleOption = (groupId: string, optionId: string) => {
+    if (!choosing) return;
+    const group = choosing.product.optionGroups?.find((item) => item.id === groupId);
+    if (!group) return;
+    const inGroup = new Set(group.options.map((option) => option.id));
+    const selected = choosing.optionIds.includes(optionId);
+    let optionIds: string[];
+    if (group.maxSelections === 1) {
+      // A single choice works like radio buttons (an optional one can be cleared by tapping it again).
+      const others = choosing.optionIds.filter((id) => !inGroup.has(id));
+      optionIds = selected && group.minSelections === 0 ? others : [...others, optionId];
+    } else if (selected) {
+      optionIds = choosing.optionIds.filter((id) => id !== optionId);
+    } else {
+      const pickedInGroup = choosing.optionIds.filter((id) => inGroup.has(id)).length;
+      if (pickedInGroup >= group.maxSelections) return;
+      optionIds = [...choosing.optionIds, optionId];
+    }
+    setChoosing({ ...choosing, optionIds });
+  };
+
+  const confirmChoice = () => {
+    if (!choosing || choiceError || chosenQuantity === null) return;
+    const { product, optionIds } = choosing;
+    const key = getLineKey(product.id, optionIds);
+    setCart((current) => {
+      if (current.some((line) => line.key === key)) {
+        return current.map((line) => (line.key === key
+          ? { ...line, quantity: Math.min(roundQuantity(line.quantity + chosenQuantity), MAX_QUANTITY_PER_LINE) }
+          : line));
+      }
+      if (current.length >= MAX_LINES) {
+        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
+        return current;
+      }
+      return [...current, toCartLine(product, Math.min(chosenQuantity, MAX_QUANTITY_PER_LINE), '', optionIds)];
+    });
+    setChoosing(null);
+  };
+
+  const measuredQuantity = measure ? parseQuantity(measure.text, measure.product.unit) : null;
+  const measureTooLarge = measuredQuantity !== null && measuredQuantity > MAX_QUANTITY_PER_LINE;
+
+  const confirmMeasure = () => {
+    if (!measure || measuredQuantity === null || measureTooLarge) return;
+    const { product } = measure;
+    setCart((current) => {
+      if (current.some((line) => line.key === product.id)) {
+        return current.map((line) => (line.key === product.id ? { ...line, quantity: measuredQuantity } : line));
+      }
+      if (current.length >= MAX_LINES) {
+        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
+        return current;
+      }
+      return [...current, toCartLine(product, measuredQuantity)];
+    });
+    setMeasure(null);
+  };
+
+  const changeQuantity = (key: string, quantity: number) => {
+    const rounded = roundQuantity(quantity);
+    setCart((current) => (rounded <= 0
+      ? current.filter((line) => line.key !== key)
+      : current.map((line) => (line.key === key
+        ? { ...line, quantity: Math.min(rounded, MAX_QUANTITY_PER_LINE) }
         : line))));
   };
 
-  const updateLine = (productId: string, changes: Partial<CartLine>) => {
-    setCart((current) => current.map((line) => (line.productId === productId ? { ...line, ...changes } : line)));
+  const typeQuantity = (line: CartLine, text: string) => {
+    setQuantityDrafts((current) => ({ ...current, [line.key]: text }));
+    const parsed = parseQuantity(text, line.unit);
+    if (parsed !== null) changeQuantity(line.key, parsed);
+  };
+
+  const finishTypingQuantity = (key: string) => {
+    setQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const updateLine = (key: string, changes: Partial<CartLine>) => {
+    setCart((current) => current.map((line) => (line.key === key ? { ...line, ...changes } : line)));
   };
 
   const clearSale = () => {
+    saleKey.current = null;
     setCart([]);
     setCustomerName('');
     setCustomerPhone('');
@@ -353,11 +599,12 @@ export default function SellPage() {
   };
 
   const openCharge = useCallback(() => {
-    if (cart.length === 0 || submitting) return;
+    // A table's round is sent to the kitchen and charged when the table leaves (Mesas).
+    if (cart.length === 0 || submitting || tabTarget) return;
     setSaleError('');
     setCartOpenOnPhone(false);
     setChargeOpen(true);
-  }, [cart.length, submitting]);
+  }, [cart.length, submitting, tabTarget]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -381,10 +628,45 @@ export default function SellPage() {
       productId: line.productId,
       quantity: line.quantity,
       notes: line.notes.trim() || undefined,
+      optionIds: line.optionIds.length > 0 ? line.optionIds : undefined,
     })),
     expectedTotal: totals.total,
     channel: chatOrigin ? OrderChannel.WhatsApp : undefined,
+    branchId: saleBranchId,
   });
+
+  /** Keeps a charged sale on the device when the connection is down; it is sent with its key when it comes back. */
+  const queueOfflineSale = async (request: CreateOrderRequest, charge: ChargeResult) => {
+    if (!tenantId || !user) return false;
+    const capturedAt = new Date().toISOString();
+    try {
+      const pending = await enqueueSale({
+        id: request.idempotencyKey ?? newUuid(),
+        tenantId,
+        userId: user.id,
+        request: { ...request, idempotencyKey: undefined },
+        total: totals.total,
+        capturedAt,
+      });
+      const order = buildOfflineTicketOrder({
+        folio: pending.folio,
+        capturedAt,
+        lines: cart,
+        totals,
+        pricesIncludeTax,
+        payments: charge.payments.map((payment) => ({ amount: payment.amount, method: payment.method, reference: payment.reference })),
+        customerName: request.customerName,
+        tableNumber: request.tableNumber,
+      });
+      clearSale();
+      setChargeOpen(false);
+      setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived, offline: true });
+      return true;
+    } catch {
+      // No IndexedDB on this device (private window): the sale needs the connection.
+      return false;
+    }
+  };
 
   const submitSale = async (charge: ChargeResult | null) => {
     if (!validateSale()) {
@@ -393,17 +675,26 @@ export default function SellPage() {
     }
     setSubmitting(true);
     setSaleError('');
+    // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid or a service
+    // (its pieces are picked up with the server's folio) need the server.
+    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices;
+    const request: CreateOrderRequest = {
+      ...buildOrderRequest(),
+      // The same key on a retry returns this sale instead of charging twice.
+      idempotencyKey: (saleKey.current ??= newUuid()),
+      payments: charge?.payments.map((payment) => ({
+        amount: payment.amount,
+        method: payment.method,
+        reference: payment.reference,
+        evidenceUrl: payment.evidenceUrl,
+      })),
+    };
+    if (canQueue && !navigator.onLine && await queueOfflineSale(request, charge)) {
+      setSubmitting(false);
+      return;
+    }
     try {
-      const request = buildOrderRequest();
-      const { data: order } = await ordersApi.create({
-        ...request,
-        payments: charge?.payments.map((payment) => ({
-          amount: payment.amount,
-          method: payment.method,
-          reference: payment.reference,
-          evidenceUrl: payment.evidenceUrl,
-        })),
-      });
+      const { data: order } = await ordersApi.create(request);
       clearSale();
       setChargeOpen(false);
       if (charge) {
@@ -415,10 +706,40 @@ export default function SellPage() {
         toast.success(`Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`);
       }
     } catch (err: unknown) {
+      if (canQueue && isNetworkError(err) && await queueOfflineSale(request, charge)) return;
       const message = getApiErrorMessage(err, 'No se pudo registrar la venta.');
       setSaleError(message);
       if (!charge) toast.error(message);
       // A price or availability may have changed: refresh the catalog and the cart prices.
+      void loadCatalog();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const sendToKitchen = async () => {
+    if (!tabTarget || !validateSale()) return;
+    setSubmitting(true);
+    setSaleError('');
+    try {
+      const request = buildOrderRequest();
+      if (tabTarget.kind === 'round') {
+        await ordersApi.addRound(tabTarget.orderId, request.items);
+      } else {
+        await ordersApi.create({
+          ...request,
+          openTab: true,
+          orderType: OrderType.Retail,
+          diningTableId: tabTarget.tableId,
+          // A tab without a table goes by its name.
+          tableNumber: tabTarget.tableId ? undefined : tabTarget.label,
+        });
+      }
+      clearSale();
+      toast.success(tabTarget.kind === 'round' ? 'Ronda enviada a cocina.' : `Cuenta de ${tabTarget.label} abierta y enviada a cocina.`);
+      navigate('/tables');
+    } catch (err: unknown) {
+      setSaleError(getApiErrorMessage(err, 'No se pudo enviar a cocina.'));
       void loadCatalog();
     } finally {
       setSubmitting(false);
@@ -453,10 +774,25 @@ export default function SellPage() {
     businessName,
     change: completedSale.change,
     cashReceived: completedSale.cashReceived,
+    provisional: completedSale.offline,
   }) : '';
 
   const cartPanel = (
     <div className="sell-cart-panel">
+      {tabTarget && (
+        <div className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
+          <span className="small">
+            <i className="ri-restaurant-line me-1" aria-hidden="true"></i>
+            <strong>{tabTarget.label}</strong>
+            {tabTarget.kind === 'round'
+              ? tabOrder
+                ? <> · ronda {(tabOrder.kitchenTickets?.length ?? 0) + 1} · llevan <span className="ta-money">{formatMoney(tabOrder.total)}</span></>
+                : ' · nueva ronda'
+              : ' · cuenta nueva'}
+          </span>
+          <Link to="/tables" className="btn btn-sm btn-light">Mesas</Link>
+        </div>
+      )}
       {chatOrigin && (
         <div className="alert alert-success d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
           <span className="small">
@@ -482,65 +818,74 @@ export default function SellPage() {
         </div>
       ) : (
         <ul className="sell-lines list-unstyled mb-2">
-          {cart.map((line) => (
-            <li key={line.productId} className="sell-line">
-              <div className="d-flex justify-content-between gap-2">
-                <div className="sell-line-name">
-                  {line.name}
-                  <div className="small text-muted">{formatMoney(line.unitPrice)} c/u</div>
+          {cart.map((line) => {
+            const step = getQuantityStep(line.unit);
+            const unitLabel = getUnitShortLabel(line.unit);
+            const removesLine = line.quantity - step <= 0;
+            const stepLabel = line.fractional ? `${formatQuantity(step, line.unit)} de` : 'uno de';
+            return (
+              <li key={line.key} className="sell-line">
+                <div className="d-flex justify-content-between gap-2">
+                  <div className="sell-line-name">
+                    {line.name}
+                    {line.optionsLabel && <div className="small sell-line-options">{line.optionsLabel}</div>}
+                    <div className="small text-muted">
+                      {line.fractional
+                        ? `${formatQuantity(line.quantity, line.unit)} × ${formatMoney(line.unitPrice)}/${unitLabel}`
+                        : `${formatMoney(line.unitPrice)} c/u`}
+                    </div>
+                  </div>
+                  <strong className="ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</strong>
                 </div>
-                <strong className="ta-money">{formatMoney(line.unitPrice * line.quantity)}</strong>
-              </div>
-              <div className="d-flex align-items-center justify-content-between gap-2 mt-1">
-                <div className="sell-stepper" role="group" aria-label={`Cantidad de ${line.name}`}>
+                <div className="d-flex align-items-center justify-content-between gap-2 mt-1">
+                  <div className="sell-stepper" role="group" aria-label={`Cantidad de ${line.name}`}>
+                    <button
+                      type="button"
+                      className="btn btn-light"
+                      aria-label={removesLine ? `Quitar ${line.name}` : `Quitar ${stepLabel} ${line.name}`}
+                      onClick={() => changeQuantity(line.key, line.quantity - step)}
+                    >
+                      <i className={removesLine ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
+                    </button>
+                    <input
+                      className={`form-control text-center ta-money ${line.fractional ? 'sell-quantity-measured' : ''}`}
+                      inputMode={line.fractional ? 'decimal' : 'numeric'}
+                      aria-label={line.fractional ? `Cantidad de ${line.name} en ${unitLabel}` : `Cantidad de ${line.name}`}
+                      value={quantityDrafts[line.key] ?? String(line.quantity)}
+                      onChange={(event) => typeQuantity(line, event.target.value)}
+                      onBlur={() => finishTypingQuantity(line.key)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-light"
+                      aria-label={`Agregar ${stepLabel} ${line.name}`}
+                      onClick={() => changeQuantity(line.key, line.quantity + step)}
+                    >
+                      <i className="ri-add-line" aria-hidden="true"></i>
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="btn btn-light"
-                    aria-label={line.quantity === 1 ? `Quitar ${line.name}` : `Quitar uno de ${line.name}`}
-                    onClick={() => changeQuantity(line.productId, line.quantity - 1)}
+                    className={`btn btn-sm ${line.showNotes ? 'btn-soft-warning' : 'btn-light'}`}
+                    onClick={() => updateLine(line.key, { showNotes: !line.showNotes })}
+                    aria-expanded={line.showNotes}
                   >
-                    <i className={line.quantity === 1 ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
+                    <i className="ri-sticky-note-line me-1" aria-hidden="true"></i>Nota
                   </button>
+                </div>
+                {line.showNotes && (
                   <input
-                    className="form-control text-center ta-money"
-                    inputMode="numeric"
-                    aria-label={`Cantidad de ${line.name}`}
-                    value={line.quantity}
-                    onChange={(event) => {
-                      const parsed = Number.parseInt(event.target.value, 10);
-                      if (!Number.isNaN(parsed)) changeQuantity(line.productId, parsed);
-                    }}
+                    className="form-control form-control-sm mt-2"
+                    placeholder="Ej. sin cebolla, para llevar"
+                    aria-label={`Nota para ${line.name}`}
+                    maxLength={300}
+                    value={line.notes}
+                    onChange={(event) => updateLine(line.key, { notes: event.target.value })}
                   />
-                  <button
-                    type="button"
-                    className="btn btn-light"
-                    aria-label={`Agregar uno de ${line.name}`}
-                    onClick={() => changeQuantity(line.productId, line.quantity + 1)}
-                  >
-                    <i className="ri-add-line" aria-hidden="true"></i>
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${line.showNotes ? 'btn-soft-warning' : 'btn-light'}`}
-                  onClick={() => updateLine(line.productId, { showNotes: !line.showNotes })}
-                  aria-expanded={line.showNotes}
-                >
-                  <i className="ri-sticky-note-line me-1" aria-hidden="true"></i>Nota
-                </button>
-              </div>
-              {line.showNotes && (
-                <input
-                  className="form-control form-control-sm mt-2"
-                  placeholder="Ej. sin cebolla, para llevar"
-                  aria-label={`Nota para ${line.name}`}
-                  maxLength={300}
-                  value={line.notes}
-                  onChange={(event) => updateLine(line.productId, { notes: event.target.value })}
-                />
-              )}
-            </li>
-          ))}
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -631,24 +976,39 @@ export default function SellPage() {
 
       {saleError && !chargeOpen && <div className="alert alert-danger py-2 mt-2 mb-0">{saleError}</div>}
 
-      <div className="d-grid gap-2 mt-3">
-        <button
-          type="button"
-          className="btn btn-primary btn-touch btn-touch-lg"
-          onClick={openCharge}
-          disabled={cart.length === 0 || submitting}
-        >
-          Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
-        </button>
-        <button
-          type="button"
-          className="btn btn-light btn-touch"
-          onClick={() => void submitSale(null)}
-          disabled={cart.length === 0 || submitting}
-        >
-          Guardar sin cobrar
-        </button>
-      </div>
+      {tabTarget ? (
+        <div className="d-grid gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-touch btn-touch-lg"
+            onClick={() => void sendToKitchen()}
+            disabled={cart.length === 0 || submitting}
+          >
+            <i className="ri-restaurant-2-line me-1" aria-hidden="true"></i>
+            {submitting ? 'Enviando…' : `Enviar a cocina · ${formatMoney(totals.total)}`}
+          </button>
+          <Link to="/tables" className="btn btn-light btn-touch">Cancelar</Link>
+        </div>
+      ) : (
+        <div className="d-grid gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-touch btn-touch-lg"
+            onClick={openCharge}
+            disabled={cart.length === 0 || submitting}
+          >
+            Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-light btn-touch"
+            onClick={() => void submitSale(null)}
+            disabled={cart.length === 0 || submitting}
+          >
+            Guardar sin cobrar
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -656,7 +1016,31 @@ export default function SellPage() {
     <div className="sell-page">
       <div className="sell-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h1 className="h3 mb-0">Vender</h1>
-        <div className="d-flex flex-wrap gap-2">
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          {!online && (
+            <span className="badge text-bg-warning" role="status">
+              <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>Sin conexión
+            </span>
+          )}
+          {pendingSales.sales.length > 0 && (
+            <button type="button" className={`btn btn-sm ${pendingSales.failedCount > 0 ? 'btn-danger' : 'btn-warning'}`}
+              onClick={() => setShowPendingSales(true)}>
+              <i className="ri-upload-cloud-2-line me-1" aria-hidden="true"></i>
+              {pendingSales.sales.length} {pendingSales.sales.length === 1 ? 'venta sin enviar' : 'ventas sin enviar'}
+            </button>
+          )}
+          {workingBranch.hasSeveral && (drawerBranch ? (
+            <span className="badge text-bg-light border" title="Las ventas se registran en la sucursal de tu caja abierta">
+              <i className="ri-store-3-line me-1" aria-hidden="true"></i>{drawerBranch.name} · tu caja
+            </span>
+          ) : (
+            <BranchPicker
+              branches={workingBranch.branches}
+              value={workingBranch.branch?.id}
+              onChange={workingBranch.setBranch}
+              label="Sucursal donde vendes"
+            />
+          ))}
           {canReceiveServices && access.sell && (
             <Link to="/orders/cart" className="btn btn-sm btn-light">
               <i className="ri-t-shirt-line me-1" aria-hidden="true"></i>Recibir servicio con piezas
@@ -669,6 +1053,14 @@ export default function SellPage() {
           )}
         </div>
       </div>
+
+      {offlineCatalogAt && (
+        <div className="alert alert-warning mt-3 mb-0" role="status">
+          <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
+          Sin conexión: vendes con el catálogo guardado ({formatDateTime(offlineCatalogAt)}). Las ventas cobradas se guardan
+          en este dispositivo y se envían solas al volver la conexión.
+        </div>
+      )}
 
       {cashClosed && (
         <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-0" role="status">
@@ -762,22 +1154,30 @@ export default function SellPage() {
           ) : (
             <div className="sell-products">
               {visibleProducts.map((product) => {
-                const inCart = cart.find((line) => line.productId === product.id)?.quantity ?? 0;
+                const inCart = roundQuantity(cart
+                  .filter((line) => line.productId === product.id)
+                  .reduce((sum, line) => sum + line.quantity, 0));
+                const unitLabel = allowsFractions(product.unit) ? getUnitShortLabel(product.unit) : '';
+                const price = unitLabel ? `${formatMoney(product.priceAmount)}/${unitLabel}` : formatMoney(product.priceAmount);
+                const inCartLabel = unitLabel ? formatQuantity(inCart, product.unit) : String(inCart);
+                // The badge shows the number only: the tile already says the unit.
+                const badge = inCart.toLocaleString('es-MX', { maximumFractionDigits: 3 });
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    className={`sell-product ${inCart > 0 ? 'in-cart' : ''}`}
+                    className={`sell-product ${inCart > 0 ? 'in-cart' : ''} ${unitLabel ? 'measured' : ''}`}
                     onClick={() => addProduct(product)}
-                    aria-label={`Agregar ${product.name}, ${formatMoney(product.priceAmount)}${inCart > 0 ? `, ${inCart} en el ticket` : ''}`}
+                    aria-label={`Agregar ${product.name}, ${price}${inCart > 0 ? `, ${inCartLabel} en el ticket` : ''}`}
                   >
                     {product.images?.thumbnail && (
                       <img src={product.images.thumbnail} alt="" className="sell-product-image" loading="lazy" />
                     )}
                     <span className="sell-product-name">{product.name}</span>
-                    <span className="sell-product-price ta-money">{formatMoney(product.priceAmount)}</span>
+                    <span className="sell-product-price ta-money">{price}</span>
                     {isServiceProduct(product) && <span className="sell-product-tag">Servicio</span>}
-                    {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{inCart}</span>}
+                    {unitLabel && !isServiceProduct(product) && <span className="sell-product-tag">Por {unitLabel}</span>}
+                    {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{badge}</span>}
                   </button>
                 );
               })}
@@ -796,8 +1196,13 @@ export default function SellPage() {
           <i className="ri-shopping-basket-2-line me-1" aria-hidden="true"></i>
           {itemCount} {itemCount === 1 ? 'artículo' : 'artículos'} · <span className="ta-money">{formatMoney(totals.total)}</span>
         </button>
-        <button type="button" className="btn btn-primary btn-touch" onClick={openCharge} disabled={cart.length === 0}>
-          Cobrar
+        <button
+          type="button"
+          className="btn btn-primary btn-touch"
+          onClick={tabTarget ? () => void sendToKitchen() : openCharge}
+          disabled={cart.length === 0 || submitting}
+        >
+          {tabTarget ? 'Enviar' : 'Cobrar'}
         </button>
       </div>
       <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet">
@@ -806,6 +1211,147 @@ export default function SellPage() {
         </Offcanvas.Header>
         <Offcanvas.Body>{cartPanel}</Offcanvas.Body>
       </Offcanvas>
+
+      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down">
+        {choosing && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              confirmChoice();
+            }}
+          >
+            <Modal.Header closeButton>
+              <Modal.Title as="h2" className="h5">{choosing.product.name}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {(choosing.product.optionGroups ?? []).map((group) => {
+                const single = group.maxSelections === 1;
+                const pickedInGroup = group.options.filter((option) => choosing.optionIds.includes(option.id)).length;
+                return (
+                  <fieldset key={group.id} className="mb-3">
+                    <legend className="fs-6 fw-semibold mb-1">
+                      {group.name}{' '}
+                      <span className="small text-muted fw-normal">
+                        {group.minSelections > 0
+                          ? single ? '· obligatorio' : `· elige ${group.minSelections} a ${group.maxSelections}`
+                          : single ? '· opcional' : `· hasta ${group.maxSelections}`}
+                      </span>
+                    </legend>
+                    <div className="sell-option-list">
+                      {group.options.map((option) => {
+                        const checked = choosing.optionIds.includes(option.id);
+                        const full = !single && !checked && pickedInGroup >= group.maxSelections;
+                        return (
+                          <label key={option.id} className={`sell-option ${checked ? 'active' : ''} ${!option.isAvailable || full ? 'disabled' : ''}`}>
+                            <input
+                              type={single ? 'radio' : 'checkbox'}
+                              className="form-check-input me-2"
+                              name={`option-${group.id}`}
+                              checked={checked}
+                              disabled={!option.isAvailable || full}
+                              onChange={() => toggleOption(group.id, option.id)}
+                              onClick={() => {
+                                // Tapping the chosen option of an optional single choice clears it.
+                                if (single && checked && group.minSelections === 0) toggleOption(group.id, option.id);
+                              }}
+                            />
+                            <span className="flex-grow-1">{option.name}{!option.isAvailable && ' (agotado)'}</span>
+                            {option.priceDelta !== 0 && (
+                              <span className="ta-money small">{option.priceDelta > 0 ? '+' : '−'}{formatMoney(Math.abs(option.priceDelta))}</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                );
+              })}
+              <label className="form-label" htmlFor="sell-choice-quantity">
+                {allowsFractions(choosing.product.unit) ? `Cantidad (${getUnitShortLabel(choosing.product.unit)})` : 'Cantidad'}
+              </label>
+              <input
+                id="sell-choice-quantity"
+                className={`form-control ta-money ${choosing.quantityText && chosenQuantity === null ? 'is-invalid' : ''}`}
+                style={{ maxWidth: '8rem' }}
+                inputMode={allowsFractions(choosing.product.unit) ? 'decimal' : 'numeric'}
+                value={choosing.quantityText}
+                onChange={(event) => setChoosing({ ...choosing, quantityText: event.target.value })}
+              />
+              {choiceError && <div className="text-danger small mt-2" role="status">{choiceError}</div>}
+            </Modal.Body>
+            <Modal.Footer>
+              <button type="button" className="btn btn-light" onClick={() => setChoosing(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={Boolean(choiceError) || chosenQuantity === null}>
+                Agregar · {formatMoney(lineAmount(
+                  getPriceWithOptions(choosing.product.priceAmount, choosing.product.optionGroups, choosing.optionIds),
+                  chosenQuantity ?? 0,
+                ))}
+              </button>
+            </Modal.Footer>
+          </form>
+        )}
+      </Modal>
+
+      <Modal show={!!measure} onHide={() => setMeasure(null)} centered>
+        {measure && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              confirmMeasure();
+            }}
+          >
+            <Modal.Header closeButton>
+              <Modal.Title as="h2" className="h5">{measure.product.name}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <label className="form-label" htmlFor="sell-measure">
+                ¿Cuánto? <span className="text-muted">({formatMoney(measure.product.priceAmount)}/{getUnitShortLabel(measure.product.unit)})</span>
+              </label>
+              <div className="input-group input-group-lg">
+                <input
+                  id="sell-measure"
+                  className={`form-control ta-money ${measure.text && (measuredQuantity === null || measureTooLarge) ? 'is-invalid' : ''}`}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  autoFocus
+                  placeholder="0.000"
+                  value={measure.text}
+                  onChange={(event) => setMeasure({ ...measure, text: event.target.value })}
+                  aria-describedby="sell-measure-help"
+                />
+                <span className="input-group-text">{getUnitShortLabel(measure.product.unit)}</span>
+              </div>
+              <div id="sell-measure-help" className={measure.text && (measuredQuantity === null || measureTooLarge) ? 'invalid-feedback d-block' : 'form-text'}>
+                {measureTooLarge
+                  ? `Máximo ${MAX_QUANTITY_PER_LINE.toLocaleString('es-MX')} por producto.`
+                  : measure.text && measuredQuantity === null
+                    ? 'Escribe una cantidad mayor a cero, con hasta 3 decimales.'
+                    : measuredQuantity !== null
+                      ? `Importe: ${formatMoney(lineAmount(measure.product.priceAmount, measuredQuantity))}`
+                      : 'Hasta 3 decimales.'}
+              </div>
+              <div className="sell-measure-picks mt-3" role="group" aria-label="Cantidades rápidas">
+                {getQuickQuantities(measure.product.unit).map((quantity) => (
+                  <button
+                    key={quantity}
+                    type="button"
+                    className="btn btn-light btn-touch"
+                    onClick={() => setMeasure({ ...measure, text: String(quantity) })}
+                  >
+                    {formatQuantity(quantity, measure.product.unit)}
+                  </button>
+                ))}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <button type="button" className="btn btn-light" onClick={() => setMeasure(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={measuredQuantity === null || measureTooLarge}>
+                {measure.replacing ? 'Cambiar cantidad' : 'Agregar'}
+              </button>
+            </Modal.Footer>
+          </form>
+        )}
+      </Modal>
 
       <Modal show={chargeOpen} onHide={() => !submitting && setChargeOpen(false)} centered size="lg" fullscreen="sm-down">
         <Modal.Header closeButton={!submitting}>
@@ -828,18 +1374,30 @@ export default function SellPage() {
         </Modal.Body>
       </Modal>
 
+      {showPendingSales && <PendingSalesModal onClose={() => setShowPendingSales(false)} />}
+
       <Modal show={!!completedSale} onHide={startNewSale} centered fullscreen="sm-down">
         <Modal.Header closeButton>
           <Modal.Title as="h2" className="h5">
             <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
-            {completedSale?.unpaid
-              ? `Pedido ${completedSale.order.orderNumber} guardado`
-              : `Venta ${completedSale?.order.orderNumber} cobrada`}
+            {completedSale?.offline
+              ? `Venta ${completedSale.order.orderNumber} guardada sin conexión`
+              : completedSale?.unpaid
+                ? `Pedido ${completedSale.order.orderNumber} guardado`
+                : `Venta ${completedSale?.order.orderNumber} cobrada`}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {completedSale && (
             <>
+              {completedSale.offline && (
+                <div className="alert alert-warning small" role="status">
+                  <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
+                  Sin conexión: la venta quedó guardada en este dispositivo y se envía sola cuando vuelva. Su folio definitivo
+                  aparecerá en Pedidos.
+                  {hasKitchen && ' La cocina no la verá hasta que se envíe: avísale o entrégale el ticket impreso.'}
+                </div>
+              )}
               {completedSale.change > 0 && (
                 <div className="charge-change has-change mb-3" aria-live="polite">
                   <span>Cambio</span>
@@ -851,6 +1409,7 @@ export default function SellPage() {
                 businessName={businessName}
                 change={completedSale.change}
                 cashReceived={completedSale.cashReceived}
+                provisional={completedSale.offline}
               />
             </>
           )}

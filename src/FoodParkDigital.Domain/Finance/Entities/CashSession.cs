@@ -12,7 +12,8 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     private CashSession() { }
 
     /// <param name="openedByUserId">The cashier who owns the drawer: payments they take enter this session.</param>
-    /// <param name="inventoryLocationId">The branch (location) where the drawer is.</param>
+    /// <param name="inventoryLocationId">Stock location of the branch, kept for the cuts by location.</param>
+    /// <param name="branchId">The branch where the drawer is.</param>
     public CashSession(
         Guid tenantId,
         DateTimeOffset openedAt,
@@ -20,7 +21,8 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
         decimal openingAmount,
         string? notes = null,
         Guid? openedByUserId = null,
-        Guid? inventoryLocationId = null)
+        Guid? inventoryLocationId = null,
+        Guid? branchId = null)
     {
         if (openingAmount < 0)
             throw new DomainException("El fondo inicial no puede ser negativo.");
@@ -30,6 +32,7 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
         OpenedBy = openedBy;
         OpenedByUserId = openedByUserId;
         InventoryLocationId = inventoryLocationId;
+        BranchId = branchId;
         OpeningAmount = openingAmount;
         Notes = notes?.Trim();
         Status = CashSessionStatus.Open;
@@ -49,8 +52,11 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>Cashier who owns the drawer. Null for drawers opened before per-cashier sessions.</summary>
     public Guid? OpenedByUserId { get; private set; }
 
-    /// <summary>Branch (inventory location) of the drawer.</summary>
+    /// <summary>Stock location of the drawer's branch (before branches existed, it was the branch itself).</summary>
     public Guid? InventoryLocationId { get; private set; }
+
+    /// <summary>Branch of the drawer: payments of sales made there enter it.</summary>
+    public Guid? BranchId { get; private set; }
 
     /// <summary>Cash the drawer should have held at closing (opening amount plus cash in, minus cash out).</summary>
     public decimal? ExpectedClosingAmount { get; private set; }

@@ -2,14 +2,14 @@ import type { OrderDto } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
-import { formatTicketDate, type TicketExtras } from '../../utils/ticket';
+import { formatTicketDate, formatTicketQuantity, type TicketExtras } from '../../utils/ticket';
 
 interface SaleTicketProps extends TicketExtras {
   order: OrderDto;
 }
 
 /** Customer ticket: what was bought, the IVA breakdown computed by the server and how it was paid. */
-export default function SaleTicket({ order, businessName, cashReceived, change }: SaleTicketProps) {
+export default function SaleTicket({ order, businessName, cashReceived, change, provisional }: SaleTicketProps) {
   const taxLines = order.taxBreakdown.filter((line) => line.taxAmount > 0);
   const showCustomer = order.customerName && order.customerName !== 'Público en general';
 
@@ -18,6 +18,7 @@ export default function SaleTicket({ order, businessName, cashReceived, change }
       <div className="text-center mb-2">
         <div className="ta-ticket-business">{businessName}</div>
         <div className="small">Ticket {order.orderNumber}</div>
+        {provisional && <div className="small">Folio provisional: venta registrada sin conexión</div>}
         <div className="small">{formatTicketDate(order.createdAt)}</div>
         {order.tableNumber && <div className="small">Mesa/Ref.: {order.tableNumber}</div>}
         {showCustomer && <div className="small">Cliente: {order.customerName}</div>}
@@ -27,9 +28,12 @@ export default function SaleTicket({ order, businessName, cashReceived, change }
         <tbody>
           {order.items.map((item) => (
             <tr key={item.id}>
-              <td className="pe-1 align-top">{item.quantity}×</td>
+              <td className="pe-1 align-top text-nowrap">{formatTicketQuantity(item)}</td>
               <td className="w-100">
                 {item.productName}
+                {item.options && item.options.length > 0 && (
+                  <div className="ta-ticket-note">{item.options.map((option) => option.optionName).join(', ')}</div>
+                )}
                 {item.notes && <div className="ta-ticket-note">{item.notes}</div>}
               </td>
               <td className="text-end align-top ta-money">{formatMoney(item.totalPrice)}</td>

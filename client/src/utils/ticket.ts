@@ -2,12 +2,21 @@ import type { OrderDto } from '../types';
 import { getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
 import { getVatLabel } from './orderTotals';
+import { describeItem } from './productOptions';
+import { allowsFractions, formatQuantity } from './units';
 
 export interface TicketExtras {
   businessName: string;
   /** Cash handed over and change, known only at the counter right after charging. */
   cashReceived?: number;
   change?: number;
+  /** Charged without connection: the folio is the device's until the server gives the real one. */
+  provisional?: boolean;
+}
+
+/** "2 ×" for pieces, "1.255 kg" for what is weighed or measured. */
+export function formatTicketQuantity(item: OrderDto['items'][number]): string {
+  return allowsFractions(item.unit) ? formatQuantity(item.quantity, item.unit) : `${item.quantity} ×`;
 }
 
 export function formatTicketDate(value: string): string {
@@ -25,10 +34,11 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
   const lines: string[] = [
     `*${extras.businessName}*`,
     `Ticket ${order.orderNumber} · ${formatTicketDate(order.createdAt)}`,
+    ...(extras.provisional ? ['_Folio provisional: venta registrada sin conexión._'] : []),
     '',
     ...order.items.map((item) => {
       const note = item.notes ? `\n   _${item.notes}_` : '';
-      return `${item.quantity} × ${item.productName}  ${formatMoney(item.totalPrice)}${note}`;
+      return `${formatTicketQuantity(item)} ${describeItem(item)}  ${formatMoney(item.totalPrice)}${note}`;
     }),
     '',
   ];

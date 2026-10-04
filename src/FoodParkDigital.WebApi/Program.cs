@@ -88,6 +88,26 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = isDev ? 10 : 2
             }));
 
+    // Public menu (anonymous): browsing is generous, placing orders is tight, both per IP.
+    options.AddPolicy("public-menu", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 600 : 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    options.AddPolicy("public-order", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDev ? 100 : 6,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            }));
+
     // Sliding window for general API endpoints - 200 requests per minute per user
     options.AddPolicy("api", httpContext =>
         RateLimitPartition.GetSlidingWindowLimiter(

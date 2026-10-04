@@ -1,12 +1,11 @@
-using FoodParkDigital.Application.Inventory.Commands;
-using FoodParkDigital.Application.Inventory.DTOs;
-using FoodParkDigital.Application.Inventory.Queries;
+using FoodParkDigital.Application.Branches;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
+/// <summary>Branches of the business: every member reads them, owners and admins manage them.</summary>
 [ApiController]
 [Route("api/v1/branches")]
 [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
@@ -20,9 +19,9 @@ public class BranchesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<InventoryLocationDto>>> GetBranches([FromQuery] bool? isActive)
+    public async Task<ActionResult<List<BranchDto>>> GetBranches([FromQuery] bool? isActive)
     {
-        var result = await _mediator.Send(new GetInventoryLocationsQuery
+        var result = await _mediator.Send(new GetBranchesQuery
         {
             IsActive = isActive
         });
@@ -31,7 +30,7 @@ public class BranchesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<InventoryLocationDto>> CreateBranch([FromBody] CreateInventoryLocationCommand command)
+    public async Task<ActionResult<BranchDto>> CreateBranch([FromBody] CreateBranchCommand command)
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
@@ -41,7 +40,7 @@ public class BranchesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<InventoryLocationDto>> UpdateBranch(Guid id, [FromBody] UpdateInventoryLocationCommand command)
+    public async Task<ActionResult<BranchDto>> UpdateBranch(Guid id, [FromBody] UpdateBranchCommand command)
     {
         if (id != command.Id)
             return BadRequest(new { error = "Route ID and body ID mismatch." });
@@ -56,12 +55,22 @@ public class BranchesController : ControllerBase
     [HttpPatch("{id:guid}/active")]
     public async Task<IActionResult> SetBranchActive(Guid id, [FromBody] SetBranchActiveRequest request)
     {
-        var result = await _mediator.Send(new SetInventoryLocationActiveCommand
+        var result = await _mediator.Send(new SetBranchActiveCommand
         {
             Id = id,
             IsActive = request.IsActive
         });
 
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/default")]
+    public async Task<IActionResult> SetDefaultBranch(Guid id)
+    {
+        var result = await _mediator.Send(new SetDefaultBranchCommand { Id = id });
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 

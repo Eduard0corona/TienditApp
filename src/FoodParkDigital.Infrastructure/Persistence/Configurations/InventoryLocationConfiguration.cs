@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -30,5 +31,11 @@ public class InventoryLocationConfiguration : IEntityTypeConfiguration<Inventory
         builder.HasIndex(x => new { x.TenantId, x.Name });
         builder.HasIndex(x => new { x.TenantId, x.IsActive });
         builder.HasIndex(x => new { x.TenantId, x.IsDefault });
+        builder.HasIndex(x => new { x.TenantId, x.BranchId });
+
+        builder.HasOne<Branch>()
+            .WithMany()
+            .HasForeignKey(x => x.BranchId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

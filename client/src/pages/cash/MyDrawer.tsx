@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import DataTable from '../../components/common/DataTable';
+import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useToast } from '../../hooks/useToast';
@@ -9,7 +10,6 @@ import type {
   CashSessionDto,
   CashTransactionDto,
   CashTransactionType,
-  InventoryLocationDto,
   PaginatedList,
 } from '../../types';
 import { CashTransactionType as CashTransactionTypeConst } from '../../types';
@@ -42,13 +42,17 @@ const MANUAL_TYPES: CashTransactionType[] = [
 ];
 
 interface MyDrawerProps {
-  locations: InventoryLocationDto[];
+  branches: Branch[];
+  /** Branch this device works at: the drawer opens there unless another one is chosen. */
+  workingBranchId?: string;
+  /** The drawer was opened at this branch: the device keeps working there. */
+  onBranchChosen: (branchId: string) => void;
   /** Called after the drawer opens or closes, so the history refreshes. */
   onChanged: () => void;
 }
 
 /** The cashier's own drawer: open it, see what it should hold, record expenses and close it with a count. */
-export default function MyDrawer({ locations, onChanged }: MyDrawerProps) {
+export default function MyDrawer({ branches, workingBranchId, onBranchChosen, onChanged }: MyDrawerProps) {
   const toast = useToast();
   const [session, setSession] = useState<CashSessionDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +67,8 @@ export default function MyDrawer({ locations, onChanged }: MyDrawerProps) {
 
   const [openingAmount, setOpeningAmount] = useState('');
   const [openingNotes, setOpeningNotes] = useState('');
-  const [openingLocationId, setOpeningLocationId] = useState('');
+  const [openingBranchId, setOpeningBranchId] = useState('');
+  const chosenBranchId = openingBranchId || workingBranchId || '';
 
   const [movementType, setMovementType] = useState<CashTransactionType>(CashTransactionTypeConst.Expense);
   const [movementAmount, setMovementAmount] = useState('');
@@ -115,9 +120,10 @@ export default function MyDrawer({ locations, onChanged }: MyDrawerProps) {
       const { data } = await cashApi.openSession({
         openingAmount: amount,
         notes: openingNotes.trim() || undefined,
-        inventoryLocationId: openingLocationId || undefined,
+        branchId: chosenBranchId || undefined,
       });
       setSession(data);
+      if (data.branchId) onBranchChosen(data.branchId);
       setOpeningAmount('');
       setOpeningNotes('');
       toast.success('Tu caja quedó abierta.');
@@ -214,19 +220,18 @@ export default function MyDrawer({ locations, onChanged }: MyDrawerProps) {
                 disabled={submitting}
               />
             </div>
-            {locations.length > 1 && (
+            {branches.length > 1 && (
               <div className="col-sm-4 col-lg-3">
-                <label className="form-label" htmlFor="drawer-location">Sucursal</label>
+                <label className="form-label" htmlFor="drawer-branch">Sucursal</label>
                 <select
-                  id="drawer-location"
+                  id="drawer-branch"
                   className="form-select"
-                  value={openingLocationId}
-                  onChange={(event) => setOpeningLocationId(event.target.value)}
+                  value={chosenBranchId}
+                  onChange={(event) => setOpeningBranchId(event.target.value)}
                   disabled={submitting}
                 >
-                  <option value="">Principal</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>{location.name}</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>{branch.name}{branch.isDefault ? ' (principal)' : ''}</option>
                   ))}
                 </select>
               </div>
@@ -259,7 +264,7 @@ export default function MyDrawer({ locations, onChanged }: MyDrawerProps) {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted">
           {session.isMine ? 'Tu caja' : `Caja de ${session.openedBy}`}
-          {session.inventoryLocationName ? ` · ${session.inventoryLocationName}` : ''}
+          {(session.branchName ?? session.inventoryLocationName) ? ` · ${session.branchName ?? session.inventoryLocationName}` : ''}
           {' · abierta '}
           {new Date(session.openedAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
         </div>

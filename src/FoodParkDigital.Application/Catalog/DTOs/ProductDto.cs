@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Fiscal;
 
 namespace FoodParkDigital.Application.Catalog.DTOs;
 
@@ -24,6 +25,11 @@ public class ProductDto
     public bool IsTaxExempt { get; set; }
     public bool HasDiscount { get; set; }
 
+    // Invoicing (CFDI 4.0): the product's own codes, null when it uses the generic ones.
+    public string? SatProductCode { get; set; }
+    public string? SatUnitCode { get; set; }
+    public CfdiTaxObject TaxObject { get; set; }
+
     // Media
     public string? ImageUrl { get; set; }
     public ProductImageUrlsDto? Images { get; set; }
@@ -46,6 +52,29 @@ public class ProductDto
     public bool IsLowStock { get; set; }
     public bool IsTrackable { get; set; }
     public bool NotifyCustomer { get; set; }
+
+    /// <summary>Variants and extras offered with the product.</summary>
+    public List<ProductOptionGroupDto> OptionGroups { get; set; } = new();
+}
+
+public class ProductOptionGroupDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = null!;
+    /// <summary>0 makes the group optional.</summary>
+    public int MinSelections { get; set; }
+    /// <summary>1 makes it a single choice.</summary>
+    public int MaxSelections { get; set; }
+    public List<ProductOptionDto> Options { get; set; } = new();
+}
+
+public class ProductOptionDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = null!;
+    /// <summary>Added to the product price (negative for a cheaper variant).</summary>
+    public decimal PriceDelta { get; set; }
+    public bool IsAvailable { get; set; }
 }
 
 public class ProductImageUrlsDto

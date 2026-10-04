@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Billing;
 using System;
 using System.Text.Json;
 using AutoMapper;
@@ -51,7 +52,7 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.ContactEmail).NotEmpty().EmailAddress();
         RuleFor(x => x.ContactPhone).MaximumLength(20);
         RuleFor(x => x.Rfc)
-            .Matches(@"^[A-ZN&]{3,4}\d{6}[A-Z0-9]{3}$")
+            .Matches(@"^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$")
             .When(x => !string.IsNullOrEmpty(x.Rfc))
             .WithMessage("El RFC no tiene un formato valido.");
         RuleFor(x => x.LegalName).MaximumLength(300);
@@ -131,6 +132,13 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
         }
 
         tenant.SetBusinessInfo(request.Rfc, request.LegalName, request.Industry, request.TaxRegime, address);
+
+        if (request.Capabilities is { } requestedModules)
+        {
+            var planError = await SubscriptionRules.CheckModulesAsync(_context, tenant.Id, requestedModules, cancellationToken);
+            if (planError is not null)
+                return Result.Failure<TenantProfileDto>(planError);
+        }
 
         var settings = await _context.TenantSettings
             .FirstOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);

@@ -6,8 +6,8 @@
 | Capas | Cuatro proyectos Clean Architecture; algunas fugas puntuales | Dependencias estrictas y casos de uso siempre en Application | En progreso |
 | Tenant | Filtros globales para `ITenantScoped`, middleware por rutas, interceptor que rechaza `TenantId` ajeno o modificado, hubs con membresía | Cobertura total, tenant inmutable, políticas explícitas y suite cross-tenant | Brecha |
 | Autorización | Roles + permisos/capabilities en middleware y Application parcial | Policies/resource authorization consistentes en backend | Brecha |
-| Eventos | MediatR post-save, side effects directos | Outbox durable + consumidores idempotentes antes de procesos críticos | Objetivo no implementado |
-| Fiscal | Impuesto de orden fijo 16%; porcentaje por línea en compras | Tax Calculation Engine México, desglose persistido, preparación CFDI | Objetivo no implementado |
+| Eventos | Outbox durable con worker, reintentos y dead-letter para auditoría y avisos (Fase 2); SignalR best-effort | Outbox durable + consumidores idempotentes antes de procesos críticos | En progreso |
+| Fiscal | IVA por negocio y por producto, desglose persistido por línea, claves SAT y vista previa CFDI 4.0 (Fases 1 y 3); sin timbrado | Tax Calculation Engine México, desglose persistido, preparación CFDI | En progreso |
 | Ajustes financieros | Pagos/caja sin ledger de ajustes | Créditos/débitos trazables, CxC, saldo a favor, Wallet y conciliación | Objetivo no implementado |
 | Inventario | Stock almacenado + movimientos; idempotencia parcial; tokens de concurrencia en stock, costo y recepción | Concurrencia robusta, transferencias atómicas y reconciliación | Brecha |
 | API | `/api/v1`, DTOs/MediatR, errores mixtos | `ProblemDetails` uniforme, tokens propagados, paginación completa | Brecha |

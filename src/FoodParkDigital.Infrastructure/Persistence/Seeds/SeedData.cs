@@ -1,6 +1,7 @@
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -143,17 +144,35 @@ public static class SeedData
                     isPublicGeneral: true));
             }
 
-            var hasDefaultLocation = await context.InventoryLocations
+            // Seeding runs before any request: the tenant is explicit in every query below.
+            var defaultBranchId = await context.Branches
                 .IgnoreQueryFilters()
-                .AnyAsync(x => x.TenantId == tenant.Id && x.IsDefault);
+                .Where(x => x.TenantId == tenant.Id && x.IsDefault)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync();
+            if (defaultBranchId is null)
+            {
+                var branch = Branch.CreateDefault(tenant.Id);
+                context.Branches.Add(branch);
+                defaultBranchId = branch.Id;
+            }
 
-            if (!hasDefaultLocation)
+            var defaultLocation = await context.InventoryLocations
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.TenantId == tenant.Id && x.IsDefault);
+
+            if (defaultLocation is null)
             {
                 context.InventoryLocations.Add(new InventoryLocation(
                     tenantId: tenant.Id,
                     name: "Almacen principal",
                     code: $"MAIN-{tenant.Id.ToString()[..8]}",
-                    isDefault: true));
+                    isDefault: true,
+                    branchId: defaultBranchId));
+            }
+            else if (defaultLocation.BranchId is null)
+            {
+                defaultLocation.AssignToBranch(defaultBranchId);
             }
         }
 

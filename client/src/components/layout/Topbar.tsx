@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import { useAuth } from '../../hooks/useAuth';
+import { useConfirm } from '../../hooks/useConfirm';
+import { usePendingSales } from '../../hooks/usePendingSales';
 import { useTenant } from '../../hooks/useTenant';
 import type { MyTenantDto } from '../../types';
 import { getRoleLabel, getUserRoleLabel } from '../../utils/labels';
@@ -38,6 +40,8 @@ interface TopbarProps {
 export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch }: TopbarProps) {
   const { user, logout, switchTenant } = useAuth();
   const { tenant, capabilities, refreshTenant } = useTenant();
+  const { confirm } = useConfirm();
+  const pendingSales = usePendingSales();
   const access = getAccess(user, capabilities);
   const canOpenBusinessSettings = access.businessSettings;
   const [availableTenants, setAvailableTenants] = useState<MyTenantDto[]>([]);
@@ -57,6 +61,18 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
+    const unsent = pendingSales.sales.length;
+    if (unsent > 0) {
+      // They stay on this device and are sent the next time this user enters here.
+      const accepted = await confirm({
+        title: 'Tienes ventas sin enviar',
+        message: `${unsent === 1 ? 'Una venta cobrada sin conexión sigue' : `${unsent} ventas cobradas sin conexión siguen`} en este dispositivo. `
+          + 'Se enviarán cuando vuelvas a entrar con tu usuario aquí'
+          + (navigator.onLine ? '.' : ', y sin conexión no podrás entrar hasta que regrese.'),
+        confirmLabel: 'Cerrar sesión',
+      });
+      if (!accepted) return;
+    }
     await logout();
   };
 

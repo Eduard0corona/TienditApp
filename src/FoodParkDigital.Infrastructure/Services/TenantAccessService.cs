@@ -40,6 +40,11 @@ public class TenantAccessService : ITenantAccessService
                     .Where(t => t.Id == x.TenantId)
                     .Select(t => (BusinessType?)t.BusinessType)
                     .FirstOrDefault(),
+                TenantStatus = _context.Tenants
+                    .IgnoreQueryFilters()
+                    .Where(t => t.Id == x.TenantId)
+                    .Select(t => (TenantStatus?)t.Status)
+                    .FirstOrDefault(),
                 Capabilities = _context.TenantSettings
                     .IgnoreQueryFilters()
                     .Where(s => s.TenantId == x.TenantId)
@@ -77,7 +82,8 @@ public class TenantAccessService : ITenantAccessService
         return new TenantAccessSnapshot(
             HasActiveAccess: true,
             NormalizedCapabilities: normalizedCapabilities,
-            Permissions: permissions);
+            Permissions: permissions,
+            TenantSuspended: snapshot.TenantStatus is TenantStatus.Suspended or TenantStatus.Inactive);
     }
 
     public async Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
