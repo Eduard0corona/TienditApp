@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -60,11 +61,15 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
             isPublicGeneral: true);
         _context.Customers.Add(publicGeneralCustomer);
 
+        var defaultBranch = Branch.CreateDefault(tenant.Id);
+        _context.Branches.Add(defaultBranch);
+
         var defaultLocation = new InventoryLocation(
             tenantId: tenant.Id,
             name: "Almacen principal",
             code: "MAIN",
-            isDefault: true);
+            isDefault: true,
+            branchId: defaultBranch.Id);
         _context.InventoryLocations.Add(defaultLocation);
 
         await _context.SaveChangesAsync(cancellationToken);

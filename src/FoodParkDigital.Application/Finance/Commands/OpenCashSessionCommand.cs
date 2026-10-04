@@ -20,6 +20,9 @@ public record OpenCashSessionCommand : IRequest<Result<CashSessionDto>>
     public string? Notes { get; init; }
 
     /// <summary>Branch of the drawer; the default branch when omitted.</summary>
+    public Guid? BranchId { get; init; }
+
+    /// <summary>Before branches existed the drawer named a stock location: its branch is used.</summary>
     public Guid? InventoryLocationId { get; init; }
 }
 
@@ -74,19 +77,10 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
         if (hasOpenSession)
             return Result.Failure<CashSessionDto>(AlreadyOpenMessage);
 
-        var location = request.InventoryLocationId is { } locationId
-            ? await _context.InventoryLocations
-                .Where(x => x.Id == locationId && x.IsActive)
-                .Select(x => new { x.Id, x.Name })
-                .FirstOrDefaultAsync(cancellationToken)
-            : await _context.InventoryLocations
-                .Where(x => x.IsActive)
-                .OrderByDescending(x => x.IsDefault)
-                .ThenBy(x => x.Name)
-                .Select(x => new { x.Id, x.Name })
-                .FirstOrDefaultAsync(cancellationToken);
-        if (request.InventoryLocationId is not null && location is null)
-            return Result.Failure<CashSessionDto>("La sucursal seleccionada no es válida.");
+        var place = await ResolvePlaceAsync(request, cancellationToken);
+        if (place.IsFailure)
+            return Result.Failure<CashSessionDto>(place.Error!);
+        var (branchId, branchName, locationId) = place.Value;
 
         var session = new CashSession(
             tenantId: _tenantService.TenantId,
@@ -95,7 +89,8 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
             openingAmount: request.OpeningAmount,
             notes: request.Notes,
             openedByUserId: userId,
-            inventoryLocationId: location?.Id);
+            inventoryLocationId: locationId,
+            branchId: branchId);
 
         _context.CashSessions.Add(session);
         try
@@ -108,6 +103,45 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
             return Result.Failure<CashSessionDto>(AlreadyOpenMessage);
         }
 
-        return Result.Success(CashSessionMapping.ToDto(session, userId, location?.Name));
+        var locationName = locationId is { } stockLocationId
+            ? await _context.InventoryLocations.Where(x => x.Id == stockLocationId).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return Result.Success(CashSessionMapping.ToDto(session, userId, locationName, branchName));
+    }
+
+    /// <summary>The branch of the drawer (asked for, the branch of the location asked for, or the default) and its stock location.</summary>
+    private async Task<Result<(Guid? BranchId, string? BranchName, Guid? LocationId)>> ResolvePlaceAsync(
+        OpenCashSessionCommand request,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = _tenantService.TenantId;
+        Guid? branchId = request.BranchId;
+        Guid? locationId = null;
+        if (branchId is null && request.InventoryLocationId is { } requestedLocationId)
+        {
+            var location = await _context.InventoryLocations
+                .Where(x => x.Id == requestedLocationId && x.IsActive)
+                .Select(x => new { x.Id, x.BranchId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (location is null)
+                return Result.Failure<(Guid?, string?, Guid?)>(BranchRules.InvalidBranchMessage);
+            locationId = location.Id;
+            branchId = location.BranchId;
+        }
+
+        branchId ??= await BranchRules.DefaultBranchIdAsync(_context, tenantId, cancellationToken);
+        string? branchName = null;
+        if (branchId is { } id)
+        {
+            branchName = await _context.Branches
+                .Where(x => x.Id == id && x.IsActive)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (branchName is null)
+                return Result.Failure<(Guid?, string?, Guid?)>(BranchRules.InvalidBranchMessage);
+        }
+
+        locationId ??= await BranchRules.StockLocationIdAsync(_context, tenantId, branchId, cancellationToken);
+        return Result.Success<(Guid?, string?, Guid?)>((branchId, branchName, locationId));
     }
 }

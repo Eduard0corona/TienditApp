@@ -6,6 +6,7 @@ using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Messaging;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Reporting;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Interceptors;
@@ -127,8 +128,8 @@ public static class DependencyInjection
         services.AddHttpClient("WhatsApp").AddResilienceHandler("whatsapp", ConfigureProviderResilience);
         services.AddHttpClient("Twilio").AddResilienceHandler("twilio", ConfigureProviderResilience);
 
-        // Background work: outbox (durable side effects of domain events), webhook inbox and messaging
-        // (campaigns, reminders and the queue of outgoing WhatsApp messages).
+        // Background work: outbox (durable side effects of domain events), webhook inbox, messaging
+        // (campaigns, reminders and the queue of outgoing WhatsApp messages) and daily sales snapshots.
         services.Configure<BackgroundJobOptions>(configuration.GetSection(BackgroundJobOptions.SectionName));
         services.AddSingleton<OutboxSignal>();
         services.AddSingleton<InboxSignal>();
@@ -145,6 +146,7 @@ public static class DependencyInjection
             services.AddHostedService<OutboxDispatcherService>();
             services.AddHostedService<InboxProcessorService>();
             services.AddHostedService<MessagingWorkerService>();
+            services.AddHostedService<SalesSnapshotWorkerService>();
         }
 
         // Services

@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Entities;
@@ -65,10 +66,26 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         settings.UpdateSalesPolicy(pricesIncludeTax, defaultTaxRate, autoCloseCounterSales);
         Context.Tenants.Add(tenant);
         Context.TenantSettings.Add(settings);
-        Context.InventoryLocations.Add(new InventoryLocation(tenant.Id, "Mostrador", $"MAIN-{slug}", isDefault: true));
+        // Like a business after the branches migration: a default branch that owns the default location.
+        var branch = new Branch(tenant.Id, "Matriz", $"MATRIZ-{slug}", isDefault: true);
+        Context.Branches.Add(branch);
+        Context.InventoryLocations.Add(new InventoryLocation(tenant.Id, "Mostrador", $"MAIN-{slug}", isDefault: true, branchId: branch.Id));
         await Context.SaveChangesAsync();
         TenantService.SetTenant(tenant.Id);
         return tenant;
+    }
+
+    /// <summary>The default branch of the tenant in scope.</summary>
+    public Task<Branch> DefaultBranchAsync() => Context.Branches.SingleAsync(b => b.IsDefault);
+
+    /// <summary>Another branch of the tenant in scope, with its own stock location.</summary>
+    public async Task<Branch> AddBranchAsync(Tenant tenant, string name, string code)
+    {
+        var branch = new Branch(tenant.Id, name, code);
+        Context.Branches.Add(branch);
+        Context.InventoryLocations.Add(new InventoryLocation(tenant.Id, $"Almacén {name}", $"LOC-{code}", branchId: branch.Id));
+        await Context.SaveChangesAsync();
+        return branch;
     }
 
     public async Task<Product> AddProductAsync(
@@ -92,9 +109,9 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         return product;
     }
 
-    public async Task<CashSession> OpenCashSessionAsync(Tenant tenant)
+    public async Task<CashSession> OpenCashSessionAsync(Tenant tenant, Guid? branchId = null, Guid? openedByUserId = null)
     {
-        var session = new CashSession(tenant.Id, Now.AddHours(-2), "cajero", 500m);
+        var session = new CashSession(tenant.Id, Now.AddHours(-2), "cajero", 500m, openedByUserId: openedByUserId, branchId: branchId);
         Context.CashSessions.Add(session);
         await Context.SaveChangesAsync();
         return session;

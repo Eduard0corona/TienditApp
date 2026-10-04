@@ -117,7 +117,8 @@ public class MappingProfile : Profile
         CreateMap<AuditLog, AuditLogDto>();
         CreateMap<AiAgent, AiAgentDto>();
         CreateMap<SupplyItem, SupplyItemDto>();
-        CreateMap<InventoryLocation, InventoryLocationDto>();
+        CreateMap<InventoryLocation, InventoryLocationDto>()
+            .ForMember(d => d.BranchName, o => o.Ignore());
         CreateMap<InventoryMovement, InventoryMovementDto>();
         CreateMap<InventoryMovementLine, InventoryMovementLineDto>();
         CreateMap<Supplier, SupplierDto>();

@@ -33,7 +33,7 @@ Actualizada el 2026-10-04 tras las Fases 0, 1 y 2 del roadmap de producto (la au
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Auto-migrate/seed solo existe en Development contra un servidor local, pero falta el proceso productivo de migraciones.
 - Listados pequeños aún materializan colecciones sin paginación (categorías, AI agents, ubicaciones, kitchen).
-- Inicio carga en memoria las órdenes y pagos del rango; con volumen alto conviene un modelo de lectura.
+- Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.
 - Consultas con varias colecciones incluidas no usan `AsSplitQuery`.
 - `client/README.md` sigue siendo template genérico.
 - Un pago puede guardarse sin movimiento de caja si el cajero no tiene caja abierta y hay varias o ninguna en la sucursal, salvo que el negocio active `RequireOpenCashSession`.

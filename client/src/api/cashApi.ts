@@ -23,7 +23,7 @@ export const cashApi = {
   getSessions: (params?: {
     fromDate?: string;
     toDate?: string;
-    inventoryLocationId?: string;
+    branchId?: string;
     status?: number;
     onlyWithDifference?: boolean;
     pageNumber?: number;
@@ -41,7 +41,7 @@ export const cashApi = {
 
   getDailyCut: (params?: {
     date?: string;
-    inventoryLocationId?: string;
+    branchId?: string;
     userName?: string;
   }) => api.get<DailyCashCutDto>('/cash/daily-cut', { params }),
 

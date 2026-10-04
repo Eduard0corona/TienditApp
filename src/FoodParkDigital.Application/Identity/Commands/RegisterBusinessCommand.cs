@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -157,11 +158,13 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             email: null,
             isPublicGeneral: true);
 
+        var defaultBranch = Branch.CreateDefault(tenant.Id);
         var defaultLocation = new InventoryLocation(
             tenantId: tenant.Id,
             name: "Almacen principal",
             code: "MAIN",
-            isDefault: true);
+            isDefault: true,
+            branchId: defaultBranch.Id);
 
         // Create user as TenantAdmin
         var user = new ApplicationUser
@@ -188,6 +191,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             _context.Tenants.Add(tenant);
             _context.TenantSettings.Add(settings);
             _context.Customers.Add(publicGeneralCustomer);
+            _context.Branches.Add(defaultBranch);
             _context.InventoryLocations.Add(defaultLocation);
             await _context.SaveChangesAsync(ct);
 

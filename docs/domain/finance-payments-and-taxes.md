@@ -12,7 +12,7 @@
   - Los movimientos manuales solo pueden ser depósito, gasto, retiro o reembolso; la orden referida debe existir.
   - `Inflows`/`Outflows` y el saldo esperado solo cuentan efectivo; tarjeta, transferencia y otros métodos se reportan aparte (`NonCashInflows`). El corte diario expone `NetCashOnlyFlow`.
   - Cada cajero tiene su propia caja abierta por sucursal (índice único filtrado por negocio y cajero, ver [caja por cajero](#caja-por-cajero-fase-2)) y `CashSession.Revision` es token de concurrencia: un pago concurrente con el cierre o dos cierres simultáneos fallan con 409 en lugar de sobrescribirse. El cierre exige un monto contado mayor o igual a cero.
-- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal del pago o del negocio. Si hay varias abiertas y ninguna es suya, o no hay ninguna, el pago sigue registrado sin movimiento de caja, salvo que el negocio exija caja abierta para cobrar en efectivo.
+- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal de la venta (nunca a una de otra sucursal; las cajas de antes de las sucursales la toman si son la única abierta). Si hay varias abiertas y ninguna es suya, o no hay ninguna, el pago sigue registrado sin movimiento de caja, salvo que el negocio exija caja abierta para cobrar en efectivo.
 - Compras aceptan `TaxPercent` por línea y calculan subtotales/impuesto.
 - `DigitalWallet` existe como método de pago y subtotal del corte, no como cuenta Wallet.
 
@@ -53,7 +53,7 @@
 
 ## Caja por cajero (Fase 2)
 
-- Cada cajero abre su caja en una sucursal (`InventoryLocationId`) y queda como dueño (`OpenedByUserId`). Solo quien la abrió o un administrador la cierra o registra gastos y retiros en ella.
+- Cada cajero abre su caja en una sucursal (`BranchId`; desde la Fase 3 la sucursal es entidad propia, ver [sucursales](branches-and-reporting.md)) y queda como dueño (`OpenedByUserId`). Solo quien la abrió o un administrador la cierra o registra gastos y retiros en ella.
 - Al cerrar se guardan lo esperado (fondo + efectivo neto), lo contado, la diferencia y las notas; las notas son obligatorias si hay faltante o sobrante. El conteo por denominación es opcional y debe cuadrar con el total (`CashCountJson`).
 - `GET /api/v1/cash/sessions` lista los turnos por fecha, sucursal y estado, con filtro de solo diferencias. Caja muestra Mi caja, Turnos (el administrador puede cerrar cajas ajenas) y Corte del día.
 - `TenantSettings.RequireOpenCashSession` (apagado por defecto) rechaza cobros y reembolsos en efectivo si el cajero no tiene caja abierta; tarjeta y transferencia no la necesitan.

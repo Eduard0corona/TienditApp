@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
-import type { DailyCashCutDto, InventoryLocationDto } from '../../types';
+import type { DailyCashCutDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import { getTodayInputDate } from './cashFormat';
 
 interface DailyCutProps {
-  locations: InventoryLocationDto[];
+  branches: Branch[];
 }
 
 /** Payments of a day by method, user and branch, for every drawer of the business. */
-export default function DailyCut({ locations }: DailyCutProps) {
+export default function DailyCut({ branches }: DailyCutProps) {
   const [date, setDate] = useState(getTodayInputDate());
-  const [locationId, setLocationId] = useState('');
+  const [branchId, setBranchId] = useState('');
   const [userName, setUserName] = useState('');
   const [cut, setCut] = useState<DailyCashCutDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function DailyCut({ locations }: DailyCutProps) {
     try {
       const { data } = await cashApi.getDailyCut({
         date: date || undefined,
-        inventoryLocationId: locationId || undefined,
+        branchId: branchId || undefined,
         userName: userName.trim() || undefined,
       });
       setCut(data);
@@ -30,7 +31,7 @@ export default function DailyCut({ locations }: DailyCutProps) {
     } finally {
       setLoading(false);
     }
-  }, [date, locationId, userName]);
+  }, [branchId, date, userName]);
 
   useEffect(() => {
     void load();
@@ -45,11 +46,11 @@ export default function DailyCut({ locations }: DailyCutProps) {
             <input id="cut-date" type="date" className="form-control" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
           <div className="col-md-4">
-            <label className="form-label" htmlFor="cut-location">Sucursal</label>
-            <select id="cut-location" className="form-select" value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+            <label className="form-label" htmlFor="cut-branch">Sucursal</label>
+            <select id="cut-branch" className="form-select" value={branchId} onChange={(event) => setBranchId(event.target.value)}>
               <option value="">Todas</option>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>{location.name}</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
               ))}
             </select>
           </div>
@@ -94,8 +95,8 @@ export default function DailyCut({ locations }: DailyCutProps) {
               <div className="col-md-6">
                 <h3 className="h6 mb-1">Por sucursal</h3>
                 <ul className="mb-0 ps-3">
-                  {cut.byLocation.length === 0 ? <li className="text-muted">Sin datos</li> : cut.byLocation.map((item) => (
-                    <li key={`${item.inventoryLocationId || 'none'}-${item.paymentsCount}`}>{item.locationName}: {item.paymentsCount} pagos / {formatMoney(item.totalAmount)}</li>
+                  {cut.byBranch.length === 0 ? <li className="text-muted">Sin datos</li> : cut.byBranch.map((item) => (
+                    <li key={item.branchId || 'none'}>{item.branchName}: {item.paymentsCount} pagos / {formatMoney(item.totalAmount)}</li>
                   ))}
                 </ul>
               </div>

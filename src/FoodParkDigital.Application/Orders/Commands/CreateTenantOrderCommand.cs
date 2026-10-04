@@ -121,6 +121,13 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             .CountAsync(o => o.TenantId == request.TenantId, cancellationToken);
         var orderNumber = $"ORD-{orderCountForTenant + 1:D6}";
 
+        // Orders placed by customers go to the default branch of the business named by the route.
+        var defaultBranchId = await _context.Branches
+            .IgnoreQueryFilters()
+            .Where(b => b.TenantId == request.TenantId && b.IsDefault)
+            .Select(b => (Guid?)b.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var resolvedName = string.IsNullOrWhiteSpace(linkedCustomer.ResolvedName)
             ? request.Phone
             : linkedCustomer.ResolvedName!.Trim();
@@ -137,7 +144,8 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             customerPhone: linkedCustomer.PhoneNormalized,
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber,
-            pricesIncludeTax: salesSettings.PricesIncludeTax);
+            pricesIncludeTax: salesSettings.PricesIncludeTax,
+            branchId: defaultBranchId);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
         var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate);
         // The route names the tenant (validated by the controller), so products are narrowed to it explicitly.

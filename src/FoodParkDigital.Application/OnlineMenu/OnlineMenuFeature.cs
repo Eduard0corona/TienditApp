@@ -331,6 +331,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
         var orderCount = await _context.Orders.CountAsync(cancellationToken);
+        // Online orders arrive at the default branch of the business.
+        var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
         var order = new Order(
             tenantId: tenant.Id,
             customerUserId: customer.CustomerUserId,
@@ -344,7 +346,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             customerNotes: string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             tableNumber: string.IsNullOrWhiteSpace(request.TableLabel) ? null : request.TableLabel.Trim(),
             pricesIncludeTax: settings.PricesIncludeTax,
-            channel: OrderChannel.Online);
+            channel: OrderChannel.Online,
+            branchId: branchId);
 
         var lineBuilder = new OrderLineBuilder(localTimeOfDay, settings.DefaultTaxRate);
         var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken);

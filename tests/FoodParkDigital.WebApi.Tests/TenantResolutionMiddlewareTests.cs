@@ -101,6 +101,19 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Theory]
+    [InlineData("GET")]
+    [InlineData("POST")]
+    public async Task Branches_ShouldReachEveryMember_WithoutTheInventoryModule(string method)
+    {
+        // Who may read or manage them is decided by the use case (any member reads, owners and admins manage).
+        var result = await InvokeAsync("/api/v1/branches", method, "STAFF",
+            new FakeTenantAccessService(active: true, [nameof(TenantPermission.ManageOrders)], TenantCapability.Service));
+
+        Assert.True(result.NextCalled);
+        Assert.Equal(TenantId, result.TenantService.TenantId);
+    }
+
+    [Theory]
     [InlineData("/api/v1/auth/login")]
     [InlineData("/api/v1/auth/refresh-token")]
     [InlineData("/api/v1/auth/register/business")]

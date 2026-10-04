@@ -7,11 +7,13 @@ import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
 import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
+import BranchPicker from '../../components/branches/BranchPicker';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { useWorkingBranch } from '../../hooks/useWorkingBranch';
 import type { CategoryDto, CreateOrderRequest, OrderDto, ProductDto } from '../../types';
 import { BusinessType, OrderChannel, OrderType, TenantCapability, UnitType } from '../../types';
 import { getAccess } from '../../utils/access';
@@ -179,6 +181,10 @@ export default function SellPage() {
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
+  const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
+  const workingBranch = useWorkingBranch();
+  // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
+  const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   // A table's tab (new or a new round): read once; the sale then goes to the kitchen instead of being charged.
@@ -304,7 +310,9 @@ export default function SellPage() {
     let cancelled = false;
     cashApi.getCurrentSession()
       .then(({ data }) => {
-        if (!cancelled) setCashClosed(!data);
+        if (cancelled) return;
+        setCashClosed(!data);
+        setDrawerBranch(data?.isMine && data.branchId ? { id: data.branchId, name: data.branchName ?? '' } : null);
       })
       .catch(() => {
         if (!cancelled) setCashClosed(false);
@@ -577,6 +585,7 @@ export default function SellPage() {
     })),
     expectedTotal: totals.total,
     channel: chatOrigin ? OrderChannel.WhatsApp : undefined,
+    branchId: saleBranchId,
   });
 
   const submitSale = async (charge: ChargeResult | null) => {
@@ -916,7 +925,19 @@ export default function SellPage() {
     <div className="sell-page">
       <div className="sell-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h1 className="h3 mb-0">Vender</h1>
-        <div className="d-flex flex-wrap gap-2">
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          {workingBranch.hasSeveral && (drawerBranch ? (
+            <span className="badge text-bg-light border" title="Las ventas se registran en la sucursal de tu caja abierta">
+              <i className="ri-store-3-line me-1" aria-hidden="true"></i>{drawerBranch.name} · tu caja
+            </span>
+          ) : (
+            <BranchPicker
+              branches={workingBranch.branches}
+              value={workingBranch.branch?.id}
+              onChange={workingBranch.setBranch}
+              label="Sucursal donde vendes"
+            />
+          ))}
           {canReceiveServices && access.sell && (
             <Link to="/orders/cart" className="btn btn-sm btn-light">
               <i className="ri-t-shirt-line me-1" aria-hidden="true"></i>Recibir servicio con piezas

@@ -28,6 +28,7 @@ import {
   InventoryMovementType as InventoryMovementTypeConst,
 } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useActiveBranches } from '../../hooks/useWorkingBranch';
 
 type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
@@ -66,6 +67,8 @@ interface LocationFormState {
   contactName: string;
   contactPhone: string;
   isDefault: boolean;
+  /** Empty: a warehouse that serves every branch. */
+  branchId: string;
 }
 
 interface MovementLineFormState {
@@ -252,6 +255,7 @@ const buildEmptyLocationForm = (): LocationFormState => ({
   contactName: '',
   contactPhone: '',
   isDefault: false,
+  branchId: '',
 });
 
 const buildEmptyMovementLineForm = (): MovementLineFormState => ({
@@ -324,6 +328,7 @@ const formatDate = (value?: string) => {
 };
 
 export default function InventoryManagement() {
+  const branches = useActiveBranches();
   const [activeTab, setActiveTab] = useState<InventoryTab>('supplies');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -776,6 +781,7 @@ export default function InventoryManagement() {
       contactName: location.contactName ?? '',
       contactPhone: location.contactPhone ?? '',
       isDefault: location.isDefault,
+      branchId: location.branchId ?? '',
     });
     setShowLocationModal(true);
   };
@@ -804,12 +810,17 @@ export default function InventoryManagement() {
       contactName: locationForm.contactName.trim() || undefined,
       contactPhone: locationForm.contactPhone.trim() || undefined,
       isDefault: locationForm.isDefault,
+      branchId: locationForm.branchId || undefined,
     };
 
     try {
       setSavingLocation(true);
       if (editingLocation) {
-        const updatePayload: UpdateInventoryLocationRequest = { ...payload, id: editingLocation.id };
+        const updatePayload: UpdateInventoryLocationRequest = {
+          ...payload,
+          id: editingLocation.id,
+          detachFromBranch: !locationForm.branchId,
+        };
         await inventoryApi.updateLocation(editingLocation.id, updatePayload);
         setSuccess('Ubicacion actualizada correctamente.');
       } else {
@@ -1809,7 +1820,10 @@ export default function InventoryManagement() {
                     <>
                       <td>
                         <div className="fw-semibold">{item.name}</div>
-                        <div className="text-muted small">{item.description || '-'}</div>
+                        <div className="text-muted small">
+                          {item.branchName ? `Sucursal ${item.branchName}` : 'Almacén general'}
+                          {item.description ? ` · ${item.description}` : ''}
+                        </div>
                       </td>
                       <td>{item.code}</td>
                       <td>
@@ -2083,6 +2097,21 @@ export default function InventoryManagement() {
                 />
                 <label className="form-check-label">Ubicacion por defecto</label>
               </div>
+            </div>
+            <div className="col-12 mb-2">
+              <label className="form-label" htmlFor="location-branch">Sucursal</label>
+              <select
+                id="location-branch"
+                className="form-select"
+                value={locationForm.branchId}
+                onChange={(e) => setLocationForm((current) => ({ ...current, branchId: e.target.value }))}
+              >
+                <option value="">Almacén general (surte a todas las sucursales)</option>
+                {(branches.data ?? []).map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+              <div className="form-text">Las ventas de una sucursal descuentan del almacén de esa sucursal.</div>
             </div>
             <div className="col-12 mb-2">
               <label className="form-label">Descripcion</label>

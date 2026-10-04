@@ -27,6 +27,9 @@ public class CashSessionDto
     public bool IsMine { get; set; }
     public Guid? InventoryLocationId { get; set; }
     public string? InventoryLocationName { get; set; }
+    /// <summary>Branch of the drawer: payments of sales made there enter it.</summary>
+    public Guid? BranchId { get; set; }
+    public string? BranchName { get; set; }
     /// <summary>Expected cash frozen at closing.</summary>
     public decimal? ExpectedClosingAmount { get; set; }
     /// <summary>Counted minus expected: negative is a shortage.</summary>
@@ -75,6 +78,8 @@ public class DailyCashCutDto
     public decimal NetCashOnlyFlow { get; set; }
     public List<DailyCashCutByUserDto> ByUser { get; set; } = [];
     public List<DailyCashCutByLocationDto> ByLocation { get; set; } = [];
+    /// <summary>Payments by the branch where the sale was made.</summary>
+    public List<DailyCashCutByBranchDto> ByBranch { get; set; } = [];
 }
 
 public class DailyCashCutByUserDto
@@ -88,6 +93,14 @@ public class DailyCashCutByLocationDto
 {
     public Guid? InventoryLocationId { get; set; }
     public string LocationName { get; set; } = "Sin sucursal";
+    public int PaymentsCount { get; set; }
+    public decimal TotalAmount { get; set; }
+}
+
+public class DailyCashCutByBranchDto
+{
+    public Guid? BranchId { get; set; }
+    public string BranchName { get; set; } = "Sin sucursal";
     public int PaymentsCount { get; set; }
     public decimal TotalAmount { get; set; }
 }

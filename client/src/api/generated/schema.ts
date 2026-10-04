@@ -1350,9 +1350,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["InventoryLocationDto"][];
-                        "application/json": components["schemas"]["InventoryLocationDto"][];
-                        "text/json": components["schemas"]["InventoryLocationDto"][];
+                        "text/plain": components["schemas"]["BranchDto"][];
+                        "application/json": components["schemas"]["BranchDto"][];
+                        "text/json": components["schemas"]["BranchDto"][];
                     };
                 };
             };
@@ -1367,9 +1367,9 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["CreateInventoryLocationCommand"];
-                    "text/json": components["schemas"]["CreateInventoryLocationCommand"];
-                    "application/*+json": components["schemas"]["CreateInventoryLocationCommand"];
+                    "application/json": components["schemas"]["CreateBranchCommand"];
+                    "text/json": components["schemas"]["CreateBranchCommand"];
+                    "application/*+json": components["schemas"]["CreateBranchCommand"];
                 };
             };
             responses: {
@@ -1379,9 +1379,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["InventoryLocationDto"];
-                        "application/json": components["schemas"]["InventoryLocationDto"];
-                        "text/json": components["schemas"]["InventoryLocationDto"];
+                        "text/plain": components["schemas"]["BranchDto"];
+                        "application/json": components["schemas"]["BranchDto"];
+                        "text/json": components["schemas"]["BranchDto"];
                     };
                 };
             };
@@ -1411,9 +1411,9 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["UpdateInventoryLocationCommand"];
-                    "text/json": components["schemas"]["UpdateInventoryLocationCommand"];
-                    "application/*+json": components["schemas"]["UpdateInventoryLocationCommand"];
+                    "application/json": components["schemas"]["UpdateBranchCommand"];
+                    "text/json": components["schemas"]["UpdateBranchCommand"];
+                    "application/*+json": components["schemas"]["UpdateBranchCommand"];
                 };
             };
             responses: {
@@ -1423,9 +1423,9 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "text/plain": components["schemas"]["InventoryLocationDto"];
-                        "application/json": components["schemas"]["InventoryLocationDto"];
-                        "text/json": components["schemas"]["InventoryLocationDto"];
+                        "text/plain": components["schemas"]["BranchDto"];
+                        "application/json": components["schemas"]["BranchDto"];
+                        "text/json": components["schemas"]["BranchDto"];
                     };
                 };
             };
@@ -1476,6 +1476,41 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/api/v1/branches/{id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/cash/current-session": {
@@ -1616,6 +1651,7 @@ export interface paths {
                     fromDate?: string;
                     toDate?: string;
                     inventoryLocationId?: string;
+                    branchId?: string;
                     status?: components["schemas"]["CashSessionStatus"];
                     onlyWithDifference?: boolean;
                     pageNumber?: number;
@@ -1731,6 +1767,7 @@ export interface paths {
                 query?: {
                     date?: string;
                     inventoryLocationId?: string;
+                    branchId?: string;
                     userName?: string;
                 };
                 header?: never;
@@ -5248,6 +5285,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/sales-by-branch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    to?: string;
+                    branchId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SalesByBranchReportDto"];
+                        "application/json": components["schemas"]["SalesByBranchReportDto"];
+                        "text/json": components["schemas"]["SalesByBranchReportDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/service-board/pieces": {
         parameters: {
             query?: never;
@@ -6472,6 +6550,33 @@ export interface components {
             small: string;
             thumbnail: string;
         };
+        BranchDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            code: string;
+            description?: string | null;
+            addressLine1?: string | null;
+            addressLine2?: string | null;
+            city?: string | null;
+            state?: string | null;
+            country?: string | null;
+            postalCode?: string | null;
+            contactName?: string | null;
+            contactPhone?: string | null;
+            isDefault: boolean;
+            isActive: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        BranchSalesDto: {
+            /** Format: uuid */
+            branchId?: string | null;
+            branchName: string;
+            figures: components["schemas"]["SalesFiguresDto"];
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -6598,6 +6703,9 @@ export interface components {
             /** Format: uuid */
             inventoryLocationId?: string | null;
             inventoryLocationName?: string | null;
+            /** Format: uuid */
+            branchId?: string | null;
+            branchName?: string | null;
             /** Format: double */
             expectedClosingAmount?: number | null;
             /** Format: double */
@@ -6843,6 +6951,20 @@ export interface components {
             endAt: string;
             notes?: string | null;
         };
+        CreateBranchCommand: {
+            name: string;
+            code: string;
+            description?: string | null;
+            addressLine1?: string | null;
+            addressLine2?: string | null;
+            city?: string | null;
+            state?: string | null;
+            country?: string | null;
+            postalCode?: string | null;
+            contactName?: string | null;
+            contactPhone?: string | null;
+            isDefault: boolean;
+        };
         CreateCampaignCommand: {
             name: string;
             /** Format: uuid */
@@ -6897,6 +7019,8 @@ export interface components {
             contactName?: string | null;
             contactPhone?: string | null;
             isDefault: boolean;
+            /** Format: uuid */
+            branchId?: string | null;
         };
         CreateInventoryMovementCommand: {
             movementType: components["schemas"]["InventoryMovementType"];
@@ -6949,6 +7073,8 @@ export interface components {
             openTab: boolean;
             /** Format: uuid */
             diningTableId?: string | null;
+            /** Format: uuid */
+            branchId?: string | null;
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -7163,6 +7289,15 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        DailyCashCutByBranchDto: {
+            /** Format: uuid */
+            branchId?: string | null;
+            branchName: string;
+            /** Format: int32 */
+            paymentsCount: number;
+            /** Format: double */
+            totalAmount: number;
+        };
         DailyCashCutByLocationDto: {
             /** Format: uuid */
             inventoryLocationId?: string | null;
@@ -7206,6 +7341,21 @@ export interface components {
             netCashOnlyFlow: number;
             byUser: components["schemas"]["DailyCashCutByUserDto"][];
             byLocation: components["schemas"]["DailyCashCutByLocationDto"][];
+            byBranch: components["schemas"]["DailyCashCutByBranchDto"][];
+        };
+        DailySalesPointDto: {
+            /** Format: date */
+            date: string;
+            /** Format: double */
+            netSales: number;
+            /** Format: double */
+            paymentsAmount: number;
+            /** Format: double */
+            refundsAmount: number;
+            /** Format: int32 */
+            paidOrders: number;
+            /** Format: int32 */
+            ordersCreated: number;
         };
         DashboardMetricsDto: {
             /** Format: date-time */
@@ -7412,6 +7562,9 @@ export interface components {
             contactPhone?: string | null;
             isDefault: boolean;
             isActive: boolean;
+            /** Format: uuid */
+            branchId?: string | null;
+            branchName?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -7690,6 +7843,8 @@ export interface components {
             openingAmount: number;
             notes?: string | null;
             /** Format: uuid */
+            branchId?: string | null;
+            /** Format: uuid */
             inventoryLocationId?: string | null;
         };
         OpenTabSummaryDto: {
@@ -7768,6 +7923,8 @@ export interface components {
             tableNumber?: string | null;
             pricesIncludeTax: boolean;
             channel: components["schemas"]["OrderChannel"];
+            /** Format: uuid */
+            branchId?: string | null;
             /** Format: double */
             subTotal: number;
             /** Format: double */
@@ -8305,6 +8462,47 @@ export interface components {
             token: string;
             newPassword: string;
         };
+        SalesByBranchReportDto: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            totals: components["schemas"]["SalesFiguresDto"];
+            branches: components["schemas"]["BranchSalesDto"][];
+            days: components["schemas"]["DailySalesPointDto"][];
+            /** Format: int32 */
+            snapshotDays: number;
+            /** Format: int32 */
+            liveDays: number;
+        };
+        SalesFiguresDto: {
+            /** Format: int32 */
+            ordersCreated: number;
+            /** Format: int32 */
+            paidOrders: number;
+            /** Format: int32 */
+            paymentsCount: number;
+            /** Format: double */
+            paymentsAmount: number;
+            /** Format: double */
+            cashAmount: number;
+            /** Format: double */
+            cardAmount: number;
+            /** Format: double */
+            transferAmount: number;
+            /** Format: double */
+            walletAmount: number;
+            /** Format: double */
+            otherAmount: number;
+            /** Format: int32 */
+            refundsCount: number;
+            /** Format: double */
+            refundsAmount: number;
+            /** Format: double */
+            netSales: number;
+            /** Format: double */
+            averageTicket: number;
+        };
         SendChatMessageCommand: {
             phoneNumber: string;
             message: string;
@@ -8704,6 +8902,21 @@ export interface components {
         UpdateAppointmentStatusRequest: {
             newStatus: components["schemas"]["AppointmentStatus"];
         };
+        UpdateBranchCommand: {
+            name: string;
+            code: string;
+            description?: string | null;
+            addressLine1?: string | null;
+            addressLine2?: string | null;
+            city?: string | null;
+            state?: string | null;
+            country?: string | null;
+            postalCode?: string | null;
+            contactName?: string | null;
+            contactPhone?: string | null;
+            /** Format: uuid */
+            id: string;
+        };
         UpdateCategoryCommand: {
             /** Format: uuid */
             id: string;
@@ -8755,6 +8968,9 @@ export interface components {
             contactName?: string | null;
             contactPhone?: string | null;
             isDefault: boolean;
+            /** Format: uuid */
+            branchId?: string | null;
+            detachFromBranch: boolean;
         };
         UpdateMessageTemplateCommand: {
             /** Format: uuid */

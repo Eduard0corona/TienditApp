@@ -19,9 +19,11 @@ public class InventoryLocation : AuditableEntity, ITenantScoped
         string? postalCode = null,
         string? contactName = null,
         string? contactPhone = null,
-        bool isDefault = false)
+        bool isDefault = false,
+        Guid? branchId = null)
     {
         TenantId = tenantId;
+        BranchId = branchId;
         Name = name;
         Code = code;
         Description = description;
@@ -52,6 +54,9 @@ public class InventoryLocation : AuditableEntity, ITenantScoped
     public bool IsDefault { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>Branch the stock belongs to; none for a warehouse that serves every branch.</summary>
+    public Guid? BranchId { get; private set; }
+
     public void Update(
         string name,
         string code,
@@ -79,6 +84,8 @@ public class InventoryLocation : AuditableEntity, ITenantScoped
     }
 
     public void SetDefault(bool isDefault) => IsDefault = isDefault;
+
+    public void AssignToBranch(Guid? branchId) => BranchId = branchId;
 
     public void SetActive(bool isActive) => IsActive = isActive;
 }

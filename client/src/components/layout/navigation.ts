@@ -58,7 +58,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Mi negocio', path: '/settings/business', icon: 'ri-store-2-line', area: 'businessSettings', keywords: 'empresa datos fiscales iva impuestos módulos logotipo' },
       { label: 'Primeros pasos', path: '/setup', icon: 'ri-rocket-2-line', area: 'businessSettings', keywords: 'arranque guiado plantillas configuración inicial' },
-      { label: 'Sucursales', path: '/branches', icon: 'ri-store-3-line', area: 'inventory' },
+      { label: 'Sucursales', path: '/branches', icon: 'ri-store-3-line', area: 'businessSettings', keywords: 'tiendas locales puntos de venta matriz' },
       { label: 'Equipo', path: '/employees', icon: 'ri-user-settings-line', area: 'employees', keywords: 'empleados usuarios permisos' },
       { label: 'WhatsApp', path: '/settings/whatsapp', icon: 'ri-whatsapp-line', area: 'whatsAppSettings' },
       { label: 'Respuestas automáticas', path: '/ai-agent', icon: 'ri-robot-2-line', area: 'aiAgent', keywords: 'agente ia bot' },

@@ -13,7 +13,7 @@ Esta documentación describe `develop` en el commit `b26a3c6` inspeccionado el 1
 ## Índice
 
 - Arquitectura: [visión general](architecture/system-overview.md), [capas](architecture/layers-and-dependencies.md), [contextos](architecture/bounded-contexts.md), [multi-tenancy](architecture/multi-tenancy.md), [identidad y acceso](architecture/identity-permissions-capabilities.md), [consistencia y eventos](architecture/data-consistency-and-domain-events.md), [frontend](architecture/frontend-architecture.md), [observabilidad](architecture/observability.md).
-- Dominio: [capabilities de negocio](domain/business-capabilities.md), [reglas](domain/business-rules.md), [ciclos de órdenes](domain/order-lifecycles.md), [inventario y compras](domain/inventory-and-purchasing.md), [finanzas e impuestos](domain/finance-payments-and-taxes.md), [mensajería](domain/messaging.md).
+- Dominio: [capabilities de negocio](domain/business-capabilities.md), [reglas](domain/business-rules.md), [ciclos de órdenes](domain/order-lifecycles.md), [inventario y compras](domain/inventory-and-purchasing.md), [finanzas e impuestos](domain/finance-payments-and-taxes.md), [mensajería](domain/messaging.md), [sucursales y reportes](domain/branches-and-reporting.md).
 - Desarrollo: [entorno local](development/local-development.md), [estándares](development/coding-standards.md), [pruebas](development/testing-strategy.md), [migraciones](development/database-migrations.md), [Git](development/git-workflow.md), [Definition of Done](development/definition-of-done.md).
 - IA: [flujo](ai/task-workflow.md), [guardrails](ai/guardrails.md), [checklist](ai/review-checklist.md).
 - Evolución: [actual vs objetivo](roadmap/current-vs-target.md), [deuda técnica](roadmap/technical-debt.md).

@@ -638,6 +638,9 @@ export interface InventoryLocationDto {
   contactPhone?: string;
   isDefault: boolean;
   isActive: boolean;
+  /** Branch the stock belongs to; none for a warehouse that serves every branch. */
+  branchId?: string | null;
+  branchName?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -655,15 +658,14 @@ export interface CreateInventoryLocationRequest {
   contactName?: string;
   contactPhone?: string;
   isDefault: boolean;
+  branchId?: string;
 }
 
 export interface UpdateInventoryLocationRequest extends CreateInventoryLocationRequest {
   id: string;
+  /** Makes it a warehouse that serves every branch (without it, a missing branchId keeps the current one). */
+  detachFromBranch?: boolean;
 }
-
-export type BranchDto = InventoryLocationDto;
-export type CreateBranchRequest = CreateInventoryLocationRequest;
-export type UpdateBranchRequest = UpdateInventoryLocationRequest;
 
 export interface InventoryStockDto {
   stockId: string;
@@ -961,6 +963,9 @@ export interface CashSessionDto {
   isMine: boolean;
   inventoryLocationId?: string | null;
   inventoryLocationName?: string | null;
+  /** Branch of the drawer: payments of sales made there enter it. */
+  branchId?: string | null;
+  branchName?: string | null;
   /** Expected cash frozen at closing. */
   expectedClosingAmount?: number | null;
   /** Counted minus expected: negative is a shortage. */
@@ -1002,6 +1007,13 @@ export interface DailyCashCutByLocationDto {
   totalAmount: number;
 }
 
+export interface DailyCashCutByBranchDto {
+  branchId?: string | null;
+  branchName: string;
+  paymentsCount: number;
+  totalAmount: number;
+}
+
 export interface DailyCashCutDto {
   date: string;
   salesPaymentsTotal: number;
@@ -1018,13 +1030,15 @@ export interface DailyCashCutDto {
   netCashOnlyFlow: number;
   byUser: DailyCashCutByUserDto[];
   byLocation: DailyCashCutByLocationDto[];
+  /** Payments by the branch where the sale was made. */
+  byBranch: DailyCashCutByBranchDto[];
 }
 
 export interface OpenCashSessionRequest {
   openingAmount: number;
   notes?: string;
   /** Branch of the drawer; the default one when omitted. */
-  inventoryLocationId?: string;
+  branchId?: string;
 }
 
 export interface CloseCashSessionRequest {
@@ -1623,6 +1637,8 @@ export interface CreateOrderRequest {
   /** Opens the order as a tab: its items are the first round sent to the kitchen. */
   openTab?: boolean;
   diningTableId?: string;
+  /** Branch where the sale is made; the cashier's drawer branch or the default one when omitted. */
+  branchId?: string;
 }
 
 export interface CreateOrderPaymentRequest {

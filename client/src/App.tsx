@@ -136,7 +136,7 @@ export default function App() {
             <Route
               path="/branches"
               element={(
-                <AccessRoute area="inventory">
+                <AccessRoute area="businessSettings">
                   <BranchesList />
                 </AccessRoute>
               )}

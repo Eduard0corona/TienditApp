@@ -249,6 +249,93 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogs", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Branches.Entities.Branch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine1")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("AddressLine2")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("ContactPhone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Branches_TenantId_Default")
+                        .HasFilter("[IsDefault] = 1");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "IsActive");
+
+                    b.ToTable("Branches", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.Category", b =>
                 {
                     b.Property<Guid>("Id")
@@ -705,6 +792,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("CashCountJson")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
@@ -774,6 +864,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BranchId");
+
                     b.HasIndex("InventoryLocationId");
 
                     b.HasIndex("TenantId", "OpenedAt");
@@ -784,6 +876,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasFilter("[Status] = 0 AND [OpenedByUserId] IS NOT NULL");
 
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "BranchId", "OpenedAt");
 
                     b.HasIndex("TenantId", "InventoryLocationId", "OpenedAt");
 
@@ -1098,6 +1192,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("City")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
@@ -1162,6 +1259,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("TenantId", "BranchId");
 
                     b.HasIndex("TenantId", "Code")
                         .IsUnique();
@@ -1907,6 +2008,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("BusinessType")
                         .HasColumnType("int");
 
@@ -2011,6 +2115,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BranchId");
+
                     b.HasIndex("CustomerUserId");
 
                     b.HasIndex("DiningTableId");
@@ -2035,6 +2141,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Status");
 
                     b.HasIndex("TenantId", "TemporaryCustomerId");
+
+                    b.HasIndex("TenantId", "BranchId", "CreatedAt");
 
                     b.HasIndex("TenantId", "OrderType", "Status");
 
@@ -2704,6 +2812,72 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("Suppliers", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Reporting.Entities.DailySalesSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("CardAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CashAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("ComputedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("OrderType")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrdersCreated")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("OtherAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("PaidOrders")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PaymentsAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("PaymentsCount")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RefundsAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("RefundsCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("TransferAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("WalletAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "BusinessDate", "BranchId", "OrderType")
+                        .IsUnique();
+
+                    b.ToTable("DailySalesSnapshots", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3352,6 +3526,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Branches.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
                         .WithMany()
                         .HasForeignKey("InventoryLocationId")
@@ -3393,6 +3572,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Branches.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.InventoryMovementLine", b =>
@@ -3496,6 +3683,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.Order", b =>
                 {
+                    b.HasOne("FoodParkDigital.Domain.Branches.Entities.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("FoodParkDigital.Domain.Identity.Entities.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("CustomerUserId")

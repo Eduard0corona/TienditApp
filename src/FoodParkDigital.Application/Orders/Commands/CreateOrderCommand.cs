@@ -49,6 +49,11 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>
     public bool OpenTab { get; init; }
     /// <summary>Table of the tab; a tab can also go by a name (TableNumber or CustomerName).</summary>
     public Guid? DiningTableId { get; init; }
+    /// <summary>
+    /// Branch where the sale is made (the one the device works at). When omitted: the branch of the cashier's
+    /// open drawer, else the default branch.
+    /// </summary>
+    public Guid? BranchId { get; init; }
 }
 
 public record CreateOrderPaymentDto
@@ -280,6 +285,15 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             return Result.Failure<OrderDto>("El cliente seleccionado no tiene telefono. Captura uno para continuar.");
         }
 
+        var branch = await BranchRules.ResolveForSaleAsync(
+            _context,
+            _tenantService.TenantId,
+            request.BranchId,
+            Guid.TryParse(_currentUserService.UserId, out var cashierId) ? cashierId : null,
+            cancellationToken);
+        if (branch.IsFailure)
+            return Result.Failure<OrderDto>(branch.Error!);
+
         var salesSettings = await TenantSalesSettings.ReadAsync(_context, _tenantService.TenantId, cancellationToken);
         var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
         var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, tenantZone);
@@ -300,7 +314,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             customerNotes: request.CustomerNotes,
             tableNumber: request.TableNumber,
             pricesIncludeTax: salesSettings.PricesIncludeTax,
-            channel: request.Channel);
+            channel: request.Channel,
+            branchId: branch.Value);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
         var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate);
         var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken);

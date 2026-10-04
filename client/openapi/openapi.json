@@ -1480,7 +1480,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/InventoryLocationDto"
+                    "$ref": "#/components/schemas/BranchDto"
                   }
                 }
               },
@@ -1488,7 +1488,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/InventoryLocationDto"
+                    "$ref": "#/components/schemas/BranchDto"
                   }
                 }
               },
@@ -1496,7 +1496,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/InventoryLocationDto"
+                    "$ref": "#/components/schemas/BranchDto"
                   }
                 }
               }
@@ -1512,17 +1512,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateInventoryLocationCommand"
+                "$ref": "#/components/schemas/CreateBranchCommand"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateInventoryLocationCommand"
+                "$ref": "#/components/schemas/CreateBranchCommand"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateInventoryLocationCommand"
+                "$ref": "#/components/schemas/CreateBranchCommand"
               }
             }
           }
@@ -1533,17 +1533,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryLocationDto"
+                  "$ref": "#/components/schemas/BranchDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryLocationDto"
+                  "$ref": "#/components/schemas/BranchDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryLocationDto"
+                  "$ref": "#/components/schemas/BranchDto"
                 }
               }
             }
@@ -1571,17 +1571,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateInventoryLocationCommand"
+                "$ref": "#/components/schemas/UpdateBranchCommand"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateInventoryLocationCommand"
+                "$ref": "#/components/schemas/UpdateBranchCommand"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateInventoryLocationCommand"
+                "$ref": "#/components/schemas/UpdateBranchCommand"
               }
             }
           }
@@ -1592,17 +1592,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryLocationDto"
+                  "$ref": "#/components/schemas/BranchDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryLocationDto"
+                  "$ref": "#/components/schemas/BranchDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InventoryLocationDto"
+                  "$ref": "#/components/schemas/BranchDto"
                 }
               }
             }
@@ -1645,6 +1645,29 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/branches/{id}/default": {
+      "post": {
+        "tags": [
+          "Branches"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1812,6 +1835,14 @@
           },
           {
             "name": "inventoryLocationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "branchId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -2018,6 +2049,14 @@
           },
           {
             "name": "inventoryLocationId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "branchId",
             "in": "query",
             "schema": {
               "type": "string",
@@ -6492,6 +6531,61 @@
         }
       }
     },
+    "/api/v1/reports/sales-by-branch": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByBranchReportDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByBranchReportDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByBranchReportDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-board/pieces": {
       "get": {
         "tags": [
@@ -8197,6 +8291,102 @@
         },
         "additionalProperties": false
       },
+      "BranchDto": {
+        "required": [
+          "code",
+          "createdAt",
+          "id",
+          "isActive",
+          "isDefault",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressLine1": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressLine2": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "country": {
+            "type": "string",
+            "nullable": true
+          },
+          "postalCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BranchSalesDto": {
+        "required": [
+          "branchName",
+          "figures"
+        ],
+        "type": "object",
+        "properties": {
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "branchName": {
+            "type": "string"
+          },
+          "figures": {
+            "$ref": "#/components/schemas/SalesFiguresDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "BusinessType": {
         "enum": [
           0,
@@ -8565,6 +8755,15 @@
             "nullable": true
           },
           "inventoryLocationName": {
+            "type": "string",
+            "nullable": true
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "branchName": {
             "type": "string",
             "nullable": true
           },
@@ -9418,6 +9617,62 @@
         },
         "additionalProperties": false
       },
+      "CreateBranchCommand": {
+        "required": [
+          "code",
+          "isDefault",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressLine1": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressLine2": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "country": {
+            "type": "string",
+            "nullable": true
+          },
+          "postalCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateCampaignCommand": {
         "required": [
           "audienceKind",
@@ -9616,6 +9871,11 @@
           },
           "isDefault": {
             "type": "boolean"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9803,6 +10063,11 @@
             "type": "boolean"
           },
           "diningTableId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "branchId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
@@ -10532,6 +10797,33 @@
         },
         "additionalProperties": false
       },
+      "DailyCashCutByBranchDto": {
+        "required": [
+          "branchName",
+          "paymentsCount",
+          "totalAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "branchName": {
+            "type": "string"
+          },
+          "paymentsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "DailyCashCutByLocationDto": {
         "required": [
           "locationName",
@@ -10583,6 +10875,7 @@
       },
       "DailyCashCutDto": {
         "required": [
+          "byBranch",
           "byLocation",
           "byUser",
           "cardTotal",
@@ -10659,6 +10952,50 @@
             "items": {
               "$ref": "#/components/schemas/DailyCashCutByLocationDto"
             }
+          },
+          "byBranch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyCashCutByBranchDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DailySalesPointDto": {
+        "required": [
+          "date",
+          "netSales",
+          "ordersCreated",
+          "paidOrders",
+          "paymentsAmount",
+          "refundsAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "netSales": {
+            "type": "number",
+            "format": "double"
+          },
+          "paymentsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "paidOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ordersCreated": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -11347,6 +11684,15 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "branchName": {
+            "type": "string",
+            "nullable": true
           },
           "createdAt": {
             "type": "string",
@@ -12266,6 +12612,11 @@
             "type": "string",
             "nullable": true
           },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "inventoryLocationId": {
             "type": "string",
             "format": "uuid",
@@ -12505,6 +12856,11 @@
           },
           "channel": {
             "$ref": "#/components/schemas/OrderChannel"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           },
           "subTotal": {
             "type": "number",
@@ -14288,6 +14644,125 @@
         },
         "additionalProperties": false
       },
+      "SalesByBranchReportDto": {
+        "required": [
+          "branches",
+          "days",
+          "from",
+          "liveDays",
+          "snapshotDays",
+          "to",
+          "totals"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/SalesFiguresDto"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BranchSalesDto"
+            }
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailySalesPointDto"
+            }
+          },
+          "snapshotDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "liveDays": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SalesFiguresDto": {
+        "required": [
+          "averageTicket",
+          "cardAmount",
+          "cashAmount",
+          "netSales",
+          "ordersCreated",
+          "otherAmount",
+          "paidOrders",
+          "paymentsAmount",
+          "paymentsCount",
+          "refundsAmount",
+          "refundsCount",
+          "transferAmount",
+          "walletAmount"
+        ],
+        "type": "object",
+        "properties": {
+          "ordersCreated": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paidOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "cardAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "transferAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "walletAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "otherAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "refundsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "netSales": {
+            "type": "number",
+            "format": "double"
+          },
+          "averageTicket": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendChatMessageCommand": {
         "required": [
           "message",
@@ -15685,6 +16160,63 @@
         },
         "additionalProperties": false
       },
+      "UpdateBranchCommand": {
+        "required": [
+          "code",
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressLine1": {
+            "type": "string",
+            "nullable": true
+          },
+          "addressLine2": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "country": {
+            "type": "string",
+            "nullable": true
+          },
+          "postalCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateCategoryCommand": {
         "required": [
           "id",
@@ -15814,6 +16346,7 @@
       "UpdateInventoryLocationCommand": {
         "required": [
           "code",
+          "detachFromBranch",
           "id",
           "isDefault",
           "name"
@@ -15867,6 +16400,14 @@
             "nullable": true
           },
           "isDefault": {
+            "type": "boolean"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "detachFromBranch": {
             "type": "boolean"
           }
         },

@@ -15,6 +15,8 @@ public record GetDailyCashCutQuery : IRequest<DailyCashCutDto>
 {
     public DateOnly? Date { get; init; }
     public Guid? InventoryLocationId { get; init; }
+    /// <summary>Payments of sales made at the branch and movements of its drawers.</summary>
+    public Guid? BranchId { get; init; }
     public string? UserName { get; init; }
 }
 
@@ -65,6 +67,9 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         if (request.InventoryLocationId.HasValue)
             orderPayments = orderPayments.Where(x => x.InventoryLocationId == request.InventoryLocationId.Value);
 
+        if (request.BranchId is { } branchId)
+            orderPayments = orderPayments.Where(x => x.Order.BranchId == branchId);
+
         if (!string.IsNullOrWhiteSpace(userNameFilter))
             orderPayments = orderPayments.Where(x => x.CreatedBy == userNameFilter);
 
@@ -74,9 +79,14 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
                 x.Amount,
                 x.Method,
                 x.CreatedBy,
-                x.InventoryLocationId
+                x.InventoryLocationId,
+                x.Order.BranchId
             })
             .ToListAsync(cancellationToken);
+
+        var branchNames = await _context.Branches
+            .AsNoTracking()
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
 
         var locationNames = await _context.InventoryLocations
             .AsNoTracking()
@@ -100,6 +110,20 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             {
                 InventoryLocationId = x.Key,
                 LocationName = x.Key.HasValue && locationNames.TryGetValue(x.Key.Value, out var name)
+                    ? name
+                    : "Sin sucursal",
+                PaymentsCount = x.Count(),
+                TotalAmount = x.Sum(y => y.Amount)
+            })
+            .OrderByDescending(x => x.TotalAmount)
+            .ToList();
+
+        var byBranch = paymentRows
+            .GroupBy(x => x.BranchId)
+            .Select(x => new DailyCashCutByBranchDto
+            {
+                BranchId = x.Key,
+                BranchName = x.Key.HasValue && branchNames.TryGetValue(x.Key.Value, out var name)
                     ? name
                     : "Sin sucursal",
                 PaymentsCount = x.Count(),
@@ -135,6 +159,9 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         if (request.InventoryLocationId.HasValue)
             manualTransactions = manualTransactions.Where(x => x.InventoryLocationId == request.InventoryLocationId.Value);
 
+        if (request.BranchId is { } drawerBranchId)
+            manualTransactions = manualTransactions.Where(x => x.CashSession.BranchId == drawerBranchId);
+
         if (!string.IsNullOrWhiteSpace(userNameFilter))
             manualTransactions = manualTransactions.Where(x => x.CreatedBy == userNameFilter);
 
@@ -168,7 +195,8 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             NetCashFlow = netCashFlow,
             NetCashOnlyFlow = netCashOnlyFlow,
             ByUser = byUser,
-            ByLocation = byLocation
+            ByLocation = byLocation,
+            ByBranch = byBranch
         };
     }
 }

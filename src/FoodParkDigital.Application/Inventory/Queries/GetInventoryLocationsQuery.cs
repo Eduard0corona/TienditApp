@@ -43,10 +43,11 @@ public class GetInventoryLocationsQueryHandler : IRequestHandler<GetInventoryLoc
         if (request.IsActive.HasValue)
             query = query.Where(x => x.IsActive == request.IsActive.Value);
 
-        return await query
+        var locations = await query
             .OrderByDescending(x => x.IsDefault)
             .ThenBy(x => x.Name)
             .ProjectTo<InventoryLocationDto>(_mapper.ConfigurationProvider)
             .ToListAsync(cancellationToken);
+        return await InventoryLocationBranches.NameAsync(_context, locations, cancellationToken);
     }
 }

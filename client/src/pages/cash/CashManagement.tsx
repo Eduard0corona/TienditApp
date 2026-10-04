@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
-import { inventoryApi } from '../../api/inventoryApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
-import type { InventoryLocationDto } from '../../types';
+import { useWorkingBranch } from '../../hooks/useWorkingBranch';
 import { getAccess } from '../../utils/access';
 import DailyCut from './DailyCut';
 import MyDrawer from './MyDrawer';
@@ -23,22 +22,8 @@ export default function CashManagement() {
   const { capabilities } = useTenant();
   const access = getAccess(user, capabilities);
   const [tab, setTab] = useState<CashTab>('drawer');
-  const [locations, setLocations] = useState<InventoryLocationDto[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    inventoryApi.getLocations({ isActive: true })
-      .then(({ data }) => {
-        if (!cancelled) setLocations(data);
-      })
-      .catch(() => {
-        if (!cancelled) setLocations([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { branches, branch, setBranch } = useWorkingBranch();
 
   return (
     <>
@@ -60,9 +45,16 @@ export default function CashManagement() {
         ))}
       </ul>
 
-      {tab === 'drawer' && <MyDrawer locations={locations} onChanged={() => setRefreshKey((key) => key + 1)} />}
-      {tab === 'shifts' && <ShiftHistory locations={locations} canCloseOthers={access.businessSettings} refreshKey={refreshKey} />}
-      {tab === 'cut' && <DailyCut locations={locations} />}
+      {tab === 'drawer' && (
+        <MyDrawer
+          branches={branches}
+          workingBranchId={branch?.id}
+          onBranchChosen={setBranch}
+          onChanged={() => setRefreshKey((key) => key + 1)}
+        />
+      )}
+      {tab === 'shifts' && <ShiftHistory branches={branches} canCloseOthers={access.businessSettings} refreshKey={refreshKey} />}
+      {tab === 'cut' && <DailyCut branches={branches} />}
     </>
   );
 }

@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
@@ -79,10 +80,8 @@ public class OrderInventoryService : IOrderInventoryService
         if (requirements.Count == 0)
             return;
 
-        var defaultLocationId = await _context.InventoryLocations
-            .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
-            .Select(x => (Guid?)x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        // Supplies without a location in the recipe leave the stock of the branch where the sale was made.
+        var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
 
         var groupedConsumptions = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
         foreach (var orderItem in orderItems)
@@ -213,10 +212,8 @@ public class OrderInventoryService : IOrderInventoryService
         if (requirements.Count == 0)
             return;
 
-        var defaultLocationId = await _context.InventoryLocations
-            .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
-            .Select(x => (Guid?)x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        // Supplies without a location in the recipe leave the stock of the branch where the sale was made.
+        var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
 
         var groupedConsumptions = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
         foreach (var requirement in requirements)
@@ -444,10 +441,11 @@ public class OrderInventoryService : IOrderInventoryService
         if (requirements.Count == 0)
             return;
 
-        var defaultLocationId = await _context.InventoryLocations
-            .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
-            .Select(x => (Guid?)x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        // Supplies come back where the order took them from (the branch's stock when it took none of them).
+        var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
+        var consumedAt = consumption.Lines
+            .GroupBy(l => l.SupplyItemId)
+            .ToDictionary(g => g.Key, g => g.First().InventoryLocationId);
 
         // The current recipe gives the supplies per unit; never re-enter more than the order consumed.
         var consumedByKey = consumption.Lines
@@ -458,7 +456,8 @@ public class OrderInventoryService : IOrderInventoryService
         {
             foreach (var requirement in requirements.Where(r => r.ProductId == product.ProductId))
             {
-                var locationId = requirement.InventoryLocationId ?? defaultLocationId;
+                var locationId = requirement.InventoryLocationId
+                    ?? (consumedAt.TryGetValue(requirement.SupplyItemId, out var consumedLocationId) ? consumedLocationId : defaultLocationId);
                 if (locationId is null)
                     continue;
 

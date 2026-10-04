@@ -34,9 +34,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string? customerNotes,
         string? tableNumber,
         bool pricesIncludeTax = false,
-        OrderChannel channel = OrderChannel.Counter)
+        OrderChannel channel = OrderChannel.Counter,
+        Guid? branchId = null)
     {
         TenantId = tenantId;
+        BranchId = branchId;
         CustomerUserId = customerUserId;
         TemporaryCustomerId = temporaryCustomerId;
         CreatedByBusiness = createdByBusiness;
@@ -81,6 +83,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>True when item prices already include IVA; false when IVA is added on top of them.</summary>
     public bool PricesIncludeTax { get; private set; }
     public OrderChannel Channel { get; private set; }
+    /// <summary>
+    /// Branch where the sale was made, fixed when the order is created: reports by branch and the daily sales
+    /// snapshots rely on it never moving.
+    /// </summary>
+    public Guid? BranchId { get; private set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }

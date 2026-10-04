@@ -28,6 +28,8 @@ public record CreateInventoryLocationCommand : IRequest<Result<InventoryLocation
     public string? ContactName { get; init; }
     public string? ContactPhone { get; init; }
     public bool IsDefault { get; init; }
+    /// <summary>Branch the stock belongs to; none for a warehouse that serves every branch.</summary>
+    public Guid? BranchId { get; init; }
 }
 
 public class CreateInventoryLocationCommandValidator : AbstractValidator<CreateInventoryLocationCommand>
@@ -73,6 +75,10 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
             return Result.Failure<InventoryLocationDto>("El tenant no tiene habilitado el modulo de inventario.");
 
+        var branchError = await InventoryLocationBranches.ValidateAsync(_context, _tenantService.TenantId, request.BranchId, cancellationToken);
+        if (branchError is not null)
+            return Result.Failure<InventoryLocationDto>(branchError);
+
         var code = request.Code.Trim().ToUpperInvariant();
         var name = request.Name.Trim();
 
@@ -102,11 +108,13 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
             postalCode: request.PostalCode?.Trim(),
             contactName: request.ContactName?.Trim(),
             contactPhone: request.ContactPhone?.Trim(),
-            isDefault: makeDefault);
+            isDefault: makeDefault,
+            branchId: request.BranchId);
 
         _context.InventoryLocations.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(_mapper.Map<InventoryLocationDto>(entity));
+        var dto = await InventoryLocationBranches.NameAsync(_context, [_mapper.Map<InventoryLocationDto>(entity)], cancellationToken);
+        return Result.Success(dto[0]);
     }
 }

@@ -14,6 +14,23 @@ public sealed class BackgroundJobOptions
     public QueueOptions Outbox { get; set; } = new();
     public QueueOptions Inbox { get; set; } = new();
     public MessagingOptions Messaging { get; set; } = new();
+    public SalesSnapshotOptions SalesSnapshots { get; set; } = new();
+
+    /// <summary>Daily sales snapshots of closed days, read by the sales reports.</summary>
+    public sealed class SalesSnapshotOptions
+    {
+        /// <summary>How often closed days without a snapshot are looked for.</summary>
+        public int IntervalMinutes { get; set; } = 30;
+
+        /// <summary>Wait after startup before the first pass.</summary>
+        public int StartupDelaySeconds { get; set; } = 60;
+
+        /// <summary>Days stored per business on each pass: the history of an existing business fills over several passes.</summary>
+        public int MaxDaysPerPass { get; set; } = 31;
+
+        /// <summary>How far back days are stored.</summary>
+        public int HorizonDays { get; set; } = 400;
+    }
 
     /// <summary>Campaigns, appointment reminders and the queue of outgoing WhatsApp messages.</summary>
     public sealed class MessagingOptions

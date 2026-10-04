@@ -82,6 +82,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey(o => o.TemporaryCustomerId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<FoodParkDigital.Domain.Branches.Entities.Branch>()
+            .WithMany()
+            .HasForeignKey(o => o.BranchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Open tabs: the table it was served at, and OpenTableId while it is open (one open tab per table).
         builder.HasOne<DiningTable>()
             .WithMany()
@@ -112,6 +117,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(o => new { o.TenantId, o.Status });
         builder.HasIndex(o => new { o.TenantId, o.OrderType, o.Status });
         builder.HasIndex(o => new { o.TenantId, o.CreatedAt }).IsDescending(false, true);
+        builder.HasIndex(o => new { o.TenantId, o.BranchId, o.CreatedAt });
         builder.HasIndex(o => new { o.TenantId, o.OrderNumber }).IsUnique();
         builder.HasIndex(o => new { o.TenantId, o.CustomerUserId });
         builder.HasIndex(o => new { o.TenantId, o.TemporaryCustomerId });

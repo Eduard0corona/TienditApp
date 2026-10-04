@@ -22,6 +22,8 @@ public class OrderDto
     /// <summary>True when item prices include IVA; false when IVA was added on top.</summary>
     public bool PricesIncludeTax { get; set; }
     public OrderChannel Channel { get; set; }
+    /// <summary>Branch where the sale was made.</summary>
+    public Guid? BranchId { get; set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; set; }
     public decimal Tax { get; set; }

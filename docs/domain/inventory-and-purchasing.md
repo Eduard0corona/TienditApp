@@ -2,7 +2,7 @@
 
 ## Estado actual
 
-`SupplyItem` representa insumos; `InventoryLocation` funciona también como sucursal; `InventoryStock` almacena on-hand/reservado por insumo+ubicación. `InventoryMovement` y líneas forman el kardex con cantidades antes/después, costos, lote, caducidad, referencias y `ExternalReference`.
+`SupplyItem` representa insumos; `InventoryLocation` es una ubicación de inventario que pertenece a una sucursal (`BranchId`, opcional para un almacén general; ver [sucursales](branches-and-reporting.md)) y las ventas consumen del almacén de su sucursal; `InventoryStock` almacena on-hand/reservado por insumo+ubicación. `InventoryMovement` y líneas forman el kardex con cantidades antes/después, costos, lote, caducidad, referencias y `ExternalReference`.
 
 Las entradas/salidas manuales pasan por `CreateInventoryMovementCommand`. Recibir una `PurchaseOrder` actualiza líneas, stock, costo del insumo y crea movimiento de compra. Órdenes con receta crean salida por venta/consumo; cancelación crea entrada compensatoria. Un índice único `(TenantId, ExternalReference)` protege los movimientos automáticos que sí usan clave estable.
 

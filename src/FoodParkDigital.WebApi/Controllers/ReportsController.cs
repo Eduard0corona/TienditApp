@@ -30,4 +30,20 @@ public class ReportsController : ControllerBase
         });
         return Ok(result);
     }
+
+    /// <summary>Sales by branch and by day between two local dates (the current month when omitted).</summary>
+    [HttpGet("sales-by-branch")]
+    public async Task<ActionResult<SalesByBranchReportDto>> GetSalesByBranch(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] Guid? branchId)
+    {
+        var result = await _mediator.Send(new GetSalesByBranchQuery
+        {
+            From = from,
+            To = to,
+            BranchId = branchId
+        });
+        return Ok(result);
+    }
 }

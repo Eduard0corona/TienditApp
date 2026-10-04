@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Customers.Entities;
@@ -13,6 +14,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Purchasing.Entities;
+using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
@@ -149,6 +151,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderItemOption> OrderItemOptions => Set<OrderItemOption>();
     public DbSet<DiningTable> DiningTables => Set<DiningTable>();
     public DbSet<KitchenTicket> KitchenTickets => Set<KitchenTicket>();
+    public DbSet<Branch> Branches => Set<Branch>();
+    public DbSet<DailySalesSnapshot> DailySalesSnapshots => Set<DailySalesSnapshot>();
 
     // Background queues: infrastructure only, read across tenants by the workers (not on IApplicationDbContext).
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

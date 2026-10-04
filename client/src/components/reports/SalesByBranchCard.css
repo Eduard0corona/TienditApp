@@ -1,0 +1,32 @@
+.ta-kpi {
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius, var(--ct-border-radius));
+  padding: 0.5rem 0.75rem;
+  height: 100%;
+}
+
+.ta-day-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-evenly;
+  gap: 2px;
+  height: 7rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.ta-day-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 3rem;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.ta-day-bar span {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: var(--ct-primary);
+}
