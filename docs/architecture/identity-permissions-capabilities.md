@@ -28,6 +28,8 @@ En el cliente, `src/utils/access.ts` (`getAccess`) traduce la misma matriz para 
 
 Cambiar de tenant rota el refresh token de la sesión (el anterior se revoca).
 
+La verificación de teléfono identifica la cuenta por el `userId` que devuelve el registro: viaja en la URL de `/confirm-phone` (recargar ya no pierde el estado) y `POST /auth/resend-phone-confirmation` acepta `{ userId }` para reenviar el código (o un teléfono E.164), sin revelar si la cuenta existe y con el límite `auth`. El enlace del correo de confirmación abre la página `/confirm-email` de la app, que confirma contra `GET /auth/confirm-email` y, si el enlace venció o está incompleto, ofrece pedir uno nuevo.
+
 ## Guardrails
 
 - Los guards de React y menús ocultos no son seguridad.

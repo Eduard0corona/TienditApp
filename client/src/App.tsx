@@ -8,6 +8,7 @@ import AccessRoute from './components/common/AccessRoute';
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
 const ConfirmPhone = lazy(() => import('./pages/auth/ConfirmPhone'));
+const ConfirmEmail = lazy(() => import('./pages/auth/ConfirmEmail'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/confirm-phone" element={<ConfirmPhone />} />
+          <Route path="/confirm-email" element={<ConfirmEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
 

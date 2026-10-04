@@ -61,11 +61,17 @@ export default function Register() {
   // Customer form
   const customerForm = useForm<RegisterCustomerRequest>();
 
+  // The account id goes in the URL so the confirmation screen survives a reload.
+  const goToPhoneConfirmation = (userId?: string) =>
+    navigate(userId ? `/confirm-phone?userId=${encodeURIComponent(userId)}` : '/confirm-phone', {
+      state: { userId },
+    });
+
   const onSubmitBusiness = async (data: RegisterBusinessRequest) => {
     setError('');
     try {
       const response = await authApi.registerBusiness(data);
-      navigate('/confirm-phone', { state: { userId: response.data.userId } });
+      goToPhoneConfirmation(response.data.userId);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
@@ -78,7 +84,7 @@ export default function Register() {
     setError('');
     try {
       const response = await authApi.registerCustomer(data);
-      navigate('/confirm-phone', { state: { userId: response.data.userId } });
+      goToPhoneConfirmation(response.data.userId);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||

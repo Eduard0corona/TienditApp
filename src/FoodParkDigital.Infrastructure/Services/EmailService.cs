@@ -24,18 +24,22 @@ public class EmailService : IEmailService
     public async Task SendEmailConfirmationAsync(string email, string userId, string token)
     {
         var appUrl = _configuration["AppUrl"] ?? "https://localhost:5001";
-        var confirmationLink = $"{appUrl}/api/v1/auth/confirm-email?userId={userId}&token={Uri.EscapeDataString(token)}";
+        var confirmationLink = BuildEmailConfirmationLink(appUrl, userId, token);
 
         var subject = "Confirma tu correo - TienditApp";
         var body = $@"
             <h2>Bienvenido a TienditApp</h2>
-            <p>Por favor confirma tu email haciendo clic en el siguiente enlace:</p>
-            <p><a href='{confirmationLink}'>Confirmar Email</a></p>
+            <p>Confirma tu correo con el siguiente enlace:</p>
+            <p><a href='{confirmationLink}'>Confirmar correo</a></p>
             <p>Si no creaste una cuenta, puedes ignorar este mensaje.</p>
         ";
 
         await SendEmailAsync(email, subject, body);
     }
+
+    // The app page confirms through the API and explains the result; linking the API itself showed raw JSON.
+    internal static string BuildEmailConfirmationLink(string appUrl, string userId, string token)
+        => $"{appUrl.TrimEnd('/')}/confirm-email?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}";
 
     public async Task SendPasswordResetEmailAsync(string email, string userId, string token)
     {
