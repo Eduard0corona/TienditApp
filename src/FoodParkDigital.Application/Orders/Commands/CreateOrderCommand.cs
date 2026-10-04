@@ -8,6 +8,7 @@ using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -41,6 +42,13 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>
     public decimal? ExpectedTotal { get; init; }
     /// <summary>Counter (default) or WhatsApp, when the business takes the order from a chat.</summary>
     public OrderChannel Channel { get; init; } = OrderChannel.Counter;
+    /// <summary>
+    /// Opens the order as a tab: its items are the first round sent to the kitchen, more rounds are added
+    /// later and it is charged and closed when the table leaves.
+    /// </summary>
+    public bool OpenTab { get; init; }
+    /// <summary>Table of the tab; a tab can also go by a name (TableNumber or CustomerName).</summary>
+    public Guid? DiningTableId { get; init; }
 }
 
 public record CreateOrderPaymentDto
@@ -59,6 +67,24 @@ public record CreateOrderItemDto
     /// <summary>Whole for pieces; up to three decimals for weight, volume, length and time.</summary>
     public decimal Quantity { get; init; }
     public string? Notes { get; init; }
+    /// <summary>Variants and extras chosen (ids of the product's options).</summary>
+    public List<Guid> OptionIds { get; init; } = new();
+}
+
+/// <summary>Rules of a requested line, shared by sales, tab rounds and online orders.</summary>
+public class CreateOrderItemDtoValidator : AbstractValidator<CreateOrderItemDto>
+{
+    public const int MaxOptionsPerLine = 50;
+
+    public CreateOrderItemDtoValidator()
+    {
+        RuleFor(i => i.ProductId).NotEmpty();
+        RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
+            .PrecisionScale(18, 3, ignoreTrailingZeros: true);
+        RuleFor(i => i.Notes).MaximumLength(300);
+        RuleFor(i => i.OptionIds).NotNull();
+        RuleFor(i => i.OptionIds.Count).LessThanOrEqualTo(MaxOptionsPerLine).When(i => i.OptionIds is not null);
+    }
 }
 
 public record ServiceOrderDetailInput
@@ -96,6 +122,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
     {
         RuleFor(x => x.CustomerName).MaximumLength(200);
         RuleFor(x => x.CustomerPhone).MaximumLength(50);
+        RuleFor(x => x.TableNumber).MaximumLength(50);
         RuleFor(x => x.OrderType).IsInEnum();
         // Online orders come from the public menu, not from the business's screens.
         RuleFor(x => x.Channel).IsInEnum().NotEqual(OrderChannel.Online)
@@ -104,13 +131,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
             .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
-        RuleForEach(x => x.Items).ChildRules(item =>
-        {
-            item.RuleFor(i => i.ProductId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
-                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
-            item.RuleFor(i => i.Notes).MaximumLength(300);
-        });
+        RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
@@ -136,6 +157,18 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             .GreaterThanOrEqualTo(0)
             .PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedTotal.HasValue);
+
+        When(x => x.OpenTab, () =>
+        {
+            RuleFor(x => x.OrderType).Equal(OrderType.Retail)
+                .WithMessage("Una cuenta abierta es de consumo; los servicios no se abren como cuenta.");
+            RuleFor(x => x.CreatedByBusiness).Equal(true).WithMessage("Solo el negocio abre cuentas.");
+            RuleFor(x => x)
+                .Must(x => x.DiningTableId.HasValue || !string.IsNullOrWhiteSpace(x.TableNumber) || !string.IsNullOrWhiteSpace(x.CustomerName))
+                .WithMessage("Elige la mesa o escribe a nombre de quién va la cuenta.");
+        });
+        RuleFor(x => x.DiningTableId).Null().When(x => !x.OpenTab)
+            .WithMessage("La mesa se indica al abrir una cuenta.");
 
         When(x => x.OrderType == OrderType.Service && !x.CreatedByBusiness, () =>
         {
@@ -269,17 +302,12 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             pricesIncludeTax: salesSettings.PricesIncludeTax,
             channel: request.Channel);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var quantitiesByProduct = new Dictionary<Guid, decimal>();
+        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate);
+        var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken);
 
         foreach (var itemDto in request.Items)
         {
-            var product = await _context.Products
-                .FirstOrDefaultAsync(p => p.Id == itemDto.ProductId, cancellationToken)
-                ?? throw new EntityNotFoundException("Product", itemDto.ProductId);
-
-            if (!product.IsAvailableAt(localTimeOfDay))
-                throw new DomainException($"El producto '{product.Name}' no está disponible en este horario.");
-
+            var product = products[itemDto.ProductId];
             if (!request.CreatedByBusiness && !OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
             {
                 var expectedLabel = request.OrderType == OrderType.Service ? "servicio" : "producto";
@@ -287,25 +315,21 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                     $"El item '{product.Name}' no corresponde al tipo de orden '{expectedLabel}'.");
             }
 
-            var quantityError = OrderLimits.TrackProductQuantity(quantitiesByProduct, product, itemDto.Quantity);
-            if (quantityError is not null)
-                return Result.Failure<OrderDto>(quantityError);
+            var built = lineBuilder.Build(product, itemDto);
+            if (built.IsFailure)
+                return Result.Failure<OrderDto>(built.Error!);
 
-            var isTrackableService = OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable;
-            if (isTrackableService && decimal.Truncate(itemDto.Quantity) != itemDto.Quantity)
-                return Result.Failure<OrderDto>($"'{product.Name}' crea una pieza por unidad: la cantidad debe ser entera.");
-
-            order.AddItem(
-                product.Id,
-                product.Name,
-                itemDto.Quantity,
-                product.PriceAmount,
-                string.IsNullOrWhiteSpace(itemDto.Notes) ? null : itemDto.Notes.Trim(),
-                product.GetVatRate(salesSettings.DefaultTaxRate),
-                OrderLineFiscalData.From(product));
-
-            if (isTrackableService)
+            order.AddItem(built.Value.Line);
+            if (built.Value.IsTrackableService)
                 checklistCandidates.Add((product, itemDto));
+        }
+        var quantitiesByProduct = lineBuilder.QuantitiesByProduct;
+
+        if (request.OpenTab)
+        {
+            var tabError = await OpenTabAsync(order, request, tenantCapabilities, cancellationToken);
+            if (tabError is not null)
+                return Result.Failure<OrderDto>(tabError);
         }
 
         if (request.OrderType == OrderType.Service && request.ServiceDetail is not null)
@@ -423,11 +447,43 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
         order.MarkAsCreated();
         _context.Orders.Add(order);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (order.OpenTableId.HasValue)
+        {
+            // Another device opened a tab on the same table first (IX_Orders_TenantId_OpenTableId_Open).
+            return Result.Failure<OrderDto>("La mesa ya tiene una cuenta abierta: agrega la ronda a esa cuenta.");
+        }
 
         var dto = _mapper.Map<OrderDto>(order);
         dto.ApplyStateMetadata();
         return Result.Success(dto);
+    }
+
+    private async Task<string?> OpenTabAsync(
+        Order order,
+        CreateOrderCommand request,
+        TenantCapability tenantCapabilities,
+        CancellationToken cancellationToken)
+    {
+        if (!tenantCapabilities.HasFlag(TenantCapability.Food))
+            return "Las cuentas abiertas son para negocios de comida o bebida.";
+
+        DiningTable? table = null;
+        if (request.DiningTableId is { } tableId)
+        {
+            table = await _context.DiningTables.FirstOrDefaultAsync(t => t.Id == tableId, cancellationToken);
+            if (table is null || !table.IsActive)
+                return "La mesa no existe o está desactivada.";
+            if (await _context.Orders.AnyAsync(o => o.OpenTableId == tableId, cancellationToken))
+                return $"La mesa {table.Name} ya tiene una cuenta abierta: agrega la ronda a esa cuenta.";
+        }
+
+        var tabName = table?.Name ?? request.TableNumber?.Trim();
+        order.OpenAsTab(table?.Id, tabName, _dateTimeProvider.UtcNow, _currentUserService.UserName);
+        return null;
     }
 
     private static string ResolveCustomerName(string? requestedName, CustomerLookupResult? linkedCustomer, string? rawPhone)

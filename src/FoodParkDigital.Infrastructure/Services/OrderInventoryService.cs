@@ -27,7 +27,9 @@ public class OrderInventoryService : IOrderInventoryService
 
     public async Task ApplyConsumptionForOrderAsync(Order order, CancellationToken cancellationToken)
     {
-        if (!ShouldConsumeInventory(order.Status))
+        // An open tab keeps getting rounds: it consumes once, when it closes, so no round is left out of the
+        // single consumption movement of the order.
+        if (!ShouldConsumeInventory(order.Status) || order.IsOpenTab)
             return;
 
         var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);

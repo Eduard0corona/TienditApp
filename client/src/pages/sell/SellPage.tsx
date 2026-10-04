@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import { ordersApi } from '../../api/ordersApi';
@@ -29,6 +29,13 @@ import {
   roundQuantity,
 } from '../../utils/units';
 import { readSellDraft, writeSellDraft } from './sellDraft';
+import {
+  getLineKey,
+  getOptionsLabel,
+  getPriceWithOptions,
+  getSelectionError,
+  hasOptions,
+} from '../../utils/productOptions';
 import './SellPage.css';
 
 // Same limits as the API (OrderLimits).
@@ -38,7 +45,12 @@ const MAX_LINES = 200;
 const CATALOG_PAGE_SIZE = 500;
 
 interface CartLine {
+  /** Product plus its options: the same product with other options is another line. */
+  key: string;
   productId: string;
+  optionIds: string[];
+  /** "Grande, Almendra". */
+  optionsLabel: string;
   name: string;
   unitPrice: number;
   quantity: number;
@@ -50,6 +62,27 @@ interface CartLine {
   unit?: UnitType;
   /** Sold by weight, volume, length or time: the quantity admits three decimals. */
   fractional: boolean;
+}
+
+/** A product with variants or extras waiting for the options and quantity. */
+interface OptionsRequest {
+  product: ProductDto;
+  optionIds: string[];
+  quantityText: string;
+}
+
+/** Where the order goes when it is not a counter sale: a new tab or a round of an open one. */
+type TabTarget =
+  | { kind: 'new'; tableId?: string; label: string }
+  | { kind: 'round'; orderId: string; label: string };
+
+function readTabTarget(params: URLSearchParams): TabTarget | null {
+  const orderId = params.get('tab');
+  if (orderId) return { kind: 'round', orderId, label: params.get('label')?.trim() || 'la cuenta' };
+  const tableId = params.get('table') ?? undefined;
+  const label = params.get('label')?.trim();
+  if (tableId || label) return { kind: 'new', tableId, label: label || 'Mesa' };
+  return null;
 }
 
 /** A weighed or measured product waiting for its quantity. */
@@ -147,6 +180,11 @@ export default function SellPage() {
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // A table's tab (new or a new round): read once; the sale then goes to the kitchen instead of being charged.
+  const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
+  const [tabOrder, setTabOrder] = useState<OrderDto | null>(null);
+  const [choosing, setChoosing] = useState<OptionsRequest | null>(null);
   // Read once: the link fills the customer after the saved draft is restored.
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
@@ -158,12 +196,15 @@ export default function SellPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const toCartLine = useCallback(
-    (product: ProductDto, quantity: number, notes = ''): CartLine => {
+    (product: ProductDto, quantity: number, notes = '', optionIds: string[] = []): CartLine => {
       const vat = resolveProductVat(product, defaultTaxRate);
       return {
+        key: getLineKey(product.id, optionIds),
         productId: product.id,
+        optionIds,
+        optionsLabel: getOptionsLabel(product.optionGroups, optionIds),
         name: product.name,
-        unitPrice: product.priceAmount,
+        unitPrice: getPriceWithOptions(product.priceAmount, product.optionGroups, optionIds),
         quantity,
         notes,
         showNotes: notes.length > 0,
@@ -192,13 +233,16 @@ export default function SellPage() {
 
       const byId = new Map(loaded.map((product) => [product.id, product]));
       if (draftLoadedFor.current !== tenantId) {
-        // First load for this business: bring back the sale that was being built.
+        // First load for this business: bring back the sale that was being built (a table's round starts empty).
         draftLoadedFor.current = tenantId;
-        const draft = readSellDraft(tenantId);
+        const draft = tabTarget ? null : readSellDraft(tenantId);
         if (draft) {
           setCart(draft.lines.flatMap((line) => {
             const product = byId.get(line.productId);
-            return product ? [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes)] : [];
+            const optionIds = line.optionIds ?? [];
+            // Options that changed since the draft was saved drop the line instead of selling something else.
+            if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
+            return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
           }));
           setCustomerName(draft.customerName);
           setCustomerPhone(draft.customerPhone);
@@ -218,7 +262,8 @@ export default function SellPage() {
         // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
         setCart((current) => current.flatMap((line) => {
           const product = byId.get(line.productId);
-          return product ? [{ ...toCartLine(product, line.quantity, line.notes), showNotes: line.showNotes }] : [];
+          if (!product || getSelectionError(product.optionGroups, line.optionIds)) return [];
+          return [{ ...toCartLine(product, line.quantity, line.notes, line.optionIds), showNotes: line.showNotes }];
         }));
       }
     } catch (err: unknown) {
@@ -226,7 +271,23 @@ export default function SellPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, toCartLine]);
+  }, [tabTarget, tenantId, toCartLine]);
+
+  useEffect(() => {
+    // A round goes to an open tab: show what it already has.
+    if (tabTarget?.kind !== 'round') return;
+    let cancelled = false;
+    ordersApi.getById(tabTarget.orderId)
+      .then(({ data }) => {
+        if (!cancelled) setTabOrder(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setSaleError(getApiErrorMessage(err, 'No se encontró la cuenta.'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tabTarget]);
 
   useEffect(() => {
     void loadCatalog();
@@ -254,15 +315,15 @@ export default function SellPage() {
   }, [access.cash, tenantId]);
 
   useEffect(() => {
-    if (!tenantId || draftLoadedFor.current !== tenantId) return;
+    if (!tenantId || draftLoadedFor.current !== tenantId || tabTarget) return;
     writeSellDraft(tenantId, {
-      lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes })),
+      lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
       customerName,
       customerPhone,
       tableNumber,
       orderNotes,
     });
-  }, [cart, customerName, customerPhone, orderNotes, tableNumber, tenantId]);
+  }, [cart, customerName, customerPhone, orderNotes, tableNumber, tabTarget, tenantId]);
 
   const totals = useMemo(
     () => estimateOrderTotals(
@@ -307,16 +368,24 @@ export default function SellPage() {
 
   const addProduct = useCallback((product: ProductDto) => {
     setSaleError('');
+    if (hasOptions(product)) {
+      // Variants and extras: choose them (and how many) before it goes to the ticket.
+      const preselected = (product.optionGroups ?? [])
+        .filter((group) => group.minSelections === 1 && group.maxSelections === 1)
+        .flatMap((group) => group.options.filter((option) => option.isAvailable).slice(0, 1).map((option) => option.id));
+      setChoosing({ product, optionIds: preselected, quantityText: '1' });
+      return;
+    }
     if (allowsFractions(product.unit)) {
       // Weighed or measured: ask how much instead of adding one.
-      const existing = cart.find((line) => line.productId === product.id);
+      const existing = cart.find((line) => line.key === product.id);
       setMeasure({ product, text: existing ? String(existing.quantity) : '', replacing: Boolean(existing) });
       return;
     }
     setCart((current) => {
-      const existing = current.find((line) => line.productId === product.id);
+      const existing = current.find((line) => line.key === product.id);
       if (existing) {
-        return current.map((line) => (line.productId === product.id
+        return current.map((line) => (line.key === product.id
           ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_LINE) }
           : line));
       }
@@ -328,6 +397,49 @@ export default function SellPage() {
     });
   }, [cart, toCartLine, toast]);
 
+  const chosenQuantity = choosing ? parseQuantity(choosing.quantityText, choosing.product.unit) : null;
+  const choiceError = choosing ? getSelectionError(choosing.product.optionGroups, choosing.optionIds) : null;
+
+  const toggleOption = (groupId: string, optionId: string) => {
+    if (!choosing) return;
+    const group = choosing.product.optionGroups?.find((item) => item.id === groupId);
+    if (!group) return;
+    const inGroup = new Set(group.options.map((option) => option.id));
+    const selected = choosing.optionIds.includes(optionId);
+    let optionIds: string[];
+    if (group.maxSelections === 1) {
+      // A single choice works like radio buttons (an optional one can be cleared by tapping it again).
+      const others = choosing.optionIds.filter((id) => !inGroup.has(id));
+      optionIds = selected && group.minSelections === 0 ? others : [...others, optionId];
+    } else if (selected) {
+      optionIds = choosing.optionIds.filter((id) => id !== optionId);
+    } else {
+      const pickedInGroup = choosing.optionIds.filter((id) => inGroup.has(id)).length;
+      if (pickedInGroup >= group.maxSelections) return;
+      optionIds = [...choosing.optionIds, optionId];
+    }
+    setChoosing({ ...choosing, optionIds });
+  };
+
+  const confirmChoice = () => {
+    if (!choosing || choiceError || chosenQuantity === null) return;
+    const { product, optionIds } = choosing;
+    const key = getLineKey(product.id, optionIds);
+    setCart((current) => {
+      if (current.some((line) => line.key === key)) {
+        return current.map((line) => (line.key === key
+          ? { ...line, quantity: Math.min(roundQuantity(line.quantity + chosenQuantity), MAX_QUANTITY_PER_LINE) }
+          : line));
+      }
+      if (current.length >= MAX_LINES) {
+        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
+        return current;
+      }
+      return [...current, toCartLine(product, Math.min(chosenQuantity, MAX_QUANTITY_PER_LINE), '', optionIds)];
+    });
+    setChoosing(null);
+  };
+
   const measuredQuantity = measure ? parseQuantity(measure.text, measure.product.unit) : null;
   const measureTooLarge = measuredQuantity !== null && measuredQuantity > MAX_QUANTITY_PER_LINE;
 
@@ -335,8 +447,8 @@ export default function SellPage() {
     if (!measure || measuredQuantity === null || measureTooLarge) return;
     const { product } = measure;
     setCart((current) => {
-      if (current.some((line) => line.productId === product.id)) {
-        return current.map((line) => (line.productId === product.id ? { ...line, quantity: measuredQuantity } : line));
+      if (current.some((line) => line.key === product.id)) {
+        return current.map((line) => (line.key === product.id ? { ...line, quantity: measuredQuantity } : line));
       }
       if (current.length >= MAX_LINES) {
         toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
@@ -347,31 +459,31 @@ export default function SellPage() {
     setMeasure(null);
   };
 
-  const changeQuantity = (productId: string, quantity: number) => {
+  const changeQuantity = (key: string, quantity: number) => {
     const rounded = roundQuantity(quantity);
     setCart((current) => (rounded <= 0
-      ? current.filter((line) => line.productId !== productId)
-      : current.map((line) => (line.productId === productId
+      ? current.filter((line) => line.key !== key)
+      : current.map((line) => (line.key === key
         ? { ...line, quantity: Math.min(rounded, MAX_QUANTITY_PER_LINE) }
         : line))));
   };
 
   const typeQuantity = (line: CartLine, text: string) => {
-    setQuantityDrafts((current) => ({ ...current, [line.productId]: text }));
+    setQuantityDrafts((current) => ({ ...current, [line.key]: text }));
     const parsed = parseQuantity(text, line.unit);
-    if (parsed !== null) changeQuantity(line.productId, parsed);
+    if (parsed !== null) changeQuantity(line.key, parsed);
   };
 
-  const finishTypingQuantity = (productId: string) => {
+  const finishTypingQuantity = (key: string) => {
     setQuantityDrafts((current) => {
       const next = { ...current };
-      delete next[productId];
+      delete next[key];
       return next;
     });
   };
 
-  const updateLine = (productId: string, changes: Partial<CartLine>) => {
-    setCart((current) => current.map((line) => (line.productId === productId ? { ...line, ...changes } : line)));
+  const updateLine = (key: string, changes: Partial<CartLine>) => {
+    setCart((current) => current.map((line) => (line.key === key ? { ...line, ...changes } : line)));
   };
 
   const clearSale = () => {
@@ -432,11 +544,12 @@ export default function SellPage() {
   };
 
   const openCharge = useCallback(() => {
-    if (cart.length === 0 || submitting) return;
+    // A table's round is sent to the kitchen and charged when the table leaves (Mesas).
+    if (cart.length === 0 || submitting || tabTarget) return;
     setSaleError('');
     setCartOpenOnPhone(false);
     setChargeOpen(true);
-  }, [cart.length, submitting]);
+  }, [cart.length, submitting, tabTarget]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -460,6 +573,7 @@ export default function SellPage() {
       productId: line.productId,
       quantity: line.quantity,
       notes: line.notes.trim() || undefined,
+      optionIds: line.optionIds.length > 0 ? line.optionIds : undefined,
     })),
     expectedTotal: totals.total,
     channel: chatOrigin ? OrderChannel.WhatsApp : undefined,
@@ -504,6 +618,35 @@ export default function SellPage() {
     }
   };
 
+  const sendToKitchen = async () => {
+    if (!tabTarget || !validateSale()) return;
+    setSubmitting(true);
+    setSaleError('');
+    try {
+      const request = buildOrderRequest();
+      if (tabTarget.kind === 'round') {
+        await ordersApi.addRound(tabTarget.orderId, request.items);
+      } else {
+        await ordersApi.create({
+          ...request,
+          openTab: true,
+          orderType: OrderType.Retail,
+          diningTableId: tabTarget.tableId,
+          // A tab without a table goes by its name.
+          tableNumber: tabTarget.tableId ? undefined : tabTarget.label,
+        });
+      }
+      clearSale();
+      toast.success(tabTarget.kind === 'round' ? 'Ronda enviada a cocina.' : `Cuenta de ${tabTarget.label} abierta y enviada a cocina.`);
+      navigate('/tables');
+    } catch (err: unknown) {
+      setSaleError(getApiErrorMessage(err, 'No se pudo enviar a cocina.'));
+      void loadCatalog();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const startNewSale = () => {
     setCompletedSale(null);
     setChatOrigin(null);
@@ -536,6 +679,20 @@ export default function SellPage() {
 
   const cartPanel = (
     <div className="sell-cart-panel">
+      {tabTarget && (
+        <div className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
+          <span className="small">
+            <i className="ri-restaurant-line me-1" aria-hidden="true"></i>
+            <strong>{tabTarget.label}</strong>
+            {tabTarget.kind === 'round'
+              ? tabOrder
+                ? <> · ronda {(tabOrder.kitchenTickets?.length ?? 0) + 1} · llevan <span className="ta-money">{formatMoney(tabOrder.total)}</span></>
+                : ' · nueva ronda'
+              : ' · cuenta nueva'}
+          </span>
+          <Link to="/tables" className="btn btn-sm btn-light">Mesas</Link>
+        </div>
+      )}
       {chatOrigin && (
         <div className="alert alert-success d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
           <span className="small">
@@ -567,10 +724,11 @@ export default function SellPage() {
             const removesLine = line.quantity - step <= 0;
             const stepLabel = line.fractional ? `${formatQuantity(step, line.unit)} de` : 'uno de';
             return (
-              <li key={line.productId} className="sell-line">
+              <li key={line.key} className="sell-line">
                 <div className="d-flex justify-content-between gap-2">
                   <div className="sell-line-name">
                     {line.name}
+                    {line.optionsLabel && <div className="small sell-line-options">{line.optionsLabel}</div>}
                     <div className="small text-muted">
                       {line.fractional
                         ? `${formatQuantity(line.quantity, line.unit)} × ${formatMoney(line.unitPrice)}/${unitLabel}`
@@ -585,7 +743,7 @@ export default function SellPage() {
                       type="button"
                       className="btn btn-light"
                       aria-label={removesLine ? `Quitar ${line.name}` : `Quitar ${stepLabel} ${line.name}`}
-                      onClick={() => changeQuantity(line.productId, line.quantity - step)}
+                      onClick={() => changeQuantity(line.key, line.quantity - step)}
                     >
                       <i className={removesLine ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
                     </button>
@@ -593,15 +751,15 @@ export default function SellPage() {
                       className={`form-control text-center ta-money ${line.fractional ? 'sell-quantity-measured' : ''}`}
                       inputMode={line.fractional ? 'decimal' : 'numeric'}
                       aria-label={line.fractional ? `Cantidad de ${line.name} en ${unitLabel}` : `Cantidad de ${line.name}`}
-                      value={quantityDrafts[line.productId] ?? String(line.quantity)}
+                      value={quantityDrafts[line.key] ?? String(line.quantity)}
                       onChange={(event) => typeQuantity(line, event.target.value)}
-                      onBlur={() => finishTypingQuantity(line.productId)}
+                      onBlur={() => finishTypingQuantity(line.key)}
                     />
                     <button
                       type="button"
                       className="btn btn-light"
                       aria-label={`Agregar ${stepLabel} ${line.name}`}
-                      onClick={() => changeQuantity(line.productId, line.quantity + step)}
+                      onClick={() => changeQuantity(line.key, line.quantity + step)}
                     >
                       <i className="ri-add-line" aria-hidden="true"></i>
                     </button>
@@ -609,7 +767,7 @@ export default function SellPage() {
                   <button
                     type="button"
                     className={`btn btn-sm ${line.showNotes ? 'btn-soft-warning' : 'btn-light'}`}
-                    onClick={() => updateLine(line.productId, { showNotes: !line.showNotes })}
+                    onClick={() => updateLine(line.key, { showNotes: !line.showNotes })}
                     aria-expanded={line.showNotes}
                   >
                     <i className="ri-sticky-note-line me-1" aria-hidden="true"></i>Nota
@@ -622,7 +780,7 @@ export default function SellPage() {
                     aria-label={`Nota para ${line.name}`}
                     maxLength={300}
                     value={line.notes}
-                    onChange={(event) => updateLine(line.productId, { notes: event.target.value })}
+                    onChange={(event) => updateLine(line.key, { notes: event.target.value })}
                   />
                 )}
               </li>
@@ -718,24 +876,39 @@ export default function SellPage() {
 
       {saleError && !chargeOpen && <div className="alert alert-danger py-2 mt-2 mb-0">{saleError}</div>}
 
-      <div className="d-grid gap-2 mt-3">
-        <button
-          type="button"
-          className="btn btn-primary btn-touch btn-touch-lg"
-          onClick={openCharge}
-          disabled={cart.length === 0 || submitting}
-        >
-          Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
-        </button>
-        <button
-          type="button"
-          className="btn btn-light btn-touch"
-          onClick={() => void submitSale(null)}
-          disabled={cart.length === 0 || submitting}
-        >
-          Guardar sin cobrar
-        </button>
-      </div>
+      {tabTarget ? (
+        <div className="d-grid gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-touch btn-touch-lg"
+            onClick={() => void sendToKitchen()}
+            disabled={cart.length === 0 || submitting}
+          >
+            <i className="ri-restaurant-2-line me-1" aria-hidden="true"></i>
+            {submitting ? 'Enviando…' : `Enviar a cocina · ${formatMoney(totals.total)}`}
+          </button>
+          <Link to="/tables" className="btn btn-light btn-touch">Cancelar</Link>
+        </div>
+      ) : (
+        <div className="d-grid gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-touch btn-touch-lg"
+            onClick={openCharge}
+            disabled={cart.length === 0 || submitting}
+          >
+            Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-light btn-touch"
+            onClick={() => void submitSale(null)}
+            disabled={cart.length === 0 || submitting}
+          >
+            Guardar sin cobrar
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -849,7 +1022,9 @@ export default function SellPage() {
           ) : (
             <div className="sell-products">
               {visibleProducts.map((product) => {
-                const inCart = cart.find((line) => line.productId === product.id)?.quantity ?? 0;
+                const inCart = roundQuantity(cart
+                  .filter((line) => line.productId === product.id)
+                  .reduce((sum, line) => sum + line.quantity, 0));
                 const unitLabel = allowsFractions(product.unit) ? getUnitShortLabel(product.unit) : '';
                 const price = unitLabel ? `${formatMoney(product.priceAmount)}/${unitLabel}` : formatMoney(product.priceAmount);
                 const inCartLabel = unitLabel ? formatQuantity(inCart, product.unit) : String(inCart);
@@ -889,8 +1064,13 @@ export default function SellPage() {
           <i className="ri-shopping-basket-2-line me-1" aria-hidden="true"></i>
           {itemCount} {itemCount === 1 ? 'artículo' : 'artículos'} · <span className="ta-money">{formatMoney(totals.total)}</span>
         </button>
-        <button type="button" className="btn btn-primary btn-touch" onClick={openCharge} disabled={cart.length === 0}>
-          Cobrar
+        <button
+          type="button"
+          className="btn btn-primary btn-touch"
+          onClick={tabTarget ? () => void sendToKitchen() : openCharge}
+          disabled={cart.length === 0 || submitting}
+        >
+          {tabTarget ? 'Enviar' : 'Cobrar'}
         </button>
       </div>
       <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet">
@@ -899,6 +1079,86 @@ export default function SellPage() {
         </Offcanvas.Header>
         <Offcanvas.Body>{cartPanel}</Offcanvas.Body>
       </Offcanvas>
+
+      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down">
+        {choosing && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              confirmChoice();
+            }}
+          >
+            <Modal.Header closeButton>
+              <Modal.Title as="h2" className="h5">{choosing.product.name}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {(choosing.product.optionGroups ?? []).map((group) => {
+                const single = group.maxSelections === 1;
+                const pickedInGroup = group.options.filter((option) => choosing.optionIds.includes(option.id)).length;
+                return (
+                  <fieldset key={group.id} className="mb-3">
+                    <legend className="fs-6 fw-semibold mb-1">
+                      {group.name}{' '}
+                      <span className="small text-muted fw-normal">
+                        {group.minSelections > 0
+                          ? single ? '· obligatorio' : `· elige ${group.minSelections} a ${group.maxSelections}`
+                          : single ? '· opcional' : `· hasta ${group.maxSelections}`}
+                      </span>
+                    </legend>
+                    <div className="sell-option-list">
+                      {group.options.map((option) => {
+                        const checked = choosing.optionIds.includes(option.id);
+                        const full = !single && !checked && pickedInGroup >= group.maxSelections;
+                        return (
+                          <label key={option.id} className={`sell-option ${checked ? 'active' : ''} ${!option.isAvailable || full ? 'disabled' : ''}`}>
+                            <input
+                              type={single ? 'radio' : 'checkbox'}
+                              className="form-check-input me-2"
+                              name={`option-${group.id}`}
+                              checked={checked}
+                              disabled={!option.isAvailable || full}
+                              onChange={() => toggleOption(group.id, option.id)}
+                              onClick={() => {
+                                // Tapping the chosen option of an optional single choice clears it.
+                                if (single && checked && group.minSelections === 0) toggleOption(group.id, option.id);
+                              }}
+                            />
+                            <span className="flex-grow-1">{option.name}{!option.isAvailable && ' (agotado)'}</span>
+                            {option.priceDelta !== 0 && (
+                              <span className="ta-money small">{option.priceDelta > 0 ? '+' : '−'}{formatMoney(Math.abs(option.priceDelta))}</span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                );
+              })}
+              <label className="form-label" htmlFor="sell-choice-quantity">
+                {allowsFractions(choosing.product.unit) ? `Cantidad (${getUnitShortLabel(choosing.product.unit)})` : 'Cantidad'}
+              </label>
+              <input
+                id="sell-choice-quantity"
+                className={`form-control ta-money ${choosing.quantityText && chosenQuantity === null ? 'is-invalid' : ''}`}
+                style={{ maxWidth: '8rem' }}
+                inputMode={allowsFractions(choosing.product.unit) ? 'decimal' : 'numeric'}
+                value={choosing.quantityText}
+                onChange={(event) => setChoosing({ ...choosing, quantityText: event.target.value })}
+              />
+              {choiceError && <div className="text-danger small mt-2" role="status">{choiceError}</div>}
+            </Modal.Body>
+            <Modal.Footer>
+              <button type="button" className="btn btn-light" onClick={() => setChoosing(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={Boolean(choiceError) || chosenQuantity === null}>
+                Agregar · {formatMoney(lineAmount(
+                  getPriceWithOptions(choosing.product.priceAmount, choosing.product.optionGroups, choosing.optionIds),
+                  chosenQuantity ?? 0,
+                ))}
+              </button>
+            </Modal.Footer>
+          </form>
+        )}
+      </Modal>
 
       <Modal show={!!measure} onHide={() => setMeasure(null)} centered>
         {measure && (

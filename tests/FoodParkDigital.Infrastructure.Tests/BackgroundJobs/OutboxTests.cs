@@ -222,7 +222,9 @@ public class OutboxTests
             new OrderCancelledEvent(Guid.NewGuid(), TenantA, OrderStatus.Pending, "Cliente canceló"),
             new ServiceOrderPieceStatusChangedEvent(Guid.NewGuid(), Guid.NewGuid(), TenantA,
                 ServiceOrderPieceStatus.Accepted, ServiceOrderPieceStatus.InProgress),
-            new OrderRefundedEvent(Guid.NewGuid(), TenantA, Guid.NewGuid(), 25.50m, OrderPaymentMethod.Cash, "Producto dañado")
+            new OrderRefundedEvent(Guid.NewGuid(), TenantA, Guid.NewGuid(), 25.50m, OrderPaymentMethod.Cash, "Producto dañado"),
+            new TabRoundSentEvent(Guid.NewGuid(), TenantA, 2),
+            new KitchenTicketChangedEvent(Guid.NewGuid(), TenantA, 2, KitchenTicketStatus.Ready)
         };
 
         foreach (var domainEvent in events)

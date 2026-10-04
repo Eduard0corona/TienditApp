@@ -1,3 +1,4 @@
+using System.Globalization;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
@@ -16,6 +17,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     private readonly List<OrderPayment> _payments = new();
     private readonly List<OrderRefund> _refunds = new();
     private readonly List<ServiceOrderPiece> _servicePieces = new();
+    private readonly List<KitchenTicket> _kitchenTickets = new();
 
     private Order() { }
 
@@ -100,9 +102,22 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
     public IReadOnlyCollection<OrderRefund> Refunds => _refunds.AsReadOnly();
     public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
+    /// <summary>Rounds of an open tab sent to the kitchen.</summary>
+    public IReadOnlyCollection<KitchenTicket> KitchenTickets => _kitchenTickets.AsReadOnly();
 
+    /// <summary>The order is (or was) a tab: items are added in rounds and it is charged when the table leaves.</summary>
+    public bool IsTab { get; private set; }
+    public Guid? DiningTableId { get; private set; }
+    /// <summary>The table while the tab is open; cleared when it closes, so a table has one open tab at most.</summary>
+    public Guid? OpenTableId { get; private set; }
+
+    public bool IsOpenTab => IsTab && !IsClosedStatus(Status);
+    public int CurrentRound => _items.Count == 0 ? 0 : _items.Max(item => item.Round);
+
+    /// <param name="unitPrice">Price of one unit with the chosen options.</param>
     /// <param name="vatRate">IVA of the line; the general rate (16 %) when omitted.</param>
     /// <param name="fiscal">Unit and invoicing codes copied from the product; a generic piece when omitted.</param>
+    /// <param name="options">Variants and extras chosen, with the price each one added.</param>
     public void AddItem(
         Guid productId,
         string productName,
@@ -110,14 +125,100 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         decimal unitPrice,
         string? notes = null,
         VatRate? vatRate = null,
-        OrderLineFiscalData? fiscal = null)
+        OrderLineFiscalData? fiscal = null,
+        IReadOnlyList<OrderLineOption>? options = null)
     {
         if (Status != OrderStatus.Pending)
             throw new DomainException("Cannot add items to an order that is not pending.");
 
-        var item = new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General, fiscal);
-        _items.Add(item);
+        _items.Add(new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General, fiscal, options, TenantId));
         RecalculateTotals();
+    }
+
+    /// <summary>Adds a line priced and checked against the catalog (see <see cref="OrderLineRequest"/>).</summary>
+    public void AddItem(OrderLineRequest line)
+        => AddItem(line.ProductId, line.ProductName, line.Quantity, line.UnitPrice, line.Notes, line.VatRate, line.Fiscal, line.Options);
+
+    /// <summary>
+    /// Turns a new order into an open tab: its items are the first round, sent to the kitchen now. Called before
+    /// the order leaves Pending.
+    /// </summary>
+    public void OpenAsTab(Guid? diningTableId, string? tableName, DateTimeOffset sentAt, string? sentBy)
+    {
+        if (IsTab || Status != OrderStatus.Pending)
+            throw new DomainException("Solo un pedido nuevo puede abrirse como cuenta.");
+        if (OrderType != OrderType.Retail)
+            throw new DomainException("Una cuenta abierta es de consumo; los servicios no se abren como cuenta.");
+        if (_items.Count == 0)
+            throw new DomainException("La cuenta se abre con la primera ronda.");
+
+        IsTab = true;
+        DiningTableId = diningTableId;
+        OpenTableId = diningTableId;
+        if (!string.IsNullOrWhiteSpace(tableName))
+            TableNumber = tableName.Trim();
+        _kitchenTickets.Add(new KitchenTicket(TenantId, Id, 1, sentAt, sentBy));
+    }
+
+    /// <summary>Adds a round to an open tab and sends it to the kitchen.</summary>
+    public KitchenTicket AddRound(IReadOnlyList<OrderLineRequest> lines, DateTimeOffset sentAt, string? sentBy)
+    {
+        if (!IsOpenTab)
+            throw new DomainException("La cuenta ya está cerrada: abre una nueva.");
+        if (lines.Count == 0)
+            throw new DomainException("La ronda necesita al menos un producto.");
+
+        var round = CurrentRound + 1;
+        foreach (var line in lines)
+        {
+            _items.Add(new OrderItem(
+                Id, line.ProductId, line.ProductName, line.Quantity, line.UnitPrice, line.Notes, line.VatRate, line.Fiscal,
+                line.Options, TenantId, round));
+        }
+
+        var ticket = new KitchenTicket(TenantId, Id, round, sentAt, sentBy);
+        _kitchenTickets.Add(ticket);
+        RecalculateTotals();
+        UpdatedAt = sentAt;
+        AddDomainEvent(new TabRoundSentEvent(Id, TenantId, round));
+        return ticket;
+    }
+
+    /// <summary>Moves a round forward in the kitchen (preparing, ready, served).</summary>
+    public void ChangeKitchenTicketStatus(Guid ticketId, KitchenTicketStatus status, DateTimeOffset at)
+    {
+        var ticket = _kitchenTickets.FirstOrDefault(t => t.Id == ticketId)
+            ?? throw new DomainException("La ronda indicada no pertenece a esta cuenta.");
+        if (!IsOpenTab)
+            throw new DomainException("La cuenta ya está cerrada.");
+
+        ticket.MoveTo(status, at);
+        // Marks the order row as changed so two cooks moving the same round conflict instead of overwriting.
+        UpdatedAt = at;
+        AddDomainEvent(new KitchenTicketChangedEvent(Id, TenantId, ticket.Round, status));
+    }
+
+    /// <summary>Moves an open tab to another free table.</summary>
+    public void MoveToTable(Guid diningTableId, string tableName)
+    {
+        if (!IsOpenTab)
+            throw new DomainException("La cuenta ya está cerrada.");
+
+        DiningTableId = diningTableId;
+        OpenTableId = diningTableId;
+        TableNumber = tableName.Trim();
+    }
+
+    /// <summary>Closes a paid tab and frees its table. The customer is not messaged: they are leaving.</summary>
+    public void CloseTab(IOrderStateMachine stateMachine, string? performedBy)
+    {
+        if (!IsOpenTab)
+            throw new DomainException("La cuenta ya está cerrada.");
+        if (Balance > 0)
+            throw new DomainException(
+                $"La cuenta tiene un saldo de ${Balance.ToString("N2", CultureInfo.InvariantCulture)}: cóbralo antes de cerrarla.");
+
+        Transition(OrderStatus.Delivered, stateMachine, performedBy, notifyCustomer: false);
     }
 
     public void SetServiceDetail(
@@ -216,7 +317,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <returns>True when the order was closed.</returns>
     public bool CloseIfPaidCounterSale(IOrderStateMachine stateMachine, bool waitsForKitchen, string? performedBy)
     {
-        if (!CreatedByBusiness || _items.Count == 0 || Balance > 0)
+        // A tab can be paid round by round and keep ordering: it closes only when the table leaves (CloseTab).
+        if (!CreatedByBusiness || IsTab || _items.Count == 0 || Balance > 0)
             return false;
 
         OrderStatus closedStatus;
@@ -248,8 +350,18 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         stateMachine.ValidateTransition(Status, newStatus);
         var previousStatus = Status;
         Status = newStatus;
+        ReleaseTableWhenClosed();
         _statusHistory.Add(new OrderStatusHistory(Id, previousStatus, newStatus, performedBy));
         AddDomainEvent(new OrderStatusChangedEvent(Id, TenantId, previousStatus, newStatus, notifyCustomer));
+    }
+
+    private static bool IsClosedStatus(OrderStatus status)
+        => status is OrderStatus.Delivered or OrderStatus.Cancelled or OrderStatus.Completed;
+
+    private void ReleaseTableWhenClosed()
+    {
+        if (IsClosedStatus(Status))
+            OpenTableId = null;
     }
 
     public void Cancel(IOrderStateMachine stateMachine, string? performedBy, string? reason = null)
@@ -265,6 +377,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         var previousStatus = Status;
         Status = OrderStatus.Cancelled;
+        ReleaseTableWhenClosed();
         CancellationReason = reason;
         _statusHistory.Add(new OrderStatusHistory(Id, previousStatus, OrderStatus.Cancelled, performedBy));
 

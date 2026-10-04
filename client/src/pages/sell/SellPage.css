@@ -273,3 +273,34 @@
   border-top-left-radius: var(--ta-radius-lg);
   border-top-right-radius: var(--ta-radius-lg);
 }
+
+/* Variants and extras chosen for a line, and the options dialog. */
+.sell-line-options {
+  color: var(--ct-primary-text-emphasis);
+}
+
+.sell-option-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sell-option {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: var(--ta-touch);
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius-sm);
+  cursor: pointer;
+}
+
+.sell-option.active {
+  border-color: var(--ct-primary);
+  background: var(--ct-primary-bg-subtle);
+}
+
+.sell-option.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

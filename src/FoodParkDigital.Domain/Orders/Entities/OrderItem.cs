@@ -9,9 +9,14 @@ namespace FoodParkDigital.Domain.Orders.Entities;
 
 public class OrderItem : BaseEntity
 {
+    private readonly List<OrderItemOption> _options = new();
+
     private OrderItem() { }
 
+    /// <param name="unitPrice">Price of one unit with the chosen options.</param>
     /// <param name="fiscal">Unit and invoicing codes of the product; a generic piece when omitted.</param>
+    /// <param name="options">Variants and extras chosen for the line, with the price each one added.</param>
+    /// <param name="round">Round of an open tab the line belongs to (1 for any other sale).</param>
     public OrderItem(
         Guid orderId,
         Guid productId,
@@ -20,7 +25,10 @@ public class OrderItem : BaseEntity
         decimal unitPrice,
         string? notes,
         VatRate vatRate,
-        OrderLineFiscalData? fiscal = null)
+        OrderLineFiscalData? fiscal = null,
+        IReadOnlyList<OrderLineOption>? options = null,
+        Guid tenantId = default,
+        int round = 1)
     {
         fiscal ??= OrderLineFiscalData.Default;
         if (quantity <= 0)
@@ -46,6 +54,9 @@ public class OrderItem : BaseEntity
         SatProductCode = fiscal.SatProductCode;
         SatUnitCode = fiscal.SatUnitCode;
         TaxObject = fiscal.TaxObject;
+        Round = round >= 1 ? round : throw new ArgumentException("The round starts at 1.", nameof(round));
+        foreach (var option in options ?? [])
+            _options.Add(new OrderItemOption(tenantId, Id, option));
     }
 
     public Guid OrderId { get; private set; }
@@ -74,6 +85,17 @@ public class OrderItem : BaseEntity
     public CfdiTaxObject TaxObject { get; private set; } = CfdiTaxObject.Subject;
 
     public VatRate VatRate => new(TaxRate, IsTaxExempt);
+
+    /// <summary>Round of an open tab the line was ordered in; 1 for every other sale.</summary>
+    public int Round { get; private set; } = 1;
+
+    /// <summary>Variants and extras chosen, already included in <see cref="UnitPrice"/>.</summary>
+    public IReadOnlyCollection<OrderItemOption> Options => _options.AsReadOnly();
+
+    /// <summary>"Latte (Grande, Leche de almendra)": the name with its options, for tickets and invoices.</summary>
+    public string Describe() => _options.Count == 0
+        ? ProductName
+        : $"{ProductName} ({string.Join(", ", _options.Select(option => option.OptionName))})";
 
     internal void RegisterReturn(decimal quantity)
     {

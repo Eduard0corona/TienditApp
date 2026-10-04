@@ -744,6 +744,10 @@ export default function OrdersList() {
                       <tr key={item.id}>
                         <td>
                           {item.productName}
+                          {selectedOrder.isTab && <span className="badge bg-light text-dark ms-1">Ronda {item.round ?? 1}</span>}
+                          {item.options && item.options.length > 0 && (
+                            <div className="small text-primary-emphasis">{item.options.map((option) => option.optionName).join(', ')}</div>
+                          )}
                           {item.notes && <div className="text-muted small">Nota: {item.notes}</div>}
                         </td>
                         <td className="text-center">

@@ -418,6 +418,25 @@ export interface ProductDto {
   isLowStock: boolean;
   isTrackable: boolean;
   notifyCustomer: boolean;
+  /** Variants and extras offered with the product. */
+  optionGroups?: ProductOptionGroupDto[];
+}
+
+/** A choice offered with a product: min 1 and max 1 is a variant (size), min 0 makes extras optional. */
+export interface ProductOptionGroupDto {
+  id: string;
+  name: string;
+  minSelections: number;
+  maxSelections: number;
+  options: ProductOptionDto[];
+}
+
+export interface ProductOptionDto {
+  id: string;
+  name: string;
+  /** Added to the product price (negative for a cheaper variant). */
+  priceDelta: number;
+  isAvailable: boolean;
 }
 
 export interface CategoryDto {
@@ -1328,6 +1347,52 @@ export interface OrderItemDto {
   /** IVA rate in percent the line was sold with (0 when exempt). */
   taxRate: number;
   isTaxExempt: boolean;
+  /** Round of an open tab the line was ordered in (1 for any other sale). */
+  round?: number;
+  /** Variants and extras chosen, already included in the unit price. */
+  options?: OrderItemOptionDto[];
+}
+
+export interface OrderItemOptionDto {
+  optionId: string;
+  groupName: string;
+  optionName: string;
+  priceDelta: number;
+}
+
+/** Same numbers as Domain.Orders.Enums.KitchenTicketStatus: a round of an open tab in the kitchen. */
+export const KitchenTicketStatus = {
+  Pending: 0,
+  Preparing: 1,
+  Ready: 2,
+  Served: 3,
+} as const;
+export type KitchenTicketStatus = (typeof KitchenTicketStatus)[keyof typeof KitchenTicketStatus];
+
+export interface KitchenTicketSummaryDto {
+  id: string;
+  round: number;
+  status: KitchenTicketStatus;
+  sentAt: string;
+  sentBy?: string | null;
+  readyAt?: string | null;
+  servedAt?: string | null;
+}
+
+/** A round of an open tab on the kitchen board, with only its own lines. */
+export interface KitchenTicketDto {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  tableNumber?: string | null;
+  customerNotes?: string | null;
+  round: number;
+  status: KitchenTicketStatus;
+  sentAt: string;
+  startedAt?: string | null;
+  readyAt?: string | null;
+  items: OrderItemDto[];
 }
 
 /** IVA of the lines of one rate, as computed by the server. */
@@ -1450,6 +1515,12 @@ export interface OrderDto {
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
   refunds?: OrderRefundDto[];
+  /** The order is (or was) a tab: rounds added over time, charged when the table leaves. */
+  isTab?: boolean;
+  /** A tab still taking rounds. */
+  isOpenTab?: boolean;
+  diningTableId?: string | null;
+  kitchenTickets?: KitchenTicketSummaryDto[];
 }
 
 export interface OrderRefundDto {
@@ -1483,6 +1554,8 @@ export interface CreateOrderItemRequest {
   productId: string;
   quantity: number;
   notes?: string;
+  /** Variants and extras chosen (ids of the product's options). */
+  optionIds?: string[];
 }
 
 export const OrderChannel = {
@@ -1537,6 +1610,9 @@ export interface CreateOrderRequest {
   expectedTotal?: number;
   /** Counter (default) or WhatsApp when the order is taken from a chat. */
   channel?: OrderChannel;
+  /** Opens the order as a tab: its items are the first round sent to the kitchen. */
+  openTab?: boolean;
+  diningTableId?: string;
 }
 
 export interface CreateOrderPaymentRequest {

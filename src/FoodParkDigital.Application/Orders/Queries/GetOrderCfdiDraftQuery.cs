@@ -72,7 +72,7 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
     {
         var order = await _context.Orders
             .AsNoTracking()
-            .Include(o => o.Items)
+            .Include(o => o.Items).ThenInclude(i => i.Options)
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
@@ -112,7 +112,8 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
                     OrderItemId = item.Id,
                     ProductCode = item.SatProductCode,
                     UnitCode = item.SatUnitCode,
-                    Description = item.ProductName,
+                    // The chosen variants and extras are part of what was sold.
+                    Description = item.Describe(),
                     Quantity = concept.Quantity,
                     UnitValue = concept.UnitValue,
                     Amount = concept.Amount,

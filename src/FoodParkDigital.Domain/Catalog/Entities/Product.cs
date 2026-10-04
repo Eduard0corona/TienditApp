@@ -3,11 +3,16 @@ using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Orders;
 
 namespace FoodParkDigital.Domain.Catalog.Entities;
 
 public class Product : AuditableEntity, ITenantScoped
 {
+    public const int MaxOptionGroups = 10;
+
+    private readonly List<ProductOptionGroup> _optionGroups = new();
+
     private Product() { }
 
     public Product(
@@ -191,6 +196,95 @@ public class Product : AuditableEntity, ITenantScoped
         SatProductCode = SatCatalog.NormalizeProductCode(satProductCode);
         SatUnitCode = SatCatalog.NormalizeUnitCode(satUnitCode);
         TaxObject = taxObject;
+    }
+
+    /// <summary>Variants and extras offered with the product, in the order they are shown.</summary>
+    public IReadOnlyCollection<ProductOptionGroup> OptionGroups => _optionGroups.AsReadOnly();
+
+    /// <summary>
+    /// Replaces the option groups. Groups and options sent with their id keep it, so carts and lines that refer
+    /// to them stay valid; the ones left out are removed (sold lines keep their own copy).
+    /// </summary>
+    public void SetOptionGroups(IReadOnlyList<ProductOptionGroupDefinition> definitions)
+    {
+        if (definitions.Count > MaxOptionGroups)
+            throw new DomainException($"Un producto admite como máximo {MaxOptionGroups} grupos de opciones.");
+
+        var duplicated = definitions
+            .GroupBy(group => group.Name?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicated is not null)
+            throw new DomainException($"El grupo de opciones '{duplicated.Key}' está repetido.");
+
+        var kept = new List<ProductOptionGroup>();
+        for (var index = 0; index < definitions.Count; index++)
+        {
+            var definition = definitions[index];
+            var group = definition.Id is { } id ? _optionGroups.FirstOrDefault(existing => existing.Id == id) : null;
+            if (group is null)
+            {
+                group = new ProductOptionGroup(TenantId, Id);
+                _optionGroups.Add(group);
+            }
+
+            group.Apply(definition, index);
+            kept.Add(group);
+        }
+
+        _optionGroups.RemoveAll(group => !kept.Contains(group));
+    }
+
+    /// <summary>
+    /// The options chosen for a sale, checked against the catalog: they belong to the product, are available,
+    /// each one is chosen once and every group gets between its minimum and maximum.
+    /// </summary>
+    public IReadOnlyList<OrderLineOption> ResolveOptions(IReadOnlyCollection<Guid> optionIds)
+    {
+        if (optionIds.Count != optionIds.Distinct().Count())
+            throw new DomainException($"Una opción de '{Name}' está repetida.");
+
+        var chosen = new List<OrderLineOption>();
+        var remaining = optionIds.ToHashSet();
+        foreach (var group in _optionGroups.OrderBy(group => group.SortOrder))
+        {
+            var picked = group.Options
+                .Where(option => remaining.Contains(option.Id))
+                .OrderBy(option => option.SortOrder)
+                .ToList();
+            remaining.ExceptWith(picked.Select(option => option.Id));
+
+            var unavailable = picked.FirstOrDefault(option => !option.IsAvailable);
+            if (unavailable is not null)
+                throw new DomainException($"'{unavailable.Name}' de '{Name}' no está disponible.");
+            if (picked.Count < group.MinSelections)
+            {
+                throw new DomainException(group.MinSelections == 1
+                    ? $"Elige una opción de '{group.Name}' para '{Name}'."
+                    : $"Elige al menos {group.MinSelections} opciones de '{group.Name}' para '{Name}'.");
+            }
+            if (picked.Count > group.MaxSelections)
+            {
+                throw new DomainException(group.MaxSelections == 1
+                    ? $"Elige solo una opción de '{group.Name}' para '{Name}'."
+                    : $"Elige como máximo {group.MaxSelections} opciones de '{group.Name}' para '{Name}'.");
+            }
+
+            chosen.AddRange(picked.Select(option => new OrderLineOption(option.Id, group.Name, option.Name, option.PriceDelta)));
+        }
+
+        if (remaining.Count > 0)
+            throw new DomainException($"Una de las opciones elegidas ya no existe en '{Name}'. Actualiza el catálogo e intenta de nuevo.");
+
+        return chosen;
+    }
+
+    /// <summary>Price of one unit with the chosen options; never below zero.</summary>
+    public decimal PriceWith(IReadOnlyCollection<OrderLineOption> options)
+    {
+        var price = PriceAmount + options.Sum(option => option.PriceDelta);
+        return price >= 0
+            ? price
+            : throw new DomainException($"Las opciones elegidas dejan '{Name}' con precio negativo.");
     }
 
     public string GetSatProductCode() => SatProductCode ?? SatCatalog.GenericProductCode;

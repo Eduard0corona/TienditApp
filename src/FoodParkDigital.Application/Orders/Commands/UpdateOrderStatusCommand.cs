@@ -61,6 +61,10 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
             if (order.Status == request.NewStatus)
                 return Result.Success();
 
+            // An open tab is closed when it is paid (CloseTabCommand); by hand it could only be cancelled.
+            if (order.IsOpenTab && request.NewStatus != OrderStatus.Cancelled)
+                return Result.Failure("Es una cuenta abierta: ciérrala desde Mesas cuando esté pagada.");
+
             var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
 
             if (!stateMachine.GetAllowedTransitions(order.Status).Contains(request.NewStatus))

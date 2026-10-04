@@ -47,12 +47,8 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
             .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
-        RuleForEach(x => x.Items).ChildRules(item =>
-        {
-            item.RuleFor(i => i.ProductId).NotEmpty();
-            item.RuleFor(i => i.Quantity).GreaterThan(0).LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
-                .PrecisionScale(18, 3, ignoreTrailingZeros: true);
-        });
+        RuleFor(x => x.TableNumber).MaximumLength(50);
+        RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
@@ -143,18 +139,16 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             tableNumber: request.TableNumber,
             pricesIncludeTax: salesSettings.PricesIncludeTax);
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var quantitiesByProduct = new Dictionary<Guid, decimal>();
+        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate);
+        // The route names the tenant (validated by the controller), so products are narrowed to it explicitly.
+        var products = await OrderCatalog.LoadProductsAsync(
+            _context.Products.IgnoreQueryFilters().Where(p => p.TenantId == request.TenantId),
+            request.Items,
+            cancellationToken);
 
         foreach (var itemDto in request.Items)
         {
-            var product = await _context.Products
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(p => p.Id == itemDto.ProductId && p.TenantId == request.TenantId, cancellationToken)
-                ?? throw new EntityNotFoundException("Product", itemDto.ProductId);
-
-            if (!product.IsAvailableAt(localTimeOfDay))
-                throw new DomainException($"El producto '{product.Name}' no está disponible en este horario.");
-
+            var product = products[itemDto.ProductId];
             if (!request.CreatedByBusiness && !OrderProductClassifier.MatchesOrderType(request.OrderType, product.Unit))
             {
                 var expectedLabel = request.OrderType == OrderType.Service ? "servicio" : "producto";
@@ -162,26 +156,15 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
                     $"El item '{product.Name}' no corresponde al tipo de orden '{expectedLabel}'.");
             }
 
-            var quantityError = OrderLimits.TrackProductQuantity(quantitiesByProduct, product, itemDto.Quantity);
-            if (quantityError is not null)
-                return Result.Failure<OrderDto>(quantityError);
+            var built = lineBuilder.Build(product, itemDto);
+            if (built.IsFailure)
+                return Result.Failure<OrderDto>(built.Error!);
 
-            var isTrackableService = OrderProductClassifier.IsServiceUnit(product.Unit) && product.IsTrackable;
-            if (isTrackableService && decimal.Truncate(itemDto.Quantity) != itemDto.Quantity)
-                return Result.Failure<OrderDto>($"'{product.Name}' crea una pieza por unidad: la cantidad debe ser entera.");
-
-            order.AddItem(
-                product.Id,
-                product.Name,
-                itemDto.Quantity,
-                product.PriceAmount,
-                itemDto.Notes,
-                product.GetVatRate(salesSettings.DefaultTaxRate),
-                OrderLineFiscalData.From(product));
-
-            if (isTrackableService)
+            order.AddItem(built.Value.Line);
+            if (built.Value.IsTrackableService)
                 checklistCandidates.Add((product, itemDto));
         }
+        var quantitiesByProduct = lineBuilder.QuantitiesByProduct;
 
         if (request.OrderType == OrderType.Service && request.ServiceDetail is not null)
         {

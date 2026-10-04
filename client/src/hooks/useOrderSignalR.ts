@@ -21,6 +21,11 @@ export interface OrderCancelledPayload {
   reason?: string;
 }
 
+export interface KitchenTicketsChangedPayload {
+  orderId: string;
+  round: number;
+}
+
 export interface ServiceBoardPieceUpdatedPayload {
   orderId: string;
   pieceId: string;
@@ -78,6 +83,15 @@ export function useOrderSignalR() {
     return () => conn.off('ServiceBoardPieceUpdated', callback);
   }, []);
 
+  /** A round of an open tab was sent or moved in the kitchen. */
+  const onKitchenTicketsChanged = useCallback((callback: (data: KitchenTicketsChangedPayload) => void) => {
+    const conn = connectionRef.current;
+    if (!conn) return () => {};
+
+    conn.on('KitchenTicketsChanged', callback);
+    return () => conn.off('KitchenTicketsChanged', callback);
+  }, []);
+
   /** Runs each time the hub (re)connects; events sent while disconnected are not replayed. */
   const onConnected = useCallback((callback: () => void) => {
     const listeners = connectedListenersRef.current;
@@ -87,5 +101,5 @@ export function useOrderSignalR() {
     };
   }, []);
 
-  return { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated, onConnected };
+  return { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated, onKitchenTicketsChanged, onConnected };
 }

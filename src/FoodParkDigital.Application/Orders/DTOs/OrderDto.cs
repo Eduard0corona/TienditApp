@@ -45,6 +45,49 @@ public class OrderDto
     public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
     public List<OrderPaymentDto> Payments { get; set; } = new();
     public List<OrderRefundDto> Refunds { get; set; } = new();
+    /// <summary>The order is (or was) a tab: rounds added over time, charged when the table leaves.</summary>
+    public bool IsTab { get; set; }
+    /// <summary>A tab still taking rounds.</summary>
+    public bool IsOpenTab { get; set; }
+    public Guid? DiningTableId { get; set; }
+    /// <summary>Rounds of the tab sent to the kitchen.</summary>
+    public List<KitchenTicketSummaryDto> KitchenTickets { get; set; } = new();
+}
+
+public class KitchenTicketSummaryDto
+{
+    public Guid Id { get; set; }
+    public int Round { get; set; }
+    public KitchenTicketStatus Status { get; set; }
+    public DateTimeOffset SentAt { get; set; }
+    public string? SentBy { get; set; }
+    public DateTimeOffset? ReadyAt { get; set; }
+    public DateTimeOffset? ServedAt { get; set; }
+}
+
+/// <summary>A round of an open tab on the kitchen board, with only its own lines.</summary>
+public class KitchenTicketDto
+{
+    public Guid Id { get; set; }
+    public Guid OrderId { get; set; }
+    public string OrderNumber { get; set; } = null!;
+    public string CustomerName { get; set; } = null!;
+    public string? TableNumber { get; set; }
+    public string? CustomerNotes { get; set; }
+    public int Round { get; set; }
+    public KitchenTicketStatus Status { get; set; }
+    public DateTimeOffset SentAt { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? ReadyAt { get; set; }
+    public List<OrderItemDto> Items { get; set; } = new();
+}
+
+public class OrderItemOptionDto
+{
+    public Guid OptionId { get; set; }
+    public string GroupName { get; set; } = null!;
+    public string OptionName { get; set; } = null!;
+    public decimal PriceDelta { get; set; }
 }
 
 public class OrderRefundDto
@@ -84,6 +127,10 @@ public class OrderItemDto
     public string SatProductCode { get; set; } = null!;
     public string SatUnitCode { get; set; } = null!;
     public CfdiTaxObject TaxObject { get; set; }
+    /// <summary>Round of an open tab the line was ordered in (1 for any other sale).</summary>
+    public int Round { get; set; }
+    /// <summary>Variants and extras chosen, already included in the unit price.</summary>
+    public List<OrderItemOptionDto> Options { get; set; } = new();
 }
 
 public class OrderTaxLineDto

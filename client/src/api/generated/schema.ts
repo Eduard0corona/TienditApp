@@ -3192,6 +3192,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kitchen/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["KitchenTicketDto"][];
+                        "application/json": components["schemas"]["KitchenTicketDto"][];
+                        "text/json": components["schemas"]["KitchenTicketDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/tickets/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/tickets/{id}/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kitchen/tickets/{id}/served": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kitchen/orders/{id}/start": {
         parameters: {
             query?: never;
@@ -3976,6 +4118,170 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/rounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AddTabRoundRequest"];
+                    "text/json": components["schemas"]["AddTabRoundRequest"];
+                    "application/*+json": components["schemas"]["AddTabRoundRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderDto"];
+                        "application/json": components["schemas"]["OrderDto"];
+                        "text/json": components["schemas"]["OrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/close-tab": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderDto"];
+                        "application/json": components["schemas"]["OrderDto"];
+                        "text/json": components["schemas"]["OrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/table": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MoveTabRequest"];
+                    "text/json": components["schemas"]["MoveTabRequest"];
+                    "application/*+json": components["schemas"]["MoveTabRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderDto"];
+                        "application/json": components["schemas"]["OrderDto"];
+                        "text/json": components["schemas"]["OrderDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/kitchen-tickets/{ticketId}/served": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    ticketId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/cfdi-draft": {
         parameters: {
             query?: never;
@@ -4572,6 +4878,51 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/products/{id}/option-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetProductOptionGroupsRequest"];
+                    "text/json": components["schemas"]["SetProductOptionGroupsRequest"];
+                    "application/*+json": components["schemas"]["SetProductOptionGroupsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProductDto"];
+                        "application/json": components["schemas"]["ProductDto"];
+                        "text/json": components["schemas"]["ProductDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products/{id}/image": {
         parameters: {
             query?: never;
@@ -5104,6 +5455,117 @@ export interface paths {
                 };
             };
         };
+        trace?: never;
+    };
+    "/api/v1/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    includeInactive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DiningRoomDto"];
+                        "application/json": components["schemas"]["DiningRoomDto"];
+                        "text/json": components["schemas"]["DiningRoomDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateDiningTableCommand"];
+                    "text/json": components["schemas"]["CreateDiningTableCommand"];
+                    "application/*+json": components["schemas"]["CreateDiningTableCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DiningTableDto"];
+                        "application/json": components["schemas"]["DiningTableDto"];
+                        "text/json": components["schemas"]["DiningTableDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tables/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateDiningTableCommand"];
+                    "text/json": components["schemas"]["UpdateDiningTableCommand"];
+                    "application/*+json": components["schemas"]["UpdateDiningTableCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DiningTableDto"];
+                        "application/json": components["schemas"]["DiningTableDto"];
+                        "text/json": components["schemas"]["DiningTableDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tenants/{tenantId}/orders": {
@@ -5779,6 +6241,9 @@ export interface components {
             reference?: string | null;
             notes?: string | null;
         };
+        AddTabRoundRequest: {
+            items: components["schemas"]["CreateOrderItemDto"][];
+        };
         AiAgentDto: {
             /** Format: uuid */
             id: string;
@@ -6274,6 +6739,14 @@ export interface components {
             phone?: string | null;
             email?: string | null;
         };
+        CreateDiningTableCommand: {
+            name: string;
+            area?: string | null;
+            /** Format: int32 */
+            seats?: number | null;
+            /** Format: int32 */
+            sortOrder: number;
+        };
         CreateEmployeeCommand: {
             email: string;
             password: string;
@@ -6346,6 +6819,9 @@ export interface components {
             /** Format: double */
             expectedTotal?: number | null;
             channel: components["schemas"]["OrderChannel"];
+            openTab: boolean;
+            /** Format: uuid */
+            diningTableId?: string | null;
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -6353,6 +6829,7 @@ export interface components {
             /** Format: double */
             quantity: number;
             notes?: string | null;
+            optionIds: string[];
         };
         CreateOrderPaymentDto: {
             /** Format: double */
@@ -6639,6 +7116,22 @@ export interface components {
             };
             topSellingItems: components["schemas"]["TopSellingItemDto"][];
         };
+        DiningRoomDto: {
+            tables: components["schemas"]["DiningTableDto"][];
+            tabsWithoutTable: components["schemas"]["OpenTabSummaryDto"][];
+        };
+        DiningTableDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            area?: string | null;
+            /** Format: int32 */
+            seats?: number | null;
+            /** Format: int32 */
+            sortOrder: number;
+            isActive: boolean;
+            openTab: components["schemas"]["OpenTabSummaryDto"];
+        };
         Disable2FARequest: {
             code: string;
             useRecoveryCode: boolean;
@@ -6918,6 +7411,45 @@ export interface components {
             createdAt: string;
             items: components["schemas"]["OrderItemDto"][];
         };
+        KitchenTicketDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            customerName: string;
+            tableNumber?: string | null;
+            customerNotes?: string | null;
+            /** Format: int32 */
+            round: number;
+            status: components["schemas"]["KitchenTicketStatus"];
+            /** Format: date-time */
+            sentAt: string;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            readyAt?: string | null;
+            items: components["schemas"]["OrderItemDto"][];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        KitchenTicketStatus: 0 | 1 | 2 | 3;
+        KitchenTicketSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            round: number;
+            status: components["schemas"]["KitchenTicketStatus"];
+            /** Format: date-time */
+            sentAt: string;
+            sentBy?: string | null;
+            /** Format: date-time */
+            readyAt?: string | null;
+            /** Format: date-time */
+            servedAt?: string | null;
+        };
         Login2FACommand: {
             twoFactorChallengeToken: string;
             code: string;
@@ -6992,6 +7524,10 @@ export interface components {
             campaignPlaceholders: string[];
             reminderPlaceholders: string[];
         };
+        MoveTabRequest: {
+            /** Format: uuid */
+            diningTableId: string;
+        };
         MyAccessDto: {
             userId?: string | null;
             role?: string | null;
@@ -7019,6 +7555,25 @@ export interface components {
             notes?: string | null;
             /** Format: uuid */
             inventoryLocationId?: string | null;
+        };
+        OpenTabSummaryDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            customerName: string;
+            tableNumber?: string | null;
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            balance: number;
+            /** Format: date-time */
+            openedAt: string;
+            /** Format: int32 */
+            rounds: number;
+            /** Format: int32 */
+            roundsInKitchen: number;
+            /** Format: int32 */
+            roundsReady: number;
         };
         OperationalReportDto: {
             /** Format: date-time */
@@ -7105,6 +7660,11 @@ export interface components {
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
+            isTab: boolean;
+            isOpenTab: boolean;
+            /** Format: uuid */
+            diningTableId?: string | null;
+            kitchenTickets: components["schemas"]["KitchenTicketSummaryDto"][];
         };
         OrderDtoPaginatedList: {
             items: components["schemas"]["OrderDto"][];
@@ -7139,6 +7699,17 @@ export interface components {
             satProductCode: string;
             satUnitCode: string;
             taxObject: components["schemas"]["CfdiTaxObject"];
+            /** Format: int32 */
+            round: number;
+            options: components["schemas"]["OrderItemOptionDto"][];
+        };
+        OrderItemOptionDto: {
+            /** Format: uuid */
+            optionId: string;
+            groupName: string;
+            optionName: string;
+            /** Format: double */
+            priceDelta: number;
         };
         OrderPaymentDto: {
             /** Format: uuid */
@@ -7326,6 +7897,7 @@ export interface components {
             isLowStock: boolean;
             isTrackable: boolean;
             notifyCustomer: boolean;
+            optionGroups: components["schemas"]["ProductOptionGroupDto"][];
         };
         ProductDtoPaginatedList: {
             items: components["schemas"]["ProductDto"][];
@@ -7344,6 +7916,42 @@ export interface components {
             medium: string;
             small: string;
             thumbnail: string;
+        };
+        ProductOptionDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            priceDelta: number;
+            isAvailable: boolean;
+        };
+        ProductOptionGroupDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: int32 */
+            minSelections: number;
+            /** Format: int32 */
+            maxSelections: number;
+            options: components["schemas"]["ProductOptionDto"][];
+        };
+        ProductOptionGroupInput: {
+            /** Format: uuid */
+            id?: string | null;
+            name: string;
+            /** Format: int32 */
+            minSelections: number;
+            /** Format: int32 */
+            maxSelections: number;
+            options: components["schemas"]["ProductOptionInput"][];
+        };
+        ProductOptionInput: {
+            /** Format: uuid */
+            id?: string | null;
+            name: string;
+            /** Format: double */
+            priceDelta: number;
+            isAvailable: boolean;
         };
         ProductRecipeDto: {
             /** Format: uuid */
@@ -7656,6 +8264,9 @@ export interface components {
             phone: string;
             optedOut: boolean;
         };
+        SetProductOptionGroupsRequest: {
+            groups: components["schemas"]["ProductOptionGroupInput"][];
+        };
         StarterCatalogDto: {
             id: string;
             name: string;
@@ -7916,6 +8527,17 @@ export interface components {
             name: string;
             phone?: string | null;
             email?: string | null;
+        };
+        UpdateDiningTableCommand: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            area?: string | null;
+            /** Format: int32 */
+            seats?: number | null;
+            /** Format: int32 */
+            sortOrder: number;
+            isActive: boolean;
         };
         UpdateEmployeeCommand: {
             /** Format: uuid */

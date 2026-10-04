@@ -2,6 +2,7 @@ import type { OrderDto } from '../types';
 import { getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
 import { getVatLabel } from './orderTotals';
+import { describeItem } from './productOptions';
 import { allowsFractions, formatQuantity } from './units';
 
 export interface TicketExtras {
@@ -34,7 +35,7 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
     '',
     ...order.items.map((item) => {
       const note = item.notes ? `\n   _${item.notes}_` : '';
-      return `${formatTicketQuantity(item)} ${item.productName}  ${formatMoney(item.totalPrice)}${note}`;
+      return `${formatTicketQuantity(item)} ${describeItem(item)}  ${formatMoney(item.totalPrice)}${note}`;
     }),
     '',
   ];

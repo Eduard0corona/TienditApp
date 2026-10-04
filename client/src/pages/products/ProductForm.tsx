@@ -14,6 +14,9 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
 import { getDefaultSatUnitCode } from '../../utils/units';
+import ProductOptionsEditor from '../../components/catalog/ProductOptionsEditor';
+import type { ProductOptionGroupInput } from '../../api/productsApi';
+import { getOptionGroupsError, toOptionGroupInputs } from '../../utils/productOptions';
 
 type ProductFormValues = CreateProductRequest & { vatOption: VatOption };
 
@@ -46,6 +49,9 @@ export default function ProductForm() {
 
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [product, setProduct] = useState<ProductDto | null>(null);
+  const [optionGroups, setOptionGroups] = useState<ProductOptionGroupInput[]>([]);
+  // Saved only when edited, so a plain product update never rewrites them.
+  const [optionsTouched, setOptionsTouched] = useState(false);
   const [loading, setLoading] = useState(isEditing);
   const [error, setError] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -117,6 +123,7 @@ export default function ProductForm() {
       if (id) {
         const { data: prod } = await productsApi.getById(id);
         setProduct(prod);
+        setOptionGroups(toOptionGroupInputs(prod.optionGroups));
         if (prod.images?.medium) {
           setImagePreview(prod.images.medium);
         }
@@ -141,6 +148,11 @@ export default function ProductForm() {
 
   const onSubmit = async ({ vatOption, ...data }: ProductFormValues) => {
     setError('');
+    const optionsError = optionsTouched ? getOptionGroupsError(optionGroups) : null;
+    if (optionsError) {
+      setError(optionsError);
+      return;
+    }
 
     // Clean optional numeric fields
     const payload: CreateProductRequest = {
@@ -171,6 +183,14 @@ export default function ProductForm() {
       } else {
         const { data: created } = await productsApi.create(payload, 'Product');
         productId = created.id;
+      }
+
+      if (optionsTouched && productId) {
+        await productsApi.setOptionGroups(productId, optionGroups.map((group) => ({
+          ...group,
+          name: group.name.trim(),
+          options: group.options.map((option) => ({ ...option, name: option.name.trim() })),
+        })));
       }
 
       // Upload image if selected
@@ -362,6 +382,24 @@ export default function ProductForm() {
                   taxObject={register('taxObject')}
                   defaultUnitCode={getDefaultSatUnitCode(selectedUnit)}
                   errors={{ productCode: errors.satProductCode?.message, unitCode: errors.satUnitCode?.message }}
+                />
+              </div>
+            </div>
+
+            {/* Variants and extras */}
+            <div className="card">
+              <div className="card-body">
+                <h5 className="header-title mb-1">Opciones y extras</h5>
+                <p className="text-muted small mb-3">
+                  Tamaños, tipos de leche, términos o ingredientes extra. En Vender se eligen al tocar el producto y
+                  su precio se suma al del producto.
+                </p>
+                <ProductOptionsEditor
+                  groups={optionGroups}
+                  onChange={(groups) => {
+                    setOptionGroups(groups);
+                    setOptionsTouched(true);
+                  }}
                 />
               </div>
             </div>

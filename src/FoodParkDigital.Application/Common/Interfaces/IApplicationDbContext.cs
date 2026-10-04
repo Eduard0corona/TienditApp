@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -58,6 +59,11 @@ public interface IApplicationDbContext
     DbSet<MessageCampaign> MessageCampaigns { get; }
     DbSet<OutgoingMessage> OutgoingMessages { get; }
     DbSet<MessagingOptOut> MessagingOptOuts { get; }
+    DbSet<ProductOptionGroup> ProductOptionGroups { get; }
+    DbSet<ProductOption> ProductOptions { get; }
+    DbSet<OrderItemOption> OrderItemOptions { get; }
+    DbSet<DiningTable> DiningTables { get; }
+    DbSet<KitchenTicket> KitchenTickets { get; }
     DatabaseFacade Database { get; }
     ChangeTracker ChangeTracker { get; }
 

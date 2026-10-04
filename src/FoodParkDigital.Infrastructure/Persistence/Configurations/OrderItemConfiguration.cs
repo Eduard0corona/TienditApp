@@ -43,6 +43,13 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
             .IsRequired();
         builder.Ignore(i => i.ReturnableQuantity);
 
+        builder.Property(i => i.Round).HasDefaultValue(1).ValueGeneratedNever().IsRequired();
+        builder.HasMany(i => i.Options)
+            .WithOne()
+            .HasForeignKey(o => o.OrderItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(i => i.Options).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         builder.HasIndex(i => i.OrderId);
     }
 }

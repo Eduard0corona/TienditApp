@@ -119,6 +119,17 @@ public class ProductsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Replaces the variants and extras of the product.</summary>
+    [HttpPut("{id:guid}/option-groups")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<ProductDto>> SetOptionGroups(Guid id, [FromBody] SetProductOptionGroupsRequest request)
+    {
+        var result = await _mediator.Send(new SetProductOptionGroupsCommand { ProductId = id, Groups = request.Groups });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpPost("{id:guid}/image")]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     [Consumes("multipart/form-data")]
@@ -151,3 +162,8 @@ public class ProductsController : ControllerBase
 }
 
 public record ToggleAvailabilityRequest(bool IsAvailable);
+
+public class SetProductOptionGroupsRequest
+{
+    public List<ProductOptionGroupInput> Groups { get; init; } = [];
+}

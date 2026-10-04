@@ -172,7 +172,10 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
 
     public async Task<Result<ProductDto>> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
     {
+        // Options are loaded so the response carries them (the product form keeps editing with it).
         var product = await _context.Products
+            .Include(p => p.OptionGroups)
+            .ThenInclude(g => g.Options)
             .FirstOrDefaultAsync(p => p.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.Id);
 

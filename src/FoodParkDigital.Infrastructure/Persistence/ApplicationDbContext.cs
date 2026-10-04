@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -143,6 +144,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<MessageCampaign> MessageCampaigns => Set<MessageCampaign>();
     public DbSet<OutgoingMessage> OutgoingMessages => Set<OutgoingMessage>();
     public DbSet<MessagingOptOut> MessagingOptOuts => Set<MessagingOptOut>();
+    public DbSet<ProductOptionGroup> ProductOptionGroups => Set<ProductOptionGroup>();
+    public DbSet<ProductOption> ProductOptions => Set<ProductOption>();
+    public DbSet<OrderItemOption> OrderItemOptions => Set<OrderItemOption>();
+    public DbSet<DiningTable> DiningTables => Set<DiningTable>();
+    public DbSet<KitchenTicket> KitchenTickets => Set<KitchenTicket>();
 
     // Background queues: infrastructure only, read across tenants by the workers (not on IApplicationDbContext).
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

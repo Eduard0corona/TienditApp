@@ -230,6 +230,7 @@ public class TenantResolutionMiddleware
         || path.StartsWith("/api/v1/employees", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/tables", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
@@ -246,6 +247,9 @@ public class TenantResolutionMiddleware
 
         if (path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Kitchen, CapabilityMatchMode.All);
+
+        if (path.StartsWith("/api/v1/tables", StringComparison.Ordinal))
+            return new CapabilityRequirement(TenantCapability.Food, CapabilityMatchMode.All);
 
         if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal))
             return new CapabilityRequirement(TenantCapability.Service, CapabilityMatchMode.All);
@@ -312,6 +316,10 @@ public class TenantResolutionMiddleware
 
         if (path.StartsWith("/api/v1/marketing", StringComparison.Ordinal))
             return [TenantPermission.ManageWhatsApp];
+
+        // The dining room is read by whoever takes orders; tables are configured with the catalog.
+        if (path.StartsWith("/api/v1/tables", StringComparison.Ordinal))
+            return isReadRequest ? [TenantPermission.ManageOrders, TenantPermission.ManageCatalog] : [TenantPermission.ManageCatalog];
 
         // Recording a customer's opt-out is also part of attending them.
         if (path.StartsWith("/api/v1/messaging/opt-outs", StringComparison.Ordinal))

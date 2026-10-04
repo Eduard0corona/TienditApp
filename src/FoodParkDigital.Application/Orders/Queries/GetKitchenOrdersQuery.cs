@@ -38,10 +38,12 @@ public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuer
 
         var orders = await _context.Orders
             .AsNoTracking()
-            .Include(o => o.Items)
+            .Include(o => o.Items).ThenInclude(i => i.Options)
             // Only food orders are tickets: a food business can also take service orders (repairs,
             // catering quotes), which follow their own board and must not show up as kitchen tickets.
             .Where(o => o.BusinessType == BusinessType.Food && o.OrderType == OrderType.Retail)
+            // Open tabs reach the kitchen round by round (GetKitchenTicketsQuery).
+            .Where(o => !o.IsTab)
             // Every Food state before Ready. Orders created from the POS start as Confirmed, so the
             // board must include it (it previously only listed Pending and InPreparation).
             .Where(o => o.Status == OrderStatus.Pending

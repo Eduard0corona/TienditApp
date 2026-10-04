@@ -98,8 +98,34 @@ stateDiagram-v2
 - Reembolsar no cambia el estado: registra el reembolso, saca el efectivo de la caja y, si se pide, regresa insumos. "Anular venta" reembolsa lo que queda de cada pago y después cancela si la máquina lo permite; una orden ya entregada o completada queda en su estado, reembolsada por completo.
 - La auditoría y los avisos de WhatsApp de cada evento se procesan por el outbox, después del commit y con reintentos; SignalR se notifica en proceso (best-effort). Las notificaciones de citas se esperan dentro de la solicitud, son best-effort y muestran la hora del tenant; los recordatorios de citas salen por la cola de mensajería.
 
+## Cuentas abiertas por mesa (Fase 3)
+
+Un negocio con el módulo Comida puede abrir una cuenta (`Order.IsTab`) para una mesa (`DiningTable`) o a nombre de alguien (barra, "Juan"). La cuenta es una sola orden: se cobra, factura y reembolsa como cualquier otra, pero recibe productos en rondas.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Abierta: primera ronda (Vender, Enviar a cocina)
+    Abierta --> Abierta: otra ronda / cobro parcial / cambio de mesa
+    Abierta --> Cerrada: Cerrar cuenta (saldo 0) = Delivered
+    Abierta --> Cancelada: cancelar o anular
+```
+
+- Se abre desde Mesas (tocar una mesa libre) o "Cuenta sin mesa"; Vender cambia el cobro por "Enviar a cocina". Cada ronda (`OrderItem.Round`) crea una comanda (`KitchenTicket`) que la cocina avanza sola: Nueva, Preparando, Lista y Servida. El mesero marca "Servida" desde la cuenta.
+- Una mesa tiene a lo más una cuenta abierta: `Orders.OpenTableId` vale la mesa mientras la cuenta está abierta y se limpia al cerrarla o cancelarla, con índice único filtrado (`IX_Orders_TenantId_OpenTableId_Open`) además de la validación del caso de uso.
+- La cuenta queda en `Confirmed` mientras está abierta. No aparece en el tablero de pedidos (va por comandas), no admite cambios manuales de estado (solo cancelar) y el cierre automático de ventas pagadas no la cierra: se puede pagar por partes y seguir pidiendo. "Cerrar cuenta" exige saldo cero, pasa a `Delivered` con la máquina de estados y libera la mesa.
+- El inventario de una cuenta se consume una sola vez, al cerrarla, con todas sus rondas (`OrderInventoryService` omite cuentas abiertas). Así ninguna ronda queda fuera del movimiento de consumo de la orden.
+- Las rondas nuevas y los cambios de comanda emiten `TabRoundSentEvent` y `KitchenTicketChangedEvent`; Cocina y Mesas se actualizan con `KitchenTicketsChanged` de `OrderHub` y sondean como respaldo.
+- Pendiente: cancelar un platillo de una ronda ya enviada (hoy se compensa con un reembolso), dividir la cuenta entre comensales y unir mesas.
+
+## Variantes y extras (Fase 3)
+
+- Un producto tiene hasta 10 grupos de opciones (`ProductOptionGroup`) con hasta 30 opciones (`ProductOption`). Mínimo 1 y máximo 1 es una variante obligatoria (tamaño); mínimo 0 hace el grupo opcional; máximo mayor a 1 permite varias (extras). Cada opción suma su precio (puede restar) y puede estar agotada.
+- `Product.ResolveOptions` valida en el servidor lo elegido: que pertenezca al producto, que esté disponible, que no se repita y que cada grupo quede entre su mínimo y su máximo; `Product.PriceWith` da el precio unitario con opciones y nunca negativo. `OrderLineBuilder` aplica estas reglas igual en ventas, rondas y pedidos en línea.
+- Cada línea guarda una copia de lo elegido (`OrderItemOption`: grupo, opción y precio). Editar el producto conserva el id de grupos y opciones que siguen existiendo; los quitados no alteran ventas pasadas.
+- Ticket, cocina, cuenta y CFDI muestran las opciones ("Latte (Grande, Almendra)"). Las recetas de inventario son del producto; las opciones aún no consumen insumos propios.
+
 ## Deuda e inconsistencias
 
 - Las máquinas permiten saltos amplios (por ejemplo Pending a Delivered/Completed). Se documentan porque existen, no como flujo operativo ideal.
 - Cancelar con `UpdateOrderStatusCommand` no registra motivo; el SPA usa el endpoint de cancelación, que sí lo pide.
-- Las cantidades de `OrderItem` son enteras aunque existen unidades Kg, Litro, Metro y Hora; vender fracciones requiere una decisión de producto y una migración.
+- Desde la Fase 3 las cantidades admiten 3 decimales en kilo, litro, metro y hora (ver [finanzas](finance-payments-and-taxes.md#cantidades-decimales-y-datos-para-cfdi-fase-3)).

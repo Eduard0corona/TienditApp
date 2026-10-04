@@ -30,6 +30,9 @@ export default function SaleTicket({ order, businessName, cashReceived, change }
               <td className="pe-1 align-top text-nowrap">{formatTicketQuantity(item)}</td>
               <td className="w-100">
                 {item.productName}
+                {item.options && item.options.length > 0 && (
+                  <div className="ta-ticket-note">{item.options.map((option) => option.optionName).join(', ')}</div>
+                )}
                 {item.notes && <div className="ta-ticket-note">{item.notes}</div>}
               </td>
               <td className="text-end align-top ta-money">{formatMoney(item.totalPrice)}</td>

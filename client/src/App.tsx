@@ -30,6 +30,7 @@ const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const OrdersList = lazy(() => import('./pages/orders/OrdersList'));
 const OrdersCart = lazy(() => import('./pages/orders/OrdersCart'));
 const SellPage = lazy(() => import('./pages/sell/SellPage'));
+const TablesPage = lazy(() => import('./pages/tables/TablesPage'));
 const SetupPage = lazy(() => import('./pages/setup/SetupPage'));
 const CustomersList = lazy(() => import('./pages/customers/CustomersList'));
 const CampaignsPage = lazy(() => import('./pages/campaigns/CampaignsPage'));
@@ -214,6 +215,14 @@ export default function App() {
               element={(
                 <AccessRoute area="sell">
                   <SellPage />
+                </AccessRoute>
+              )}
+            />
+            <Route
+              path="/tables"
+              element={(
+                <AccessRoute area="tables">
+                  <TablesPage />
                 </AccessRoute>
               )}
             />

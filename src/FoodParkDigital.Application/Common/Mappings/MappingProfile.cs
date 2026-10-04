@@ -21,6 +21,7 @@ using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.WhatsApp.Entities;
@@ -33,8 +34,17 @@ public class MappingProfile : Profile
     {
         CreateMap<Order, OrderDto>()
             .ForMember(d => d.TaxBreakdown, opt => opt.Ignore())
-            .ForMember(d => d.NetPaidAmount, opt => opt.MapFrom(s => s.PaidAmount - s.RefundedAmount));
-        CreateMap<OrderItem, OrderItemDto>();
+            .ForMember(d => d.NetPaidAmount, opt => opt.MapFrom(s => s.PaidAmount - s.RefundedAmount))
+            // Same rule as Order.IsOpenTab, written so the list query can translate it.
+            .ForMember(d => d.IsOpenTab, opt => opt.MapFrom(s => s.IsTab
+                && s.Status != OrderStatus.Delivered
+                && s.Status != OrderStatus.Cancelled
+                && s.Status != OrderStatus.Completed))
+            .ForMember(d => d.KitchenTickets, opt => opt.MapFrom(s => s.KitchenTickets.OrderBy(t => t.Round)));
+        CreateMap<OrderItem, OrderItemDto>()
+            .ForMember(d => d.Options, opt => opt.MapFrom(s => s.Options.OrderBy(o => o.GroupName).ThenBy(o => o.OptionName)));
+        CreateMap<OrderItemOption, OrderItemOptionDto>();
+        CreateMap<KitchenTicket, KitchenTicketSummaryDto>();
         CreateMap<OrderStatusHistory, OrderStatusHistoryDto>();
         CreateMap<ServiceOrderDetail, ServiceOrderDetailDto>();
         CreateMap<ServiceOrderPiece, ServiceOrderPieceDto>();
@@ -44,10 +54,14 @@ public class MappingProfile : Profile
         CreateMap<Order, KitchenOrderDto>();
 
         CreateMap<Product, ProductDto>()
+            .ForMember(d => d.OptionGroups, opt => opt.MapFrom(s => s.OptionGroups.OrderBy(g => g.SortOrder)))
             .ForMember(d => d.ImageUrl, opt => opt.MapFrom(s =>
                 string.IsNullOrEmpty(s.ImageUrl) ? null : $"{s.ImageUrl}_md.webp"))
             .ForMember(d => d.Images, opt => opt.MapFrom(s =>
                 ProductImageUrlsDto.FromBaseUrl(s.ImageUrl)));
+        CreateMap<ProductOptionGroup, ProductOptionGroupDto>()
+            .ForMember(d => d.Options, opt => opt.MapFrom(s => s.Options.OrderBy(o => o.SortOrder)));
+        CreateMap<ProductOption, ProductOptionDto>();
         CreateMap<Category, CategoryDto>();
         CreateMap<Customer, CustomerDto>();
 

@@ -50,6 +50,13 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         // Tenant
         builder.Property(p => p.TenantId).IsRequired();
 
+        // Variants and extras, owned by the product.
+        builder.HasMany(p => p.OptionGroups)
+            .WithOne()
+            .HasForeignKey(g => g.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(p => p.OptionGroups).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Computed properties ignored by EF
         builder.Ignore(p => p.IsLowStock);
         builder.Ignore(p => p.HasDiscount);

@@ -24,6 +24,8 @@ export interface Access {
   sell: boolean;
   /** KitchenController: every employee role + ManageServiceBoard + Kitchen module. */
   kitchen: boolean;
+  /** TablesController and open tabs: counter roles + ManageOrders + Food module. */
+  tables: boolean;
   serviceBoard: boolean;
   customers: boolean;
   appointments: boolean;
@@ -78,6 +80,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     orders: commerce && isEmployeeRole && can('ManageOrders'),
     sell: commerce && isCounterRole && can('ManageOrders'),
     kitchen: hasCapability(capabilities, TenantCapability.Kitchen) && isEmployeeRole && can('ManageServiceBoard'),
+    tables: hasCapability(capabilities, TenantCapability.Food) && isCounterRole && can('ManageOrders'),
     serviceBoard: hasCapability(capabilities, TenantCapability.Service) && isEmployeeRole && can('ManageServiceBoard'),
     customers: commerce && isCounterRole && can('ManageCustomers'),
     appointments: hasCapability(capabilities, TenantCapability.Appointments) && isCounterRole && can('ManageAppointments'),
