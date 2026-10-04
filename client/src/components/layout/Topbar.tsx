@@ -130,7 +130,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   return (
     <div className="navbar-custom">
       <div className="topbar container-fluid">
-        <div className="d-flex align-items-center gap-lg-2 gap-1">
+        <div className="topbar-start d-flex align-items-center gap-lg-2 gap-1">
           {/* Topbar Brand Logo */}
           <div className="logo-topbar">
             <Link to="/" className="logo-light">

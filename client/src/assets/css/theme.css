@@ -464,12 +464,33 @@ input[data-switch='primary']:checked + label {
 }
 
 /* Top bar: business switcher, search trigger and Nueva venta. */
+/* The left group shrinks (truncating the business name) so the topbar never overflows a phone. */
+.navbar-custom .topbar-start {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.navbar-custom .topbar-menu {
+  flex: 0 0 auto;
+}
+
+.topbar-business {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(42vw, 260px);
+}
+
 .topbar-business-button {
   display: inline-flex;
   align-items: center;
-  max-width: min(42vw, 260px);
+  max-width: 100%;
+  min-width: 0;
   border-radius: 999px;
   font-weight: 600;
+}
+
+.topbar-business-button .text-truncate {
+  min-width: 0;
 }
 
 .topbar-business-name {
