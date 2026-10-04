@@ -63,7 +63,7 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
             _tenantService.TenantId,
             cancellationToken);
         if ((capabilities & TenantCapability.Appointments) != TenantCapability.Appointments)
-            return Result.Failure<AppointmentDto>("El tenant no tiene habilitado el módulo de citas.");
+            return Result.Failure<AppointmentDto>("El negocio no tiene habilitado el módulo de citas.");
 
         if (!string.IsNullOrWhiteSpace(request.StaffName))
         {

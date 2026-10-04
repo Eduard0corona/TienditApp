@@ -26,7 +26,7 @@ public static class CategoryTemplateCatalog
         {
             Id = "food",
             Name = "Alimentos",
-            Description = "Categorias comunes para restaurantes, cafeterias y dark kitchens.",
+            Description = "Categorías comunes para restaurantes, cafeterías y dark kitchens.",
             BusinessType = BusinessType.Food,
             Categories =
             [
@@ -43,7 +43,7 @@ public static class CategoryTemplateCatalog
         {
             Id = "retail",
             Name = "Retail",
-            Description = "Categorias base para tienda fisica o ecommerce con inventario.",
+            Description = "Categorías base para tienda física o ecommerce con inventario.",
             BusinessType = BusinessType.Retail,
             Categories =
             [
@@ -59,7 +59,7 @@ public static class CategoryTemplateCatalog
         {
             Id = "services",
             Name = "Servicios",
-            Description = "Categorias generales para negocios orientados a servicios.",
+            Description = "Categorías generales para negocios orientados a servicios.",
             BusinessType = BusinessType.Service,
             Categories =
             [

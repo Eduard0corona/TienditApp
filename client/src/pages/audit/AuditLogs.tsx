@@ -7,7 +7,7 @@ import type { AuditLogDto, PaginatedList } from '../../types';
 const COLUMNS = [
   { header: 'Fecha' },
   { header: 'Entidad' },
-  { header: 'Accion' },
+  { header: 'Acción' },
   { header: 'Id entidad' },
   { header: 'Usuario' },
 ];
@@ -85,7 +85,7 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-3">
-              <label className="form-label">Accion</label>
+              <label className="form-label">Acción</label>
               <input
                 type="text"
                 className="form-control form-control-sm"

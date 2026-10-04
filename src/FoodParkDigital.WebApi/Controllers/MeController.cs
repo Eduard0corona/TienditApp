@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Identity.Queries;
+using FoodParkDigital.Application.Tenants.Commands;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,5 +29,15 @@ public class MeController : ControllerBase
     {
         var result = await _mediator.Send(new GetMyTenantsQuery());
         return Ok(result);
+    }
+
+    /// <summary>Opens another business with this account, as its owner. Switch to it to finish its setup.</summary>
+    [HttpPost("tenants")]
+    public async Task<ActionResult<MyTenantDto>> CreateBusiness([FromBody] CreateBusinessCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
     }
 }

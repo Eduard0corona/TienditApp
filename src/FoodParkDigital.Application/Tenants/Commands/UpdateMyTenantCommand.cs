@@ -54,7 +54,7 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.Rfc)
             .Matches(@"^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$")
             .When(x => !string.IsNullOrEmpty(x.Rfc))
-            .WithMessage("El RFC no tiene un formato valido.");
+            .WithMessage("El RFC no tiene un formato válido.");
         RuleFor(x => x.LegalName).MaximumLength(300);
         RuleFor(x => x.Industry).MaximumLength(200);
         RuleFor(x => x.TaxRegime).MaximumLength(200);
@@ -99,7 +99,7 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
             string.Equals(_currentUserService.TenantRole, "ADMIN", StringComparison.OrdinalIgnoreCase);
 
         if (!canManageTenant)
-            return Result.Failure<TenantProfileDto>("Solo el administrador del tenant puede modificar los datos de la empresa.");
+            return Result.Failure<TenantProfileDto>("Solo el administrador del negocio puede modificar los datos de la empresa.");
 
         var tenantId = await MyTenantResolver.ResolveAsync(
             _context,
@@ -108,13 +108,13 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
             cancellationToken);
 
         if (tenantId is null)
-            return Result.Failure<TenantProfileDto>("No se encontro el tenant del usuario.");
+            return Result.Failure<TenantProfileDto>("No se encontró el negocio del usuario.");
 
         var tenant = await _context.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
 
         if (tenant is null)
-            return Result.Failure<TenantProfileDto>("Tenant no encontrado.");
+            return Result.Failure<TenantProfileDto>("Negocio no encontrado.");
 
         tenant.Update(request.Name, request.ContactEmail, request.ContactPhone, tenant.LogoUrl);
 

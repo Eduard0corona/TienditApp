@@ -230,7 +230,7 @@ export default function ProductsList() {
                     <td className="text-center">
                       {product.availableFromTime && product.availableToTime
                         ? `${product.availableFromTime.slice(0, 5)} - ${product.availableToTime.slice(0, 5)}`
-                        : 'Todo el dia'}
+                        : 'Todo el día'}
                     </td>
                     <td className="text-center">
                       <div className="form-check form-switch d-inline-block">

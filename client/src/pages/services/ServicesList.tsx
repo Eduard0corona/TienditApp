@@ -43,11 +43,11 @@ interface ServiceFormData {
 
 const COLUMNS = [
   { header: 'Nombre' },
-  { header: 'Categoria' },
+  { header: 'Categoría' },
   { header: 'Precio', className: 'text-end' },
   { header: 'Unidad', className: 'text-center' },
   { header: 'Horario', className: 'text-center' },
-  { header: 'Duracion (min)', className: 'text-center' },
+  { header: 'Duración (min)', className: 'text-center' },
   { header: 'Rastreable', className: 'text-center' },
   { header: 'Notificar', className: 'text-center' },
   { header: 'Disponible', className: 'text-center' },
@@ -56,14 +56,14 @@ const COLUMNS = [
 
 const UNIT_LABELS: Record<number, string> = {
   50: 'Hora',
-  51: 'Sesion',
+  51: 'Sesión',
   52: 'Servicio',
 };
 
 const UNIT_OPTIONS: Array<{ value: UnitType; label: string }> = [
   { value: 52, label: 'Servicio' },
   { value: 50, label: 'Hora' },
-  { value: 51, label: 'Sesion' },
+  { value: 51, label: 'Sesión' },
 ];
 
 export default function ServicesList() {
@@ -224,7 +224,8 @@ export default function ServicesList() {
       name: form.name.trim(),
       description: form.description?.trim() || undefined,
       priceAmount: Number(form.priceAmount),
-      priceCurrency: form.priceCurrency,
+      // Every amount is charged and shown in pesos.
+      priceCurrency: 'MXN',
       sortOrder: Number(form.sortOrder || 0),
       isFeatured: false,
       unit: Number(form.unit) as UnitType,
@@ -287,7 +288,7 @@ export default function ServicesList() {
 
   return (
     <>
-      <PageTitle title="Servicios" subtitle="Catalogo" />
+      <PageTitle title="Servicios" subtitle="Catálogo" />
 
       <div className="row">
         <div className="col-12">
@@ -310,7 +311,7 @@ export default function ServicesList() {
                         setPageNumber(1);
                       }}
                     >
-                      <option value="">Todas las categorias</option>
+                      <option value="">Todas las categorías</option>
                       {categories.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
@@ -373,7 +374,7 @@ export default function ServicesList() {
                     <td className="text-center">
                       {service.availableFromTime && service.availableToTime
                         ? `${service.availableFromTime.slice(0, 5)} - ${service.availableToTime.slice(0, 5)}`
-                        : 'Todo el dia'}
+                        : 'Todo el día'}
                     </td>
                     <td className="text-center">{service.preparationTimeMinutes ?? '-'}</td>
                     <td className="text-center">
@@ -433,17 +434,17 @@ export default function ServicesList() {
                 className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                 {...register('name', {
                   required: 'El nombre es requerido',
-                  maxLength: { value: 200, message: 'Maximo 200 caracteres' },
+                  maxLength: { value: 200, message: 'Máximo 200 caracteres' },
                 })}
               />
               {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Categoria <span className="text-danger">*</span></label>
+              <label className="form-label">Categoría <span className="text-danger">*</span></label>
               <select
                 className={`form-select ${errors.categoryId ? 'is-invalid' : ''}`}
-                {...register('categoryId', { required: 'Selecciona una categoria' })}
+                {...register('categoryId', { required: 'Selecciona una categoría' })}
               >
                 <option value="">Seleccionar...</option>
                 {categories.map((category) => (
@@ -456,12 +457,12 @@ export default function ServicesList() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Descripcion</label>
+              <label className="form-label">Descripción</label>
               <textarea
                 className="form-control"
                 rows={3}
                 {...register('description', {
-                  maxLength: { value: 1000, message: 'Maximo 1000 caracteres' },
+                  maxLength: { value: 1000, message: 'Máximo 1000 caracteres' },
                 })}
               />
             </div>
@@ -480,13 +481,6 @@ export default function ServicesList() {
                   })}
                 />
                 {errors.priceAmount && <div className="invalid-feedback">{errors.priceAmount.message}</div>}
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Moneda</label>
-                <select className="form-select" {...register('priceCurrency')}>
-                  <option value="MXN">MXN</option>
-                  <option value="USD">USD</option>
-                </select>
               </div>
               <div className="col-12 mb-3">
                 <label className="form-label" htmlFor="service-vat">IVA</label>
@@ -521,7 +515,7 @@ export default function ServicesList() {
                 </select>
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Duracion (min)</label>
+                <label className="form-label">Duración (min)</label>
                 <input
                   type="number"
                   className="form-control"

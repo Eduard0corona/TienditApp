@@ -211,7 +211,7 @@ export default function ServiceBoard() {
       await serviceBoardApi.release(pieceId);
       await loadBoard();
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'No se pudo liberar la asignacion de la pieza.');
+      const msg = getApiErrorMessage(err, 'No se pudo liberar la asignación de la pieza.');
       setError(msg);
     } finally {
       setProcessingPieceId('');
@@ -220,7 +220,7 @@ export default function ServiceBoard() {
 
   return (
     <>
-      <PageTitle title="Tablero de Servicios" subtitle="Operacion" />
+      <PageTitle title="Tablero de Servicios" subtitle="Operación" />
 
       <div className="row mb-3">
         <div className="col-xl-2 col-md-6 mb-2">
@@ -265,7 +265,7 @@ export default function ServiceBoard() {
                   style={{ width: 260 }}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por orden, cliente, pieza o telefono"
+                  placeholder="Buscar por orden, cliente, pieza o teléfono"
                 />
                 <div className="form-check">
                   <input
@@ -306,7 +306,7 @@ export default function ServiceBoard() {
               </div>
               <div className="d-flex flex-column align-items-end">
                 <small className="text-muted">
-                  Ultima actualizacion: {lastUpdatedAt ? toLocalDateTime(lastUpdatedAt) : '-'}
+                  Última actualización: {lastUpdatedAt ? toLocalDateTime(lastUpdatedAt) : '-'}
                 </small>
                 <button type="button" className="btn btn-light btn-sm mt-1" onClick={() => void loadBoard()}>
                   Recargar
@@ -396,7 +396,7 @@ export default function ServiceBoard() {
 
                           <div className="d-flex justify-content-between align-items-center mt-2 gap-2 flex-wrap">
                             <span className={`badge ${piece.notifyCustomer ? 'bg-info' : 'bg-secondary'}`}>
-                              {piece.notifyCustomer ? 'Notifica al cliente' : 'Sin notificacion'}
+                              {piece.notifyCustomer ? 'Notifica al cliente' : 'Sin notificación'}
                             </span>
                             {piece.assignedToUserId ? (
                               <span className="badge bg-primary-subtle text-primary">

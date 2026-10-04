@@ -45,10 +45,10 @@ public class DeleteCustomerCommandHandler : IRequestHandler<DeleteCustomerComman
             customer.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de clientes.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de clientes.");
 
         if (customer.IsPublicGeneral)
-            return Result.Failure("No puedes eliminar el cliente publico en general.");
+            return Result.Failure("No puedes eliminar el cliente público en general.");
 
         // Orders store the phone normalized to E.164 while customers keep it as typed; comparing the raw
         // values (and the name) almost never matched, so customers with orders were hard-deleted.
@@ -71,7 +71,7 @@ public class DeleteCustomerCommandHandler : IRequestHandler<DeleteCustomerComman
                 o => o.CustomerPhone != null && phoneCandidates.Contains(o.CustomerPhone),
                 cancellationToken);
         if (inUse)
-            return Result.Failure("No puedes eliminar un cliente con ordenes relacionadas.");
+            return Result.Failure("No puedes eliminar un cliente con órdenes relacionadas.");
 
         _context.Customers.Remove(customer);
         await _context.SaveChangesAsync(cancellationToken);

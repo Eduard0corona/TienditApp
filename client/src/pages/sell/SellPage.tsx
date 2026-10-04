@@ -8,6 +8,7 @@ import { cashApi } from '../../api/cashApi';
 import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
 import BranchPicker from '../../components/branches/BranchPicker';
+import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import SaleTicket from '../../components/sales/SaleTicket';
@@ -194,6 +195,7 @@ export default function SellPage() {
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
+  const [showOpenDrawer, setShowOpenDrawer] = useState(false);
   const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
   const online = useOnlineStatus();
   const pendingSales = usePendingSales();
@@ -1068,9 +1070,28 @@ export default function SellPage() {
             <i className="ri-safe-2-line me-1" aria-hidden="true"></i>
             La caja está cerrada: los cobros se guardan, pero no entran al corte.
           </span>
-          <Link to="/cash" className="btn btn-sm btn-warning">Abrir caja</Link>
+          <button type="button" className="btn btn-sm btn-warning" onClick={() => setShowOpenDrawer(true)}>
+            Abrir caja
+          </button>
         </div>
       )}
+
+      <OpenDrawerModal
+        show={showOpenDrawer}
+        onHide={() => setShowOpenDrawer(false)}
+        branches={workingBranch.branches}
+        defaultBranchId={workingBranch.branch?.id}
+        onOpened={(session) => {
+          setShowOpenDrawer(false);
+          setCashClosed(false);
+          if (session.isMine && session.branchId) {
+            setDrawerBranch({ id: session.branchId, name: session.branchName ?? '' });
+            // The device keeps working where the drawer is.
+            workingBranch.setBranch(session.branchId);
+          }
+          toast.success('Tu caja quedó abierta.');
+        }}
+      />
 
       <div className="sell-layout mt-3">
         <section className="sell-catalog" aria-label="Catálogo">

@@ -59,7 +59,7 @@ public class CreateSupplyItemCommandValidator : AbstractValidator<CreateSupplyIt
         RuleFor(x => x.Notes).MaximumLength(1000);
         RuleFor(x => x)
             .Must(x => !x.MaxStock.HasValue || x.MaxStock.Value >= x.MinStock)
-            .WithMessage("El stock maximo no puede ser menor al stock minimo.");
+            .WithMessage("El stock máximo no puede ser menor al stock mínimo.");
     }
 }
 
@@ -86,20 +86,20 @@ public class CreateSupplyItemCommandHandler : IRequestHandler<CreateSupplyItemCo
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<SupplyItemDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<SupplyItemDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var code = string.IsNullOrWhiteSpace(request.Code) ? null : request.Code.Trim();
         var sku = string.IsNullOrWhiteSpace(request.Sku) ? null : request.Sku.Trim();
         var barcode = string.IsNullOrWhiteSpace(request.Barcode) ? null : request.Barcode.Trim();
 
         if (code is not null && await _context.SupplyItems.AnyAsync(x => x.Code == code, cancellationToken))
-            return Result.Failure<SupplyItemDto>("Ya existe un insumo con ese codigo.");
+            return Result.Failure<SupplyItemDto>("Ya existe un insumo con ese código.");
 
         if (sku is not null && await _context.SupplyItems.AnyAsync(x => x.Sku == sku, cancellationToken))
             return Result.Failure<SupplyItemDto>("Ya existe un insumo con ese SKU.");
 
         if (barcode is not null && await _context.SupplyItems.AnyAsync(x => x.Barcode == barcode, cancellationToken))
-            return Result.Failure<SupplyItemDto>("Ya existe un insumo con ese codigo de barras.");
+            return Result.Failure<SupplyItemDto>("Ya existe un insumo con ese código de barras.");
 
         var entity = new SupplyItem(
             tenantId: _tenantService.TenantId,

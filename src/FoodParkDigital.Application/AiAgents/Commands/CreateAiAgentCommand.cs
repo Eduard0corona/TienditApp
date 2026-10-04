@@ -22,8 +22,8 @@ public record CreateAiAgentCommand : IRequest<Result<AiAgentDto>>
     public string? BusinessName { get; init; }
     public string? BusinessDescription { get; init; }
     public string? BusinessProductsAndServices { get; init; }
-    public string WelcomeMessage { get; init; } = "Hola, soy tu asistente virtual. Te ayudo con productos, servicios y ordenes.";
-    public string FallbackMessage { get; init; } = "No tengo esa informacion por ahora, pero puedo ayudarte con otra consulta.";
+    public string WelcomeMessage { get; init; } = "Hola, soy tu asistente virtual. Te ayudo con productos, servicios y órdenes.";
+    public string FallbackMessage { get; init; } = "No tengo esa información por ahora, pero puedo ayudarte con otra consulta.";
     public string ClosingMessage { get; init; } = "Gracias por contactarnos. Quedo atento para ayudarte nuevamente.";
     public bool AskForName { get; init; } = true;
     public bool AskForPhone { get; init; } = true;
@@ -84,7 +84,7 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
             .IgnoreQueryFilters()
             .AnyAsync(x => x.Id == _tenantService.TenantId, cancellationToken);
         if (!exists)
-            return Result.Failure<AiAgentDto>("No se encontro configuracion del tenant para crear el agente.");
+            return Result.Failure<AiAgentDto>("No se encontró configuración del negocio para crear el agente.");
 
         var duplicatedName = await _context.AiAgents
             .AnyAsync(x => x.Name == name, cancellationToken);

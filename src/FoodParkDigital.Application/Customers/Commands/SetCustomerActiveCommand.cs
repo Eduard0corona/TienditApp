@@ -45,10 +45,10 @@ public class SetCustomerActiveCommandHandler : IRequestHandler<SetCustomerActive
             customer.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de clientes.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de clientes.");
 
         if (customer.IsPublicGeneral && !request.IsActive)
-            return Result.Failure("No puedes desactivar el cliente publico en general.");
+            return Result.Failure("No puedes desactivar el cliente público en general.");
 
         customer.SetActive(request.IsActive);
         await _context.SaveChangesAsync(cancellationToken);

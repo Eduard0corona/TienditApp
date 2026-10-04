@@ -66,7 +66,7 @@ public class SetEmployeeActiveCommandHandler : IRequestHandler<SetEmployeeActive
             return Result.Failure("Empleado no encontrado.");
 
         if (!Guid.TryParse(_currentUserService.UserId, out var currentUserId))
-            return Result.Failure("Usuario no valido.");
+            return Result.Failure("Usuario no válido.");
 
         if (currentUserId == tenantUser.UserId)
             return Result.Failure("No puedes desactivar tu propio acceso.");

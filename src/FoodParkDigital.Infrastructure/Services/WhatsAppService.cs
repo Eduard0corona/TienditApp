@@ -13,7 +13,7 @@ namespace FoodParkDigital.Infrastructure.Services;
 public class WhatsAppService : IWhatsAppService
 {
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    public const string NotConfiguredError = "WhatsApp no está configurado para este tenant.";
+    public const string NotConfiguredError = "WhatsApp no está configurado para este negocio.";
 
     private readonly IApplicationDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;

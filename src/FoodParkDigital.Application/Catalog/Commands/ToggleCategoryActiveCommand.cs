@@ -45,7 +45,7 @@ public class ToggleCategoryActiveCommandHandler : IRequestHandler<ToggleCategory
             category.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de catalogo.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de catálogo.");
 
         if (request.IsActive)
             category.Activate();

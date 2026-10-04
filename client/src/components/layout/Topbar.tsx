@@ -10,6 +10,7 @@ import { getRoleLabel, getUserRoleLabel } from '../../utils/labels';
 import { getAccess } from '../../utils/access';
 import { getApiErrorMessage } from '../../api/errors';
 import BrandLogo from '../common/BrandLogo';
+import CreateBusinessModal from '../business/CreateBusinessModal';
 import { applyTheme, storeTheme } from '../../utils/theme';
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
@@ -49,6 +50,9 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const [switchingTenant, setSwitchingTenant] = useState(false);
   const [tenantError, setTenantError] = useState('');
   const [autoSwitchAttempted, setAutoSwitchAttempted] = useState(false);
+  const [creatingBusiness, setCreatingBusiness] = useState(false);
+  // Employees and owners may open a business of their own; a customer account is customer everywhere.
+  const canOpenBusiness = !!user && user.role !== 'CUSTOMER' && user.role !== 'SUPER_ADMIN';
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
@@ -211,6 +215,14 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                   </button>
                 ))}
                 {tenantError && <div className="dropdown-item-text text-danger small">{tenantError}</div>}
+                {canOpenBusiness && (
+                  <>
+                    <div className="dropdown-divider"></div>
+                    <button type="button" className="dropdown-item" onClick={() => setCreatingBusiness(true)}>
+                      <i className="ri-add-line me-1" aria-hidden="true"></i>Abrir otro negocio
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ) : (
@@ -290,9 +302,16 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
 
               {canOpenBusinessSettings && (
                 <Link to="/settings/business" className="dropdown-item">
-                  <i className="ri-store-2-line font-16 me-1"></i>
-                  <span>Mi empresa</span>
+                  <i className="ri-store-2-line font-16 me-1" aria-hidden="true"></i>
+                  <span>Mi negocio</span>
                 </Link>
+              )}
+
+              {canOpenBusiness && (
+                <button type="button" className="dropdown-item" onClick={() => setCreatingBusiness(true)}>
+                  <i className="ri-add-circle-line font-16 me-1" aria-hidden="true"></i>
+                  <span>Abrir otro negocio</span>
+                </button>
               )}
 
               <a href="#" className="dropdown-item" onClick={handleLogout}>
@@ -303,6 +322,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
           </li>
         </ul>
       </div>
+      <CreateBusinessModal show={creatingBusiness} onHide={() => setCreatingBusiness(false)} />
     </div>
   );
 }

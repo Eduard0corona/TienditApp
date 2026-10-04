@@ -39,10 +39,10 @@ public class CreateEmployeeCommandValidator : AbstractValidator<CreateEmployeeCo
         RuleFor(x => x.PhoneNumber).MaximumLength(30);
         RuleFor(x => x.AppRole)
             .Must(role => role is UserRole.TenantAdmin or UserRole.Staff or UserRole.Kitchen)
-            .WithMessage("El rol de aplicacion no es valido para empleados.");
+            .WithMessage("El rol de aplicación no es válido para empleados.");
         RuleFor(x => x.TenantRole)
             .Must(role => role is TenantUserRole.Admin or TenantUserRole.Staff)
-            .WithMessage("El rol de tenant no es valido para empleados.");
+            .WithMessage("El rol en el negocio no es válido para empleados.");
     }
 }
 

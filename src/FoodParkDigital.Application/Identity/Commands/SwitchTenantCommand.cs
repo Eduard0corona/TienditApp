@@ -66,7 +66,7 @@ public class SwitchTenantCommandHandler : IRequestHandler<SwitchTenantCommand, R
                     && x.Status == TenantUserStatus.Active,
                 cancellationToken);
         if (membership is null)
-            return Result.Failure<AuthResponse>("No tienes acceso activo a este tenant.");
+            return Result.Failure<AuthResponse>("No tienes acceso activo a este negocio.");
 
         var user = await _userManager.Users
             .IgnoreQueryFilters()

@@ -172,6 +172,8 @@ export default function ProductForm() {
       availableFromTime: data.availableFromTime ? `${data.availableFromTime}:00` : undefined,
       availableToTime: data.availableToTime ? `${data.availableToTime}:00` : undefined,
       priceAmount: Number(data.priceAmount),
+      // Every amount is charged and shown in pesos.
+      priceCurrency: 'MXN',
       sortOrder: Number(data.sortOrder),
     };
 
@@ -345,13 +347,6 @@ export default function ProductForm() {
                       })}
                     />
                     {errors.priceAmount && <div className="invalid-feedback">{errors.priceAmount.message}</div>}
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <label className="form-label">Moneda</label>
-                    <select className="form-select" {...register('priceCurrency')}>
-                      <option value="MXN">MXN</option>
-                      <option value="USD">USD</option>
-                    </select>
                   </div>
                   <div className="col-md-3 mb-3">
                     <label className="form-label">Precio anterior</label>

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable from '../../components/common/DataTable';
+import PrintButton from '../../components/common/PrintButton';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type { CashCountLineDto, CashSessionDto, CashTransactionDto, PaginatedList } from '../../types';
 import { CashSessionStatus } from '../../types';
@@ -48,6 +51,7 @@ function toEndOfDay(date: string) {
 /** Every drawer by date, branch and status, with what it should have held, what was counted and why it differed. */
 export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: ShiftHistoryProps) {
   const toast = useToast();
+  const { tenant } = useTenant();
   const [data, setData] = useState(EMPTY_SESSIONS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -230,7 +234,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
                 <dd className="col-6 text-end fw-bold">{formatMoney(selected.expectedClosingAmount ?? selected.expectedBalance)}</dd>
                 {selected.status === CashSessionStatus.Closed && (
                   <>
-                    <dt className="col-6">Contado ({selected.closedBy})</dt>
+                    <dt className="col-6">Contado{selected.closedBy ? ` (${selected.closedBy})` : ''}</dt>
                     <dd className="col-6 text-end fw-bold">{formatMoney(selected.closingAmount ?? 0)}</dd>
                     {selected.closingDifference !== null && selected.closingDifference !== undefined && (
                       <>
@@ -266,13 +270,17 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
                 </ul>
               )}
             </Modal.Body>
-            {selected.status === CashSessionStatus.Open && !selected.isMine && canCloseOthers && (
-              <Modal.Footer>
+            <Modal.Footer>
+              <PrintButton
+                label={selected.status === CashSessionStatus.Closed ? 'Imprimir corte' : 'Imprimir corte parcial'}
+                render={() => <CashCutTicket businessName={tenant?.name} session={selected} movements={selectedMovements} />}
+              />
+              {selected.status === CashSessionStatus.Open && !selected.isMine && canCloseOthers && (
                 <button type="button" className="btn btn-outline-danger" onClick={() => { setCloseError(''); setClosing(true); }}>
                   Cerrar esta caja
                 </button>
-              </Modal.Footer>
-            )}
+              )}
+            </Modal.Footer>
           </>
         )}
       </Modal>

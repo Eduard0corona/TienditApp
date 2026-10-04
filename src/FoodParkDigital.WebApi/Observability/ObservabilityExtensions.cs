@@ -15,7 +15,8 @@ namespace FoodParkDigital.WebApi.Observability;
 /// <summary>
 /// Health endpoints and OpenTelemetry. Telemetry is exported only when a destination is configured:
 /// Application Insights (<c>APPLICATIONINSIGHTS_CONNECTION_STRING</c>) or any OTLP collector
-/// (<c>OTEL_EXPORTER_OTLP_ENDPOINT</c>). Logs keep going to Serilog's console output.
+/// (<c>OTEL_EXPORTER_OTLP_ENDPOINT</c>). Logs go to Serilog's console output and, with a destination, there too
+/// (Serilog hands them to the OpenTelemetry logging provider), tagged with the business and the user ids.
 /// </summary>
 public static class ObservabilityExtensions
 {
@@ -45,6 +46,7 @@ public static class ObservabilityExtensions
         }
 
         openTelemetry
+            .WithLogging()
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation(options => options.Filter = IsTraced)
                 .AddHttpClientInstrumentation()

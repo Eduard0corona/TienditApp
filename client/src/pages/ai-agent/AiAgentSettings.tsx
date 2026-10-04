@@ -6,7 +6,7 @@ import { tenantApi } from '../../api/tenantApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 
-type AgentTab = 'General' | 'Mensajes' | 'Captura de Datos' | 'Configuracion IA';
+type AgentTab = 'General' | 'Mensajes' | 'Captura de Datos' | 'Configuración IA';
 
 const createDefaultAgentPayload = (name: string): CreateAiAgentRequest => ({
   name,
@@ -17,8 +17,8 @@ const createDefaultAgentPayload = (name: string): CreateAiAgentRequest => ({
   businessName: '',
   businessDescription: '',
   businessProductsAndServices: '',
-  welcomeMessage: 'Hola, soy tu asistente virtual. Te ayudo con productos, servicios y ordenes.',
-  fallbackMessage: 'No tengo esa informacion por ahora, pero puedo ayudarte con otra consulta.',
+  welcomeMessage: 'Hola, soy tu asistente virtual. Te ayudo con productos, servicios y órdenes.',
+  fallbackMessage: 'No tengo esa información por ahora, pero puedo ayudarte con otra consulta.',
   closingMessage: 'Gracias por contactarnos. Quedo atento para ayudarte nuevamente.',
   askForName: true,
   askForPhone: true,
@@ -178,7 +178,7 @@ export default function AiAgentSettings() {
     try {
       const { data } = await aiAgentsApi.update(selectedAgent.id, toUpdateRequest(selectedAgent));
       setAgents((current) => current.map((agent) => (agent.id === data.id ? data : agent)));
-      setFeedback({ type: 'success', text: 'Configuracion del agente guardada correctamente.' });
+      setFeedback({ type: 'success', text: 'Configuración del agente guardada correctamente.' });
     } catch (err: unknown) {
       setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudieron guardar las respuestas automáticas.') });
     } finally {
@@ -288,7 +288,7 @@ export default function AiAgentSettings() {
             <div className="card">
               <div className="card-body text-center py-5">
                 <h5 className="mb-2">Sin agentes IA</h5>
-                <p className="text-muted mb-3">Crea tu primer agente para comenzar la configuracion.</p>
+                <p className="text-muted mb-3">Crea tu primer agente para comenzar la configuración.</p>
                 <button type="button" className="btn btn-primary" onClick={addAgent} disabled={creating}>
                   <i className="ri-add-line me-1"></i>Crear agente
                 </button>
@@ -298,7 +298,7 @@ export default function AiAgentSettings() {
             <div className="card">
               <div className="card-body">
                 <ul className="nav nav-tabs nav-bordered mb-3">
-                  {(['General', 'Mensajes', 'Captura de Datos', 'Configuracion IA'] as AgentTab[]).map((tab) => (
+                  {(['General', 'Mensajes', 'Captura de Datos', 'Configuración IA'] as AgentTab[]).map((tab) => (
                     <li className="nav-item" key={tab}>
                       <button
                         type="button"
@@ -408,7 +408,7 @@ export default function AiAgentSettings() {
                       </div>
                     </div>
 
-                    <h5 className="mb-3 mt-2">Informacion del Negocio</h5>
+                    <h5 className="mb-3 mt-2">Información del Negocio</h5>
                     <div className="mb-3">
                       <label className="form-label">Nombre de la empresa</label>
                       <input
@@ -424,7 +424,7 @@ export default function AiAgentSettings() {
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label">Descripcion del negocio</label>
+                      <label className="form-label">Descripción del negocio</label>
                       <textarea
                         className="form-control"
                         rows={3}
@@ -534,7 +534,7 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
-                      <label className="form-check-label" htmlFor="ask-phone">Solicitar telefono</label>
+                      <label className="form-check-label" htmlFor="ask-phone">Solicitar teléfono</label>
                     </div>
                     <div className="form-check mb-2">
                       <input
@@ -564,7 +564,7 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
-                      <label className="form-check-label" htmlFor="ask-address">Solicitar direccion</label>
+                      <label className="form-check-label" htmlFor="ask-address">Solicitar dirección</label>
                     </div>
 
                     <div className="mb-0">
@@ -585,7 +585,7 @@ export default function AiAgentSettings() {
                   </div>
                 )}
 
-                {activeTab === 'Configuracion IA' && (
+                {activeTab === 'Configuración IA' && (
                   <div>
                     <h5 className="mb-3">Motor de IA</h5>
                     <div className="row">
@@ -610,7 +610,7 @@ export default function AiAgentSettings() {
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
-                          <label className="form-label">Maximo de tokens</label>
+                          <label className="form-label">Máximo de tokens</label>
                           <input
                             type="number"
                             className="form-control"
@@ -705,7 +705,7 @@ export default function AiAgentSettings() {
                     </button>
                   </div>
                   <button type="button" className="btn btn-primary" onClick={saveAgent} disabled={saving || deleting}>
-                    <i className="ri-save-line me-1"></i>{saving ? 'Guardando...' : 'Guardar configuracion'}
+                    <i className="ri-save-line me-1"></i>{saving ? 'Guardando...' : 'Guardar configuración'}
                   </button>
                 </div>
               </div>

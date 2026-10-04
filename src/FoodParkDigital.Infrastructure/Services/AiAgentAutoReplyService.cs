@@ -77,7 +77,7 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         if (normalizedMessage.Contains("horario") || normalizedMessage.Contains("ubicacion"))
         {
             if (!string.IsNullOrWhiteSpace(agent.BusinessDescription))
-                return $"{agent.BusinessDescription}\nSi deseas, te comparto mas detalles por aqui.";
+                return $"{agent.BusinessDescription}\nSi deseas, te comparto más detalles por aquí.";
         }
 
         if (!agent.StrictMode && !string.IsNullOrWhiteSpace(agent.BusinessDescription))
@@ -96,9 +96,9 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         if (agent.AskForName && string.IsNullOrWhiteSpace(customerName))
             prompts.Add("Para continuar, me compartes tu nombre?");
         if (agent.AskForEmail)
-            prompts.Add("Si gustas, comparte tambien tu email.");
+            prompts.Add("Si gustas, comparte también tu email.");
         if (agent.AskForAddress)
-            prompts.Add("Si aplica entrega, comparte tu direccion.");
+            prompts.Add("Si aplica entrega, comparte tu dirección.");
 
         if (prompts.Count == 0)
             return reply;

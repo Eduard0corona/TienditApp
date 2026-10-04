@@ -151,6 +151,13 @@ Pendientes detectados en la Fase 3:
 - `TenantFilterBypassAllowlistTests` inventaría cada uso de `IgnoreQueryFilters()` por archivo, cantidad y motivo.
 - `develop` se retira: `master` es la única rama permanente y el CI y la documentación ya no la mencionan. Borrar la rama en GitHub es un paso manual del dueño del repositorio.
 - Los tipos generados del cliente marcaban como obligatorios los enums y objetos que pueden faltar (`OrderStatus?`, `PlanDto?`); el filtro de OpenAPI ya respeta la nulabilidad de C#.
+- Cocina y Pedidos suenan con comandas nuevas y pedidos en línea por confirmar; Pedidos ya no parpadea con los eventos en vivo y recarga al reconectar.
+- Pantalla de error con recarga automática ante archivos de una versión anterior (antes la app quedaba en blanco después de un despliegue).
+- Registro corto (datos fiscales y dirección opcionales y plegados), MXN por defecto (migración `UseMexicanPesosByDefault`), diálogo propio para abrir una cuenta sin mesa.
+- Corte de caja imprimible por turno y del día; abrir caja desde Vender.
+- Logs por OpenTelemetry con negocio y usuario por id.
+- Acentos en 123 textos de la interfaz y 112 mensajes del servidor; la palabra "tenant" sale de los mensajes y de Equipo.
+- "Abrir otro negocio" con la misma cuenta; Más vendidos cuenta lo cobrado; un teléfono inválido en un pedido de cliente responde 400 en español.
 
 ## Decisiones humanas pendientes
 

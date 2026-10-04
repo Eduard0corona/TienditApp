@@ -160,7 +160,7 @@ export default function OrdersCart() {
       const truncated = [productsResponse.data, servicesResponse.data, customersResponse.data]
         .some((page) => page.totalCount > page.items.length);
       setTruncationNotice(truncated
-        ? 'El catalogo o la lista de clientes tiene mas registros de los que se muestran aqui (maximo 200 por lista).'
+        ? 'El catálogo o la lista de clientes tiene más registros de los que se muestran aquí (máximo 200 por lista).'
         : '');
       const defaultCustomer = loadedCustomers.find((c) => c.isPublicGeneral) ?? loadedCustomers[0];
 
@@ -252,7 +252,7 @@ export default function OrdersCart() {
     setError('');
     setUploadingPhotos(true);
     setUploadingMessage(type === 'before'
-      ? 'Subiendo fotos de recepcion...'
+      ? 'Subiendo fotos de recepción...'
       : 'Subiendo fotos de entrega...');
 
     try {
@@ -268,7 +268,7 @@ export default function OrdersCart() {
         setAfterPhotos((current) => [...current, ...uploads]);
       }
     } catch {
-      setError('No se pudieron subir una o mas imagenes. Intenta nuevamente.');
+      setError('No se pudieron subir una o más imágenes. Intenta nuevamente.');
     } finally {
       setUploadingPhotos(false);
     }
@@ -460,7 +460,7 @@ export default function OrdersCart() {
     <>
       <UploadLoadingModal
         show={uploadingPhotos}
-        title="Subiendo imagenes"
+        title="Subiendo imágenes"
         description={uploadingMessage}
       />
       <PageTitle title="Orden detallada" subtitle="Pedidos" />
@@ -545,7 +545,7 @@ export default function OrdersCart() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label d-block">Filtro del catalogo</label>
+                <label className="form-label d-block">Filtro del catálogo</label>
                 <div className="order-type-toggle d-flex flex-column flex-sm-row gap-2" role="group" aria-label="Tipo de orden">
                   <button
                     type="button"
@@ -630,7 +630,7 @@ export default function OrdersCart() {
                 <div className="alert alert-light py-2 px-3 mb-2">
                   <div className="small text-muted mb-1">Cliente seleccionado</div>
                   <div className="fw-semibold">{selectedCustomer?.name}</div>
-                  <div className="small">{selectedCustomer?.phone || 'Sin telefono registrado'}</div>
+                  <div className="small">{selectedCustomer?.phone || 'Sin teléfono registrado'}</div>
                   {!selectedCustomer?.phone && (
                     <div className="small text-danger">Captura el teléfono para poder generar la orden.</div>
                   )}
@@ -651,10 +651,10 @@ export default function OrdersCart() {
 
               {resolvedOrderType === OrderTypeConst.Service && (
                 <div className="border rounded p-2 mb-2">
-                  <h5 className="font-15 mb-2">Recepcion de servicio</h5>
+                  <h5 className="font-15 mb-2">Recepción de servicio</h5>
                   <div className="row g-2 mb-2">
                     <div className="col-md-6">
-                      <label className="form-label">Fecha de recepcion</label>
+                      <label className="form-label">Fecha de recepción</label>
                       <input
                         type="datetime-local"
                         className="form-control"
@@ -709,7 +709,7 @@ export default function OrdersCart() {
 
                   <div className="mb-2">
                     <div className="d-flex justify-content-between align-items-center mb-1">
-                      <label className="form-label mb-0">Checklist de recepcion</label>
+                      <label className="form-label mb-0">Checklist de recepción</label>
                       <button type="button" className="btn btn-sm btn-soft-primary" onClick={addChecklistItem}>
                         <i className="ri-add-line me-1"></i>Agregar item
                       </button>
@@ -773,7 +773,7 @@ export default function OrdersCart() {
                       )}
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label">Fotos despues</label>
+                      <label className="form-label">Fotos después</label>
                       <input
                         type="file"
                         accept="image/*"
@@ -833,7 +833,7 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Servicio del catalogo</label>
+                            <label className="form-label">Servicio del catálogo</label>
                             <select
                               className="form-select"
                               value={piece.serviceProductId || ''}
@@ -913,7 +913,7 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Condicion</label>
+                            <label className="form-label">Condición</label>
                             <textarea
                               className="form-control"
                               rows={2}

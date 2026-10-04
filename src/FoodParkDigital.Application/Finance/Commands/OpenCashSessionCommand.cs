@@ -65,7 +65,7 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
         if (!TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, Domain.Orders.Enums.OrderType.Retail) &&
             !TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, Domain.Orders.Enums.OrderType.Service))
         {
-            return Result.Failure<CashSessionDto>("El tenant no tiene módulos comerciales habilitados.");
+            return Result.Failure<CashSessionDto>("El negocio no tiene módulos comerciales habilitados.");
         }
 
         var userId = CashSessionMapping.ParseUserId(_currentUserService.UserId);

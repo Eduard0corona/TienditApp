@@ -73,7 +73,7 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryLocationDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<InventoryLocationDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var branchError = await InventoryLocationBranches.ValidateAsync(_context, _tenantService.TenantId, request.BranchId, cancellationToken);
         if (branchError is not null)
@@ -83,7 +83,7 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
         var name = request.Name.Trim();
 
         if (await _context.InventoryLocations.AnyAsync(x => x.Code == code, cancellationToken))
-            return Result.Failure<InventoryLocationDto>("Ya existe una ubicacion con ese codigo.");
+            return Result.Failure<InventoryLocationDto>("Ya existe una ubicación con ese código.");
 
         var hasAnyLocation = await _context.InventoryLocations.AnyAsync(cancellationToken);
         var makeDefault = request.IsDefault || !hasAnyLocation;

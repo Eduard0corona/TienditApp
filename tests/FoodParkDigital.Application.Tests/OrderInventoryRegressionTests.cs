@@ -346,7 +346,7 @@ public class OrderInventoryRegressionTests
         var deleted = await handler.Handle(new DeleteCustomerCommand(withoutOrders.Id), CancellationToken.None);
 
         Assert.True(blocked.IsFailure);
-        Assert.Contains("ordenes", blocked.Error);
+        Assert.Contains("órdenes", blocked.Error);
         Assert.True(deleted.IsSuccess, deleted.Error);
         Assert.Equal(withOrders.Id, (await context.Customers.AsNoTracking().SingleAsync()).Id);
     }

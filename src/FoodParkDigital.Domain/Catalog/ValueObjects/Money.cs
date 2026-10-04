@@ -7,7 +7,7 @@ public class Money : ValueObject
     public decimal Amount { get; }
     public string Currency { get; }
 
-    private Money() { Currency = "USD"; }
+    private Money() { Currency = "MXN"; }
 
     public Money(decimal amount, string currency)
     {

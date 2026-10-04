@@ -7,6 +7,7 @@ import TablesConfigModal from '../../components/dining/TablesConfigModal';
 import { getApiErrorMessage } from '../../api/errors';
 import { tablesApi, type DiningTable, type OpenTabSummary } from '../../api/tablesApi';
 import { useAuth } from '../../hooks/useAuth';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
@@ -28,6 +29,7 @@ function formatOpenFor(minutes: number): string {
  */
 export default function TablesPage() {
   const navigate = useNavigate();
+  const { prompt } = useConfirm();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
@@ -72,8 +74,16 @@ export default function TablesPage() {
   const freeTables = tables.filter((table) => !table.openTab);
   const tabsWithoutTable = room.data?.tabsWithoutTable ?? [];
 
-  const openNamedTab = () => {
-    const name = window.prompt('¿A nombre de quién va la cuenta? (por ejemplo "Barra - Juan")')?.trim();
+  const openNamedTab = async () => {
+    const name = await prompt({
+      title: 'Cuenta sin mesa',
+      message: 'La cuenta se abre a nombre de alguien (barra, para llevar) y recibe sus rondas como una mesa.',
+      inputLabel: '¿A nombre de quién va la cuenta?',
+      placeholder: 'Por ejemplo "Barra - Juan"',
+      confirmLabel: 'Abrir cuenta',
+      required: true,
+      maxLength: 50,
+    });
     if (name) navigate(`/sell?label=${encodeURIComponent(name.slice(0, 50))}`);
   };
 
@@ -92,7 +102,7 @@ export default function TablesPage() {
           {tables.length > 0 && `${tables.length - freeTables.length} de ${tables.length} ocupadas`}
         </div>
         <div className="d-flex gap-2">
-          <button type="button" className="btn btn-sm btn-light" onClick={openNamedTab}>
+          <button type="button" className="btn btn-sm btn-light" onClick={() => void openNamedTab()}>
             <i className="ri-user-add-line me-1" aria-hidden="true"></i>Cuenta sin mesa
           </button>
           {access.catalog && (

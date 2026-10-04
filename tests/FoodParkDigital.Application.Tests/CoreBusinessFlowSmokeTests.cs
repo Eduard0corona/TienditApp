@@ -95,10 +95,9 @@ public class CoreBusinessFlowSmokeTests
         Assert.Equal(1, metrics.CompletedOrders);
         Assert.Equal(1, metrics.ActiveProducts);
         Assert.Equal(0, metrics.ActiveServices);
-        Assert.Single(metrics.TopSellingItems);
-        Assert.Equal(seeded.Product.Id, metrics.TopSellingItems[0].ProductId);
-        Assert.Equal("Product", metrics.TopSellingItems[0].ItemType);
-        // Delivered without a payment: revenue counts payments, so the order shows as money still owed.
+        // Delivered without a payment: revenue and best sellers count payments, so the order shows as money
+        // still owed and is not a best seller yet.
+        Assert.Empty(metrics.TopSellingItems);
         Assert.Equal(0m, metrics.TotalRevenue);
         Assert.Equal(1, metrics.UnpaidOrders);
         Assert.Equal(createResult.Value.Total, metrics.OutstandingBalance);

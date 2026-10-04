@@ -142,12 +142,12 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
 
         RuleFor(x => x.Payments)
             .Empty()
@@ -155,7 +155,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             .WithMessage("Solo el negocio registra pagos al crear una venta.");
         RuleFor(x => x.Payments.Count)
             .LessThanOrEqualTo(OrderLimits.MaxPaymentsPerSale)
-            .WithMessage($"Una venta admite como maximo {OrderLimits.MaxPaymentsPerSale} pagos.");
+            .WithMessage($"Una venta admite como máximo {OrderLimits.MaxPaymentsPerSale} pagos.");
         RuleFor(x => x.IdempotencyKey)
             .NotEqual(Guid.Empty)
             .When(x => x.IdempotencyKey.HasValue)
@@ -264,7 +264,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         {
             var typeLabel = request.OrderType == OrderType.Service ? "servicios" : "ventas retail";
             return Result.Failure<OrderDto>(
-                $"El tenant no tiene habilitado el modulo requerido para crear ordenes de {typeLabel}.");
+                $"El negocio no tiene habilitado el módulo requerido para crear órdenes de {typeLabel}.");
         }
 
         string? customerName = request.CustomerName;
@@ -310,7 +310,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         }
         else if (request.CustomerId.HasValue && !isPublicGeneralCustomer)
         {
-            return Result.Failure<OrderDto>("El cliente seleccionado no tiene telefono. Captura uno para continuar.");
+            return Result.Failure<OrderDto>("El cliente seleccionado no tiene teléfono. Captura uno para continuar.");
         }
 
         var branch = await BranchRules.ResolveForSaleAsync(

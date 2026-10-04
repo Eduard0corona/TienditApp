@@ -19,7 +19,7 @@ public class TenantSettings : BaseEntity
         bool pricesIncludeTax = false)
     {
         TenantId = tenantId;
-        Currency = "USD";
+        Currency = "MXN";
         TimeZone = "America/Mexico_City";
         AutoAcceptOrders = false;
         MaxConcurrentOrders = 50;
@@ -30,7 +30,8 @@ public class TenantSettings : BaseEntity
     }
 
     public Guid TenantId { get; private set; }
-    public string Currency { get; private set; } = "USD";
+    /// <summary>Mexican pesos: the app formats every amount as MXN.</summary>
+    public string Currency { get; private set; } = "MXN";
     public string TimeZone { get; private set; } = "America/Mexico_City";
     public bool AutoAcceptOrders { get; private set; }
     public int MaxConcurrentOrders { get; private set; }

@@ -1,15 +1,11 @@
-using FoodParkDigital.Application.Billing;
-using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Common.ValueObjects;
-using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
-using FoodParkDigital.Domain.Branches.Entities;
-using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -109,14 +105,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         if (existingUser)
             return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electrónico.");
 
-        // Generate slug from business name
-        var slug = GenerateSlug(request.BusinessName);
-        var slugExists = await _context.Tenants
-            .IgnoreQueryFilters()
-            .AnyAsync(t => t.Slug == slug, cancellationToken);
-
-        if (slugExists)
-            slug = $"{slug}-{Guid.NewGuid().ToString()[..6]}";
+        var slug = await BusinessProvisioning.UniqueSlugAsync(_context, request.BusinessName, cancellationToken);
 
         // Create tenant
         var tenant = new Tenant(
@@ -150,26 +139,6 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         if (!string.IsNullOrWhiteSpace(request.ContactPhone))
             tenant.Update(tenant.Name, tenant.ContactEmail, request.ContactPhone, tenant.LogoUrl);
 
-        // Create tenant settings with defaults. A new business starts with prices that include IVA (what
-        // its customers read on a menu); the guided setup lets the owner change it before the first sale.
-        var capabilities = TenantCapabilityDefaults.FromBusinessType(request.BusinessType);
-        var settings = new TenantSettings(tenant.Id, capabilities, pricesIncludeTax: true);
-
-        var publicGeneralCustomer = new Customer(
-            tenantId: tenant.Id,
-            name: "Publico en general",
-            phone: null,
-            email: null,
-            isPublicGeneral: true);
-
-        var defaultBranch = Branch.CreateDefault(tenant.Id);
-        var defaultLocation = new InventoryLocation(
-            tenantId: tenant.Id,
-            name: "Almacen principal",
-            code: "MAIN",
-            isDefault: true,
-            branchId: defaultBranch.Id);
-
         // Create user as TenantAdmin
         var user = new ApplicationUser
         {
@@ -192,16 +161,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         // Tenant, owner, membership and session are committed together or not at all
         var registration = await _context.ExecuteInResilientTransactionAsync(async ct =>
         {
-            _context.Tenants.Add(tenant);
-            _context.TenantSettings.Add(settings);
-            _context.Customers.Add(publicGeneralCustomer);
-            _context.Branches.Add(defaultBranch);
-            _context.InventoryLocations.Add(defaultLocation);
-            // With a plan for new businesses the business starts its trial there (modules trimmed to the plan).
-            var trial = await SubscriptionRules.StartTrialForNewBusinessAsync(
-                _context, tenant.Id, settings, request.BusinessType, _clock.UtcNow, ct);
-            if (trial is not null)
-                _context.TenantSubscriptions.Add(trial);
+            await BusinessProvisioning.AddAsync(_context, tenant, _clock.UtcNow, ct);
             await _context.SaveChangesAsync(ct);
 
             var createResult = await _userManager.CreateAsync(user, request.Password);
@@ -265,19 +225,4 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         });
     }
 
-    private static string GenerateSlug(string name)
-    {
-        var slug = name.ToLowerInvariant().Trim();
-        slug = Regex.Replace(slug, @"[áàäâ]", "a");
-        slug = Regex.Replace(slug, @"[éèëê]", "e");
-        slug = Regex.Replace(slug, @"[íìïî]", "i");
-        slug = Regex.Replace(slug, @"[óòöô]", "o");
-        slug = Regex.Replace(slug, @"[úùüû]", "u");
-        slug = Regex.Replace(slug, @"[ñ]", "n");
-        slug = Regex.Replace(slug, @"[^a-z0-9\s-]", "");
-        slug = Regex.Replace(slug, @"[\s]+", "-");
-        slug = Regex.Replace(slug, @"-+", "-");
-        slug = slug.Trim('-');
-        return slug;
-    }
 }

@@ -46,7 +46,7 @@ public class ToggleProductAvailabilityCommandHandler : IRequestHandler<TogglePro
             cancellationToken);
         if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, product.Unit))
         {
-            return Result.Failure("El tenant no tiene habilitado el modulo requerido para este tipo de item.");
+            return Result.Failure("El negocio no tiene habilitado el módulo requerido para este tipo de artículo.");
         }
 
         product.SetAvailability(request.IsAvailable);

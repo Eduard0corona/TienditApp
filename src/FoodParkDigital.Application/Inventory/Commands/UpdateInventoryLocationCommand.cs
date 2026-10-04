@@ -76,7 +76,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
             entity.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryLocationDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<InventoryLocationDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var branchError = await InventoryLocationBranches.ValidateAsync(_context, entity.TenantId, request.BranchId, cancellationToken);
         if (branchError is not null)
@@ -84,7 +84,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
 
         var code = request.Code.Trim().ToUpperInvariant();
         if (await _context.InventoryLocations.AnyAsync(x => x.Id != request.Id && x.Code == code, cancellationToken))
-            return Result.Failure<InventoryLocationDto>("Ya existe una ubicacion con ese codigo.");
+            return Result.Failure<InventoryLocationDto>("Ya existe una ubicación con ese código.");
 
         entity.Update(
             name: request.Name.Trim(),

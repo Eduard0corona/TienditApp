@@ -37,7 +37,7 @@ public class SetSupplyItemActiveCommandHandler : IRequestHandler<SetSupplyItemAc
             entity.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de inventario.");
 
         entity.SetActive(request.IsActive);
         await _context.SaveChangesAsync(cancellationToken);

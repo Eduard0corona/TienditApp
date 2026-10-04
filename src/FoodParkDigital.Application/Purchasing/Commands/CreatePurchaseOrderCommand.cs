@@ -71,7 +71,7 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<PurchaseOrderDto>("El tenant no tiene habilitado el modulo de inventario/compras.");
+            return Result.Failure<PurchaseOrderDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
 
         var supplier = await _context.Suppliers
             .AsNoTracking()

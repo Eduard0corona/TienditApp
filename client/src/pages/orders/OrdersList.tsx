@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
@@ -11,6 +11,7 @@ import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
+import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -104,6 +105,9 @@ function safeParseArray<T>(raw?: string): T[] {
   }
 }
 
+// Several realtime events usually arrive together; one reload covers all of them.
+const EVENT_RELOAD_DELAY_MS = 400;
+
 export default function OrdersList() {
   const today = getTodayInputDate();
   const [searchParams] = useSearchParams();
@@ -127,6 +131,11 @@ export default function OrdersList() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedOrder, setSelectedOrder] = useState<OrderDto | null>(null);
+  // The realtime handlers read the open order without resubscribing on every selection.
+  const selectedOrderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrder?.id ?? null;
+  }, [selectedOrder]);
   const [cfdiFor, setCfdiFor] = useState<OrderDto | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderDto | null>(null);
   const [paymentError, setPaymentError] = useState('');
@@ -139,7 +148,14 @@ export default function OrdersList() {
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundError, setRefundError] = useState('');
   const [cardFor, setCardFor] = useState<{ phone: string; name: string } | null>(null);
-  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
+  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onConnected } = useOrderSignalR();
+  const latestRequestRef = useRef(0);
+  // Orders placed by customers (online menu) wait in Pending for the business: they ring on this device.
+  const chime = useArrivalChime('tienditapp:orders-sound');
+  const playChimeRef = useRef(chime.play);
+  useEffect(() => {
+    playChimeRef.current = chime.play;
+  }, [chime.play]);
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
   const { prompt } = useConfirm();
@@ -184,8 +200,10 @@ export default function OrdersList() {
       .map((item) => (typeof item === 'string' ? { url: item } : item))
       .filter((item) => isSafeFileUrl(item.url));
   }, [selectedOrder]);
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
+  // A silent reload (realtime event, reconnection) keeps the table on screen: no spinner, no lost scroll.
+  const loadOrders = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    const requestId = ++latestRequestRef.current;
+    if (!silent) setLoading(true);
     setError('');
     try {
       const params: {
@@ -208,17 +226,21 @@ export default function OrdersList() {
       if (search) params.search = search;
 
       const { data: response } = await ordersApi.getAll(params);
+      // A slower, older reload must not overwrite a newer one (filters changed meanwhile).
+      if (requestId !== latestRequestRef.current) return;
       setData(response);
     } catch (err: unknown) {
+      if (requestId !== latestRequestRef.current) return;
       setError(getApiErrorMessage(err, 'No se pudieron cargar los pedidos.'));
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) setLoading(false);
     }
   }, [fromDate, pageNumber, pageSize, search, selectedOrderType, selectedStatus, toDate]);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     const { data: order } = await ordersApi.getById(orderId);
-    setSelectedOrder(order);
+    // The detail may have been closed or switched while the request ran.
+    if (selectedOrderIdRef.current === orderId) setSelectedOrder(order);
   }, []);
 
   useEffect(() => {
@@ -226,25 +248,42 @@ export default function OrdersList() {
   }, [loadOrders]);
 
   useEffect(() => {
+    // Several events usually arrive together (status change + payment): one silent reload covers them.
+    let reloadTimeoutId: number | undefined;
+    const scheduleReload = (orderId?: string) => {
+      window.clearTimeout(reloadTimeoutId);
+      reloadTimeoutId = window.setTimeout(() => void loadOrders({ silent: true }), EVENT_RELOAD_DELAY_MS);
+      // The open detail follows its own order.
+      if (orderId && orderId === selectedOrderIdRef.current) void refreshSelectedOrder(orderId).catch(() => undefined);
+    };
     const createdOff = onOrderCreated((payload) => {
-      setRealtimeMessage(`Nueva orden recibida: ${payload.orderNumber}`);
-      loadOrders();
+      if (payload.status === 'Pending') {
+        setRealtimeMessage(`Nuevo pedido por confirmar: ${payload.orderNumber}`);
+        playChimeRef.current();
+      } else {
+        setRealtimeMessage(`Nuevo pedido recibido: ${payload.orderNumber}`);
+      }
+      scheduleReload();
     });
     const changedOff = onOrderStatusChanged((payload) => {
-      setRealtimeMessage(`Una orden cambió a: ${getOrderStatusLabel(payload.newStatus)}`);
-      loadOrders();
+      setRealtimeMessage(`Un pedido cambió a: ${getOrderStatusLabel(payload.newStatus)}`);
+      scheduleReload(payload.orderId);
     });
     const cancelledOff = onOrderCancelled((payload) => {
-      setRealtimeMessage(`Orden cancelada${payload.reason ? `: ${payload.reason}` : ''}`);
-      loadOrders();
+      setRealtimeMessage(`Pedido cancelado${payload.reason ? `: ${payload.reason}` : ''}`);
+      scheduleReload(payload.orderId);
     });
+    // Events sent while the connection was down are lost: every (re)connection reloads.
+    const connectedOff = onConnected(() => scheduleReload());
 
     return () => {
+      window.clearTimeout(reloadTimeoutId);
       createdOff();
       changedOff();
       cancelledOff();
+      connectedOff();
     };
-  }, [loadOrders, onOrderCancelled, onOrderCreated, onOrderStatusChanged]);
+  }, [loadOrders, onConnected, onOrderCancelled, onOrderCreated, onOrderStatusChanged, refreshSelectedOrder]);
 
   const openPaymentModal = (order: OrderDto) => {
     setPaymentOrder(order);
@@ -490,10 +529,23 @@ export default function OrdersList() {
                 </div>
               )}
 
+              <div className="d-flex justify-content-end mb-2">
+                <button
+                  type="button"
+                  className={`btn btn-sm ${chime.enabled ? 'btn-primary' : 'btn-light'}`}
+                  onClick={chime.toggle}
+                  aria-pressed={chime.enabled}
+                  title="Suena cuando llega un pedido en línea por confirmar"
+                >
+                  <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
+                  {chime.enabled ? 'Sonido activado' : 'Sonido para pedidos en línea'}
+                </button>
+              </div>
+
               {realtimeMessage && (
-                <div className="alert alert-info alert-dismissible fade show">
+                <div className="alert alert-info alert-dismissible fade show" role="status">
                   {realtimeMessage}
-                  <button type="button" className="btn-close" onClick={() => setRealtimeMessage('')}></button>
+                  <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setRealtimeMessage('')}></button>
                 </div>
               )}
 
@@ -768,7 +820,7 @@ export default function OrdersList() {
 
               {selectedOrder.serviceDetail && (
                 <div className="mt-3">
-                  <h5 className="mb-2">Recepcion de servicio</h5>
+                  <h5 className="mb-2">Recepción de servicio</h5>
                   <div className="row g-2">
                     <div className="col-md-6"><strong>Recibido:</strong> {toLocalDateTime(selectedOrder.serviceDetail.receivedAt)}</div>
                     <div className="col-md-6">
@@ -793,7 +845,7 @@ export default function OrdersList() {
 
                   {selectedOrderIntakeChecklist.length > 0 && (
                     <div className="mt-2">
-                      <strong>Checklist de recepcion:</strong>
+                      <strong>Checklist de recepción:</strong>
                       <ul className="mb-0 mt-1 ps-3">
                         {selectedOrderIntakeChecklist.map((item, index) => (
                           <li key={`${item.label || 'item'}-${index}`}>
@@ -828,7 +880,7 @@ export default function OrdersList() {
                         )}
                       </div>
                       <div className="col-md-6">
-                        <strong>Fotos despues</strong>
+                        <strong>Fotos después</strong>
                         {selectedOrderAfterPhotos.length === 0 ? (
                           <div className="text-muted small">Sin fotos.</div>
                         ) : (
@@ -842,7 +894,7 @@ export default function OrdersList() {
                                 className="d-inline-flex align-items-center justify-content-center border rounded"
                                 style={{ width: 64, height: 64, overflow: 'hidden' }}
                               >
-                                <img src={photo.url} alt={photo.fileName || 'Foto despues'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img src={photo.url} alt={photo.fileName || 'Foto después'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               </a>
                             ))}
                           </div>
@@ -863,7 +915,7 @@ export default function OrdersList() {
                           <th>Servicio</th>
                           <th>Notificar</th>
                           <th>Estado</th>
-                          <th className="text-end">Accion</th>
+                          <th className="text-end">Acción</th>
                         </tr>
                       </thead>
                       <tbody>

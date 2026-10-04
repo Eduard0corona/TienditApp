@@ -172,7 +172,7 @@ public class CustomerPhoneOwnershipTests
         var result = await RegisterAsync(host, "atacante@demo.com", OwnerPhoneInput);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("Ya existe una cuenta de cliente con este telefono.", result.Error);
+        Assert.Equal("Ya existe una cuenta de cliente con este teléfono.", result.Error);
         Assert.Equal(ownerId, Assert.Single(await host.QueryAsync(db => db.Users.Select(u => u.Id).ToListAsync())));
         Assert.Equal(ownerId, Assert.Single(await ProfilePhonesAsync(host)).Key);
     }

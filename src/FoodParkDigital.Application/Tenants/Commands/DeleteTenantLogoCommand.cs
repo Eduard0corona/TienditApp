@@ -39,7 +39,7 @@ public class DeleteTenantLogoCommandHandler : IRequestHandler<DeleteTenantLogoCo
             .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
 
         if (tenant is null)
-            return Result.Failure("Tenant no encontrado.");
+            return Result.Failure("Negocio no encontrado.");
 
         if (string.IsNullOrEmpty(tenant.LogoUrl))
             return Result.Success();

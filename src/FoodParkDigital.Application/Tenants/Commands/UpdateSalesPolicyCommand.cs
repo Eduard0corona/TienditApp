@@ -69,7 +69,7 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
 
         var tenantId = await MyTenantResolver.ResolveAsync(_context, _tenantService, _currentUserService, cancellationToken);
         if (tenantId is null)
-            return Result.Failure<TenantSalesPolicyDto>("No se encontro el negocio del usuario.");
+            return Result.Failure<TenantSalesPolicyDto>("No se encontró el negocio del usuario.");
 
         var settings = await _context.TenantSettings
             .FirstOrDefaultAsync(x => x.TenantId == tenantId.Value, cancellationToken);

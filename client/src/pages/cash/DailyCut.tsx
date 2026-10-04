@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import type { DailyCashCutDto } from '../../types';
+import PrintButton from '../../components/common/PrintButton';
+import { useTenant } from '../../hooks/useTenant';
 import { formatMoney } from '../../utils/money';
 import { getTodayInputDate } from './cashFormat';
 
@@ -11,6 +13,7 @@ interface DailyCutProps {
 
 /** Payments of a day by method, user and branch, for every drawer of the business. */
 export default function DailyCut({ branches }: DailyCutProps) {
+  const { tenant } = useTenant();
   const [date, setDate] = useState(getTodayInputDate());
   const [branchId, setBranchId] = useState('');
   const [userName, setUserName] = useState('');
@@ -82,6 +85,47 @@ export default function DailyCut({ branches }: DailyCutProps) {
                   {kpi.detail && <div className="small text-muted">{kpi.detail}</div>}
                 </div>
               ))}
+            </div>
+            <div className="d-flex justify-content-end mb-2">
+              <PrintButton
+                label="Imprimir corte del día"
+                className="btn btn-sm btn-light"
+                render={() => (
+                  <div>
+                    {tenant?.name && <div className="text-center fw-bold">{tenant.name}</div>}
+                    <div className="text-center fw-bold">Corte del día</div>
+                    <div className="text-center small mb-2">
+                      {date ? new Date(`${date}T12:00:00`).toLocaleDateString('es-MX', { dateStyle: 'long' }) : 'Hoy'}
+                      {branchId ? ` · ${branches.find((branch) => branch.id === branchId)?.name ?? ''}` : ' · Todas las sucursales'}
+                      {userName.trim() ? ` · ${userName.trim()}` : ''}
+                    </div>
+                    {[
+                      ['Cobrado', cut.salesPaymentsTotal],
+                      ['Efectivo', cut.cashTotal],
+                      ['Tarjeta', cut.cardTotal],
+                      ['Transferencia', cut.transferTotal],
+                      ['Otros', cut.walletTotal + cut.otherTotal],
+                      ['Neto en efectivo', cut.netCashOnlyFlow],
+                    ].map(([label, value]) => (
+                      <div key={label as string} className="d-flex justify-content-between gap-2">
+                        <span>{label}</span>
+                        <span>{formatMoney(value as number)}</span>
+                      </div>
+                    ))}
+                    <div className="small">{cut.salesPaymentsCount} pagos</div>
+                    {cut.byUser.length > 0 && <hr className="my-1" />}
+                    {cut.byUser.map((item) => (
+                      <div key={`${item.userName}-${item.paymentsCount}`} className="d-flex justify-content-between gap-2">
+                        <span>{item.userName} ({item.paymentsCount})</span>
+                        <span>{formatMoney(item.totalAmount)}</span>
+                      </div>
+                    ))}
+                    <div className="text-center small mt-2">
+                      Impreso el {new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                    </div>
+                  </div>
+                )}
+              />
             </div>
             <div className="row">
               <div className="col-md-6">

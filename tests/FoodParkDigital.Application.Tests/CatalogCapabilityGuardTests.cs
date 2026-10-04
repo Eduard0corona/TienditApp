@@ -21,7 +21,7 @@ public class CatalogCapabilityGuardTests
         var result = await handler.Handle(new DeleteCategoryCommand(category.Id), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("El tenant no tiene habilitado el modulo de catalogo.", result.Error);
+        Assert.Equal("El negocio no tiene habilitado el módulo de catálogo.", result.Error);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class CatalogCapabilityGuardTests
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("El tenant no tiene habilitado el modulo de catalogo.", result.Error);
+        Assert.Equal("El negocio no tiene habilitado el módulo de catálogo.", result.Error);
     }
 
     private sealed class TestFixture : IAsyncDisposable

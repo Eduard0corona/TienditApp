@@ -85,7 +85,7 @@ public class Product : AuditableEntity, ITenantScoped
 
     // Pricing
     public decimal PriceAmount { get; private set; }
-    public string PriceCurrency { get; private set; } = "USD";
+    public string PriceCurrency { get; private set; } = "MXN";
     public decimal? CompareAtPrice { get; private set; }
     /// <summary>IVA rate in percent; null uses the business default rate.</summary>
     public decimal? TaxRate { get; private set; }

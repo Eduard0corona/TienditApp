@@ -28,7 +28,7 @@ public class UpdateCustomerCommandValidator : AbstractValidator<UpdateCustomerCo
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Phone)
-            .NotEmpty().WithMessage("El telefono es obligatorio.")
+            .NotEmpty().WithMessage("El teléfono es obligatorio.")
             .MaximumLength(20);
         RuleFor(x => x.Email).MaximumLength(200).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.Email));
     }
@@ -56,17 +56,17 @@ public class UpdateCustomerCommandHandler : IRequestHandler<UpdateCustomerComman
             customer.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure<CustomerDto>("El tenant no tiene habilitado el modulo de clientes.");
+            return Result.Failure<CustomerDto>("El negocio no tiene habilitado el módulo de clientes.");
 
         if (customer.IsPublicGeneral)
-            return Result.Failure<CustomerDto>("No puedes editar el cliente publico en general.");
+            return Result.Failure<CustomerDto>("No puedes editar el cliente público en general.");
 
         var name = request.Name.Trim();
         var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
 
         if (phone is null)
-            return Result.Failure<CustomerDto>("El telefono es obligatorio.");
+            return Result.Failure<CustomerDto>("El teléfono es obligatorio.");
 
         customer.Update(name, phone, email);
         await _context.SaveChangesAsync(cancellationToken);

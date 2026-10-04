@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import AppErrorBoundary from '../common/AppErrorBoundary';
 import LeftSidebar from './LeftSidebar';
 import Topbar from './Topbar';
 import Footer from './Footer';
@@ -128,7 +129,12 @@ export default function Layout() {
               <>
                 {/* Mi negocio shows it in the plan card; the platform console is not about this business. */}
                 {!pathname.startsWith('/platform') && pathname !== '/settings/business' && <PastDueBanner />}
-                <Outlet />
+                {/* The menu stays while a screen loads or if it fails; another screen clears the error. */}
+                <AppErrorBoundary resetKey={pathname}>
+                  <Suspense fallback={<div className="p-3 text-muted">Cargando…</div>}>
+                    <Outlet />
+                  </Suspense>
+                </AppErrorBoundary>
               </>
             )}
           </div>

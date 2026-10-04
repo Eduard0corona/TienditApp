@@ -187,7 +187,7 @@ public class TenantResolutionMiddleware
                     {
                         Status = 403,
                         Title = "Tenant capability denied",
-                        Detail = $"El tenant no tiene habilitado el modulo requerido para '{path}'."
+                        Detail = $"El negocio no tiene habilitado el módulo requerido para '{path}'."
                     });
                     return;
                 }

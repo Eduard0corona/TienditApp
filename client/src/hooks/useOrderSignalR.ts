@@ -7,6 +7,8 @@ export interface OrderCreatedPayload {
   orderNumber: string;
   businessType: string;
   total: number;
+  /** Status name the order was created in ("Pending" waits for the business to confirm it). */
+  status?: string;
 }
 
 export interface OrderStatusChangedPayload {

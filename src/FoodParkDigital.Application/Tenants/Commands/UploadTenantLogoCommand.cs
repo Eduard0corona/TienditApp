@@ -73,7 +73,7 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
             .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);
 
         if (tenant is null)
-            return Result.Failure<LogoImageUrlsDto>("Tenant no encontrado.");
+            return Result.Failure<LogoImageUrlsDto>("Negocio no encontrado.");
 
         var folder = TenantStorageFolders.Logos(tenantId);
         var previousLogoUrl = tenant.LogoUrl;

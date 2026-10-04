@@ -30,7 +30,7 @@ public class ConfirmPhoneCommandValidator : AbstractValidator<ConfirmPhoneComman
         RuleFor(x => x.Code)
             .NotEmpty()
             .Matches(@"^\d{5,6}$")
-            .WithMessage("El codigo debe tener 5 o 6 digitos.");
+            .WithMessage("El código debe tener 5 o 6 dígitos.");
     }
 }
 
@@ -73,7 +73,7 @@ public class ConfirmPhoneCommandHandler : IRequestHandler<ConfirmPhoneCommand, R
                 return Result.Success();
 
             if (string.IsNullOrEmpty(user.PhoneNumber))
-                return Result.Failure("El usuario no tiene un numero de telefono registrado.");
+                return Result.Failure("El usuario no tiene un número de teléfono registrado.");
 
             var normalizedCode = NormalizeVerificationCode(request.Code);
             if (normalizedCode is null)

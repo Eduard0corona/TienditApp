@@ -22,7 +22,7 @@ public record UpdateProductCommand : IRequest<Result<ProductDto>>
     public string Name { get; init; } = null!;
     public string? Description { get; init; }
     public decimal PriceAmount { get; init; }
-    public string PriceCurrency { get; init; } = "USD";
+    public string PriceCurrency { get; init; } = "MXN";
     public int? PreparationTimeMinutes { get; init; }
     public string? Sku { get; init; }
     public string? Barcode { get; init; }
@@ -188,7 +188,7 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, resultingUnit))
         {
             return Result.Failure<ProductDto>(
-                "El tenant no tiene habilitado el modulo requerido para este tipo de item.");
+                "El negocio no tiene habilitado el módulo requerido para este tipo de artículo.");
         }
 
         var category = await _context.Categories
@@ -197,7 +197,7 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         if (category is null)
             throw new EntityNotFoundException("Category", request.CategoryId);
         if (!category.IsActive)
-            return Result.Failure<ProductDto>("La categoria seleccionada no esta activa.");
+            return Result.Failure<ProductDto>("La categoría seleccionada no está activa.");
 
         if (!string.IsNullOrEmpty(request.Sku))
         {

@@ -109,7 +109,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryMovementDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<InventoryMovementDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var externalReference = string.IsNullOrWhiteSpace(request.ExternalReference)
             ? null
@@ -147,10 +147,10 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             .ToDictionaryAsync(x => x.Id, cancellationToken);
 
         if (supplies.Count != supplyIds.Count)
-            return Result.Failure<InventoryMovementDto>("Uno o mas insumos no existen o estan inactivos.");
+            return Result.Failure<InventoryMovementDto>("Uno o más insumos no existen o están inactivos.");
 
         if (locations.Count != locationIds.Count)
-            return Result.Failure<InventoryMovementDto>("Una o mas ubicaciones no existen o estan inactivas.");
+            return Result.Failure<InventoryMovementDto>("Una o más ubicaciones no existen o están inactivas.");
 
         var existingStocks = await _context.InventoryStocks
             .Where(x => supplyIds.Contains(x.SupplyItemId) && locationIds.Contains(x.InventoryLocationId))

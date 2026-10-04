@@ -109,7 +109,7 @@ public class ImageProcessingService : IImageProcessingService, IImageNormalizati
             seekable.Position = 0;
             var info = await Image.IdentifyAsync(DecoderOptions, seekable, cancellationToken);
             if ((long)info.Width * info.Height > MaxPixels)
-                throw new DomainException("La imagen es demasiado grande (maximo 50 megapixeles).");
+                throw new DomainException("La imagen es demasiado grande (máximo 50 megapíxeles).");
 
             seekable.Position = 0;
             var image = await Image.LoadAsync(DecoderOptions, seekable, cancellationToken);

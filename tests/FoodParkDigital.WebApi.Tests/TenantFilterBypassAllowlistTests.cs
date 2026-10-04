@@ -16,7 +16,7 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Identity/Commands/ForgotPasswordCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/LoginCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RefreshTokenCommand.cs"] = 3,
-        ["src/FoodParkDigital.Application/Identity/Commands/RegisterBusinessCommand.cs"] = 2,
+        ["src/FoodParkDigital.Application/Identity/Commands/RegisterBusinessCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterCustomerCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResendConfirmationEmailCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResendPhoneConfirmationCommand.cs"] = 1,
@@ -26,6 +26,9 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Identity/Queries/GetMyTenantsQuery.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Queries/GetOwnerWhatsAppConfigQuery.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Services/AuthSessionIssuer.cs"] = 2,
+        // A new business: slugs are unique across the platform, and the owner limit counts the account's businesses.
+        ["src/FoodParkDigital.Application/Tenants/BusinessProvisioning.cs"] = 1,
+        ["src/FoodParkDigital.Application/Tenants/Commands/CreateBusinessCommand.cs"] = 2,
         // Employees: the account (ApplicationUser) is shared by the businesses of a person.
         ["src/FoodParkDigital.Application/Employees/Commands/CreateEmployeeCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Employees/Commands/SetEmployeeActiveCommand.cs"] = 1,

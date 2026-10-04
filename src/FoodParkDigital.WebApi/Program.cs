@@ -42,9 +42,13 @@ if (jwtSecretError is not null)
     usesEphemeralJwtSecret = true;
 }
 
-// Serilog
-builder.Host.UseSerilog((ctx, config) =>
-    config.ReadFrom.Configuration(ctx.Configuration));
+// Serilog writes the console and hands every event to the other logging providers: OpenTelemetry, when a
+// destination is configured, so logs reach Application Insights or the collector with traces and metrics.
+// The default providers go away so the console does not get every line twice.
+builder.Logging.ClearProviders();
+builder.Host.UseSerilog(
+    (ctx, config) => config.ReadFrom.Configuration(ctx.Configuration).Enrich.FromLogContext(),
+    writeToProviders: true);
 
 // Layer registrations
 builder.Services.AddApplicationServices();
@@ -233,6 +237,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<RequestTelemetryEnrichmentMiddleware>();
 app.MapHealthEndpoints();
 app.MapControllers();
 // Close hub connections when the access token expires so that reconnecting re-validates

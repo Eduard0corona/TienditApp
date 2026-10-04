@@ -42,10 +42,10 @@ public class DeleteCategoryCommandHandler : IRequestHandler<DeleteCategoryComman
             category.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de catalogo.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de catálogo.");
 
         if (category.Products.Any())
-            return Result.Failure("No se puede eliminar una categoria que tiene productos. Reasigne o elimine los productos primero.");
+            return Result.Failure("No se puede eliminar una categoría que tiene productos. Reasigne o elimine los productos primero.");
 
         category.Deactivate();
         await _context.SaveChangesAsync(cancellationToken);

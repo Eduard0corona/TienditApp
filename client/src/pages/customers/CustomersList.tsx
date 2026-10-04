@@ -12,7 +12,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 
 const COLUMNS = [
   { header: 'Nombre' },
-  { header: 'Telefono' },
+  { header: 'Teléfono' },
   { header: 'Email' },
   { header: 'Tipo', className: 'text-center' },
   { header: 'Estado', className: 'text-center' },
@@ -109,7 +109,7 @@ export default function CustomersList() {
   const onSubmit = async (form: CreateCustomerRequest) => {
     const phone = form.phone.trim();
     if (!phone) {
-      setError('El telefono es obligatorio.');
+      setError('El teléfono es obligatorio.');
       return;
     }
 
@@ -167,7 +167,7 @@ export default function CustomersList() {
 
   return (
     <>
-      <PageTitle title="Clientes" subtitle="Operacion" />
+      <PageTitle title="Clientes" subtitle="Operación" />
 
       <div className="row">
         <div className="col-12">
@@ -234,7 +234,7 @@ export default function CustomersList() {
                     <td>{customer.email || '-'}</td>
                     <td className="text-center">
                       {customer.isPublicGeneral ? (
-                        <span className="badge bg-info">Publico general</span>
+                        <span className="badge bg-info">Público general</span>
                       ) : (
                         <span className="badge bg-secondary">Registrado</span>
                       )}
@@ -300,20 +300,20 @@ export default function CustomersList() {
                 className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                 {...register('name', {
                   required: 'El nombre es requerido',
-                  maxLength: { value: 200, message: 'Maximo 200 caracteres' },
+                  maxLength: { value: 200, message: 'Máximo 200 caracteres' },
                 })}
               />
               {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Telefono *</label>
+              <label className="form-label">Teléfono *</label>
               <input
                 type="text"
                 className={`form-control ${errors.phone ? 'is-invalid' : ''}`}
                 {...register('phone', {
-                  required: 'El telefono es requerido',
-                  maxLength: { value: 20, message: 'Maximo 20 caracteres' },
+                  required: 'El teléfono es requerido',
+                  maxLength: { value: 20, message: 'Máximo 20 caracteres' },
                 })}
               />
               {errors.phone && <div className="invalid-feedback">{errors.phone.message}</div>}
@@ -325,7 +325,7 @@ export default function CustomersList() {
                 type="email"
                 className={`form-control ${errors.email ? 'is-invalid' : ''}`}
                 {...register('email', {
-                  maxLength: { value: 200, message: 'Maximo 200 caracteres' },
+                  maxLength: { value: 200, message: 'Máximo 200 caracteres' },
                 })}
               />
               {errors.email && <div className="invalid-feedback">{errors.email.message}</div>}

@@ -45,7 +45,7 @@ public class SetSupplierActiveCommandHandler : IRequestHandler<SetSupplierActive
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de inventario/compras.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de inventario/compras.");
 
         var entity = await _context.Suppliers
             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)

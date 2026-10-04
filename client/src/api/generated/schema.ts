@@ -3547,7 +3547,34 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateBusinessCommand"];
+                    "text/json": components["schemas"]["CreateBusinessCommand"];
+                    "application/*+json": components["schemas"]["CreateBusinessCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyTenantDto"];
+                        "application/json": components["schemas"]["MyTenantDto"];
+                        "text/json": components["schemas"]["MyTenantDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -7476,6 +7503,10 @@ export interface components {
             contactName?: string | null;
             contactPhone?: string | null;
             isDefault: boolean;
+        };
+        CreateBusinessCommand: {
+            businessName: string;
+            businessType: components["schemas"]["BusinessType"];
         };
         CreateCampaignCommand: {
             name: string;

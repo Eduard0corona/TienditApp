@@ -68,7 +68,7 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             .AnyAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
         if (existingUser)
-            return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electronico.");
+            return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electrónico.");
 
         if (!_phoneNormalizationService.TryNormalizeToE164(
                 request.PhoneNumber,
@@ -87,7 +87,7 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         // Only a number its account confirmed by SMS is taken: an unverified profile must not let
         // whoever typed the number first lock its real owner out.
         if (phoneHolder is { IsVerified: true })
-            return Result.Failure<AuthResponse>("Ya existe una cuenta de cliente con este telefono.");
+            return Result.Failure<AuthResponse>("Ya existe una cuenta de cliente con este teléfono.");
 
         var user = new ApplicationUser
         {

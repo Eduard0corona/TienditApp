@@ -34,7 +34,7 @@ public class AddTabRoundCommandValidator : AbstractValidator<AddTabRoundCommand>
         RuleFor(x => x.Items).NotEmpty().WithMessage("La ronda necesita al menos un producto.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
     }
 }
@@ -67,7 +67,7 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
         if (!order.IsOpenTab)
             return Result.Failure<OrderDto>("La cuenta ya está cerrada: abre una nueva.");
         if (order.Items.Count + request.Items.Count > OrderLimits.MaxItemsPerOrder)
-            return Result.Failure<OrderDto>($"Una cuenta puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            return Result.Failure<OrderDto>($"Una cuenta puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
 
         var salesSettings = await TenantSalesSettings.ReadAsync(_context, _tenantService.TenantId, cancellationToken);
         var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);

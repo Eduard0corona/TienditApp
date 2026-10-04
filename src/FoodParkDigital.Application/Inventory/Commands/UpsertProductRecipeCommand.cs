@@ -63,7 +63,7 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<ProductRecipeDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<ProductRecipeDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var product = await _context.Products
             .FirstOrDefaultAsync(x => x.Id == request.ProductId, cancellationToken)
@@ -75,7 +75,7 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
             .Select(g => g.Key)
             .ToList();
         if (duplicatedLines.Count > 0)
-            return Result.Failure<ProductRecipeDto>("No puedes repetir el mismo insumo y ubicacion en la receta.");
+            return Result.Failure<ProductRecipeDto>("No puedes repetir el mismo insumo y ubicación en la receta.");
 
         var supplyIds = request.Lines.Select(x => x.SupplyItemId).Distinct().ToList();
         var locationIds = request.Lines
@@ -90,7 +90,7 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
                 .Where(x => supplyIds.Contains(x.Id) && x.IsActive)
                 .CountAsync(cancellationToken);
             if (existingSupplyCount != supplyIds.Count)
-                return Result.Failure<ProductRecipeDto>("Uno o mas insumos no existen o estan inactivos.");
+                return Result.Failure<ProductRecipeDto>("Uno o más insumos no existen o están inactivos.");
         }
 
         if (locationIds.Count > 0)
@@ -99,7 +99,7 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
                 .Where(x => locationIds.Contains(x.Id) && x.IsActive)
                 .CountAsync(cancellationToken);
             if (existingLocationCount != locationIds.Count)
-                return Result.Failure<ProductRecipeDto>("Una o mas ubicaciones no existen o estan inactivas.");
+                return Result.Failure<ProductRecipeDto>("Una o más ubicaciones no existen o están inactivas.");
         }
 
         var existingRequirements = await _context.ProductSupplyRequirements

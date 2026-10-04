@@ -9,6 +9,7 @@ import ToastProvider from './components/feedback/ToastProvider';
 import ConfirmProvider from './components/feedback/ConfirmProvider';
 import App from './App';
 import { applyTheme, readStoredTheme } from './utils/theme';
+import { reloadOnceForNewVersion } from './utils/chunkReload';
 
 // Bootstrap JS (dropdowns, collapses, tooltips, etc.)
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
@@ -23,6 +24,11 @@ import './assets/css/vendor.min.css';
 import './assets/css/app.min.css';
 import './assets/css/theme.css';
 import './assets/css/overrides.css';
+
+// After a deploy, an open page asks for files that no longer exist: load the new version instead of failing.
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadOnceForNewVersion()) event.preventDefault();
+});
 
 // Before the first render, so a dark theme does not flash light on reload.
 const storedTheme = readStoredTheme();

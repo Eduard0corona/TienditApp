@@ -50,7 +50,7 @@ public class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryComman
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure<CategoryDto>("El tenant no tiene habilitado el modulo de catalogo.");
+            return Result.Failure<CategoryDto>("El negocio no tiene habilitado el módulo de catálogo.");
 
         var category = new Category(
             _tenantService.TenantId,

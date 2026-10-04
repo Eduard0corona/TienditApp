@@ -46,13 +46,13 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleFor(x => x.TableNumber).MaximumLength(50);
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
 
         When(x => x.OrderType == OrderType.Service && !x.CreatedByBusiness, () =>
         {
@@ -68,6 +68,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
     private readonly ICurrentUserService _currentUserService;
     private readonly IMapper _mapper;
     private readonly ICustomerLookupService _customerLookupService;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IOrderInventoryService _orderInventoryService;
 
@@ -77,6 +78,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         IMapper mapper,
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
+        IPhoneNormalizationService phoneNormalizationService,
         IOrderInventoryService? orderInventoryService = null)
     {
         _context = context;
@@ -84,6 +86,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         _mapper = mapper;
         _customerLookupService = customerLookupService;
         _dateTimeProvider = dateTimeProvider;
+        _phoneNormalizationService = phoneNormalizationService;
         _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
     }
 
@@ -102,8 +105,12 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         {
             var typeLabel = request.OrderType == OrderType.Service ? "servicios" : "ventas retail";
             return Result.Failure<OrderDto>(
-                $"El tenant no tiene habilitado el modulo requerido para crear ordenes de {typeLabel}.");
+                $"El negocio no tiene habilitado el módulo requerido para crear órdenes de {typeLabel}.");
         }
+
+        // A mistyped number is the customer's to fix (400 in Spanish), not a server error.
+        if (!_phoneNormalizationService.TryNormalizeToE164(request.Phone, request.DefaultCountry, out _))
+            return Result.Failure<OrderDto>(PhoneNumberRules.InvalidPhoneMessage);
 
         var linkedCustomer = await _customerLookupService.ResolveForOrderAsync(
             request.TenantId,

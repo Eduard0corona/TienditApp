@@ -96,7 +96,7 @@ public class OrderInventoryService : IOrderInventoryService
                 if (!locationId.HasValue)
                 {
                     throw new DomainException(
-                        $"La receta del producto '{orderItem.ProductName}' requiere una ubicacion de inventario por defecto.");
+                        $"La receta del producto '{orderItem.ProductName}' requiere una ubicación de inventario por defecto.");
                 }
 
                 var effectiveQuantityPerUnit = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
@@ -139,7 +139,7 @@ public class OrderInventoryService : IOrderInventoryService
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
             externalReference: consumptionExternalReference,
-            notes: $"Salida automatica por orden {order.OrderNumber}");
+            notes: $"Salida automática por orden {order.OrderNumber}");
 
         foreach (var entry in groupedConsumptions)
         {
@@ -148,7 +148,7 @@ public class OrderInventoryService : IOrderInventoryService
             var quantity = entry.Value;
 
             if (!supplies.TryGetValue(supplyId, out var supply))
-                throw new DomainException("No se encontro un insumo configurado en la receta.");
+                throw new DomainException("No se encontró un insumo configurado en la receta.");
 
             if (!stockByKey.TryGetValue((supplyId, locationId), out var stock))
             {
@@ -222,7 +222,7 @@ public class OrderInventoryService : IOrderInventoryService
             if (!locationId.HasValue)
             {
                 throw new DomainException(
-                    $"La receta del servicio '{piece.ItemName}' requiere una ubicacion de inventario por defecto.");
+                    $"La receta del servicio '{piece.ItemName}' requiere una ubicación de inventario por defecto.");
             }
 
             var effectiveQuantity = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
@@ -263,7 +263,7 @@ public class OrderInventoryService : IOrderInventoryService
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
             externalReference: externalReference,
-            notes: $"Consumo automatico por servicio completado ({piece.ItemName}) en orden {order.OrderNumber}");
+            notes: $"Consumo automático por servicio completado ({piece.ItemName}) en orden {order.OrderNumber}");
 
         foreach (var entry in groupedConsumptions)
         {
@@ -272,7 +272,7 @@ public class OrderInventoryService : IOrderInventoryService
             var quantity = entry.Value;
 
             if (!supplies.TryGetValue(supplyId, out var supply))
-                throw new DomainException("No se encontro un insumo configurado en la receta del servicio.");
+                throw new DomainException("No se encontró un insumo configurado en la receta del servicio.");
 
             if (!stockByKey.TryGetValue((supplyId, locationId), out var stock))
             {
@@ -373,7 +373,7 @@ public class OrderInventoryService : IOrderInventoryService
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
             externalReference: reversalExternalReference,
-            notes: $"Reverso automatico por cancelacion de orden {order.OrderNumber}. {reason}".Trim());
+            notes: $"Reverso automático por cancelación de orden {order.OrderNumber}. {reason}".Trim());
 
         foreach (var (consumedLine, quantityToReverse) in linesToReverse)
         {

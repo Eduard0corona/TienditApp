@@ -60,7 +60,7 @@ public class CreateSupplierCommandHandler : IRequestHandler<CreateSupplierComman
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<SupplierDto>("El tenant no tiene habilitado el modulo de inventario/compras.");
+            return Result.Failure<SupplierDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
 
         var entity = new Supplier(
             tenantId: _tenantService.TenantId,

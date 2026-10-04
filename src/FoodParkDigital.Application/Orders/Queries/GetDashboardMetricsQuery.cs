@@ -189,10 +189,12 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             join o in _context.Orders.AsNoTracking() on oi.OrderId equals o.Id
             join p in _context.Products.AsNoTracking() on oi.ProductId equals p.Id into productJoin
             from p in productJoin.DefaultIfEmpty()
+            // Sold means charged, as revenue counts it: orders with a payment registered in the range, whatever
+            // their status (a paid sale still in the kitchen counts; an unpaid delivery does not). Cancelled
+            // orders were refunded first, so they count nothing.
             where o.TenantId == _tenantService.TenantId
-                  && o.CreatedAt >= rangeFromUtc
-                  && o.CreatedAt <= rangeToUtc
-                  && CompletedStatuses.Contains(o.Status)
+                  && o.Status != OrderStatus.Cancelled
+                  && _context.OrderPayments.Any(payment => payment.OrderId == o.Id && payment.PaidAt >= rangeFromUtc && payment.PaidAt <= rangeToUtc)
                   && (
                       (canReadRetailOrders && o.OrderType == OrderType.Retail) ||
                       (canReadServiceOrders && o.OrderType == OrderType.Service))

@@ -26,7 +26,7 @@ public class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCo
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Phone)
-            .NotEmpty().WithMessage("El telefono es obligatorio.")
+            .NotEmpty().WithMessage("El teléfono es obligatorio.")
             .MaximumLength(20);
         RuleFor(x => x.Email).MaximumLength(200).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.Email));
     }
@@ -55,14 +55,14 @@ public class CreateCustomerCommandHandler : IRequestHandler<CreateCustomerComman
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure<CustomerDto>("El tenant no tiene habilitado el modulo de clientes.");
+            return Result.Failure<CustomerDto>("El negocio no tiene habilitado el módulo de clientes.");
 
         var name = request.Name.Trim();
         var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
         var email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
 
         if (phone is null)
-            return Result.Failure<CustomerDto>("El telefono es obligatorio.");
+            return Result.Failure<CustomerDto>("El teléfono es obligatorio.");
 
         var exists = await _context.Customers
             .AnyAsync(c => c.Name == name && c.Phone == phone, cancellationToken);

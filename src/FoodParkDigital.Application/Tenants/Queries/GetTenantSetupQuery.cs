@@ -35,7 +35,7 @@ public class GetTenantSetupQueryHandler : IRequestHandler<GetTenantSetupQuery, R
     {
         var tenantId = await MyTenantResolver.ResolveAsync(_context, _tenantService, _currentUserService, cancellationToken);
         if (tenantId is null)
-            return Result.Failure<TenantSetupDto>("No se encontro el negocio del usuario.");
+            return Result.Failure<TenantSetupDto>("No se encontró el negocio del usuario.");
 
         var tenant = await _context.Tenants
             .AsNoTracking()

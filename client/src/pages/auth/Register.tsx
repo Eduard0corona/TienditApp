@@ -53,6 +53,7 @@ export default function Register() {
   const [accountType, setAccountType] = useState<AccountType>(null);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showOptionalData, setShowOptionalData] = useState(false);
 
   // Business form
   const businessForm = useForm<RegisterBusinessRequest>({
@@ -389,8 +390,8 @@ export default function Register() {
                         <h5 className="header-title mb-3">Datos del Negocio</h5>
 
                         <div className="row">
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">Nombre Comercial <span className="text-danger">*</span></label>
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label">Nombre del negocio <span className="text-danger">*</span></label>
                             <input
                               type="text"
                               className={`form-control ${businessForm.formState.errors.businessName ? 'is-invalid' : ''}`}
@@ -401,8 +402,8 @@ export default function Register() {
                               <div className="invalid-feedback">{businessForm.formState.errors.businessName.message}</div>
                             )}
                           </div>
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">Tipo de Negocio <span className="text-danger">*</span></label>
+                          <div className="col-md-6 mb-3">
+                            <label className="form-label">Tipo de negocio <span className="text-danger">*</span></label>
                             <select
                               className={`form-select ${businessForm.formState.errors.businessType ? 'is-invalid' : ''}`}
                               {...businessForm.register('businessType', { required: 'Selecciona el tipo', valueAsNumber: true })}
@@ -412,138 +413,155 @@ export default function Register() {
                               <option value={BusinessType.Service}>Servicios</option>
                             </select>
                           </div>
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">Giro</label>
-                            <select className="form-select" {...businessForm.register('industry')}>
-                              <option value="">Seleccionar...</option>
-                              {INDUSTRY_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          </div>
                         </div>
 
-                        <div className="row">
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">RFC</label>
-                            <input
-                              type="text"
-                              className={`form-control ${businessForm.formState.errors.rfc ? 'is-invalid' : ''}`}
-                              placeholder="XAXX010101000"
-                              maxLength={13}
-                              {...businessForm.register('rfc', {
-                                pattern: { value: /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i, message: 'Formato de RFC inválido' },
-                                setValueAs: (v: string) => v ? v.toUpperCase() : v,
-                              })}
-                            />
-                            {businessForm.formState.errors.rfc && (
-                              <div className="invalid-feedback">{businessForm.formState.errors.rfc.message}</div>
-                            )}
-                          </div>
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">Razón Social</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="Nombre legal de la empresa"
-                              {...businessForm.register('legalName', { maxLength: 300 })}
-                            />
-                          </div>
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">Régimen Fiscal</label>
-                            <select className="form-select" {...businessForm.register('taxRegime')}>
-                              <option value="">Seleccionar...</option>
-                              {TAX_REGIME_OPTIONS.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
+                        {/* Only what is needed to start selling; the rest can wait for Mi negocio. */}
+                        <button
+                          type="button"
+                          className="btn btn-link px-0"
+                          onClick={() => setShowOptionalData((current) => !current)}
+                          aria-expanded={showOptionalData}
+                          aria-controls="register-optional-data"
+                        >
+                          <i className={`${showOptionalData ? 'ri-subtract-line' : 'ri-add-line'} me-1`} aria-hidden="true"></i>
+                          {showOptionalData ? 'Ocultar datos fiscales y dirección' : 'Agregar datos fiscales y dirección (opcional)'}
+                        </button>
+                        <p className="text-muted small mb-3">Puedes llenarlos después en Mi negocio; solo hacen falta para facturar.</p>
 
-                        <div className="mb-3">
-                          <label className="form-label">Teléfono del Negocio</label>
-                          <input
-                            type="tel"
-                            className="form-control"
-                            placeholder="+5215512345678"
-                            {...businessForm.register('contactPhone')}
-                          />
-                        </div>
+                        {showOptionalData && (
+                          <div id="register-optional-data">
+                            <div className="mb-3">
+                              <label className="form-label">Giro</label>
+                              <select className="form-select" {...businessForm.register('industry')}>
+                                <option value="">Seleccionar...</option>
+                                {INDUSTRY_OPTIONS.map((opt) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="row">
+                              <div className="col-md-4 mb-3">
+                                <label className="form-label">RFC</label>
+                                <input
+                                  type="text"
+                                  className={`form-control ${businessForm.formState.errors.rfc ? 'is-invalid' : ''}`}
+                                  placeholder="XAXX010101000"
+                                  maxLength={13}
+                                  {...businessForm.register('rfc', {
+                                    pattern: { value: /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i, message: 'Formato de RFC inválido' },
+                                    setValueAs: (v: string) => v ? v.toUpperCase() : v,
+                                  })}
+                                />
+                                {businessForm.formState.errors.rfc && (
+                                  <div className="invalid-feedback">{businessForm.formState.errors.rfc.message}</div>
+                                )}
+                              </div>
+                              <div className="col-md-4 mb-3">
+                                <label className="form-label">Razón Social</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="Nombre legal de la empresa"
+                                  {...businessForm.register('legalName', { maxLength: 300 })}
+                                />
+                              </div>
+                              <div className="col-md-4 mb-3">
+                                <label className="form-label">Régimen Fiscal</label>
+                                <select className="form-select" {...businessForm.register('taxRegime')}>
+                                  <option value="">Seleccionar...</option>
+                                  {TAX_REGIME_OPTIONS.map((opt) => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
 
-                        <hr className="my-3" />
+                            <div className="mb-3">
+                              <label className="form-label">Teléfono del Negocio</label>
+                              <input
+                                type="tel"
+                                className="form-control"
+                                placeholder="+5215512345678"
+                                {...businessForm.register('contactPhone')}
+                              />
+                            </div>
 
-                        {/* Address Section */}
-                        <h5 className="header-title mb-3">Dirección del Negocio</h5>
+                            <hr className="my-3" />
 
-                        <div className="row">
-                          <div className="col-md-6 mb-3">
-                            <label className="form-label">Calle</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="Nombre de la calle"
-                              {...businessForm.register('street', { maxLength: 300 })}
-                            />
-                          </div>
-                          <div className="col-md-3 mb-3">
-                            <label className="form-label">Núm. Exterior</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="123"
-                              {...businessForm.register('exteriorNumber', { maxLength: 20 })}
-                            />
-                          </div>
-                          <div className="col-md-3 mb-3">
-                            <label className="form-label">Núm. Interior</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="A"
-                              {...businessForm.register('interiorNumber', { maxLength: 20 })}
-                            />
-                          </div>
-                        </div>
+                            {/* Address Section */}
+                            <h5 className="header-title mb-3">Dirección del Negocio</h5>
 
-                        <div className="row">
-                          <div className="col-md-4 mb-3">
-                            <label className="form-label">Colonia</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="Colonia"
-                              {...businessForm.register('neighborhood', { maxLength: 200 })}
-                            />
+                            <div className="row">
+                              <div className="col-md-6 mb-3">
+                                <label className="form-label">Calle</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="Nombre de la calle"
+                                  {...businessForm.register('street', { maxLength: 300 })}
+                                />
+                              </div>
+                              <div className="col-md-3 mb-3">
+                                <label className="form-label">Núm. Exterior</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="123"
+                                  {...businessForm.register('exteriorNumber', { maxLength: 20 })}
+                                />
+                              </div>
+                              <div className="col-md-3 mb-3">
+                                <label className="form-label">Núm. Interior</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="A"
+                                  {...businessForm.register('interiorNumber', { maxLength: 20 })}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="row">
+                              <div className="col-md-4 mb-3">
+                                <label className="form-label">Colonia</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="Colonia"
+                                  {...businessForm.register('neighborhood', { maxLength: 200 })}
+                                />
+                              </div>
+                              <div className="col-md-2 mb-3">
+                                <label className="form-label">C.P.</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="01000"
+                                  maxLength={5}
+                                  {...businessForm.register('zipCode', { maxLength: 10 })}
+                                />
+                              </div>
+                              <div className="col-md-3 mb-3">
+                                <label className="form-label">Ciudad / Municipio</label>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder="Ciudad"
+                                  {...businessForm.register('city', { maxLength: 200 })}
+                                />
+                              </div>
+                              <div className="col-md-3 mb-3">
+                                <label className="form-label">Estado</label>
+                                <select className="form-select" {...businessForm.register('state')}>
+                                  <option value="">Seleccionar...</option>
+                                  {MX_STATES.map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
                           </div>
-                          <div className="col-md-2 mb-3">
-                            <label className="form-label">C.P.</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="01000"
-                              maxLength={5}
-                              {...businessForm.register('zipCode', { maxLength: 10 })}
-                            />
-                          </div>
-                          <div className="col-md-3 mb-3">
-                            <label className="form-label">Ciudad / Municipio</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="Ciudad"
-                              {...businessForm.register('city', { maxLength: 200 })}
-                            />
-                          </div>
-                          <div className="col-md-3 mb-3">
-                            <label className="form-label">Estado</label>
-                            <select className="form-select" {...businessForm.register('state')}>
-                              <option value="">Seleccionar...</option>
-                              {MX_STATES.map((s) => (
-                                <option key={s} value={s}>{s}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
+                        )}
 
                         <div className="mb-3 d-grid">
                           <button

@@ -39,7 +39,8 @@ public sealed class OrderRealtimeNotifications :
             notification.OrderId,
             notification.OrderNumber,
             notification.BusinessType,
-            notification.Total));
+            notification.Total,
+            notification.Status));
 
     public Task Handle(OrderStatusChangedEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, () => _notificationService.NotifyOrderStatusChanged(

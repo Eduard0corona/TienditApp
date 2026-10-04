@@ -229,7 +229,7 @@ public class CreateOrderCommandFlowTests
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("El cliente seleccionado no tiene telefono. Captura uno para continuar.", result.Error);
+        Assert.Equal("El cliente seleccionado no tiene teléfono. Captura uno para continuar.", result.Error);
     }
 
     [Fact]

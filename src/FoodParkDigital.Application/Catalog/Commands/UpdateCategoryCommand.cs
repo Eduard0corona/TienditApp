@@ -54,7 +54,7 @@ public class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryComman
             category.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure<CategoryDto>("El tenant no tiene habilitado el modulo de catalogo.");
+            return Result.Failure<CategoryDto>("El negocio no tiene habilitado el módulo de catálogo.");
 
         category.Update(request.Name, request.Description, request.SortOrder);
         await _context.SaveChangesAsync(cancellationToken);

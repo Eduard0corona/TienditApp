@@ -12,11 +12,12 @@ import type {
   UpdateEmployeeRequest,
 } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { getRoleLabel } from '../../utils/labels';
 
 const COLUMNS = [
   { header: 'Empleado' },
-  { header: 'Rol app', className: 'text-center' },
-  { header: 'Rol tenant', className: 'text-center' },
+  { header: 'Tipo de cuenta', className: 'text-center' },
+  { header: 'Rol en el negocio', className: 'text-center' },
   { header: 'Estado', className: 'text-center' },
   { header: 'Permisos' },
   { header: 'Acciones', className: 'text-center' },
@@ -24,13 +25,13 @@ const COLUMNS = [
 
 const APP_ROLE_OPTIONS = [
   { value: 1, label: 'Administrador' },
-  { value: 2, label: 'Staff' },
-  { value: 3, label: 'Kitchen' },
+  { value: 2, label: 'Empleado' },
+  { value: 3, label: 'Cocina' },
 ];
 
 const TENANT_ROLE_OPTIONS = [
-  { value: 1, label: 'Admin' },
-  { value: 2, label: 'Staff' },
+  { value: 1, label: 'Administrador' },
+  { value: 2, label: 'Empleado' },
 ];
 
 type EmployeeForm = {
@@ -319,8 +320,8 @@ export default function EmployeesList() {
                       <div className="fw-semibold">{employee.firstName} {employee.lastName}</div>
                       <small className="text-muted">{employee.email}</small>
                     </td>
-                    <td className="text-center">{employee.appRole}</td>
-                    <td className="text-center">{employee.tenantRole}</td>
+                    <td className="text-center">{getRoleLabel(employee.appRole)}</td>
+                    <td className="text-center">{getRoleLabel(employee.tenantRole)}</td>
                     <td className="text-center">
                       <span className={`badge ${employee.isActive ? 'bg-success' : 'bg-danger'}`}>
                         {employee.isActive ? 'Activo' : 'Inactivo'}
@@ -392,7 +393,7 @@ export default function EmployeesList() {
                 />
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Telefono</label>
+                <label className="form-label">Teléfono</label>
                 <input
                   type="text"
                   className="form-control"
@@ -420,7 +421,7 @@ export default function EmployeesList() {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Rol de aplicacion</label>
+                <label className="form-label">Tipo de cuenta</label>
                 <select className="form-select" disabled={editingOwner} {...register('appRole', { valueAsNumber: true })}>
                   {APP_ROLE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -428,7 +429,7 @@ export default function EmployeesList() {
                 </select>
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Rol de tenant</label>
+                <label className="form-label">Rol en el negocio</label>
                 <select
                   className="form-select"
                   disabled={editingOwner || watchedAppRole === 1}

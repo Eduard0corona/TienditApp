@@ -113,6 +113,34 @@ public class GetDashboardMetricsQueryTests
     }
 
     [Fact]
+    public async Task TopSellingItems_ShouldCountWhatWasCharged_NotWhatWasDelivered()
+    {
+        await using var fixture = TestFixture.Create();
+        var tenant = await fixture.AddTenantAsync("tenant-a", TenantCapability.Retail);
+        var paidInKitchen = await fixture.AddProductAsync(tenant, "Torta pagada", UnitType.Unit, 50m);
+        var deliveredUnpaid = await fixture.AddProductAsync(tenant, "Entregado sin pagar", UnitType.Unit, 50m);
+        var paidBefore = await fixture.AddProductAsync(tenant, "Pagado antes", UnitType.Unit, 50m);
+        // Paid in the range but not delivered yet (waiting for the kitchen): sold.
+        var confirmed = fixture.NewOrder(tenant, paidInKitchen, quantity: 3);
+        confirmed.TransitionTo(OrderStatus.Confirmed, new RetailOrderStateMachine(), "test");
+        confirmed.RegisterPayment(confirmed.Total, OrderPaymentMethod.Cash, OrderDate, null, null, null, null);
+        // Delivered on credit: nothing charged yet, so not counted.
+        var unpaid = fixture.NewOrder(tenant, deliveredUnpaid, quantity: 5);
+        unpaid.TransitionTo(OrderStatus.Delivered, new RetailOrderStateMachine(), "test");
+        // Charged the week before (another range).
+        var older = fixture.NewOrder(tenant, paidBefore, quantity: 7);
+        older.RegisterPayment(older.Total, OrderPaymentMethod.Cash, OrderDate.AddDays(-7), null, null, null, null);
+        fixture.Context.Orders.AddRange(confirmed, unpaid, older);
+        await fixture.Context.SaveChangesAsync();
+
+        var metrics = await fixture.GetMetricsAsync(tenant);
+
+        var item = Assert.Single(metrics.TopSellingItems);
+        Assert.Equal(paidInKitchen.Id, item.ProductId);
+        Assert.Equal(3, item.QuantitySold);
+    }
+
+    [Fact]
     public void TopSellingItemsQuery_ShouldFilterByTenantInSqlServerTranslation()
     {
         var tenantId = Guid.NewGuid();
@@ -140,9 +168,11 @@ public class GetDashboardMetricsQueryTests
         Assert.Matches(@"FROM \[Orders\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @ef_filter__CurrentTenantId\d*\b", sql);
         Assert.Matches(@"FROM \[Products\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @ef_filter__CurrentTenantId\d*\b", sql);
 
-        // Explicit predicate on the orders (the alias carrying the date range), bound to the current tenant.
-        var ordersAlias = Regex.Match(sql, @"\[(\w+)\]\.\[CreatedAt\] >= @");
-        Assert.True(ordersAlias.Success, "Orders date range predicate not found.");
+        // Explicit predicate on the orders (the alias carrying the status filter), bound to the current tenant.
+        var ordersAlias = Regex.Match(sql, @"\[(\w+)\]\.\[Status\] <> 99");
+        Assert.True(ordersAlias.Success, "Orders status predicate not found.");
+        // Payments of the range are read with their own tenant filter.
+        Assert.Matches(@"FROM \[OrderPayments\] AS \[(\w+)\]\s+WHERE \[\1\]\.\[TenantId\] = @ef_filter__CurrentTenantId\d*\b", sql);
         var explicitTenantPredicate = Regex.Match(
             sql,
             $@"\[{ordersAlias.Groups[1].Value}\]\.\[TenantId\] = @(?<parameter>(?!ef_filter__)\w+)");
@@ -222,6 +252,15 @@ public class GetDashboardMetricsQueryTests
 
             Context.Orders.Add(order);
             await Context.SaveChangesAsync();
+            return order;
+        }
+
+        public Order NewOrder(Tenant tenant, Product product, int quantity)
+        {
+            var order = new Order(tenant.Id, null, Guid.NewGuid(), true, $"ORD-{++_orderSequence:D6}", tenant.BusinessType,
+                OrderType.Retail, "Cliente", "5511111111", null, null);
+            order.AddItem(product.Id, product.Name, quantity, product.PriceAmount);
+            order.CreatedAt = OrderDate;
             return order;
         }
 

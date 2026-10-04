@@ -40,7 +40,7 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
             cancellationToken);
 
         if (tenantId is null)
-            return Result.Failure<TenantProfileDto>("No se encontro el tenant del usuario.");
+            return Result.Failure<TenantProfileDto>("No se encontró el negocio del usuario.");
 
         var tenant = await _context.Tenants
             .AsNoTracking()
@@ -48,7 +48,7 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
 
         if (tenant is null)
-            return Result.Failure<TenantProfileDto>("Tenant no encontrado.");
+            return Result.Failure<TenantProfileDto>("Negocio no encontrado.");
 
         var dto = _mapper.Map<TenantProfileDto>(tenant);
         return Result.Success(dto);

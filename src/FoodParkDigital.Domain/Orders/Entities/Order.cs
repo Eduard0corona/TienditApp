@@ -257,7 +257,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string? afterPhotosJson)
     {
         if (OrderType != OrderType.Service)
-            throw new DomainException("Solo las ordenes de servicio pueden tener detalle de servicio.");
+            throw new DomainException("Solo las órdenes de servicio pueden tener detalle de servicio.");
 
         if (ServiceDetail is null)
         {
