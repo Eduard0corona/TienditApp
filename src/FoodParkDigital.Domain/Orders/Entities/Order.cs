@@ -14,6 +14,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     private readonly List<OrderItem> _items = new();
     private readonly List<OrderStatusHistory> _statusHistory = new();
     private readonly List<OrderPayment> _payments = new();
+    private readonly List<OrderRefund> _refunds = new();
     private readonly List<ServiceOrderPiece> _servicePieces = new();
 
     private Order() { }
@@ -80,6 +81,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public decimal Tax { get; private set; }
     public decimal Total { get; private set; }
     public decimal PaidAmount { get; private set; }
+
+    /// <summary>Money given back. Payments stay as they were: refunds compensate them.</summary>
+    public decimal RefundedAmount { get; private set; }
+
+    /// <summary>What the business kept from this order: paid minus refunded.</summary>
+    public decimal NetPaidAmount => PaidAmount - RefundedAmount;
     public decimal Balance => Total - PaidAmount;
     public string? CancellationReason { get; private set; }
     public byte[] Version { get; private set; } = null!;
@@ -88,6 +95,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
     public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
+    public IReadOnlyCollection<OrderRefund> Refunds => _refunds.AsReadOnly();
     public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
 
     /// <param name="vatRate">IVA of the line; the general rate (16 %) when omitted.</param>
@@ -244,11 +252,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (!stateMachine.CanCancel(Status))
             throw new InvalidOrderStateTransitionException(Status, OrderStatus.Cancelled, BusinessType);
 
-        // Until refunds are modeled (see ADR 0007), cancelling would leave payments and cash
-        // movements counted for an order that no longer exists.
-        if (PaidAmount > 0)
+        // Cancelling with money still kept would leave payments and cash counted for an order that no
+        // longer exists: the money is refunded first (RegisterRefund), and then the order is cancelled.
+        if (NetPaidAmount > 0)
             throw new DomainException(
-                "La orden tiene pagos registrados; no se puede cancelar hasta registrar el reembolso.");
+                "La orden tiene pagos sin reembolsar; reembólsalos antes de cancelarla.");
 
         var previousStatus = Status;
         Status = OrderStatus.Cancelled;
@@ -304,6 +312,44 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         _payments.Add(payment);
         PaidAmount = newPaidAmount;
         return payment;
+    }
+
+    /// <summary>
+    /// Gives money back, optionally for returned units. The payments and lines it compensates are kept
+    /// as they were; the refund records the reason, the method and who made it.
+    /// </summary>
+    /// <param name="returnedItems">Units returned per order line (may be empty for a price adjustment).</param>
+    public OrderRefund RegisterRefund(
+        decimal amount,
+        OrderPaymentMethod method,
+        string reason,
+        DateTimeOffset refundedAt,
+        string refundedBy,
+        Guid? inventoryLocationId,
+        string? reference,
+        bool restockItems,
+        IReadOnlyCollection<(Guid OrderItemId, int Quantity)> returnedItems)
+    {
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException("La orden está cancelada: no tiene pagos que reembolsar.");
+        if (amount > NetPaidAmount)
+            throw new DomainException("El reembolso no puede ser mayor a lo que se pagó y no se ha reembolsado.");
+
+        var refund = new OrderRefund(
+            TenantId, Id, amount, method, reason, refundedAt, refundedBy, inventoryLocationId, reference, restockItems);
+
+        foreach (var (orderItemId, quantity) in returnedItems)
+        {
+            var item = _items.FirstOrDefault(x => x.Id == orderItemId)
+                ?? throw new DomainException("El artículo devuelto no pertenece a esta orden.");
+            item.RegisterReturn(quantity);
+            refund.AddLine(item, quantity);
+        }
+
+        _refunds.Add(refund);
+        RefundedAmount += amount;
+        AddDomainEvent(new OrderRefundedEvent(Id, TenantId, refund.Id, amount, method, refund.Reason));
+        return refund;
     }
 
     /// <summary>IVA by rate, computed from the items and the policy the order was sold with.</summary>

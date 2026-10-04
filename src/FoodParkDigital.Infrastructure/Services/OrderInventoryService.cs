@@ -327,8 +327,32 @@ public class OrderInventoryService : IOrderInventoryService
         if (consumptionMovement is null || !consumptionMovement.Lines.Any())
             return;
 
-        var supplyIds = consumptionMovement.Lines.Select(x => x.SupplyItemId).Distinct().ToList();
-        var locationIds = consumptionMovement.Lines.Select(x => x.InventoryLocationId).Distinct().ToList();
+        // Units already returned with refunds were re-entered by their own movements: reverse only the rest.
+        var returnPrefix = BuildReturnExternalReferencePrefix(order.Id);
+        var alreadyReturned = (await _context.InventoryMovements
+                .Where(x => x.TenantId == order.TenantId && x.ExternalReference != null
+                    && x.ExternalReference.StartsWith(returnPrefix))
+                .SelectMany(x => x.Lines)
+                .Select(l => new { l.SupplyItemId, l.InventoryLocationId, l.Quantity })
+                .ToListAsync(cancellationToken))
+            .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
+            .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
+        var linesToReverse = consumptionMovement.Lines
+            .Select(line =>
+            {
+                var key = (line.SupplyItemId, line.InventoryLocationId);
+                var returned = alreadyReturned.TryGetValue(key, out var quantity) ? quantity : 0m;
+                var take = Math.Min(returned, line.Quantity);
+                alreadyReturned[key] = returned - take;
+                return (Line: line, Quantity: line.Quantity - take);
+            })
+            .Where(x => x.Quantity > 0)
+            .ToList();
+        if (linesToReverse.Count == 0)
+            return;
+
+        var supplyIds = linesToReverse.Select(x => x.Line.SupplyItemId).Distinct().ToList();
+        var locationIds = linesToReverse.Select(x => x.Line.InventoryLocationId).Distinct().ToList();
 
         var stocks = await _context.InventoryStocks
             .Where(x =>
@@ -352,7 +376,7 @@ public class OrderInventoryService : IOrderInventoryService
             externalReference: reversalExternalReference,
             notes: $"Reverso automatico por cancelacion de orden {order.OrderNumber}. {reason}".Trim());
 
-        foreach (var consumedLine in consumptionMovement.Lines)
+        foreach (var (consumedLine, quantityToReverse) in linesToReverse)
         {
             var key = (consumedLine.SupplyItemId, consumedLine.InventoryLocationId);
             if (!stockByKey.TryGetValue(key, out var stock))
@@ -363,13 +387,13 @@ public class OrderInventoryService : IOrderInventoryService
             }
 
             var quantityBefore = stock.OnHandQuantity;
-            stock.ApplyMovement(consumedLine.Quantity, consumedLine.UnitCost, movementDate, allowNegative: true);
+            stock.ApplyMovement(quantityToReverse, consumedLine.UnitCost, movementDate, allowNegative: true);
 
             var line = reversalMovement.AddLine(
                 tenantId: order.TenantId,
                 supplyItemId: consumedLine.SupplyItemId,
                 inventoryLocationId: consumedLine.InventoryLocationId,
-                quantity: consumedLine.Quantity,
+                quantity: quantityToReverse,
                 unitCost: consumedLine.UnitCost,
                 lotNumber: consumedLine.LotNumber,
                 expirationDate: consumedLine.ExpirationDate,
@@ -387,6 +411,123 @@ public class OrderInventoryService : IOrderInventoryService
             reversalMovement.MovementNumber);
     }
 
+    public async Task ReturnItemsToInventoryAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
+    {
+        if (refund.Lines.Count == 0)
+            return;
+
+        var returnExternalReference = $"{BuildReturnExternalReferencePrefix(order.Id)}{refund.Id:N}";
+        var alreadyReturned = await _context.InventoryMovements
+            .AnyAsync(x => x.TenantId == order.TenantId && x.ExternalReference == returnExternalReference, cancellationToken);
+        if (alreadyReturned)
+            return;
+
+        // Only units whose recipe left inventory with the order come back (service pieces consume on their own).
+        var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
+        var consumption = await _context.InventoryMovements
+            .Include(x => x.Lines)
+            .FirstOrDefaultAsync(
+                x => x.TenantId == order.TenantId && x.ExternalReference == consumptionExternalReference,
+                cancellationToken);
+        if (consumption is null || consumption.Lines.Count == 0)
+            return;
+
+        var returnedProducts = refund.Lines
+            .Join(order.Items, line => line.OrderItemId, item => item.Id, (line, item) => new { item.ProductId, item.ProductName, line.Quantity })
+            .ToList();
+        var productIds = returnedProducts.Select(x => x.ProductId).Distinct().ToList();
+        var requirements = await _context.ProductSupplyRequirements
+            .Where(x => x.TenantId == order.TenantId && x.IsActive && productIds.Contains(x.ProductId))
+            .ToListAsync(cancellationToken);
+        if (requirements.Count == 0)
+            return;
+
+        var defaultLocationId = await _context.InventoryLocations
+            .Where(x => x.TenantId == order.TenantId && x.IsActive && x.IsDefault)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // The current recipe gives the supplies per unit; never re-enter more than the order consumed.
+        var consumedByKey = consumption.Lines
+            .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
+            .ToDictionary(g => g.Key, g => (Quantity: g.Sum(l => l.Quantity), UnitCost: g.First().UnitCost));
+        var toReturn = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
+        foreach (var product in returnedProducts)
+        {
+            foreach (var requirement in requirements.Where(r => r.ProductId == product.ProductId))
+            {
+                var locationId = requirement.InventoryLocationId ?? defaultLocationId;
+                if (locationId is null)
+                    continue;
+
+                var key = (requirement.SupplyItemId, locationId.Value);
+                var perUnit = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
+                toReturn[key] = (toReturn.TryGetValue(key, out var current) ? current : 0m) + perUnit * product.Quantity;
+            }
+        }
+
+        var movementDate = _dateTimeProvider.UtcNow;
+        var movement = new InventoryMovement(
+            tenantId: order.TenantId,
+            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementType: InventoryMovementType.Entry,
+            movementReason: InventoryMovementReason.Return,
+            movementDate: movementDate,
+            referenceNumber: order.OrderNumber,
+            externalReference: returnExternalReference,
+            notes: $"Devolución de la orden {order.OrderNumber}: {refund.Reason}");
+
+        var supplyIds = toReturn.Keys.Select(k => k.SupplyItemId).Distinct().ToList();
+        var locationIds = toReturn.Keys.Select(k => k.InventoryLocationId).Distinct().ToList();
+        var stocks = await _context.InventoryStocks
+            .Where(x => x.TenantId == order.TenantId && supplyIds.Contains(x.SupplyItemId) && locationIds.Contains(x.InventoryLocationId))
+            .ToListAsync(cancellationToken);
+        var stockByKey = stocks.ToDictionary(x => (x.SupplyItemId, x.InventoryLocationId), x => x);
+
+        foreach (var ((supplyItemId, locationId), requested) in toReturn)
+        {
+            if (!consumedByKey.TryGetValue((supplyItemId, locationId), out var consumed))
+                continue;
+
+            var quantity = Math.Min(requested, consumed.Quantity);
+            if (quantity <= 0)
+                continue;
+
+            if (!stockByKey.TryGetValue((supplyItemId, locationId), out var stock))
+            {
+                stock = new InventoryStock(order.TenantId, supplyItemId, locationId);
+                _context.InventoryStocks.Add(stock);
+                stockByKey[(supplyItemId, locationId)] = stock;
+            }
+
+            var quantityBefore = stock.OnHandQuantity;
+            stock.ApplyMovement(quantity, consumed.UnitCost, movementDate, allowNegative: true);
+            var line = movement.AddLine(
+                tenantId: order.TenantId,
+                supplyItemId: supplyItemId,
+                inventoryLocationId: locationId,
+                quantity: quantity,
+                unitCost: consumed.UnitCost,
+                lotNumber: null,
+                expirationDate: null,
+                notes: $"Devolución de la orden {order.OrderNumber}");
+            line.SetBalances(quantityBefore, stock.OnHandQuantity);
+        }
+
+        if (movement.Lines.Count == 0)
+            return;
+
+        movement.RecalculateTotalAmount();
+        _context.InventoryMovements.Add(movement);
+
+        _logger.LogInformation(
+            "OrderItemsReturnedToInventory: tenant {TenantId}, order {OrderId}, refund {RefundId}, movement {MovementNumber}.",
+            order.TenantId,
+            order.Id,
+            refund.Id,
+            movement.MovementNumber);
+    }
+
     public static bool ShouldConsumeInventory(OrderStatus status)
         => status is
             OrderStatus.Confirmed or
@@ -399,6 +540,7 @@ public class OrderInventoryService : IOrderInventoryService
 
     private static string BuildConsumptionExternalReference(Guid orderId) => $"ORDER:{orderId:N}:CONSUMPTION";
     private static string BuildReversalExternalReference(Guid orderId) => $"ORDER:{orderId:N}:REVERSAL";
+    private static string BuildReturnExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:RETURN:";
     private static string BuildServicePieceConsumptionExternalReference(Guid orderId, Guid pieceId)
         => $"ORDER:{orderId:N}:PIECE:{pieceId:N}:CONSUMPTION";
 

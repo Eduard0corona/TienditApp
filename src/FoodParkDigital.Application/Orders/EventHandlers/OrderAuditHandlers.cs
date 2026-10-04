@@ -15,7 +15,8 @@ public sealed class OrderAuditHandlers :
     IOutboxEventHandler<OrderCreatedEvent>,
     IOutboxEventHandler<OrderStatusChangedEvent>,
     IOutboxEventHandler<OrderCancelledEvent>,
-    IOutboxEventHandler<ServiceOrderPieceStatusChangedEvent>
+    IOutboxEventHandler<ServiceOrderPieceStatusChangedEvent>,
+    IOutboxEventHandler<OrderRefundedEvent>
 {
     private readonly IApplicationDbContext _context;
 
@@ -52,6 +53,15 @@ public sealed class OrderAuditHandlers :
             domainEvent.OrderId,
             domainEvent.PreviousStatus,
             domainEvent.NewStatus
+        });
+
+    public Task HandleAsync(OrderRefundedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+        => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "OrderRefunded", context, new
+        {
+            domainEvent.RefundId,
+            domainEvent.Amount,
+            domainEvent.Method,
+            domainEvent.Reason
         });
 
     private Task AddAsync(Guid tenantId, string entityName, Guid entityId, string action, OutboxEventContext context, object metadata)

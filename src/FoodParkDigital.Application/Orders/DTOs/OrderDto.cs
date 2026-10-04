@@ -27,6 +27,10 @@ public class OrderDto
     public List<OrderTaxLineDto> TaxBreakdown { get; set; } = new();
     public decimal PaidAmount { get; set; }
     public decimal Balance { get; set; }
+    /// <summary>Money given back; payments are not edited.</summary>
+    public decimal RefundedAmount { get; set; }
+    /// <summary>Paid minus refunded.</summary>
+    public decimal NetPaidAmount { get; set; }
     public string? CancellationReason { get; set; }
     public bool CanCancel { get; set; }
     public List<OrderStatus> AllowedTransitions { get; set; } = new();
@@ -37,6 +41,26 @@ public class OrderDto
     public ServiceOrderDetailDto? ServiceDetail { get; set; }
     public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
     public List<OrderPaymentDto> Payments { get; set; } = new();
+    public List<OrderRefundDto> Refunds { get; set; } = new();
+}
+
+public class OrderRefundDto
+{
+    public Guid Id { get; set; }
+    public decimal Amount { get; set; }
+    public OrderPaymentMethod Method { get; set; }
+    public string Reason { get; set; } = null!;
+    public DateTimeOffset RefundedAt { get; set; }
+    public string RefundedBy { get; set; } = null!;
+    public string? Reference { get; set; }
+    public bool RestockItems { get; set; }
+    public List<OrderRefundLineDto> Lines { get; set; } = new();
+}
+
+public class OrderRefundLineDto
+{
+    public Guid OrderItemId { get; set; }
+    public int Quantity { get; set; }
 }
 
 public class OrderItemDto
@@ -45,6 +69,8 @@ public class OrderItemDto
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
     public int Quantity { get; set; }
+    /// <summary>Units given back with refunds.</summary>
+    public int ReturnedQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal TotalPrice { get; set; }
     public string? Notes { get; set; }

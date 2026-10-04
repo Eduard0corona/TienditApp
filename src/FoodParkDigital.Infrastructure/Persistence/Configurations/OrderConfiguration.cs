@@ -34,6 +34,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Tax).HasColumnType("decimal(18,2)");
         builder.Property(o => o.Total).HasColumnType("decimal(18,2)");
         builder.Property(o => o.PaidAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+        builder.Property(o => o.RefundedAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+        builder.Ignore(o => o.NetPaidAmount);
         builder.Property(o => o.TenantId).IsRequired();
 
         // Concurrency token
@@ -79,6 +81,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Navigation(o => o.Items).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.StatusHistory).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.Payments).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.HasMany(o => o.Refunds)
+            .WithOne()
+            .HasForeignKey(r => r.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.Refunds).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.ServicePieces).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Indexes

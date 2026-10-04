@@ -32,12 +32,15 @@ public class MappingProfile : Profile
     public MappingProfile()
     {
         CreateMap<Order, OrderDto>()
-            .ForMember(d => d.TaxBreakdown, opt => opt.Ignore());
+            .ForMember(d => d.TaxBreakdown, opt => opt.Ignore())
+            .ForMember(d => d.NetPaidAmount, opt => opt.MapFrom(s => s.PaidAmount - s.RefundedAmount));
         CreateMap<OrderItem, OrderItemDto>();
         CreateMap<OrderStatusHistory, OrderStatusHistoryDto>();
         CreateMap<ServiceOrderDetail, ServiceOrderDetailDto>();
         CreateMap<ServiceOrderPiece, ServiceOrderPieceDto>();
         CreateMap<OrderPayment, OrderPaymentDto>();
+        CreateMap<OrderRefund, OrderRefundDto>();
+        CreateMap<OrderRefundLine, OrderRefundLineDto>();
         CreateMap<Order, KitchenOrderDto>();
 
         CreateMap<Product, ProductDto>()

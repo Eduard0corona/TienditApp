@@ -33,6 +33,7 @@ public interface IApplicationDbContext
     DbSet<OrderItem> OrderItems { get; }
     DbSet<OrderStatusHistory> OrderStatusHistories { get; }
     DbSet<OrderPayment> OrderPayments { get; }
+    DbSet<OrderRefund> OrderRefunds { get; }
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }

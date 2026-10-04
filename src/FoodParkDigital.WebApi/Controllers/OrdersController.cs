@@ -116,6 +116,43 @@ public class OrdersController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>Gives money back, optionally for returned units (owner, admin or ProcessRefunds).</summary>
+    [HttpPost("{id:guid}/refunds")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<OrderDto>> Refund(Guid id, [FromBody] RefundOrderRequest request)
+    {
+        var result = await _mediator.Send(new RefundOrderCommand
+        {
+            OrderId = id,
+            Amount = request.Amount,
+            Method = request.Method,
+            Reason = request.Reason,
+            RestockItems = request.RestockItems,
+            Items = request.Items,
+            InventoryLocationId = request.InventoryLocationId,
+            Reference = request.Reference
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
+    /// <summary>Refunds what is left of every payment, returns the units and cancels when the state allows it.</summary>
+    [HttpPost("{id:guid}/void")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+    public async Task<ActionResult<OrderDto>> Void(Guid id, [FromBody] VoidOrderRequest request)
+    {
+        var result = await _mediator.Send(new VoidOrderCommand
+        {
+            OrderId = id,
+            Reason = request.Reason,
+            RestockItems = request.RestockItems
+        });
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+        return Ok(result.Value);
+    }
+
     [HttpPut("{id:guid}/service-pieces/{pieceId:guid}/status")]
     [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> UpdateServicePieceStatus(
@@ -204,4 +241,21 @@ public record AddOrderPaymentRequest
 public record UpdateServiceOrderPieceStatusRequest
 {
     public ServiceOrderPieceStatus NewStatus { get; init; }
+}
+
+public class RefundOrderRequest
+{
+    public decimal Amount { get; init; }
+    public OrderPaymentMethod Method { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public bool RestockItems { get; init; } = true;
+    public List<RefundItemDto> Items { get; init; } = [];
+    public Guid? InventoryLocationId { get; init; }
+    public string? Reference { get; init; }
+}
+
+public class VoidOrderRequest
+{
+    public string Reason { get; init; } = string.Empty;
+    public bool RestockItems { get; init; } = true;
 }

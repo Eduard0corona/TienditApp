@@ -1145,6 +1145,8 @@ export interface OrderItemDto {
   productId: string;
   productName: string;
   quantity: number;
+  /** Units given back with refunds; the sold quantity never changes. */
+  returnedQuantity?: number;
   unitPrice: number;
   totalPrice: number;
   notes?: string;
@@ -1259,6 +1261,10 @@ export interface OrderDto {
   taxBreakdown: OrderTaxLineDto[];
   paidAmount: number;
   balance: number;
+  /** Money given back; payments are never edited. */
+  refundedAmount?: number;
+  /** Paid minus refunded. */
+  netPaidAmount?: number;
   cancellationReason?: string;
   createdAt: string;
   updatedAt?: string;
@@ -1267,6 +1273,34 @@ export interface OrderDto {
   serviceDetail?: ServiceOrderDetailDto;
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
+  refunds?: OrderRefundDto[];
+}
+
+export interface OrderRefundDto {
+  id: string;
+  amount: number;
+  method: OrderPaymentMethod;
+  reason: string;
+  refundedAt: string;
+  refundedBy: string;
+  reference?: string;
+  restockItems: boolean;
+  lines: Array<{ orderItemId: string; quantity: number }>;
+}
+
+export interface RefundOrderRequest {
+  amount: number;
+  method: OrderPaymentMethod;
+  reason: string;
+  /** Re-enter the recipe supplies of the returned units. */
+  restockItems: boolean;
+  items: Array<{ orderItemId: string; quantity: number }>;
+  reference?: string;
+}
+
+export interface VoidOrderRequest {
+  reason: string;
+  restockItems: boolean;
 }
 
 export interface CreateOrderItemRequest {

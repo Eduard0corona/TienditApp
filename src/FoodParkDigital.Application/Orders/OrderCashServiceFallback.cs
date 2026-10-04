@@ -11,4 +11,7 @@ internal sealed class NoOpOrderCashService : IOrderCashService
 
     public Task<bool> RegisterOrderPaymentAsync(Order order, OrderPayment payment, CancellationToken cancellationToken)
         => Task.FromResult(false);
+
+    public Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
+        => Task.FromResult(false);
 }

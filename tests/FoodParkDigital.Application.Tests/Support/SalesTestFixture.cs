@@ -97,7 +97,7 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         return session;
     }
 
-    public CreateOrderCommandHandler CreateOrderHandler()
+    public CreateOrderCommandHandler CreateOrderHandler(IOrderInventoryService? orderInventoryService = null)
     {
         var phoneNormalization = new PhoneNormalizationService();
         var customerLookup = new CustomerLookupService(
@@ -114,7 +114,7 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             customerLookup,
             Clock,
             phoneNormalization,
-            orderInventoryService: null,
+            orderInventoryService: orderInventoryService,
             orderCashService: new OrderCashService(Context, CurrentUser));
     }
 

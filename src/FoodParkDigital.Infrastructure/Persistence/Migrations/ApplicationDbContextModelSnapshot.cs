@@ -1493,6 +1493,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
 
+                    b.Property<decimal>("RefundedAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -1579,6 +1584,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
+                    b.Property<int>("ReturnedQuantity")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("TaxRate")
                         .HasColumnType("decimal(5,2)");
 
@@ -1655,6 +1663,99 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "InventoryLocationId", "PaidAt");
 
                     b.ToTable("OrderPayments", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderRefund", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("InventoryLocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTimeOffset>("RefundedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("RefundedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("RestockItems")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InventoryLocationId");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("TenantId", "OrderId");
+
+                    b.HasIndex("TenantId", "RefundedAt");
+
+                    b.ToTable("OrderRefunds", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderRefundLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("OrderItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("RefundId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderItemId");
+
+                    b.HasIndex("RefundId");
+
+                    b.HasIndex("TenantId", "RefundId");
+
+                    b.ToTable("OrderRefundLines", (string)null);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderStatusHistory", b =>
@@ -2824,6 +2925,35 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderRefund", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Inventory.Entities.InventoryLocation", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany("Refunds")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderRefundLine", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.OrderItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.OrderRefund", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderStatusHistory", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
@@ -3088,11 +3218,18 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Navigation("Payments");
 
+                    b.Navigation("Refunds");
+
                     b.Navigation("ServiceDetail");
 
                     b.Navigation("ServicePieces");
 
                     b.Navigation("StatusHistory");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderRefund", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>

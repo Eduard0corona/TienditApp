@@ -1,0 +1,199 @@
+import { useMemo, useState } from 'react';
+import { Modal } from 'react-bootstrap';
+import type { OrderDto, OrderPaymentMethod, RefundOrderRequest, VoidOrderRequest } from '../../types';
+import { OrderPaymentMethod as PaymentMethod } from '../../types';
+import { getPaymentMethodLabel } from '../../utils/labels';
+import { formatMoney, parseMoneyInput, toCents } from '../../utils/money';
+
+type RefundModalProps = {
+  order: OrderDto;
+  submitting: boolean;
+  error: string;
+  onClose: () => void;
+} & (
+  | { mode: 'refund'; onSubmit: (request: RefundOrderRequest) => void }
+  | { mode: 'void'; onSubmit: (request: VoidOrderRequest) => void }
+);
+
+const METHODS: OrderPaymentMethod[] = [
+  PaymentMethod.Cash,
+  PaymentMethod.Card,
+  PaymentMethod.Transfer,
+  PaymentMethod.DigitalWallet,
+  PaymentMethod.Other,
+];
+
+/** What each payment method still has to give back: paid with it minus refunded with it. */
+function remainingByMethod(order: OrderDto): Array<{ method: OrderPaymentMethod; amount: number }> {
+  const cents = new Map<OrderPaymentMethod, number>();
+  for (const payment of order.payments) cents.set(payment.method, (cents.get(payment.method) ?? 0) + toCents(payment.amount));
+  for (const refund of order.refunds ?? []) {
+    if (cents.has(refund.method)) cents.set(refund.method, (cents.get(refund.method) ?? 0) - toCents(refund.amount));
+  }
+  return [...cents.entries()].filter(([, value]) => value > 0).map(([method, value]) => ({ method, amount: value / 100 }));
+}
+
+/**
+ * Refund (money back, optionally for returned units) or void (everything back and the sale cancelled).
+ * Refunds never edit the sale: they are recorded apart with their reason.
+ */
+export default function RefundOrderModal(props: RefundModalProps) {
+  const { order, submitting, error, onClose } = props;
+  const netPaid = order.netPaidAmount ?? order.paidAmount;
+  const remaining = useMemo(() => remainingByMethod(order), [order]);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [amountInput, setAmountInput] = useState('');
+  const [method, setMethod] = useState<OrderPaymentMethod>(remaining[0]?.method ?? PaymentMethod.Cash);
+  const [reason, setReason] = useState('');
+  const [restock, setRestock] = useState(true);
+
+  const returnable = order.items.filter((item) => item.quantity - (item.returnedQuantity ?? 0) > 0);
+  const linesTotalCents = order.items.reduce((sum, item) => sum + toCents(item.totalPrice), 0);
+  // The share of the order total of the units chosen (the total already has its IVA).
+  const suggestedCents = Math.min(
+    toCents(netPaid),
+    linesTotalCents === 0
+      ? 0
+      : Math.round(order.items.reduce((sum, item) => {
+        const units = quantities[item.id] ?? 0;
+        return sum + (toCents(item.totalPrice) * units) / item.quantity;
+      }, 0) * toCents(order.total) / linesTotalCents),
+  );
+  const typedAmount = amountInput.trim() === '' ? null : parseMoneyInput(amountInput);
+  const amountCents = typedAmount === null ? suggestedCents : toCents(typedAmount);
+  const anyUnits = Object.values(quantities).some((value) => value > 0);
+  const amountValid = amountCents > 0 && amountCents <= toCents(netPaid) && (amountInput.trim() === '' || typedAmount !== null);
+  const reasonValid = reason.trim().length >= 3;
+  const canSubmit = !submitting && reasonValid && (props.mode === 'void' || amountValid);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canSubmit) return;
+    if (props.mode === 'void') {
+      props.onSubmit({ reason: reason.trim(), restockItems: restock });
+      return;
+    }
+    props.onSubmit({
+      amount: amountCents / 100,
+      method,
+      reason: reason.trim(),
+      restockItems: restock && anyUnits,
+      items: Object.entries(quantities)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([orderItemId, quantity]) => ({ orderItemId, quantity })),
+    });
+  };
+
+  return (
+    <Modal show onHide={onClose} centered size="lg">
+      <form onSubmit={submit}>
+        <Modal.Header closeButton>
+          <Modal.Title as="h2" className="h5">
+            {props.mode === 'void' ? `Anular la venta ${order.orderNumber}` : `Reembolsar ${order.orderNumber}`}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted">
+            Pagado {formatMoney(order.paidAmount)}
+            {(order.refundedAmount ?? 0) > 0 && <> · ya reembolsado {formatMoney(order.refundedAmount ?? 0)}</>}
+            {' · '}disponible para reembolsar <strong>{formatMoney(netPaid)}</strong>
+          </p>
+
+          {props.mode === 'void' ? (
+            <div className="alert alert-warning">
+              Se devolverá todo lo pagado con la misma forma de pago:
+              <ul className="mb-0 mt-1">
+                {remaining.map((item) => (
+                  <li key={item.method}>{getPaymentMethodLabel(item.method)}: {formatMoney(item.amount)}</li>
+                ))}
+              </ul>
+              El pedido se cancela si su estado lo permite; si ya se entregó, queda entregado y reembolsado.
+            </div>
+          ) : (
+            <>
+              {returnable.length > 0 && (
+                <div className="mb-3">
+                  <div className="fw-semibold mb-1">Artículos devueltos (opcional)</div>
+                  <ul className="list-unstyled mb-0">
+                    {returnable.map((item) => {
+                      const max = item.quantity - (item.returnedQuantity ?? 0);
+                      const value = quantities[item.id] ?? 0;
+                      return (
+                        <li key={item.id} className="d-flex align-items-center justify-content-between gap-2 border-bottom py-1">
+                          <span>{item.productName} <span className="text-muted small">({max} disponibles)</span></span>
+                          <span className="d-flex align-items-center gap-1" role="group" aria-label={`Devolver ${item.productName}`}>
+                            <button type="button" className="btn btn-sm btn-light" disabled={value === 0}
+                              onClick={() => setQuantities((current) => ({ ...current, [item.id]: Math.max(0, value - 1) }))}
+                              aria-label={`Uno menos de ${item.productName}`}>−</button>
+                            <span className="px-2" aria-live="polite">{value}</span>
+                            <button type="button" className="btn btn-sm btn-light" disabled={value >= max}
+                              onClick={() => setQuantities((current) => ({ ...current, [item.id]: Math.min(max, value + 1) }))}
+                              aria-label={`Uno más de ${item.productName}`}>+</button>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              <div className="row g-2 mb-3">
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="refund-amount">Monto a devolver</label>
+                  <input
+                    id="refund-amount"
+                    className={`form-control form-control-lg ta-money ${amountValid || amountCents === 0 ? '' : 'is-invalid'}`}
+                    inputMode="decimal"
+                    placeholder={formatMoney(suggestedCents / 100)}
+                    value={amountInput}
+                    onChange={(event) => setAmountInput(event.target.value)}
+                  />
+                  {!amountValid && amountCents > 0 && (
+                    <div className="invalid-feedback">No puede ser mayor a {formatMoney(netPaid)}.</div>
+                  )}
+                  <div className="form-text">Vacío usa lo que corresponde a los artículos elegidos.</div>
+                </div>
+                <div className="col-sm-6">
+                  <label className="form-label" htmlFor="refund-method">Se devuelve en</label>
+                  <select id="refund-method" className="form-select form-select-lg" value={method}
+                    onChange={(event) => setMethod(Number(event.target.value) as OrderPaymentMethod)}>
+                    {METHODS.map((item) => (
+                      <option key={item} value={item}>{getPaymentMethodLabel(item)}</option>
+                    ))}
+                  </select>
+                  {method === PaymentMethod.Cash && <div className="form-text">Sale del efectivo de tu caja.</div>}
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="mb-3">
+            <label className="form-label" htmlFor="refund-reason">Motivo</label>
+            <input
+              id="refund-reason"
+              className="form-control"
+              maxLength={500}
+              placeholder={props.mode === 'void' ? 'Ej. cobro duplicado' : 'Ej. producto en mal estado'}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="form-check form-switch">
+            <input id="refund-restock" type="checkbox" role="switch" className="form-check-input" checked={restock}
+              onChange={(event) => setRestock(event.target.checked)} />
+            <label className="form-check-label" htmlFor="refund-restock">Regresar los insumos al inventario</label>
+          </div>
+          {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
+        </Modal.Body>
+        <Modal.Footer>
+          <button type="button" className="btn btn-light" onClick={onClose} disabled={submitting}>Volver</button>
+          <button type="submit" className="btn btn-danger" disabled={!canSubmit}>
+            {submitting
+              ? 'Guardando…'
+              : props.mode === 'void' ? 'Anular venta' : `Reembolsar ${formatMoney(amountCents / 100)}`}
+          </button>
+        </Modal.Footer>
+      </form>
+    </Modal>
+  );
+}

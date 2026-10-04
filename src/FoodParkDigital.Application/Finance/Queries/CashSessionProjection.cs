@@ -33,8 +33,9 @@ internal static class CashSessionProjection
             .Where(t => t.CashSessionId == x.Id && t.Amount < 0
                 && (t.PaymentMethod == null || t.PaymentMethod == OrderPaymentMethod.Cash))
             .Sum(t => (decimal?)(-t.Amount)) ?? 0m,
+        // Net of refunds made with those methods.
         NonCashInflows = context.CashTransactions
-            .Where(t => t.CashSessionId == x.Id && t.Amount > 0
+            .Where(t => t.CashSessionId == x.Id
                 && t.PaymentMethod != null && t.PaymentMethod != OrderPaymentMethod.Cash)
             .Sum(t => (decimal?)t.Amount) ?? 0m
     };

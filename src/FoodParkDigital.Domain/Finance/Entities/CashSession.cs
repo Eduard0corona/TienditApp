@@ -75,7 +75,8 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     // and payments made in cash. Card, transfer and wallet payments are reported apart as NonCashInflows.
     public decimal Inflows => _transactions.Where(x => x.Amount > 0 && IsCashMovement(x.PaymentMethod)).Sum(x => x.Amount);
     public decimal Outflows => _transactions.Where(x => x.Amount < 0 && IsCashMovement(x.PaymentMethod)).Sum(x => -x.Amount);
-    public decimal NonCashInflows => _transactions.Where(x => x.Amount > 0 && !IsCashMovement(x.PaymentMethod)).Sum(x => x.Amount);
+    // Net of refunds made with those methods.
+    public decimal NonCashInflows => _transactions.Where(x => !IsCashMovement(x.PaymentMethod)).Sum(x => x.Amount);
     public decimal ExpectedBalance => OpeningAmount + Inflows - Outflows;
 
     public static bool IsCashMovement(OrderPaymentMethod? paymentMethod) =>

@@ -119,6 +119,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
     public DbSet<OrderPayment> OrderPayments => Set<OrderPayment>();
+    public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
     public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<Appointment> Appointments => Set<Appointment>();

@@ -7,7 +7,9 @@ import type {
   ServiceOrderPieceStatus,
   OrderType,
   PaginatedList,
+  RefundOrderRequest,
   UploadedFileDto,
+  VoidOrderRequest,
 } from '../types';
 
 export const ordersApi = {
@@ -37,6 +39,14 @@ export const ordersApi = {
 
   addPayment: (id: string, data: AddOrderPaymentRequest) =>
     api.post<OrderDto>(`/orders/${id}/payments`, data),
+
+  /** Gives money back, optionally for returned units. */
+  refund: (id: string, data: RefundOrderRequest) =>
+    api.post<OrderDto>(`/orders/${id}/refunds`, data),
+
+  /** Refunds every payment, returns the units and cancels when the state allows it. */
+  voidOrder: (id: string, data: VoidOrderRequest) =>
+    api.post<OrderDto>(`/orders/${id}/void`, data),
 
   uploadServicePhoto: (file: File) => {
     const formData = new FormData();
