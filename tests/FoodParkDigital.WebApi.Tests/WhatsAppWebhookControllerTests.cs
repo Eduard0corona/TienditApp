@@ -8,7 +8,10 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
+using FoodParkDigital.Infrastructure.BackgroundJobs;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Controllers;
 using FoodParkDigital.WebApi.Services;
@@ -35,7 +38,7 @@ public class WhatsAppWebhookControllerTests
     private const string TenantBVerifyToken = "b2b2b2b2b2b2b2b2b2b2b2b2";
 
     [Fact]
-    public async Task Receive_ShouldReturn401AndNotProcess_WhenSignatureIsInvalid()
+    public async Task Receive_ShouldReturn401AndNotStore_WhenSignatureIsInvalid()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.forged");
@@ -45,11 +48,11 @@ public class WhatsAppWebhookControllerTests
         var result = await controller.Receive(CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, StatusCodeOf(result));
-        Assert.Empty(fixture.Mediator.Requests);
+        Assert.Empty(await fixture.Context.InboxMessages.ToListAsync());
     }
 
     [Fact]
-    public async Task Receive_ShouldReturn401AndNotProcess_WhenSignatureIsMissing()
+    public async Task Receive_ShouldReturn401AndNotStore_WhenSignatureIsMissing()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.unsigned");
@@ -59,11 +62,11 @@ public class WhatsAppWebhookControllerTests
         var result = await controller.Receive(CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status401Unauthorized, StatusCodeOf(result));
-        Assert.Empty(fixture.Mediator.Requests);
+        Assert.Empty(await fixture.Context.InboxMessages.ToListAsync());
     }
 
     [Fact]
-    public async Task Receive_ShouldReturn503AndNotProcess_WhenAppSecretIsNotConfigured()
+    public async Task Receive_ShouldReturn503AndNotStore_WhenAppSecretIsNotConfigured()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.no-secret");
@@ -73,11 +76,11 @@ public class WhatsAppWebhookControllerTests
         var result = await controller.Receive(CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, StatusCodeOf(result));
-        Assert.Empty(fixture.Mediator.Requests);
+        Assert.Empty(await fixture.Context.InboxMessages.ToListAsync());
     }
 
     [Fact]
-    public async Task Receive_ShouldNotProcess_WhenUnsignedWebhooksFlagIsSetOutsideDevelopment()
+    public async Task Receive_ShouldNotStore_WhenUnsignedWebhooksFlagIsSetOutsideDevelopment()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.flag-in-production");
@@ -89,11 +92,11 @@ public class WhatsAppWebhookControllerTests
         var result = await controller.Receive(CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, StatusCodeOf(result));
-        Assert.Empty(fixture.Mediator.Requests);
+        Assert.Empty(await fixture.Context.InboxMessages.ToListAsync());
     }
 
     [Fact]
-    public async Task Receive_ShouldRouteMessageToTenantOwningPhoneNumberId_WhenSignatureIsValid()
+    public async Task Receive_ShouldStoreTheDeliveryAndAnswer200_WhenSignatureIsValid()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.valid");
@@ -102,16 +105,17 @@ public class WhatsAppWebhookControllerTests
 
         var result = await controller.Receive(CancellationToken.None);
 
+        // Acknowledged at once; the inbox worker processes it with retries.
         Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
-        var command = Assert.IsType<ProcessInboundMessageCommand>(Assert.Single(fixture.Mediator.Requests));
-        Assert.Equal(fixture.TenantB, command.TenantId);
-        Assert.Equal("wamid.valid", command.ExternalMessageId);
-        Assert.Equal("+5215511112222", command.FromPhone);
-        Assert.Equal("Hola", command.Body);
+        var stored = Assert.Single(await fixture.Context.InboxMessages.ToListAsync());
+        Assert.Equal(WebhookSources.WhatsApp, stored.Source);
+        Assert.Equal(Encoding.UTF8.GetString(body), stored.Payload);
+        Assert.Null(stored.ProcessedAt);
+        Assert.Empty(fixture.Mediator.Requests);
     }
 
     [Fact]
-    public async Task Receive_ShouldProcessUnsignedDelivery_WhenUnsignedWebhooksFlagIsSetInDevelopment()
+    public async Task Receive_ShouldStoreUnsignedDelivery_WhenUnsignedWebhooksFlagIsSetInDevelopment()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload(TenantAPhoneNumberId, "wamid.local-dev");
@@ -123,119 +127,168 @@ public class WhatsAppWebhookControllerTests
         var result = await controller.Receive(CancellationToken.None);
 
         Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
-        var command = Assert.IsType<ProcessInboundMessageCommand>(Assert.Single(fixture.Mediator.Requests));
-        Assert.Equal(fixture.TenantA, command.TenantId);
+        Assert.Single(await fixture.Context.InboxMessages.ToListAsync());
     }
 
     [Fact]
-    public async Task Receive_ShouldProcessRemainingMessagesAndReturn500_WhenAMessageCannotBeStored()
+    public async Task Receive_ShouldStoreARedeliveryOnce()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.1", "wamid.2");
+
+        foreach (var _ in Enumerable.Range(0, 2))
+        {
+            var controller = fixture.CreateController(
+                CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
+            Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(await controller.Receive(CancellationToken.None)));
+        }
+
+        Assert.Single(await fixture.Context.InboxMessages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Receive_ShouldAnswer500_WhenTheDeliveryCannotBeStored()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        fixture.SaveFaults.FailNextSave();
+        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.outage");
+        var controller = fixture.CreateController(
+            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret), logger);
+
+        var result = await controller.Receive(CancellationToken.None);
+
+        // Without a 200, Meta delivers it again.
+        Assert.True(fixture.SaveFaults.Fired);
+        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+        Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Process_ShouldRouteMessageToTenantOwningPhoneNumberId()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = InboundPayload(TenantBPhoneNumberId, "wamid.valid");
+
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
+
+        Assert.Equal(new WhatsAppWebhookOutcome(0, InvalidPayload: false), outcome);
+        var command = Assert.IsType<ProcessInboundMessageCommand>(Assert.Single(fixture.Mediator.Requests));
+        Assert.Equal(fixture.TenantB, command.TenantId);
+        Assert.Equal("wamid.valid", command.ExternalMessageId);
+        Assert.Equal("+5215511112222", command.FromPhone);
+        Assert.Equal("Hola", command.Body);
+        Assert.Equal("Cliente", command.ProfileName);
+    }
+
+    [Fact]
+    public async Task Process_ShouldStoreTheRemainingMessagesAndReportTheFailedOne()
     {
         await using var fixture = await TestFixture.CreateAsync();
         fixture.Mediator.FailingMessageIds.Add("wamid.2");
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.1", "wamid.2", "wamid.3");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
 
-        var result = await controller.Receive(CancellationToken.None);
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
 
-        // Meta redelivers anything that does not get a 200; the stored messages are then deduplicated.
-        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+        // The inbox retries the delivery; the stored messages are then deduplicated by their id.
+        Assert.Equal(1, outcome.FailedItems);
         Assert.Equal(
             new[] { "wamid.1", "wamid.2", "wamid.3" },
             fixture.Mediator.Requests.OfType<ProcessInboundMessageCommand>().Select(c => c.ExternalMessageId));
     }
 
     [Fact]
-    public async Task Receive_ShouldReturn200_WhenRedeliveryRepeatsAlreadyStoredMessages()
+    public async Task Process_ShouldSucceed_WhenARetryRepeatsAlreadyStoredMessages()
     {
         await using var fixture = await TestFixture.CreateAsync();
         fixture.Mediator.DuplicateMessageIds.Add("wamid.1");
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.1", "wamid.2");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
 
-        var result = await controller.Receive(CancellationToken.None);
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
 
-        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        Assert.Equal(0, outcome.FailedItems);
         Assert.Equal(2, fixture.Mediator.Requests.Count);
     }
 
     [Fact]
-    public async Task Receive_ShouldReturn200AndNotProcess_WhenSignedPayloadIsNotValidJson()
+    public async Task Process_ShouldDropAPayloadThatIsNotJson()
     {
         await using var fixture = await TestFixture.CreateAsync();
-        var body = Encoding.UTF8.GetBytes("""{ "entry": [""");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
 
-        var result = await controller.Receive(CancellationToken.None);
+        var outcome = await fixture.CreateProcessor().ProcessAsync("""{ "entry": [""");
 
-        // A redelivery would carry the same body, so it is acknowledged instead of retried.
-        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        // A retry would carry the same body, so it is not retried.
+        Assert.Equal(new WhatsAppWebhookOutcome(0, InvalidPayload: true), outcome);
         Assert.Empty(fixture.Mediator.Requests);
     }
 
     [Fact]
-    public async Task Receive_ShouldReturn200AndNotProcess_WhenPhoneNumberIdIsUnknown()
+    public async Task Process_ShouldIgnoreAnUnknownPhoneNumberId()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var body = InboundPayload("999999999999999", "wamid.unknown-number");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
 
-        var result = await controller.Receive(CancellationToken.None);
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
 
-        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        Assert.Equal(0, outcome.FailedItems);
         Assert.Empty(fixture.Mediator.Requests);
     }
 
     [Fact]
-    public async Task Receive_ShouldReturn500_WhenStatusUpdateCannotBeSaved()
+    public async Task Process_ShouldApplyDeliveryStatusesToTheSentMessage()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        await fixture.SeedSentMessageAsync(fixture.TenantB, "wamid.sent");
+        var body = StatusPayload(TenantBPhoneNumberId, "wamid.sent", "read");
+
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
+
+        Assert.Equal(0, outcome.FailedItems);
+        var message = await fixture.Context.WhatsAppMessages.IgnoreQueryFilters().SingleAsync(m => m.ExternalMessageId == "wamid.sent");
+        Assert.Equal(MessageStatus.Read, message.Status);
+    }
+
+    [Fact]
+    public async Task Process_ShouldReportAFailure_WhenStatusUpdateCannotBeSaved()
     {
         await using var fixture = await TestFixture.CreateAsync();
         await fixture.SeedSentMessageAsync(fixture.TenantB, "wamid.sent");
         fixture.SaveFaults.FailNextSave();
         var body = StatusPayload(TenantBPhoneNumberId, "wamid.sent", "delivered");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret));
 
-        var result = await controller.Receive(CancellationToken.None);
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
 
         Assert.True(fixture.SaveFaults.Fired);
-        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+        Assert.Equal(1, outcome.FailedItems);
     }
 
     [Fact]
-    public async Task Receive_ShouldNotLogSenderPhone_WhenStoringMessageFailsWithSqlErrorOutsideDevelopment()
+    public async Task Process_ShouldNotLogSenderPhone_WhenStoringMessageFailsWithSqlErrorOutsideDevelopment()
     {
         await using var fixture = await TestFixture.CreateAsync();
         fixture.Mediator.ProcessFailure = DuplicateConversationFailure(fixture.TenantB);
-        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var logger = new CapturingLogger<WhatsAppWebhookProcessor>();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.race");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Production, AppSecret), body, Sign(body, AppSecret), logger);
 
-        var result = await controller.Receive(CancellationToken.None);
+        var outcome = await fixture.CreateProcessor(logger).ProcessAsync(Encoding.UTF8.GetString(body));
 
-        // The message was not stored, so Meta must deliver it again.
-        Assert.Equal(StatusCodes.Status500InternalServerError, StatusCodeOf(result));
+        // The message was not stored, so the delivery is retried.
+        Assert.Equal(1, outcome.FailedItems);
         Assert.Null(logger.FirstMentioning("5511112222"));
         var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Contains($"{typeof(SqlException).FullName} (SQL error 2601)", error.Exception!.ToString());
     }
 
     [Fact]
-    public async Task Receive_ShouldLogFullSqlError_WhenStoringMessageFailsInDevelopment()
+    public async Task Process_ShouldLogFullSqlError_WhenStoringMessageFailsInDevelopment()
     {
         await using var fixture = await TestFixture.CreateAsync();
         var failure = DuplicateConversationFailure(fixture.TenantB);
         fixture.Mediator.ProcessFailure = failure;
-        var logger = new CapturingLogger<WhatsAppWebhookController>();
+        var logger = new CapturingLogger<WhatsAppWebhookProcessor>();
         var body = InboundPayload(TenantBPhoneNumberId, "wamid.race-dev");
-        var controller = fixture.CreateController(
-            CreateVerifier(Environments.Development, AppSecret), body, Sign(body, AppSecret), logger, Environments.Development);
 
-        await controller.Receive(CancellationToken.None);
+        await fixture.CreateProcessor(logger, Environments.Development).ProcessAsync(Encoding.UTF8.GetString(body));
 
         var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Same(failure, error.Exception);
@@ -381,7 +434,7 @@ public class WhatsAppWebhookControllerTests
 
             return new WhatsAppWebhookController(
                 Mediator,
-                Context,
+                new WebhookInbox(Context, new FixedClock(), new InboxSignal()),
                 verifier,
                 new TestHostEnvironment(environmentName),
                 logger ?? NullLogger<WhatsAppWebhookController>.Instance)
@@ -389,6 +442,15 @@ public class WhatsAppWebhookControllerTests
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };
         }
+
+        public WhatsAppWebhookProcessor CreateProcessor(
+            ILogger<WhatsAppWebhookProcessor>? logger = null,
+            string environmentName = "Production")
+            => new(
+                Mediator,
+                Context,
+                new TestHostEnvironment(environmentName),
+                logger ?? NullLogger<WhatsAppWebhookProcessor>.Instance);
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
 
@@ -504,6 +566,11 @@ public class WhatsAppWebhookControllerTests
                 .IsRequired(false)
                 .ValueGeneratedNever();
         }
+    }
+
+    private sealed class FixedClock : IDateTimeProvider
+    {
+        public DateTimeOffset UtcNow { get; } = new(2026, 10, 4, 18, 0, 0, TimeSpan.Zero);
     }
 
     private sealed class TestCurrentTenantService : ICurrentTenantService

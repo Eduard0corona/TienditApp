@@ -4,7 +4,7 @@ namespace FoodParkDigital.Application.Common.Interfaces;
 
 public interface IWhatsAppService
 {
-    Task<Result> SendTemplateMessageAsync(
+    Task<MessageSendResult> SendTemplateMessageAsync(
         Guid tenantId,
         string phoneNumber,
         string templateName,
@@ -12,7 +12,7 @@ public interface IWhatsAppService
         string[] parameters,
         CancellationToken cancellationToken = default);
 
-    Task<Result> SendTextMessageAsync(
+    Task<MessageSendResult> SendTextMessageAsync(
         Guid tenantId,
         string phoneNumber,
         string message,

@@ -2,6 +2,9 @@ using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Infrastructure.BackgroundJobs;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Interceptors;
@@ -13,6 +16,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
+using Polly;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
@@ -38,12 +43,14 @@ public static class DependencyInjection
         // Interceptors
         services.AddScoped<AuditableEntityInterceptor>();
         services.AddScoped<TenantSaveChangesInterceptor>();
+        services.AddScoped<OutboxSaveChangesInterceptor>();
 
         // DbContext
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
             var auditInterceptor = sp.GetRequiredService<AuditableEntityInterceptor>();
             var tenantInterceptor = sp.GetRequiredService<TenantSaveChangesInterceptor>();
+            var outboxInterceptor = sp.GetRequiredService<OutboxSaveChangesInterceptor>();
             var logSensitiveData = sp.GetRequiredService<IHostEnvironment>().IsDevelopment();
 
             options.UseSqlServer(
@@ -54,7 +61,8 @@ public static class DependencyInjection
                     sqlOptions.EnableRetryOnFailure(maxRetryCount: 3);
                 });
 
-            options.AddInterceptors(auditInterceptor, tenantInterceptor);
+            // The tenant interceptor validates rows before the outbox interceptor serializes their events.
+            options.AddInterceptors(auditInterceptor, tenantInterceptor, outboxInterceptor);
 
             options.ConfigureWarnings(w =>
             {
@@ -112,8 +120,26 @@ public static class DependencyInjection
 
         services.AddAuthorization();
 
-        // HTTP Clients
-        services.AddHttpClient("WhatsApp");
+        // HTTP Clients. Sends are POSTs that are not idempotent at the provider: they get timeouts and a
+        // circuit breaker but no immediate retry (a timed-out message may have been delivered). Background
+        // senders retry later through the outbox, with backoff.
+        services.AddHttpClient("WhatsApp").AddResilienceHandler("whatsapp", ConfigureProviderResilience);
+        services.AddHttpClient("Twilio").AddResilienceHandler("twilio", ConfigureProviderResilience);
+
+        // Background work: outbox (durable side effects of domain events) and webhook inbox.
+        services.Configure<BackgroundJobOptions>(configuration.GetSection(BackgroundJobOptions.SectionName));
+        services.AddSingleton<OutboxSignal>();
+        services.AddSingleton<InboxSignal>();
+        services.AddSingleton<OutboxDispatcher>();
+        services.AddSingleton<InboxProcessor>();
+        services.AddScoped<IWebhookInbox, WebhookInbox>();
+        services.AddScoped<WhatsAppWebhookProcessor>();
+        services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
+        if (configuration.GetValue($"{BackgroundJobOptions.SectionName}:Enabled", defaultValue: true))
+        {
+            services.AddHostedService<OutboxDispatcherService>();
+            services.AddHostedService<InboxProcessorService>();
+        }
 
         // Services
         services.AddScoped<ICurrentTenantService, CurrentTenantService>();
@@ -145,6 +171,21 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
 
         return services;
+    }
+
+    private static void ConfigureProviderResilience(ResiliencePipelineBuilder<HttpResponseMessage> builder)
+    {
+        builder
+            .AddTimeout(TimeSpan.FromSeconds(30))
+            .AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+            {
+                // Stop calling a provider that keeps failing; callers get a transient failure and retry later.
+                FailureRatio = 0.5,
+                MinimumThroughput = 10,
+                SamplingDuration = TimeSpan.FromSeconds(60),
+                BreakDuration = TimeSpan.FromSeconds(30)
+            })
+            .AddTimeout(TimeSpan.FromSeconds(15));
     }
 
     public static void ConfigureIdentityOptions(IdentityOptions options)

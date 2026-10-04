@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Events;
 using System.Reflection;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Identity.Services;
@@ -24,6 +25,16 @@ public static class DependencyInjection
         services.AddAutoMapper(assembly);
 
         services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
+
+        // Durable handlers of domain events, run by the outbox dispatcher (one registration per event type).
+        foreach (var type in assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false }))
+        {
+            foreach (var handlerInterface in type.GetInterfaces()
+                         .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IOutboxEventHandler<>)))
+            {
+                services.AddScoped(handlerInterface, type);
+            }
+        }
 
         return services;
     }

@@ -7,14 +7,23 @@ namespace FoodParkDigital.Infrastructure.Services;
 public class CurrentUserService : ICurrentUserService
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IBackgroundExecutionContext? _backgroundContext;
 
-    public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+    public CurrentUserService(
+        IHttpContextAccessor httpContextAccessor,
+        IBackgroundExecutionContext? backgroundContext = null)
     {
         _httpContextAccessor = httpContextAccessor;
+        _backgroundContext = backgroundContext;
     }
 
-    public string? UserId => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-    public string? UserName => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Email);
+    // Outside a request (background workers) the user is whoever caused the work, as the worker recorded it.
+    public string? UserId => _httpContextAccessor.HttpContext is { } httpContext
+        ? httpContext.User?.FindFirstValue(ClaimTypes.NameIdentifier)
+        : _backgroundContext?.UserId;
+    public string? UserName => _httpContextAccessor.HttpContext is { } httpContext
+        ? httpContext.User?.FindFirstValue(ClaimTypes.Email)
+        : _backgroundContext?.UserName;
     public string? Role => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Role);
     public string? TenantRole => _httpContextAccessor.HttpContext?.User?.FindFirstValue("tenant_role");
     public IReadOnlyCollection<string> Permissions =>
