@@ -8,6 +8,7 @@ Las entradas/salidas manuales pasan por `CreateInventoryMovementCommand`. Recibi
 
 Reglas vigentes:
 
+- Tipos y motivos se guardan y viajan como enteros (la API no usa `JsonStringEnumConverter`). `InventoryMovementType` va de 1 (`Entry`) a 8 (`ReturnToSupplier`) e `InventoryMovementReason` de 1 (`Purchase`) a 10 (`ManualAdjustment`), más 99 (`Other`). Suman existencias `Entry`, `AdjustmentIncrease`, `TransferIn` y `ReturnFromProduction`; restan `Exit`, `AdjustmentDecrease`, `TransferOut` y `ReturnToSupplier`. Renumerarlos reinterpretaría el historial: `InventoryEnumValuesTests` (Domain.Tests) fija los valores y `ClientEnumContractTests` (WebApi.Tests) compara la copia de `client/src/types/index.ts`.
 - Solo las entradas (`Entry`) modifican el costo promedio; transferencias, ajustes y devoluciones se valoran al promedio vigente.
 - Los movimientos manuales no pueden usar los prefijos reservados `ORDER:` y `PO:` ni repetir una referencia externa existente, ni fecharse en el futuro.
 - Una recepción no puede repetir líneas ni fecharse en el futuro; el stock sube con las cantidades que la compra aceptó.
@@ -29,6 +30,7 @@ Reglas vigentes:
 
 ## Deuda actual
 
+- Hasta la corrección del 2026-10-04, la pantalla de inventario numeraba tipos y motivos desde 0. Cada movimiento manual anterior se guardó con el tipo y el motivo siguientes al elegido, así que movió las existencias en sentido contrario y a veces alteró el costo promedio; "Entrada" y "Compra" se rechazaban. Los movimientos del sistema no se afectaron. La revisión y compensación por tenant sigue [este procedimiento](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md) y está pendiente; no existe una operación para revaluar el costo promedio.
 - Fuera del comando de piezas de servicio, un conflicto de concurrencia de stock responde 409 y el cliente debe reintentar; no hay reintento automático.
 - `Product.StockQuantity` es informativo: las ventas no lo descuentan ni lo validan. Falta decidir si el stock de producto se controla con recetas (insumo = producto) o con ese campo.
 - Folios `INV-yyyyMMdd-nnnn` se generan contando registros y pueden colisionar; el índice único detecta, pero no evita el conflicto.

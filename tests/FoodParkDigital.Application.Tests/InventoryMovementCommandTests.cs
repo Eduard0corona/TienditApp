@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Mappings;
@@ -99,6 +100,120 @@ public class InventoryMovementCommandTests
             ]
         }, CancellationToken.None));
     }
+
+    // Bodies as the inventory screen posts them: the enums travel as the numbers of client/src/types/index.ts.
+    [Theory]
+    [InlineData("Entrada / Compra", 1, 1, 13)]
+    [InlineData("Salida / Consumo", 2, 4, 7)]
+    [InlineData("Ajuste (+) / Conteo fisico", 3, 7, 13)]
+    [InlineData("Ajuste (-) / Merma", 4, 5, 7)]
+    [InlineData("Transferencia entrada / Otro", 5, 99, 13)]
+    [InlineData("Transferencia salida / Otro", 6, 99, 7)]
+    [InlineData("Devolucion produccion / Produccion", 7, 3, 13)]
+    [InlineData("Devolucion proveedor / Devolucion", 8, 9, 7)]
+    public async Task MovementPostedByTheInventoryScreen_ShouldMoveStockInTheDirectionOfItsType(
+        string screenOption, int movementType, int movementReason, decimal expectedOnHand)
+    {
+        var setup = await SeedSupplyWithStockAsync(onHand: 10);
+        await using var context = setup.Context;
+        var command = DeserializeScreenBody(movementType, movementReason, setup.Supply.Id, setup.Origin.Id, quantity: 3);
+
+        var validation = new CreateInventoryMovementCommandValidator().Validate(command);
+        Assert.True(validation.IsValid, $"{screenOption}: {validation}");
+        var result = await setup.Handler.Handle(command, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        var stock = await context.InventoryStocks.AsNoTracking().SingleAsync();
+        Assert.Equal(expectedOnHand, stock.OnHandQuantity);
+        var movement = await context.InventoryMovements.AsNoTracking().SingleAsync();
+        Assert.Equal(movementType, (int)movement.MovementType);
+        Assert.Equal(movementReason, (int)movement.MovementReason);
+    }
+
+    [Fact]
+    public async Task TransferPostedByTheInventoryScreen_ShouldMoveStockFromOriginToDestination()
+    {
+        var setup = await SeedSupplyWithStockAsync(onHand: 10);
+        await using var context = setup.Context;
+        var destination = new InventoryLocation(setup.Supply.TenantId, "Sucursal norte", "NORTH");
+        context.InventoryLocations.Add(destination);
+        await context.SaveChangesAsync();
+
+        // The screen records a transfer as "Transferencia salida" at the origin plus "Transferencia entrada"
+        // at the destination.
+        var transferOut = await setup.Handler.Handle(
+            DeserializeScreenBody(6, 99, setup.Supply.Id, setup.Origin.Id, quantity: 4), CancellationToken.None);
+        var transferIn = await setup.Handler.Handle(
+            DeserializeScreenBody(5, 99, setup.Supply.Id, destination.Id, quantity: 4), CancellationToken.None);
+
+        Assert.True(transferOut.IsSuccess, transferOut.Error);
+        Assert.True(transferIn.IsSuccess, transferIn.Error);
+        var stocks = await context.InventoryStocks.AsNoTracking().ToDictionaryAsync(x => x.InventoryLocationId, x => x.OnHandQuantity);
+        Assert.Equal(6, stocks[setup.Origin.Id]);
+        Assert.Equal(4, stocks[destination.Id]);
+        Assert.Equal(5, (await context.SupplyItems.AsNoTracking().SingleAsync()).AverageCost);
+    }
+
+    [Fact]
+    public void BodyWithTheOldClientNumbering_ShouldBeRejected()
+    {
+        // Before the fix the screen's default "Entrada / Compra" posted 0 and 0, which no enum member uses.
+        var command = DeserializeScreenBody(0, 0, Guid.NewGuid(), Guid.NewGuid(), quantity: 1);
+
+        var validation = new CreateInventoryMovementCommandValidator().Validate(command);
+
+        Assert.False(validation.IsValid);
+        Assert.Contains(validation.Errors, x => x.PropertyName == nameof(CreateInventoryMovementCommand.MovementType));
+        Assert.Contains(validation.Errors, x => x.PropertyName == nameof(CreateInventoryMovementCommand.MovementReason));
+    }
+
+    private static CreateInventoryMovementCommand DeserializeScreenBody(
+        int movementType,
+        int movementReason,
+        Guid supplyItemId,
+        Guid inventoryLocationId,
+        int quantity)
+    {
+        var body = $$"""
+            {
+              "movementType": {{movementType}},
+              "movementReason": {{movementReason}},
+              "lines": [{ "supplyItemId": "{{supplyItemId}}", "inventoryLocationId": "{{inventoryLocationId}}", "quantity": {{quantity}} }]
+            }
+            """;
+
+        // The API binds request bodies with the web defaults (camelCase, enums as numbers).
+        return JsonSerializer.Deserialize<CreateInventoryMovementCommand>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+    }
+
+    private static async Task<StockSetup> SeedSupplyWithStockAsync(decimal onHand)
+    {
+        var tenantService = new TestCurrentTenantService();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var context = new ApplicationDbContext(options, tenantService, new NullMediator());
+        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
+
+        var supply = new SupplyItem(tenantService.TenantId, "Harina", UnitType.Kg, code: "INS-010");
+        supply.ApplyInboundCost(5, 0, onHand);
+        var origin = new InventoryLocation(tenantService.TenantId, "Almacen", "MAIN", isDefault: true);
+        var stock = new InventoryStock(tenantService.TenantId, supply.Id, origin.Id);
+        stock.ApplyMovement(onHand, 5, DateTimeOffset.UtcNow);
+        context.SupplyItems.Add(supply);
+        context.InventoryLocations.Add(origin);
+        context.InventoryStocks.Add(stock);
+        await context.SaveChangesAsync();
+
+        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new TestCurrentUserService(), mapper);
+        return new StockSetup(context, handler, supply, origin);
+    }
+
+    private sealed record StockSetup(
+        ApplicationDbContext Context,
+        CreateInventoryMovementCommandHandler Handler,
+        SupplyItem Supply,
+        InventoryLocation Origin);
 
     private sealed class TestCurrentTenantService : ICurrentTenantService
     {
