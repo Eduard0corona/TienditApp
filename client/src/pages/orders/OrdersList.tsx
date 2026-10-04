@@ -7,6 +7,7 @@ import StatusChip from '../../components/common/StatusChip';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
 import RefundOrderModal from '../../components/orders/RefundOrderModal';
+import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,6 +16,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import type { OrderDto, OrderStatus, OrderType, PaginatedList, RefundOrderRequest, VoidOrderRequest } from '../../types';
 import {
+  OrderChannel,
   OrderStatus as OrderStatusConst,
   OrderType as OrderTypeConst,
 } from '../../types';
@@ -133,6 +135,7 @@ export default function OrdersList() {
   const [refundTarget, setRefundTarget] = useState<{ order: OrderDto; mode: 'refund' | 'void' } | null>(null);
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundError, setRefundError] = useState('');
+  const [cardFor, setCardFor] = useState<{ phone: string; name: string } | null>(null);
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
@@ -526,6 +529,14 @@ export default function OrdersList() {
                         <span className={`badge mt-1 ${order.createdByBusiness ? 'bg-info' : 'bg-secondary'}`}>
                           {order.createdByBusiness ? 'Creada por empresa' : 'Creada por cliente'}
                         </span>
+                        {order.channel === OrderChannel.WhatsApp && (
+                          <span className="badge mt-1 ms-1 bg-success-subtle text-success-emphasis">
+                            <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>WhatsApp
+                          </span>
+                        )}
+                        {order.channel === OrderChannel.Online && (
+                          <span className="badge mt-1 ms-1 bg-primary-subtle text-primary-emphasis">En línea</span>
+                        )}
                       </div>
                     </td>
                     <td className="text-center">
@@ -598,7 +609,18 @@ export default function OrdersList() {
                 <div className="col-md-6">
                   <p className="mb-1"><strong>Orden:</strong> {selectedOrder.orderNumber}</p>
                   <p className="mb-1"><strong>Tipo:</strong> {ORDER_TYPE_LABELS[selectedOrder.orderType]}</p>
-                  <p className="mb-1"><strong>Cliente:</strong> {selectedOrder.customerName}</p>
+                  <p className="mb-1">
+                    <strong>Cliente:</strong> {selectedOrder.customerName}
+                    {selectedOrder.customerPhone && (
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                        onClick={() => setCardFor({ phone: selectedOrder.customerPhone ?? '', name: selectedOrder.customerName })}
+                      >
+                        Ver ficha
+                      </button>
+                    )}
+                  </p>
                   <p className="mb-1"><strong>Teléfono:</strong> {selectedOrder.customerPhone || '-'}</p>
                   <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
                 </div>
@@ -947,6 +969,10 @@ export default function OrdersList() {
           )}
         </Modal.Body>
       </Modal>
+
+      {cardFor && (
+        <CustomerCardModal phone={cardFor.phone} name={cardFor.name} onClose={() => setCardFor(null)} />
+      )}
 
       {refundTarget && (refundTarget.mode === 'void' ? (
         <RefundOrderModal

@@ -22,6 +22,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.BusinessType).HasConversion<int>().IsRequired();
         builder.Property(o => o.OrderType).HasConversion<int>().IsRequired();
         builder.Property(o => o.Status).HasConversion<int>().IsRequired();
+        builder.Property(o => o.Channel).HasConversion<int>().IsRequired();
         builder.Property(o => o.CustomerName).HasMaxLength(200).IsRequired();
         builder.Property(o => o.CustomerPhone).HasMaxLength(20);
         builder.Property(o => o.CustomerNotes).HasMaxLength(500);

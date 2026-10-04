@@ -16,4 +16,16 @@ public static class MessagingPhone
             ? $"+52{phone[4..]}"
             : phone;
     }
+
+    /// <summary>
+    /// The forms the same number can be stored with (+52 and ten digits, or +521 as WhatsApp reports
+    /// Mexican mobiles), to find a customer's orders and conversation whichever way each was saved.
+    /// </summary>
+    public static IReadOnlyList<string> Variants(string e164Phone)
+    {
+        var key = ToKey(e164Phone);
+        return key.Length == 13 && key.StartsWith("+52", StringComparison.Ordinal)
+            ? [key, $"+521{key[3..]}"]
+            : [key];
+    }
 }

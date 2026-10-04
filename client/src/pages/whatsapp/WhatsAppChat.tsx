@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Offcanvas } from 'react-bootstrap';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import CustomerCardPanel from '../../components/customers/CustomerCardPanel';
 import { chatApi } from '../../api/chatApi';
+import { useAuth } from '../../hooks/useAuth';
 import { useChatSignalR } from '../../hooks/useChatSignalR';
+import { useTenant } from '../../hooks/useTenant';
 import type { ConversationDto, ChatMessageDto } from '../../types';
+import { getAccess } from '../../utils/access';
+import { buildSellLink } from '../../utils/sellLink';
 import './WhatsAppChat.css';
 import { getApiErrorMessage } from '../../api/errors';
+
+/** Same Mexican number whichever way it was stored (+52 or +521 and ten digits). */
+function isSamePhone(a: string, b: string): boolean {
+  const last10 = (value: string) => value.replace(/\D/g, '').slice(-10);
+  return last10(a).length === 10 && last10(a) === last10(b);
+}
 
 function appendUnique(messages: ChatMessageDto[], message: ChatMessageDto): ChatMessageDto[] {
   return messages.some((existing) => existing.id === message.id) ? messages : [...messages, message];
@@ -26,6 +39,12 @@ export default function WhatsAppChat() {
   const [startingChat, setStartingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { onNewMessage, onConversationUpdated } = useChatSignalR();
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  const access = getAccess(user, capabilities);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showCard, setShowCard] = useState(false);
 
   const selectedConvo = conversations.find((c) => c.id === selectedId);
   // Latest selection, read by async callbacks that finish after the user moved to another conversation.
@@ -49,6 +68,23 @@ export default function WhatsAppChat() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  // Opened from a customer card or a sale (?conversation= or ?phone=): select that chat, or start one.
+  useEffect(() => {
+    if (loadingConvos) return;
+    const conversationParam = searchParams.get('conversation');
+    const phoneParam = searchParams.get('phone');
+    if (!conversationParam && !phoneParam) return;
+    const target = conversations.find((c) => c.id === conversationParam)
+      ?? (phoneParam ? conversations.find((c) => isSamePhone(c.customerPhone, phoneParam)) : undefined);
+    if (target) {
+      setSelectedId(target.id);
+    } else if (phoneParam) {
+      setShowNewChat(true);
+      setNewChatPhone(phoneParam);
+    }
+    setSearchParams({}, { replace: true });
+  }, [conversations, loadingConvos, searchParams, setSearchParams]);
 
   // Load messages when selecting a conversation
   useEffect(() => {
@@ -380,13 +416,35 @@ export default function WhatsAppChat() {
                       {getInitials(selectedConvo?.customerName, selectedConvo?.customerPhone)}
                     </span>
                   </div>
-                  <div>
-                    <h5 className="mb-0">
+                  <div className="flex-grow-1 overflow-hidden">
+                    <h5 className="mb-0 text-truncate">
                       {selectedConvo?.customerName || selectedConvo?.customerPhone}
                     </h5>
                     {selectedConvo?.customerName && (
                       <small className="text-muted">{selectedConvo.customerPhone}</small>
                     )}
+                  </div>
+                  <div className="d-flex gap-2 flex-shrink-0">
+                    {access.sell && selectedConvo && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => navigate(buildSellLink({
+                          phone: selectedConvo.customerPhone,
+                          name: selectedConvo.customerName,
+                          conversationId: selectedConvo.id,
+                        }))}
+                      >
+                        <i className="ri-shopping-basket-2-line me-1" aria-hidden="true"></i>
+                        <span className="d-none d-sm-inline">Nuevo pedido</span>
+                        <span className="visually-hidden d-sm-none">Nuevo pedido</span>
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-sm btn-light" onClick={() => setShowCard(true)}>
+                      <i className="ri-profile-line me-1" aria-hidden="true"></i>
+                      <span className="d-none d-sm-inline">Ficha</span>
+                      <span className="visually-hidden d-sm-none">Ficha del cliente</span>
+                    </button>
                   </div>
                 </div>
 
@@ -478,6 +536,28 @@ export default function WhatsAppChat() {
           </div>
         </div>
       </div>
+
+      <Offcanvas show={showCard && !!selectedConvo} onHide={() => setShowCard(false)} placement="end">
+        <Offcanvas.Header closeButton>
+          <Offcanvas.Title as="h2" className="h5">Ficha del cliente</Offcanvas.Title>
+        </Offcanvas.Header>
+        <Offcanvas.Body>
+          {selectedConvo && (
+            <CustomerCardPanel
+              phone={selectedConvo.customerPhone}
+              fallbackName={selectedConvo.customerName}
+              inChat
+              onNewOrder={access.sell
+                ? (card) => navigate(buildSellLink({
+                  phone: selectedConvo.customerPhone,
+                  name: card.name ?? selectedConvo.customerName,
+                  conversationId: selectedConvo.id,
+                }))
+                : undefined}
+            />
+          )}
+        </Offcanvas.Body>
+      </Offcanvas>
     </>
   );
 }

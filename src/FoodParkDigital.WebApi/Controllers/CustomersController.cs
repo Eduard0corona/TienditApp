@@ -37,6 +37,17 @@ public class CustomersController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// The customer card by phone or registered customer: orders, balance, favorite products, appointments and
+    /// opt-out. Also readable with ManageOrders or ManageWhatsApp (orders and chat screens).
+    /// </summary>
+    [HttpGet("card")]
+    public async Task<ActionResult<CustomerCardDto>> GetCard([FromQuery] string? phone, [FromQuery] Guid? customerId)
+    {
+        var result = await _mediator.Send(new GetCustomerCardQuery { Phone = phone, CustomerId = customerId });
+        return result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CustomerDto>> GetById(Guid id)
     {

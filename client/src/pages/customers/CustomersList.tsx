@@ -4,6 +4,7 @@ import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
+import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
@@ -39,6 +40,7 @@ export default function CustomersList() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [filterActive, setFilterActive] = useState('');
+  const [cardCustomer, setCardCustomer] = useState<CustomerDto | null>(null);
 
   const {
     register,
@@ -244,6 +246,15 @@ export default function CustomersList() {
                     </td>
                     <td className="text-center">
                       <button
+                        className="btn btn-sm btn-soft-info me-1"
+                        title="Ficha: pedidos, saldo y citas"
+                        aria-label={`Ficha de ${customer.name}`}
+                        onClick={() => setCardCustomer(customer)}
+                        disabled={customer.isPublicGeneral}
+                      >
+                        <i className="ri-profile-line"></i>
+                      </button>
+                      <button
                         className="btn btn-sm btn-soft-secondary me-1"
                         title={customer.isActive ? 'Desactivar' : 'Activar'}
                         onClick={() => toggleActive(customer)}
@@ -330,6 +341,10 @@ export default function CustomersList() {
           </Modal.Footer>
         </form>
       </Modal>
+
+      {cardCustomer && (
+        <CustomerCardModal customerId={cardCustomer.id} name={cardCustomer.name} onClose={() => setCardCustomer(null)} />
+      )}
     </>
   );
 }

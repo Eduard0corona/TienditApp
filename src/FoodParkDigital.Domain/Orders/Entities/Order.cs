@@ -31,7 +31,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string? customerPhone,
         string? customerNotes,
         string? tableNumber,
-        bool pricesIncludeTax = false)
+        bool pricesIncludeTax = false,
+        OrderChannel channel = OrderChannel.Counter)
     {
         TenantId = tenantId;
         CustomerUserId = customerUserId;
@@ -55,6 +56,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         TableNumber = tableNumber;
         // The business policy at the time of the sale: later changes to it never alter this order.
         PricesIncludeTax = pricesIncludeTax;
+        Channel = Enum.IsDefined(channel) ? channel : throw new DomainException("El canal del pedido no es válido.");
 
         var stateMachine = OrderStateMachineFactory.Create(businessType, orderType);
         Status = stateMachine.GetInitialStatus();
@@ -76,6 +78,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? TableNumber { get; private set; }
     /// <summary>True when item prices already include IVA; false when IVA is added on top of them.</summary>
     public bool PricesIncludeTax { get; private set; }
+    public OrderChannel Channel { get; private set; }
     /// <summary>Taxable base: item amounts without IVA.</summary>
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }

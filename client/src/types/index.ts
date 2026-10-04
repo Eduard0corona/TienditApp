@@ -1413,6 +1413,7 @@ export interface OrderDto {
   tax: number;
   total: number;
   taxBreakdown: OrderTaxLineDto[];
+  channel?: OrderChannel;
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */
@@ -1463,6 +1464,42 @@ export interface CreateOrderItemRequest {
   notes?: string;
 }
 
+export const OrderChannel = {
+  Counter: 0,
+  WhatsApp: 1,
+  Online: 2,
+} as const;
+export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
+
+export interface CustomerCardDto {
+  phone?: string;
+  name?: string;
+  customerId?: string;
+  email?: string;
+  ordersCount: number;
+  /** Paid minus refunded, over orders that were not cancelled. */
+  totalSpent: number;
+  averageTicket: number;
+  balance: number;
+  firstOrderAt?: string;
+  lastOrderAt?: string;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    createdAt: string;
+    status: OrderStatus;
+    channel: OrderChannel;
+    total: number;
+    balance: number;
+  }>;
+  favoriteProducts: Array<{ productId: string; productName: string; quantity: number }>;
+  upcomingAppointments: Array<{ id: string; serviceName: string; startAt: string; status: number }>;
+  lastVisitAt?: string;
+  optedOut: boolean;
+  optedOutAt?: string;
+  conversationId?: string;
+}
+
 export interface CreateOrderRequest {
   customerId?: string;
   customerName?: string;
@@ -1477,6 +1514,8 @@ export interface CreateOrderRequest {
   payments?: CreateOrderPaymentRequest[];
   /** Total shown to the customer; the API rejects the sale if a price changed meanwhile. */
   expectedTotal?: number;
+  /** Counter (default) or WhatsApp when the order is taken from a chat. */
+  channel?: OrderChannel;
 }
 
 export interface CreateOrderPaymentRequest {

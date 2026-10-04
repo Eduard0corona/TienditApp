@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
+import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
@@ -12,7 +13,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type { CategoryDto, CreateOrderRequest, OrderDto, ProductDto } from '../../types';
-import { BusinessType, OrderType, TenantCapability, UnitType } from '../../types';
+import { BusinessType, OrderChannel, OrderType, TenantCapability, UnitType } from '../../types';
 import { getAccess } from '../../utils/access';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
@@ -43,6 +44,25 @@ interface CompletedSale {
   order: OrderDto;
   change: number;
   cashReceived: number;
+  /** Saved without charging (a WhatsApp order paid on delivery). */
+  unpaid?: boolean;
+}
+
+/** The chat a sale was started from (Vender opened with ?phone=&name=&conversation=). */
+interface ChatOrigin {
+  phone: string;
+  name?: string;
+  conversationId?: string;
+}
+
+function readChatOrigin(params: URLSearchParams): ChatOrigin | null {
+  const phone = params.get('phone')?.trim();
+  if (!phone) return null;
+  return {
+    phone,
+    name: params.get('name')?.trim() || undefined,
+    conversationId: params.get('conversation')?.trim() || undefined,
+  };
 }
 
 type CategoryFilter = 'all' | 'featured' | string;
@@ -93,6 +113,11 @@ export default function SellPage() {
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Read once: the link fills the customer after the saved draft is restored.
+  const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
+  const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
+  const [sendingToChat, setSendingToChat] = useState(false);
   const draftLoadedFor = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -143,6 +168,14 @@ export default function SellPage() {
           setOrderNotes(draft.orderNotes);
           setShowDetails(Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
         }
+        const origin = pendingChatOrigin.current;
+        if (origin) {
+          pendingChatOrigin.current = null;
+          setCustomerPhone(origin.phone);
+          setCustomerName(origin.name ?? '');
+          setShowDetails(true);
+          setChatOrigin(origin);
+        }
       } else {
         // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
         setCart((current) => current.flatMap((line) => {
@@ -160,6 +193,11 @@ export default function SellPage() {
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  // The customer is already in the form: a reload must not fill it again.
+  useEffect(() => {
+    if (searchParams.has('phone')) setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     // Only people who manage the cash drawer can see it; for them a closed drawer is worth a warning.
@@ -345,6 +383,7 @@ export default function SellPage() {
       notes: line.notes.trim() || undefined,
     })),
     expectedTotal: totals.total,
+    channel: chatOrigin ? OrderChannel.WhatsApp : undefined,
   });
 
   const submitSale = async (charge: ChargeResult | null) => {
@@ -369,6 +408,9 @@ export default function SellPage() {
       setChargeOpen(false);
       if (charge) {
         setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived });
+      } else if (chatOrigin) {
+        // From a chat the summary goes back to the customer, paid or not.
+        setCompletedSale({ order, change: 0, cashReceived: 0, unpaid: true });
       } else {
         toast.success(`Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`);
       }
@@ -385,7 +427,25 @@ export default function SellPage() {
 
   const startNewSale = () => {
     setCompletedSale(null);
+    setChatOrigin(null);
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  const sendSummaryToChat = async () => {
+    if (!completedSale || !chatOrigin || sendingToChat) return;
+    setSendingToChat(true);
+    try {
+      await chatApi.sendMessage({
+        phoneNumber: completedSale.order.customerPhone ?? chatOrigin.phone,
+        message: ticketText,
+        conversationId: chatOrigin.conversationId,
+      });
+      toast.success('Resumen enviado al chat.');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo enviar el resumen al chat.'));
+    } finally {
+      setSendingToChat(false);
+    }
   };
 
   const businessName = tenant?.name ?? 'TienditApp';
@@ -397,6 +457,15 @@ export default function SellPage() {
 
   const cartPanel = (
     <div className="sell-cart-panel">
+      {chatOrigin && (
+        <div className="alert alert-success d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
+          <span className="small">
+            <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>
+            Pedido por WhatsApp de <strong>{chatOrigin.name ?? chatOrigin.phone}</strong>
+          </span>
+          <button type="button" className="btn-close" aria-label="Ya no es un pedido por WhatsApp" onClick={() => setChatOrigin(null)}></button>
+        </div>
+      )}
       <div className="d-flex align-items-center justify-content-between mb-2">
         <h2 className="h5 mb-0">Ticket</h2>
         {cart.length > 0 && (
@@ -763,7 +832,9 @@ export default function SellPage() {
         <Modal.Header closeButton>
           <Modal.Title as="h2" className="h5">
             <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
-            Venta {completedSale?.order.orderNumber} cobrada
+            {completedSale?.unpaid
+              ? `Pedido ${completedSale.order.orderNumber} guardado`
+              : `Venta ${completedSale?.order.orderNumber} cobrada`}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -788,14 +859,28 @@ export default function SellPage() {
           <button type="button" className="btn btn-light btn-touch" onClick={printTicket}>
             <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
           </button>
-          <a
-            className="btn btn-light btn-touch"
-            href={buildWhatsAppTicketUrl(ticketText, completedSale?.order.customerPhone)}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
-          </a>
+          {chatOrigin && access.chat ? (
+            <>
+              <button type="button" className="btn btn-success btn-touch" onClick={() => void sendSummaryToChat()} disabled={sendingToChat}>
+                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>{sendingToChat ? 'Enviando…' : 'Enviar resumen al chat'}
+              </button>
+              <Link
+                className="btn btn-light btn-touch"
+                to={chatOrigin.conversationId ? `/whatsapp/chat?conversation=${chatOrigin.conversationId}` : '/whatsapp/chat'}
+              >
+                Volver al chat
+              </Link>
+            </>
+          ) : (
+            <a
+              className="btn btn-light btn-touch"
+              href={buildWhatsAppTicketUrl(ticketText, completedSale?.order.customerPhone)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
+            </a>
+          )}
           <button type="button" className="btn btn-primary btn-touch flex-grow-1" onClick={startNewSale} autoFocus>
             Nueva venta
           </button>
