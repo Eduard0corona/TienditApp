@@ -23,6 +23,7 @@ import {
   getOrderStatusLabel,
   getPaymentMethodLabel,
 } from '../../utils/labels';
+import { getApiErrorMessage } from '../../api/errors';
 
 const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
@@ -94,11 +95,6 @@ function getTodayInputDate(): string {
 function getStatusLabel(status: OrderStatus): string {
   return getOrderStatusLabel(status);
 }
-
-const getApiErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-  (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-  fallback;
 
 function safeParseArray<T>(raw?: string): T[] {
   if (!raw) return [];
@@ -314,10 +310,7 @@ export default function OrdersList() {
       setPaymentEvidenceUrl(data.url);
       setPaymentEvidenceName(data.fileName);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo subir el comprobante.';
+      const msg = getApiErrorMessage(err, 'No se pudo subir el comprobante.');
       setPaymentError(msg);
     } finally {
       setPaymentUploadingEvidence(false);
@@ -419,10 +412,7 @@ export default function OrdersList() {
       await ordersApi.updateServicePieceStatus(orderId, pieceId, Number(newStatus) as 0 | 1 | 2 | 99);
       await Promise.all([loadOrders(), refreshSelectedOrder(orderId)]);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo actualizar el estado de la pieza.';
+      const msg = getApiErrorMessage(err, 'No se pudo actualizar el estado de la pieza.');
       setError(msg);
     }
   };

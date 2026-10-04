@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import { tenantApi } from '../../api/tenantApi';
 import type { WhatsAppConfigDto, UpdateWhatsAppConfigRequest, SendWhatsAppMessageRequest } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 export default function WhatsAppSettings() {
   const [loading, setLoading] = useState(true);
@@ -67,9 +68,7 @@ export default function WhatsAppSettings() {
       });
       setMsg({ type: 'success', text: 'Configuración de WhatsApp guardada correctamente.' });
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al guardar la configuración.';
+      const errMsg = getApiErrorMessage(err, 'Error al guardar la configuración.');
       setMsg({ type: 'danger', text: errMsg });
     }
   };
@@ -81,9 +80,7 @@ export default function WhatsAppSettings() {
       setSendMsg({ type: 'success', text: 'Mensaje enviado exitosamente.' });
       resetSend();
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al enviar el mensaje.';
+      const errMsg = getApiErrorMessage(err, 'Error al enviar el mensaje.');
       setSendMsg({ type: 'danger', text: errMsg });
     }
   };

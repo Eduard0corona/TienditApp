@@ -6,6 +6,7 @@ import type { RegisterBusinessRequest, RegisterCustomerRequest } from '../../typ
 import { BusinessType } from '../../types';
 import './register.css';
 import BrandLogo from '../../components/common/BrandLogo';
+import { getApiErrorMessage } from '../../api/errors';
 
 type AccountType = 'business' | 'customer' | null;
 
@@ -73,9 +74,7 @@ export default function Register() {
       const response = await authApi.registerBusiness(data);
       goToPhoneConfirmation(response.data.userId);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al registrar la empresa.';
+      const msg = getApiErrorMessage(err, 'Error al registrar la empresa.');
       setError(msg);
     }
   };
@@ -86,9 +85,7 @@ export default function Register() {
       const response = await authApi.registerCustomer(data);
       goToPhoneConfirmation(response.data.userId);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al registrar la cuenta.';
+      const msg = getApiErrorMessage(err, 'Error al registrar la cuenta.');
       setError(msg);
     }
   };

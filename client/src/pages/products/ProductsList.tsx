@@ -5,6 +5,7 @@ import DataTable from '../../components/common/DataTable';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { ProductDto, CategoryDto, PaginatedList } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Imagen', width: 60 },
@@ -85,9 +86,7 @@ export default function ProductsList() {
       await productsApi.delete(id);
       await loadProducts();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al eliminar el producto.';
+      const msg = getApiErrorMessage(err, 'Error al eliminar el producto.');
       setError(msg);
     }
   };

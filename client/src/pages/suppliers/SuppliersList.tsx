@@ -4,6 +4,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { suppliersApi } from '../../api/suppliersApi';
 import type { CreateSupplierRequest, PaginatedList, SupplierDto, UpdateSupplierRequest } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Proveedor' },
@@ -42,9 +43,6 @@ const buildEmptyForm = (): SupplierFormState => ({
   notes: '',
 });
 
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
-
 export default function SuppliersList() {
   const [data, setData] = useState<PaginatedList<SupplierDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
@@ -70,7 +68,7 @@ export default function SuppliersList() {
       const response = await suppliersApi.getAll(params);
       setData(response.data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudieron cargar los proveedores.'));
+      setError(getApiErrorMessage(err, 'No se pudieron cargar los proveedores.'));
     } finally {
       setLoading(false);
     }
@@ -131,7 +129,7 @@ export default function SuppliersList() {
       setShowModal(false);
       await loadData();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo guardar el proveedor.'));
+      setError(getApiErrorMessage(err, 'No se pudo guardar el proveedor.'));
     } finally {
       setSaving(false);
     }
@@ -145,7 +143,7 @@ export default function SuppliersList() {
       setSuccess('Estado actualizado.');
       await loadData();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo actualizar el estado.'));
+      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado.'));
     }
   };
 

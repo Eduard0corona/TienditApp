@@ -3,14 +3,12 @@ import { useForm } from 'react-hook-form';
 import { Link, useSearchParams } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import BrandLogo from '../../components/common/BrandLogo';
+import { getApiErrorMessage } from '../../api/errors';
 
 interface ResetPasswordForm {
   newPassword: string;
   confirmPassword: string;
 }
-
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
 
 // Mirrors the Identity policy configured in the API (6+ characters, upper, lower and digit).
 const PASSWORD_RULES = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
@@ -35,7 +33,7 @@ export default function ResetPassword() {
       await authApi.resetPassword(userId, token, data.newPassword);
       setSuccess(true);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo restablecer la contraseña. El enlace pudo haber expirado.'));
+      setError(getApiErrorMessage(err, 'No se pudo restablecer la contraseña. El enlace pudo haber expirado.'));
     }
   };
 

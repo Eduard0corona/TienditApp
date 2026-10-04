@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../../hooks/useAuth';
+import { getApiErrorMessage } from '../../api/errors';
 
 interface TwoFactorLoginStepProps {
   challengeToken: string;
@@ -40,9 +41,7 @@ export default function TwoFactorLoginStep({ challengeToken, onSuccess, onCancel
       });
       onSuccess();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'No se pudo verificar el código';
+      const msg = getApiErrorMessage(err, 'No se pudo verificar el código');
       setError(msg);
     }
   };

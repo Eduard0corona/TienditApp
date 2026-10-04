@@ -4,6 +4,7 @@ import { chatApi } from '../../api/chatApi';
 import { useChatSignalR } from '../../hooks/useChatSignalR';
 import type { ConversationDto, ChatMessageDto } from '../../types';
 import './WhatsAppChat.css';
+import { getApiErrorMessage } from '../../api/errors';
 
 function appendUnique(messages: ChatMessageDto[], message: ChatMessageDto): ChatMessageDto[] {
   return messages.some((existing) => existing.id === message.id) ? messages : [...messages, message];
@@ -38,10 +39,7 @@ export default function WhatsAppChat() {
       setConversations(data.items);
       setError(null);
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        (err as { message?: string })?.message ||
-        'Error al cargar conversaciones';
+      const errMsg = getApiErrorMessage(err, 'Error al cargar conversaciones');
       setError(errMsg);
     } finally {
       setLoadingConvos(false);
@@ -146,9 +144,7 @@ export default function WhatsAppChat() {
       await loadConversations();
       setSelectedId(sentMsg.conversationId);
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al iniciar conversación';
+      const errMsg = getApiErrorMessage(err, 'Error al iniciar conversación');
       setError(errMsg);
     } finally {
       setStartingChat(false);
@@ -171,9 +167,7 @@ export default function WhatsAppChat() {
       }
       setNewMessage('');
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'No se pudo enviar el mensaje.';
+      const errMsg = getApiErrorMessage(err, 'No se pudo enviar el mensaje.');
       setError(errMsg);
     } finally {
       setSending(false);

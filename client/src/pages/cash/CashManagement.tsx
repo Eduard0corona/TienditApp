@@ -15,6 +15,7 @@ import type {
 import { CashTransactionType as CashTransactionTypeConst } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
+import { getApiErrorMessage } from '../../api/errors';
 
 const EMPTY_PAGINATED = {
   items: [],
@@ -39,9 +40,6 @@ function getTodayInputDate(): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
 
 // Money typed by the cashier: empty, negative or more than 2 decimals is rejected (the API stores cents).
 function parseMoney(value: string): number | null {
@@ -133,7 +131,7 @@ export default function CashManagement() {
     try {
       await Promise.all([loadSession(), loadLocations()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo cargar la caja.'));
+      setError(getApiErrorMessage(err, 'No se pudo cargar la caja.'));
     } finally {
       setLoading(false);
     }
@@ -172,7 +170,7 @@ export default function CashManagement() {
       setSuccess('Caja abierta correctamente.');
       await loadAll();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo abrir la caja.'));
+      setError(getApiErrorMessage(err, 'No se pudo abrir la caja.'));
     } finally {
       setSubmitting(false);
     }
@@ -204,7 +202,7 @@ export default function CashManagement() {
       setClosingAmount('');
       await loadAll();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo cerrar la caja.'));
+      setError(getApiErrorMessage(err, 'No se pudo cerrar la caja.'));
     } finally {
       setSubmitting(false);
     }
@@ -240,7 +238,7 @@ export default function CashManagement() {
       setTransactionLocationId('');
       await Promise.all([loadAll(), loadTransactions()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo registrar el movimiento.'));
+      setError(getApiErrorMessage(err, 'No se pudo registrar el movimiento.'));
     } finally {
       setSubmitting(false);
     }

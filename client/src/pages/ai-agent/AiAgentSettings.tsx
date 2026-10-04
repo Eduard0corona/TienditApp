@@ -3,6 +3,7 @@ import PageTitle from '../../components/common/PageTitle';
 import { aiAgentsApi } from '../../api/aiAgentsApi';
 import type { AiAgentDto, CreateAiAgentRequest, UpdateAiAgentRequest } from '../../types';
 import { tenantApi } from '../../api/tenantApi';
+import { getApiErrorMessage } from '../../api/errors';
 
 type AgentTab = 'General' | 'Mensajes' | 'Captura de Datos' | 'Configuracion IA';
 
@@ -54,11 +55,6 @@ const toUpdateRequest = (agent: AiAgentDto): UpdateAiAgentRequest => ({
   useConversationMemory: agent.useConversationMemory,
   strictMode: agent.strictMode,
 });
-
-const getApiError = (err: unknown, fallback: string): string =>
-  (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.error ||
-  (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.detail ||
-  fallback;
 
 export default function AiAgentSettings() {
   const [agents, setAgents] = useState<AiAgentDto[]>([]);
@@ -127,7 +123,7 @@ export default function AiAgentSettings() {
       setActiveTab('General');
       setFeedback({ type: 'success', text: 'Agente IA creado correctamente.' });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiError(err, 'No se pudo crear el agente IA.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo crear el agente IA.') });
     } finally {
       setCreating(false);
     }
@@ -149,7 +145,7 @@ export default function AiAgentSettings() {
 
       setFeedback({ type: 'success', text: 'Agente eliminado correctamente.' });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiError(err, 'No se pudo eliminar el agente IA.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo eliminar el agente IA.') });
     } finally {
       setDeleting(false);
     }
@@ -176,7 +172,7 @@ export default function AiAgentSettings() {
       setAgents((current) => current.map((agent) => (agent.id === data.id ? data : agent)));
       setFeedback({ type: 'success', text: 'Configuracion del agente guardada correctamente.' });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiError(err, 'No se pudo guardar el agente IA.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo guardar el agente IA.') });
     } finally {
       setSaving(false);
     }
@@ -201,7 +197,7 @@ export default function AiAgentSettings() {
         text: nextStatus ? 'Agente activado correctamente.' : 'Agente desactivado correctamente.',
       });
     } catch (err: unknown) {
-      setFeedback({ type: 'danger', text: getApiError(err, 'No se pudo actualizar el estado del agente.') });
+      setFeedback({ type: 'danger', text: getApiErrorMessage(err, 'No se pudo actualizar el estado del agente.') });
     } finally {
       setTogglingActive(false);
     }

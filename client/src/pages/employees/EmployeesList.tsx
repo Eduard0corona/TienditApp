@@ -11,6 +11,7 @@ import type {
   PaginatedList,
   UpdateEmployeeRequest,
 } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Empleado' },
@@ -215,9 +216,7 @@ export default function EmployeesList() {
       closeModal();
       await loadEmployees();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'No se pudo guardar el empleado.';
+      const msg = getApiErrorMessage(err, 'No se pudo guardar el empleado.');
       setError(msg);
     }
   };
@@ -227,9 +226,7 @@ export default function EmployeesList() {
       await employeesApi.setActive(employee.tenantUserId, !employee.isActive);
       await loadEmployees();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'No se pudo actualizar el estado del empleado.';
+      const msg = getApiErrorMessage(err, 'No se pudo actualizar el estado del empleado.');
       setError(msg);
     }
   };

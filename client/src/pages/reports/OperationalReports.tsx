@@ -4,9 +4,7 @@ import { reportsApi } from '../../api/reportsApi';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { marketingApi } from '../../api/marketingApi';
 import type { OperationalReportDto } from '../../types';
-
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
+import { getApiErrorMessage } from '../../api/errors';
 
 export default function OperationalReports() {
   const [report, setReport] = useState<OperationalReportDto | null>(null);
@@ -30,7 +28,7 @@ export default function OperationalReports() {
       const { data } = await reportsApi.getOperationalSummary(params);
       setReport(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo cargar el reporte.'));
+      setError(getApiErrorMessage(err, 'No se pudo cargar el reporte.'));
     } finally {
       setLoading(false);
     }
@@ -65,7 +63,7 @@ export default function OperationalReports() {
       });
       setSuccess(`Promoción enviada a ${data.sent} clientes.`);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo enviar la promoción.'));
+      setError(getApiErrorMessage(err, 'No se pudo enviar la promoción.'));
     } finally {
       setSendingPromotion(false);
     }

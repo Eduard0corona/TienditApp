@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import type { LoginRequest } from '../../types';
 import TwoFactorLoginStep from './TwoFactorLoginStep';
 import BrandLogo from '../../components/common/BrandLogo';
+import { getApiErrorMessage } from '../../api/errors';
 
 export default function Login() {
   const { login } = useAuth();
@@ -33,9 +34,7 @@ export default function Login() {
         navigate(from, { replace: true });
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al iniciar sesión';
+      const msg = getApiErrorMessage(err, 'Error al iniciar sesión');
       setError(msg);
     }
   };

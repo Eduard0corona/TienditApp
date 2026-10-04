@@ -27,6 +27,7 @@ import {
   InventoryMovementReason as InventoryMovementReasonConst,
   InventoryMovementType as InventoryMovementTypeConst,
 } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
@@ -322,11 +323,6 @@ const formatDate = (value?: string) => {
   return new Date(value).toLocaleDateString('es-MX');
 };
 
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.error ||
-  (err as { response?: { data?: { error?: string; detail?: string } } })?.response?.data?.detail ||
-  fallback;
-
 export default function InventoryManagement() {
   const [activeTab, setActiveTab] = useState<InventoryTab>('supplies');
   const [error, setError] = useState('');
@@ -408,7 +404,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getLocations();
       setLocations(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar ubicaciones.'));
+      setError(getApiErrorMessage(err, 'Error al cargar ubicaciones.'));
     } finally {
       setLocationsLoading(false);
     }
@@ -471,7 +467,7 @@ export default function InventoryManagement() {
         })),
       );
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar la receta del producto.'));
+      setError(getApiErrorMessage(err, 'Error al cargar la receta del producto.'));
       setRecipeLines([]);
     } finally {
       setRecipeLoading(false);
@@ -501,7 +497,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getKardex(params);
       setKardexData(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar kardex.'));
+      setError(getApiErrorMessage(err, 'Error al cargar kardex.'));
     } finally {
       setKardexLoading(false);
     }
@@ -513,7 +509,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getAlerts();
       setAlertsData(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar alertas de inventario.'));
+      setError(getApiErrorMessage(err, 'Error al cargar alertas de inventario.'));
     } finally {
       setAlertsLoading(false);
     }
@@ -538,7 +534,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getSupplies(params);
       setSuppliesData(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar insumos.'));
+      setError(getApiErrorMessage(err, 'Error al cargar insumos.'));
     } finally {
       setSuppliesLoading(false);
     }
@@ -563,7 +559,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getStocks(params);
       setStocksData(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar existencias.'));
+      setError(getApiErrorMessage(err, 'Error al cargar existencias.'));
     } finally {
       setStocksLoading(false);
     }
@@ -592,7 +588,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getMovements(params);
       setMovementsData(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar movimientos.'));
+      setError(getApiErrorMessage(err, 'Error al cargar movimientos.'));
     } finally {
       setMovementsLoading(false);
     }
@@ -741,7 +737,7 @@ export default function InventoryManagement() {
       setEditingSupply(null);
       await Promise.all([loadSupplies(), loadSupplyOptions(), loadStocks()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al guardar el insumo.'));
+      setError(getApiErrorMessage(err, 'Error al guardar el insumo.'));
     } finally {
       setSavingSupply(false);
     }
@@ -755,7 +751,7 @@ export default function InventoryManagement() {
       setSuccess('Estado del insumo actualizado.');
       await Promise.all([loadSupplies(), loadSupplyOptions(), loadStocks()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo actualizar el estado del insumo.'));
+      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado del insumo.'));
     }
   };
 
@@ -825,7 +821,7 @@ export default function InventoryManagement() {
       setEditingLocation(null);
       await Promise.all([loadLocations(), loadStocks(), loadMovements()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al guardar la ubicacion.'));
+      setError(getApiErrorMessage(err, 'Error al guardar la ubicacion.'));
     } finally {
       setSavingLocation(false);
     }
@@ -839,7 +835,7 @@ export default function InventoryManagement() {
       setSuccess('Estado de la ubicacion actualizado.');
       await Promise.all([loadLocations(), loadStocks()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo actualizar el estado de la ubicacion.'));
+      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la ubicacion.'));
     }
   };
 
@@ -925,7 +921,7 @@ export default function InventoryManagement() {
       setShowMovementModal(false);
       await Promise.all([loadMovements(), loadStocks(), loadSupplies(), loadSupplyOptions()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al registrar movimiento.'));
+      setError(getApiErrorMessage(err, 'Error al registrar movimiento.'));
     } finally {
       setSavingMovement(false);
     }
@@ -940,7 +936,7 @@ export default function InventoryManagement() {
       const { data } = await inventoryApi.getMovementById(movementId);
       setSelectedMovement(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al cargar el detalle del movimiento.'));
+      setError(getApiErrorMessage(err, 'Error al cargar el detalle del movimiento.'));
       setShowMovementDetailModal(false);
     } finally {
       setMovementDetailLoading(false);
@@ -1028,7 +1024,7 @@ export default function InventoryManagement() {
       setSuccess('Receta guardada correctamente.');
       await Promise.all([loadAlerts(), loadKardex()]);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Error al guardar la receta.'));
+      setError(getApiErrorMessage(err, 'Error al guardar la receta.'));
     } finally {
       setRecipeSaving(false);
     }

@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getUserRoleLabel } from '../../utils/labels';
 import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 export default function Profile() {
   const { user, refreshProfile } = useAuth();
@@ -52,9 +53,7 @@ export default function Profile() {
       setEditMode(false);
       setProfileMsg({ type: 'success', text: 'Perfil actualizado correctamente.' });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al actualizar el perfil.';
+      const msg = getApiErrorMessage(err, 'Error al actualizar el perfil.');
       setProfileMsg({ type: 'danger', text: msg });
     }
   };
@@ -70,9 +69,7 @@ export default function Profile() {
       await refreshProfile();
       setAvatarMsg({ type: 'success', text: 'Avatar actualizado.' });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al subir el avatar.';
+      const msg = getApiErrorMessage(err, 'Error al subir el avatar.');
       setAvatarMsg({ type: 'danger', text: msg });
     } finally {
       setAvatarLoading(false);
@@ -102,9 +99,7 @@ export default function Profile() {
       resetPassword();
       setPasswordMsg({ type: 'success', text: 'Contraseña actualizada. Tu sesión se cerrará pronto.' });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al cambiar la contraseña.';
+      const msg = getApiErrorMessage(err, 'Error al cambiar la contraseña.');
       setPasswordMsg({ type: 'danger', text: msg });
     }
   };

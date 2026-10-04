@@ -16,6 +16,7 @@ import type {
   SupplyItemDto,
 } from '../../types';
 import { PurchaseOrderStatus as PurchaseOrderStatusConst } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const COLUMNS = [
   { header: 'Folio' },
@@ -92,9 +93,6 @@ const statusBadge = (status: PurchaseOrderStatus) => {
   }
 };
 
-const getErrorMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || fallback;
-
 export default function PurchaseOrdersList() {
   const [orders, setOrders] = useState<PaginatedList<PurchaseOrderDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
@@ -144,7 +142,7 @@ export default function PurchaseOrdersList() {
       const { data } = await purchaseOrdersApi.getAll(params);
       setOrders(data);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudieron cargar las compras.'));
+      setError(getApiErrorMessage(err, 'No se pudieron cargar las compras.'));
     } finally {
       setLoading(false);
     }
@@ -235,7 +233,7 @@ export default function PurchaseOrdersList() {
       setForm(buildForm());
       await loadOrders();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo registrar la compra.'));
+      setError(getApiErrorMessage(err, 'No se pudo registrar la compra.'));
     } finally {
       setSaving(false);
     }
@@ -264,7 +262,7 @@ export default function PurchaseOrdersList() {
       setSuccess('Recepción aplicada correctamente.');
       await loadOrders();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'No se pudo recibir la compra.'));
+      setError(getApiErrorMessage(err, 'No se pudo recibir la compra.'));
     } finally {
       setReceivingOrderId('');
     }

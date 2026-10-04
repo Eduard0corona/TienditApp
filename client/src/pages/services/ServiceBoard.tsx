@@ -5,6 +5,7 @@ import { serviceBoardApi } from '../../api/serviceBoardApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { ServiceOrderPieceStatus as ServiceOrderPieceStatusConst } from '../../types';
 import type { PaginatedList, ServiceBoardPieceDto, ServiceOrderPieceStatus } from '../../types';
+import { getApiErrorMessage } from '../../api/errors';
 
 const STATUS_COLUMNS: Array<{
   status: ServiceOrderPieceStatus;
@@ -182,10 +183,7 @@ export default function ServiceBoard() {
       await ordersApi.updateServicePieceStatus(orderId, pieceId, nextStatus);
       await loadBoard();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo actualizar el estado del servicio.';
+      const msg = getApiErrorMessage(err, 'No se pudo actualizar el estado del servicio.');
       setError(msg);
     } finally {
       setProcessingPieceId('');
@@ -199,10 +197,7 @@ export default function ServiceBoard() {
       await serviceBoardApi.assignToMe(pieceId);
       await loadBoard();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo asignar la pieza.';
+      const msg = getApiErrorMessage(err, 'No se pudo asignar la pieza.');
       setError(msg);
     } finally {
       setProcessingPieceId('');
@@ -216,10 +211,7 @@ export default function ServiceBoard() {
       await serviceBoardApi.release(pieceId);
       await loadBoard();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.detail ||
-        (err as { response?: { data?: { detail?: string; error?: string } } })?.response?.data?.error ||
-        'No se pudo liberar la asignacion de la pieza.';
+      const msg = getApiErrorMessage(err, 'No se pudo liberar la asignacion de la pieza.');
       setError(msg);
     } finally {
       setProcessingPieceId('');

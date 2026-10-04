@@ -7,6 +7,7 @@ import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
 import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
+import { getApiErrorMessage } from '../../api/errors';
 
 
 const INDUSTRY_OPTIONS = [
@@ -161,9 +162,7 @@ export default function BusinessSettings() {
       setEditMode(false);
       setMsg({ type: 'success', text: 'Datos de la empresa actualizados correctamente.' });
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al actualizar los datos de la empresa.';
+      const errMsg = getApiErrorMessage(err, 'Error al actualizar los datos de la empresa.');
       setMsg({ type: 'danger', text: errMsg });
     }
   };
@@ -180,9 +179,7 @@ export default function BusinessSettings() {
       await refreshTenant();
       setLogoMsg({ type: 'success', text: 'Logo actualizado.' });
     } catch (err: unknown) {
-      const errMsg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Error al subir el logo.';
+      const errMsg = getApiErrorMessage(err, 'Error al subir el logo.');
       setLogoMsg({ type: 'danger', text: errMsg });
     } finally {
       setLogoLoading(false);
