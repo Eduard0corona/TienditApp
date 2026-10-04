@@ -202,6 +202,43 @@ public class CounterSaleCheckoutTests
 
         Assert.True(result.IsSuccess, result.Error);
         Assert.Equal(OrderStatus.Confirmed, result.Value.Status);
+
+        // The kitchen marks it ready: the paid sale is handed over and closed without a second message.
+        var ready = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser).Handle(
+            new UpdateOrderStatusCommand { OrderId = result.Value.Id, NewStatus = OrderStatus.Ready },
+            CancellationToken.None);
+
+        Assert.True(ready.IsSuccess, ready.Error);
+        var order = await fixture.Context.Orders.Include(o => o.StatusHistory).SingleAsync(o => o.Id == result.Value.Id);
+        Assert.Equal(OrderStatus.Delivered, order.Status);
+        Assert.Contains(order.StatusHistory, h => h.NewStatus == OrderStatus.Ready);
+        Assert.Contains(order.StatusHistory, h => h.PreviousStatus == OrderStatus.Ready && h.NewStatus == OrderStatus.Delivered);
+    }
+
+    [Fact]
+    public async Task FoodSale_WithKitchen_ReadyButUnpaid_ShouldWaitForThePayment()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(
+            BusinessType.Food, TenantCapability.Food | TenantCapability.Kitchen, pricesIncludeTax: true);
+        var taco = await fixture.AddProductAsync(tenant, "Taco de pastor", 22m);
+        var created = await fixture.CreateOrderHandler().Handle(
+            new CreateOrderCommand { Items = [new CreateOrderItemDto { ProductId = taco.Id, Quantity = 2 }] },
+            CancellationToken.None);
+        Assert.True(created.IsSuccess, created.Error);
+
+        var ready = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser).Handle(
+            new UpdateOrderStatusCommand { OrderId = created.Value.Id, NewStatus = OrderStatus.Ready },
+            CancellationToken.None);
+        Assert.True(ready.IsSuccess, ready.Error);
+        Assert.Equal(OrderStatus.Ready, (await fixture.Context.Orders.SingleAsync(o => o.Id == created.Value.Id)).Status);
+
+        // The payment taken at pickup closes it.
+        var paid = await fixture.AddPaymentHandler().Handle(
+            new AddOrderPaymentCommand { OrderId = created.Value.Id, Amount = 44m, Method = OrderPaymentMethod.Cash },
+            CancellationToken.None);
+        Assert.True(paid.IsSuccess, paid.Error);
+        Assert.Equal(OrderStatus.Delivered, paid.Value.Status);
     }
 
     [Fact]
