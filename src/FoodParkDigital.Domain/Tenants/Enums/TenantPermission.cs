@@ -14,5 +14,7 @@ public enum TenantPermission
     ManageEmployees = 10,
     ManageAppointments = 11,
     /// <summary>Give money back and void paid sales. Owners and admins always can; staff only when granted.</summary>
-    ProcessRefunds = 12
+    ProcessRefunds = 12,
+    /// <summary>Message templates, campaigns and reminders. Owners and admins always can; staff only when granted.</summary>
+    ManageCampaigns = 13
 }

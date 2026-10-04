@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -7,7 +8,8 @@ namespace FoodParkDigital.Infrastructure.BackgroundJobs;
 
 /// <summary>
 /// Degraded (still serving traffic) when the outbox or the webhook inbox set work aside in the last day,
-/// or when pending work is older than it should be, which means the workers are stuck or not running.
+/// or when pending work (including queued WhatsApp messages) is older than it should be, which means the
+/// workers are stuck or not running.
 /// </summary>
 public sealed class BackgroundQueuesHealthCheck : IHealthCheck
 {
@@ -35,16 +37,20 @@ public sealed class BackgroundQueuesHealthCheck : IHealthCheck
             m => m.ProcessedAt == null && m.DeadLetteredAt == null && m.NextAttemptAt < stuckBefore, cancellationToken);
         var inboxStuck = await _context.InboxMessages.CountAsync(
             m => m.ProcessedAt == null && m.DeadLetteredAt == null && m.NextAttemptAt < stuckBefore, cancellationToken);
+        // The health check has no business context: the queue of every business is counted.
+        var messagingStuck = await _context.OutgoingMessages.IgnoreQueryFilters().CountAsync(
+            m => m.Status == OutgoingMessageStatus.Pending && m.NextAttemptAt < stuckBefore, cancellationToken);
 
         var data = new Dictionary<string, object>
         {
             ["outboxDeadLettered24h"] = outboxDeadLettered,
             ["inboxDeadLettered24h"] = inboxDeadLettered,
             ["outboxOverdue"] = outboxStuck,
-            ["inboxOverdue"] = inboxStuck
+            ["inboxOverdue"] = inboxStuck,
+            ["messagesOverdue"] = messagingStuck
         };
 
-        return outboxDeadLettered + inboxDeadLettered + outboxStuck + inboxStuck == 0
+        return outboxDeadLettered + inboxDeadLettered + outboxStuck + inboxStuck + messagingStuck == 0
             ? HealthCheckResult.Healthy(data: data)
             : HealthCheckResult.Degraded("Background work was set aside or is overdue.", data: data);
     }

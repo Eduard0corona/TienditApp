@@ -165,11 +165,34 @@ public sealed class WhatsAppWebhookProcessor
                 var message = await _context.WhatsAppMessages
                     .IgnoreQueryFilters()
                     .FirstOrDefaultAsync(m => m.ExternalMessageId == externalId, cancellationToken);
-                if (message is null)
-                    continue;
+                if (message is not null)
+                {
+                    message.UpdateStatus(mappedStatus);
+                    anyUpdated = true;
+                }
 
-                message.UpdateStatus(mappedStatus);
-                anyUpdated = true;
+                // Campaign and reminder messages keep their own delivery result.
+                var outgoing = await _context.OutgoingMessages
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(m => m.ProviderMessageId == externalId, cancellationToken);
+                if (outgoing is not null)
+                {
+                    var at = TryGetTimestamp(statusEvent) ?? DateTimeOffset.UtcNow;
+                    switch (mappedStatus)
+                    {
+                        case MessageStatus.Delivered:
+                            outgoing.RecordDelivery(at);
+                            break;
+                        case MessageStatus.Read:
+                            outgoing.RecordRead(at);
+                            break;
+                        case MessageStatus.Failed:
+                            outgoing.RecordDeliveryFailure(DescribeDeliveryFailure(statusEvent));
+                            break;
+                    }
+
+                    anyUpdated = true;
+                }
             }
 
             if (anyUpdated)
@@ -231,6 +254,36 @@ public sealed class WhatsAppWebhookProcessor
             return listTitle.GetString();
 
         return null;
+    }
+
+    /// <summary>Unix seconds of the status, as Meta sends it ("timestamp": "1700000000").</summary>
+    private static DateTimeOffset? TryGetTimestamp(JsonElement statusEvent)
+    {
+        if (!statusEvent.TryGetProperty("timestamp", out var timestamp))
+            return null;
+
+        var raw = timestamp.ValueKind == JsonValueKind.String ? timestamp.GetString() : timestamp.GetRawText();
+        return long.TryParse(raw, out var seconds) && seconds > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
+    }
+
+    /// <summary>Only the error code and its generic title: the details can quote the recipient.</summary>
+    private static string DescribeDeliveryFailure(JsonElement statusEvent)
+    {
+        if (statusEvent.TryGetProperty("errors", out var errors)
+            && errors.ValueKind == JsonValueKind.Array
+            && errors.GetArrayLength() > 0)
+        {
+            var error = errors[0];
+            var code = error.TryGetProperty("code", out var codeProp) ? codeProp.GetRawText() : null;
+            if (code == "131047")
+                return "WhatsApp no lo entregó: el cliente no escribió en las últimas 24 horas. Usa una plantilla aprobada en Meta.";
+            if (code is not null)
+                return $"WhatsApp no pudo entregar el mensaje (código {code}).";
+        }
+
+        return "WhatsApp no pudo entregar el mensaje.";
     }
 
     private static bool TryMapStatus(string rawStatus, out MessageStatus status)

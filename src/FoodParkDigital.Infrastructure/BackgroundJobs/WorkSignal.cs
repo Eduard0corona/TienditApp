@@ -32,3 +32,5 @@ public abstract class WorkSignal
 public sealed class OutboxSignal : WorkSignal;
 
 public sealed class InboxSignal : WorkSignal;
+
+public sealed class MessagingSignal : WorkSignal, FoodParkDigital.Application.Common.Interfaces.IOutgoingMessageSignal;

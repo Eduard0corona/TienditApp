@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
+using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -138,6 +139,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<InventoryMovementLine> InventoryMovementLines => Set<InventoryMovementLine>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OwnerWhatsAppConfig> OwnerWhatsAppConfigs => Set<OwnerWhatsAppConfig>();
+    public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
+    public DbSet<MessageCampaign> MessageCampaigns => Set<MessageCampaign>();
+    public DbSet<OutgoingMessage> OutgoingMessages => Set<OutgoingMessage>();
+    public DbSet<MessagingOptOut> MessagingOptOuts => Set<MessagingOptOut>();
 
     // Background queues: infrastructure only, read across tenants by the workers (not on IApplicationDbContext).
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
 using MediatR;
@@ -138,6 +139,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
         // InMemory provider does not generate rowversion; allow test inserts.
         modelBuilder.Entity<Order>()
             .Property(o => o.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<WhatsAppConversation>()
+            .Property<byte[]>("Version")
             .IsRequired(false)
             .ValueGeneratedNever();
     }

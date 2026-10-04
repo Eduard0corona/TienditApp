@@ -13,6 +13,26 @@ public sealed class BackgroundJobOptions
 
     public QueueOptions Outbox { get; set; } = new();
     public QueueOptions Inbox { get; set; } = new();
+    public MessagingOptions Messaging { get; set; } = new();
+
+    /// <summary>Campaigns, appointment reminders and the queue of outgoing WhatsApp messages.</summary>
+    public sealed class MessagingOptions
+    {
+        public int PollIntervalSeconds { get; set; } = 10;
+
+        public int BatchSize { get; set; } = 20;
+
+        /// <summary>Attempts of a message with transient failures before it is marked as failed.</summary>
+        public int MaxAttempts { get; set; } = 6;
+
+        public int LeaseSeconds { get; set; } = 120;
+
+        /// <summary>Pause after each send, so a campaign does not burst the provider (about 10 per second).</summary>
+        public int SendIntervalMilliseconds { get; set; } = 100;
+
+        /// <summary>How often the appointments due for a reminder are looked up.</summary>
+        public int ReminderScanMinutes { get; set; } = 5;
+    }
 
     public sealed class QueueOptions
     {

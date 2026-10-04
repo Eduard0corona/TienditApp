@@ -210,6 +210,7 @@ public class TenantResolutionMiddleware
     private static bool IsTenantScopedPath(string path) =>
         path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
+        || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/auth/my-tenant", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
         || path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
@@ -248,6 +249,7 @@ public class TenantResolutionMiddleware
         if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
             || IsTenantOrdersPath(path)
             || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
+            || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
@@ -306,6 +308,13 @@ public class TenantResolutionMiddleware
 
         if (path.StartsWith("/api/v1/marketing", StringComparison.Ordinal))
             return [TenantPermission.ManageWhatsApp];
+
+        // Recording a customer's opt-out is also part of attending them.
+        if (path.StartsWith("/api/v1/messaging/opt-outs", StringComparison.Ordinal))
+            return [TenantPermission.ManageCampaigns, TenantPermission.ManageCustomers];
+
+        if (path.StartsWith("/api/v1/messaging", StringComparison.Ordinal))
+            return [TenantPermission.ManageCampaigns];
 
         if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
             || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))

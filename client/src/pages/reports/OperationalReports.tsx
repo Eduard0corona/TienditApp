@@ -1,25 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import { reportsApi } from '../../api/reportsApi';
 import { getPaymentMethodLabel } from '../../utils/labels';
-import { marketingApi } from '../../api/marketingApi';
 import type { OperationalReportDto } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
-import { useConfirm } from '../../hooks/useConfirm';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
+import { getAccess } from '../../utils/access';
 
 export default function OperationalReports() {
-  const { confirm } = useConfirm();
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  const canSendCampaigns = getAccess(user, capabilities).campaigns;
   const [report, setReport] = useState<OperationalReportDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [promoMessage, setPromoMessage] = useState('');
-  const [minimumOrders, setMinimumOrders] = useState('1');
-  // A second click would message every customer twice.
-  const [sendingPromotion, setSendingPromotion] = useState(false);
 
   const loadReport = useCallback(async () => {
     setLoading(true);
@@ -40,42 +39,6 @@ export default function OperationalReports() {
     loadReport();
   }, [loadReport]);
 
-  const sendPromotion = async () => {
-    if (sendingPromotion) return;
-    setError('');
-    setSuccess('');
-    const minimumCompletedOrders = Number(minimumOrders);
-    if (!promoMessage.trim()) {
-      setError('El mensaje promocional es obligatorio.');
-      return;
-    }
-    if (Number.isNaN(minimumCompletedOrders) || minimumCompletedOrders <= 0) {
-      setError('Cantidad mínima de órdenes inválida.');
-      return;
-    }
-
-    const accepted = await confirm({
-      title: 'Enviar promoción por WhatsApp',
-      message: 'Se enviará el mensaje a todos los clientes que cumplan el filtro. Cada mensaje puede tener costo en WhatsApp.',
-      confirmLabel: 'Enviar',
-    });
-    if (!accepted) return;
-
-    setSendingPromotion(true);
-    try {
-      const { data } = await marketingApi.sendPromotion({
-        message: promoMessage.trim(),
-        minimumCompletedOrders,
-        lastPurchaseFrom: fromDate ? new Date(`${fromDate}T00:00:00`).toISOString() : undefined,
-      });
-      setSuccess(`Promoción enviada a ${data.sent} clientes.`);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo enviar la promoción.'));
-    } finally {
-      setSendingPromotion(false);
-    }
-  };
-
   const paymentRows = report ? Object.entries(report.revenueByPaymentMethod) : [];
 
   return (
@@ -86,12 +49,6 @@ export default function OperationalReports() {
         <div className="alert alert-danger alert-dismissible fade show">
           {error}
           <button type="button" className="btn-close" onClick={() => setError('')}></button>
-        </div>
-      )}
-      {success && (
-        <div className="alert alert-success alert-dismissible fade show">
-          {success}
-          <button type="button" className="btn-close" onClick={() => setSuccess('')}></button>
         </div>
       )}
 
@@ -199,37 +156,19 @@ export default function OperationalReports() {
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-body">
-              <h5 className="mb-3">Promoción segmentada</h5>
-              <div className="row">
-                <div className="col-md-2 mb-2">
-                  <label className="form-label">Mín. órdenes</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="form-control"
-                    value={minimumOrders}
-                    onChange={(e) => setMinimumOrders(e.target.value)}
-                  />
+          {canSendCampaigns && (
+            <div className="card">
+              <div className="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                  <h5 className="mb-1">Promociones por WhatsApp</h5>
+                  <p className="text-muted small mb-0">
+                    Las campañas se envían en segundo plano, respetan las bajas y guardan el resultado de cada mensaje.
+                  </p>
                 </div>
-                <div className="col-md-8 mb-2">
-                  <label className="form-label">Mensaje</label>
-                  <input
-                    className="form-control"
-                    value={promoMessage}
-                    onChange={(e) => setPromoMessage(e.target.value)}
-                    placeholder="Ej. Promo de semana: 15% en tu siguiente compra."
-                  />
-                </div>
-                <div className="col-md-2 mb-2 d-flex align-items-end">
-                  <button className="btn btn-primary w-100" onClick={sendPromotion} disabled={sendingPromotion}>
-                    {sendingPromotion ? 'Enviando...' : 'Enviar'}
-                  </button>
-                </div>
+                <Link to="/campaigns" className="btn btn-primary">Ir a Campañas</Link>
               </div>
             </div>
-          </div>
+          )}
         </>
       ) : null}
     </>

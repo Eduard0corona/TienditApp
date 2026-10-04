@@ -1072,10 +1072,164 @@ export interface AuditLogDto {
 
 // ==================== Marketing ====================
 
-export interface SendPromotionRequest {
-  message: string;
-  minimumCompletedOrders: number;
-  lastPurchaseFrom?: string;
+// ==================== Messaging (campaigns, reminders, opt-outs) ====================
+
+export const MessagePurpose = {
+  Campaign: 0,
+  AppointmentReminder: 1,
+} as const;
+export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
+
+export const OutgoingMessageStatus = {
+  Pending: 0,
+  Sent: 1,
+  Failed: 2,
+  Skipped: 3,
+  Cancelled: 4,
+} as const;
+export type OutgoingMessageStatus = (typeof OutgoingMessageStatus)[keyof typeof OutgoingMessageStatus];
+
+export const CampaignStatus = {
+  Scheduled: 0,
+  Sending: 1,
+  Completed: 2,
+  Cancelled: 3,
+} as const;
+export type CampaignStatus = (typeof CampaignStatus)[keyof typeof CampaignStatus];
+
+export const CampaignAudienceKind = {
+  AllCustomers: 0,
+  Buyers: 1,
+  Lapsed: 2,
+} as const;
+export type CampaignAudienceKind = (typeof CampaignAudienceKind)[keyof typeof CampaignAudienceKind];
+
+export const OptOutSource = {
+  CustomerKeyword: 0,
+  Staff: 1,
+} as const;
+export type OptOutSource = (typeof OptOutSource)[keyof typeof OptOutSource];
+
+export interface MessageTemplateDto {
+  id: string;
+  name: string;
+  purpose: MessagePurpose;
+  body: string;
+  /** Template approved in Meta; without it the text only reaches customers who wrote in the last 24 hours. */
+  providerTemplateName?: string;
+  languageCode: string;
+  isActive: boolean;
+  /** Placeholders in the order they become the Meta template parameters. */
+  parameters: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SaveMessageTemplateRequest {
+  name: string;
+  purpose?: MessagePurpose;
+  body: string;
+  providerTemplateName?: string;
+  languageCode?: string;
+  isActive?: boolean;
+}
+
+export interface CampaignProgressDto {
+  pending: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  skipped: number;
+  cancelled: number;
+}
+
+export interface CampaignDto {
+  id: string;
+  name: string;
+  templateId: string;
+  templateName?: string;
+  audienceKind: CampaignAudienceKind;
+  audienceMinimumOrders: number;
+  audienceDays?: number;
+  status: CampaignStatus;
+  scheduledAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  recipientCount: number;
+  excludedCount: number;
+  createdBy?: string;
+  createdAt: string;
+  progress: CampaignProgressDto;
+}
+
+export interface CampaignAudienceRequest {
+  templateId: string;
+  audienceKind: CampaignAudienceKind;
+  minimumOrders: number;
+  days?: number;
+}
+
+export interface CreateCampaignRequest extends CampaignAudienceRequest {
+  name: string;
+  /** Empty starts now. */
+  scheduledAt?: string;
+}
+
+export interface CampaignPreviewDto {
+  recipientCount: number;
+  excludedCount: number;
+  truncated: boolean;
+  maxRecipients: number;
+  usesApprovedTemplate: boolean;
+  samples: Array<{ recipientName?: string; phone: string; text: string }>;
+}
+
+export interface OutgoingMessageDto {
+  id: string;
+  purpose: MessagePurpose;
+  campaignId?: string;
+  appointmentId?: string;
+  phone: string;
+  recipientName?: string;
+  body: string;
+  status: OutgoingMessageStatus;
+  attempts: number;
+  createdAt: string;
+  nextAttemptAt: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  lastError?: string;
+}
+
+export interface MessagingOptOutDto {
+  id: string;
+  phone: string;
+  source: OptOutSource;
+  optedOutAt: string;
+  resubscribedAt?: string;
+  isActive: boolean;
+}
+
+export interface MessagingSettingsDto {
+  whatsAppConnected: boolean;
+  appointmentsEnabled: boolean;
+  appointmentRemindersEnabled: boolean;
+  appointmentReminderHoursBefore: number;
+  appointmentReminderTemplateId?: string;
+  defaultReminderBody: string;
+  minReminderHoursBefore: number;
+  maxReminderHoursBefore: number;
+  campaignPlaceholders: string[];
+  reminderPlaceholders: string[];
+}
+
+export interface UpdateAppointmentRemindersRequest {
+  enabled: boolean;
+  hoursBefore: number;
+  templateId?: string;
 }
 
 // ==================== Customers ====================

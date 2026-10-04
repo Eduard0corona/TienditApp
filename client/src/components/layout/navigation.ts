@@ -48,6 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Compras', path: '/purchases', icon: 'ri-shopping-cart-2-line', area: 'inventory', keywords: 'órdenes de compra' },
       { label: 'Proveedores', path: '/suppliers', icon: 'ri-truck-line', area: 'inventory' },
       { label: 'Clientes', path: '/customers', icon: 'ri-team-line', area: 'customers' },
+      { label: 'Campañas', path: '/campaigns', icon: 'ri-megaphone-line', area: 'campaigns', keywords: 'promociones mensajes masivos whatsapp recordatorios de citas plantillas bajas' },
       { label: 'Reportes', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', keywords: 'utilidad ventas del mes' },
     ],
   },
