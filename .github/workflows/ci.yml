@@ -60,6 +60,10 @@ jobs:
     name: Migrations (SQL Server 2022, sqlcmd)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # An explicit bash adds pipefail: a failing `dotnet ef` inside a pipeline fails the step.
+    defaults:
+      run:
+        shell: bash
     env:
       # dotnet ef builds the API host, which outside Development requires a JWT secret.
       ASPNETCORE_ENVIRONMENT: Development
@@ -67,7 +71,7 @@ jobs:
       # in this state because from an empty one it fails in
       # 20260217004713_AddOrderServiceAndTenantCapabilities, which is applied and cannot be edited.
       # Move it forward when production does; an older value only tests more migrations.
-      PRODUCTION_BASELINE: 20261004090406_AllowWalkInSalesWithoutCustomer
+      PRODUCTION_BASELINE: 20261004165450_AddOfflineSaleIdempotency
       MSSQL_DATABASE: TienditAppCi
       EF_PROJECTS: >-
         --project src/FoodParkDigital.Infrastructure
