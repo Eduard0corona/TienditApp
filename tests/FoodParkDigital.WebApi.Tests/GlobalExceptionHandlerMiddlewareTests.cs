@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Customers.Services;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -76,7 +77,6 @@ public class GlobalExceptionHandlerMiddlewareTests
         var customerLookup = new CustomerLookupService(
             database,
             new PhoneNormalizationService(),
-            HostEnvironment(environmentName),
             NullLogger<CustomerLookupService>.Instance);
         var logger = new CapturingLogger<GlobalExceptionHandlerMiddleware>();
         var context = NewHttpContext();

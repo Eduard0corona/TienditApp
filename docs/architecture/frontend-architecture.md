@@ -11,7 +11,7 @@ Estructura principal:
 - `src/components/common` y `layout`: reutilización y shell.
 - `src/hooks`: Auth/Tenant y conexiones SignalR.
 - `src/contexts`: estado de autenticación y tenant.
-- `src/types/index.ts`: contratos TypeScript compartidos. Los enums del dominio se copian como objetos `as const` con los mismos números, porque la API los intercambia como enteros; `ClientEnumContractTests` (WebApi.Tests) los compara con el dominio.
+- `src/types/index.ts`: contratos TypeScript compartidos. Los enums del dominio no se escriben aquí: `npm run api:types` los genera del contrato en `src/api/generated/enums.ts` como objetos `as const` con los nombres y números del servidor (la API los intercambia como enteros) y `index.ts` los reexporta. Un enum nuevo se agrega al contrato, no a mano. `ClientEnumContractTests` (WebApi.Tests) los compara con el dominio.
 - `src/utils/tenantCapabilities.ts`: helpers de capabilities.
 
 El access token se mantiene en memoria y se agrega con interceptor. El refresh token usa cookie `HttpOnly`; `localStorage` solo conserva un marcador de sesión. Vite proxya API, uploads y hubs a `localhost:5203`.
@@ -40,7 +40,7 @@ Shell y diseño (Fase 1):
 
 Datos del servidor y cliente generado (Fase 2):
 
-- `client/openapi/openapi.json` es el documento OpenAPI de la API (rutas en minúsculas, propiedades no nulas como requeridas). `npm run api:pull` lo descarga de una API corriendo en Development y `npm run api:types` genera `src/api/generated/schema.ts` con openapi-typescript; ambos archivos se versionan y se regeneran cuando cambia un contrato. CI falla si alguno no coincide con la API y reporta en cada PR los cambios incompatibles contra la rama base ([ADR 0008](../adr/0008-api-error-contract.md)).
+- `client/openapi/openapi.json` es el documento OpenAPI de la API (rutas en minúsculas, propiedades no nulas como requeridas). `npm run api:pull` lo descarga de una API corriendo en Development y `npm run api:types` genera `src/api/generated/schema.ts` con openapi-typescript y `src/api/generated/enums.ts` con `scripts/generate-enums.mjs`; ambos archivos se versionan y se regeneran cuando cambia un contrato. CI falla si alguno no coincide con la API y reporta en cada PR los cambios incompatibles contra la rama base ([ADR 0008](../adr/0008-api-error-contract.md)).
 - `src/api/typedClient.ts` (`apiRequest('get', '/api/v1/…', { path, query, body })`) tipa ruta, parámetros, cuerpo y respuesta desde ese esquema y usa la misma instancia axios (token, refresh, negocio). `Schemas['CampaignDto']` da los tipos de los DTOs.
 - TanStack Query maneja el estado del servidor de las pantallas migradas: `src/api/queryClient.ts` (un reintento, 30 s de frescura) y hooks en `src/api/queries.ts` (`useMyAccess`, `useCustomerCard`, `useCampaigns`, `useCampaignMessages`, `useCreateCampaign`, `useCancelCampaign`). Las mutaciones invalidan sus claves; cerrar sesión limpia la caché.
 - Migradas: ficha del cliente y campañas (lista, detalle, crear y cancelar). El resto sigue con los módulos de `src/api` y `types/index.ts`; se migran al tocar cada pantalla, sin reescrituras incidentales.
@@ -56,6 +56,8 @@ Fase 4:
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
+Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.
+
 ## Guardrails
 
 - Backend decide estados, totales, impuestos, saldos y existencias finales.
@@ -67,14 +69,13 @@ Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y
 - No persistas access/refresh tokens en almacenamiento accesible a JavaScript.
 - SignalR debe reconectar, cancelar al desmontar, aislar tenant y manejar errores.
 - Cambios de contrato requieren actualizar DTO, regenerar `openapi.json` y `schema.ts`, y ajustar el tipo manual, el wrapper y los consumidores que aún no usan el cliente generado.
-- Un enum del dominio se copia con sus valores exactos; nunca se renumera en el cliente.
+- Un enum del dominio sale del contrato generado (`src/api/generated/enums.ts`); nunca se copia ni se renumera en el cliente.
 
 ## Deuda actual
 
-- `InventoryManagement.tsx` supera 2,400 líneas; `OrdersCart.tsx`, `OrdersList.tsx` y `types/index.ts` rondan o superan 1,000. Son candidatos a refactor por feature/componente, no deben reescribirse incidentalmente.
-- No se encontró framework ni suite de pruebas frontend.
+- `SellPage.tsx`, `OrdersList.tsx`, `OrdersCart.tsx` y `types/index.ts` superan 1,000 líneas. Son candidatos a dividirse como Inventario (Fase 7D), al tocar cada pantalla y sin reescrituras incidentales.
 - `AccessRoute` cubre las rutas del layout; los botones de acción dentro de cada pantalla todavía se condicionan caso por caso (por ahora, órdenes).
-- Inventario, Caja, Compras y Auditoría todavía filtran solo la página cargada en sus tablas; Vender carga hasta 500 productos y, si el catálogo es mayor, busca en el servidor.
-- Accesibilidad: muchas etiquetas no están asociadas a su campo y hay botones de solo icono sin nombre accesible.
+- Vender carga hasta 500 productos y, si el catálogo es mayor, busca en el servidor; las recetas de Inventario cargan hasta 500 productos e insumos.
+- Accesibilidad: el lint exige etiquetas asociadas (Fase 6F), pero no nombres en los botones de solo icono; se les pone `aria-label` al tocar cada pantalla (Inventario ya los tiene).
 - `client/README.md` aún es el texto genérico del template Vite.
 - Los estilos minificados versionados hacen difícil rastrear y revisar cambios visuales.

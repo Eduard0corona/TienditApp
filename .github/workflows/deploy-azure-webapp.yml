@@ -18,12 +18,25 @@ concurrency:
   group: deploy-azure-webapp
   cancel-in-progress: false
 
+# Two ways to reach production (docs/development/deploy-azure.md):
+# - Directly (default): the package goes to the app and the smoke test checks it there.
+# - Through a staging slot, when the AZURE_WEBAPP_SLOT and AZURE_RESOURCE_GROUP variables exist (OIDC required): the
+#   package goes to the slot and is checked there; the `promote` job swaps it into production after the approval of
+#   the `production` environment, and checks production. A version that fails in the slot never reaches production.
 jobs:
   build-and-deploy:
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    outputs:
+      client-script: ${{ steps.publish-output.outputs.client-script }}
 
     steps:
+      - name: Check the staging slot settings
+        if: vars.AZURE_WEBAPP_SLOT != '' && (vars.AZURE_CLIENT_ID == '' || vars.AZURE_RESOURCE_GROUP == '')
+        run: |
+          echo "::error::AZURE_WEBAPP_SLOT needs OIDC (AZURE_CLIENT_ID) and AZURE_RESOURCE_GROUP: the swap signs in to Azure."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -60,11 +73,16 @@ jobs:
       - name: Publish backend
         run: dotnet publish src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj -c Release -o ${{ github.workspace }}/publish
 
+      # The script that index.html loads carries the build's hash: the smoke tests look for it.
       - name: Verify publish output
+        id: publish-output
         run: |
           test -f "${{ github.workspace }}/publish/FoodParkDigital.WebApi.dll"
           test -f "${{ github.workspace }}/publish/wwwroot/index.html"
           ls -la "${{ github.workspace }}/publish" | head -n 50
+          script=$(grep -oE '/assets/index-[^"]+\.js' "${{ github.workspace }}/publish/wwwroot/index.html" | head -n 1)
+          test -n "$script"
+          echo "client-script=$script" >> "$GITHUB_OUTPUT"
 
       - name: Create deployment zip
         run: |
@@ -82,12 +100,14 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      # To the staging slot when there is one; production keeps serving the previous version until the swap.
       - name: Deploy to Azure Web App (OIDC)
         id: deploy-oidc
         if: vars.AZURE_CLIENT_ID != ''
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          slot-name: ${{ vars.AZURE_WEBAPP_SLOT || 'production' }}
           package: ${{ github.workspace }}/webapp.zip
 
       - name: Deploy to Azure Web App (publish profile)
@@ -99,28 +119,58 @@ jobs:
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ${{ github.workspace }}/webapp.zip
 
-      # The deployment is done when the app answers with this version: ready (database reachable) and serving the
-      # index.html just built (its script names carry the build's hash). App Service restarts take a few minutes.
-      # SMOKE_TEST_URL (a repository variable) overrides the azurewebsites.net address, for a custom domain.
+      # The deployment is done when the app (or the slot) answers with this version: ready (database reachable), with
+      # every migration of this version in the database (a missing apply.sql stops it here) and serving the index.html
+      # just built. SMOKE_TEST_URL (a repository variable) overrides the production address, for a custom domain; a slot
+      # is checked at its own address.
       - name: Smoke test
         env:
-          APP_URL: ${{ vars.SMOKE_TEST_URL || steps.deploy-oidc.outputs.webapp-url || steps.deploy-profile.outputs.webapp-url }}
+          APP_URL: ${{ (vars.AZURE_WEBAPP_SLOT == '' && vars.SMOKE_TEST_URL) || steps.deploy-oidc.outputs.webapp-url || steps.deploy-profile.outputs.webapp-url }}
         run: |
-          url="${APP_URL%/}"
-          if [ -z "$url" ]; then
+          if [ -z "$APP_URL" ]; then
             echo "::warning::The deployment gave no URL and SMOKE_TEST_URL is not set: smoke test skipped."
             exit 0
           fi
-          script=$(grep -oE '/assets/index-[^"]+\.js' "${{ github.workspace }}/publish/wwwroot/index.html" | head -n 1)
-          for attempt in $(seq 1 30); do
-            ready=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url/health/ready" || true)
-            if curl -s --max-time 20 "$url/" | grep -qF "$script"; then served=yes; else served=no; fi
-            if [ "$ready" = "200" ] && [ "$served" = "yes" ]; then
-              echo "$url answers with this version: ready and serving $script."
-              exit 0
-            fi
-            echo "Attempt $attempt: /health/ready=$ready, new client served=$served."
-            sleep 20
-          done
-          echo "::error::$url did not answer with this version within 10 minutes (readiness or index.html). Check the App Service log stream."
-          exit 1
+          bash .github/scripts/smoke-test.sh "$APP_URL" "${{ steps.publish-output.outputs.client-script }}"
+
+  # Only with a staging slot. The `production` environment holds the approval: with required reviewers in its settings,
+  # the swap waits for one of them. The OIDC subject of this job is the environment
+  # (repo:Eduard0corona/TienditApp:environment:production), which needs its own federated credential.
+  promote:
+    needs: build-and-deploy
+    if: vars.AZURE_WEBAPP_SLOT != ''
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Sign in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # The slot already started this version, so production changes without a cold start. The previous version stays
+      # in the slot: swapping again goes back to it.
+      - name: Swap the slot into production
+        env:
+          APP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
+        run: |
+          az webapp deployment slot swap \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "$APP_NAME" \
+            --slot "${{ vars.AZURE_WEBAPP_SLOT }}" \
+            --target-slot production
+
+      - name: Smoke test (production)
+        env:
+          APP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
+          APP_URL: ${{ vars.SMOKE_TEST_URL }}
+        run: |
+          url="${APP_URL:-https://$(az webapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "$APP_NAME" --query defaultHostName --output tsv)}"
+          bash .github/scripts/smoke-test.sh "$url" "${{ needs.build-and-deploy.outputs.client-script }}"

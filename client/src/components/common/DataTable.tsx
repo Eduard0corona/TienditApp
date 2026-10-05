@@ -7,7 +7,7 @@ export interface DataTableColumn {
   width?: number | string;
 }
 
-interface ServerSideConfig {
+export interface ServerSideConfig {
   totalCount: number;
   page: number;
   pageSize: number;
@@ -34,7 +34,7 @@ interface DataTableProps<T> {
   emptyMessage?: string;
   pageSizeOptions?: number[];
   searchPlaceholder?: string;
-  /** Text already in the search box (a search that came in the link). */
+  /** Text already in the search box: a search that came in the link, or the one the page kept while another tab was open. */
   initialSearch?: string;
 }
 

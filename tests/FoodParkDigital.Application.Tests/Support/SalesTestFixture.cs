@@ -121,7 +121,6 @@ internal sealed class SalesTestFixture : IAsyncDisposable
         var customerLookup = new CustomerLookupService(
             Context,
             phoneNormalization,
-            new HostingEnvironment { EnvironmentName = Environments.Production },
             NullLogger<CustomerLookupService>.Instance);
 
         return new CreateOrderCommandHandler(

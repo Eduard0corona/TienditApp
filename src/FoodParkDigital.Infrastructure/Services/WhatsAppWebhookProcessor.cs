@@ -154,6 +154,7 @@ public sealed class WhatsAppWebhookProcessor
         return failed;
     }
 
+    /// <summary>Reads the delivery statuses of the payload; the business applies them (ApplyWhatsAppStatusesCommand).</summary>
     /// <returns>1 when the statuses could not be saved, 0 otherwise.</returns>
     private async Task<int> ProcessStatusesAsync(
         IServiceProvider services, JsonElement value, Guid tenantId, CancellationToken cancellationToken)
@@ -161,73 +162,23 @@ public sealed class WhatsAppWebhookProcessor
         if (!value.TryGetProperty("statuses", out var statuses) || statuses.ValueKind != JsonValueKind.Array)
             return 0;
 
-        var context = services.GetRequiredService<IApplicationDbContext>();
-        var notifications = services.GetService<IWhatsAppNotificationService>();
+        var reports = new List<WhatsAppStatusReport>();
+        foreach (var statusEvent in statuses.EnumerateArray())
+        {
+            var externalId = statusEvent.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+            var statusRaw = statusEvent.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
+            if (string.IsNullOrWhiteSpace(externalId) || string.IsNullOrWhiteSpace(statusRaw) || !TryMapStatus(statusRaw, out var status))
+                continue;
+
+            reports.Add(new WhatsAppStatusReport(externalId, status, TryGetTimestamp(statusEvent), TryGetErrorCode(statusEvent)));
+        }
+
+        if (reports.Count == 0)
+            return 0;
+
         try
         {
-            var anyUpdated = false;
-            var chatMessages = new List<Domain.WhatsApp.Entities.WhatsAppMessage>();
-            foreach (var statusEvent in statuses.EnumerateArray())
-            {
-                var externalId = statusEvent.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
-                var statusRaw = statusEvent.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
-                if (string.IsNullOrWhiteSpace(externalId) || string.IsNullOrWhiteSpace(statusRaw))
-                    continue;
-
-                if (!TryMapStatus(statusRaw, out var mappedStatus))
-                    continue;
-
-                // Only this business's messages: a status reported to its number for someone else's id changes nothing.
-                var message = await context.WhatsAppMessages
-                    .FirstOrDefaultAsync(m => m.ExternalMessageId == externalId, cancellationToken);
-                if (message is not null)
-                {
-                    message.UpdateStatus(mappedStatus);
-                    chatMessages.Add(message);
-                    anyUpdated = true;
-                }
-
-                // Campaign, reminder and notice messages keep their own delivery result.
-                var outgoing = await context.OutgoingMessages
-                    .FirstOrDefaultAsync(m => m.ProviderMessageId == externalId, cancellationToken);
-                if (outgoing is not null)
-                {
-                    var at = TryGetTimestamp(statusEvent) ?? DateTimeOffset.UtcNow;
-                    switch (mappedStatus)
-                    {
-                        case MessageStatus.Delivered:
-                            outgoing.RecordDelivery(at);
-                            break;
-                        case MessageStatus.Read:
-                            outgoing.RecordRead(at);
-                            break;
-                        case MessageStatus.Failed:
-                            outgoing.RecordDeliveryFailure(DescribeDeliveryFailure(statusEvent));
-                            break;
-                    }
-
-                    anyUpdated = true;
-                }
-            }
-
-            if (anyUpdated)
-                await context.SaveChangesAsync(cancellationToken);
-
-            // The chat shows the ticks as they arrive; a lost notification only waits for the next reload.
-            if (notifications is not null)
-            {
-                foreach (var message in chatMessages.DistinctBy(m => m.Id))
-                {
-                    try
-                    {
-                        await notifications.NotifyMessageStatus(tenantId, message.ConversationId, message.Id, message.Status.ToString());
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning("Status of WhatsApp message {MessageId} could not be pushed to the chat: {ErrorType}", message.Id, ex.GetType().Name);
-                    }
-                }
-            }
+            await services.GetRequiredService<ISender>().Send(new ApplyWhatsAppStatusesCommand(tenantId, reports), cancellationToken);
             return 0;
         }
         catch (Exception ex)
@@ -374,22 +325,14 @@ public sealed class WhatsAppWebhookProcessor
             : null;
     }
 
-    /// <summary>Only the error code and its generic title: the details can quote the recipient.</summary>
-    private static string DescribeDeliveryFailure(JsonElement statusEvent)
+    /// <summary>The code of the first error of a failed status; its details can quote the recipient and are left out.</summary>
+    private static string? TryGetErrorCode(JsonElement statusEvent)
     {
-        if (statusEvent.TryGetProperty("errors", out var errors)
-            && errors.ValueKind == JsonValueKind.Array
-            && errors.GetArrayLength() > 0)
-        {
-            var error = errors[0];
-            var code = error.TryGetProperty("code", out var codeProp) ? codeProp.GetRawText() : null;
-            if (code == "131047")
-                return "WhatsApp no lo entregó: el cliente no escribió en las últimas 24 horas. Usa una plantilla aprobada en Meta.";
-            if (code is not null)
-                return $"WhatsApp no pudo entregar el mensaje (código {code}).";
-        }
+        if (!statusEvent.TryGetProperty("errors", out var errors) || errors.ValueKind != JsonValueKind.Array
+            || errors.GetArrayLength() == 0 || !errors[0].TryGetProperty("code", out var code))
+            return null;
 
-        return "WhatsApp no pudo entregar el mensaje.";
+        return code.ValueKind == JsonValueKind.String ? code.GetString() : code.GetRawText();
     }
 
     private static bool TryMapStatus(string rawStatus, out MessageStatus status)

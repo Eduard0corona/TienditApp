@@ -9846,7 +9846,15 @@
           99
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Scheduled",
+          "Confirmed",
+          "InService",
+          "Completed",
+          "NoShow",
+          "Cancelled"
+        ]
       },
       "AssignPlanRequest": {
         "required": [
@@ -10150,7 +10158,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Food",
+          "Retail",
+          "Service"
+        ]
       },
       "CampaignAudienceKind": {
         "enum": [
@@ -10159,7 +10172,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "AllCustomers",
+          "Buyers",
+          "Lapsed"
+        ]
       },
       "CampaignDto": {
         "required": [
@@ -10399,7 +10417,13 @@
           3
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Scheduled",
+          "Sending",
+          "Completed",
+          "Cancelled"
+        ]
       },
       "CancelOrderRequest": {
         "type": "object",
@@ -10594,7 +10618,11 @@
           1
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Open",
+          "Closed"
+        ]
       },
       "CashTransactionDto": {
         "required": [
@@ -10711,7 +10739,17 @@
           7
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "SalePayment",
+          "Refund",
+          "Expense",
+          "Withdrawal",
+          "Deposit",
+          "OpeningAdjustment",
+          "ClosingAdjustment",
+          "Tip"
+        ]
       },
       "CategoryDto": {
         "required": [
@@ -11001,7 +11039,11 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "NotSubject",
+          "Subject"
+        ]
       },
       "CfdiTransferDto": {
         "required": [
@@ -13482,7 +13524,11 @@
           1
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Block",
+          "Warn"
+        ]
       },
       "InventoryAlertItemDto": {
         "required": [
@@ -13983,7 +14029,20 @@
           99
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Purchase",
+          "Sale",
+          "Production",
+          "Consumption",
+          "Waste",
+          "Damaged",
+          "InventoryCount",
+          "InitialLoad",
+          "Return",
+          "ManualAdjustment",
+          "Other"
+        ]
       },
       "InventoryMovementType": {
         "enum": [
@@ -13997,7 +14056,17 @@
           8
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Entry",
+          "Exit",
+          "AdjustmentIncrease",
+          "AdjustmentDecrease",
+          "TransferIn",
+          "TransferOut",
+          "ReturnFromProduction",
+          "ReturnToSupplier"
+        ]
       },
       "InventoryStockDto": {
         "required": [
@@ -14285,7 +14354,13 @@
           3
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Pending",
+          "Preparing",
+          "Ready",
+          "Served"
+        ]
       },
       "KitchenTicketSummaryDto": {
         "required": [
@@ -14399,7 +14474,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Campaign",
+          "AppointmentReminder",
+          "AppointmentNotice"
+        ]
       },
       "MessageTemplateDto": {
         "required": [
@@ -14806,7 +14886,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Off",
+          "MenuOnly",
+          "Orders"
+        ]
       },
       "OnlineMenuSettingsDto": {
         "required": [
@@ -14988,7 +15073,11 @@
           1
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "CustomerKeyword",
+          "Staff"
+        ]
       },
       "OrderChannel": {
         "enum": [
@@ -14997,7 +15086,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Counter",
+          "WhatsApp",
+          "Online"
+        ]
       },
       "OrderDto": {
         "required": [
@@ -15371,7 +15465,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "RemoteAndServices",
+          "AllOrders",
+          "Off"
+        ]
       },
       "OrderPaymentDto": {
         "required": [
@@ -15441,7 +15540,14 @@
           4
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Cash",
+          "Card",
+          "Transfer",
+          "DigitalWallet",
+          "Other"
+        ]
       },
       "OrderRefundDto": {
         "required": [
@@ -15524,7 +15630,18 @@
           99
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Pending",
+          "Confirmed",
+          "InPreparation",
+          "Ready",
+          "Accepted",
+          "InProgress",
+          "Delivered",
+          "Completed",
+          "Cancelled"
+        ]
       },
       "OrderStatusHistoryDto": {
         "required": [
@@ -15594,7 +15711,11 @@
           1
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Retail",
+          "Service"
+        ]
       },
       "OutgoingMessageDto": {
         "required": [
@@ -15724,7 +15845,14 @@
           4
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Pending",
+          "Sent",
+          "Failed",
+          "Skipped",
+          "Cancelled"
+        ]
       },
       "OwnerWhatsAppConfigDto": {
         "required": [
@@ -16122,7 +16250,11 @@
           1
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Product",
+          "Service"
+        ]
       },
       "ProductDto": {
         "required": [
@@ -17038,7 +17170,15 @@
           99
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Draft",
+          "Sent",
+          "PartiallyReceived",
+          "Received",
+          "Closed",
+          "Cancelled"
+        ]
       },
       "ReceivePurchaseOrderLineItemRequest": {
         "required": [
@@ -17919,7 +18059,13 @@
           99
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Accepted",
+          "InProgress",
+          "Completed",
+          "Cancelled"
+        ]
       },
       "SetAiAgentActiveRequest": {
         "required": [
@@ -18185,7 +18331,13 @@
           3
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Transfer",
+          "Card",
+          "Cash",
+          "Other"
+        ]
       },
       "SubscriptionStatus": {
         "enum": [
@@ -18196,7 +18348,14 @@
           4
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Trial",
+          "Active",
+          "PastDue",
+          "Suspended",
+          "Cancelled"
+        ]
       },
       "SupplierDto": {
         "required": [
@@ -18497,7 +18656,17 @@
           32
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "None",
+          "Retail",
+          "Service",
+          "Food",
+          "Inventory",
+          "Appointments",
+          "Kitchen"
+        ],
+        "x-enum-flags": true
       },
       "TenantDto": {
         "required": [
@@ -18834,7 +19003,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Active",
+          "Inactive",
+          "Suspended"
+        ]
       },
       "TenantUserRole": {
         "enum": [
@@ -18843,7 +19017,12 @@
           2
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Owner",
+          "Admin",
+          "Staff"
+        ]
       },
       "ToggleAvailabilityRequest": {
         "required": [
@@ -18960,7 +19139,27 @@
           52
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "Unit",
+          "Pack",
+          "Box",
+          "Pair",
+          "Kg",
+          "G",
+          "Lb",
+          "Oz",
+          "Liter",
+          "Ml",
+          "Portion",
+          "Slice",
+          "Serving",
+          "Meter",
+          "Roll",
+          "Hour",
+          "Session",
+          "Service"
+        ]
       },
       "UpdateAiAgentCommand": {
         "required": [
@@ -20210,7 +20409,14 @@
           4
         ],
         "type": "integer",
-        "format": "int32"
+        "format": "int32",
+        "x-enum-varnames": [
+          "SuperAdmin",
+          "TenantAdmin",
+          "Staff",
+          "Kitchen",
+          "Customer"
+        ]
       },
       "Verify2FAResponse": {
         "required": [

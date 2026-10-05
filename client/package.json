@@ -10,7 +10,7 @@
     "test": "vitest run",
     "preview": "vite preview",
     "api:pull": "node scripts/pull-openapi.mjs",
-    "api:types": "openapi-typescript openapi/openapi.json -o src/api/generated/schema.ts"
+    "api:types": "openapi-typescript openapi/openapi.json -o src/api/generated/schema.ts && node scripts/generate-enums.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

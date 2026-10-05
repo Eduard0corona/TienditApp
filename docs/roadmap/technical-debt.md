@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-05 tras las Fases 0 a 6 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-05 tras las Fases 0 a 7 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -24,14 +24,13 @@ Actualizada el 2026-10-05 tras las Fases 0 a 6 del roadmap de producto (la audit
 
 ## Media
 
-- Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
-- Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
-- `types/index.ts` copia a mano los enums numéricos del dominio. `ClientEnumContractTests` compara sus objetos `as const` con el dominio, pero no genera los tipos ni revisa las uniones literales duplicadas (`PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99` y similares).
+- `AuthController` (447 líneas) concentra registro, sesión, perfil y negocio. El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
+- Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
 - Las pruebas del cliente (Vitest y Testing Library, desde la Fase 5) cubren utilidades de dinero, unidades, acceso, errores, IVA, mensajes de WhatsApp y componentes con existencias; faltan pruebas de pantallas completas y de extremo a extremo. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
-- No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes. Desde la Fase 4F una prueba de humo confirma que la app responde con la versión nueva y el workflow admite OIDC en lugar del publish profile ([despliegue](../development/deploy-azure.md)); cambiar de credencial requiere configurar Azure.
+- El slot de staging con swap y aprobación está listo en el workflow, pero sin activar (Fase 7, [despliegue](../development/deploy-azure.md)): requiere plan Standard o superior, OIDC, crear el slot, la credencial federada del environment `production` y sus revisores. Mientras tanto cada push a `master` despliega directo a producción; la prueba de humo confirma la versión nueva y que la base tenga sus migraciones (`/health/schema`).
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Cambios de estado, cancelaciones, reembolsos y rondas que consumen insumos toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
-- Auto-migrate/seed solo existe en Development contra un servidor local, pero falta el proceso productivo de migraciones.
+- Las migraciones de producción se aplican a mano con el `apply.sql` de cada carpeta antes del merge (probadas en CI con `sqlcmd`); `/health/schema` detecta las que falten, pero ningún paso del despliegue las aplica con aprobación.
 - Listados pequeños aún materializan colecciones sin paginación (categorías, AI agents, ubicaciones, kitchen).
 - Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.
 - Consultas con varias colecciones incluidas no usan `AsSplitQuery`.
@@ -47,7 +46,7 @@ Actualizada el 2026-10-05 tras las Fases 0 a 6 del roadmap de producto (la audit
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
 - Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
 - Las conversaciones partidas antes de la Fase 4 (`+52` y `+521` del mismo número) siguen como dos hilos; cada mensaje nuevo va al hilo con la misma forma del número.
-- Los puntos de lealtad de `CustomerProfile` siguen sin usarse.
+- No hay lealtad: es por negocio y queda fuera de alcance hasta tener reglas ([ADR 0009](../adr/0009-loyalty-per-business.md)). Las columnas `CustomerProfile.LoyaltyPoints` y `LoyaltyTier`, globales y sin uso, se borran en la próxima limpieza de columnas.
 
 ## Resuelto el 2026-10-01
 
@@ -203,6 +202,18 @@ Pendientes detectados en la Fase 3:
 - Avisos de citas por la cola de mensajería, guardados con el cambio y enviados con reintentos; un solo cliente de la API de Meta (`WhatsAppCloudClient`) para los mensajes de cada negocio y los códigos de la plataforma; alcance de negocio explícito (`BackgroundScopes`) en todos los workers y en el webhook, que procesa cada parte de la entrega con el filtro de su negocio.
 - Registrar un movimiento en la caja de otra persona exige siempre ser dueño o administrador: el caso de uso ya no omite la revisión si le faltan dependencias.
 
+## Resuelto el 2026-10-05 (Fase 7: contrato, capas y entrega)
+
+- Enums con nombre en el contrato (`x-enum-varnames`, `x-enum-flags`) y generados en el cliente (`src/api/generated/enums.ts`, `npm run api:types`); `types/index.ts` ya no copia ninguno y CI revisa que el archivo esté al día.
+- Reglas de negocio de Infrastructure a Application: respuestas automáticas, búsqueda y reclamo de clientes temporales y los estados de entrega de WhatsApp (`ApplyWhatsAppStatusesCommand`, en el alcance del negocio dueño del número). Infrastructure solo adapta (Meta, enlaces de la app, correo).
+- Inventario dividido por pestaña y diálogo (de 2,494 líneas a archivos de 60–360). De paso se corrigieron:
+  - la unidad de las existencias de productos vendidos por rebanada, libra, onza, par, rollo, ración, sesión o servicio, que se mostraba como número;
+  - los errores de los diálogos, que salían detrás del diálogo;
+  - la búsqueda, que se perdía al cambiar de pestaña;
+  - las recargas de más al elegir otra receta.
+- Despliegue que verifica el esquema: `/health/schema` responde 503 si falta en la base una migración de la versión y la prueba de humo lo exige. Slot de staging con swap y aprobación del environment `production`, opcional.
+- Lealtad: decisión explícita ([ADR 0009](../adr/0009-loyalty-per-business.md)); se quitó el método que escribía los puntos globales.
+
 ## Decisiones humanas pendientes
 
 - Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.
@@ -210,6 +221,6 @@ Pendientes detectados en la Fase 3:
 - Flujo administrativo y auditado para alta, promoción y baja de `SUPER_ADMIN`; hoy solo existe el seed de Development.
 - Responsable legal-contable de la política fiscal (descuentos, IEPS, retenciones y CFDI).
 - Cuentas por cobrar, saldo a favor y Wallet (los reembolsos ya existen; los ajustes contables no).
-- Cuándo agregar staging con swap antes de producción.
+- Cuándo activar el slot de staging (plan Standard) y quién aprueba los despliegues a producción.
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.

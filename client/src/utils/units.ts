@@ -59,6 +59,33 @@ export function getUnitShortLabel(unit?: UnitType | null): string {
   return unit === undefined || unit === null ? '' : SHORT_LABELS[unit] ?? '';
 }
 
+/** Name of every unit of the contract: a unit the API adds does not build until it has one. */
+export const UNIT_LABELS: Record<UnitType, string> = {
+  [UnitType.Unit]: 'Unidad',
+  [UnitType.Pack]: 'Paquete',
+  [UnitType.Box]: 'Caja',
+  [UnitType.Pair]: 'Par',
+  [UnitType.Kg]: 'Kg',
+  [UnitType.G]: 'Gramo',
+  [UnitType.Lb]: 'Libra',
+  [UnitType.Oz]: 'Onza',
+  [UnitType.Liter]: 'Litro',
+  [UnitType.Ml]: 'Mililitro',
+  [UnitType.Portion]: 'Porción',
+  [UnitType.Slice]: 'Rebanada',
+  [UnitType.Serving]: 'Ración',
+  [UnitType.Meter]: 'Metro',
+  [UnitType.Roll]: 'Rollo',
+  [UnitType.Hour]: 'Hora',
+  [UnitType.Session]: 'Sesión',
+  [UnitType.Service]: 'Servicio',
+};
+
+/** "Kg", "Rebanada"...; the number of a unit this client does not know yet. */
+export function getUnitLabel(unit: UnitType): string {
+  return UNIT_LABELS[unit] ?? String(unit);
+}
+
 /** What the + and − buttons add or take: a tenth of a kilo or liter, 50 g, half an hour, one piece. */
 export function getQuantityStep(unit?: UnitType | null): number {
   switch (unit) {

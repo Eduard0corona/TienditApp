@@ -1,3 +1,31 @@
+// The enums are generated from the API contract and re-exported where each one belongs below.
+import type {
+  AppointmentStatus,
+  BusinessType,
+  CampaignAudienceKind,
+  CampaignStatus,
+  CashSessionStatus,
+  CashTransactionType,
+  CfdiTaxObject,
+  InsufficientStockPolicy,
+  InventoryMovementReason,
+  InventoryMovementType,
+  KitchenTicketStatus,
+  MessagePurpose,
+  OnlineMenuMode,
+  OptOutSource,
+  OrderChannel,
+  OrderNotificationPolicy,
+  OrderPaymentMethod,
+  OrderStatus,
+  OrderType,
+  OutgoingMessageStatus,
+  PurchaseOrderStatus,
+  ServiceOrderPieceStatus,
+  TenantCapability,
+  UnitType,
+} from '../api/generated/enums';
+
 export interface AuthResponse {
   accessToken?: string;
   refreshToken?: string;
@@ -283,22 +311,9 @@ export interface SendChatMessageRequest {
 
 // ==================== Registration ====================
 
-export const BusinessType = {
-  Food: 0,
-  Retail: 1,
-  Service: 2,
-} as const;
-export type BusinessType = (typeof BusinessType)[keyof typeof BusinessType];
+export { BusinessType } from '../api/generated/enums';
 
-export const TenantCapability = {
-  Retail: 1,
-  Service: 2,
-  Food: 4,
-  Inventory: 8,
-  Appointments: 16,
-  Kitchen: 32,
-} as const;
-export type TenantCapability = number;
+export { TenantCapability } from '../api/generated/enums';
 
 export interface RegisterBusinessRequest {
   email: string;
@@ -332,63 +347,25 @@ export interface RegisterCustomerRequest {
 
 // ==================== Catalog ====================
 
-export const UnitType = {
-  Unit: 0,
-  Pack: 1,
-  Box: 2,
-  Pair: 3,
-  Kg: 10,
-  G: 11,
-  Lb: 12,
-  Oz: 13,
-  Liter: 20,
-  Ml: 21,
-  Portion: 30,
-  Slice: 31,
-  Serving: 32,
-  Meter: 40,
-  Roll: 41,
-  Hour: 50,
-  Session: 51,
-  Service: 52,
-} as const;
-export type UnitType = (typeof UnitType)[keyof typeof UnitType];
+export { UnitType } from '../api/generated/enums';
 
 /** Same numbers as Domain.Tenants.Enums.OnlineMenuMode. */
-export const OnlineMenuMode = {
-  Off: 0,
-  MenuOnly: 1,
-  Orders: 2,
-} as const;
-export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
+export { OnlineMenuMode } from '../api/generated/enums';
 
 /**
  * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders
  * placed from a distance and services; a counter sale gets no message.
  */
-export const OrderNotificationPolicy = {
-  RemoteAndServices: 0,
-  AllOrders: 1,
-  Off: 2,
-} as const;
-export type OrderNotificationPolicy = (typeof OrderNotificationPolicy)[keyof typeof OrderNotificationPolicy];
+export { OrderNotificationPolicy } from '../api/generated/enums';
 
 /**
  * Same numbers as Domain.Tenants.Enums.InsufficientStockPolicy: a sale made by the team whose recipe supplies are
  * short is refused naming them (Block, the default) or goes through and warns (Warn).
  */
-export const InsufficientStockPolicy = {
-  Block: 0,
-  Warn: 1,
-} as const;
-export type InsufficientStockPolicy = (typeof InsufficientStockPolicy)[keyof typeof InsufficientStockPolicy];
+export { InsufficientStockPolicy } from '../api/generated/enums';
 
 /** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
-export const CfdiTaxObject = {
-  NotSubject: 1,
-  Subject: 2,
-} as const;
-export type CfdiTaxObject = (typeof CfdiTaxObject)[keyof typeof CfdiTaxObject];
+export { CfdiTaxObject } from '../api/generated/enums';
 
 export interface ProductImageUrlsDto {
   original: string;
@@ -556,32 +533,9 @@ export interface UpdateCategoryRequest extends CreateCategoryRequest {
 
 // Same numbers as FoodParkDigital.Domain.Inventory.Enums: the API exchanges them as integers and the
 // database stores them, so they never change. ClientEnumContractTests (WebApi.Tests) compares both sides.
-export const InventoryMovementType = {
-  Entry: 1,
-  Exit: 2,
-  AdjustmentIncrease: 3,
-  AdjustmentDecrease: 4,
-  TransferIn: 5,
-  TransferOut: 6,
-  ReturnFromProduction: 7,
-  ReturnToSupplier: 8,
-} as const;
-export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof InventoryMovementType];
+export { InventoryMovementType } from '../api/generated/enums';
 
-export const InventoryMovementReason = {
-  Purchase: 1,
-  Sale: 2,
-  Production: 3,
-  Consumption: 4,
-  Waste: 5,
-  Damaged: 6,
-  InventoryCount: 7,
-  InitialLoad: 8,
-  Return: 9,
-  ManualAdjustment: 10,
-  Other: 99,
-} as const;
-export type InventoryMovementReason = (typeof InventoryMovementReason)[keyof typeof InventoryMovementReason];
+export { InventoryMovementReason } from '../api/generated/enums';
 
 export interface SupplyItemDto {
   id: string;
@@ -874,16 +828,7 @@ export interface InventoryAlertsDto {
 // ==================== Purchasing ====================
 
 /** Closed (4): part arrived and the rest will not; closed with what came in. */
-export type PurchaseOrderStatus = 0 | 1 | 2 | 3 | 4 | 99;
-
-export const PurchaseOrderStatus = {
-  Draft: 0,
-  Sent: 1,
-  PartiallyReceived: 2,
-  Received: 3,
-  Closed: 4,
-  Cancelled: 99,
-} as const;
+export { PurchaseOrderStatus } from '../api/generated/enums';
 
 export interface SupplierDto {
   id: string;
@@ -984,25 +929,9 @@ export interface ReceivePurchaseOrderRequest {
 
 // ==================== Cash ====================
 
-export type CashSessionStatus = 0 | 1;
-export type CashTransactionType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export { CashSessionStatus } from '../api/generated/enums';
 
-export const CashSessionStatus = {
-  Open: 0,
-  Closed: 1,
-} as const;
-
-export const CashTransactionType = {
-  SalePayment: 0,
-  Refund: 1,
-  Expense: 2,
-  Withdrawal: 3,
-  Deposit: 4,
-  OpeningAdjustment: 5,
-  ClosingAdjustment: 6,
-  // A tip given with a sale payment: money received, never part of the sale.
-  Tip: 7,
-} as const;
+export { CashTransactionType } from '../api/generated/enums';
 
 export interface CashSessionDto {
   id: string;
@@ -1130,16 +1059,7 @@ export interface AddCashTransactionRequest {
 
 // ==================== Appointments ====================
 
-export type AppointmentStatus = 0 | 1 | 2 | 3 | 4 | 99;
-
-export const AppointmentStatus = {
-  Scheduled: 0,
-  Confirmed: 1,
-  InService: 2,
-  Completed: 3,
-  NoShow: 4,
-  Cancelled: 99,
-} as const;
+export { AppointmentStatus } from '../api/generated/enums';
 
 export interface AppointmentDto {
   id: string;
@@ -1207,42 +1127,15 @@ export interface AuditLogDto {
 // ==================== Messaging (campaigns, reminders, opt-outs) ====================
 
 // AppointmentNotice: booked, moved, confirmed or cancelled; queued by the system, it has no templates.
-export const MessagePurpose = {
-  Campaign: 0,
-  AppointmentReminder: 1,
-  AppointmentNotice: 2,
-} as const;
-export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
+export { MessagePurpose } from '../api/generated/enums';
 
-export const OutgoingMessageStatus = {
-  Pending: 0,
-  Sent: 1,
-  Failed: 2,
-  Skipped: 3,
-  Cancelled: 4,
-} as const;
-export type OutgoingMessageStatus = (typeof OutgoingMessageStatus)[keyof typeof OutgoingMessageStatus];
+export { OutgoingMessageStatus } from '../api/generated/enums';
 
-export const CampaignStatus = {
-  Scheduled: 0,
-  Sending: 1,
-  Completed: 2,
-  Cancelled: 3,
-} as const;
-export type CampaignStatus = (typeof CampaignStatus)[keyof typeof CampaignStatus];
+export { CampaignStatus } from '../api/generated/enums';
 
-export const CampaignAudienceKind = {
-  AllCustomers: 0,
-  Buyers: 1,
-  Lapsed: 2,
-} as const;
-export type CampaignAudienceKind = (typeof CampaignAudienceKind)[keyof typeof CampaignAudienceKind];
+export { CampaignAudienceKind } from '../api/generated/enums';
 
-export const OptOutSource = {
-  CustomerKeyword: 0,
-  Staff: 1,
-} as const;
-export type OptOutSource = (typeof OptOutSource)[keyof typeof OptOutSource];
+export { OptOutSource } from '../api/generated/enums';
 
 export interface MessageTemplateDto {
   id: string;
@@ -1404,42 +1297,13 @@ export interface UpdateCustomerRequest extends CreateCustomerRequest {
 
 // ==================== Orders ====================
 
-export type OrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 99;
-export type OrderType = 0 | 1;
-export type ServiceOrderPieceStatus = 0 | 1 | 2 | 99;
-export type OrderPaymentMethod = 0 | 1 | 2 | 3 | 4;
+export { OrderStatus } from '../api/generated/enums';
 
-export const OrderStatus = {
-  Pending: 0,
-  Confirmed: 1,
-  InPreparation: 2,
-  Ready: 3,
-  Accepted: 4,
-  InProgress: 5,
-  Delivered: 6,
-  Completed: 7,
-  Cancelled: 99,
-} as const;
+export { OrderType } from '../api/generated/enums';
 
-export const OrderType = {
-  Retail: 0,
-  Service: 1,
-} as const;
+export { OrderPaymentMethod } from '../api/generated/enums';
 
-export const OrderPaymentMethod = {
-  Cash: 0,
-  Card: 1,
-  Transfer: 2,
-  DigitalWallet: 3,
-  Other: 4,
-} as const;
-
-export const ServiceOrderPieceStatus = {
-  Accepted: 0,
-  InProgress: 1,
-  Completed: 2,
-  Cancelled: 99,
-} as const;
+export { ServiceOrderPieceStatus } from '../api/generated/enums';
 
 export interface OrderItemDto {
   id: string;
@@ -1474,13 +1338,7 @@ export interface OrderItemOptionDto {
 }
 
 /** Same numbers as Domain.Orders.Enums.KitchenTicketStatus: a round of an open tab in the kitchen. */
-export const KitchenTicketStatus = {
-  Pending: 0,
-  Preparing: 1,
-  Ready: 2,
-  Served: 3,
-} as const;
-export type KitchenTicketStatus = (typeof KitchenTicketStatus)[keyof typeof KitchenTicketStatus];
+export { KitchenTicketStatus } from '../api/generated/enums';
 
 export interface KitchenTicketSummaryDto {
   id: string;
@@ -1684,12 +1542,7 @@ export interface CreateOrderItemRequest {
   optionIds?: string[];
 }
 
-export const OrderChannel = {
-  Counter: 0,
-  WhatsApp: 1,
-  Online: 2,
-} as const;
-export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
+export { OrderChannel } from '../api/generated/enums';
 
 export interface CustomerCardDto {
   phone?: string;

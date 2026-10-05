@@ -62,7 +62,7 @@ Como producción no migra al arrancar, cada migración nueva deja en `database/p
 
 Los `apply.sql` son para la base de producción existente (ya en la Fase 0 o después): el de la última carpeta aplica de una vez todo lo que falte. Una base nueva y vacía se crea con `dotnet ef database update` (o con el arranque en Development): con EF Core 10, el script idempotente desde cero falla en `20260217004713_AddOrderServiceAndTenantCapabilities`, que actualiza en el mismo lote una columna que acaba de agregar. Esa migración ya está aplicada en producción y no se edita.
 
-El orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR.
+El orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR. Si se olvida, `GET /health/schema` responde 503 y la prueba de humo del despliegue falla pidiendo el script; con el slot de staging, la versión no pasa a producción ([despliegue](deploy-azure.md)).
 
 Antes de publicarlos:
 

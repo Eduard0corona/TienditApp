@@ -298,12 +298,13 @@ jobs:
       - name: Install
         run: npm ci
 
-      # The generated types must be the ones openapi/openapi.json produces (the backend job checks that document).
+      # The generated types and enums must be the ones openapi/openapi.json produces (the backend job checks that
+      # document).
       - name: Check the generated API types
         run: |
           npm run api:types
-          if ! git diff --exit-code -- src/api/generated/schema.ts; then
-            echo "::error::src/api/generated/schema.ts does not match openapi/openapi.json: run npm run api:types."
+          if ! git diff --exit-code -- src/api/generated/schema.ts src/api/generated/enums.ts; then
+            echo "::error::src/api/generated does not match openapi/openapi.json: run npm run api:types."
             exit 1
           fi
 

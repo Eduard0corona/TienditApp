@@ -143,6 +143,8 @@ builder.Services.AddSwaggerGen(options =>
     // Accurate client types (client/src/api/generated): non-nullable properties are required.
     options.SupportNonNullableReferenceTypes();
     options.SchemaFilter<FoodParkDigital.WebApi.Swagger.RequireNonNullablePropertiesSchemaFilter>();
+    // Named enum constants for the client (client/src/api/generated/enums.ts), generated from the contract.
+    options.SchemaFilter<FoodParkDigital.WebApi.Swagger.EnumNamesSchemaFilter>();
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "TienditApp API",

@@ -35,7 +35,9 @@ El pipeline de MediatR corre, en orden, `AuthorizationBehavior`, `ValidationBeha
 
 ### Infrastructure
 
-Implementa persistencia SQL Server, configuraciones y migraciones EF, Identity/JWT, archivos, imagen, WhatsApp, email, SMS, reloj y servicios coordinadores de inventario/caja. No debe introducir reglas que solo sean visibles desde un provider; si una regla es de dominio, muévela al agregado.
+Implementa persistencia SQL Server, configuraciones y migraciones EF, Identity/JWT, archivos, imagen, WhatsApp, email, SMS, reloj y los workers. No debe introducir reglas que solo sean visibles desde un provider; si una regla es de dominio, muévela al agregado o a Application.
+
+Desde la Fase 7 las reglas que vivían en Infrastructure están en Application: las respuestas automáticas (`AiAgents/AiAgentAutoReplyService`, con la dirección de la app por `IAppLinks`), a quién pertenece el teléfono de un pedido y el reclamo de clientes temporales (`Customers/Services`), y la aplicación de los estados de entrega de WhatsApp (`ApplyWhatsAppStatusesCommand`). El procesador del webhook solo lee el payload de Meta, encuentra el negocio y manda comandos en su alcance. Lo que queda en Infrastructure son adaptadores (proveedores, almacenamiento, imagen), persistencia (folios con secuencias SQL, lectura del acceso de cada membresía) y los workers que orquestan servicios de Application.
 
 ### WebApi
 

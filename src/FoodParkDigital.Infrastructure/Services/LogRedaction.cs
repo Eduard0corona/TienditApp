@@ -1,4 +1,5 @@
 using System.Data.Common;
+using FoodParkDigital.Application.Common.Diagnostics;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -13,11 +14,7 @@ public static class LogRedaction
     private const string Hidden = "***";
 
     /// <summary>Keeps the last four digits of full-length numbers: <c>+525512345678</c> becomes <c>***5678</c>.</summary>
-    public static string MaskPhoneNumber(string? phoneNumber)
-    {
-        var digits = new string((phoneNumber ?? string.Empty).Where(char.IsAsciiDigit).ToArray());
-        return digits.Length >= 8 ? Hidden + digits[^4..] : Hidden;
-    }
+    public static string MaskPhoneNumber(string? phoneNumber) => LogValues.Phone(phoneNumber);
 
     /// <summary>Keeps the initials and the top-level domain: <c>ana@example.com</c> becomes <c>a***@e***.com</c>.</summary>
     public static string MaskEmail(string? email)

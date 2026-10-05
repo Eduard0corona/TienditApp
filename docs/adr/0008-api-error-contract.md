@@ -14,7 +14,7 @@ La API respondía errores en cuatro formas: objetos `{ error }` en 147 respuesta
 - `detail` es un mensaje en español para la persona. Las excepciones técnicas (no encontrado, concurrencia, transición inválida, otro negocio) responden un texto claro y el mensaje técnico queda solo en el log; los nombres de permisos que faltan también van al log.
 - Mientras haya lectores anteriores, `error` repite `detail`.
 - El cliente decide por `code` (`getApiErrorMessage`, `getApiErrorCode`), nunca por el texto.
-- Los enums siguen viajando como números. Pasarlos a texto obliga a cambiar todo el cliente y los mocks de una vez; el defecto que motivó la propuesta (inventario desfasado) lo impiden `ClientEnumContractTests` y los tipos generados. Se revisará si se agrega otro cliente.
+- Los enums siguen viajando como números. Pasarlos a texto obliga a cambiar todo el cliente y los mocks de una vez; el defecto que motivó la propuesta (inventario desfasado) lo impiden `ClientEnumContractTests` y los tipos generados. Desde la Fase 7 el contrato nombra cada valor (`x-enum-varnames`, `EnumNamesSchemaFilter`) y `npm run api:types` genera las constantes del cliente (`src/api/generated/enums.ts`): ya no se copian a mano. Se revisará pasarlos a texto si se agrega otro cliente.
 - CI verifica que `client/openapi/openapi.json` sea el documento que sirve la API y que `schema.ts` sea el que produce; en cada PR reporta (sin bloquear) los cambios incompatibles contra la rama base con oasdiff, fijado por digest. Una propiedad de petición con `[DefaultValue]` queda opcional en el contrato.
 
 ## Consecuencias

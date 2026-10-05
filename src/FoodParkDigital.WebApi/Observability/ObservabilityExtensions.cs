@@ -22,12 +22,14 @@ public static class ObservabilityExtensions
 {
     public const string ServiceName = "tienditapp-api";
     private const string ReadyTag = "ready";
+    private const string SchemaTag = "schema";
 
     public static WebApplicationBuilder AddObservability(this WebApplicationBuilder builder)
     {
         builder.Services.AddHealthChecks()
             .AddDbContextCheck<ApplicationDbContext>("database", tags: [ReadyTag])
-            .AddCheck<BackgroundQueuesHealthCheck>("background-queues", tags: [ReadyTag]);
+            .AddCheck<BackgroundQueuesHealthCheck>("background-queues", tags: [ReadyTag])
+            .AddCheck<DatabaseSchemaHealthCheck>("database-schema", tags: [SchemaTag]);
 
         var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
         var otlpEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
@@ -64,7 +66,9 @@ public static class ObservabilityExtensions
     /// <summary>
     /// <c>/health/live</c> answers while the process runs (no dependencies), for restarts.
     /// <c>/health/ready</c> checks the database and the background queues, for the load balancer and alerts;
-    /// a degraded queue still answers 200. Both are anonymous and show only statuses.
+    /// a degraded queue still answers 200. <c>/health/schema</c> answers 503 while the database lacks a migration of
+    /// this version, for the deployment: it stays out of readiness so a missing <c>apply.sql</c> fails the deployment
+    /// instead of taking every instance out of rotation. All three are anonymous and show only statuses.
     /// </summary>
     public static WebApplication MapHealthEndpoints(this WebApplication app)
     {
@@ -76,6 +80,11 @@ public static class ObservabilityExtensions
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains(ReadyTag),
+            ResponseWriter = WriteStatusAsync
+        });
+        app.MapHealthChecks("/health/schema", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains(SchemaTag),
             ResponseWriter = WriteStatusAsync
         });
         return app;
