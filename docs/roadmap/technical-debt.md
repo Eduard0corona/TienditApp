@@ -17,7 +17,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso y el login distingue cuentas sin confirmar o bloqueadas. (Los intentos fallidos ya bloquean la cuenta: Fase 4E.)
-- La recepción de compra no tiene idempotency key estable. (Los folios de órdenes, movimientos de inventario y órdenes de compra ya salen de un contador por negocio y no chocan: Fase 4F.)
+- La recepción de compra no tiene idempotency key estable. (Los folios de órdenes, movimientos de inventario y órdenes de compra ya salen de un contador por negocio y no chocan: Fase 4F; los comandos que crean esos documentos corren en una transacción y devuelven el folio si se rechazan: Fase 4G.)
 - Resuelto en la Fase 4F ([ADR 0008](../adr/0008-api-error-contract.md)): todo error es `ProblemDetails` con `code` estable y el cliente decide por él. Quedan en inglés los mensajes del enlace de modelos de ASP.NET Core y algunos mensajes de dominio.
 - Controllers no propagan `CancellationToken`.
 - Política de contraseña (longitud mínima 6) pendiente de evaluación.
@@ -30,6 +30,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Sin pruebas frontend. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
 - No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes. Desde la Fase 4F una prueba de humo confirma que la app responde con la versión nueva y el workflow admite OIDC en lugar del publish profile ([despliegue](../development/deploy-azure.md)); cambiar de credencial requiere configurar Azure.
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
+- Cambios de estado, cancelaciones, reembolsos y rondas que consumen insumos toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
 - Auto-migrate/seed solo existe en Development contra un servidor local, pero falta el proceso productivo de migraciones.
 - Listados pequeños aún materializan colecciones sin paginación (categorías, AI agents, ubicaciones, kitchen).
 - Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.

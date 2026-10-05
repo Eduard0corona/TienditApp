@@ -23,7 +23,7 @@ public record CreatePurchaseOrderLineRequest
 }
 
 [RequiresPermission(TenantPermission.ManageInventory)]
-public record CreatePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>
+public record CreatePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>, ITransactionalRequest
 {
     public Guid SupplierId { get; init; }
     public DateTimeOffset? ExpectedDeliveryAt { get; init; }

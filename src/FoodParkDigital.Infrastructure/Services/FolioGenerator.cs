@@ -8,9 +8,11 @@ namespace FoodParkDigital.Infrastructure.Services;
 
 /// <summary>
 /// Folios from the counters of each business (<see cref="FolioSequence"/>). In SQL Server one statement takes the
-/// next number under the row's lock, so two users saving at the same time never get the same folio; the number is
-/// committed right away, so a request refused afterwards leaves a gap. Other providers (tests) increment the tracked
-/// counter, saved with the document.
+/// next number under the row's lock, so two users saving at the same time never get the same folio. Inside the
+/// transaction of a document's request (<c>ITransactionalRequest</c>) the lock lasts until it commits and a refused
+/// request gives the number back; outside one (supplies consumed by a status change) the number is committed right
+/// away and a refusal afterwards leaves a gap. Other providers (tests) increment the tracked counter, saved with the
+/// document.
 /// </summary>
 public sealed class FolioGenerator : IFolioGenerator
 {
@@ -64,6 +66,8 @@ public sealed class FolioGenerator : IFolioGenerator
 
         // A counter used for the first time (a new business, the first movement of a day): it starts after the folios
         // the business already has with that prefix. The range lock keeps two first documents from creating it twice.
+        // XACT_ABORT undoes the batch if it is cut short (a timeout) instead of leaving it open with the lock. It lasts
+        // only for this batch (sp_executesql restores it), so the request's own transaction keeps its error handling.
         await (kind switch
         {
             FolioKind.Order => _context.Database.ExecuteSqlAsync($"""

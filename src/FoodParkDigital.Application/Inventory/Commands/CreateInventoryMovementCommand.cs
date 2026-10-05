@@ -26,7 +26,7 @@ public record CreateInventoryMovementLineRequest
 
 [RequiresPermission(TenantPermission.ManageInventory)]
 [RequiresCapability(TenantCapability.Inventory)]
-public record CreateInventoryMovementCommand : IRequest<Result<InventoryMovementDto>>
+public record CreateInventoryMovementCommand : IRequest<Result<InventoryMovementDto>>, ITransactionalRequest
 {
     public InventoryMovementType MovementType { get; init; }
     public InventoryMovementReason MovementReason { get; init; }

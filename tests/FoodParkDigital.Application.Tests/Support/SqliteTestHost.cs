@@ -56,7 +56,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddSingleton<ICurrentTenantService>(_tenantService);
         services.AddSingleton<ICurrentUserService, FixedCurrentUserService>();
         services.AddSingleton<IDateTimeProvider, FixedDateTimeProvider>();
-        services.AddSingleton<IMediator, NoOpMediator>();
+        services.AddSingleton<IMediator>(Mediator);
         services.AddScoped<ApplicationDbContext>(sp => new SqliteTestApplicationDbContext(
             options,
             sp.GetRequiredService<ICurrentTenantService>(),
@@ -83,6 +83,8 @@ internal sealed class SqliteTestHost : IAsyncDisposable
     }
 
     public RecordingEmailService Email { get; } = new();
+    /// <summary>Realtime events published by the contexts of the host (none is sent: requests return default).</summary>
+    public RecordingMediator Mediator { get; } = new();
     public FakeJwtTokenService Jwt { get; } = new();
     public RecordingSmsService Sms { get; } = new();
     public BeforeSaveInterceptor BeforeSave { get; } = new();
@@ -216,16 +218,34 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         public System.Security.Claims.ClaimsPrincipal? GetPrincipalFromExpiredToken(string token) => throw new NotSupportedException();
     }
 
-    private sealed class NoOpMediator : IMediator
+    internal sealed class RecordingMediator : IMediator
     {
+        private readonly List<object> _published = [];
+
+        public IReadOnlyList<object> Published
+        {
+            get
+            {
+                lock (_published)
+                    return _published.ToList();
+            }
+        }
+
         public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken ct = default) => Task.FromResult<TResponse>(default!);
         public Task Send<TRequest>(TRequest request, CancellationToken ct = default) where TRequest : IRequest => Task.CompletedTask;
-        public Task Publish(object notification, CancellationToken ct = default) => Task.CompletedTask;
-        public Task Publish<TNotification>(TNotification notification, CancellationToken ct = default) where TNotification : INotification => Task.CompletedTask;
+        public Task Publish(object notification, CancellationToken ct = default) => Record(notification);
+        public Task Publish<TNotification>(TNotification notification, CancellationToken ct = default) where TNotification : INotification => Record(notification!);
         public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken ct = default) => AsyncEnumerable.Empty<TResponse>();
         public IAsyncEnumerable<TResponse> CreateStream<TResponse>(object request, CancellationToken ct = default) => AsyncEnumerable.Empty<TResponse>();
         public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken ct = default) => AsyncEnumerable.Empty<object?>();
         public Task<object?> Send(object request, CancellationToken ct = default) => Task.FromResult<object?>(null);
+
+        private Task Record(object notification)
+        {
+            lock (_published)
+                _published.Add(notification);
+            return Task.CompletedTask;
+        }
     }
 }
 

@@ -31,6 +31,8 @@ Orquesta Commands/Queries, validación con FluentValidation, DTOs, interfaces de
 
 Los puertos que un caso de uso necesita son obligatorios en su constructor (`IOrderInventoryService`, `IOrderCashService`, `IFolioGenerator`): desde la Fase 4F no hay respaldos que no hagan nada si falta el registro, porque una venta guardada sin consumir inventario o sin entrar a la caja pasaría inadvertida. Las pruebas pasan sus dobles de forma explícita (`NoOpOrderInventoryService`, `NoOpOrderCashService` en `tests/.../Support`).
 
+El pipeline de MediatR corre, en orden, `AuthorizationBehavior`, `ValidationBehavior`, `LoggingBehavior` y `TransactionBehavior`. El último solo envuelve los comandos marcados `ITransactionalRequest` (sus restricciones genéricas lo dejan fuera de los demás) y corre el handler en una transacción (ver [consistencia de datos](data-consistency-and-domain-events.md)).
+
 ### Infrastructure
 
 Implementa persistencia SQL Server, configuraciones y migraciones EF, Identity/JWT, archivos, imagen, WhatsApp, email, SMS, reloj y servicios coordinadores de inventario/caja. No debe introducir reglas que solo sean visibles desde un provider; si una regla es de dominio, muévela al agregado.

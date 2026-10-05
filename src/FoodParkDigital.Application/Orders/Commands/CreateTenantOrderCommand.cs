@@ -20,7 +20,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.Commands;
 
 [RequiresAuthentication]
-public record CreateTenantOrderCommand : IRequest<Result<OrderDto>>
+public record CreateTenantOrderCommand : IRequest<Result<OrderDto>>, ITransactionalRequest
 {
     public Guid TenantId { get; init; }
     public string Phone { get; init; } = null!;

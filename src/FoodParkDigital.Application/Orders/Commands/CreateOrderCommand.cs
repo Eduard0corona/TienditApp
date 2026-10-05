@@ -21,7 +21,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.Commands;
 
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions
+public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions, ITransactionalRequest
 {
     /// <summary>Taking an order needs ManageOrders; charging it at once also needs ChargeOrders.</summary>
     public IEnumerable<TenantPermission> RequiredPermissions()
@@ -465,7 +465,9 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         catch (DbUpdateException) when (request.IdempotencyKey is { } racedKey)
         {
             // The same sale arrived twice at once and the other request stored it first (IX_Orders_TenantId_ClientRequestId).
-            _context.ChangeTracker.Clear();
+            // This copy is undone whole, its folio, payments and supplies included (with MARS, SQL Server keeps no
+            // savepoint for the failed save), and the stored one is the answer.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
             if (await ExistingSaleAsync(racedKey, cancellationToken) is { } stored)
                 return Result.Success(stored);
             throw;

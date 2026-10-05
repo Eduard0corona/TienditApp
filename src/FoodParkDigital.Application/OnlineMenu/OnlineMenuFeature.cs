@@ -244,7 +244,7 @@ public class PublicOrderReceiptDto
 
 /// <summary>An order placed from the public menu. It arrives in Pedidos with the Online channel.</summary>
 [AllowAnonymousRequest("Pedido del menú público: el negocio activó los pedidos en línea y el cliente se identifica con su teléfono.")]
-public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>
+public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>, ITransactionalRequest
 {
     public string Slug { get; init; } = null!;
     public string CustomerName { get; init; } = null!;

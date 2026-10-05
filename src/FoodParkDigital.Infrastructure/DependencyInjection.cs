@@ -70,6 +70,10 @@ public static class DependencyInjection
             options.ConfigureWarnings(w =>
             {
                 w.Ignore(RelationalEventId.PendingModelChangesWarning);
+                // Logged on every save inside a transaction when the connection string enables MARS. Handled: a
+                // transactional request never goes on after a failed save, it fails or discards its whole transaction
+                // (data-consistency-and-domain-events.md).
+                w.Ignore(SqlServerEventId.SavepointsDisabledBecauseOfMARS);
                 if (!logSensitiveData)
                     w.Ignore(DatabaseErrorEvents);
             });

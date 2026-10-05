@@ -75,6 +75,38 @@ public class ArchitectureTests
     }
 
     [Fact]
+    public void TransactionalCommands_ShouldAnswerWithAResult()
+    {
+        // TransactionBehavior commits by the result; its constraints leave any other answer out, without a transaction.
+        var offending = Application.GetTypes()
+            .Where(type => typeof(ITransactionalRequest).IsAssignableFrom(type) && !type.IsInterface)
+            .Where(type => !type.GetInterfaces().Any(i =>
+                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>)
+                && typeof(Result).IsAssignableFrom(i.GetGenericArguments()[0])))
+            .Select(type => type.Name)
+            .ToList();
+
+        Assert.True(offending.Count == 0, "Transactional commands without a Result: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void CommandsThatTakeAFolio_ShouldRunInATransaction()
+    {
+        // Outside one, a folio is committed at once and a refused request leaves a gap in the business's numbering.
+        var offending = Application.GetTypes()
+            .Where(type => !type.IsAbstract && type.GetConstructors()
+                .Any(c => c.GetParameters().Any(p => p.ParameterType == typeof(IFolioGenerator))))
+            .SelectMany(type => type.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>))
+                .Select(i => i.GetGenericArguments()[0]))
+            .Where(request => !typeof(ITransactionalRequest).IsAssignableFrom(request))
+            .Select(request => request.Name)
+            .ToList();
+
+        Assert.True(offending.Count == 0, "Commands that take a folio outside a transaction: " + string.Join(", ", offending));
+    }
+
+    [Fact]
     public void Controllers_ShouldNotUseTheDatabase()
     {
         // The webhook still resolves the business and the statuses itself (technical-debt.md, "Media").

@@ -1,5 +1,9 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Infrastructure.Persistence;
+using MediatR;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace FoodParkDigital.Infrastructure.Tests.Support;
 
@@ -47,6 +51,20 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         if (tenantId is { } id)
             tenant.SetTenant(id);
         return new ApplicationDbContext(options, tenant, new InMemoryApplicationDbContext.NullMediator());
+    }
+
+    /// <summary>
+    /// A context set up like production where a test depends on it: retries on transient errors and MARS on, as in the
+    /// connection strings of the app (with MARS, SQL Server keeps no savepoint when a save fails inside a transaction).
+    /// </summary>
+    public ApplicationDbContext CreateProductionLikeContext(ICurrentTenantService tenant, IMediator mediator, params IInterceptor[] interceptors)
+    {
+        var connection = new SqlConnectionStringBuilder(_connectionString) { MultipleActiveResultSets = true };
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(connection.ConnectionString, sql => sql.EnableRetryOnFailure(maxRetryCount: 3))
+            .AddInterceptors(interceptors)
+            .Options;
+        return new ApplicationDbContext(options, tenant, mediator);
     }
 
     public async ValueTask DisposeAsync()
