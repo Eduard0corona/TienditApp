@@ -1,13 +1,7 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.Tests.Support;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -15,9 +9,10 @@ namespace FoodParkDigital.WebApi.Tests;
 /// Two businesses on the real API (the whole pipeline in process, SQL Server): the owner of one tries to read, change
 /// and delete the other's records by their ids, with the other's header, route and files. Every attempt fails as if
 /// the record did not exist, and nothing of the other business changes. Runs where TIENDITAPP_TEST_SQLSERVER names a
-/// server (the Migrations job of CI).
+/// server (the Migrations job of CI). Hubs and the WhatsApp webhook: <see cref="CrossTenantRealtimeSqlServerTests"/>.
 /// </summary>
-public sealed class CrossTenantHttpSqlServerTests : IClassFixture<TwoBusinessesApi>
+[Collection(TwoBusinessesCollection.Name)]
+public sealed class CrossTenantHttpSqlServerTests
 {
     private readonly TwoBusinessesApi _api;
 
@@ -128,6 +123,151 @@ public sealed class CrossTenantHttpSqlServerTests : IClassFixture<TwoBusinessesA
         Assert.Equal(B.TenantId.ToString(), mine.GetProperty("id").GetString());
     }
 
+    [SqlServerFact]
+    public async Task Inventory_OfAnotherBusiness_ShouldBeInvisible_AndItsStockShouldNotMove()
+    {
+        var supply = $"/api/v1/inventory/supplies/{A.SupplyId}";
+        var location = $"/api/v1/inventory/locations/{A.LocationId}";
+        var stockBefore = await StockAsync(A);
+
+        Assert.Equal(HttpStatusCode.OK, (await A.Client.GetAsync(supply)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await B.Client.GetAsync(supply)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await B.Client.GetAsync($"/api/v1/inventory/movements/{A.MovementId}")).StatusCode);
+        AssertRefused(await B.Client.PutAsJsonAsync(supply, new { id = A.SupplyId, name = "Cambiada por B", unit = 0 }));
+        AssertRefused(await B.Client.PatchAsJsonAsync($"{supply}/active", new { isActive = false }));
+        AssertRefused(await B.Client.PutAsJsonAsync(location, new { id = A.LocationId, name = "Cambiado por B", code = "B" }));
+        AssertRefused(await B.Client.PatchAsJsonAsync($"{location}/active", new { isActive = false }));
+
+        // Through B's movements: A's stock taken out, or B's supply put into A's warehouse.
+        AssertRefused(await B.Client.PostAsJsonAsync("/api/v1/inventory/movements", new
+        {
+            movementType = 2,
+            movementReason = 5,
+            lines = new[] { new { supplyItemId = A.SupplyId, inventoryLocationId = A.LocationId, quantity = 1m } }
+        }));
+        AssertRefused(await B.Client.PostAsJsonAsync("/api/v1/inventory/movements", new
+        {
+            movementType = 1,
+            movementReason = 1,
+            lines = new[] { new { supplyItemId = B.SupplyId, inventoryLocationId = A.LocationId, quantity = 1m, unitCost = 1m } }
+        }));
+
+        foreach (var list in new[]
+        {
+            "/api/v1/inventory/supplies?pageSize=100",
+            "/api/v1/inventory/locations",
+            "/api/v1/inventory/stocks?pageSize=100",
+            "/api/v1/inventory/movements?pageSize=100",
+            $"/api/v1/inventory/kardex?supplyItemId={A.SupplyId}"
+        })
+        {
+            var theirs = await B.Client.GetStringAsync(list);
+            Assert.DoesNotContain(A.SupplyId.ToString(), theirs);
+            Assert.DoesNotContain(A.LocationId.ToString(), theirs);
+            Assert.DoesNotContain(A.MovementId.ToString(), theirs);
+        }
+
+        var stillThere = await A.Client.GetFromJsonAsync<JsonElement>(supply);
+        Assert.Equal("Harina de A", stillThere.GetProperty("name").GetString());
+        Assert.True(stillThere.GetProperty("isActive").GetBoolean());
+        Assert.Equal(stockBefore, await StockAsync(A));
+    }
+
+    [SqlServerFact]
+    public async Task PurchaseOrders_OfAnotherBusiness_ShouldBeInvisible_AndNotBeReceivedClosedOrCancelled()
+    {
+        var purchaseOrder = $"/api/v1/purchaseorders/{A.PurchaseOrderId}";
+        var before = await A.Client.GetFromJsonAsync<JsonElement>(purchaseOrder);
+        var stockBefore = await StockAsync(A);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await B.Client.GetAsync(purchaseOrder)).StatusCode);
+        AssertRefused(await B.Client.PostAsJsonAsync($"{purchaseOrder}/receive", new
+        {
+            lines = new[] { new { purchaseOrderLineId = A.PurchaseOrderLineId, quantityReceived = 5m } }
+        }));
+        AssertRefused(await B.Client.PostAsync($"{purchaseOrder}/send", null));
+        AssertRefused(await B.Client.PostAsJsonAsync($"{purchaseOrder}/close", new { reason = "Cerrada por B" }));
+        AssertRefused(await B.Client.PostAsync($"{purchaseOrder}/cancel", null));
+
+        // A's supplier or supply in an order of B.
+        AssertRefused(await B.Client.PostAsJsonAsync("/api/v1/purchaseorders", new
+        {
+            supplierId = A.SupplierId,
+            lines = new[] { new { supplyItemId = B.SupplyId, inventoryLocationId = B.LocationId, quantity = 1m, unitCost = 1m, taxPercent = 0m } }
+        }));
+        AssertRefused(await B.Client.PostAsJsonAsync("/api/v1/purchaseorders", new
+        {
+            supplierId = B.SupplierId,
+            lines = new[] { new { supplyItemId = A.SupplyId, inventoryLocationId = B.LocationId, quantity = 1m, unitCost = 1m, taxPercent = 0m } }
+        }));
+        Assert.DoesNotContain(A.PurchaseOrderId.ToString(), await B.Client.GetStringAsync("/api/v1/purchaseorders?pageSize=100"));
+
+        var stillThere = await A.Client.GetFromJsonAsync<JsonElement>(purchaseOrder);
+        Assert.Equal(before.GetProperty("status").GetInt32(), stillThere.GetProperty("status").GetInt32());
+        Assert.Equal(
+            before.GetProperty("lines")[0].GetProperty("receivedQuantity").GetDecimal(),
+            stillThere.GetProperty("lines")[0].GetProperty("receivedQuantity").GetDecimal());
+        Assert.Equal(stockBefore, await StockAsync(A));
+    }
+
+    [SqlServerFact]
+    public async Task CashSession_OfAnotherBusiness_ShouldNotCloseOrTakeMovements()
+    {
+        AssertRefused(await B.Client.PostAsJsonAsync($"/api/v1/cash/{A.CashSessionId}/close", new { closingAmount = 0m }));
+        AssertRefused(await B.Client.PostAsJsonAsync("/api/v1/cash/transactions", new
+        {
+            cashSessionId = A.CashSessionId,
+            transactionType = 3,
+            amount = 50m
+        }));
+        Assert.DoesNotContain(A.CashSessionId.ToString(), await B.Client.GetStringAsync("/api/v1/cash/sessions?pageSize=100"));
+        Assert.DoesNotContain(
+            A.CashSessionId.ToString(),
+            await B.Client.GetStringAsync($"/api/v1/cash/transactions?cashSessionId={A.CashSessionId}&pageSize=100"));
+
+        // A's drawer: still open, with nothing taken out.
+        var current = await A.Client.GetFromJsonAsync<JsonElement>("/api/v1/cash/current-session");
+        Assert.Equal(A.CashSessionId, current.GetProperty("id").GetGuid());
+        Assert.Equal(0, current.GetProperty("status").GetInt32());
+        var movements = await A.Client.GetFromJsonAsync<JsonElement>($"/api/v1/cash/transactions?cashSessionId={A.CashSessionId}&pageSize=100");
+        Assert.DoesNotContain(
+            movements.GetProperty("items").EnumerateArray(),
+            transaction => transaction.GetProperty("amount").GetDecimal() == 50m);
+    }
+
+    [SqlServerFact]
+    public async Task Appointments_OfAnotherBusiness_ShouldBeInvisibleAndUntouchable()
+    {
+        var appointment = $"/api/v1/appointments/{A.AppointmentId}";
+        var before = await A.Client.GetFromJsonAsync<JsonElement>(appointment);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await B.Client.GetAsync(appointment)).StatusCode);
+        AssertRefused(await B.Client.PutAsJsonAsync(appointment, new
+        {
+            customerName = "Cambiada por B",
+            customerPhone = "5599998888",
+            serviceName = "Otro",
+            startAt = DateTimeOffset.UtcNow.AddDays(2),
+            endAt = DateTimeOffset.UtcNow.AddDays(2).AddHours(1)
+        }));
+        AssertRefused(await B.Client.PutAsJsonAsync($"{appointment}/status", new { newStatus = 99 }));
+        Assert.DoesNotContain(A.AppointmentId.ToString(), await B.Client.GetStringAsync("/api/v1/appointments?pageSize=100"));
+
+        var stillThere = await A.Client.GetFromJsonAsync<JsonElement>(appointment);
+        Assert.Equal(before.GetProperty("status").GetInt32(), stillThere.GetProperty("status").GetInt32());
+        Assert.Equal("Cliente de A", stillThere.GetProperty("customerName").GetString());
+        Assert.Equal(before.GetProperty("startAt").GetDateTimeOffset(), stillThere.GetProperty("startAt").GetDateTimeOffset());
+    }
+
+    private static async Task<decimal> StockAsync(Business business)
+    {
+        var page = await business.Client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/inventory/stocks?inventoryLocationId={business.LocationId}&pageSize=100");
+        return page.GetProperty("items").EnumerateArray()
+            .Single(stock => stock.GetProperty("supplyItemId").GetGuid() == business.SupplyId)
+            .GetProperty("onHandQuantity").GetDecimal();
+    }
+
     private static async Task<int> CountOrdersAsync(Business business)
     {
         var page = await business.Client.GetFromJsonAsync<JsonElement>("/api/v1/orders?pageSize=100");
@@ -148,128 +288,4 @@ public sealed class CrossTenantHttpSqlServerTests : IClassFixture<TwoBusinessesA
     internal sealed record ProductRequest(
         Guid? Id, Guid CategoryId, string Name, decimal PriceAmount, string PriceCurrency, int SortOrder,
         bool IsFeatured, bool IsTaxExempt, bool IsTrackable, bool NotifyCustomer, int TaxObject);
-}
-
-/// <summary>A business registered through the API, its owner's client and the records it created.</summary>
-public sealed record Business(
-    Guid TenantId,
-    HttpClient Client,
-    Guid CategoryId,
-    Guid ProductId,
-    Guid CustomerId,
-    Guid SupplierId,
-    Guid OrderId,
-    string ReceiptPath);
-
-/// <summary>The API in process on a throwaway SQL Server database, with two businesses registered through it.</summary>
-public sealed class TwoBusinessesApi : IAsyncLifetime
-{
-    private readonly string _privateFiles = Path.Combine(Path.GetTempPath(), "fpd-http-tests", Guid.NewGuid().ToString("N"));
-    private SqlServerTestDatabase? _database;
-    private WebApplicationFactory<Program>? _factory;
-
-    public Business A { get; private set; } = null!;
-    public Business B { get; private set; } = null!;
-
-    public async Task InitializeAsync()
-    {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(SqlServerTestDatabase.ConnectionVariable)))
-            return;
-
-        _database = await SqlServerTestDatabase.CreateAsync();
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(host =>
-        {
-            // Development: no secrets to configure (the signing key is generated) and no rate limit on sign-ups.
-            host.UseEnvironment("Development");
-            host.UseSetting("ConnectionStrings:DefaultConnection", _database.ConnectionString);
-            host.UseSetting("Database:AutoMigrateOnStartup", "false");
-            host.UseSetting("Database:SeedOnStartup", "false");
-            host.UseSetting("BackgroundJobs:Enabled", "false");
-            host.UseSetting("FileStorage:Provider", "Local");
-            host.UseSetting("FileStorage:Local:PrivateRootPath", _privateFiles);
-            // appsettings.json carries placeholder SMTP and SMS settings: without a host or an account, sign-up only
-            // logs what it would send.
-            host.UseSetting("EmailSettings:Smtp:Host", "");
-            host.UseSetting("SmsSettings:AccountSid", "");
-        });
-
-        // The roles the seed of a new database creates (accounts are registered with them).
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var roles = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
-            foreach (var role in new[] { "SUPER_ADMIN", "TENANT_ADMIN", "STAFF", "KITCHEN", "CUSTOMER" })
-                await roles.CreateAsync(new ApplicationRole(role));
-        }
-
-        A = await RegisterAsync("a");
-        B = await RegisterAsync("b");
-    }
-
-    public async Task DisposeAsync()
-    {
-        A?.Client.Dispose();
-        B?.Client.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
-        if (_database is not null)
-            await _database.DisposeAsync();
-        if (Directory.Exists(_privateFiles))
-            Directory.Delete(_privateFiles, recursive: true);
-    }
-
-    private async Task<Business> RegisterAsync(string name)
-    {
-        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-        var registered = await ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/register/business", new
-        {
-            email = $"dueno-{name}-{suffix}@demo.com",
-            password = "Secreto1",
-            firstName = "Dueño",
-            lastName = name.ToUpperInvariant(),
-            phoneNumber = "+52155" + Random.Shared.Next(10000000, 99999999),
-            businessName = $"Negocio {name.ToUpperInvariant()}",
-            businessType = 1
-        }));
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", registered.GetProperty("accessToken").GetString());
-        var tenantId = registered.GetProperty("user").GetProperty("tenantId").GetGuid();
-
-        var category = await IdAsync(client, "/api/v1/categories", new { name = "Bebidas", sortOrder = 1 });
-        var product = await IdAsync(client, "/api/v1/products", CrossTenantHttpSqlServerTests.NewProduct(category, $"Agua de {name.ToUpperInvariant()}"));
-        var customer = await IdAsync(client, "/api/v1/customers", new { name = $"Cliente de {name.ToUpperInvariant()}", phone = "5511112222" });
-        var supplier = await IdAsync(client, "/api/v1/suppliers", new { name = $"Proveedor de {name.ToUpperInvariant()}" });
-        var order = await IdAsync(client, "/api/v1/orders", new
-        {
-            orderType = 0,
-            channel = 0,
-            createdByBusiness = true,
-            openTab = false,
-            customerName = "Mostrador",
-            items = new[] { new { productId = product, quantity = 1, optionIds = Array.Empty<Guid>() } },
-            payments = Array.Empty<object>()
-        });
-
-        using var receipt = new MultipartFormDataContent();
-        var png = new ByteArrayContent(TinyPng);
-        png.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-        receipt.Add(png, "file", "recibo.png");
-        var uploaded = await ReadAsync(await client.PostAsync("/api/v1/orders/uploads/payment-evidence", receipt));
-
-        return new Business(tenantId, client, category, product, customer, supplier, order, uploaded.GetProperty("url").GetString()!);
-    }
-
-    private static async Task<Guid> IdAsync(HttpClient client, string path, object body)
-        => (await ReadAsync(await client.PostAsJsonAsync(path, body))).GetProperty("id").GetGuid();
-
-    private static async Task<JsonElement> ReadAsync(HttpResponseMessage response)
-    {
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.True(response.IsSuccessStatusCode, $"{response.RequestMessage?.RequestUri} answered {(int)response.StatusCode}: {body}");
-        return JsonDocument.Parse(body).RootElement.Clone();
-    }
-
-    // A 1x1 PNG: the upload validates the real content and re-encodes it.
-    private static readonly byte[] TinyPng = Convert.FromBase64String(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 }
