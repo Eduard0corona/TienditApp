@@ -20,6 +20,8 @@ public class CustomerProfile
     public string? DisplayName { get; private set; }
     public string? FirstName { get; private set; }
     public string? LastName { get; private set; }
+    // Columns of the first model, shared by every business and never used: loyalty belongs to each business and is
+    // out of scope until it has rules (docs/adr/0009-loyalty-per-business.md). Nothing writes them.
     public long LoyaltyPoints { get; private set; }
     public string? LoyaltyTier { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -31,13 +33,6 @@ public class CustomerProfile
         DisplayName = displayName;
         FirstName = firstName;
         LastName = lastName;
-        UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
-    public void SetLoyalty(long loyaltyPoints, string? loyaltyTier)
-    {
-        LoyaltyPoints = loyaltyPoints;
-        LoyaltyTier = loyaltyTier;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 }
