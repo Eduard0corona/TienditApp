@@ -4,13 +4,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { purchaseOrdersApi } from '../../api/purchaseOrdersApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type { PurchaseOrderDto, PurchaseOrderLineDto, ReceivePurchaseOrderLineRequest } from '../../types';
 import { PurchaseOrderStatus } from '../../types';
 import { formatDate, formatDateTime } from '../../utils/dates';
 import { getPurchaseOrderStatusBadge, getPurchaseOrderStatusLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
+import { buildPurchaseOrderMessage } from '../../utils/purchaseOrderMessage';
 import { formatQuantity, roundQuantity } from '../../utils/units';
+import WhatsAppLink from '../common/WhatsAppLink';
 
 export type PurchaseOrderDetailMode = 'view' | 'receive';
 
@@ -38,6 +41,7 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
+  const { tenant } = useTenant();
   // Only what the person changed: the rest of the lines receive their pending quantity at the ordered cost.
   const [reception, setReception] = useState<Record<string, ReceptionInput>>({});
   const [busy, setBusy] = useState(false);
@@ -51,6 +55,8 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
   const pendingLines = order?.lines.filter((line) => line.pendingQuantity > 0) ?? [];
   const canReceive = order?.status === PurchaseOrderStatus.Sent || order?.status === PurchaseOrderStatus.PartiallyReceived;
   const canCancel = order?.status === PurchaseOrderStatus.Draft || order?.status === PurchaseOrderStatus.Sent;
+  // While something is still to arrive, the order (or what is missing) can go to the supplier by WhatsApp.
+  const canMessage = order?.status === PurchaseOrderStatus.Draft || canReceive;
   const receiving = mode === 'receive' && canReceive;
 
   const quantityText = (line: PurchaseOrderLineDto) => reception[line.id]?.quantity ?? String(line.pendingQuantity);
@@ -111,7 +117,7 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
         return;
       }
       if (quantity > line.pendingQuantity) {
-        toast.error(`${line.supplyItemName}: solo faltan ${formatQuantity(line.pendingQuantity)}.`);
+        toast.error(`${line.supplyItemName}: solo faltan ${formatQuantity(line.pendingQuantity, line.unit)}.`);
         return;
       }
       if (unitCost === null || unitCost < 0) {
@@ -205,7 +211,7 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                             {line.supplyItemName}
                             <span className="d-block small text-muted">{line.inventoryLocationName}</span>
                           </td>
-                          <td className="text-end">{formatQuantity(line.pendingQuantity)}</td>
+                          <td className="text-end">{formatQuantity(line.pendingQuantity, line.unit)}</td>
                           <td>
                             <input
                               type="number"
@@ -266,12 +272,12 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                             <span className="d-block small text-muted">
                               {line.inventoryLocationName}
                               {line.pendingQuantity > 0 && order.status !== PurchaseOrderStatus.Cancelled && (
-                                <> · faltan {formatQuantity(line.pendingQuantity)}</>
+                                <> · faltan {formatQuantity(line.pendingQuantity, line.unit)}</>
                               )}
                             </span>
                           </td>
-                          <td className="text-end">{formatQuantity(line.quantity)}</td>
-                          <td className="text-end">{formatQuantity(line.receivedQuantity)}</td>
+                          <td className="text-end">{formatQuantity(line.quantity, line.unit)}</td>
+                          <td className="text-end">{formatQuantity(line.receivedQuantity, line.unit)}</td>
                           <td className="text-end">{formatMoney(line.unitCost)}</td>
                           <td className="text-end">{formatMoney(line.total)}</td>
                         </tr>
@@ -292,9 +298,20 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                     </button>
                   )}
                   {order.status === PurchaseOrderStatus.Draft && (
-                    <button type="button" className="btn btn-primary" onClick={send} disabled={busy}>
-                      <i className="ri-send-plane-line me-1" />Enviar al proveedor
+                    <button type="button" className="btn btn-light" onClick={send} disabled={busy}>
+                      <i className="ri-check-line me-1" />Marcar como enviada
                     </button>
+                  )}
+                  {canMessage && (
+                    <WhatsAppLink
+                      text={buildPurchaseOrderMessage(order, tenant?.name)}
+                      phone={order.supplierPhone}
+                      label={order.status === PurchaseOrderStatus.PartiallyReceived ? 'Pedir lo pendiente por WhatsApp' : 'Enviar por WhatsApp'}
+                      className={order.status === PurchaseOrderStatus.Draft ? 'btn btn-primary' : 'btn btn-light'}
+                      disabled={busy}
+                      // Sending the draft is what makes it sent: the status follows the message.
+                      onClick={order.status === PurchaseOrderStatus.Draft ? () => void send() : undefined}
+                    />
                   )}
                   {canReceive && (
                     <button type="button" className="btn btn-success" onClick={() => onModeChange('receive')} disabled={busy}>
@@ -303,6 +320,11 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                     </button>
                   )}
                 </div>
+                {canMessage && !order.supplierPhone && (
+                  <p className="small text-muted text-end mt-2 mb-0">
+                    El proveedor no tiene teléfono: WhatsApp te preguntará a quién enviarlo.
+                  </p>
+                )}
               </>
             )}
           </>

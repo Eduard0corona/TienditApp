@@ -9954,6 +9954,7 @@ export interface components {
             /** Format: uuid */
             supplierId: string;
             supplierName: string;
+            supplierPhone?: string | null;
             orderNumber: string;
             status: components["schemas"]["PurchaseOrderStatus"];
             /** Format: date-time */
@@ -9989,6 +9990,7 @@ export interface components {
             /** Format: uuid */
             supplyItemId: string;
             supplyItemName: string;
+            unit: components["schemas"]["UnitType"];
             /** Format: uuid */
             inventoryLocationId: string;
             inventoryLocationName: string;

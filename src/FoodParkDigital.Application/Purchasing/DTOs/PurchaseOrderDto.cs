@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Purchasing.Enums;
 
 namespace FoodParkDigital.Application.Purchasing.DTOs;
@@ -7,6 +8,7 @@ public class PurchaseOrderDto
     public Guid Id { get; set; }
     public Guid SupplierId { get; set; }
     public string SupplierName { get; set; } = null!;
+    public string? SupplierPhone { get; set; }
     public string OrderNumber { get; set; } = null!;
     public PurchaseOrderStatus Status { get; set; }
     public DateTimeOffset OrderedAt { get; set; }
@@ -25,6 +27,7 @@ public class PurchaseOrderLineDto
     public Guid Id { get; set; }
     public Guid SupplyItemId { get; set; }
     public string SupplyItemName { get; set; } = null!;
+    public UnitType Unit { get; set; }
     public Guid InventoryLocationId { get; set; }
     public string InventoryLocationName { get; set; } = null!;
     public decimal Quantity { get; set; }

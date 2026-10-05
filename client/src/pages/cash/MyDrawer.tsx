@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable from '../../components/common/DataTable';
+import PrintButton from '../../components/common/PrintButton';
+import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type {
   CashCountLineDto,
@@ -16,7 +20,8 @@ import { CashTransactionType as CashTransactionTypeConst } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
-import { getTransactionTypeLabel, parseCashAmount } from './cashFormat';
+import { buildShiftCutText } from './cashCutText';
+import { describeDifference, getTransactionTypeLabel, parseCashAmount } from './cashFormat';
 
 const EMPTY_PAGE: PaginatedList<CashTransactionDto> = {
   items: [],
@@ -54,7 +59,10 @@ interface MyDrawerProps {
 /** The cashier's own drawer: open it, see what it should hold, record expenses and close it with a count. */
 export default function MyDrawer({ branches, workingBranchId, onBranchChosen, onChanged }: MyDrawerProps) {
   const toast = useToast();
+  const { tenant } = useTenant();
   const [session, setSession] = useState<CashSessionDto | null>(null);
+  // The drawer just closed: its cut stays at hand to print it or send it.
+  const [closedCut, setClosedCut] = useState<{ session: CashSessionDto; movements: CashTransactionDto[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [movements, setMovements] = useState(EMPTY_PAGE);
@@ -123,6 +131,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
         branchId: chosenBranchId || undefined,
       });
       setSession(data);
+      setClosedCut(null);
       if (data.branchId) onBranchChosen(data.branchId);
       setOpeningAmount('');
       setOpeningNotes('');
@@ -144,6 +153,10 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       setShowClose(false);
       setSession(null);
       setMovements(EMPTY_PAGE);
+      setClosedCut({ session: data, movements: [] });
+      cashApi.getTransactions({ cashSessionId: data.id, pageSize: 200 })
+        .then(({ data: page }) => setClosedCut((current) => (current?.session.id === data.id ? { ...current, movements: page.items } : current)))
+        .catch(() => undefined);
       const difference = data.closingDifference ?? 0;
       if (difference === 0) toast.success('Caja cerrada: cuadró exacto.');
       else toast.warning(`Caja cerrada con ${difference < 0 ? 'faltante' : 'sobrante'} de ${formatMoney(Math.abs(difference))}.`);
@@ -203,59 +216,83 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
 
   if (!session) {
     return (
-      <div className="card">
-        <div className="card-body">
-          <h2 className="h5 mb-1">Abre tu caja</h2>
-          <p className="text-muted mb-3">Cada cajero tiene su propia caja: el efectivo que cobres entra a tu corte.</p>
-          <form className="row g-2 align-items-end" onSubmit={(event) => void openDrawer(event)}>
-            <div className="col-sm-4 col-lg-3">
-              <label className="form-label" htmlFor="drawer-opening">Fondo inicial</label>
-              <input
-                id="drawer-opening"
-                className="form-control ta-money"
-                inputMode="decimal"
-                placeholder="$0.00"
-                value={openingAmount}
-                onChange={(event) => setOpeningAmount(event.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            {branches.length > 1 && (
-              <div className="col-sm-4 col-lg-3">
-                <label className="form-label" htmlFor="drawer-branch">Sucursal</label>
-                <select
-                  id="drawer-branch"
-                  className="form-select"
-                  value={chosenBranchId}
-                  onChange={(event) => setOpeningBranchId(event.target.value)}
-                  disabled={submitting}
-                >
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>{branch.name}{branch.isDefault ? ' (principal)' : ''}</option>
-                  ))}
-                </select>
+      <>
+        {closedCut && (
+          <div className="card border-success mb-3">
+            <div className="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div>
+                <h2 className="h6 mb-1">Corte de tu caja</h2>
+                <div className="small text-muted">
+                  Debía haber {formatMoney(closedCut.session.expectedClosingAmount ?? closedCut.session.expectedBalance)}
+                  {' · '}Contado {formatMoney(closedCut.session.closingAmount ?? 0)}
+                  {' · '}{describeDifference(closedCut.session.closingDifference ?? 0, formatMoney)}
+                </div>
               </div>
-            )}
-            <div className="col-sm-4 col-lg-4">
-              <label className="form-label" htmlFor="drawer-notes">Notas (opcional)</label>
-              <input
-                id="drawer-notes"
-                className="form-control"
-                maxLength={2000}
-                value={openingNotes}
-                onChange={(event) => setOpeningNotes(event.target.value)}
-                disabled={submitting}
-              />
+              <div className="d-flex flex-wrap gap-2">
+                <PrintButton
+                  label="Imprimir corte"
+                  render={() => <CashCutTicket businessName={tenant?.name} session={closedCut.session} movements={closedCut.movements} />}
+                />
+                <WhatsAppLink text={buildShiftCutText(closedCut.session, tenant?.name)} />
+                <button type="button" className="btn btn-link" onClick={() => setClosedCut(null)}>Listo</button>
+              </div>
             </div>
-            <div className="col-sm-12 col-lg-2">
-              <button type="submit" className="btn btn-primary btn-touch w-100" disabled={submitting}>
-                {submitting ? 'Abriendo…' : 'Abrir mi caja'}
-              </button>
-            </div>
-          </form>
-          {actionError && <div className="alert alert-danger mt-3 mb-0">{actionError}</div>}
+          </div>
+        )}
+        <div className="card">
+          <div className="card-body">
+            <h2 className="h5 mb-1">Abre tu caja</h2>
+            <p className="text-muted mb-3">Cada cajero tiene su propia caja: el efectivo que cobres entra a tu corte.</p>
+            <form className="row g-2 align-items-end" onSubmit={(event) => void openDrawer(event)}>
+              <div className="col-sm-4 col-lg-3">
+                <label className="form-label" htmlFor="drawer-opening">Fondo inicial</label>
+                <input
+                  id="drawer-opening"
+                  className="form-control ta-money"
+                  inputMode="decimal"
+                  placeholder="$0.00"
+                  value={openingAmount}
+                  onChange={(event) => setOpeningAmount(event.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+              {branches.length > 1 && (
+                <div className="col-sm-4 col-lg-3">
+                  <label className="form-label" htmlFor="drawer-branch">Sucursal</label>
+                  <select
+                    id="drawer-branch"
+                    className="form-select"
+                    value={chosenBranchId}
+                    onChange={(event) => setOpeningBranchId(event.target.value)}
+                    disabled={submitting}
+                  >
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>{branch.name}{branch.isDefault ? ' (principal)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="col-sm-4 col-lg-4">
+                <label className="form-label" htmlFor="drawer-notes">Notas (opcional)</label>
+                <input
+                  id="drawer-notes"
+                  className="form-control"
+                  maxLength={2000}
+                  value={openingNotes}
+                  onChange={(event) => setOpeningNotes(event.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+              <div className="col-sm-12 col-lg-2">
+                <button type="submit" className="btn btn-primary btn-touch w-100" disabled={submitting}>
+                  {submitting ? 'Abriendo…' : 'Abrir mi caja'}
+                </button>
+              </div>
+            </form>
+            {actionError && <div className="alert alert-danger mt-3 mb-0">{actionError}</div>}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 

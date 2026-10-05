@@ -909,6 +909,8 @@ export interface PurchaseOrderLineDto {
   id: string;
   supplyItemId: string;
   supplyItemName: string;
+  /** Unit the supply is bought and stocked in. */
+  unit: UnitType;
   inventoryLocationId: string;
   inventoryLocationName: string;
   quantity: number;
@@ -926,6 +928,8 @@ export interface PurchaseOrderDto {
   id: string;
   supplierId: string;
   supplierName: string;
+  /** Supplier's phone, to send the order by WhatsApp. */
+  supplierPhone?: string | null;
   orderNumber: string;
   status: PurchaseOrderStatus;
   orderedAt: string;

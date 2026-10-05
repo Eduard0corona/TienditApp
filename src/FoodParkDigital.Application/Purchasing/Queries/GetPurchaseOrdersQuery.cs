@@ -39,6 +39,7 @@ public class GetPurchaseOrdersQueryHandler : IRequestHandler<GetPurchaseOrdersQu
                         Id = po.Id,
                         SupplierId = po.SupplierId,
                         SupplierName = supplier.Name,
+                        SupplierPhone = supplier.Phone,
                         OrderNumber = po.OrderNumber,
                         Status = po.Status,
                         OrderedAt = po.OrderedAt,

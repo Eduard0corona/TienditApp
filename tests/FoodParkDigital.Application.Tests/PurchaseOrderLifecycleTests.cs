@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Purchasing.Commands;
 using FoodParkDigital.Application.Purchasing.DTOs;
+using FoodParkDigital.Application.Purchasing.Queries;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
@@ -80,6 +81,22 @@ public class PurchaseOrderLifecycleTests
     }
 
     [Fact]
+    public async Task Order_ShouldCarryTheSupplierPhoneAndTheUnitOfEachSupply()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail | TenantCapability.Inventory);
+
+        var order = await CreateOrderAsync(fixture, tenant, quantity: 2.5m, unitCost: 30m, markAsSent: false, supplierPhone: " 55 1234 5678 ");
+        var listed = Assert.Single((await new GetPurchaseOrdersQueryHandler(fixture.Context)
+            .Handle(new GetPurchaseOrdersQuery(), CancellationToken.None)).Items);
+
+        // What the WhatsApp message to the supplier needs: who to send it to and how each quantity is measured.
+        Assert.Equal("55 1234 5678", order.SupplierPhone);
+        Assert.Equal(UnitType.Liter, Assert.Single(order.Lines).Unit);
+        Assert.Equal("55 1234 5678", listed.SupplierPhone);
+    }
+
+    [Fact]
     public async Task OrderOfAnotherBusiness_ShouldNotBeFound()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -92,9 +109,10 @@ public class PurchaseOrderLifecycleTests
         await Assert.ThrowsAsync<EntityNotFoundException>(() => CancelAsync(fixture, foreign.Id));
     }
 
-    private static async Task<PurchaseOrderDto> CreateOrderAsync(SalesTestFixture fixture, Tenant tenant, decimal quantity, decimal unitCost, bool markAsSent)
+    private static async Task<PurchaseOrderDto> CreateOrderAsync(
+        SalesTestFixture fixture, Tenant tenant, decimal quantity, decimal unitCost, bool markAsSent, string? supplierPhone = null)
     {
-        var supplier = new Supplier(tenant.Id, "Proveedor central");
+        var supplier = new Supplier(tenant.Id, "Proveedor central", phone: supplierPhone);
         var supply = new SupplyItem(tenant.Id, "Detergente", UnitType.Liter, defaultCost: 10m);
         fixture.Context.Suppliers.Add(supplier);
         fixture.Context.SupplyItems.Add(supply);

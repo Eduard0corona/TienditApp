@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-05 tras las Fases 0 a 5 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -27,7 +27,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
 - Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
 - `types/index.ts` copia a mano los enums numéricos del dominio. `ClientEnumContractTests` compara sus objetos `as const` con el dominio, pero no genera los tipos ni revisa las uniones literales duplicadas (`PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99` y similares).
-- Sin pruebas frontend. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
+- Las pruebas del cliente (Vitest y Testing Library, desde la Fase 5) cubren utilidades de dinero, unidades, acceso, errores, IVA, mensajes de WhatsApp y componentes con existencias; faltan pruebas de pantallas completas y de extremo a extremo. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
 - No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes. Desde la Fase 4F una prueba de humo confirma que la app responde con la versión nueva y el workflow admite OIDC en lugar del publish profile ([despliegue](../development/deploy-azure.md)); cambiar de credencial requiere configurar Azure.
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Cambios de estado, cancelaciones, reembolsos y rondas que consumen insumos toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
@@ -181,6 +181,18 @@ Pendientes detectados en la Fase 3:
 - Permisos que se ofrecían al personal y no funcionaban (categorías, borrar productos, respuestas automáticas) ya funcionan; "Equipo" se quitó de los permisos del personal.
 - Recuperar la contraseña por SMS al teléfono confirmado; el teléfono solo cambia con la contraseña y un código al número nuevo (el admin ya no lo cambia) y el número mal escrito al registrarse se corrige con la contraseña.
 - Bloqueo por cuenta (5 intentos, 15 minutos) en login y códigos, un código SMS por minuto por cuenta, mensajes de Identity en español y reintento con espera al renovar la sesión ante 429.
+
+## Resuelto el 2026-10-05 (Fase 5: un solo modelo, un solo lugar)
+
+- Existencias de producto en el libro mayor de inventario: un producto que se vende tal cual controla sus existencias con un artículo de inventario propio, y vender, cancelar, devolver, comprar y ajustar lo mueven con las mismas reglas que a un insumo (migración `AddProductStockItems`). `Product.StockQuantity` ya no se edita.
+- La autorización vive solo en cada caso de uso: el middleware resuelve negocio y membresía, los controllers no tienen roles, los hubs deciden por membresía y la cocina y el mesero tienen sus propios comandos (`MoveKitchenOrderCommand`, `MarkRoundServedCommand`).
+- Un negocio siempre vende algo: productos, servicios o alimentos (no se pueden apagar los tres módulos de venta).
+- Pruebas del cliente en CI y antes de desplegar; dinero, costos unitarios y existencias con un solo formato; Node.js 24 LTS en CI, despliegue y Docker.
+- Errores de enlace de modelos y de FluentValidation en español (`SpanishModelBinding`).
+- Modo enfocado para Vender y Cocina: pantalla completa sin menú, barra con reloj y salida, recordado por dispositivo.
+- Versiones de NuGet centralizadas en `Directory.Packages.props` (Central Package Management).
+- Azure SignalR Service opcional para varias instancias (`Azure__SignalR__ConnectionString`, ver [despliegue](../development/deploy-azure.md)).
+- Orden de compra al proveedor por WhatsApp (con el teléfono del proveedor y la unidad de cada insumo; reenviarla pide solo lo pendiente) y corte de caja por WhatsApp desde Mi caja al cerrar, Turnos y Corte del día.
 
 ## Decisiones humanas pendientes
 

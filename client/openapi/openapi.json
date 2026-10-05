@@ -16674,6 +16674,10 @@
           "supplierName": {
             "type": "string"
           },
+          "supplierPhone": {
+            "type": "string",
+            "nullable": true
+          },
           "orderNumber": {
             "type": "string"
           },
@@ -16779,6 +16783,7 @@
           "taxAmount",
           "taxPercent",
           "total",
+          "unit",
           "unitCost"
         ],
         "type": "object",
@@ -16793,6 +16798,9 @@
           },
           "supplyItemName": {
             "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
           },
           "inventoryLocationId": {
             "type": "string",

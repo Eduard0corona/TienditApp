@@ -177,7 +177,11 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // SignalR
-builder.Services.AddSignalR();
+// Live updates run in this process; with Azure:SignalR:ConnectionString they go through Azure SignalR Service,
+// so several instances of the app share them (scale out) without a backplane of our own.
+var signalR = builder.Services.AddSignalR();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Azure:SignalR:ConnectionString"]))
+    signalR.AddAzureSignalR();
 
 // CORS: the SPA is served by this API (and proxied by Vite in development), so cross-origin
 // access is only granted to the origins listed in Cors:AllowedOrigins.
