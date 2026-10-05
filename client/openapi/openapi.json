@@ -7934,6 +7934,65 @@
         }
       }
     },
+    "/api/v1/purchaseorders/{id}/close": {
+      "post": {
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePurchaseOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePurchaseOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePurchaseOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/purchaseorders/{id}/cancel": {
       "post": {
         "tags": [
@@ -11073,6 +11132,16 @@
             "items": {
               "$ref": "#/components/schemas/CashCountLineDto"
             },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClosePurchaseOrderRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -16784,6 +16853,15 @@
             "type": "number",
             "format": "double"
           },
+          "closedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeReason": {
+            "type": "string",
+            "nullable": true
+          },
           "lines": {
             "type": "array",
             "items": {
@@ -16920,6 +16998,7 @@
           1,
           2,
           3,
+          4,
           99
         ],
         "type": "integer",

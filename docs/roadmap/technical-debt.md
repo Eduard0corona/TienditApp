@@ -43,7 +43,6 @@ Actualizada el 2026-10-05 tras las Fases 0 a 5 del roadmap de producto (la audit
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
 - Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.
 - Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
-- Una compra con recepción parcial no se puede cerrar sin esperar el resto (cancelarla se rechaza porque ya hay mercancía recibida).
 - Las rondas de una cuenta de mesa no se revisan contra existencias; la cuenta consume al cerrarse y ahí no se rechaza.
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).

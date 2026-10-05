@@ -18,6 +18,7 @@ import type {
 import { PurchaseOrderStatus as PurchaseOrderStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import PurchaseOrderDetail, { type PurchaseOrderDetailMode } from '../../components/purchases/PurchaseOrderDetail';
+import { getSupplyLineDefaults } from './purchaseLineDefaults';
 import { getPurchaseOrderStatusBadge, getPurchaseOrderStatusLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { formatInBusinessZone } from '../../utils/dates';
@@ -258,6 +259,7 @@ export default function PurchaseOrdersList() {
                 <option value={PurchaseOrderStatusConst.Sent}>Enviada</option>
                 <option value={PurchaseOrderStatusConst.PartiallyReceived}>Recepción parcial</option>
                 <option value={PurchaseOrderStatusConst.Received}>Recibida</option>
+                <option value={PurchaseOrderStatusConst.Closed}>Cerrada sin el resto</option>
                 <option value={PurchaseOrderStatusConst.Cancelled}>Cancelada</option>
               </select>
             </div>
@@ -405,7 +407,10 @@ export default function PurchaseOrdersList() {
                   <select
                     className="form-select"
                     value={line.supplyItemId}
-                    onChange={(e) => updateLine(index, { supplyItemId: e.target.value })}
+                    onChange={(e) => updateLine(index, {
+                      supplyItemId: e.target.value,
+                      ...getSupplyLineDefaults(line, supplyOptions.find((item) => item.id === e.target.value)),
+                    })}
                   >
                     <option value="">Seleccionar...</option>
                     {supplyOptions.map((item) => (

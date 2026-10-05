@@ -30,6 +30,10 @@ export const purchaseOrdersApi = {
   send: (id: string) =>
     api.post<PurchaseOrderDto>(`/purchaseorders/${id}/send`),
 
+  /** Part arrived and the rest will not: closes with what came in. */
+  close: (id: string, reason?: string) =>
+    api.post<PurchaseOrderDto>(`/purchaseorders/${id}/close`, { reason }),
+
   /** Only while nothing has been received. */
   cancel: (id: string) =>
     api.post<PurchaseOrderDto>(`/purchaseorders/${id}/cancel`),

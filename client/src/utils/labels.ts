@@ -140,6 +140,7 @@ const PURCHASE_ORDER_STATUS: Record<PurchaseOrderStatus, { label: string; badge:
   1: { label: 'Enviada', badge: 'bg-primary' },
   2: { label: 'Recepción parcial', badge: 'bg-info' },
   3: { label: 'Recibida', badge: 'bg-success' },
+  4: { label: 'Cerrada sin el resto', badge: 'bg-dark' },
   99: { label: 'Cancelada', badge: 'bg-danger' },
 };
 

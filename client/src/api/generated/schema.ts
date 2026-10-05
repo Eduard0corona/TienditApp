@@ -6493,6 +6493,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/purchaseorders/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ClosePurchaseOrderRequest"];
+                    "text/json": components["schemas"]["ClosePurchaseOrderRequest"];
+                    "application/*+json": components["schemas"]["ClosePurchaseOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurchaseOrderDto"];
+                        "application/json": components["schemas"]["PurchaseOrderDto"];
+                        "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/purchaseorders/{id}/cancel": {
         parameters: {
             query?: never;
@@ -8292,6 +8337,9 @@ export interface components {
             notes?: string | null;
             cashCount?: components["schemas"]["CashCountLineDto"][] | null;
         };
+        ClosePurchaseOrderRequest: {
+            reason?: string | null;
+        };
         ConfirmPhoneChangeCommand: {
             phoneNumber: string;
             code: string;
@@ -10018,6 +10066,9 @@ export interface components {
             tax: number;
             /** Format: double */
             total: number;
+            /** Format: date-time */
+            closedAt?: string | null;
+            closeReason?: string | null;
             lines: components["schemas"]["PurchaseOrderLineDto"][];
         };
         PurchaseOrderDtoPaginatedList: {
@@ -10063,7 +10114,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        PurchaseOrderStatus: 0 | 1 | 2 | 3 | 99;
+        PurchaseOrderStatus: 0 | 1 | 2 | 3 | 4 | 99;
         ReceivePurchaseOrderLineItemRequest: {
             /** Format: uuid */
             purchaseOrderLineId: string;

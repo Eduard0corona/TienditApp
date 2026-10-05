@@ -89,6 +89,16 @@ public class PurchaseOrdersController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>Part arrived and the rest will not: the order closes with what came in.</summary>
+    [HttpPost("{id:guid}/close")]
+    public async Task<ActionResult<PurchaseOrderDto>> Close(Guid id, [FromBody] ClosePurchaseOrderRequest request)
+    {
+        var result = await _mediator.Send(new ClosePurchaseOrderCommand(id, request.Reason));
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     [HttpPost("{id:guid}/cancel")]
     public async Task<ActionResult<PurchaseOrderDto>> Cancel(Guid id)
     {
@@ -97,6 +107,12 @@ public class PurchaseOrdersController : ControllerBase
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
+}
+
+public class ClosePurchaseOrderRequest
+{
+    /// <summary>Why the rest is no longer expected (optional).</summary>
+    public string? Reason { get; init; }
 }
 
 public class ReceivePurchaseOrderRequest

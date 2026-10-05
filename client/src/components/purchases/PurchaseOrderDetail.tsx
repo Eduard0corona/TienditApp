@@ -40,7 +40,7 @@ const parseNumber = (text: string) => {
 export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHide, onChanged }: PurchaseOrderDetailProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { confirm } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const { tenant } = useTenant();
   // Only what the person changed: the rest of the lines receive their pending quantity at the ordered cost.
   const [reception, setReception] = useState<Record<string, ReceptionInput>>({});
@@ -103,6 +103,25 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
       async () => (await purchaseOrdersApi.cancel(order.id)).data,
       `${order.orderNumber} cancelada.`,
       'No se pudo cancelar la compra.',
+    );
+  };
+
+  const closeWithoutRest = async () => {
+    if (!order) return;
+    const reason = await prompt({
+      title: 'Cerrar sin esperar el resto',
+      message: `${order.orderNumber} se queda con lo que llegó. Lo que falta ya no se espera; las existencias no cambian.`,
+      inputLabel: 'Motivo (opcional)',
+      placeholder: 'Ej. el proveedor ya no lo surte',
+      maxLength: 500,
+      confirmLabel: 'Cerrar compra',
+      cancelLabel: 'Volver',
+    });
+    if (reason === null) return;
+    await run(
+      async () => (await purchaseOrdersApi.close(order.id, reason || undefined)).data,
+      `${order.orderNumber} quedó cerrada con lo que llegó.`,
+      'No se pudo cerrar la compra.',
     );
   };
 
@@ -185,6 +204,15 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                 <>
                   <dt className="col-5 text-muted fw-normal">Notas</dt>
                   <dd className="col-7 mb-1">{order.notes}</dd>
+                </>
+              )}
+              {order.status === PurchaseOrderStatus.Closed && (
+                <>
+                  <dt className="col-5 text-muted fw-normal">Cerrada sin el resto</dt>
+                  <dd className="col-7 mb-1">
+                    {formatDateTime(order.closedAt)}
+                    {order.closeReason && <span className="d-block text-muted">{order.closeReason}</span>}
+                  </dd>
                 </>
               )}
             </dl>
@@ -272,7 +300,9 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                             <span className="d-block small text-muted">
                               {line.inventoryLocationName}
                               {line.pendingQuantity > 0 && order.status !== PurchaseOrderStatus.Cancelled && (
-                                <> · faltan {formatQuantity(line.pendingQuantity, line.unit)}</>
+                                order.status === PurchaseOrderStatus.Closed
+                                  ? <> · no llegaron {formatQuantity(line.pendingQuantity, line.unit)}</>
+                                  : <> · faltan {formatQuantity(line.pendingQuantity, line.unit)}</>
                               )}
                             </span>
                           </td>
@@ -312,6 +342,11 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
                       // Sending the draft is what makes it sent: the status follows the message.
                       onClick={order.status === PurchaseOrderStatus.Draft ? () => void send() : undefined}
                     />
+                  )}
+                  {order.status === PurchaseOrderStatus.PartiallyReceived && (
+                    <button type="button" className="btn btn-light" onClick={closeWithoutRest} disabled={busy}>
+                      <i className="ri-checkbox-circle-line me-1" />Cerrar sin esperar el resto
+                    </button>
                   )}
                   {canReceive && (
                     <button type="button" className="btn btn-success" onClick={() => onModeChange('receive')} disabled={busy}>

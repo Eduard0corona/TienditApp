@@ -23,6 +23,8 @@ public class PurchaseOrderConfiguration : IEntityTypeConfiguration<PurchaseOrder
         builder.Property(x => x.SubTotal).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.Tax).HasColumnType("decimal(18,4)").IsRequired();
         builder.Property(x => x.Total).HasColumnType("decimal(18,4)").IsRequired();
+        builder.Property(x => x.ClosedAt);
+        builder.Property(x => x.CloseReason).HasMaxLength(PurchaseOrder.MaxCloseReasonLength);
 
         builder.HasIndex(x => new { x.TenantId, x.OrderNumber }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.Status });

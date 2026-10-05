@@ -81,6 +81,28 @@ public class PurchaseOrderLifecycleTests
     }
 
     [Fact]
+    public async Task PartialOrder_ShouldCloseWithoutWaitingForTheRest()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail | TenantCapability.Inventory);
+        var order = await CreateOrderAsync(fixture, tenant, quantity: 10m, unitCost: 12m, markAsSent: true);
+        Assert.True((await ReceiveAsync(fixture, order.Id, order.Lines.Single().Id, 4m)).IsSuccess);
+
+        var closed = await new ClosePurchaseOrderCommandHandler(fixture.Context, fixture.Clock)
+            .Handle(new ClosePurchaseOrderCommand(order.Id, "El proveedor ya no surte"), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var receiveAfter = await Assert.ThrowsAsync<DomainException>(() => ReceiveAsync(fixture, order.Id, order.Lines.Single().Id, 1m));
+
+        Assert.True(closed.IsSuccess, closed.Error);
+        Assert.Equal(PurchaseOrderStatus.Closed, closed.Value!.Status);
+        Assert.Equal(SalesTestFixture.Now, closed.Value.ClosedAt);
+        Assert.Equal("El proveedor ya no surte", closed.Value.CloseReason);
+        // The stock is what came in; closing moves nothing.
+        Assert.Equal(4m, (await fixture.Context.InventoryStocks.AsNoTracking().SingleAsync()).OnHandQuantity);
+        Assert.StartsWith("La compra ya se cerró", receiveAfter.Message);
+    }
+
+    [Fact]
     public async Task Order_ShouldCarryTheSupplierPhoneAndTheUnitOfEachSupply()
     {
         await using var fixture = SalesTestFixture.Create();

@@ -873,13 +873,15 @@ export interface InventoryAlertsDto {
 
 // ==================== Purchasing ====================
 
-export type PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99;
+/** Closed (4): part arrived and the rest will not; closed with what came in. */
+export type PurchaseOrderStatus = 0 | 1 | 2 | 3 | 4 | 99;
 
 export const PurchaseOrderStatus = {
   Draft: 0,
   Sent: 1,
   PartiallyReceived: 2,
   Received: 3,
+  Closed: 4,
   Cancelled: 99,
 } as const;
 
@@ -944,6 +946,9 @@ export interface PurchaseOrderDto {
   subTotal: number;
   tax: number;
   total: number;
+  /** When the business stopped waiting for what was missing, and why. */
+  closedAt?: string | null;
+  closeReason?: string | null;
   lines: PurchaseOrderLineDto[];
 }
 
