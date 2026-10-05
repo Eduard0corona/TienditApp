@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -16,16 +15,13 @@ public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, R
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
 
     public GetUserProfileQueryHandler(
         UserManager<ApplicationUser> userManager,
-        ICurrentUserService currentUserService,
-        IMapper mapper)
+        ICurrentUserService currentUserService)
     {
         _userManager = userManager;
         _currentUserService = currentUserService;
-        _mapper = mapper;
     }
 
     public async Task<Result<UserProfileDto>> Handle(GetUserProfileQuery request, CancellationToken cancellationToken)
@@ -38,7 +34,7 @@ public class GetUserProfileQueryHandler : IRequestHandler<GetUserProfileQuery, R
         if (user is null || !user.IsActive)
             return Result.Failure<UserProfileDto>("Usuario no encontrado.");
 
-        var dto = _mapper.Map<UserProfileDto>(user);
+        var dto = user.ToProfileDto();
         // Inside a business the role is the one the person has there (the token's), as the API applies it.
         if (!string.IsNullOrEmpty(_currentUserService.TenantRole) && !string.IsNullOrEmpty(_currentUserService.Role))
             dto.Role = _currentUserService.Role;

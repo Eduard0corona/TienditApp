@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -63,16 +62,13 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public CreateAiAgentCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<AiAgentDto>> Handle(CreateAiAgentCommand request, CancellationToken cancellationToken)
@@ -121,7 +117,7 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
         _context.AiAgents.Add(agent);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(_mapper.Map<AiAgentDto>(agent));
+        return Result.Success(agent.ToDto());
     }
 
     private static string? TrimToNull(string? value)

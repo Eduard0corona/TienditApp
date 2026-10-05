@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -64,12 +63,10 @@ public class UpdateAiAgentCommandValidator : AbstractValidator<UpdateAiAgentComm
 public class UpdateAiAgentCommandHandler : IRequestHandler<UpdateAiAgentCommand, Result<AiAgentDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public UpdateAiAgentCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public UpdateAiAgentCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<AiAgentDto>> Handle(UpdateAiAgentCommand request, CancellationToken cancellationToken)
@@ -111,7 +108,7 @@ public class UpdateAiAgentCommandHandler : IRequestHandler<UpdateAiAgentCommand,
             strictMode: request.StrictMode);
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<AiAgentDto>(agent));
+        return Result.Success(agent.ToDto());
     }
 
     private static string? TrimToNull(string? value)

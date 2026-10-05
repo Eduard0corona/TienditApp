@@ -224,11 +224,11 @@ public class OrderRefundTests
     private static RefundOrderCommandHandler RefundHandler(
         SalesTestFixture fixture, bool grantsRefunds = false, IOrderInventoryService? inventory = null)
         => new(fixture.Context, fixture.CurrentUser, new RefundAccess(grantsRefunds), new OrderCashService(fixture.Context, fixture.CurrentUser),
-            fixture.Clock, fixture.Mapper, inventory ?? NoOpOrderInventoryService.Instance);
+            fixture.Clock, inventory ?? NoOpOrderInventoryService.Instance);
 
     private static VoidOrderCommandHandler VoidHandler(SalesTestFixture fixture, IOrderInventoryService? inventory = null)
         => new(fixture.Context, fixture.CurrentUser, new RefundAccess(false), new OrderCashService(fixture.Context, fixture.CurrentUser),
-            fixture.Clock, fixture.Mapper, inventory ?? NoOpOrderInventoryService.Instance);
+            fixture.Clock, inventory ?? NoOpOrderInventoryService.Instance);
 
     private static async Task<decimal> OnHandAsync(SalesTestFixture fixture, Guid supplyId)
         => (await fixture.Context.InventoryStocks.AsNoTracking().SingleAsync(s => s.SupplyItemId == supplyId)).OnHandQuantity;

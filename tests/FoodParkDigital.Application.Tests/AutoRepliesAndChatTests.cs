@@ -102,7 +102,7 @@ public class AutoRepliesAndChatTests
         await ReceiveAsync(fixture, whatsApp, tenant.Id, "wamid.in.1", "¿tienen pan?");
         var quietReplies = whatsApp.Texts.Count;
 
-        var resumed = await new SetConversationAutoRepliesCommandHandler(fixture.Context, new Notifications(), fixture.TenantService, fixture.Mapper, fixture.Clock)
+        var resumed = await new SetConversationAutoRepliesCommandHandler(fixture.Context, new Notifications(), fixture.TenantService, fixture.Clock)
             .Handle(new SetConversationAutoRepliesCommand(sent.Value!.ConversationId, Paused: false), CancellationToken.None);
         await ReceiveAsync(fixture, whatsApp, tenant.Id, "wamid.in.2", "¿tienen pan?");
 
@@ -184,7 +184,6 @@ public class AutoRepliesAndChatTests
                 whatsApp,
                 new Notifications(),
                 fixture.TenantService,
-                fixture.Mapper,
                 NullLogger<SendChatMessageCommandHandler>.Instance,
                 new PhoneNormalizationService(),
                 fixture.Clock)
@@ -197,7 +196,6 @@ public class AutoRepliesAndChatTests
                 new FixedReply(),
                 whatsApp,
                 new Notifications(),
-                fixture.Mapper,
                 NullLogger<ProcessInboundMessageCommandHandler>.Instance,
                 clock: fixture.Clock)
             .Handle(new ProcessInboundMessageCommand

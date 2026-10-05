@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -31,16 +30,13 @@ public class UpdateUserProfileCommandHandler : IRequestHandler<UpdateUserProfile
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
 
     public UpdateUserProfileCommandHandler(
         UserManager<ApplicationUser> userManager,
-        ICurrentUserService currentUserService,
-        IMapper mapper)
+        ICurrentUserService currentUserService)
     {
         _userManager = userManager;
         _currentUserService = currentUserService;
-        _mapper = mapper;
     }
 
     public async Task<Result<UserProfileDto>> Handle(UpdateUserProfileCommand request, CancellationToken cancellationToken)
@@ -63,7 +59,7 @@ public class UpdateUserProfileCommandHandler : IRequestHandler<UpdateUserProfile
             return Result.Failure<UserProfileDto>(errors);
         }
 
-        var dto = _mapper.Map<UserProfileDto>(user);
+        var dto = user.ToProfileDto();
         return Result.Success(dto);
     }
 }

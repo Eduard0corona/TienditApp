@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
@@ -20,13 +19,11 @@ public class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQuery, Lis
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
-    public GetCategoriesQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IMapper mapper)
+    public GetCategoriesQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<List<CategoryDto>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
@@ -47,7 +44,7 @@ public class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQuery, Lis
             .ThenBy(c => c.Name)
             .ToListAsync(cancellationToken);
 
-        var dtos = _mapper.Map<List<CategoryDto>>(categories);
+        var dtos = categories.Select(c => c.ToDto()).ToList();
         var ids = categories.Select(c => c.Id).ToList();
         var counts = await _context.Products
             .AsNoTracking()

@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -58,20 +57,17 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IMapper _mapper;
     private readonly IOrderCashService _orderCashService;
     private readonly ICurrentUserService? _currentUserService;
 
     public AddOrderPaymentCommandHandler(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
-        IMapper mapper,
         IOrderCashService orderCashService,
         ICurrentUserService? currentUserService = null)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
-        _mapper = mapper;
         _orderCashService = orderCashService;
         _currentUserService = currentUserService;
     }
@@ -117,7 +113,7 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        var dto = _mapper.Map<OrderDto>(updatedOrder);
+        var dto = updatedOrder.ToDto();
         dto.ApplyStateMetadata();
         return Result.Success(dto);
     }

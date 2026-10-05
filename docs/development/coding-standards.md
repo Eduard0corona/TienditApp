@@ -6,7 +6,7 @@
 - Modela invariantes en constructores/métodos de Domain y usa colecciones de solo lectura.
 - Un Command cambia estado; una Query lee y proyecta. Ambos viven en el contexto Application correspondiente.
 - FluentValidation valida formato, rangos y presencia de entrada; no sustituye invariantes ni autorización.
-- Usa DTOs en límites. AutoMapper solo donde reduzca repetición sin ocultar lógica.
+- Usa DTOs en límites, mapeados a mano junto a ellos (`XxxMappings.ToDto` para una entidad cargada, `AsDto` como expresión para listas en SQL). Si un DTO tiene ambas formas, una prueba las compara miembro a miembro (`DtoMappingTests`).
 - Propaga `CancellationToken` desde controller hasta EF/provider.
 - Usa async para I/O y `AsNoTracking()` en lecturas cuando no se actualizará la entidad.
 - Pagina listados con crecimiento posible; filtra antes de materializar.

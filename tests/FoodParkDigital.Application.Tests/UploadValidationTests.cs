@@ -1,8 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -140,8 +138,7 @@ public class UploadValidationTests
         order.AddItem(Guid.NewGuid(), "Producto", 1, 100m);
         context.Orders.Add(order);
         await context.SaveChangesAsync();
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-        var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), mapper, NoOpOrderCashService.Instance);
+        var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), NoOpOrderCashService.Instance);
 
         var external = await handler.Handle(new AddOrderPaymentCommand
         {

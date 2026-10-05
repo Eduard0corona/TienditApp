@@ -1,7 +1,5 @@
-using AutoMapper;
 using FoodParkDigital.Application.AiAgents.Commands;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -109,15 +107,13 @@ public class AiAgentsCommandTests
     {
         private readonly TestCurrentTenantService _tenantService;
 
-        private TestFixture(ApplicationDbContext context, IMapper mapper, TestCurrentTenantService tenantService)
+        private TestFixture(ApplicationDbContext context, TestCurrentTenantService tenantService)
         {
             Context = context;
-            Mapper = mapper;
             _tenantService = tenantService;
         }
 
         public ApplicationDbContext Context { get; }
-        public IMapper Mapper { get; }
         public Guid TenantId => _tenantService.TenantId;
 
         public static async Task<TestFixture> CreateAsync()
@@ -128,10 +124,8 @@ public class AiAgentsCommandTests
 
             var tenantService = new TestCurrentTenantService();
             var context = new ApplicationDbContext(options, tenantService, new NullMediator());
-            var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-                .CreateMapper();
 
-            var fixture = new TestFixture(context, mapper, tenantService);
+            var fixture = new TestFixture(context, tenantService);
             await Task.CompletedTask;
             return fixture;
         }
@@ -146,10 +140,10 @@ public class AiAgentsCommandTests
         }
 
         public CreateAiAgentCommandHandler CreateCreateHandler()
-            => new(Context, _tenantService, Mapper);
+            => new(Context, _tenantService);
 
         public UpdateAiAgentCommandHandler CreateUpdateHandler()
-            => new(Context, Mapper);
+            => new(Context);
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();
     }

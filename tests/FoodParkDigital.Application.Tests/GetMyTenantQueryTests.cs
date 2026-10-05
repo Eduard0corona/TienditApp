@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Tenants.Queries;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -22,7 +20,6 @@ public class GetMyTenantQueryTests
             .Options;
 
         await using var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
-        var mapper = CreateMapper();
 
         var tenant = new Tenant("Tenant Uno", "tenant-uno", BusinessType.Food, "tenant@demo.com");
         context.Tenants.Add(tenant);
@@ -37,7 +34,7 @@ public class GetMyTenantQueryTests
         await context.SaveChangesAsync();
 
         var currentUser = new TestCurrentUserService(user.Id.ToString(), null);
-        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService(), mapper);
+        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService());
 
         var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
 
@@ -65,7 +62,7 @@ public class GetMyTenantQueryTests
 
         // Even with the tenant in the token claim and as default tenant, a disabled member gets nothing.
         var currentUser = new TestCurrentUserService(user.Id.ToString(), tenant.Id);
-        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService(), CreateMapper());
+        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService());
 
         var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
 
@@ -90,7 +87,7 @@ public class GetMyTenantQueryTests
         var tenantService = new TestCurrentTenantService();
         tenantService.SetTenant(requestTenant.Id);
         var currentUser = new TestCurrentUserService(user.Id.ToString(), claimTenant.Id);
-        var handler = new GetMyTenantQueryHandler(context, currentUser, tenantService, CreateMapper());
+        var handler = new GetMyTenantQueryHandler(context, currentUser, tenantService);
 
         var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
 
@@ -106,7 +103,6 @@ public class GetMyTenantQueryTests
             .Options;
 
         await using var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
-        var mapper = CreateMapper();
 
         var tenant = new Tenant("Tenant Dos", "tenant-dos", BusinessType.Service, "tenant2@demo.com");
         context.Tenants.Add(tenant);
@@ -118,7 +114,7 @@ public class GetMyTenantQueryTests
         await context.SaveChangesAsync();
 
         var currentUser = new TestCurrentUserService(user.Id.ToString(), null);
-        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService(), mapper);
+        var handler = new GetMyTenantQueryHandler(context, currentUser, new TestCurrentTenantService());
 
         var result = await handler.Handle(new GetMyTenantQuery(), CancellationToken.None);
 
@@ -127,11 +123,6 @@ public class GetMyTenantQueryTests
         Assert.Equal(tenant.Id, result.Value!.Id);
     }
 
-    private static IMapper CreateMapper()
-    {
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>());
-        return config.CreateMapper();
-    }
 
     private static ApplicationUser BuildUser(Guid? defaultTenantId)
         => new()

@@ -31,7 +31,7 @@ public class TenantOrderPhoneTests
         await context.SaveChangesAsync();
         var lookup = new RecordingLookup();
         var handler = new CreateTenantOrderCommandHandler(
-            context, new AnonymousUser(), null!, lookup, new FixedClock(), new PhoneNormalizationService(),
+            context, new AnonymousUser(), lookup, new FixedClock(), new PhoneNormalizationService(),
             NoOpOrderInventoryService.Instance, new FolioGenerator(context));
 
         var result = await handler.Handle(new CreateTenantOrderCommand

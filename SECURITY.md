@@ -64,7 +64,7 @@ Serilog y `AuditLog` existen, pero los logs deben usar minimización y redacció
 
 Configura connection strings, JWT, WhatsApp, SMS, email y Azure mediante variables de entorno, plataforma de secretos o user-secrets. El repositorio ya no contiene credenciales, pero cadenas de conexión de Azure SQL y el secreto JWT anterior siguen en el historial de git: rótalos y revisa el firewall de Azure SQL. Los valores de `docker-compose.yml` son ejemplos inseguros para producción.
 
-Las dependencias deben revisarse de forma continua; el CI audita las dependencias npm de producción en cada PR. Al 2026-10-01 npm no reporta vulnerabilidades. `SQLitePCLRaw.lib.e_sqlite3` 2.1.10 (`GHSA-2m69-gcr7-jv3q`) no tiene versión corregida y solo entra por las pruebas que usan SQLite; no forma parte de la aplicación publicada. AutoMapper 13.0.1 conserva un advisory alto (`GHSA-rvv3-g6hj-g44x`) cuya corrección solo existe en versiones con licencia comercial; requiere una decisión. No uses actualizaciones automáticas de ruptura sin revisión.
+Las dependencias deben revisarse de forma continua; el CI audita las dependencias npm de producción en cada PR. Al 2026-10-01 npm no reporta vulnerabilidades. `SQLitePCLRaw.lib.e_sqlite3` 2.1.10 (`GHSA-2m69-gcr7-jv3q`) no tiene versión corregida y solo entra por las pruebas que usan SQLite; no forma parte de la aplicación publicada. AutoMapper, que conservaba un advisory alto (`GHSA-rvv3-g6hj-g44x`) corregido solo en versiones con licencia comercial, se reemplazó por mapeo manual en la Fase 4F. No uses actualizaciones automáticas de ruptura sin revisión.
 
 ## Reporte responsable
 

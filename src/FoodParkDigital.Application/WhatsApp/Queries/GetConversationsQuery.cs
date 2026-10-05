@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -21,12 +19,10 @@ public record GetConversationsQuery : IRequest<PaginatedList<ConversationDto>>
 public class GetConversationsQueryHandler : IRequestHandler<GetConversationsQuery, PaginatedList<ConversationDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetConversationsQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetConversationsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedList<ConversationDto>> Handle(GetConversationsQuery request, CancellationToken cancellationToken)
@@ -45,7 +41,7 @@ public class GetConversationsQueryHandler : IRequestHandler<GetConversationsQuer
 
         var projected = query
             .OrderByDescending(c => c.LastMessageAt)
-            .ProjectTo<ConversationDto>(_mapper.ConfigurationProvider);
+            .Select(WhatsAppMappings.ConversationAsDto);
 
         return await PaginatedList<ConversationDto>.CreateAsync(
             projected, request.PageNumber, request.PageSize, cancellationToken);

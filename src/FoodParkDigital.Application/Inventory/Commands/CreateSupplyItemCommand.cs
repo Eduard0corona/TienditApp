@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -67,16 +66,13 @@ public class CreateSupplyItemCommandHandler : IRequestHandler<CreateSupplyItemCo
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public CreateSupplyItemCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<SupplyItemDto>> Handle(CreateSupplyItemCommand request, CancellationToken cancellationToken)
@@ -126,6 +122,6 @@ public class CreateSupplyItemCommandHandler : IRequestHandler<CreateSupplyItemCo
         _context.SupplyItems.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(_mapper.Map<SupplyItemDto>(entity));
+        return Result.Success(entity.ToDto());
     }
 }

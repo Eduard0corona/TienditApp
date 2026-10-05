@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -57,12 +56,10 @@ public class UpdateInventoryLocationCommandValidator : AbstractValidator<UpdateI
 public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInventoryLocationCommand, Result<InventoryLocationDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public UpdateInventoryLocationCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public UpdateInventoryLocationCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<InventoryLocationDto>> Handle(UpdateInventoryLocationCommand request, CancellationToken cancellationToken)
@@ -123,7 +120,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        var dto = await InventoryLocationBranches.NameAsync(_context, [_mapper.Map<InventoryLocationDto>(entity)], cancellationToken);
+        var dto = await InventoryLocationBranches.NameAsync(_context, [entity.ToDto()], cancellationToken);
         return Result.Success(dto[0]);
     }
 }

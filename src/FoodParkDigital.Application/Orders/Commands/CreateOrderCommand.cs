@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -225,7 +224,6 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
     private readonly ICustomerLookupService _customerLookupService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
@@ -237,7 +235,6 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IMapper mapper,
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
         IPhoneNormalizationService phoneNormalizationService,
@@ -248,7 +245,6 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
-        _mapper = mapper;
         _customerLookupService = customerLookupService;
         _dateTimeProvider = dateTimeProvider;
         _phoneNormalizationService = phoneNormalizationService;
@@ -474,7 +470,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             throw;
         }
 
-        var dto = _mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
         dto.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
         return Result.Success(dto);
@@ -494,7 +490,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (order is null)
             return null;
 
-        var dto = _mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
         return dto;
     }

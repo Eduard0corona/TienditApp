@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -40,7 +39,6 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
     private readonly IWhatsAppService _whatsAppService;
     private readonly IWhatsAppNotificationService _notificationService;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
     private readonly ILogger<SendChatMessageCommandHandler> _logger;
     private readonly IPhoneNormalizationService _phones;
     private readonly IDateTimeProvider _clock;
@@ -50,7 +48,6 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         IWhatsAppService whatsAppService,
         IWhatsAppNotificationService notificationService,
         ICurrentTenantService tenantService,
-        IMapper mapper,
         ILogger<SendChatMessageCommandHandler> logger,
         IPhoneNormalizationService phones,
         IDateTimeProvider? clock = null)
@@ -59,7 +56,6 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         _whatsAppService = whatsAppService;
         _notificationService = notificationService;
         _tenantService = tenantService;
-        _mapper = mapper;
         _logger = logger;
         _phones = phones;
         _clock = clock ?? SystemClock.Instance;
@@ -85,8 +81,8 @@ public class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageComm
         var (conversation, message) = await StoreOutboundMessageAsync(
             tenantId, phone, request.Message, sendResult.ProviderMessageId, existing, cancellationToken);
 
-        var messageDto = _mapper.Map<ChatMessageDto>(message);
-        var conversationDto = _mapper.Map<ConversationDto>(conversation);
+        var messageDto = message.ToDto();
+        var conversationDto = conversation.ToDto();
 
         // Notify via SignalR
         await _notificationService.NotifyNewMessage(tenantId, conversationDto, messageDto);

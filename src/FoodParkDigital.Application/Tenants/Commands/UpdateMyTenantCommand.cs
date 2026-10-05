@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Billing;
 using System;
 using System.Text.Json;
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -76,18 +75,15 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public UpdateMyTenantCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<TenantProfileDto>> Handle(UpdateMyTenantCommand request, CancellationToken cancellationToken)
@@ -178,7 +174,7 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = _mapper.Map<TenantProfileDto>(tenant);
+        var dto = tenant.ToProfileDto();
         dto.Capabilities = settings.Capabilities;
         dto.PricesIncludeTax = settings.PricesIncludeTax;
         dto.DefaultTaxRate = settings.DefaultTaxRate;

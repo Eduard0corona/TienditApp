@@ -116,7 +116,7 @@ public class BillingTests
         await Assign(fixture).Handle(new AssignPlanCommand { TenantId = tenant.Id, PlanId = plan.Id }, CancellationToken.None);
         fixture.TenantService.SetTenant(tenant.Id);
 
-        var result = await new UpdateMyTenantCommandHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService, fixture.Mapper)
+        var result = await new UpdateMyTenantCommandHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService)
             .Handle(new UpdateMyTenantCommand
             {
                 Name = tenant.Name,

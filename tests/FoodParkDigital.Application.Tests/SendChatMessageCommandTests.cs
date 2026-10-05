@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.WhatsApp.Commands;
 using FoodParkDigital.Application.WhatsApp.DTOs;
@@ -177,8 +175,6 @@ public class SendChatMessageCommandTests
     {
         private const string CustomerPhone = "+5215511112222";
 
-        private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-            .CreateMapper();
 
         private TestFixture(SqliteTestDatabase database, ApplicationDbContext context, Guid tenantId, Guid otherTenantId)
         {
@@ -217,7 +213,6 @@ public class SendChatMessageCommandTests
                 WhatsApp,
                 Notifier,
                 new TestCurrentTenantService(TenantId),
-                _mapper,
                 NullLogger<SendChatMessageCommandHandler>.Instance,
                 new FoodParkDigital.Infrastructure.Services.PhoneNormalizationService());
 
@@ -246,7 +241,6 @@ public class SendChatMessageCommandTests
                 new NoAutoReplyService(),
                 new RecordingWhatsAppService(),
                 new RecordingNotificationService(),
-                _mapper,
                 NullLogger<ProcessInboundMessageCommandHandler>.Instance);
 
             var result = await webhook.Handle(new ProcessInboundMessageCommand

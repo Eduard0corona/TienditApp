@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -38,13 +36,11 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
-    public GetOrdersByBusinessQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IMapper mapper)
+    public GetOrdersByBusinessQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedList<OrderDto>> Handle(GetOrdersByBusinessQuery request, CancellationToken cancellationToken)
@@ -62,10 +58,6 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
 
         var query = _context.Orders
             .AsNoTracking()
-            .Include(o => o.Items)
-            .Include(o => o.ServiceDetail)
-            .Include(o => o.ServicePieces)
-            .Include(o => o.Payments)
             .AsQueryable();
 
         if (request.StatusFilter.HasValue)
@@ -105,9 +97,10 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
                 || (searchPhone && o.CustomerPhone != null && o.CustomerPhone.Contains(digits)));
         }
 
-        query = query.OrderByDescending(o => o.CreatedAt);
+        // The id breaks ties: two orders created at the same instant keep their place between pages.
+        query = query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id);
 
-        var projectedQuery = query.ProjectTo<OrderDto>(_mapper.ConfigurationProvider);
+        var projectedQuery = query.Select(OrderMappings.AsDto);
         var result = await PaginatedList<OrderDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);
         result.Items.ApplyStateMetadata();

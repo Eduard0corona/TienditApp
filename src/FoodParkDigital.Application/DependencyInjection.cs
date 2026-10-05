@@ -26,7 +26,6 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(assembly);
-        services.AddAutoMapper(assembly);
 
         services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
         services.AddScoped<CurrentAccessContext>();

@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Branches.Entities;
@@ -35,11 +33,9 @@ internal sealed class SalesTestFixture : IAsyncDisposable
     {
         Context = context;
         TenantService = tenantService;
-        Mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
     }
 
     public SalesDbContext Context { get; }
-    public IMapper Mapper { get; }
     /// <summary>The tenant the DbContext filters by.</summary>
     public SalesTenantService TenantService { get; }
     public SalesCurrentUser CurrentUser { get; } = new();
@@ -131,7 +127,6 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             Context,
             TenantService,
             CurrentUser,
-            Mapper,
             customerLookup,
             Clock,
             phoneNormalization,
@@ -141,7 +136,7 @@ internal sealed class SalesTestFixture : IAsyncDisposable
     }
 
     public AddOrderPaymentCommandHandler AddPaymentHandler()
-        => new(Context, Clock, Mapper, new OrderCashService(Context, CurrentUser), CurrentUser);
+        => new(Context, Clock, new OrderCashService(Context, CurrentUser), CurrentUser);
 
     public ValueTask DisposeAsync() => Context.DisposeAsync();
 }

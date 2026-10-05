@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -54,16 +53,13 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public CreateInventoryLocationCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<InventoryLocationDto>> Handle(CreateInventoryLocationCommand request, CancellationToken cancellationToken)
@@ -114,7 +110,7 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
         _context.InventoryLocations.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = await InventoryLocationBranches.NameAsync(_context, [_mapper.Map<InventoryLocationDto>(entity)], cancellationToken);
+        var dto = await InventoryLocationBranches.NameAsync(_context, [entity.ToDto()], cancellationToken);
         return Result.Success(dto[0]);
     }
 }

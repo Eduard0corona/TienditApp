@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.WhatsApp;
 using FoodParkDigital.Application.WhatsApp.Commands;
@@ -400,8 +398,6 @@ public class ProcessInboundMessageCommandTests
         private const string CustomerPhone = "+5215511112222";
         public const string OtherCustomerPhone = "+5215533334444";
 
-        private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-            .CreateMapper();
 
         private TestFixture(SqliteTestDatabase database, ApplicationDbContext context, Guid tenantId, Guid otherTenantId)
         {
@@ -438,7 +434,6 @@ public class ProcessInboundMessageCommandTests
                 AutoReply,
                 WhatsApp,
                 Notifier,
-                _mapper,
                 NullLogger<ProcessInboundMessageCommandHandler>.Instance);
 
         public ProcessInboundMessageCommand Inbound(string externalMessageId, string fromPhone = CustomerPhone) => new()

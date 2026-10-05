@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -80,7 +78,6 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddSingleton<IEmailService>(Email);
         services.AddSingleton<ISmsService>(Sms);
         services.AddSingleton<IJwtTokenService>(Jwt);
-        services.AddSingleton<IMapper>(new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper());
 
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }

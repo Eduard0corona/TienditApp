@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -37,7 +36,6 @@ public class ProcessInboundMessageCommandHandler
     private readonly IAiAgentAutoReplyService _aiAgentAutoReplyService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IWhatsAppNotificationService _notificationService;
-    private readonly IMapper _mapper;
     private readonly ILogger<ProcessInboundMessageCommandHandler> _logger;
     private readonly MessagingConsentService _consent;
     private readonly IDateTimeProvider _clock;
@@ -47,7 +45,6 @@ public class ProcessInboundMessageCommandHandler
         IAiAgentAutoReplyService aiAgentAutoReplyService,
         IWhatsAppService whatsAppService,
         IWhatsAppNotificationService notificationService,
-        IMapper mapper,
         ILogger<ProcessInboundMessageCommandHandler> logger,
         MessagingConsentService? consent = null,
         IDateTimeProvider? clock = null)
@@ -56,7 +53,6 @@ public class ProcessInboundMessageCommandHandler
         _aiAgentAutoReplyService = aiAgentAutoReplyService;
         _whatsAppService = whatsAppService;
         _notificationService = notificationService;
-        _mapper = mapper;
         _logger = logger;
         _clock = clock ?? SystemClock.Instance;
         _consent = consent ?? new MessagingConsentService(context, _clock);
@@ -74,8 +70,8 @@ public class ProcessInboundMessageCommandHandler
             return Result.Failure<ChatMessageDto>(DuplicateMessageError);
 
         var (conversation, message) = stored.Value;
-        var messageDto = _mapper.Map<ChatMessageDto>(message);
-        var conversationDto = _mapper.Map<ConversationDto>(conversation);
+        var messageDto = message.ToDto();
+        var conversationDto = conversation.ToDto();
 
         // Notify via SignalR
         await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, messageDto);
@@ -311,8 +307,8 @@ public class ProcessInboundMessageCommandHandler
             var (repliedConversation, outboundMessage) =
                 await StoreAutoReplyAsync(request, conversation, reply, sendResult.ProviderMessageId, cancellationToken);
 
-            var outboundDto = _mapper.Map<ChatMessageDto>(outboundMessage);
-            var conversationDto = _mapper.Map<ConversationDto>(repliedConversation);
+            var outboundDto = outboundMessage.ToDto();
+            var conversationDto = repliedConversation.ToDto();
             await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, outboundDto);
         }
         catch (Exception ex)

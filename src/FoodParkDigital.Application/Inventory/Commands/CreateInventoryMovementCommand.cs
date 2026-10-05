@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -88,20 +87,17 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
     private readonly IFolioGenerator _folios;
 
     public CreateInventoryMovementCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IMapper mapper,
         IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
-        _mapper = mapper;
         _folios = folios;
     }
 
@@ -225,7 +221,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
         if (movement is null)
             throw new EntityNotFoundException("InventoryMovement", movementId);
 
-        var dto = _mapper.Map<InventoryMovementDto>(movement);
+        var dto = movement.ToDto();
         dto.Lines = await (
             from line in _context.InventoryMovementLines.AsNoTracking()
             join supply in _context.SupplyItems.AsNoTracking() on line.SupplyItemId equals supply.Id

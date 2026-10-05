@@ -37,15 +37,16 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         return database;
     }
 
-    public ApplicationDbContext CreateContext()
+    /// <param name="tenantId">The business in context: its rows pass the tenant filter (none without one).</param>
+    public ApplicationDbContext CreateContext(Guid? tenantId = null)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlServer(_connectionString)
             .Options;
-        return new ApplicationDbContext(
-            options,
-            new InMemoryApplicationDbContext.TestCurrentTenantService(),
-            new InMemoryApplicationDbContext.NullMediator());
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        if (tenantId is { } id)
+            tenant.SetTenant(id);
+        return new ApplicationDbContext(options, tenant, new InMemoryApplicationDbContext.NullMediator());
     }
 
     public async ValueTask DisposeAsync()

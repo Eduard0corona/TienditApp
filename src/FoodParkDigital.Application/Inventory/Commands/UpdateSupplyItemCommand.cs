@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -68,12 +67,10 @@ public class UpdateSupplyItemCommandValidator : AbstractValidator<UpdateSupplyIt
 public class UpdateSupplyItemCommandHandler : IRequestHandler<UpdateSupplyItemCommand, Result<SupplyItemDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public UpdateSupplyItemCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public UpdateSupplyItemCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<SupplyItemDto>> Handle(UpdateSupplyItemCommand request, CancellationToken cancellationToken)
@@ -124,6 +121,6 @@ public class UpdateSupplyItemCommandHandler : IRequestHandler<UpdateSupplyItemCo
             notes: request.Notes?.Trim());
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<SupplyItemDto>(entity));
+        return Result.Success(entity.ToDto());
     }
 }

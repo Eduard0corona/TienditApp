@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -24,20 +23,17 @@ public class SetConversationAutoRepliesCommandHandler : IRequestHandler<SetConve
     private readonly IApplicationDbContext _context;
     private readonly IWhatsAppNotificationService _notifications;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
     private readonly IDateTimeProvider _clock;
 
     public SetConversationAutoRepliesCommandHandler(
         IApplicationDbContext context,
         IWhatsAppNotificationService notifications,
         ICurrentTenantService tenantService,
-        IMapper mapper,
         IDateTimeProvider? clock = null)
     {
         _context = context;
         _notifications = notifications;
         _tenantService = tenantService;
-        _mapper = mapper;
         _clock = clock ?? SystemClock.Instance;
     }
 
@@ -59,7 +55,7 @@ public class SetConversationAutoRepliesCommandHandler : IRequestHandler<SetConve
             try
             {
                 await _context.SaveChangesAsync(cancellationToken);
-                var dto = _mapper.Map<ConversationDto>(conversation);
+                var dto = conversation.ToDto();
                 await _notifications.NotifyConversationUpdated(_tenantService.TenantId, dto);
                 return Result.Success(dto);
             }

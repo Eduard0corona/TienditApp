@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders;
@@ -460,15 +458,13 @@ public class CreateOrderCommandFlowTests
         private readonly TestCurrentUserService _currentUserService = new();
         private readonly TestDateTimeProvider _dateTimeProvider = new();
 
-        private TestFixture(ApplicationDbContext context, IMapper mapper, TestCurrentTenantService tenantService)
+        private TestFixture(ApplicationDbContext context, TestCurrentTenantService tenantService)
         {
             Context = context;
-            Mapper = mapper;
             _tenantService = tenantService;
         }
 
         public ApplicationDbContext Context { get; }
-        public IMapper Mapper { get; }
 
         public static async Task<TestFixture> CreateAsync()
         {
@@ -479,10 +475,8 @@ public class CreateOrderCommandFlowTests
             var tenantService = new TestCurrentTenantService();
             var context = new TestApplicationDbContext(options, tenantService, new NullMediator());
 
-            var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-                .CreateMapper();
 
-            var fixture = new TestFixture(context, mapper, tenantService);
+            var fixture = new TestFixture(context, tenantService);
 
             await Task.CompletedTask;
             return fixture;
@@ -503,7 +497,6 @@ public class CreateOrderCommandFlowTests
                 Context,
                 _tenantService,
                 _currentUserService,
-                Mapper,
                 customerLookup,
                 _dateTimeProvider,
                 new PhoneNormalizationService(),

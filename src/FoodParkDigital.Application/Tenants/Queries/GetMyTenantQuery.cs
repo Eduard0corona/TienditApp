@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -17,18 +16,15 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public GetMyTenantQueryHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<TenantProfileDto>> Handle(GetMyTenantQuery request, CancellationToken cancellationToken)
@@ -50,7 +46,7 @@ public class GetMyTenantQueryHandler : IRequestHandler<GetMyTenantQuery, Result<
         if (tenant is null)
             return Result.Failure<TenantProfileDto>("Negocio no encontrado.");
 
-        var dto = _mapper.Map<TenantProfileDto>(tenant);
+        var dto = tenant.ToProfileDto();
         return Result.Success(dto);
     }
 }

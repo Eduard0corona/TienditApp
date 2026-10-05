@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -74,12 +73,10 @@ public class SetProductOptionGroupsCommandValidator : AbstractValidator<SetProdu
 public class SetProductOptionGroupsCommandHandler : IRequestHandler<SetProductOptionGroupsCommand, Result<ProductDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public SetProductOptionGroupsCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public SetProductOptionGroupsCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<ProductDto>> Handle(SetProductOptionGroupsCommand request, CancellationToken cancellationToken)
@@ -100,6 +97,6 @@ public class SetProductOptionGroupsCommandHandler : IRequestHandler<SetProductOp
             .ToList());
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<ProductDto>(product));
+        return Result.Success(product.ToDto());
     }
 }

@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
@@ -21,13 +19,11 @@ public class GetInventoryLocationsQueryHandler : IRequestHandler<GetInventoryLoc
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
-    public GetInventoryLocationsQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IMapper mapper)
+    public GetInventoryLocationsQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<List<InventoryLocationDto>> Handle(GetInventoryLocationsQuery request, CancellationToken cancellationToken)
@@ -46,7 +42,7 @@ public class GetInventoryLocationsQueryHandler : IRequestHandler<GetInventoryLoc
         var locations = await query
             .OrderByDescending(x => x.IsDefault)
             .ThenBy(x => x.Name)
-            .ProjectTo<InventoryLocationDto>(_mapper.ConfigurationProvider)
+            .Select(InventoryMappings.AsDto)
             .ToListAsync(cancellationToken);
         return await InventoryLocationBranches.NameAsync(_context, locations, cancellationToken);
     }

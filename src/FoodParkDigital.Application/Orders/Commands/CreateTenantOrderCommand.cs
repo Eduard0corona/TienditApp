@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -66,7 +65,6 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
     private readonly ICustomerLookupService _customerLookupService;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IDateTimeProvider _dateTimeProvider;
@@ -76,7 +74,6 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
     public CreateTenantOrderCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IMapper mapper,
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
         IPhoneNormalizationService phoneNormalizationService,
@@ -85,7 +82,6 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
     {
         _context = context;
         _currentUserService = currentUserService;
-        _mapper = mapper;
         _customerLookupService = customerLookupService;
         _dateTimeProvider = dateTimeProvider;
         _phoneNormalizationService = phoneNormalizationService;
@@ -204,7 +200,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         _context.Orders.Add(order);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = _mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
         dto.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
         return Result.Success(dto);

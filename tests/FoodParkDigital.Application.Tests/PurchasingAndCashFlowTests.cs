@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Finance.Commands;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Purchasing.Commands;
@@ -107,7 +105,6 @@ public class PurchasingAndCashFlowTests
             .Options;
 
         await using var context = new TestApplicationDbContext(options, tenantService, new NullMediator());
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
 
         var tenant = new Tenant("Tenant Caja", "tenant-caja", BusinessType.Retail, "tenant@test.com");
         context.Tenants.Add(tenant);
@@ -144,7 +141,6 @@ public class PurchasingAndCashFlowTests
         var handler = new AddOrderPaymentCommandHandler(
             context,
             new TestDateTimeProvider(),
-            mapper,
             new OrderCashService(context, new CashierUser()));
 
         var result = await handler.Handle(new AddOrderPaymentCommand

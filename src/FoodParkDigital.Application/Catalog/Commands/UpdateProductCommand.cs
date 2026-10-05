@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -162,12 +161,10 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
 public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand, Result<ProductDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public UpdateProductCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public UpdateProductCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<ProductDto>> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
@@ -235,6 +232,6 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         product.SetFiscalData(request.SatProductCode, request.SatUnitCode, request.TaxObject);
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<ProductDto>(product));
+        return Result.Success(product.ToDto());
     }
 }

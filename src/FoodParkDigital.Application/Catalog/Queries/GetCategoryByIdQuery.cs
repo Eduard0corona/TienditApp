@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
@@ -16,12 +15,10 @@ public record GetCategoryByIdQuery(Guid Id) : IRequest<CategoryDto>;
 public class GetCategoryByIdQueryHandler : IRequestHandler<GetCategoryByIdQuery, CategoryDto>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetCategoryByIdQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetCategoryByIdQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<CategoryDto> Handle(GetCategoryByIdQuery request, CancellationToken cancellationToken)
@@ -38,6 +35,6 @@ public class GetCategoryByIdQueryHandler : IRequestHandler<GetCategoryByIdQuery,
         if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
             throw new EntityNotFoundException("Category", request.Id);
 
-        return _mapper.Map<CategoryDto>(category);
+        return category.ToDto();
     }
 }

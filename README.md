@@ -6,7 +6,7 @@ TienditApp (los proyectos conservan el nombre histórico `FoodParkDigital`) es u
 
 La decisión vigente es un monolito modular con Clean Architecture, DDD ligero y CQRS mediante MediatR:
 
-- Backend: ASP.NET Core/.NET 10 (LTS), EF Core 10, SQL Server, ASP.NET Identity, JWT, refresh tokens, 2FA, FluentValidation, AutoMapper, SignalR y Serilog.
+- Backend: ASP.NET Core/.NET 10 (LTS), EF Core 10, SQL Server, ASP.NET Identity, JWT, refresh tokens, 2FA, FluentValidation, SignalR y Serilog.
 - Frontend: React 19, TypeScript, Vite, React Router, Axios, React Hook Form y Bootstrap.
 - Pruebas: xUnit en proyectos de Domain y Application. No se encontraron proyectos de pruebas de WebApi, Infrastructure ni frontend.
 

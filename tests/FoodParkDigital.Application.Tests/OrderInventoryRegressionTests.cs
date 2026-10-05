@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Application.Orders.Commands;
@@ -48,7 +46,7 @@ public class OrderInventoryRegressionTests
         context.Orders.AddRange(pending, confirmed, ready);
         await context.SaveChangesAsync();
 
-        var result = await new GetKitchenOrdersQueryHandler(context, tenant, CreateMapper())
+        var result = await new GetKitchenOrdersQueryHandler(context, tenant)
             .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
 
         Assert.Equal(
@@ -70,7 +68,7 @@ public class OrderInventoryRegressionTests
         context.Orders.AddRange(ticket, serviceOrder);
         await context.SaveChangesAsync();
 
-        var result = await new GetKitchenOrdersQueryHandler(context, tenant, CreateMapper())
+        var result = await new GetKitchenOrdersQueryHandler(context, tenant)
             .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
 
         Assert.Equal([ticket.Id], result.Select(x => x.Id));
@@ -484,10 +482,8 @@ public class OrderInventoryRegressionTests
         new(context, new FixedClock(Now), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance);
 
     private static CreateInventoryMovementCommandHandler NewMovementHandler(ApplicationDbContext context, ICurrentTenantService tenant) =>
-        new(context, tenant, new TestCurrentUserService(), CreateMapper(), new FolioGenerator(context));
+        new(context, tenant, new TestCurrentUserService(), new FolioGenerator(context));
 
-    private static IMapper CreateMapper() =>
-        new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
 
     private static (TestDbContext Context, TestCurrentTenantService Tenant, DbContextOptions<ApplicationDbContext> Options) CreateContext()
     {

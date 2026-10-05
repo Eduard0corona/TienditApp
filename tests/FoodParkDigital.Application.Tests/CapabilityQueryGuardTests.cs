@@ -1,7 +1,5 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.Queries;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Inventory.Queries;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -28,8 +26,7 @@ public class CapabilityQueryGuardTests
         var handler = new GetProductsQueryHandler(
             fixture.Context,
             fixture.TenantService,
-            new TestDateTimeProvider(),
-            fixture.Mapper);
+            new TestDateTimeProvider());
 
         var allItems = await handler.Handle(new GetProductsQuery(), CancellationToken.None);
         Assert.NotEmpty(allItems.Items);
@@ -47,7 +44,7 @@ public class CapabilityQueryGuardTests
         await using var fixture = await TestFixture.CreateAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Inventory);
         await fixture.SeedOrdersAsync();
 
-        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService, fixture.Mapper);
+        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService);
         var result = await handler.Handle(new GetOrdersByBusinessQuery(), CancellationToken.None);
 
         Assert.NotEmpty(result.Items);
@@ -69,16 +66,14 @@ public class CapabilityQueryGuardTests
 
     private sealed class TestFixture : IAsyncDisposable
     {
-        private TestFixture(TestApplicationDbContext context, IMapper mapper, TestCurrentTenantService tenantService, Tenant tenant)
+        private TestFixture(TestApplicationDbContext context, TestCurrentTenantService tenantService, Tenant tenant)
         {
             Context = context;
-            Mapper = mapper;
             TenantService = tenantService;
             Tenant = tenant;
         }
 
         public TestApplicationDbContext Context { get; }
-        public IMapper Mapper { get; }
         public TestCurrentTenantService TenantService { get; }
         public Tenant Tenant { get; }
 
@@ -98,10 +93,8 @@ public class CapabilityQueryGuardTests
 
             tenantService.SetTenant(tenant.Id);
 
-            var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-                .CreateMapper();
 
-            return new TestFixture(context, mapper, tenantService, tenant);
+            return new TestFixture(context, tenantService, tenant);
         }
 
         public async Task SeedCatalogAsync()
