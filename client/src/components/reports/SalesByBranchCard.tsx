@@ -6,6 +6,7 @@ import { useActiveBranches } from '../../hooks/useWorkingBranch';
 import { formatMoney } from '../../utils/money';
 import BranchPicker from '../branches/BranchPicker';
 import './SalesByBranchCard.css';
+import { formatCalendarDate } from '../../utils/dates';
 
 function toInputDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -14,8 +15,7 @@ function toInputDate(date: Date) {
 }
 
 function shortDay(isoDate: string) {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  return formatCalendarDate(isoDate, { day: 'numeric', month: 'short' });
 }
 
 /**

@@ -67,7 +67,7 @@ public sealed class MessagingWorker
         {
             try
             {
-                await using var scope = CreateTenantScope(tenantId);
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
                 var services = scope.ServiceProvider;
                 var context = services.GetRequiredService<ApplicationDbContext>();
                 var campaign = await context.MessageCampaigns.FirstOrDefaultAsync(c => c.Id == campaignId, cancellationToken);
@@ -150,7 +150,7 @@ public sealed class MessagingWorker
         {
             try
             {
-                await using var scope = CreateTenantScope(tenantId);
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
                 var services = scope.ServiceProvider;
                 var context = services.GetRequiredService<ApplicationDbContext>();
                 var settings = await context.TenantSettings.AsNoTracking()
@@ -239,7 +239,7 @@ public sealed class MessagingWorker
         OutgoingSendOutcome outcome;
         try
         {
-            await using var scope = CreateTenantScope(message.TenantId);
+            await using var scope = _scopeFactory.CreateTenantScope(message.TenantId, WorkerActor);
             outcome = await scope.ServiceProvider.GetRequiredService<OutgoingMessageSender>().SendAsync(message, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -295,13 +295,5 @@ public sealed class MessagingWorker
         }
 
         return outcome.Decision == OutgoingSendDecision.Sent;
-    }
-
-    private AsyncServiceScope CreateTenantScope(Guid tenantId)
-    {
-        var scope = _scopeFactory.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<ICurrentTenantService>().SetTenant(tenantId);
-        scope.ServiceProvider.GetRequiredService<IBackgroundExecutionContext>().SetActor(null, WorkerActor);
-        return scope;
     }
 }

@@ -2,8 +2,9 @@ import type { CashSessionDto, DailyCashCutDto } from '../../types';
 import { CashSessionStatus } from '../../types';
 import { formatMoney, toCents } from '../../utils/money';
 import { describeDifference } from './cashFormat';
+import { formatInBusinessZone } from '../../utils/dates';
 
-const dateTime = (value: string) => new Date(value).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+const dateTime = (value: string) => formatInBusinessZone(value, { dateStyle: 'short', timeStyle: 'short' });
 
 /** Wallet and other methods, shown together as "Otros" (added in cents). */
 export function getOtherMethodsTotal(cut: DailyCashCutDto): number {

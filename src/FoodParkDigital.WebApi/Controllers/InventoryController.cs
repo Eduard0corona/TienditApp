@@ -158,6 +158,7 @@ public class InventoryController : ControllerBase
         [FromQuery] InventoryMovementReason? movementReason,
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -167,6 +168,7 @@ public class InventoryController : ControllerBase
             MovementReason = movementReason,
             FromDate = fromDate,
             ToDate = toDate,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         });
@@ -180,6 +182,7 @@ public class InventoryController : ControllerBase
         [FromQuery] Guid? inventoryLocationId,
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -189,6 +192,7 @@ public class InventoryController : ControllerBase
             InventoryLocationId = inventoryLocationId,
             FromDate = fromDate,
             ToDate = toDate,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         });

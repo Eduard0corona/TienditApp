@@ -6,7 +6,6 @@ using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
-using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.Commands;
 
@@ -47,19 +46,19 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IWhatsAppService _whatsAppService;
-    private readonly ILogger<CreateAppointmentCommandHandler> _logger;
+    private readonly AppointmentNotices _notices;
+    private readonly IOutgoingMessageSignal? _signal;
 
     public CreateAppointmentCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        IWhatsAppService whatsAppService,
-        ILogger<CreateAppointmentCommandHandler> logger)
+        AppointmentNotices notices,
+        IOutgoingMessageSignal? signal = null)
     {
         _context = context;
         _tenantService = tenantService;
-        _whatsAppService = whatsAppService;
-        _logger = logger;
+        _notices = notices;
+        _signal = signal;
     }
 
     public async Task<Result<AppointmentDto>> Handle(CreateAppointmentCommand request, CancellationToken cancellationToken)
@@ -86,9 +85,10 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
             staffUserId: request.StaffUserId);
 
         _context.Appointments.Add(entity);
+        var noticeQueued = await _notices.QueueScheduledAsync(entity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-
-        await AppointmentNotifier.NotifyScheduledAsync(_context, _whatsAppService, _logger, entity, cancellationToken);
+        if (noticeQueued)
+            _signal?.Notify();
 
         return Result.Success(AppointmentDto.From(entity));
     }

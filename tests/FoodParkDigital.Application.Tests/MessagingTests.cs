@@ -144,7 +144,7 @@ public class MessagingTests
         fixture.Context.Appointments.Add(appointment);
         await fixture.Context.SaveChangesAsync();
         var whatsApp = new FakeWhatsApp();
-        var sender = new OutgoingMessageSender(fixture.Context, whatsApp, new MessagingConsentService(fixture.Context, fixture.Clock), fixture.Clock);
+        var sender = new OutgoingMessageSender(fixture.Context, whatsApp, new MessagingConsentService(fixture.Context, fixture.TenantService, fixture.Clock), fixture.Clock);
         var reminder = new OutgoingMessage(tenant.Id, MessagePurpose.AppointmentReminder, "+525512345678", "Luis", "Hola Luis", "cita", "es_MX",
             ["Luis"], SalesTestFixture.Now, AppointmentReminderPlanner.Key(appointment), appointmentId: appointment.Id);
         var promo = new OutgoingMessage(tenant.Id, MessagePurpose.Campaign, "+525599999999", null, "Hola cliente", null, "es_MX", [], SalesTestFixture.Now);
@@ -165,6 +165,37 @@ public class MessagingTests
         Assert.Equal(OutgoingSendDecision.Skipped, optedOut.Decision);
         Assert.Equal(OutgoingMessageSender.OptedOutReason, optedOut.Reason);
         Assert.Equal([("template:cita", "+525512345678"), ("text", "+525599999999")], whatsApp.Sent);
+    }
+
+    [Fact]
+    public async Task AppointmentNotices_ShouldReachCustomersWhoOptedOut_ButNeverArriveStaleOrLate()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service | TenantCapability.Appointments);
+        var appointment = new Appointment(tenant.Id, "Luis", "5512345678", "Corte", SalesTestFixture.Now.AddHours(20), SalesTestFixture.Now.AddHours(21));
+        var older = new Appointment(tenant.Id, "Luis", "5512345678", "Tinte", SalesTestFixture.Now.AddHours(30), SalesTestFixture.Now.AddHours(31));
+        fixture.Context.Appointments.AddRange(appointment, older);
+        // BAJA stops promotions and reminders, not the notices of the customer's own appointments.
+        fixture.Context.MessagingOptOuts.Add(new MessagingOptOut(tenant.Id, "+5215512345678", OptOutSource.CustomerKeyword, SalesTestFixture.Now));
+        var booked = Notice(tenant.Id, appointment.Id, "quedó agendada", SalesTestFixture.Now.AddMinutes(-10));
+        var moved = Notice(tenant.Id, appointment.Id, "cambió", SalesTestFixture.Now.AddMinutes(-5));
+        var forgotten = Notice(tenant.Id, older.Id, "quedó agendada", SalesTestFixture.Now.AddHours(-25));
+        fixture.Context.OutgoingMessages.AddRange(booked, moved, forgotten);
+        await fixture.Context.SaveChangesAsync();
+        var whatsApp = new FakeWhatsApp();
+        var sender = new OutgoingMessageSender(fixture.Context, whatsApp, new MessagingConsentService(fixture.Context, fixture.TenantService, fixture.Clock), fixture.Clock);
+
+        // The first notice is retried after the second was queued: it must not arrive last with the old time.
+        var stale = await sender.SendAsync(booked, CancellationToken.None);
+        var latest = await sender.SendAsync(moved, CancellationToken.None);
+        var late = await sender.SendAsync(forgotten, CancellationToken.None);
+
+        Assert.Equal(OutgoingSendDecision.Skipped, stale.Decision);
+        Assert.Equal(OutgoingMessageSender.NoticeSupersededReason, stale.Reason);
+        Assert.Equal(OutgoingSendDecision.Sent, latest.Decision);
+        Assert.Equal(OutgoingSendDecision.Skipped, late.Decision);
+        Assert.Equal(OutgoingMessageSender.NoticeExpiredReason, late.Reason);
+        Assert.Equal([("text", "+525512345678")], whatsApp.Sent);
     }
 
     [Fact]
@@ -205,11 +236,12 @@ public class MessagingTests
         var autoReply = new CountingAutoReply();
         var handler = new ProcessInboundMessageCommandHandler(
             fixture.Context,
+            fixture.TenantService,
             autoReply,
             whatsApp,
             new NullNotifications(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessInboundMessageCommandHandler>.Instance,
-            new MessagingConsentService(fixture.Context, fixture.Clock));
+            new MessagingConsentService(fixture.Context, fixture.TenantService, fixture.Clock));
 
         var baja = await handler.Handle(Inbound(tenant.Id, "wamid.in.1", "Baja"), CancellationToken.None);
         var optOut = await fixture.Context.MessagingOptOuts.SingleAsync();
@@ -227,6 +259,10 @@ public class MessagingTests
         Assert.Contains(conversation.Messages, m => m.Body == MessagingDefaults.OptInReply);
         Assert.Equal(2, await fixture.Context.AuditLogs.CountAsync(a => a.Action == "MessagingOptOut" || a.Action == "MessagingOptIn"));
     }
+
+    private static OutgoingMessage Notice(Guid tenantId, Guid appointmentId, string body, DateTimeOffset queuedAt)
+        => new(tenantId, MessagePurpose.AppointmentNotice, "+525512345678", "Luis", $"Hola Luis, tu cita {body}.", null, "es_MX", [],
+            queuedAt, appointmentId: appointmentId) { CreatedAt = queuedAt };
 
     private static ProcessInboundMessageCommand Inbound(Guid tenantId, string id, string body) => new()
     {

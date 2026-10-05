@@ -165,15 +165,15 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label">
-                    Phone Number ID {isEnabled && <span className="text-danger">*</span>}
+                  <label htmlFor="whatsappsettings-phone-number-id" className="form-label">
+                    ID del número de teléfono {isEnabled && <span className="text-danger">*</span>}
                   </label>
-                  <input
+                  <input id="whatsappsettings-phone-number-id"
                     className={`form-control ${configErrors.phoneNumberId ? 'is-invalid' : ''}`}
                     type="text"
                     placeholder="Ej: 123456789012345"
                     {...registerConfig('phoneNumberId', {
-                      required: isEnabled ? 'El Phone Number ID es requerido' : false,
+                      required: isEnabled ? 'Escribe el ID del número de teléfono.' : false,
                     })}
                   />
                   {configErrors.phoneNumberId && (
@@ -183,26 +183,26 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label">
-                    WABA ID {isEnabled && <span className="text-danger">*</span>}
+                  <label htmlFor="whatsappsettings-waba-id" className="form-label">
+                    ID de la cuenta de WhatsApp Business {isEnabled && <span className="text-danger">*</span>}
                   </label>
-                  <input
+                  <input id="whatsappsettings-waba-id"
                     className={`form-control ${configErrors.wabaId ? 'is-invalid' : ''}`}
                     type="text"
                     placeholder="Ej: 123456789012345"
                     {...registerConfig('wabaId', {
-                      required: isEnabled ? 'El WABA ID es requerido' : false,
+                      required: isEnabled ? 'Escribe el ID de la cuenta de WhatsApp Business.' : false,
                     })}
                   />
                   {configErrors.wabaId && (
                     <div className="invalid-feedback">{configErrors.wabaId.message}</div>
                   )}
-                  <small className="text-muted">WhatsApp Business Account ID</small>
+                  <small className="text-muted">En Meta Business Suite aparece como "WhatsApp Business Account ID" (WABA)</small>
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label">Access Token</label>
-                  <input
+                  <label htmlFor="whatsappsettings-access-token" className="form-label">Token de acceso</label>
+                  <input id="whatsappsettings-access-token"
                     className="form-control"
                     type="password"
                     placeholder={config?.hasAccessToken ? '••••••••••••••••' : 'Pegar token de Meta'}
@@ -216,8 +216,8 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label">Número Visible</label>
-                  <input
+                  <label htmlFor="whatsappsettings-numero-visible" className="form-label">Número Visible</label>
+                  <input id="whatsappsettings-numero-visible"
                     className="form-control"
                     type="text"
                     placeholder="Ej: +5215512345678"
@@ -326,10 +326,10 @@ export default function WhatsAppSettings() {
 
               <form onSubmit={handleSendSubmit(onSendMessage)}>
                 <div className="mb-3">
-                  <label className="form-label">
+                  <label htmlFor="whatsappsettings-numero-de-telefono" className="form-label">
                     Número de Teléfono <span className="text-danger">*</span>
                   </label>
-                  <input
+                  <input id="whatsappsettings-numero-de-telefono"
                     className={`form-control ${sendErrors.phoneNumber ? 'is-invalid' : ''}`}
                     type="text"
                     placeholder="+5215512345678"
@@ -348,10 +348,10 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label">
+                  <label htmlFor="whatsappsettings-mensaje" className="form-label">
                     Mensaje <span className="text-danger">*</span>
                   </label>
-                  <textarea
+                  <textarea id="whatsappsettings-mensaje"
                     className={`form-control ${sendErrors.message ? 'is-invalid' : ''}`}
                     rows={4}
                     placeholder="Escribe tu mensaje..."
@@ -409,9 +409,9 @@ export default function WhatsAppSettings() {
                 </p>
 
                 <div className="mb-3">
-                  <label className="form-label fw-semibold">Callback URL</label>
+                  <label htmlFor="whatsappsettings-callback-url" className="form-label fw-semibold">URL de devolución de llamada (Callback URL)</label>
                   <div className="input-group">
-                    <input
+                    <input id="whatsappsettings-callback-url"
                       type="text"
                       className="form-control font-monospace"
                       value={`${window.location.origin}/api/v1/whatsapp/webhook`}
@@ -431,9 +431,9 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label fw-semibold">Verify Token</label>
+                  <label htmlFor="whatsappsettings-verify-token" className="form-label fw-semibold">Token de verificación (Verify Token)</label>
                   <div className="input-group">
-                    <input
+                    <input id="whatsappsettings-verify-token"
                       type="text"
                       className="form-control font-monospace"
                       value={config.verifyToken}
@@ -451,7 +451,7 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-0">
-                  <label className="form-label fw-semibold">Webhook Fields</label>
+                  <div className="form-label fw-semibold">Campos del webhook</div>
                   <p className="text-muted mb-1">
                     Suscribe el webhook al campo <code>messages</code> en Meta for Developers.
                   </p>

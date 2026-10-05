@@ -170,8 +170,8 @@ export default function SuppliersList() {
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <div className="d-flex align-items-center gap-2">
-              <label className="form-label mb-0">Estado</label>
-              <select
+              <label htmlFor="supplierslist-estado" className="form-label mb-0">Estado</label>
+              <select id="supplierslist-estado"
                 className="form-select form-select-sm"
                 value={activeFilter}
                 onChange={(e) => {
@@ -253,56 +253,56 @@ export default function SuppliersList() {
         <Modal.Body>
           <div className="row">
             <div className="col-12 mb-2">
-              <label className="form-label">Nombre *</label>
-              <input
+              <label htmlFor="supplierslist-nombre" className="form-label">Nombre *</label>
+              <input id="supplierslist-nombre"
                 className="form-control"
                 value={form.name}
                 onChange={(e) => setForm((x) => ({ ...x, name: e.target.value }))}
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Contacto</label>
-              <input
+              <label htmlFor="supplierslist-contacto" className="form-label">Contacto</label>
+              <input id="supplierslist-contacto"
                 className="form-control"
                 value={form.contactName}
                 onChange={(e) => setForm((x) => ({ ...x, contactName: e.target.value }))}
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Teléfono</label>
-              <input
+              <label htmlFor="supplierslist-telefono" className="form-label">Teléfono</label>
+              <input id="supplierslist-telefono"
                 className="form-control"
                 value={form.phone}
                 onChange={(e) => setForm((x) => ({ ...x, phone: e.target.value }))}
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Email</label>
-              <input
+              <label htmlFor="supplierslist-email" className="form-label">Email</label>
+              <input id="supplierslist-email"
                 className="form-control"
                 value={form.email}
                 onChange={(e) => setForm((x) => ({ ...x, email: e.target.value }))}
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">RFC/NIF</label>
-              <input
+              <label htmlFor="supplierslist-rfc-nif" className="form-label">RFC/NIF</label>
+              <input id="supplierslist-rfc-nif"
                 className="form-control"
                 value={form.taxId}
                 onChange={(e) => setForm((x) => ({ ...x, taxId: e.target.value }))}
               />
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Dirección</label>
-              <input
+              <label htmlFor="supplierslist-direccion" className="form-label">Dirección</label>
+              <input id="supplierslist-direccion"
                 className="form-control"
                 value={form.address}
                 onChange={(e) => setForm((x) => ({ ...x, address: e.target.value }))}
               />
             </div>
             <div className="col-12">
-              <label className="form-label">Notas</label>
-              <textarea
+              <label htmlFor="supplierslist-notas" className="form-label">Notas</label>
+              <textarea id="supplierslist-notas"
                 className="form-control"
                 rows={2}
                 value={form.notes}

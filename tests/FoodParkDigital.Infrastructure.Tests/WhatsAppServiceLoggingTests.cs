@@ -1,4 +1,5 @@
 using System.Net;
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
@@ -23,40 +24,57 @@ public class WhatsAppServiceLoggingTests
     public async Task SendTextMessageAsync_WhenMetaRejectsMessage_LogsStatusAndProviderCodeOutsideDevelopment()
     {
         var http = new StubHttpMessageHandler(HttpStatusCode.BadRequest, MetaRejectedMessageResponse);
+        var tenantId = Guid.NewGuid();
         await using var context = InMemoryApplicationDbContext.Create();
-        var tenantId = await SeedWhatsAppConfigAsync(context);
+        await SeedWhatsAppConfigAsync(context, tenantId);
         var logger = new CapturingLogger<WhatsAppService>();
-        var service = new WhatsAppService(context, http, new TestHostEnvironment(Environments.Production), logger);
+        var clientLogger = new CapturingLogger<WhatsAppCloudClient>();
+        var service = new WhatsAppService(context, Scope(tenantId), Client(http, Environments.Production, clientLogger), logger);
 
         var result = await service.SendTextMessageAsync(tenantId, PhoneNumber, Message);
 
         Assert.True(result.IsFailure);
         Assert.Single(http.Requests);
-        Assert.Null(logger.FirstMentioning(NationalNumber));
-        Assert.Null(logger.FirstMentioning("ORD-000123"));
-        Assert.Null(logger.FirstMentioning(AccessToken));
-        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        foreach (var text in new[] { NationalNumber, "ORD-000123", AccessToken })
+        {
+            Assert.Null(logger.FirstMentioning(text));
+            Assert.Null(clientLogger.FirstMentioning(text));
+        }
+
+        var error = Assert.Single(clientLogger.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Equal(HttpStatusCode.BadRequest, error["StatusCode"]);
         Assert.Equal(131008, error["ProviderErrorCode"]);
+        Assert.Contains("***5678", error.Message);
     }
 
     [Fact]
     public async Task SendTextMessageAsync_WhenMetaRejectsMessageInDevelopment_LogsProviderResponseForDebugging()
     {
         var http = new StubHttpMessageHandler(HttpStatusCode.BadRequest, MetaRejectedMessageResponse);
+        var tenantId = Guid.NewGuid();
         await using var context = InMemoryApplicationDbContext.Create();
-        var tenantId = await SeedWhatsAppConfigAsync(context);
-        var logger = new CapturingLogger<WhatsAppService>();
-        var service = new WhatsAppService(context, http, new TestHostEnvironment(Environments.Development), logger);
+        await SeedWhatsAppConfigAsync(context, tenantId);
+        var clientLogger = new CapturingLogger<WhatsAppCloudClient>();
+        var service = new WhatsAppService(
+            context, Scope(tenantId), Client(http, Environments.Development, clientLogger), new CapturingLogger<WhatsAppService>());
 
         await service.SendTextMessageAsync(tenantId, PhoneNumber, Message);
 
-        Assert.Contains(logger.Entries, entry => entry.Message.Contains("ORD-000123"));
+        Assert.Contains(clientLogger.Entries, entry => entry.Message.Contains("ORD-000123"));
     }
 
-    private static async Task<Guid> SeedWhatsAppConfigAsync(ApplicationDbContext context)
+    private static WhatsAppCloudClient Client(StubHttpMessageHandler http, string environmentName, CapturingLogger<WhatsAppCloudClient> logger)
+        => new(http, new TestHostEnvironment(environmentName), logger);
+
+    private static ICurrentTenantService Scope(Guid tenantId)
     {
-        var tenantId = Guid.NewGuid();
+        var scope = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        scope.SetTenant(tenantId);
+        return scope;
+    }
+
+    private static async Task SeedWhatsAppConfigAsync(ApplicationDbContext context, Guid tenantId)
+    {
         var config = new WhatsAppConfig(tenantId);
         config.Update(
             isEnabled: true,
@@ -66,6 +84,5 @@ public class WhatsAppServiceLoggingTests
             displayPhoneNumber: null);
         context.WhatsAppConfigs.Add(config);
         await context.SaveChangesAsync();
-        return tenantId;
     }
 }

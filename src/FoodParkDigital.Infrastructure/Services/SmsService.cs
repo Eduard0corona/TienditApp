@@ -1,8 +1,5 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -12,13 +9,16 @@ using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Infrastructure.Services;
 
+/// <summary>
+/// Verification codes: by WhatsApp with the platform's account when there is one (through the single Meta client),
+/// otherwise by SMS (Twilio).
+/// </summary>
 public class SmsService : ISmsService
 {
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-
     private readonly IApplicationDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly WhatsAppCloudClient _whatsApp;
     private readonly ILogger<SmsService> _logger;
     private readonly bool _logSensitiveData;
 
@@ -26,12 +26,14 @@ public class SmsService : ISmsService
         IApplicationDbContext context,
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
+        WhatsAppCloudClient whatsApp,
         IHostEnvironment environment,
         ILogger<SmsService> logger)
     {
         _context = context;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
+        _whatsApp = whatsApp;
         _logger = logger;
         // SMS bodies carry OTP codes: they, full phone numbers and provider responses are only logged in Development.
         _logSensitiveData = environment.IsDevelopment();
@@ -128,67 +130,15 @@ public class SmsService : ISmsService
             ? phoneNumber
             : $"+{phoneNumber}";
 
-        var body = new
-        {
-            messaging_product = "whatsapp",
-            to = toPhone,
-            type = "template",
-            template = new
-            {
-                name = config.OtpTemplateName,
-                language = new { code = config.OtpTemplateLanguageCode },
-                components = new[]
-                {
-                    new
-                    {
-                        type = "body",
-                        parameters = new[]
-                        {
-                            new
-                            {
-                                type = "text",
-                                text = code
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient("WhatsApp");
-            var url = $"{GraphApiBaseUrl}/{config.PhoneNumberId}/messages";
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.AccessToken);
-            request.Content = JsonContent.Create(body, options: new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            });
-
-            using var response = await client.SendAsync(request);
-            if (response.IsSuccessStatusCode)
-            {
-                _logger.LogInformation("OTP sent successfully via WhatsApp to {PhoneNumber}", LoggablePhone(toPhone));
-                return true;
-            }
-
-            var responseBody = await response.Content.ReadAsStringAsync();
-            _logger.LogError(
-                "WhatsApp OTP send failed for {PhoneNumber}. Status: {StatusCode}. Provider error code: {ProviderErrorCode}",
-                LoggablePhone(toPhone),
-                response.StatusCode,
-                LogRedaction.GetProviderErrorCode(responseBody));
-            LogProviderResponseInDevelopment("WhatsApp", responseBody);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error while sending OTP via owner WhatsApp config.");
-            return false;
-        }
+        // The client logs the outcome with the recipient masked; a failure falls back to SMS.
+        var result = await _whatsApp.SendTemplateAsync(
+            new WhatsAppSenderAccount(config.PhoneNumberId, config.AccessToken),
+            toPhone,
+            config.OtpTemplateName,
+            config.OtpTemplateLanguageCode,
+            [code],
+            CancellationToken.None);
+        return result.IsSuccess;
     }
 
     private string LoggablePhone(string phoneNumber)

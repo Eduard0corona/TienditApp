@@ -68,6 +68,8 @@ export const inventoryApi = {
     movementReason?: InventoryMovementReason;
     fromDate?: string;
     toDate?: string;
+    /** Folio, reference, document or counterparty, over every page. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) =>
@@ -84,6 +86,8 @@ export const inventoryApi = {
     inventoryLocationId?: string;
     fromDate?: string;
     toDate?: string;
+    /** Supply, location, folio or reference, over every page. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) =>

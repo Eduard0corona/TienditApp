@@ -297,8 +297,8 @@ export default function CustomersList() {
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
             <div className="mb-3">
-              <label className="form-label">Nombre *</label>
-              <input
+              <label htmlFor="customerslist-nombre" className="form-label">Nombre *</label>
+              <input id="customerslist-nombre"
                 type="text"
                 className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                 {...register('name', {
@@ -310,8 +310,8 @@ export default function CustomersList() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Teléfono *</label>
-              <input
+              <label htmlFor="customerslist-telefono" className="form-label">Teléfono *</label>
+              <input id="customerslist-telefono"
                 type="text"
                 className={`form-control ${errors.phone ? 'is-invalid' : ''}`}
                 placeholder="55 1234 5678"
@@ -325,8 +325,8 @@ export default function CustomersList() {
             </div>
 
             <div className="mb-0">
-              <label className="form-label">Email</label>
-              <input
+              <label htmlFor="customerslist-email" className="form-label">Email</label>
+              <input id="customerslist-email"
                 type="email"
                 className={`form-control ${errors.email ? 'is-invalid' : ''}`}
                 {...register('email', {

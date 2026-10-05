@@ -61,6 +61,36 @@ public class UpdateMyTenantCommandTests
     }
 
     [Fact]
+    public async Task Handle_ShouldKeepTheTimeZone_UnlessAnotherOneIsPicked()
+    {
+        await using var fixture = await TestFixture.CreateAsync(TenantCapability.Food);
+        var handler = new UpdateMyTenantCommandHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
+
+        var unchanged = await handler.Handle(
+            new UpdateMyTenantCommand { Name = "Tenant Demo", ContactEmail = "tenant@demo.com" },
+            CancellationToken.None);
+        var moved = await handler.Handle(
+            new UpdateMyTenantCommand { Name = "Tenant Demo", ContactEmail = "tenant@demo.com", TimeZone = "America/Tijuana" },
+            CancellationToken.None);
+
+        Assert.Equal("America/Mexico_City", unchanged.Value!.TimeZone);
+        Assert.Equal("America/Tijuana", moved.Value!.TimeZone);
+        Assert.Equal("America/Tijuana", (await fixture.Context.TenantSettings.AsNoTracking().SingleAsync()).TimeZone);
+    }
+
+    [Theory]
+    [InlineData("America/Cancun", true)]
+    [InlineData("Europe/Madrid", false)]
+    [InlineData("UTC", false)]
+    public void Validator_ShouldOnlyTakeTheZonesOfTheList(string timeZone, bool valid)
+    {
+        var result = new UpdateMyTenantCommandValidator().Validate(
+            new UpdateMyTenantCommand { Name = "Tenant Demo", ContactEmail = "tenant@demo.com", TimeZone = timeZone });
+
+        Assert.Equal(valid, result.IsValid);
+    }
+
+    [Fact]
     public async Task Handle_ShouldFail_WhenNoRequestTenantAndNoActiveMembership()
     {
         await using var fixture = await TestFixture.CreateAsync(TenantCapability.Food);

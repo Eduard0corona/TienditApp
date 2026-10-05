@@ -8,7 +8,6 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.Commands;
 
@@ -32,17 +31,17 @@ public class UpdateAppointmentStatusCommandValidator : AbstractValidator<UpdateA
 public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppointmentStatusCommand, Result<AppointmentDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IWhatsAppService _whatsAppService;
-    private readonly ILogger<UpdateAppointmentStatusCommandHandler> _logger;
+    private readonly AppointmentNotices _notices;
+    private readonly IOutgoingMessageSignal? _signal;
 
     public UpdateAppointmentStatusCommandHandler(
         IApplicationDbContext context,
-        IWhatsAppService whatsAppService,
-        ILogger<UpdateAppointmentStatusCommandHandler> logger)
+        AppointmentNotices notices,
+        IOutgoingMessageSignal? signal = null)
     {
         _context = context;
-        _whatsAppService = whatsAppService;
-        _logger = logger;
+        _notices = notices;
+        _signal = signal;
     }
 
     public async Task<Result<AppointmentDto>> Handle(UpdateAppointmentStatusCommand request, CancellationToken cancellationToken)
@@ -51,10 +50,12 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
             .FirstOrDefaultAsync(x => x.Id == request.AppointmentId, cancellationToken)
             ?? throw new EntityNotFoundException("Appointment", request.AppointmentId);
 
+        var changed = entity.Status != request.NewStatus;
         entity.ChangeStatus(request.NewStatus);
+        var noticeQueued = changed && await _notices.QueueStatusChangedAsync(entity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-
-        await AppointmentNotifier.NotifyStatusChangedAsync(_whatsAppService, _logger, entity, cancellationToken);
+        if (noticeQueued)
+            _signal?.Notify();
 
         return Result.Success(AppointmentDto.From(entity));
     }

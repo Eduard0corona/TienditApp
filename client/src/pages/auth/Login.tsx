@@ -119,13 +119,15 @@ export default function Login() {
                               placeholder="Ingresa tu contraseña"
                               {...register('password', { required: 'La contraseña es requerida' })}
                             />
-                            <div
+                            <button
+                              type="button"
                               className={`input-group-text ${showPassword ? 'show-password' : ''}`}
                               onClick={() => setShowPassword(!showPassword)}
-                              style={{ cursor: 'pointer' }}
+                              aria-label={showPassword ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+                              aria-pressed={showPassword}
                             >
-                              <span className="password-eye"></span>
-                            </div>
+                              <span className="password-eye" aria-hidden="true"></span>
+                            </button>
                           </div>
                           {errors.password && (
                             <div className="text-danger mt-1" style={{ fontSize: '0.875em' }}>

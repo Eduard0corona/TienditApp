@@ -10,6 +10,8 @@ import { getRoleLabel, getUserRoleLabel } from '../../utils/labels';
 import { getAccess } from '../../utils/access';
 import { getApiErrorMessage } from '../../api/errors';
 import BrandLogo from '../common/BrandLogo';
+import AttentionBell from './AttentionBell';
+import CashStatusChip from './CashStatusChip';
 import CreateBusinessModal from '../business/CreateBusinessModal';
 import { applyTheme, storeTheme } from '../../utils/theme';
 
@@ -53,6 +55,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const [creatingBusiness, setCreatingBusiness] = useState(false);
   // Employees and owners may open a business of their own; a customer account is customer everywhere.
   const canOpenBusiness = !!user && user.role !== 'CUSTOMER' && user.role !== 'SUPER_ADMIN';
+  const isBusinessMember = !!tenant && !!user && user.role !== 'CUSTOMER' && user.role !== 'SUPER_ADMIN';
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',
@@ -235,7 +238,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
           <li>
             <button type="button" className="topbar-search-button" onClick={onOpenSearch} aria-label="Buscar (Ctrl K)">
               <i className="ri-search-line" aria-hidden="true"></i>
-              <span className="d-none d-lg-inline">Buscar pedidos, clientes…</span>
+              <span className="d-none d-lg-inline">Buscar</span>
               <kbd className="d-none d-xl-inline">Ctrl K</kbd>
             </button>
           </li>
@@ -247,6 +250,19 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                 <span className="ms-1">Nueva venta</span>
                 <kbd className="d-none d-xl-inline ms-2">F2</kbd>
               </Link>
+            </li>
+          )}
+
+          {access.cash && (
+            <li className="d-none d-lg-inline-block">
+              <CashStatusChip />
+            </li>
+          )}
+
+          {/* What needs someone now: the API counts only what this person may handle. */}
+          {isBusinessMember && (
+            <li>
+              <AttentionBell />
             </li>
           )}
 
@@ -266,13 +282,12 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
 
           {/* User Dropdown */}
           <li className="dropdown">
-            <a
-              className="nav-link dropdown-toggle arrow-none nav-user px-2"
+            <button
+              type="button"
+              className="nav-link dropdown-toggle arrow-none nav-user px-2 border-0 bg-transparent"
               data-bs-toggle="dropdown"
-              href="#"
-              role="button"
-              aria-haspopup="false"
               aria-expanded="false"
+              aria-label="Menú de tu cuenta"
             >
               <span className="account-user-avatar">
                 <img
@@ -288,7 +303,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                 </h5>
                 <h6 className="my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</h6>
               </span>
-            </a>
+            </button>
             <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated profile-dropdown">
               {/* Welcome header */}
               <div className="dropdown-header noti-title">
@@ -314,10 +329,10 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                 </button>
               )}
 
-              <a href="#" className="dropdown-item" onClick={handleLogout}>
-                <i className="ri-login-circle-line font-16 me-1"></i>
+              <button type="button" className="dropdown-item" onClick={handleLogout}>
+                <i className="ri-login-circle-line font-16 me-1" aria-hidden="true"></i>
                 <span>Cerrar sesión</span>
-              </a>
+              </button>
             </div>
           </li>
         </ul>

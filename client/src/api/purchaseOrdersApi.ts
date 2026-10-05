@@ -13,6 +13,8 @@ export const purchaseOrdersApi = {
     status?: PurchaseOrderStatus;
     fromDate?: string;
     toDate?: string;
+    /** Folio, supplier or reference, over every page. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) => api.get<PaginatedList<PurchaseOrderDto>>('/purchaseorders', { params }),
@@ -29,6 +31,10 @@ export const purchaseOrdersApi = {
   /** Draft → sent to the supplier. */
   send: (id: string) =>
     api.post<PurchaseOrderDto>(`/purchaseorders/${id}/send`),
+
+  /** Part arrived and the rest will not: closes with what came in. */
+  close: (id: string, reason?: string) =>
+    api.post<PurchaseOrderDto>(`/purchaseorders/${id}/close`, { reason }),
 
   /** Only while nothing has been received. */
   cancel: (id: string) =>

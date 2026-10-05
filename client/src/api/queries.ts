@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest, type Schemas } from './typedClient';
 
@@ -11,7 +12,12 @@ export const queryKeys = {
   reminderHistory: ['messaging', 'reminders', 'history'] as const,
   messagingTemplates: (purpose?: number) => ['messaging', 'templates', purpose ?? 'all'] as const,
   cfdiDraft: (orderId: string, receiver?: CfdiReceiver) => ['orders', orderId, 'cfdi-draft', receiver ?? null] as const,
+  attention: ['attention'] as const,
+  currentCashSession: ['cash', 'current-session'] as const,
 };
+
+// The bell and the drawer chip stay current without a live connection of their own.
+const ATTENTION_REFRESH_MS = 60_000;
 
 /** Fiscal data of the customer an invoice is for (CFDI 4.0 receptor). */
 export interface CfdiReceiver {
@@ -33,6 +39,35 @@ export function useCfdiDraft(orderId: string, receiver?: CfdiReceiver) {
     }),
     retry: false,
   });
+}
+
+/** What needs someone now, counted by the API only for what the person may handle (the bell and Inicio). */
+export function useAttention(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.attention,
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/dashboard/attention', { signal }),
+    enabled,
+    refetchInterval: ATTENTION_REFRESH_MS,
+  });
+}
+
+/** The person's open drawer, or null: the chip in the top bar. */
+export function useCurrentCashSession(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.currentCashSession,
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/cash/current-session', { signal }),
+    enabled,
+    refetchInterval: ATTENTION_REFRESH_MS,
+  });
+}
+
+/** After a drawer opens, closes or moves money: the drawer chip and the bell read it again. */
+export function useRefreshCashState() {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.currentCashSession });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
+  }, [queryClient]);
 }
 
 /** What the server says the user can do now (fresher than the token's claims). */

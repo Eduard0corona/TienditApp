@@ -396,6 +396,7 @@ export interface paths {
                     action?: string;
                     from?: string;
                     to?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -2005,6 +2006,7 @@ export interface paths {
                     transactionType?: components["schemas"]["CashTransactionType"];
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -2811,6 +2813,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AttentionDto"];
+                        "application/json": components["schemas"]["AttentionDto"];
+                        "text/json": components["schemas"]["AttentionDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees": {
         parameters: {
             query?: never;
@@ -3492,6 +3531,7 @@ export interface paths {
                     movementReason?: components["schemas"]["InventoryMovementReason"];
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -3563,6 +3603,7 @@ export interface paths {
                     inventoryLocationId?: string;
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -6276,6 +6317,7 @@ export interface paths {
                     status?: components["schemas"]["PurchaseOrderStatus"];
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -6436,6 +6478,51 @@ export interface paths {
                 cookie?: never;
             };
             requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurchaseOrderDto"];
+                        "application/json": components["schemas"]["PurchaseOrderDto"];
+                        "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchaseorders/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ClosePurchaseOrderRequest"];
+                    "text/json": components["schemas"]["ClosePurchaseOrderRequest"];
+                    "application/*+json": components["schemas"]["ClosePurchaseOrderRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -7859,6 +7946,16 @@ export interface components {
             /** Format: int32 */
             trialDays?: number | null;
         };
+        AttentionDto: {
+            items: components["schemas"]["AttentionItemDto"][];
+        };
+        AttentionItemDto: {
+            key: string;
+            /** Format: int32 */
+            count: number;
+            /** Format: int32 */
+            urgentCount: number;
+        };
         AuditLogDto: {
             /** Format: uuid */
             id: string;
@@ -8244,6 +8341,9 @@ export interface components {
             closingAmount: number;
             notes?: string | null;
             cashCount?: components["schemas"]["CashCountLineDto"][] | null;
+        };
+        ClosePurchaseOrderRequest: {
+            reason?: string | null;
         };
         ConfirmPhoneChangeCommand: {
             phoneNumber: string;
@@ -9201,7 +9301,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        MessagePurpose: 0 | 1;
+        MessagePurpose: 0 | 1 | 2;
         MessageTemplateDto: {
             /** Format: uuid */
             id: string;
@@ -9971,6 +10071,9 @@ export interface components {
             tax: number;
             /** Format: double */
             total: number;
+            /** Format: date-time */
+            closedAt?: string | null;
+            closeReason?: string | null;
             lines: components["schemas"]["PurchaseOrderLineDto"][];
         };
         PurchaseOrderDtoPaginatedList: {
@@ -10016,7 +10119,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        PurchaseOrderStatus: 0 | 1 | 2 | 3 | 99;
+        PurchaseOrderStatus: 0 | 1 | 2 | 3 | 4 | 99;
         ReceivePurchaseOrderLineItemRequest: {
             /** Format: uuid */
             purchaseOrderLineId: string;
@@ -10497,6 +10600,7 @@ export interface components {
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
+            timeZone: string;
             rfc?: string | null;
             legalName?: string | null;
             industry?: string | null;
@@ -10732,6 +10836,7 @@ export interface components {
             city?: string | null;
             state?: string | null;
             capabilities?: components["schemas"]["TenantCapability"];
+            timeZone?: string | null;
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];

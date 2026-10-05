@@ -8,7 +8,7 @@ public static class MessagingDefaults
         + "Si no puedes venir, respóndenos este mensaje. Escribe BAJA si no quieres recibir recordatorios.";
 
     public const string OptOutReply =
-        "Listo, ya no te enviaremos promociones ni recordatorios. Seguirás recibiendo los avisos de tus pedidos. "
+        "Listo, ya no te enviaremos promociones ni recordatorios. Seguirás recibiendo los avisos de tus pedidos y citas. "
         + "Escribe ALTA si quieres volver a recibirlos.";
 
     public const string OptInReply =

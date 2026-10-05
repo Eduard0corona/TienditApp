@@ -2,6 +2,7 @@ import type { CashSessionDto, CashTransactionDto } from '../../types';
 import { CashSessionStatus } from '../../types';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import { describeDifference, getTransactionTypeLabel } from '../../pages/cash/cashFormat';
+import { formatInBusinessZone } from '../../utils/dates';
 
 interface CashCutTicketProps {
   businessName?: string;
@@ -9,7 +10,7 @@ interface CashCutTicketProps {
   movements: CashTransactionDto[];
 }
 
-const dateTime = (value: string) => new Date(value).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+const dateTime = (value: string) => formatInBusinessZone(value, { dateStyle: 'short', timeStyle: 'short' });
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
@@ -63,7 +64,7 @@ export default function CashCutTicket({ businessName, session, movements }: Cash
           {movements.map((movement) => (
             <Row
               key={movement.id}
-              label={`${new Date(movement.occurredAt).toLocaleTimeString('es-MX', { timeStyle: 'short' })} ${getTransactionTypeLabel(movement.transactionType)}`}
+              label={`${formatInBusinessZone(movement.occurredAt, { timeStyle: 'short' })} ${getTransactionTypeLabel(movement.transactionType)}`}
               value={formatSignedMoney(movement.amount)}
             />
           ))}

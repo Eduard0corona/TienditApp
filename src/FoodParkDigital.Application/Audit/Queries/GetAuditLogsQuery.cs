@@ -15,6 +15,8 @@ public record GetAuditLogsQuery : IRequest<PaginatedList<AuditLogDto>>
     public string? Action { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
+    /// <summary>What changed, the action or who did it, over every page.</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 50;
 }
@@ -43,6 +45,16 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
 
         if (request.ToDate.HasValue)
             query = query.Where(a => a.Timestamp <= request.ToDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(a =>
+                a.EntityName.ToLower().Contains(search) ||
+                a.Action.ToLower().Contains(search) ||
+                a.PerformedBy.ToLower().Contains(search) ||
+                a.EntityId.ToLower().Contains(search));
+        }
 
         var projectedQuery = query
             .OrderByDescending(a => a.Timestamp)

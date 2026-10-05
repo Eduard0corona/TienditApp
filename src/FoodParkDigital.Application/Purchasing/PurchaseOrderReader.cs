@@ -29,7 +29,9 @@ internal static class PurchaseOrderReader
                 po.Notes,
                 po.SubTotal,
                 po.Tax,
-                po.Total
+                po.Total,
+                po.ClosedAt,
+                po.CloseReason
             })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new EntityNotFoundException("PurchaseOrder", purchaseOrderId);
@@ -76,6 +78,8 @@ internal static class PurchaseOrderReader
             SubTotal = header.SubTotal,
             Tax = header.Tax,
             Total = header.Total,
+            ClosedAt = header.ClosedAt,
+            CloseReason = header.CloseReason,
             Lines = lines
         };
     }

@@ -577,6 +577,13 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -2251,6 +2258,13 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -3327,6 +3341,35 @@
         }
       }
     },
+    "/api/v1/dashboard/attention": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/employees": {
       "get": {
         "tags": [
@@ -4262,6 +4305,13 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -4386,6 +4436,13 @@
             "schema": {
               "type": "string",
               "format": "date-time"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -7678,6 +7735,13 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -7881,6 +7945,65 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchaseorders/{id}/close": {
+      "post": {
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePurchaseOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePurchaseOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePurchaseOrderRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -9743,6 +9866,43 @@
         },
         "additionalProperties": false
       },
+      "AttentionDto": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttentionItemDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AttentionItemDto": {
+        "required": [
+          "count",
+          "key",
+          "urgentCount"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "urgentCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "AuditLogDto": {
         "required": [
           "action",
@@ -11007,6 +11167,16 @@
             "items": {
               "$ref": "#/components/schemas/CashCountLineDto"
             },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClosePurchaseOrderRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -14225,7 +14395,8 @@
       "MessagePurpose": {
         "enum": [
           0,
-          1
+          1,
+          2
         ],
         "type": "integer",
         "format": "int32"
@@ -16718,6 +16889,15 @@
             "type": "number",
             "format": "double"
           },
+          "closedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "closeReason": {
+            "type": "string",
+            "nullable": true
+          },
           "lines": {
             "type": "array",
             "items": {
@@ -16854,6 +17034,7 @@
           1,
           2,
           3,
+          4,
           99
         ],
         "type": "integer",
@@ -18426,7 +18607,8 @@
           "pricesIncludeTax",
           "requireOpenCashSession",
           "slug",
-          "status"
+          "status",
+          "timeZone"
         ],
         "type": "object",
         "properties": {
@@ -18493,6 +18675,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "timeZone": {
+            "type": "string"
           },
           "rfc": {
             "type": "string",
@@ -19322,6 +19507,10 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/TenantCapability"
+          },
+          "timeZone": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

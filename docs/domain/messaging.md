@@ -4,7 +4,7 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 ## Plantillas
 
-- `MessageTemplate` guarda nombre, uso (`Campaign` o `AppointmentReminder`), texto con variables y, opcionalmente, el nombre de la plantilla aprobada en Meta (`ProviderTemplateName`) y su idioma (`es_MX` por defecto).
+- `MessageTemplate` guarda nombre, uso (`Campaign` o `AppointmentReminder`), texto con variables y, opcionalmente, el nombre de la plantilla aprobada en Meta (`ProviderTemplateName`) y su idioma (`es_MX` por defecto). Los avisos de citas (`AppointmentNotice`) no tienen plantilla: los escribe el sistema con la cita completa.
 - Variables: `{nombre}` (primer nombre del cliente o "cliente") y `{negocio}`; los recordatorios suman `{servicio}`, `{fecha}` ("lunes 5 de octubre") y `{hora}` ("4:30 p. m."), en la zona horaria del negocio. Una variable que no aplica al uso se rechaza.
 - WhatsApp solo entrega texto libre a quien escribió en las últimas 24 horas. Fuera de esa ventana hace falta una plantilla aprobada en Meta: el mensaje se envía como plantilla y las variables se mandan como parámetros en el orden en que aparecen en el texto (`{nombre}` → `{{1}}`…). Sin nombre de Meta se envía el texto; si Meta lo rechaza por la ventana (código 131047) el mensaje queda como fallido con esa explicación.
 - Editar una plantilla no cambia los mensajes ya encolados: cada mensaje guarda su texto y parámetros.
@@ -23,11 +23,19 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 - Cada 5 minutos el worker encola el recordatorio de las citas agendadas o confirmadas que empiezan dentro de la ventana (y en más de 15 minutos). La clave incluye la hora de la cita: si se reagenda, se encola uno nuevo y el anterior se omite.
 - Antes de enviar se revisa que la cita siga vigente, a la misma hora y en el futuro.
 
+## Avisos de citas (Fase 6)
+
+- Al agendar, reprogramar, confirmar o cancelar una cita se encola un `OutgoingMessage` con uso `AppointmentNotice` en el mismo guardado que el cambio (no hay aviso sin cambio ni cambio sin aviso) y se despierta al worker. Antes se enviaba dentro de la solicitud, sin reintentos (`AppointmentNotices` reemplaza a `AppointmentNotifier`).
+- Solo se encola con WhatsApp conectado y un teléfono que se pueda normalizar. Los pasos internos (en servicio, completada, no asistió) y guardar el mismo estado ya no mandan mensaje.
+- Cada aviso dice la cita completa: servicio, negocio, día y hora en la zona horaria del negocio ("Hola Luis, tu cita de Corte ahora es el martes 6 de octubre a las 10:00 a. m. en Café Luna."). Si al llegar su turno ya hay otro más reciente de la misma cita, se omite ("Hay un aviso más reciente de la misma cita"): un reintento no llega después con la hora vieja. Uno que esperó más de 24 horas (el worker estuvo detenido) también se omite.
+- La baja no los detiene, igual que los avisos de pedidos: el cliente pidió esa cita. Son texto libre, así que WhatsApp solo los entrega a quien escribió en las últimas 24 horas; si no, quedan como fallidos con esa explicación.
+- Clientes → Campañas → Recordatorios de citas muestra los últimos avisos y su resultado.
+
 ## Bajas
 
 - Un mensaje entrante que es solo "BAJA", "STOP", "ALTO" o "darme de baja" registra la baja del número y se responde con una confirmación; "ALTA" o "START" la revierte. No se usa la respuesta automática para esos mensajes. Frases como "quiero cancelar mi pedido" no cuentan.
 - El negocio también puede registrar o reactivar una baja a petición del cliente (permiso `ManageCampaigns` o `ManageCustomers`). Cada cambio se audita.
-- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) siguen llegando: el cliente los pidió al hacer el pedido. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador.
+- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) y de citas siguen llegando: el cliente los pidió al hacer el pedido o la cita, y la confirmación de la baja se lo dice. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador.
 
 ## Chat y respuestas automáticas (Fase 4)
 
@@ -40,7 +48,8 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 ## Cola y worker
 
-- `OutgoingMessages` es la cola y el historial. `MessagingWorker` (Infrastructure, `BackgroundJobs/Messaging`) reclama mensajes con token de concurrencia y lease, envía cada uno en el contexto de su negocio y pausa 100 ms entre envíos (unos 10 por segundo).
+- `OutgoingMessages` es la cola y el historial. `MessagingWorker` (Infrastructure, `BackgroundJobs/Messaging`) reclama mensajes con token de concurrencia y lease, envía cada uno en el alcance de su negocio (`BackgroundScopes.CreateTenantScope`: filtros, auditoría y servicios como en una solicitud de ese negocio) y pausa 100 ms entre envíos (unos 10 por segundo).
+- Un solo cliente de la API de WhatsApp (`WhatsAppCloudClient`, Fase 6): los mensajes de cada negocio (`WhatsAppService`) y los códigos de verificación de la plataforma (`SmsService`) usan la misma versión de la API, el mismo armado de mensajes, la misma regla de qué fallos se reintentan y el mismo registro (sin el cuerpo de Meta fuera de Development y con el teléfono enmascarado). `WhatsAppService` solo envía con el WhatsApp del negocio en alcance: pedirlo para otro negocio responde "no configurado" sin usar su token.
 - Fallos temporales (timeout, 429, 5xx, red) se reintentan con espera creciente hasta 6 intentos; un rechazo de Meta se marca como fallido. Los estados de entrega del webhook (entregado, leído, fallido) se aplican al mensaje por su `wamid`.
 - Opciones en `BackgroundJobs:Messaging` (intervalo, lote, intentos, lease, pausa entre envíos, frecuencia de recordatorios). El health check marca degradado si hay mensajes pendientes con más de 15 minutos de atraso.
 - `POST /api/v1/marketing/promotions/send` (anterior) se conserva para clientes viejos: ahora crea una campaña inmediata con la plantilla "Promoción rápida" y responde a cuántos clientes llegará.

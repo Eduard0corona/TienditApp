@@ -82,6 +82,14 @@ public class TenantSettings : BaseEntity
         MaxConcurrentOrders = maxConcurrentOrders;
     }
 
+    /// <summary>Where the business lives its days: cuts, reports and reminders start at its midnight.</summary>
+    public void SetTimeZone(string timeZone)
+    {
+        if (string.IsNullOrWhiteSpace(timeZone) || timeZone.Length > 50)
+            throw new DomainException("La zona horaria no es válida.");
+        TimeZone = timeZone;
+    }
+
     public void UpdateCapabilities(TenantCapability capabilities)
     {
         Capabilities = capabilities;

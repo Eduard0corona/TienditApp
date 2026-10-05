@@ -130,7 +130,7 @@ public static class DependencyInjection
         // HTTP Clients. Sends are POSTs that are not idempotent at the provider: they get timeouts and a
         // circuit breaker but no immediate retry (a timed-out message may have been delivered). Background
         // senders retry later through the outbox, with backoff.
-        services.AddHttpClient("WhatsApp").AddResilienceHandler("whatsapp", ConfigureProviderResilience);
+        services.AddHttpClient(WhatsAppCloudClient.HttpClientName).AddResilienceHandler("whatsapp", ConfigureProviderResilience);
         services.AddHttpClient("Twilio").AddResilienceHandler("twilio", ConfigureProviderResilience);
 
         // Background work: outbox (durable side effects of domain events), webhook inbox, messaging
@@ -169,6 +169,7 @@ public static class DependencyInjection
         services.AddScoped<ISignInService, SignInService>();
         services.AddScoped<ITwoFactorLoginChallengeService, TwoFactorLoginChallengeService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<WhatsAppCloudClient>();
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();
         services.AddSingleton<ITwoFactorService, TwoFactorService>();

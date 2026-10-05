@@ -7,17 +7,20 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Messaging;
 
 /// <summary>
-/// Opt-outs from campaigns and reminders. The webhook runs without a tenant context, so the business is always
-/// passed in and filtered explicitly (the same query serves the staff screen, where it is the current tenant).
+/// Opt-outs from campaigns and reminders. It always runs in the scope of the business it is asked about (a staff
+/// request, the messaging worker or the webhook, which set it), so the tenant filter applies; asking about another
+/// business is a bug and fails instead of answering "not opted out".
 /// </summary>
 public sealed class MessagingConsentService
 {
     private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenant;
     private readonly IDateTimeProvider _clock;
 
-    public MessagingConsentService(IApplicationDbContext context, IDateTimeProvider clock)
+    public MessagingConsentService(IApplicationDbContext context, ICurrentTenantService tenant, IDateTimeProvider clock)
     {
         _context = context;
+        _tenant = tenant;
         _clock = clock;
     }
 
@@ -29,9 +32,9 @@ public sealed class MessagingConsentService
         OptOutSource source,
         CancellationToken cancellationToken)
     {
+        EnsureScope(tenantId);
         var key = MessagingPhone.ToKey(phone);
         var existing = await _context.MessagingOptOuts
-            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(o => o.TenantId == tenantId && o.Phone == key, cancellationToken);
         var now = _clock.UtcNow;
 
@@ -59,9 +62,15 @@ public sealed class MessagingConsentService
 
     public Task<bool> IsOptedOutAsync(Guid tenantId, string phone, CancellationToken cancellationToken)
     {
+        EnsureScope(tenantId);
         var key = MessagingPhone.ToKey(phone);
         return _context.MessagingOptOuts
-            .IgnoreQueryFilters()
             .AnyAsync(o => o.TenantId == tenantId && o.Phone == key && o.ResubscribedAt == null, cancellationToken);
+    }
+
+    private void EnsureScope(Guid tenantId)
+    {
+        if (tenantId != _tenant.TenantId)
+            throw new InvalidOperationException("Opt-outs are read and changed in the scope of their business.");
     }
 }

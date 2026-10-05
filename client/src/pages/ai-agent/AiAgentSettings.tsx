@@ -322,8 +322,8 @@ export default function AiAgentSettings() {
                     <div className="row">
                       <div className="col-md-6">
                         <div className="mb-3">
-                          <label className="form-label">Nombre</label>
-                          <input
+                          <label htmlFor="aiagentsettings-nombre" className="form-label">Nombre</label>
+                          <input id="aiagentsettings-nombre"
                             type="text"
                             className="form-control"
                             value={selectedAgent.name}
@@ -338,8 +338,8 @@ export default function AiAgentSettings() {
                       </div>
                       <div className="col-md-6">
                         <div className="mb-3">
-                          <label className="form-label">Para qué la usas</label>
-                          <input
+                          <label htmlFor="aiagentsettings-para-que-la-usas" className="form-label">Para qué la usas</label>
+                          <input id="aiagentsettings-para-que-la-usas"
                             type="text"
                             className="form-control"
                             value={selectedAgent.role}
@@ -356,8 +356,8 @@ export default function AiAgentSettings() {
 
                     <h5 className="mb-3 mt-2">Información del negocio</h5>
                     <div className="mb-3">
-                      <label className="form-label">Nombre de la empresa</label>
-                      <input
+                      <label htmlFor="aiagentsettings-nombre-de-la-empresa" className="form-label">Nombre de la empresa</label>
+                      <input id="aiagentsettings-nombre-de-la-empresa"
                         type="text"
                         className="form-control"
                         value={selectedAgent.businessName || ''}
@@ -370,8 +370,8 @@ export default function AiAgentSettings() {
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label">Descripción del negocio</label>
-                      <textarea
+                      <label htmlFor="aiagentsettings-descripcion-del-negocio" className="form-label">Descripción del negocio</label>
+                      <textarea id="aiagentsettings-descripcion-del-negocio"
                         className="form-control"
                         rows={3}
                         value={selectedAgent.businessDescription || ''}
@@ -384,8 +384,8 @@ export default function AiAgentSettings() {
                       />
                     </div>
                     <div className="mb-0">
-                      <label className="form-label">Productos y servicios</label>
-                      <textarea
+                      <label htmlFor="aiagentsettings-productos-y-servicios" className="form-label">Productos y servicios</label>
+                      <textarea id="aiagentsettings-productos-y-servicios"
                         className="form-control"
                         rows={4}
                         placeholder="Ejemplo: Tacos al pastor, combos familiares, asesoria legal, mantenimiento preventivo..."
@@ -405,8 +405,8 @@ export default function AiAgentSettings() {
                   <div>
                     <h5 className="mb-3">Mensajes</h5>
                     <div className="mb-3">
-                      <label className="form-label">Mensaje de bienvenida</label>
-                      <textarea
+                      <label htmlFor="aiagentsettings-mensaje-de-bienvenida" className="form-label">Mensaje de bienvenida</label>
+                      <textarea id="aiagentsettings-mensaje-de-bienvenida"
                         className="form-control"
                         rows={3}
                         value={selectedAgent.welcomeMessage}
@@ -419,8 +419,8 @@ export default function AiAgentSettings() {
                       />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label">Mensaje de respaldo</label>
-                      <textarea
+                      <label htmlFor="aiagentsettings-mensaje-de-respaldo" className="form-label">Mensaje de respaldo</label>
+                      <textarea id="aiagentsettings-mensaje-de-respaldo"
                         className="form-control"
                         rows={3}
                         value={selectedAgent.fallbackMessage}
@@ -433,8 +433,8 @@ export default function AiAgentSettings() {
                       />
                     </div>
                     <div className="mb-0">
-                      <label className="form-label">Mensaje de cierre</label>
-                      <textarea
+                      <label htmlFor="aiagentsettings-mensaje-de-cierre" className="form-label">Mensaje de cierre</label>
+                      <textarea id="aiagentsettings-mensaje-de-cierre"
                         className="form-control"
                         rows={3}
                         value={selectedAgent.closingMessage}

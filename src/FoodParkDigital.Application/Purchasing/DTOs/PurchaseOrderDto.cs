@@ -19,6 +19,9 @@ public class PurchaseOrderDto
     public decimal SubTotal { get; set; }
     public decimal Tax { get; set; }
     public decimal Total { get; set; }
+    /// <summary>When the business stopped waiting for what was missing (status Closed), and why.</summary>
+    public DateTimeOffset? ClosedAt { get; set; }
+    public string? CloseReason { get; set; }
     public List<PurchaseOrderLineDto> Lines { get; set; } = [];
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
@@ -11,6 +12,7 @@ import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
+import { queryKeys } from '../../api/queries';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { getServicePriorityLabel, parseChecklist, parsePhotos } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
@@ -36,6 +38,7 @@ import {
   getPaymentMethodLabel,
 } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
+import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
 const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
@@ -65,21 +68,13 @@ const COLUMNS = [
 ];
 
 function toLocalDateTime(date: string) {
-  return new Date(date).toLocaleString('es-MX', {
+  return formatInBusinessZone(date, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function getTodayInputDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function getStatusLabel(status: OrderStatus): string {
@@ -90,7 +85,8 @@ function getStatusLabel(status: OrderStatus): string {
 const EVENT_RELOAD_DELAY_MS = 400;
 
 export default function OrdersList() {
-  const today = getTodayInputDate();
+  const queryClient = useQueryClient();
+  const today = getBusinessToday();
   const [searchParams] = useSearchParams();
   // A search from the global search (Ctrl K) or a link looks in every date, not only today.
   const initialSearch = searchParams.get('search')?.trim() ?? '';
@@ -199,8 +195,8 @@ export default function OrdersList() {
 
       if (selectedOrderType !== '') params.orderType = Number(selectedOrderType) as OrderType;
       if (selectedStatus !== '') params.status = Number(selectedStatus) as OrderStatus;
-      if (fromDate) params.fromDate = new Date(`${fromDate}T00:00:00`).toISOString();
-      if (toDate) params.toDate = new Date(`${toDate}T23:59:59`).toISOString();
+      if (fromDate) params.fromDate = businessDayStart(fromDate);
+      if (toDate) params.toDate = businessDayEnd(toDate);
       if (search) params.search = search;
 
       const { data: response } = await ordersApi.getAll(params);
@@ -280,6 +276,8 @@ export default function OrdersList() {
     setStatusError('');
     try {
       await ordersApi.updateStatus(order.id, newStatus);
+      // Confirming an online order takes it off the bell.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
     } catch (err: unknown) {
       setStatusError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la orden.'));
@@ -306,6 +304,7 @@ export default function OrdersList() {
     setStatusError('');
     try {
       await ordersApi.cancel(order.id, reason || undefined);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
       toast.success(`Pedido ${order.orderNumber} cancelado.`);
     } catch (err: unknown) {
@@ -419,8 +418,8 @@ export default function OrdersList() {
             <div className="card-body">
               <div className="row mb-3">
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Tipo</label>
-                  <select
+                  <label htmlFor="orderslist-tipo" className="form-label">Tipo</label>
+                  <select id="orderslist-tipo"
                     className="form-select form-select-sm"
                     value={selectedOrderType}
                     onChange={(e) => {
@@ -435,8 +434,8 @@ export default function OrdersList() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Estado</label>
-                  <select
+                  <label htmlFor="orderslist-estado" className="form-label">Estado</label>
+                  <select id="orderslist-estado"
                     className="form-select form-select-sm"
                     value={selectedStatus}
                     onChange={(e) => {
@@ -455,8 +454,8 @@ export default function OrdersList() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Desde</label>
-                  <input
+                  <label htmlFor="orderslist-desde" className="form-label">Desde</label>
+                  <input id="orderslist-desde"
                     type="date"
                     className="form-control form-control-sm"
                     value={fromDate}
@@ -467,8 +466,8 @@ export default function OrdersList() {
                   />
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Hasta</label>
-                  <input
+                  <label htmlFor="orderslist-hasta" className="form-label">Hasta</label>
+                  <input id="orderslist-hasta"
                     type="date"
                     className="form-control form-control-sm"
                     value={toDate}

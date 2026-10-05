@@ -235,9 +235,25 @@ public class SendChatMessageCommandTests
         /// </summary>
         public async Task<Guid> ReceiveFromWebhookAsync(Guid tenantId, string externalMessageId, string body)
         {
+            // The webhook works in the scope of the business the message was sent to; the test's own scope returns after.
+            var requestTenant = Database.TenantService.TenantId;
+            Database.SetTenant(tenantId);
+            try
+            {
+                return await ReceiveInScopeAsync(tenantId, externalMessageId, body);
+            }
+            finally
+            {
+                Database.SetTenant(requestTenant);
+            }
+        }
+
+        private async Task<Guid> ReceiveInScopeAsync(Guid tenantId, string externalMessageId, string body)
+        {
             await using var webhookContext = Database.CreateIndependentContext();
             var webhook = new ProcessInboundMessageCommandHandler(
                 webhookContext,
+                Database.TenantService,
                 new NoAutoReplyService(),
                 new RecordingWhatsAppService(),
                 new RecordingNotificationService(),

@@ -7,6 +7,7 @@ import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useRefreshCashState } from '../../api/queries';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type {
@@ -22,6 +23,7 @@ import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
 import { buildShiftCutText } from './cashCutText';
 import { describeDifference, getTransactionTypeLabel, parseCashAmount } from './cashFormat';
+import { formatInBusinessZone } from '../../utils/dates';
 
 const EMPTY_PAGE: PaginatedList<CashTransactionDto> = {
   items: [],
@@ -60,6 +62,7 @@ interface MyDrawerProps {
 export default function MyDrawer({ branches, workingBranchId, onBranchChosen, onChanged }: MyDrawerProps) {
   const toast = useToast();
   const { tenant } = useTenant();
+  const refreshCashState = useRefreshCashState();
   const [session, setSession] = useState<CashSessionDto | null>(null);
   // The drawer just closed: its cut stays at hand to print it or send it.
   const [closedCut, setClosedCut] = useState<{ session: CashSessionDto; movements: CashTransactionDto[] } | null>(null);
@@ -68,6 +71,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
   const [movements, setMovements] = useState(EMPTY_PAGE);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [movementSearch, setMovementSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
   const [showClose, setShowClose] = useState(false);
@@ -103,7 +107,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    cashApi.getTransactions({ cashSessionId: sessionId, pageNumber, pageSize })
+    cashApi.getTransactions({ cashSessionId: sessionId, search: movementSearch || undefined, pageNumber, pageSize })
       .then(({ data }) => {
         if (!cancelled) setMovements(data);
       })
@@ -113,7 +117,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
     return () => {
       cancelled = true;
     };
-  }, [pageNumber, pageSize, sessionId, session?.expectedBalance]);
+  }, [movementSearch, pageNumber, pageSize, session?.expectedBalance, sessionId]);
 
   const openDrawer = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -132,6 +136,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       });
       setSession(data);
       setClosedCut(null);
+      refreshCashState();
       if (data.branchId) onBranchChosen(data.branchId);
       setOpeningAmount('');
       setOpeningNotes('');
@@ -154,6 +159,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       setSession(null);
       setMovements(EMPTY_PAGE);
       setClosedCut({ session: data, movements: [] });
+      refreshCashState();
       cashApi.getTransactions({ cashSessionId: data.id, pageSize: 200 })
         .then(({ data: page }) => setClosedCut((current) => (current?.session.id === data.id ? { ...current, movements: page.items } : current)))
         .catch(() => undefined);
@@ -193,6 +199,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       setMovementReference('');
       setMovementNotes('');
       toast.success(`${getTransactionTypeLabel(movementType)} registrado.`);
+      refreshCashState();
       await loadSession();
     } catch (err: unknown) {
       setActionError(getApiErrorMessage(err, 'No se pudo registrar el movimiento.'));
@@ -303,7 +310,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
           {session.isMine ? 'Tu caja' : `Caja de ${session.openedBy}`}
           {(session.branchName ?? session.inventoryLocationName) ? ` · ${session.branchName ?? session.inventoryLocationName}` : ''}
           {' · abierta '}
-          {new Date(session.openedAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+          {formatInBusinessZone(session.openedAt, { dateStyle: 'short', timeStyle: 'short' })}
         </div>
         <div className="d-flex gap-2">
           <button type="button" className="btn btn-light" onClick={() => { setActionError(''); setShowMovement(true); }}>
@@ -343,10 +350,6 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
             keyExtractor={(item) => item.id}
             loading={false}
             emptyMessage="Todavía no hay movimientos en esta caja."
-            searchFilter={(item, search) =>
-              getTransactionTypeLabel(item.transactionType).toLowerCase().includes(search)
-              || (item.reference || '').toLowerCase().includes(search)
-              || (item.notes || '').toLowerCase().includes(search)}
             serverSide={{
               totalCount: movements.totalCount,
               page: pageNumber,
@@ -356,10 +359,15 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
                 setPageSize(size);
                 setPageNumber(1);
               },
+              onSearchChange: (term) => {
+                setMovementSearch(term);
+                setPageNumber(1);
+              },
             }}
+            searchPlaceholder="Referencia, nota o quién lo registró"
             renderRow={(item) => (
               <>
-                <td className="text-center text-nowrap">{new Date(item.occurredAt).toLocaleTimeString('es-MX', { timeStyle: 'short' })}</td>
+                <td className="text-center text-nowrap">{formatInBusinessZone(item.occurredAt, { timeStyle: 'short' })}</td>
                 <td>
                   {getTransactionTypeLabel(item.transactionType)}
                   {item.paymentMethod !== undefined && item.paymentMethod !== null && (

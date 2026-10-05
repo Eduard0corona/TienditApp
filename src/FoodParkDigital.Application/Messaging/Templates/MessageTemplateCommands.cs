@@ -58,7 +58,9 @@ public class CreateMessageTemplateCommandValidator : AbstractValidator<CreateMes
     public CreateMessageTemplateCommandValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(MessageTemplate.MaxNameLength);
-        RuleFor(x => x.Purpose).IsInEnum();
+        RuleFor(x => x.Purpose)
+            .Must(purpose => purpose is MessagePurpose.Campaign or MessagePurpose.AppointmentReminder)
+            .WithMessage(MessageTemplate.TemplatePurposeError);
         RuleFor(x => x.Body).NotEmpty().MaximumLength(MessageTemplate.MaxBodyLength);
         RuleFor(x => x.ProviderTemplateName).MaximumLength(MessageTemplate.MaxProviderTemplateNameLength);
         RuleFor(x => x.LanguageCode).MaximumLength(MessageTemplate.MaxLanguageCodeLength);

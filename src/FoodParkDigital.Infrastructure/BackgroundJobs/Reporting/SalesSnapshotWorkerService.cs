@@ -100,7 +100,7 @@ public sealed class SalesSnapshotWorkerService : BackgroundService
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await using var scope = CreateTenantScope(tenantId);
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
                 var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var timeZoneId = await context.TenantSettings
                     .AsNoTracking()
@@ -128,13 +128,5 @@ public sealed class SalesSnapshotWorkerService : BackgroundService
         }
 
         return stored;
-    }
-
-    private AsyncServiceScope CreateTenantScope(Guid tenantId)
-    {
-        var scope = _scopeFactory.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<ICurrentTenantService>().SetTenant(tenantId);
-        scope.ServiceProvider.GetRequiredService<IBackgroundExecutionContext>().SetActor(null, WorkerActor);
-        return scope;
     }
 }

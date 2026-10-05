@@ -7,6 +7,7 @@ import { BusinessType } from '../../types';
 import './register.css';
 import BrandLogo from '../../components/common/BrandLogo';
 import { getApiErrorMessage } from '../../api/errors';
+import { asButton } from '../../utils/a11y';
 
 type AccountType = 'business' | 'customer' | null;
 
@@ -132,8 +133,7 @@ export default function Register() {
                         <div className="col-6">
                           <div
                             className="card border border-primary shadow-none mb-0 h-100 register-account-card"
-                            role="button"
-                            onClick={() => setAccountType('business')}
+                            {...asButton(() => setAccountType('business'))}
                           >
                             <div className="card-body text-center py-4">
                               <i className="ri-store-2-line text-primary" style={{ fontSize: '2.5rem' }}></i>
@@ -147,8 +147,7 @@ export default function Register() {
                         <div className="col-6">
                           <div
                             className="card border border-primary shadow-none mb-0 h-100 register-account-card"
-                            role="button"
-                            onClick={() => setAccountType('customer')}
+                            {...asButton(() => setAccountType('customer'))}
                           >
                             <div className="card-body text-center py-4">
                               <i className="ri-user-line text-primary" style={{ fontSize: '2.5rem' }}></i>
@@ -176,8 +175,8 @@ export default function Register() {
                       <form onSubmit={customerForm.handleSubmit(onSubmitCustomer)}>
                         <div className="row">
                           <div className="col-md-6 mb-3">
-                            <label className="form-label">Nombre <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-nombre" className="form-label">Nombre <span className="text-danger">*</span></label>
+                            <input id="register-nombre"
                               type="text"
                               className={`form-control ${customerForm.formState.errors.firstName ? 'is-invalid' : ''}`}
                               placeholder="Tu nombre"
@@ -188,8 +187,8 @@ export default function Register() {
                             )}
                           </div>
                           <div className="col-md-6 mb-3">
-                            <label className="form-label">Apellido <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-apellido" className="form-label">Apellido <span className="text-danger">*</span></label>
+                            <input id="register-apellido"
                               type="text"
                               className={`form-control ${customerForm.formState.errors.lastName ? 'is-invalid' : ''}`}
                               placeholder="Tu apellido"
@@ -202,8 +201,8 @@ export default function Register() {
                         </div>
 
                         <div className="mb-3">
-                          <label className="form-label">Email <span className="text-danger">*</span></label>
-                          <input
+                          <label htmlFor="register-email" className="form-label">Email <span className="text-danger">*</span></label>
+                          <input id="register-email"
                             type="email"
                             className={`form-control ${customerForm.formState.errors.email ? 'is-invalid' : ''}`}
                             placeholder="tu@email.com"
@@ -215,8 +214,8 @@ export default function Register() {
                         </div>
 
                         <div className="mb-3">
-                          <label className="form-label">Teléfono <span className="text-danger">*</span></label>
-                          <input
+                          <label htmlFor="register-telefono" className="form-label">Teléfono <span className="text-danger">*</span></label>
+                          <input id="register-telefono"
                             type="tel"
                             className={`form-control ${customerForm.formState.errors.phoneNumber ? 'is-invalid' : ''}`}
                             placeholder="+5215512345678"
@@ -231,9 +230,9 @@ export default function Register() {
                         </div>
 
                         <div className="mb-3">
-                          <label className="form-label">Contraseña <span className="text-danger">*</span></label>
+                          <label htmlFor="register-contrasena" className="form-label">Contraseña <span className="text-danger">*</span></label>
                           <div className="input-group input-group-merge">
-                            <input
+                            <input id="register-contrasena"
                               type={showPassword ? 'text' : 'password'}
                               className={`form-control ${customerForm.formState.errors.password ? 'is-invalid' : ''}`}
                               placeholder="Mínimo 6 caracteres"
@@ -242,13 +241,15 @@ export default function Register() {
                                 minLength: { value: 6, message: 'Mínimo 6 caracteres' },
                               })}
                             />
-                            <div
+                            <button
+                              type="button"
                               className={`input-group-text ${showPassword ? 'show-password' : ''}`}
                               onClick={() => setShowPassword(!showPassword)}
-                              style={{ cursor: 'pointer' }}
+                              aria-label={showPassword ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+                              aria-pressed={showPassword}
                             >
-                              <span className="password-eye"></span>
-                            </div>
+                              <span className="password-eye" aria-hidden="true"></span>
+                            </button>
                           </div>
                           {customerForm.formState.errors.password && (
                             <div className="text-danger mt-1" style={{ fontSize: '0.875em' }}>
@@ -303,8 +304,8 @@ export default function Register() {
 
                         <div className="row">
                           <div className="col-md-6 mb-3">
-                            <label className="form-label">Nombre <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-nombre-2" className="form-label">Nombre <span className="text-danger">*</span></label>
+                            <input id="register-nombre-2"
                               type="text"
                               className={`form-control ${businessForm.formState.errors.firstName ? 'is-invalid' : ''}`}
                               placeholder="Tu nombre"
@@ -315,8 +316,8 @@ export default function Register() {
                             )}
                           </div>
                           <div className="col-md-6 mb-3">
-                            <label className="form-label">Apellido <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-apellido-2" className="form-label">Apellido <span className="text-danger">*</span></label>
+                            <input id="register-apellido-2"
                               type="text"
                               className={`form-control ${businessForm.formState.errors.lastName ? 'is-invalid' : ''}`}
                               placeholder="Tu apellido"
@@ -330,8 +331,8 @@ export default function Register() {
 
                         <div className="row">
                           <div className="col-md-4 mb-3">
-                            <label className="form-label">Email <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-email-2" className="form-label">Email <span className="text-danger">*</span></label>
+                            <input id="register-email-2"
                               type="email"
                               className={`form-control ${businessForm.formState.errors.email ? 'is-invalid' : ''}`}
                               placeholder="tu@email.com"
@@ -342,8 +343,8 @@ export default function Register() {
                             )}
                           </div>
                           <div className="col-md-4 mb-3">
-                            <label className="form-label">Teléfono <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-telefono-2" className="form-label">Teléfono <span className="text-danger">*</span></label>
+                            <input id="register-telefono-2"
                               type="tel"
                               className={`form-control ${businessForm.formState.errors.phoneNumber ? 'is-invalid' : ''}`}
                               placeholder="+5215512345678"
@@ -357,9 +358,9 @@ export default function Register() {
                             )}
                           </div>
                           <div className="col-md-4 mb-3">
-                            <label className="form-label">Contraseña <span className="text-danger">*</span></label>
+                            <label htmlFor="register-contrasena-2" className="form-label">Contraseña <span className="text-danger">*</span></label>
                             <div className="input-group input-group-merge">
-                              <input
+                              <input id="register-contrasena-2"
                                 type={showPassword ? 'text' : 'password'}
                                 className={`form-control ${businessForm.formState.errors.password ? 'is-invalid' : ''}`}
                                 placeholder="Mínimo 6 caracteres"
@@ -368,13 +369,15 @@ export default function Register() {
                                   minLength: { value: 6, message: 'Mínimo 6 caracteres' },
                                 })}
                               />
-                              <div
+                              <button
+                                type="button"
                                 className={`input-group-text ${showPassword ? 'show-password' : ''}`}
                                 onClick={() => setShowPassword(!showPassword)}
-                                style={{ cursor: 'pointer' }}
+                                aria-label={showPassword ? 'Ocultar la contraseña' : 'Mostrar la contraseña'}
+                                aria-pressed={showPassword}
                               >
-                                <span className="password-eye"></span>
-                              </div>
+                                <span className="password-eye" aria-hidden="true"></span>
+                              </button>
                             </div>
                             {businessForm.formState.errors.password && (
                               <div className="text-danger mt-1" style={{ fontSize: '0.875em' }}>
@@ -391,8 +394,8 @@ export default function Register() {
 
                         <div className="row">
                           <div className="col-md-6 mb-3">
-                            <label className="form-label">Nombre del negocio <span className="text-danger">*</span></label>
-                            <input
+                            <label htmlFor="register-nombre-del-negocio" className="form-label">Nombre del negocio <span className="text-danger">*</span></label>
+                            <input id="register-nombre-del-negocio"
                               type="text"
                               className={`form-control ${businessForm.formState.errors.businessName ? 'is-invalid' : ''}`}
                               placeholder="Nombre de tu negocio"
@@ -403,8 +406,8 @@ export default function Register() {
                             )}
                           </div>
                           <div className="col-md-6 mb-3">
-                            <label className="form-label">Tipo de negocio <span className="text-danger">*</span></label>
-                            <select
+                            <label htmlFor="register-tipo-de-negocio" className="form-label">Tipo de negocio <span className="text-danger">*</span></label>
+                            <select id="register-tipo-de-negocio"
                               className={`form-select ${businessForm.formState.errors.businessType ? 'is-invalid' : ''}`}
                               {...businessForm.register('businessType', { required: 'Selecciona el tipo', valueAsNumber: true })}
                             >
@@ -431,8 +434,8 @@ export default function Register() {
                         {showOptionalData && (
                           <div id="register-optional-data">
                             <div className="mb-3">
-                              <label className="form-label">Giro</label>
-                              <select className="form-select" {...businessForm.register('industry')}>
+                              <label htmlFor="register-giro" className="form-label">Giro</label>
+                              <select id="register-giro" className="form-select" {...businessForm.register('industry')}>
                                 <option value="">Seleccionar...</option>
                                 {INDUSTRY_OPTIONS.map((opt) => (
                                   <option key={opt} value={opt}>{opt}</option>
@@ -441,8 +444,8 @@ export default function Register() {
                             </div>
                             <div className="row">
                               <div className="col-md-4 mb-3">
-                                <label className="form-label">RFC</label>
-                                <input
+                                <label htmlFor="register-rfc" className="form-label">RFC</label>
+                                <input id="register-rfc"
                                   type="text"
                                   className={`form-control ${businessForm.formState.errors.rfc ? 'is-invalid' : ''}`}
                                   placeholder="XAXX010101000"
@@ -457,8 +460,8 @@ export default function Register() {
                                 )}
                               </div>
                               <div className="col-md-4 mb-3">
-                                <label className="form-label">Razón Social</label>
-                                <input
+                                <label htmlFor="register-razon-social" className="form-label">Razón Social</label>
+                                <input id="register-razon-social"
                                   type="text"
                                   className="form-control"
                                   placeholder="Nombre legal de la empresa"
@@ -466,8 +469,8 @@ export default function Register() {
                                 />
                               </div>
                               <div className="col-md-4 mb-3">
-                                <label className="form-label">Régimen Fiscal</label>
-                                <select className="form-select" {...businessForm.register('taxRegime')}>
+                                <label htmlFor="register-regimen-fiscal" className="form-label">Régimen Fiscal</label>
+                                <select id="register-regimen-fiscal" className="form-select" {...businessForm.register('taxRegime')}>
                                   <option value="">Seleccionar...</option>
                                   {TAX_REGIME_OPTIONS.map((opt) => (
                                     <option key={opt} value={opt}>{opt}</option>
@@ -477,8 +480,8 @@ export default function Register() {
                             </div>
 
                             <div className="mb-3">
-                              <label className="form-label">Teléfono del Negocio</label>
-                              <input
+                              <label htmlFor="register-telefono-del-negocio" className="form-label">Teléfono del Negocio</label>
+                              <input id="register-telefono-del-negocio"
                                 type="tel"
                                 className="form-control"
                                 placeholder="+5215512345678"
@@ -493,8 +496,8 @@ export default function Register() {
 
                             <div className="row">
                               <div className="col-md-6 mb-3">
-                                <label className="form-label">Calle</label>
-                                <input
+                                <label htmlFor="register-calle" className="form-label">Calle</label>
+                                <input id="register-calle"
                                   type="text"
                                   className="form-control"
                                   placeholder="Nombre de la calle"
@@ -502,8 +505,8 @@ export default function Register() {
                                 />
                               </div>
                               <div className="col-md-3 mb-3">
-                                <label className="form-label">Núm. Exterior</label>
-                                <input
+                                <label htmlFor="register-num-exterior" className="form-label">Núm. Exterior</label>
+                                <input id="register-num-exterior"
                                   type="text"
                                   className="form-control"
                                   placeholder="123"
@@ -511,8 +514,8 @@ export default function Register() {
                                 />
                               </div>
                               <div className="col-md-3 mb-3">
-                                <label className="form-label">Núm. Interior</label>
-                                <input
+                                <label htmlFor="register-num-interior" className="form-label">Núm. Interior</label>
+                                <input id="register-num-interior"
                                   type="text"
                                   className="form-control"
                                   placeholder="A"
@@ -523,8 +526,8 @@ export default function Register() {
 
                             <div className="row">
                               <div className="col-md-4 mb-3">
-                                <label className="form-label">Colonia</label>
-                                <input
+                                <label htmlFor="register-colonia" className="form-label">Colonia</label>
+                                <input id="register-colonia"
                                   type="text"
                                   className="form-control"
                                   placeholder="Colonia"
@@ -532,8 +535,8 @@ export default function Register() {
                                 />
                               </div>
                               <div className="col-md-2 mb-3">
-                                <label className="form-label">C.P.</label>
-                                <input
+                                <label htmlFor="register-c-p" className="form-label">C.P.</label>
+                                <input id="register-c-p"
                                   type="text"
                                   className="form-control"
                                   placeholder="01000"
@@ -542,8 +545,8 @@ export default function Register() {
                                 />
                               </div>
                               <div className="col-md-3 mb-3">
-                                <label className="form-label">Ciudad / Municipio</label>
-                                <input
+                                <label htmlFor="register-ciudad-municipio" className="form-label">Ciudad / Municipio</label>
+                                <input id="register-ciudad-municipio"
                                   type="text"
                                   className="form-control"
                                   placeholder="Ciudad"
@@ -551,8 +554,8 @@ export default function Register() {
                                 />
                               </div>
                               <div className="col-md-3 mb-3">
-                                <label className="form-label">Estado</label>
-                                <select className="form-select" {...businessForm.register('state')}>
+                                <label htmlFor="register-estado" className="form-label">Estado</label>
+                                <select id="register-estado" className="form-select" {...businessForm.register('state')}>
                                   <option value="">Seleccionar...</option>
                                   {MX_STATES.map((s) => (
                                     <option key={s} value={s}>{s}</option>

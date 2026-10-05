@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useRefreshCashState } from '../../api/queries';
 import type { Branch } from '../../api/branchesApi';
 import { parseCashAmount } from '../../pages/cash/cashFormat';
 import type { CashSessionDto } from '../../types';
@@ -17,6 +18,7 @@ interface OpenDrawerModalProps {
 
 /** Opens the cashier's drawer without leaving the screen (Vender): the opening float and, with several branches, where. */
 export default function OpenDrawerModal({ show, onHide, branches, defaultBranchId, onOpened }: OpenDrawerModalProps) {
+  const refreshCashState = useRefreshCashState();
   const [openingAmount, setOpeningAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [branchId, setBranchId] = useState('');
@@ -47,6 +49,7 @@ export default function OpenDrawerModal({ show, onHide, branches, defaultBranchI
       });
       setOpeningAmount('');
       setNotes('');
+      refreshCashState();
       onOpened(data);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo abrir la caja.'));

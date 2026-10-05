@@ -17,6 +17,8 @@ public record GetPurchaseOrdersQuery : IRequest<PaginatedList<PurchaseOrderDto>>
     public PurchaseOrderStatus? Status { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
+    /// <summary>Folio, supplier or reference, over every page.</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -60,6 +62,14 @@ public class GetPurchaseOrdersQueryHandler : IRequestHandler<GetPurchaseOrdersQu
             query = query.Where(x => x.OrderedAt >= request.FromDate.Value);
         if (request.ToDate.HasValue)
             query = query.Where(x => x.OrderedAt <= request.ToDate.Value);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(x =>
+                x.OrderNumber.ToLower().Contains(search) ||
+                x.SupplierName.ToLower().Contains(search) ||
+                (x.ReferenceNumber != null && x.ReferenceNumber.ToLower().Contains(search)));
+        }
 
         query = query.OrderByDescending(x => x.OrderedAt);
 

@@ -34,6 +34,8 @@ public record UpdateMyTenantCommand : IRequest<Result<TenantProfileDto>>
     public string? City { get; init; }
     public string? State { get; init; }
     public TenantCapability? Capabilities { get; init; }
+    /// <summary>IANA id from <see cref="BusinessTimeZones.Supported"/>; null keeps the current one.</summary>
+    public string? TimeZone { get; init; }
 }
 
 public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCommand>
@@ -68,6 +70,10 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.Capabilities)
             .Must(c => !c.HasValue || (c.Value & ~allowedCapabilities) == 0)
             .WithMessage("Las capacidades proporcionadas no son validas.");
+        RuleFor(x => x.TimeZone)
+            .Must(BusinessTimeZones.IsSupported)
+            .When(x => x.TimeZone is not null)
+            .WithMessage("Elige una zona horaria de la lista.");
         // Like its plan, a business always sells something.
         RuleFor(x => x.Capabilities)
             .Must(c => !c.HasValue || TenantCapabilityRules.HasCommerce(c.Value))
@@ -152,6 +158,9 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
             settings.UpdateCapabilities(request.Capabilities.Value);
         }
 
+        if (request.TimeZone is not null && settings.TimeZone != request.TimeZone)
+            settings.SetTimeZone(request.TimeZone);
+
         if (capabilitiesChanged)
         {
             var auditLog = new AuditLog(
@@ -179,6 +188,7 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
         dto.OrderNotificationPolicy = settings.OrderNotificationPolicy;
         dto.InsufficientStockPolicy = settings.InsufficientStockPolicy;
         dto.OnboardingCompletedAt = settings.OnboardingCompletedAt;
+        dto.TimeZone = settings.TimeZone;
         return Result.Success(dto);
     }
 }

@@ -49,8 +49,8 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         if (string.IsNullOrWhiteSpace(incomingMessage))
             return null;
 
+        // The webhook runs it in the scope of the business the message was sent to.
         var agent = await _context.AiAgents
-            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.IsActive)
             .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)

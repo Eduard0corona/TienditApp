@@ -76,6 +76,7 @@ public class SmsServiceTests
             context,
             new ConfigurationBuilder().Build(),
             httpClientFactory,
+            new WhatsAppCloudClient(httpClientFactory, new TestHostEnvironment(), NullLogger<WhatsAppCloudClient>.Instance),
             new TestHostEnvironment(),
             NullLogger<SmsService>.Instance);
 

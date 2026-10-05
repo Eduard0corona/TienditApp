@@ -82,9 +82,7 @@ public sealed class SubscriptionStatusWorkerService : BackgroundService
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await using var scope = _scopeFactory.CreateAsyncScope();
-                scope.ServiceProvider.GetRequiredService<ICurrentTenantService>().SetTenant(tenantId);
-                scope.ServiceProvider.GetRequiredService<IBackgroundExecutionContext>().SetActor(null, WorkerActor);
+                await using var scope = _scopeFactory.CreateTenantScope(tenantId, WorkerActor);
                 var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 if (await SubscriptionStatusRefresher.RefreshAsync(context, tenantId, _clock.UtcNow, cancellationToken))
                     changed++;

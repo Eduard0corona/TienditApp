@@ -23,6 +23,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -249,6 +250,34 @@ public class WhatsAppWebhookControllerTests
     }
 
     [Fact]
+    public async Task Process_ShouldNotApplyAStatusToAnotherBusinessesMessage()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        await fixture.SeedSentMessageAsync(fixture.TenantA, "wamid.of-a");
+        // Reported to business B's number: B's scope cannot see (nor change) business A's message.
+        var body = StatusPayload(TenantBPhoneNumberId, "wamid.of-a", "read");
+
+        var outcome = await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
+
+        Assert.Equal(0, outcome.FailedItems);
+        var message = await fixture.Context.WhatsAppMessages.IgnoreQueryFilters().SingleAsync(m => m.ExternalMessageId == "wamid.of-a");
+        Assert.NotEqual(MessageStatus.Read, message.Status);
+    }
+
+    [Fact]
+    public async Task Process_ShouldWorkInTheScopeOfTheBusinessThatOwnsTheNumber()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var body = InboundPayload(TenantAPhoneNumberId, "wamid.to-a");
+
+        await fixture.CreateProcessor().ProcessAsync(Encoding.UTF8.GetString(body));
+
+        // The handler runs with the tenant filter of business A, as in one of its requests.
+        Assert.Equal(fixture.TenantA, fixture.TenantService.TenantId);
+        Assert.Equal(fixture.TenantA, Assert.IsType<ProcessInboundMessageCommand>(Assert.Single(fixture.Mediator.Requests)).TenantId);
+    }
+
+    [Fact]
     public async Task Process_ShouldKeepPhotosVoiceNotesAndLocationsAsMarkers()
     {
         await using var fixture = await TestFixture.CreateAsync();
@@ -414,9 +443,17 @@ public class WhatsAppWebhookControllerTests
 
     private sealed class TestFixture : IAsyncDisposable
     {
-        private TestFixture(ApplicationDbContext context, Guid tenantA, Guid tenantB, SaveChangesFaultInterceptor saveFaults)
+        private readonly List<ServiceProvider> _providers = [];
+
+        private TestFixture(
+            ApplicationDbContext context,
+            TestCurrentTenantService tenantService,
+            Guid tenantA,
+            Guid tenantB,
+            SaveChangesFaultInterceptor saveFaults)
         {
             Context = context;
+            TenantService = tenantService;
             TenantA = tenantA;
             TenantB = tenantB;
             SaveFaults = saveFaults;
@@ -424,6 +461,8 @@ public class WhatsAppWebhookControllerTests
         }
 
         public ApplicationDbContext Context { get; }
+        /// <summary>The business the context filters by: the processor sets it for each business of a delivery.</summary>
+        public TestCurrentTenantService TenantService { get; }
         public Guid TenantA { get; }
         public Guid TenantB { get; }
         public SaveChangesFaultInterceptor SaveFaults { get; }
@@ -437,7 +476,8 @@ public class WhatsAppWebhookControllerTests
                 .AddInterceptors(saveFaults)
                 .Options;
 
-            var context = new TestApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+            var tenantService = new TestCurrentTenantService();
+            var context = new TestApplicationDbContext(options, tenantService, new NullMediator());
 
             var tenantA = new Tenant("Tenant A", "tenant-a", BusinessType.Food, "a@tenant.com");
             var tenantB = new Tenant("Tenant B", "tenant-b", BusinessType.Retail, "b@tenant.com");
@@ -447,7 +487,7 @@ public class WhatsAppWebhookControllerTests
                 CreateConfig(tenantB.Id, TenantBPhoneNumberId, TenantBVerifyToken));
             await context.SaveChangesAsync();
 
-            return new TestFixture(context, tenantA.Id, tenantB.Id, saveFaults);
+            return new TestFixture(context, tenantService, tenantA.Id, tenantB.Id, saveFaults);
         }
 
         /// <summary>Stores a message the business sent, whose delivery statuses Meta reports later.</summary>
@@ -482,18 +522,38 @@ public class WhatsAppWebhookControllerTests
             };
         }
 
+        /// <summary>
+        /// The processor with a scope factory whose scopes share this fixture's context, mediator and tenant: the
+        /// business it sets for each part of a delivery is the one the context filters by.
+        /// </summary>
         public WhatsAppWebhookProcessor CreateProcessor(
             ILogger<WhatsAppWebhookProcessor>? logger = null,
             string environmentName = "Production",
             IWhatsAppNotificationService? notifications = null)
-            => new(
-                Mediator,
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<ISender>(Mediator);
+            services.AddSingleton<IApplicationDbContext>(Context);
+            services.AddSingleton<ICurrentTenantService>(TenantService);
+            services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
+            if (notifications is not null)
+                services.AddSingleton(notifications);
+            var provider = services.BuildServiceProvider();
+            _providers.Add(provider);
+
+            return new WhatsAppWebhookProcessor(
+                provider.GetRequiredService<IServiceScopeFactory>(),
                 Context,
                 new TestHostEnvironment(environmentName),
-                logger ?? NullLogger<WhatsAppWebhookProcessor>.Instance,
-                notifications);
+                logger ?? NullLogger<WhatsAppWebhookProcessor>.Instance);
+        }
 
-        public ValueTask DisposeAsync() => Context.DisposeAsync();
+        public async ValueTask DisposeAsync()
+        {
+            foreach (var provider in _providers)
+                await provider.DisposeAsync();
+            await Context.DisposeAsync();
+        }
 
         private static WhatsAppConfig CreateConfig(Guid tenantId, string phoneNumberId, string verifyToken)
         {

@@ -16,6 +16,7 @@ import type {
 import { AppointmentStatus as AppointmentStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import { useToast } from '../../hooks/useToast';
+import { formatInBusinessZone } from '../../utils/dates';
 
 const COLUMNS = [
   { header: 'Cliente' },
@@ -116,11 +117,11 @@ function formatSlot(item: AppointmentDto): string {
   const start = new Date(item.startAt);
   const end = new Date(item.endAt);
   const sameDay = start.toDateString() === end.toDateString();
-  const day = start.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
-  const from = start.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const day = formatInBusinessZone(start, { weekday: 'short', day: 'numeric', month: 'short' });
+  const from = formatInBusinessZone(start, { hour: '2-digit', minute: '2-digit' });
   const to = sameDay
-    ? end.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-    : end.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+    ? formatInBusinessZone(end, { hour: '2-digit', minute: '2-digit' })
+    : formatInBusinessZone(end, { dateStyle: 'short', timeStyle: 'short' });
   return `${day} · ${from} a ${to}`;
 }
 

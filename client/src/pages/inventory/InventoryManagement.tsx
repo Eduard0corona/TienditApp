@@ -31,6 +31,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useActiveBranches } from '../../hooks/useWorkingBranch';
 import { formatMoney, formatUnitCost } from '../../utils/money';
 import { formatStockQuantity } from '../../utils/units';
+import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
 
 type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
@@ -315,7 +316,7 @@ const getMovementReasonLabel = (movementReason: InventoryMovementReason) =>
 
 const formatDateTime = (value?: string) => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('es-MX', {
+  return formatInBusinessZone(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -326,7 +327,7 @@ const formatDateTime = (value?: string) => {
 
 const formatDate = (value?: string) => {
   if (!value) return '-';
-  return new Date(value).toLocaleDateString('es-MX');
+  return formatInBusinessZone(value, { day: 'numeric', month: 'numeric', year: 'numeric' });
 };
 
 export default function InventoryManagement() {
@@ -338,6 +339,7 @@ export default function InventoryManagement() {
   const [suppliesData, setSuppliesData] = useState<PaginatedList<SupplyItemDto>>(EMPTY_PAGINATED);
   const [suppliesLoading, setSuppliesLoading] = useState(true);
   const [suppliesPageNumber, setSuppliesPageNumber] = useState(1);
+  const [suppliesSearch, setSuppliesSearch] = useState('');
   const [suppliesPageSize, setSuppliesPageSize] = useState(10);
   const [suppliesFilterActive, setSuppliesFilterActive] = useState('');
   const [suppliesLowStockOnly, setSuppliesLowStockOnly] = useState(false);
@@ -345,6 +347,7 @@ export default function InventoryManagement() {
   const [stocksData, setStocksData] = useState<PaginatedList<InventoryStockDto>>(EMPTY_PAGINATED);
   const [stocksLoading, setStocksLoading] = useState(true);
   const [stocksPageNumber, setStocksPageNumber] = useState(1);
+  const [stocksSearch, setStocksSearch] = useState('');
   const [stocksPageSize, setStocksPageSize] = useState(10);
   const [stocksLocationFilter, setStocksLocationFilter] = useState('');
   const [stocksLowStockOnly, setStocksLowStockOnly] = useState(false);
@@ -352,6 +355,7 @@ export default function InventoryManagement() {
   const [movementsData, setMovementsData] = useState<PaginatedList<InventoryMovementDto>>(EMPTY_PAGINATED);
   const [movementsLoading, setMovementsLoading] = useState(true);
   const [movementsPageNumber, setMovementsPageNumber] = useState(1);
+  const [movementsSearch, setMovementsSearch] = useState('');
   const [movementsPageSize, setMovementsPageSize] = useState(10);
   const [movementsTypeFilter, setMovementsTypeFilter] = useState('');
   const [movementsReasonFilter, setMovementsReasonFilter] = useState('');
@@ -369,6 +373,7 @@ export default function InventoryManagement() {
   const [kardexData, setKardexData] = useState<PaginatedList<InventoryKardexEntryDto>>(EMPTY_PAGINATED);
   const [kardexLoading, setKardexLoading] = useState(false);
   const [kardexPageNumber, setKardexPageNumber] = useState(1);
+  const [kardexSearch, setKardexSearch] = useState('');
   const [kardexPageSize, setKardexPageSize] = useState(20);
   const [kardexSupplyFilter, setKardexSupplyFilter] = useState('');
   const [kardexLocationFilter, setKardexLocationFilter] = useState('');
@@ -489,6 +494,7 @@ export default function InventoryManagement() {
         inventoryLocationId?: string;
         fromDate?: string;
         toDate?: string;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -498,8 +504,9 @@ export default function InventoryManagement() {
 
       if (kardexSupplyFilter) params.supplyItemId = kardexSupplyFilter;
       if (kardexLocationFilter) params.inventoryLocationId = kardexLocationFilter;
-      if (kardexFromDate) params.fromDate = new Date(`${kardexFromDate}T00:00:00`).toISOString();
-      if (kardexToDate) params.toDate = new Date(`${kardexToDate}T23:59:59`).toISOString();
+      if (kardexFromDate) params.fromDate = businessDayStart(kardexFromDate);
+      if (kardexToDate) params.toDate = businessDayEnd(kardexToDate);
+      if (kardexSearch) params.search = kardexSearch;
 
       const { data } = await inventoryApi.getKardex(params);
       setKardexData(data);
@@ -508,7 +515,7 @@ export default function InventoryManagement() {
     } finally {
       setKardexLoading(false);
     }
-  }, [kardexFromDate, kardexLocationFilter, kardexPageNumber, kardexPageSize, kardexSupplyFilter, kardexToDate]);
+  }, [kardexFromDate, kardexLocationFilter, kardexPageNumber, kardexPageSize, kardexSearch, kardexSupplyFilter, kardexToDate]);
 
   const loadAlerts = useCallback(async () => {
     setAlertsLoading(true);
@@ -528,6 +535,7 @@ export default function InventoryManagement() {
       const params: {
         isActive?: boolean;
         lowStockOnly?: boolean;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -537,6 +545,7 @@ export default function InventoryManagement() {
 
       if (suppliesFilterActive !== '') params.isActive = suppliesFilterActive === 'true';
       if (suppliesLowStockOnly) params.lowStockOnly = true;
+      if (suppliesSearch) params.search = suppliesSearch;
 
       const { data } = await inventoryApi.getSupplies(params);
       setSuppliesData(data);
@@ -545,7 +554,7 @@ export default function InventoryManagement() {
     } finally {
       setSuppliesLoading(false);
     }
-  }, [suppliesFilterActive, suppliesLowStockOnly, suppliesPageNumber, suppliesPageSize]);
+  }, [suppliesFilterActive, suppliesLowStockOnly, suppliesPageNumber, suppliesPageSize, suppliesSearch]);
 
   const loadStocks = useCallback(async () => {
     setStocksLoading(true);
@@ -553,6 +562,7 @@ export default function InventoryManagement() {
       const params: {
         inventoryLocationId?: string;
         lowStockOnly?: boolean;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -562,6 +572,7 @@ export default function InventoryManagement() {
 
       if (stocksLocationFilter) params.inventoryLocationId = stocksLocationFilter;
       if (stocksLowStockOnly) params.lowStockOnly = true;
+      if (stocksSearch) params.search = stocksSearch;
 
       const { data } = await inventoryApi.getStocks(params);
       setStocksData(data);
@@ -570,7 +581,7 @@ export default function InventoryManagement() {
     } finally {
       setStocksLoading(false);
     }
-  }, [stocksLocationFilter, stocksLowStockOnly, stocksPageNumber, stocksPageSize]);
+  }, [stocksLocationFilter, stocksLowStockOnly, stocksPageNumber, stocksPageSize, stocksSearch]);
 
   const loadMovements = useCallback(async () => {
     setMovementsLoading(true);
@@ -580,6 +591,7 @@ export default function InventoryManagement() {
         movementReason?: InventoryMovementReason;
         fromDate?: string;
         toDate?: string;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -589,8 +601,9 @@ export default function InventoryManagement() {
 
       if (movementsTypeFilter !== '') params.movementType = Number(movementsTypeFilter) as InventoryMovementType;
       if (movementsReasonFilter !== '') params.movementReason = Number(movementsReasonFilter) as InventoryMovementReason;
-      if (movementsFromDate) params.fromDate = new Date(`${movementsFromDate}T00:00:00`).toISOString();
-      if (movementsToDate) params.toDate = new Date(`${movementsToDate}T23:59:59`).toISOString();
+      if (movementsFromDate) params.fromDate = businessDayStart(movementsFromDate);
+      if (movementsToDate) params.toDate = businessDayEnd(movementsToDate);
+      if (movementsSearch) params.search = movementsSearch;
 
       const { data } = await inventoryApi.getMovements(params);
       setMovementsData(data);
@@ -599,7 +612,7 @@ export default function InventoryManagement() {
     } finally {
       setMovementsLoading(false);
     }
-  }, [movementsFromDate, movementsPageNumber, movementsPageSize, movementsReasonFilter, movementsToDate, movementsTypeFilter]);
+  }, [movementsFromDate, movementsPageNumber, movementsPageSize, movementsReasonFilter, movementsSearch, movementsToDate, movementsTypeFilter]);
 
   useEffect(() => {
     loadLocations();
@@ -922,7 +935,7 @@ export default function InventoryManagement() {
         quantity: Number(line.quantity),
         unitCost: line.unitCost ? Number(line.unitCost) : undefined,
         lotNumber: line.lotNumber.trim() || undefined,
-        expirationDate: line.expirationDate ? new Date(`${line.expirationDate}T00:00:00`).toISOString() : undefined,
+        expirationDate: line.expirationDate ? businessDayStart(line.expirationDate) : undefined,
         notes: line.notes.trim() || undefined,
       })),
     };
@@ -1173,8 +1186,8 @@ export default function InventoryManagement() {
                 <>
                   <div className="row mb-2">
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Estado</label>
-                      <select
+                      <label htmlFor="inventorymanagement-estado" className="form-label">Estado</label>
+                      <select id="inventorymanagement-estado"
                         className="form-select form-select-sm"
                         value={suppliesFilterActive}
                         onChange={(e) => {
@@ -1189,7 +1202,7 @@ export default function InventoryManagement() {
                     </div>
                     <div className="col-md-3 mb-2 d-flex align-items-end">
                       <div className="form-check form-switch">
-                        <input
+                        <input id="inventorymanagement-solo-bajo-stock"
                           className="form-check-input"
                           type="checkbox"
                           checked={suppliesLowStockOnly}
@@ -1198,7 +1211,7 @@ export default function InventoryManagement() {
                             setSuppliesPageNumber(1);
                           }}
                         />
-                        <label className="form-check-label">Solo bajo stock</label>
+                        <label htmlFor="inventorymanagement-solo-bajo-stock" className="form-check-label">Solo bajo stock</label>
                       </div>
                     </div>
                   </div>
@@ -1209,12 +1222,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.id}
                     loading={suppliesLoading}
                     emptyMessage="No hay insumos registrados."
-                    searchFilter={(item, search) =>
-                      item.name.toLowerCase().includes(search) ||
-                      (item.code || '').toLowerCase().includes(search) ||
-                      (item.sku || '').toLowerCase().includes(search) ||
-                      (item.barcode || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: suppliesData.totalCount,
                       page: suppliesPageNumber,
@@ -1222,6 +1229,10 @@ export default function InventoryManagement() {
                       onPageChange: setSuppliesPageNumber,
                       onPageSizeChange: (size) => {
                         setSuppliesPageSize(size);
+                        setSuppliesPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setSuppliesSearch(term);
                         setSuppliesPageNumber(1);
                       },
                     }}
@@ -1289,8 +1300,8 @@ export default function InventoryManagement() {
                 <>
                   <div className="row mb-2">
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Ubicación</label>
-                      <select
+                      <label htmlFor="inventorymanagement-ubicacion" className="form-label">Ubicación</label>
+                      <select id="inventorymanagement-ubicacion"
                         className="form-select form-select-sm"
                         value={stocksLocationFilter}
                         onChange={(e) => {
@@ -1308,7 +1319,7 @@ export default function InventoryManagement() {
                     </div>
                     <div className="col-md-3 mb-2 d-flex align-items-end">
                       <div className="form-check form-switch">
-                        <input
+                        <input id="inventorymanagement-solo-bajo-stock-2"
                           className="form-check-input"
                           type="checkbox"
                           checked={stocksLowStockOnly}
@@ -1317,7 +1328,7 @@ export default function InventoryManagement() {
                             setStocksPageNumber(1);
                           }}
                         />
-                        <label className="form-check-label">Solo bajo stock</label>
+                        <label htmlFor="inventorymanagement-solo-bajo-stock-2" className="form-check-label">Solo bajo stock</label>
                       </div>
                     </div>
                   </div>
@@ -1328,12 +1339,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.stockId}
                     loading={stocksLoading}
                     emptyMessage="No hay existencias registradas."
-                    searchFilter={(item, search) =>
-                      item.supplyItemName.toLowerCase().includes(search) ||
-                      item.inventoryLocationName.toLowerCase().includes(search) ||
-                      (item.supplyCode || '').toLowerCase().includes(search) ||
-                      (item.supplySku || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: stocksData.totalCount,
                       page: stocksPageNumber,
@@ -1341,6 +1346,10 @@ export default function InventoryManagement() {
                       onPageChange: setStocksPageNumber,
                       onPageSizeChange: (size) => {
                         setStocksPageSize(size);
+                        setStocksPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setStocksSearch(term);
                         setStocksPageNumber(1);
                       },
                     }}
@@ -1383,8 +1392,8 @@ export default function InventoryManagement() {
                 <>
                   <div className="row mb-2">
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Tipo</label>
-                      <select
+                      <label htmlFor="inventorymanagement-tipo" className="form-label">Tipo</label>
+                      <select id="inventorymanagement-tipo"
                         className="form-select form-select-sm"
                         value={movementsTypeFilter}
                         onChange={(e) => {
@@ -1401,8 +1410,8 @@ export default function InventoryManagement() {
                       </select>
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Motivo</label>
-                      <select
+                      <label htmlFor="inventorymanagement-motivo" className="form-label">Motivo</label>
+                      <select id="inventorymanagement-motivo"
                         className="form-select form-select-sm"
                         value={movementsReasonFilter}
                         onChange={(e) => {
@@ -1419,8 +1428,8 @@ export default function InventoryManagement() {
                       </select>
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Desde</label>
-                      <input
+                      <label htmlFor="inventorymanagement-desde" className="form-label">Desde</label>
+                      <input id="inventorymanagement-desde"
                         type="date"
                         className="form-control form-control-sm"
                         value={movementsFromDate}
@@ -1431,8 +1440,8 @@ export default function InventoryManagement() {
                       />
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Hasta</label>
-                      <input
+                      <label htmlFor="inventorymanagement-hasta" className="form-label">Hasta</label>
+                      <input id="inventorymanagement-hasta"
                         type="date"
                         className="form-control form-control-sm"
                         value={movementsToDate}
@@ -1450,11 +1459,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.id}
                     loading={movementsLoading}
                     emptyMessage="No hay movimientos registrados."
-                    searchFilter={(item, search) =>
-                      item.movementNumber.toLowerCase().includes(search) ||
-                      (item.referenceNumber || '').toLowerCase().includes(search) ||
-                      (item.counterpartyName || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: movementsData.totalCount,
                       page: movementsPageNumber,
@@ -1462,6 +1466,10 @@ export default function InventoryManagement() {
                       onPageChange: setMovementsPageNumber,
                       onPageSizeChange: (size) => {
                         setMovementsPageSize(size);
+                        setMovementsPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setMovementsSearch(term);
                         setMovementsPageNumber(1);
                       },
                     }}
@@ -1494,8 +1502,8 @@ export default function InventoryManagement() {
                 <>
                   <div className="row mb-3">
                     <div className="col-md-6 mb-2">
-                      <label className="form-label">Producto o servicio</label>
-                      <select
+                      <label htmlFor="inventorymanagement-producto-o-servicio" className="form-label">Producto o servicio</label>
+                      <select id="inventorymanagement-producto-o-servicio"
                         className="form-select"
                         value={recipeProductId}
                         onChange={(e) => selectRecipeProduct(e.target.value)}
@@ -1634,8 +1642,8 @@ export default function InventoryManagement() {
                 <>
                   <div className="row mb-2">
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Insumo</label>
-                      <select
+                      <label htmlFor="inventorymanagement-insumo" className="form-label">Insumo</label>
+                      <select id="inventorymanagement-insumo"
                         className="form-select form-select-sm"
                         value={kardexSupplyFilter}
                         onChange={(e) => {
@@ -1652,8 +1660,8 @@ export default function InventoryManagement() {
                       </select>
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Ubicación</label>
-                      <select
+                      <label htmlFor="inventorymanagement-ubicacion-2" className="form-label">Ubicación</label>
+                      <select id="inventorymanagement-ubicacion-2"
                         className="form-select form-select-sm"
                         value={kardexLocationFilter}
                         onChange={(e) => {
@@ -1670,8 +1678,8 @@ export default function InventoryManagement() {
                       </select>
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Desde</label>
-                      <input
+                      <label htmlFor="inventorymanagement-desde-2" className="form-label">Desde</label>
+                      <input id="inventorymanagement-desde-2"
                         type="date"
                         className="form-control form-control-sm"
                         value={kardexFromDate}
@@ -1682,8 +1690,8 @@ export default function InventoryManagement() {
                       />
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Hasta</label>
-                      <input
+                      <label htmlFor="inventorymanagement-hasta-2" className="form-label">Hasta</label>
+                      <input id="inventorymanagement-hasta-2"
                         type="date"
                         className="form-control form-control-sm"
                         value={kardexToDate}
@@ -1701,12 +1709,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.movementLineId}
                     loading={kardexLoading}
                     emptyMessage="No hay movimientos para los filtros seleccionados."
-                    searchFilter={(item, search) =>
-                      item.movementNumber.toLowerCase().includes(search) ||
-                      item.supplyItemName.toLowerCase().includes(search) ||
-                      item.inventoryLocationName.toLowerCase().includes(search) ||
-                      (item.referenceNumber || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: kardexData.totalCount,
                       page: kardexPageNumber,
@@ -1714,6 +1716,10 @@ export default function InventoryManagement() {
                       onPageChange: setKardexPageNumber,
                       onPageSizeChange: (size) => {
                         setKardexPageSize(size);
+                        setKardexPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setKardexSearch(term);
                         setKardexPageNumber(1);
                       },
                     }}
@@ -1880,8 +1886,8 @@ export default function InventoryManagement() {
         <Modal.Body>
           <div className="row">
             <div className="col-md-6 mb-2">
-              <label className="form-label">Nombre *</label>
-              <input
+              <label htmlFor="inventorymanagement-nombre" className="form-label">Nombre *</label>
+              <input id="inventorymanagement-nombre"
                 type="text"
                 className="form-control"
                 value={supplyForm.name}
@@ -1889,8 +1895,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Código</label>
-              <input
+              <label htmlFor="inventorymanagement-codigo" className="form-label">Código</label>
+              <input id="inventorymanagement-codigo"
                 type="text"
                 className="form-control"
                 value={supplyForm.code}
@@ -1898,8 +1904,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">SKU</label>
-              <input
+              <label htmlFor="inventorymanagement-sku" className="form-label">SKU</label>
+              <input id="inventorymanagement-sku"
                 type="text"
                 className="form-control"
                 value={supplyForm.sku}
@@ -1907,8 +1913,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Código de barras</label>
-              <input
+              <label htmlFor="inventorymanagement-codigo-de-barras" className="form-label">Código de barras</label>
+              <input id="inventorymanagement-codigo-de-barras"
                 type="text"
                 className="form-control"
                 value={supplyForm.barcode}
@@ -1916,8 +1922,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Categoría</label>
-              <input
+              <label htmlFor="inventorymanagement-categoria" className="form-label">Categoría</label>
+              <input id="inventorymanagement-categoria"
                 type="text"
                 className="form-control"
                 value={supplyForm.categoryName}
@@ -1925,8 +1931,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Unidad</label>
-              <select
+              <label htmlFor="inventorymanagement-unidad" className="form-label">Unidad</label>
+              <select id="inventorymanagement-unidad"
                 className="form-select"
                 value={supplyForm.unit}
                 onChange={(e) => setSupplyForm((current) => ({ ...current, unit: Number(e.target.value) as UnitType }))}
@@ -1939,8 +1945,8 @@ export default function InventoryManagement() {
               </select>
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Marca</label>
-              <input
+              <label htmlFor="inventorymanagement-marca" className="form-label">Marca</label>
+              <input id="inventorymanagement-marca"
                 type="text"
                 className="form-control"
                 value={supplyForm.brand}
@@ -1948,8 +1954,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Modelo</label>
-              <input
+              <label htmlFor="inventorymanagement-modelo" className="form-label">Modelo</label>
+              <input id="inventorymanagement-modelo"
                 type="text"
                 className="form-control"
                 value={supplyForm.model}
@@ -1957,8 +1963,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Costo por defecto</label>
-              <input
+              <label htmlFor="inventorymanagement-costo-por-defecto" className="form-label">Costo por defecto</label>
+              <input id="inventorymanagement-costo-por-defecto"
                 type="number"
                 step="0.01"
                 className="form-control"
@@ -1967,8 +1973,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Stock mínimo</label>
-              <input
+              <label htmlFor="inventorymanagement-stock-minimo" className="form-label">Stock mínimo</label>
+              <input id="inventorymanagement-stock-minimo"
                 type="number"
                 step="0.01"
                 className="form-control"
@@ -1977,8 +1983,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Stock máximo</label>
-              <input
+              <label htmlFor="inventorymanagement-stock-maximo" className="form-label">Stock máximo</label>
+              <input id="inventorymanagement-stock-maximo"
                 type="number"
                 step="0.01"
                 className="form-control"
@@ -1987,8 +1993,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Punto de reorden</label>
-              <input
+              <label htmlFor="inventorymanagement-punto-de-reorden" className="form-label">Punto de reorden</label>
+              <input id="inventorymanagement-punto-de-reorden"
                 type="number"
                 step="0.01"
                 className="form-control"
@@ -1997,8 +2003,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Impuesto (%)</label>
-              <input
+              <label htmlFor="inventorymanagement-impuesto" className="form-label">Impuesto (%)</label>
+              <input id="inventorymanagement-impuesto"
                 type="number"
                 step="0.01"
                 className="form-control"
@@ -2009,46 +2015,46 @@ export default function InventoryManagement() {
             <div className="col-md-4 mb-2 d-flex align-items-end">
               <div>
                 <div className="form-check mb-1">
-                  <input
+                  <input id="inventorymanagement-control-por-lotes"
                     className="form-check-input"
                     type="checkbox"
                     checked={supplyForm.trackBatches}
                     onChange={(e) => setSupplyForm((current) => ({ ...current, trackBatches: e.target.checked }))}
                   />
-                  <label className="form-check-label">Control por lotes</label>
+                  <label htmlFor="inventorymanagement-control-por-lotes" className="form-check-label">Control por lotes</label>
                 </div>
                 <div className="form-check mb-1">
-                  <input
+                  <input id="inventorymanagement-control-caducidad"
                     className="form-check-input"
                     type="checkbox"
                     checked={supplyForm.trackExpiration}
                     onChange={(e) => setSupplyForm((current) => ({ ...current, trackExpiration: e.target.checked }))}
                   />
-                  <label className="form-check-label">Control caducidad</label>
+                  <label htmlFor="inventorymanagement-control-caducidad" className="form-check-label">Control caducidad</label>
                 </div>
                 <div className="form-check">
-                  <input
+                  <input id="inventorymanagement-es-perecedero"
                     className="form-check-input"
                     type="checkbox"
                     checked={supplyForm.isPerishable}
                     onChange={(e) => setSupplyForm((current) => ({ ...current, isPerishable: e.target.checked }))}
                   />
-                  <label className="form-check-label">Es perecedero</label>
+                  <label htmlFor="inventorymanagement-es-perecedero" className="form-check-label">Es perecedero</label>
                 </div>
                 <div className="form-check">
-                  <input
+                  <input id="inventorymanagement-insumo-critico"
                     className="form-check-input"
                     type="checkbox"
                     checked={supplyForm.isCritical}
                     onChange={(e) => setSupplyForm((current) => ({ ...current, isCritical: e.target.checked }))}
                   />
-                  <label className="form-check-label">Insumo critico</label>
+                  <label htmlFor="inventorymanagement-insumo-critico" className="form-check-label">Insumo critico</label>
                 </div>
               </div>
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Descripción</label>
-              <textarea
+              <label htmlFor="inventorymanagement-descripcion" className="form-label">Descripción</label>
+              <textarea id="inventorymanagement-descripcion"
                 className="form-control"
                 rows={2}
                 value={supplyForm.description}
@@ -2056,8 +2062,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-12 mb-0">
-              <label className="form-label">Notas</label>
-              <textarea
+              <label htmlFor="inventorymanagement-notas" className="form-label">Notas</label>
+              <textarea id="inventorymanagement-notas"
                 className="form-control"
                 rows={2}
                 value={supplyForm.notes}
@@ -2083,8 +2089,8 @@ export default function InventoryManagement() {
         <Modal.Body>
           <div className="row">
             <div className="col-md-6 mb-2">
-              <label className="form-label">Nombre *</label>
-              <input
+              <label htmlFor="inventorymanagement-nombre-2" className="form-label">Nombre *</label>
+              <input id="inventorymanagement-nombre-2"
                 type="text"
                 className="form-control"
                 value={locationForm.name}
@@ -2092,8 +2098,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Código *</label>
-              <input
+              <label htmlFor="inventorymanagement-codigo-2" className="form-label">Código *</label>
+              <input id="inventorymanagement-codigo-2"
                 type="text"
                 className="form-control"
                 value={locationForm.code}
@@ -2102,13 +2108,13 @@ export default function InventoryManagement() {
             </div>
             <div className="col-md-3 mb-2 d-flex align-items-end">
               <div className="form-check">
-                <input
+                <input id="inventorymanagement-ubicacion-por-defecto"
                   className="form-check-input"
                   type="checkbox"
                   checked={locationForm.isDefault}
                   onChange={(e) => setLocationForm((current) => ({ ...current, isDefault: e.target.checked }))}
                 />
-                <label className="form-check-label">Ubicación por defecto</label>
+                <label htmlFor="inventorymanagement-ubicacion-por-defecto" className="form-check-label">Ubicación por defecto</label>
               </div>
             </div>
             <div className="col-12 mb-2">
@@ -2127,8 +2133,8 @@ export default function InventoryManagement() {
               <div className="form-text">Las ventas de una sucursal descuentan del almacén de esa sucursal.</div>
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Descripción</label>
-              <textarea
+              <label htmlFor="inventorymanagement-descripcion-2" className="form-label">Descripción</label>
+              <textarea id="inventorymanagement-descripcion-2"
                 className="form-control"
                 rows={2}
                 value={locationForm.description}
@@ -2136,8 +2142,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Dirección linea 1</label>
-              <input
+              <label htmlFor="inventorymanagement-direccion-linea-1" className="form-label">Dirección linea 1</label>
+              <input id="inventorymanagement-direccion-linea-1"
                 type="text"
                 className="form-control"
                 value={locationForm.addressLine1}
@@ -2145,8 +2151,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Dirección linea 2</label>
-              <input
+              <label htmlFor="inventorymanagement-direccion-linea-2" className="form-label">Dirección linea 2</label>
+              <input id="inventorymanagement-direccion-linea-2"
                 type="text"
                 className="form-control"
                 value={locationForm.addressLine2}
@@ -2154,8 +2160,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Ciudad</label>
-              <input
+              <label htmlFor="inventorymanagement-ciudad" className="form-label">Ciudad</label>
+              <input id="inventorymanagement-ciudad"
                 type="text"
                 className="form-control"
                 value={locationForm.city}
@@ -2163,8 +2169,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Estado</label>
-              <input
+              <label htmlFor="inventorymanagement-estado-2" className="form-label">Estado</label>
+              <input id="inventorymanagement-estado-2"
                 type="text"
                 className="form-control"
                 value={locationForm.state}
@@ -2172,8 +2178,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Código postal</label>
-              <input
+              <label htmlFor="inventorymanagement-codigo-postal" className="form-label">Código postal</label>
+              <input id="inventorymanagement-codigo-postal"
                 type="text"
                 className="form-control"
                 value={locationForm.postalCode}
@@ -2181,8 +2187,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Contacto</label>
-              <input
+              <label htmlFor="inventorymanagement-contacto" className="form-label">Contacto</label>
+              <input id="inventorymanagement-contacto"
                 type="text"
                 className="form-control"
                 value={locationForm.contactName}
@@ -2190,8 +2196,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Teléfono contacto</label>
-              <input
+              <label htmlFor="inventorymanagement-telefono-contacto" className="form-label">Teléfono contacto</label>
+              <input id="inventorymanagement-telefono-contacto"
                 type="text"
                 className="form-control"
                 value={locationForm.contactPhone}
@@ -2217,8 +2223,8 @@ export default function InventoryManagement() {
         <Modal.Body>
           <div className="row mb-2">
             <div className="col-md-3 mb-2">
-              <label className="form-label">Tipo *</label>
-              <select
+              <label htmlFor="inventorymanagement-tipo-2" className="form-label">Tipo *</label>
+              <select id="inventorymanagement-tipo-2"
                 className="form-select"
                 value={movementForm.movementType}
                 onChange={(e) => setMovementForm((current) => ({
@@ -2232,8 +2238,8 @@ export default function InventoryManagement() {
               </select>
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Motivo *</label>
-              <select
+              <label htmlFor="inventorymanagement-motivo-2" className="form-label">Motivo *</label>
+              <select id="inventorymanagement-motivo-2"
                 className="form-select"
                 value={movementForm.movementReason}
                 onChange={(e) => setMovementForm((current) => ({
@@ -2247,8 +2253,8 @@ export default function InventoryManagement() {
               </select>
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Fecha y hora</label>
-              <input
+              <label htmlFor="inventorymanagement-fecha-y-hora" className="form-label">Fecha y hora</label>
+              <input id="inventorymanagement-fecha-y-hora"
                 type="datetime-local"
                 className="form-control"
                 value={movementForm.movementDate}
@@ -2256,8 +2262,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Referencia</label>
-              <input
+              <label htmlFor="inventorymanagement-referencia" className="form-label">Referencia</label>
+              <input id="inventorymanagement-referencia"
                 type="text"
                 className="form-control"
                 value={movementForm.referenceNumber}
@@ -2265,8 +2271,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Referencia externa</label>
-              <input
+              <label htmlFor="inventorymanagement-referencia-externa" className="form-label">Referencia externa</label>
+              <input id="inventorymanagement-referencia-externa"
                 type="text"
                 className="form-control"
                 value={movementForm.externalReference}
@@ -2274,8 +2280,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Contraparte</label>
-              <input
+              <label htmlFor="inventorymanagement-contraparte" className="form-label">Contraparte</label>
+              <input id="inventorymanagement-contraparte"
                 type="text"
                 className="form-control"
                 value={movementForm.counterpartyName}
@@ -2283,8 +2289,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Documento</label>
-              <input
+              <label htmlFor="inventorymanagement-documento" className="form-label">Documento</label>
+              <input id="inventorymanagement-documento"
                 type="text"
                 className="form-control"
                 value={movementForm.documentNumber}
@@ -2292,8 +2298,8 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Notas</label>
-              <textarea
+              <label htmlFor="inventorymanagement-notas-2" className="form-label">Notas</label>
+              <textarea id="inventorymanagement-notas-2"
                 className="form-control"
                 rows={2}
                 value={movementForm.notes}
@@ -2325,8 +2331,8 @@ export default function InventoryManagement() {
               </div>
               <div className="row">
                 <div className="col-md-4 mb-2">
-                  <label className="form-label">Insumo *</label>
-                  <select
+                  <label htmlFor={`inventorymanagement-insumo-${index}`} className="form-label">Insumo *</label>
+                  <select id={`inventorymanagement-insumo-${index}`}
                     className="form-select"
                     value={line.supplyItemId}
                     onChange={(e) => updateMovementLine(index, { supplyItemId: e.target.value })}
@@ -2340,8 +2346,8 @@ export default function InventoryManagement() {
                   </select>
                 </div>
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Ubicación *</label>
-                  <select
+                  <label htmlFor={`inventorymanagement-ubicacion-${index}`} className="form-label">Ubicación *</label>
+                  <select id={`inventorymanagement-ubicacion-${index}`}
                     className="form-select"
                     value={line.inventoryLocationId}
                     onChange={(e) => updateMovementLine(index, { inventoryLocationId: e.target.value })}
@@ -2355,8 +2361,8 @@ export default function InventoryManagement() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Cantidad *</label>
-                  <input
+                  <label htmlFor={`inventorymanagement-cantidad-${index}`} className="form-label">Cantidad *</label>
+                  <input id={`inventorymanagement-cantidad-${index}`}
                     type="number"
                     step="0.01"
                     className="form-control"
@@ -2365,8 +2371,8 @@ export default function InventoryManagement() {
                   />
                 </div>
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Costo unitario</label>
-                  <input
+                  <label htmlFor={`inventorymanagement-costo-unitario-${index}`} className="form-label">Costo unitario</label>
+                  <input id={`inventorymanagement-costo-unitario-${index}`}
                     type="number"
                     step="0.01"
                     className="form-control"
@@ -2375,8 +2381,8 @@ export default function InventoryManagement() {
                   />
                 </div>
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Lote</label>
-                  <input
+                  <label htmlFor={`inventorymanagement-lote-${index}`} className="form-label">Lote</label>
+                  <input id={`inventorymanagement-lote-${index}`}
                     type="text"
                     className="form-control"
                     value={line.lotNumber}
@@ -2384,8 +2390,8 @@ export default function InventoryManagement() {
                   />
                 </div>
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Caducidad</label>
-                  <input
+                  <label htmlFor={`inventorymanagement-caducidad-${index}`} className="form-label">Caducidad</label>
+                  <input id={`inventorymanagement-caducidad-${index}`}
                     type="date"
                     className="form-control"
                     value={line.expirationDate}
@@ -2393,8 +2399,8 @@ export default function InventoryManagement() {
                   />
                 </div>
                 <div className="col-md-6 mb-2">
-                  <label className="form-label">Notas</label>
-                  <input
+                  <label htmlFor={`inventorymanagement-notas-${index}`} className="form-label">Notas</label>
+                  <input id={`inventorymanagement-notas-${index}`}
                     type="text"
                     className="form-control"
                     value={line.notes}

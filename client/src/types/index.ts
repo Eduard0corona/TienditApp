@@ -145,6 +145,8 @@ export interface TenantProfileDto {
   insufficientStockPolicy?: InsufficientStockPolicy;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
+  /** IANA time zone of the business: dates show and days start as the business lives them. */
+  timeZone?: string;
   rfc?: string;
   legalName?: string;
   industry?: string;
@@ -221,6 +223,8 @@ export interface UpdateTenantRequest {
   zipCode?: string;
   city?: string;
   state?: string;
+  /** IANA id of the business's time zone; omitted keeps the current one. */
+  timeZone?: string;
 }
 
 // ==================== WhatsApp ====================
@@ -869,13 +873,15 @@ export interface InventoryAlertsDto {
 
 // ==================== Purchasing ====================
 
-export type PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99;
+/** Closed (4): part arrived and the rest will not; closed with what came in. */
+export type PurchaseOrderStatus = 0 | 1 | 2 | 3 | 4 | 99;
 
 export const PurchaseOrderStatus = {
   Draft: 0,
   Sent: 1,
   PartiallyReceived: 2,
   Received: 3,
+  Closed: 4,
   Cancelled: 99,
 } as const;
 
@@ -940,6 +946,9 @@ export interface PurchaseOrderDto {
   subTotal: number;
   tax: number;
   total: number;
+  /** When the business stopped waiting for what was missing, and why. */
+  closedAt?: string | null;
+  closeReason?: string | null;
   lines: PurchaseOrderLineDto[];
 }
 
@@ -1197,9 +1206,11 @@ export interface AuditLogDto {
 
 // ==================== Messaging (campaigns, reminders, opt-outs) ====================
 
+// AppointmentNotice: booked, moved, confirmed or cancelled; queued by the system, it has no templates.
 export const MessagePurpose = {
   Campaign: 0,
   AppointmentReminder: 1,
+  AppointmentNotice: 2,
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 

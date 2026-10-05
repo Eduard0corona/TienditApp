@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
+import { businessDayEnd, businessDayStart } from '../../utils/dates';
 
 export default function OperationalReports() {
   const { user } = useAuth();
@@ -26,8 +27,8 @@ export default function OperationalReports() {
     setLoading(true);
     try {
       const params: { fromDate?: string; toDate?: string } = {};
-      if (fromDate) params.fromDate = new Date(`${fromDate}T00:00:00`).toISOString();
-      if (toDate) params.toDate = new Date(`${toDate}T23:59:59`).toISOString();
+      if (fromDate) params.fromDate = businessDayStart(fromDate);
+      if (toDate) params.toDate = businessDayEnd(toDate);
       const { data } = await reportsApi.getOperationalSummary(params);
       setReport(data);
     } catch (err: unknown) {
@@ -58,12 +59,12 @@ export default function OperationalReports() {
         <div className="card-body">
           <div className="row align-items-end">
             <div className="col-md-3 mb-2">
-              <label className="form-label">Desde</label>
-              <input type="date" className="form-control" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <label htmlFor="operationalreports-desde" className="form-label">Desde</label>
+              <input id="operationalreports-desde" type="date" className="form-control" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Hasta</label>
-              <input type="date" className="form-control" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <label htmlFor="operationalreports-hasta" className="form-label">Hasta</label>
+              <input id="operationalreports-hasta" type="date" className="form-control" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="col-md-2 mb-2">
               <button className="btn btn-primary w-100" onClick={loadReport}>Actualizar</button>

@@ -9,11 +9,14 @@ import { PLACEHOLDER_HELP } from './campaignLabels';
 const PURPOSE_LABEL: Record<MessagePurpose, string> = {
   [MessagePurpose.Campaign]: 'Campaña',
   [MessagePurpose.AppointmentReminder]: 'Recordatorio de cita',
+  [MessagePurpose.AppointmentNotice]: 'Aviso de cita',
 };
 
+// Appointment notices are written by the system: no template uses them.
 const PLACEHOLDERS: Record<MessagePurpose, string[]> = {
   [MessagePurpose.Campaign]: ['nombre', 'negocio'],
   [MessagePurpose.AppointmentReminder]: ['nombre', 'negocio', 'servicio', 'fecha', 'hora'],
+  [MessagePurpose.AppointmentNotice]: [],
 };
 
 type Draft = {

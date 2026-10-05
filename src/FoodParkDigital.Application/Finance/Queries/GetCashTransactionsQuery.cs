@@ -16,6 +16,8 @@ public record GetCashTransactionsQuery : IRequest<PaginatedList<CashTransactionD
     public CashTransactionType? TransactionType { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
+    /// <summary>Reference, notes or who registered it, over every page.</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -43,6 +45,14 @@ public class GetCashTransactionsQueryHandler : IRequestHandler<GetCashTransactio
             query = query.Where(x => x.OccurredAt >= request.FromDate.Value);
         if (request.ToDate.HasValue)
             query = query.Where(x => x.OccurredAt <= request.ToDate.Value);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(x =>
+                (x.Reference != null && x.Reference.ToLower().Contains(search)) ||
+                (x.Notes != null && x.Notes.ToLower().Contains(search)) ||
+                (x.CreatedBy != null && x.CreatedBy.ToLower().Contains(search)));
+        }
 
         var projected = query
             .OrderByDescending(x => x.OccurredAt)

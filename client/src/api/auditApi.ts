@@ -7,6 +7,8 @@ export const auditApi = {
     action?: string;
     from?: string;
     to?: string;
+    /** What changed, the action or who did it, over every page. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) =>

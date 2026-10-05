@@ -157,17 +157,21 @@ public class SmsServiceLoggingTests
         context.OwnerWhatsAppConfigs.Add(ownerConfig);
         await context.SaveChangesAsync();
         var logger = new CapturingLogger<SmsService>();
-        var service = CreateService(Environments.Production, NoSmsProvider, context, http, logger);
+        var whatsAppLogger = new CapturingLogger<WhatsAppCloudClient>();
+        var service = CreateService(Environments.Production, NoSmsProvider, context, http, logger, whatsAppLogger);
 
         await service.SendVerificationCodeAsync(PhoneNumber, OtpCode);
 
+        // The single Meta client sends the code and logs the rejection (Twilio is not configured, so no SMS follows).
         var request = Assert.Single(http.Requests);
         Assert.Equal("graph.facebook.com", request.Uri.Host);
         Assert.Contains(OtpCode, request.Content);
         AssertNoCodeOrPhoneNumber(logger);
+        AssertNoCodeOrPhoneNumber(whatsAppLogger);
         Assert.Null(logger.FirstMentioning(OwnerAccessToken));
-        Assert.Null(logger.FirstMentioning("not in allowed list"));
-        var error = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Null(whatsAppLogger.FirstMentioning(OwnerAccessToken));
+        Assert.Null(whatsAppLogger.FirstMentioning("not in allowed list"));
+        var error = Assert.Single(whatsAppLogger.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Equal(131030, error["ProviderErrorCode"]);
         Assert.Contains(MaskedPhoneNumber, error.Message);
     }
@@ -177,13 +181,16 @@ public class SmsServiceLoggingTests
         Dictionary<string, string?> settings,
         ApplicationDbContext context,
         StubHttpMessageHandler http,
-        CapturingLogger<SmsService> logger)
+        CapturingLogger<SmsService> logger,
+        CapturingLogger<WhatsAppCloudClient>? whatsAppLogger = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
-        return new SmsService(context, configuration, http, new TestHostEnvironment(environmentName), logger);
+        var environment = new TestHostEnvironment(environmentName);
+        var whatsApp = new WhatsAppCloudClient(http, environment, whatsAppLogger ?? new CapturingLogger<WhatsAppCloudClient>());
+        return new SmsService(context, configuration, http, whatsApp, environment, logger);
     }
 
-    private static void AssertNoCodeOrPhoneNumber(CapturingLogger<SmsService> logger)
+    private static void AssertNoCodeOrPhoneNumber<T>(CapturingLogger<T> logger)
     {
         Assert.Null(logger.FirstMentioning(OtpCode));
         Assert.Null(logger.FirstMentioning(NationalNumber));

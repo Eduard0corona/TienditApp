@@ -6,6 +6,8 @@ namespace FoodParkDigital.Domain.Purchasing.Entities;
 
 public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
 {
+    public const int MaxCloseReasonLength = 500;
+
     private readonly List<PurchaseOrderLine> _lines = new();
 
     private PurchaseOrder() { }
@@ -44,6 +46,9 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
     public decimal SubTotal { get; private set; }
     public decimal Tax { get; private set; }
     public decimal Total { get; private set; }
+    /// <summary>When the business stopped waiting for what was missing (<see cref="PurchaseOrderStatus.Closed"/>).</summary>
+    public DateTimeOffset? ClosedAt { get; private set; }
+    public string? CloseReason { get; private set; }
 
     public Supplier Supplier { get; private set; } = null!;
     public IReadOnlyCollection<PurchaseOrderLine> Lines => _lines.AsReadOnly();
@@ -56,7 +61,7 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
         decimal taxPercent,
         string? notes = null)
     {
-        if (Status is PurchaseOrderStatus.Received or PurchaseOrderStatus.Cancelled)
+        if (Status is PurchaseOrderStatus.Received or PurchaseOrderStatus.Closed or PurchaseOrderStatus.Cancelled)
             throw new DomainException("No se pueden agregar líneas a una compra cerrada.");
 
         if (_lines.Any(x =>
@@ -96,7 +101,7 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (Status == PurchaseOrderStatus.Cancelled)
             throw new DomainException("La compra ya está cancelada.");
-        if (Status == PurchaseOrderStatus.Received)
+        if (Status is PurchaseOrderStatus.Received or PurchaseOrderStatus.Closed)
             throw new DomainException("No se puede cancelar una compra ya recibida.");
         if (_lines.Any(x => x.ReceivedQuantity > 0))
             throw new DomainException("La compra ya tiene mercancía recibida; no se puede cancelar.");
@@ -112,6 +117,8 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (Status == PurchaseOrderStatus.Cancelled)
             throw new DomainException("No se puede recibir una compra cancelada.");
+        if (Status == PurchaseOrderStatus.Closed)
+            throw new DomainException("La compra ya se cerró: lo que faltaba no se espera. Registra lo que llegó en una compra nueva.");
 
         if (_lines.Count == 0)
             throw new DomainException("La compra no tiene líneas para recibir.");
@@ -136,6 +143,23 @@ public class PurchaseOrder : AuditableEntity, ITenantScoped, IAggregateRoot
         Status = _lines.All(x => x.PendingQuantity <= 0)
             ? PurchaseOrderStatus.Received
             : PurchaseOrderStatus.PartiallyReceived;
+    }
+
+    /// <summary>
+    /// What is still missing will not arrive: the order closes with what came in. The ordered quantities stay as they
+    /// were, so the order still shows what was asked for and what never came.
+    /// </summary>
+    public void CloseWithoutRemainder(string? reason, DateTimeOffset closedAt)
+    {
+        if (Status != PurchaseOrderStatus.PartiallyReceived)
+            throw new DomainException("Solo una compra con recepción parcial se cierra sin esperar el resto; sin nada recibido, cancélala.");
+        var trimmed = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (trimmed is { Length: > MaxCloseReasonLength })
+            throw new DomainException($"El motivo admite hasta {MaxCloseReasonLength} caracteres.");
+
+        CloseReason = trimmed;
+        ClosedAt = closedAt;
+        Status = PurchaseOrderStatus.Closed;
     }
 
     private void RecalculateTotals()

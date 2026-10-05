@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import { useAuth } from '../../hooks/useAuth';
@@ -6,11 +7,14 @@ import { useTenant } from '../../hooks/useTenant';
 import { dashboardApi } from '../../api/dashboardApi';
 import { tenantApi } from '../../api/tenantApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { queryKeys, useAttention } from '../../api/queries';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { getAccess } from '../../utils/access';
+import { describeAttentionItems } from '../../utils/attention';
 import { formatMoney } from '../../utils/money';
 import { getCatalogItemTypeLabel, getOrderStatusLabel } from '../../utils/labels';
 import type { DashboardMetricsDto, TenantSetupDto, TenantSetupStepKey } from '../../types';
+import { businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
 // Several events usually arrive together (sale + payment + close); one reload covers them.
 const EVENT_RELOAD_DELAY_MS = 600;
@@ -24,20 +28,12 @@ const SETUP_STEPS: Array<{ key: TenantSetupStepKey; label: string; path: string 
   { key: 'logo', label: 'Sube tu logotipo', path: '/settings/business' },
 ];
 
-function getTodayDateInput() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 /** Inicio: what was charged, what is still owed and what needs attention, plus the first steps. */
 export default function Dashboard() {
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const access = getAccess(user, capabilities);
-  const today = getTodayDateInput();
+  const today = getBusinessToday();
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
   const [metrics, setMetrics] = useState<DashboardMetricsDto | null>(null);
@@ -45,6 +41,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled } = useOrderSignalR();
+  const queryClient = useQueryClient();
+  const attention = useAttention();
+  const notices = describeAttentionItems(attention.data?.items ?? []);
   const isToday = fromDate === today && toDate === today;
 
   const statusRows = useMemo(
@@ -54,8 +53,8 @@ export default function Dashboard() {
 
   const loadMetrics = useCallback(async () => {
     try {
-      const from = new Date(`${fromDate}T00:00:00`).toISOString();
-      const to = new Date(`${toDate}T23:59:59`).toISOString();
+      const from = businessDayStart(fromDate);
+      const to = businessDayEnd(toDate);
       const { data } = await dashboardApi.getMetrics({ from, to });
       setMetrics(data);
       setError('');
@@ -90,14 +89,17 @@ export default function Dashboard() {
     let reloadTimeoutId: number | undefined;
     const scheduleReload = () => {
       window.clearTimeout(reloadTimeoutId);
-      reloadTimeoutId = window.setTimeout(() => void loadMetrics(), EVENT_RELOAD_DELAY_MS);
+      reloadTimeoutId = window.setTimeout(() => {
+        void loadMetrics();
+        void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
+      }, EVENT_RELOAD_DELAY_MS);
     };
     const unsubscribers = [onOrderCreated(scheduleReload), onOrderStatusChanged(scheduleReload), onOrderCancelled(scheduleReload)];
     return () => {
       window.clearTimeout(reloadTimeoutId);
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [loadMetrics, onOrderCancelled, onOrderCreated, onOrderStatusChanged]);
+  }, [loadMetrics, onOrderCancelled, onOrderCreated, onOrderStatusChanged, queryClient]);
 
   const pendingSetupSteps = setup ? SETUP_STEPS.filter((step) => !setup.steps.find((item) => item.key === step.key)?.done) : [];
   const doneSetupSteps = SETUP_STEPS.length - pendingSetupSteps.length;
@@ -158,6 +160,30 @@ export default function Dashboard() {
           <button type="button" className="btn btn-sm btn-light" onClick={() => void loadMetrics()}>Reintentar</button>
         </div>
       )}
+
+      <section className="card" aria-labelledby="attention-title">
+        <div className="card-body">
+          <h3 id="attention-title" className="h5 mb-2">Requiere atención</h3>
+          {attention.isLoading && <p className="text-muted mb-0">Revisando…</p>}
+          {attention.isError && <p className="text-muted mb-0">No se pudo revisar lo pendiente.</p>}
+          {attention.isSuccess && notices.length === 0 && (
+            <p className="text-muted mb-0"><i className="ri-check-double-line me-1" aria-hidden="true"></i>Nada pendiente por ahora.</p>
+          )}
+          {notices.length > 0 && (
+            <ul className="list-unstyled mb-0 d-grid gap-2">
+              {notices.map((notice) => (
+                <li key={notice.key}>
+                  <Link to={notice.path} className={`attention-row attention-${notice.tone}`}>
+                    <i className={notice.icon} aria-hidden="true"></i>
+                    <span className="flex-grow-1">{notice.text}</span>
+                    <i className="ri-arrow-right-s-line" aria-hidden="true"></i>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
 
       {setup && pendingSetupSteps.length > 0 && (
         <div className="card border-primary-subtle">

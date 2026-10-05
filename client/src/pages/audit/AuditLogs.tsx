@@ -3,6 +3,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { auditApi } from '../../api/auditApi';
 import type { AuditLogDto, PaginatedList } from '../../types';
+import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
 
 const COLUMNS = [
   { header: 'Fecha' },
@@ -13,7 +14,7 @@ const COLUMNS = [
 ];
 
 function toLocalDateTime(value: string) {
-  return new Date(value).toLocaleString('es-MX', {
+  return formatInBusinessZone(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -38,6 +39,7 @@ export default function AuditLogs() {
   const [toDate, setToDate] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -48,18 +50,19 @@ export default function AuditLogs() {
       const { data: response } = await auditApi.getLogs({
         entityName: entityName || undefined,
         action: action || undefined,
-        from: fromDate ? new Date(`${fromDate}T00:00:00`).toISOString() : undefined,
-        to: toDate ? new Date(`${toDate}T23:59:59`).toISOString() : undefined,
+        from: fromDate ? businessDayStart(fromDate) : undefined,
+        to: toDate ? businessDayEnd(toDate) : undefined,
+        search: search || undefined,
         pageNumber,
         pageSize,
       });
       setData(response);
     } catch {
-      setError('No se pudieron cargar los registros de auditoria.');
+      setError('No se pudo cargar la actividad del negocio.');
     } finally {
       setLoading(false);
     }
-  }, [action, entityName, fromDate, pageNumber, pageSize, toDate]);
+  }, [action, entityName, fromDate, pageNumber, pageSize, search, toDate]);
 
   useEffect(() => {
     loadData();
@@ -67,14 +70,14 @@ export default function AuditLogs() {
 
   return (
     <>
-      <PageTitle title="Auditoria" subtitle="Seguridad" />
+      <PageTitle title="Seguridad y actividad" subtitle="Configuración" />
 
       <div className="card">
         <div className="card-body">
           <div className="row g-2 mb-3">
             <div className="col-md-3">
-              <label className="form-label">Entidad</label>
-              <input
+              <label htmlFor="auditlogs-entidad" className="form-label">Entidad</label>
+              <input id="auditlogs-entidad"
                 type="text"
                 className="form-control form-control-sm"
                 value={entityName}
@@ -85,8 +88,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-3">
-              <label className="form-label">Acción</label>
-              <input
+              <label htmlFor="auditlogs-accion" className="form-label">Acción</label>
+              <input id="auditlogs-accion"
                 type="text"
                 className="form-control form-control-sm"
                 value={action}
@@ -97,8 +100,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-2">
-              <label className="form-label">Desde</label>
-              <input
+              <label htmlFor="auditlogs-desde" className="form-label">Desde</label>
+              <input id="auditlogs-desde"
                 type="date"
                 className="form-control form-control-sm"
                 value={fromDate}
@@ -109,8 +112,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-2">
-              <label className="form-label">Hasta</label>
-              <input
+              <label htmlFor="auditlogs-hasta" className="form-label">Hasta</label>
+              <input id="auditlogs-hasta"
                 type="date"
                 className="form-control form-control-sm"
                 value={toDate}
@@ -149,13 +152,7 @@ export default function AuditLogs() {
             columns={COLUMNS}
             keyExtractor={(item) => item.id}
             loading={loading}
-            emptyMessage="No hay registros de auditoria."
-            searchFilter={(item, search) =>
-              item.entityName.toLowerCase().includes(search)
-              || item.action.toLowerCase().includes(search)
-              || item.performedBy.toLowerCase().includes(search)
-              || item.entityId.toLowerCase().includes(search)
-            }
+            emptyMessage="No hay actividad registrada con estos filtros."
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,
@@ -165,7 +162,13 @@ export default function AuditLogs() {
                 setPageSize(size);
                 setPageNumber(1);
               },
+              onSearchChange: (term) => {
+                setSearch(term);
+                setPageNumber(1);
+              },
             }}
+            searchPlaceholder="Qué cambió, acción o quién"
+
             renderRow={(item) => (
               <>
                 <td>{toLocalDateTime(item.timestamp)}</td>
