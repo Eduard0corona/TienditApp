@@ -56,6 +56,8 @@ Fase 4:
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
+Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.
+
 ## Guardrails
 
 - Backend decide estados, totales, impuestos, saldos y existencias finales.
@@ -67,14 +69,13 @@ Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y
 - No persistas access/refresh tokens en almacenamiento accesible a JavaScript.
 - SignalR debe reconectar, cancelar al desmontar, aislar tenant y manejar errores.
 - Cambios de contrato requieren actualizar DTO, regenerar `openapi.json` y `schema.ts`, y ajustar el tipo manual, el wrapper y los consumidores que aún no usan el cliente generado.
-- Un enum del dominio se copia con sus valores exactos; nunca se renumera en el cliente.
+- Un enum del dominio sale del contrato generado (`src/api/generated/enums.ts`); nunca se copia ni se renumera en el cliente.
 
 ## Deuda actual
 
-- `InventoryManagement.tsx` supera 2,400 líneas; `OrdersCart.tsx`, `OrdersList.tsx` y `types/index.ts` rondan o superan 1,000. Son candidatos a refactor por feature/componente, no deben reescribirse incidentalmente.
-- No se encontró framework ni suite de pruebas frontend.
+- `SellPage.tsx`, `OrdersList.tsx`, `OrdersCart.tsx` y `types/index.ts` superan 1,000 líneas. Son candidatos a dividirse como Inventario (Fase 7D), al tocar cada pantalla y sin reescrituras incidentales.
 - `AccessRoute` cubre las rutas del layout; los botones de acción dentro de cada pantalla todavía se condicionan caso por caso (por ahora, órdenes).
-- Inventario, Caja, Compras y Auditoría todavía filtran solo la página cargada en sus tablas; Vender carga hasta 500 productos y, si el catálogo es mayor, busca en el servidor.
-- Accesibilidad: muchas etiquetas no están asociadas a su campo y hay botones de solo icono sin nombre accesible.
+- Vender carga hasta 500 productos y, si el catálogo es mayor, busca en el servidor; las recetas de Inventario cargan hasta 500 productos e insumos.
+- Accesibilidad: el lint exige etiquetas asociadas (Fase 6F), pero no nombres en los botones de solo icono; se les pone `aria-label` al tocar cada pantalla (Inventario ya los tiene).
 - `client/README.md` aún es el texto genérico del template Vite.
 - Los estilos minificados versionados hacen difícil rastrear y revisar cambios visuales.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { UnitType } from '../types';
-import { allowsFractions, formatQuantity, formatStockQuantity, lineAmount, parseQuantity } from './units';
+import { allowsFractions, formatQuantity, formatStockQuantity, getUnitLabel, lineAmount, parseQuantity } from './units';
 
 describe('units', () => {
   it('sells weight with up to three decimals and pieces whole', () => {
@@ -17,6 +17,12 @@ describe('units', () => {
     expect(formatQuantity(3, UnitType.Unit)).toBe('3');
     expect(formatStockQuantity(0.0125, UnitType.Kg)).toBe('0.0125 kg');
     expect(formatStockQuantity(1250.5)).toBe('1,250.5');
+  });
+
+  it('names every unit of the contract, the stock of a product sold by the slice included', () => {
+    for (const unit of Object.values(UnitType)) expect(getUnitLabel(unit)).not.toBe(String(unit));
+    expect(getUnitLabel(UnitType.Slice)).toBe('Rebanada');
+    expect(getUnitLabel(UnitType.Lb)).toBe('Libra');
   });
 
   it('rounds a weighed line once to cents, half to even like the API', () => {
