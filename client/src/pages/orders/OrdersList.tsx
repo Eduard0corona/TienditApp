@@ -418,8 +418,8 @@ export default function OrdersList() {
             <div className="card-body">
               <div className="row mb-3">
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Tipo</label>
-                  <select
+                  <label htmlFor="orderslist-tipo" className="form-label">Tipo</label>
+                  <select id="orderslist-tipo"
                     className="form-select form-select-sm"
                     value={selectedOrderType}
                     onChange={(e) => {
@@ -434,8 +434,8 @@ export default function OrdersList() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Estado</label>
-                  <select
+                  <label htmlFor="orderslist-estado" className="form-label">Estado</label>
+                  <select id="orderslist-estado"
                     className="form-select form-select-sm"
                     value={selectedStatus}
                     onChange={(e) => {
@@ -454,8 +454,8 @@ export default function OrdersList() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Desde</label>
-                  <input
+                  <label htmlFor="orderslist-desde" className="form-label">Desde</label>
+                  <input id="orderslist-desde"
                     type="date"
                     className="form-control form-control-sm"
                     value={fromDate}
@@ -466,8 +466,8 @@ export default function OrdersList() {
                   />
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Hasta</label>
-                  <input
+                  <label htmlFor="orderslist-hasta" className="form-label">Hasta</label>
+                  <input id="orderslist-hasta"
                     type="date"
                     className="form-control form-control-sm"
                     value={toDate}

@@ -247,8 +247,8 @@ export default function PurchaseOrdersList() {
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <div className="d-flex align-items-center gap-2">
-              <label className="form-label mb-0">Estado</label>
-              <select
+              <label htmlFor="purchaseorderslist-estado" className="form-label mb-0">Estado</label>
+              <select id="purchaseorderslist-estado"
                 className="form-select form-select-sm"
                 value={statusFilter}
                 onChange={(e) => {
@@ -344,8 +344,8 @@ export default function PurchaseOrdersList() {
         <Modal.Body>
           <div className="row">
             <div className="col-md-6 mb-2">
-              <label className="form-label">Proveedor *</label>
-              <select
+              <label htmlFor="purchaseorderslist-proveedor" className="form-label">Proveedor *</label>
+              <select id="purchaseorderslist-proveedor"
                 className="form-select"
                 value={form.supplierId}
                 onChange={(e) => setForm((x) => ({ ...x, supplierId: e.target.value }))}
@@ -357,8 +357,8 @@ export default function PurchaseOrdersList() {
               </select>
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Entrega esperada</label>
-              <input
+              <label htmlFor="purchaseorderslist-entrega-esperada" className="form-label">Entrega esperada</label>
+              <input id="purchaseorderslist-entrega-esperada"
                 type="datetime-local"
                 className="form-control"
                 value={form.expectedDeliveryAt}
@@ -366,16 +366,16 @@ export default function PurchaseOrdersList() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Referencia</label>
-              <input
+              <label htmlFor="purchaseorderslist-referencia" className="form-label">Referencia</label>
+              <input id="purchaseorderslist-referencia"
                 className="form-control"
                 value={form.referenceNumber}
                 onChange={(e) => setForm((x) => ({ ...x, referenceNumber: e.target.value }))}
               />
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Notas</label>
-              <textarea
+              <label htmlFor="purchaseorderslist-notas" className="form-label">Notas</label>
+              <textarea id="purchaseorderslist-notas"
                 className="form-control"
                 rows={2}
                 value={form.notes}
@@ -384,13 +384,13 @@ export default function PurchaseOrdersList() {
             </div>
             <div className="col-12 mb-3">
               <div className="form-check">
-                <input
+                <input id="purchaseorderslist-marcar-como-enviada"
                   className="form-check-input"
                   type="checkbox"
                   checked={form.markAsSent}
                   onChange={(e) => setForm((x) => ({ ...x, markAsSent: e.target.checked }))}
                 />
-                <label className="form-check-label">Marcar como enviada</label>
+                <label htmlFor="purchaseorderslist-marcar-como-enviada" className="form-check-label">Marcar como enviada</label>
               </div>
             </div>
           </div>
@@ -406,8 +406,8 @@ export default function PurchaseOrdersList() {
             <div className="border rounded p-2 mb-2" key={`po-line-${index}`}>
               <div className="row">
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Insumo</label>
-                  <select
+                  <label htmlFor={`purchaseorderslist-insumo-${index}`} className="form-label">Insumo</label>
+                  <select id={`purchaseorderslist-insumo-${index}`}
                     className="form-select"
                     value={line.supplyItemId}
                     onChange={(e) => updateLine(index, {
@@ -422,8 +422,8 @@ export default function PurchaseOrdersList() {
                   </select>
                 </div>
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Ubicación</label>
-                  <select
+                  <label htmlFor={`purchaseorderslist-ubicacion-${index}`} className="form-label">Ubicación</label>
+                  <select id={`purchaseorderslist-ubicacion-${index}`}
                     className="form-select"
                     value={line.inventoryLocationId}
                     onChange={(e) => updateLine(index, { inventoryLocationId: e.target.value })}
@@ -435,8 +435,8 @@ export default function PurchaseOrdersList() {
                   </select>
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Cantidad</label>
-                  <input
+                  <label htmlFor={`purchaseorderslist-cantidad-${index}`} className="form-label">Cantidad</label>
+                  <input id={`purchaseorderslist-cantidad-${index}`}
                     type="number"
                     step="0.01"
                     className="form-control"
@@ -445,8 +445,8 @@ export default function PurchaseOrdersList() {
                   />
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Costo</label>
-                  <input
+                  <label htmlFor={`purchaseorderslist-costo-${index}`} className="form-label">Costo</label>
+                  <input id={`purchaseorderslist-costo-${index}`}
                     type="number"
                     step="0.01"
                     className="form-control"
@@ -455,8 +455,8 @@ export default function PurchaseOrdersList() {
                   />
                 </div>
                 <div className="col-md-2 mb-2">
-                  <label className="form-label">Impuesto %</label>
-                  <input
+                  <label htmlFor={`purchaseorderslist-impuesto-${index}`} className="form-label">Impuesto %</label>
+                  <input id={`purchaseorderslist-impuesto-${index}`}
                     type="number"
                     step="0.01"
                     className="form-control"
@@ -465,8 +465,8 @@ export default function PurchaseOrdersList() {
                   />
                 </div>
                 <div className="col-md-10 mb-0">
-                  <label className="form-label">Notas</label>
-                  <input
+                  <label htmlFor={`purchaseorderslist-notas-${index}`} className="form-label">Notas</label>
+                  <input id={`purchaseorderslist-notas-${index}`}
                     className="form-control"
                     value={line.notes}
                     onChange={(e) => updateLine(index, { notes: e.target.value })}

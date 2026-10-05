@@ -293,8 +293,8 @@ export default function CategoriesList() {
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
             <div className="mb-3">
-              <label className="form-label">Nombre <span className="text-danger">*</span></label>
-              <input
+              <label htmlFor="categorieslist-nombre" className="form-label">Nombre <span className="text-danger">*</span></label>
+              <input id="categorieslist-nombre"
                 type="text"
                 className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                 {...register('name', { required: 'El nombre es requerido', maxLength: { value: 150, message: 'Máximo 150 caracteres' } })}
@@ -302,16 +302,16 @@ export default function CategoriesList() {
               {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
             </div>
             <div className="mb-3">
-              <label className="form-label">Descripción</label>
-              <textarea
+              <label htmlFor="categorieslist-descripcion" className="form-label">Descripción</label>
+              <textarea id="categorieslist-descripcion"
                 className="form-control"
                 rows={3}
                 {...register('description', { maxLength: { value: 500, message: 'Máximo 500 caracteres' } })}
               />
             </div>
             <div className="mb-0">
-              <label className="form-label">Orden</label>
-              <input
+              <label htmlFor="categorieslist-orden" className="form-label">Orden</label>
+              <input id="categorieslist-orden"
                 type="number"
                 className="form-control"
                 {...register('sortOrder', { valueAsNumber: true, min: { value: 0, message: 'Debe ser 0 o mayor' } })}

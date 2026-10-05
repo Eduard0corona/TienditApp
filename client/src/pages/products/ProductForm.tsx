@@ -256,8 +256,8 @@ export default function ProductForm() {
 
                 <div className="row">
                   <div className="col-md-8 mb-3">
-                    <label className="form-label">Nombre <span className="text-danger">*</span></label>
-                    <input
+                    <label htmlFor="productform-nombre" className="form-label">Nombre <span className="text-danger">*</span></label>
+                    <input id="productform-nombre"
                       type="text"
                       className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                       {...register('name', { required: 'El nombre es requerido', maxLength: { value: 200, message: 'Máximo 200 caracteres' } })}
@@ -265,8 +265,8 @@ export default function ProductForm() {
                     {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Categoría <span className="text-danger">*</span></label>
-                    <select
+                    <label htmlFor="productform-categoria" className="form-label">Categoría <span className="text-danger">*</span></label>
+                    <select id="productform-categoria"
                       className={`form-select ${errors.categoryId ? 'is-invalid' : ''}`}
                       {...register('categoryId', { required: 'Selecciona una categoría' })}
                     >
@@ -280,8 +280,8 @@ export default function ProductForm() {
                 </div>
 
                 <div className="mb-3">
-                  <label className="form-label">Descripción</label>
-                  <textarea
+                  <label htmlFor="productform-descripcion" className="form-label">Descripción</label>
+                  <textarea id="productform-descripcion"
                     className="form-control"
                     rows={3}
                     {...register('description', { maxLength: { value: 1000, message: 'Máximo 1000 caracteres' } })}
@@ -290,16 +290,16 @@ export default function ProductForm() {
 
                 <div className="row">
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Unidad</label>
-                    <select className="form-select" {...register('unit')}>
+                    <label htmlFor="productform-unidad" className="form-label">Unidad</label>
+                    <select id="productform-unidad" className="form-select" {...register('unit')}>
                       {UNIT_TYPE_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Tags</label>
-                    <input
+                    <label htmlFor="productform-tags" className="form-label">Tags</label>
+                    <input id="productform-tags"
                       type="text"
                       className="form-control"
                       placeholder="ej: popular, nuevo"
@@ -307,8 +307,8 @@ export default function ProductForm() {
                     />
                   </div>
                   <div className="col-md-2 mb-3">
-                    <label className="form-label">Orden</label>
-                    <input
+                    <label htmlFor="productform-orden" className="form-label">Orden</label>
+                    <input id="productform-orden"
                       type="number"
                       className="form-control"
                       {...register('sortOrder', { valueAsNumber: true })}
@@ -336,8 +336,8 @@ export default function ProductForm() {
 
                 <div className="row">
                   <div className="col-md-3 mb-3">
-                    <label className="form-label">Precio <span className="text-danger">*</span></label>
-                    <input
+                    <label htmlFor="productform-precio" className="form-label">Precio <span className="text-danger">*</span></label>
+                    <input id="productform-precio"
                       type="number"
                       step="0.01"
                       className={`form-control ${errors.priceAmount ? 'is-invalid' : ''}`}
@@ -350,8 +350,8 @@ export default function ProductForm() {
                     {errors.priceAmount && <div className="invalid-feedback">{errors.priceAmount.message}</div>}
                   </div>
                   <div className="col-md-3 mb-3">
-                    <label className="form-label">Precio anterior</label>
-                    <input
+                    <label htmlFor="productform-precio-anterior" className="form-label">Precio anterior</label>
+                    <input id="productform-precio-anterior"
                       type="number"
                       step="0.01"
                       className="form-control"
@@ -407,24 +407,24 @@ export default function ProductForm() {
 
                 <div className="row">
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">SKU</label>
-                    <input
+                    <label htmlFor="productform-sku" className="form-label">SKU</label>
+                    <input id="productform-sku"
                       type="text"
                       className="form-control"
                       {...register('sku', { maxLength: { value: 100, message: 'Máximo 100 caracteres' } })}
                     />
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Código de barras</label>
-                    <input
+                    <label htmlFor="productform-codigo-de-barras" className="form-label">Código de barras</label>
+                    <input id="productform-codigo-de-barras"
                       type="text"
                       className="form-control"
                       {...register('barcode', { maxLength: { value: 50, message: 'Máximo 50 caracteres' } })}
                     />
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Máx. por orden</label>
-                    <input
+                    <label htmlFor="productform-max-por-orden" className="form-label">Máx. por orden</label>
+                    <input id="productform-max-por-orden"
                       type="number"
                       className="form-control"
                       {...register('maxQuantityPerOrder')}
@@ -453,16 +453,16 @@ export default function ProductForm() {
 
                 <div className="row">
                   <div className="col-md-6 mb-3">
-                    <label className="form-label">Disponible desde</label>
-                    <input
+                    <label htmlFor="productform-disponible-desde" className="form-label">Disponible desde</label>
+                    <input id="productform-disponible-desde"
                       type="time"
                       className="form-control"
                       {...register('availableFromTime')}
                     />
                   </div>
                   <div className="col-md-6 mb-3">
-                    <label className="form-label">Disponible hasta</label>
-                    <input
+                    <label htmlFor="productform-disponible-hasta" className="form-label">Disponible hasta</label>
+                    <input id="productform-disponible-hasta"
                       type="time"
                       className="form-control"
                       {...register('availableToTime')}
@@ -472,24 +472,24 @@ export default function ProductForm() {
 
                 <div className="row">
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Tiempo preparación (min)</label>
-                    <input
+                    <label htmlFor="productform-tiempo-preparacion-min" className="form-label">Tiempo preparación (min)</label>
+                    <input id="productform-tiempo-preparacion-min"
                       type="number"
                       className="form-control"
                       {...register('preparationTimeMinutes')}
                     />
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Calorías</label>
-                    <input
+                    <label htmlFor="productform-calorias" className="form-label">Calorías</label>
+                    <input id="productform-calorias"
                       type="number"
                       className="form-control"
                       {...register('calories')}
                     />
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label className="form-label">Alérgenos</label>
-                    <input
+                    <label htmlFor="productform-alergenos" className="form-label">Alérgenos</label>
+                    <input id="productform-alergenos"
                       type="text"
                       className="form-control"
                       placeholder="ej: gluten, lácteos"

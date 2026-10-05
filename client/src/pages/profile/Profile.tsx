@@ -236,16 +236,16 @@ export default function Profile() {
               {editMode ? (
                 <form onSubmit={handleProfile(onUpdateProfile)}>
                   <div className="mb-3">
-                    <label className="form-label">Nombre</label>
-                    <input
+                    <label htmlFor="profile-nombre" className="form-label">Nombre</label>
+                    <input id="profile-nombre"
                       className="form-control"
                       type="text"
                       {...regProfile('firstName', { required: true })}
                     />
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Apellido</label>
-                    <input
+                    <label htmlFor="profile-apellido" className="form-label">Apellido</label>
+                    <input id="profile-apellido"
                       className="form-control"
                       type="text"
                       {...regProfile('lastName', { required: true })}
@@ -372,8 +372,8 @@ export default function Profile() {
                 <div className="row">
                   <div className="col-md-4">
                     <div className="mb-3">
-                      <label className="form-label">Contraseña Actual</label>
-                      <input
+                      <label htmlFor="profile-contrasena-actual" className="form-label">Contraseña Actual</label>
+                      <input id="profile-contrasena-actual"
                         type="password"
                         className={`form-control ${passwordErrors.currentPassword ? 'is-invalid' : ''}`}
                         {...regPassword('currentPassword', { required: 'Requerido' })}
@@ -387,8 +387,8 @@ export default function Profile() {
                   </div>
                   <div className="col-md-4">
                     <div className="mb-3">
-                      <label className="form-label">Nueva Contraseña</label>
-                      <input
+                      <label htmlFor="profile-nueva-contrasena" className="form-label">Nueva Contraseña</label>
+                      <input id="profile-nueva-contrasena"
                         type="password"
                         className={`form-control ${passwordErrors.newPassword ? 'is-invalid' : ''}`}
                         {...regPassword('newPassword', {

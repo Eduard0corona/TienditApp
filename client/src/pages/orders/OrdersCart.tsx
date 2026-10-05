@@ -549,7 +549,7 @@ export default function OrdersCart() {
               </div>
 
               <div className="mb-3">
-                <label className="form-label d-block">Filtro del catálogo</label>
+                <div className="form-label d-block">Filtro del catálogo</div>
                 <div className="order-type-toggle d-flex flex-column flex-sm-row gap-2" role="group" aria-label="Tipo de orden">
                   <button
                     type="button"
@@ -574,8 +574,8 @@ export default function OrdersCart() {
               </div>
 
               <div className="mb-2">
-                <label className="form-label">Cliente</label>
-                <select
+                <label htmlFor="orderscart-cliente" className="form-label">Cliente</label>
+                <select id="orderscart-cliente"
                   className="form-select"
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -591,8 +591,8 @@ export default function OrdersCart() {
               {selectedCustomer?.isPublicGeneral && (
                 <>
                   <div className="mb-2">
-                    <label className="form-label">Nombre para la orden (opcional)</label>
-                    <input
+                    <label htmlFor="orderscart-nombre-para-la-orden" className="form-label">Nombre para la orden (opcional)</label>
+                    <input id="orderscart-nombre-para-la-orden"
                       type="text"
                       className="form-control"
                       value={customerNameOverride}
@@ -643,8 +643,8 @@ export default function OrdersCart() {
 
               {showsTableReferenceField && (
                 <div className="mb-2">
-                  <label className="form-label">Mesa / Referencia</label>
-                  <input
+                  <label htmlFor="orderscart-mesa-referencia" className="form-label">Mesa / Referencia</label>
+                  <input id="orderscart-mesa-referencia"
                     type="text"
                     className="form-control"
                     value={tableNumber}
@@ -658,8 +658,8 @@ export default function OrdersCart() {
                   <h5 className="font-15 mb-2">Recepción de servicio</h5>
                   <div className="row g-2 mb-2">
                     <div className="col-md-6">
-                      <label className="form-label">Fecha de recepción</label>
-                      <input
+                      <label htmlFor="orderscart-fecha-de-recepcion" className="form-label">Fecha de recepción</label>
+                      <input id="orderscart-fecha-de-recepcion"
                         type="datetime-local"
                         className="form-control"
                         value={serviceReceivedAt}
@@ -667,8 +667,8 @@ export default function OrdersCart() {
                       />
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label">Fecha promesa</label>
-                      <input
+                      <label htmlFor="orderscart-fecha-promesa" className="form-label">Fecha promesa</label>
+                      <input id="orderscart-fecha-promesa"
                         type="datetime-local"
                         className="form-control"
                         value={servicePromisedAt}
@@ -676,8 +676,8 @@ export default function OrdersCart() {
                       />
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label">Prioridad</label>
-                      <select
+                      <label htmlFor="orderscart-prioridad" className="form-label">Prioridad</label>
+                      <select id="orderscart-prioridad"
                         className="form-select"
                         value={servicePriority}
                         onChange={(e) => setServicePriority(Number(e.target.value))}
@@ -690,8 +690,8 @@ export default function OrdersCart() {
                   </div>
 
                   <div className="mb-2">
-                    <label className="form-label">Notas de ingreso</label>
-                    <textarea
+                    <label htmlFor="orderscart-notas-de-ingreso" className="form-label">Notas de ingreso</label>
+                    <textarea id="orderscart-notas-de-ingreso"
                       className="form-control"
                       rows={2}
                       value={serviceIntakeNotes}
@@ -700,8 +700,8 @@ export default function OrdersCart() {
                   </div>
 
                   <div className="mb-2">
-                    <label className="form-label">Notas de entrega</label>
-                    <textarea
+                    <label htmlFor="orderscart-notas-de-entrega" className="form-label">Notas de entrega</label>
+                    <textarea id="orderscart-notas-de-entrega"
                       className="form-control"
                       rows={2}
                       value={serviceDeliveryNotes}
@@ -711,7 +711,7 @@ export default function OrdersCart() {
 
                   <div className="mb-2">
                     <div className="d-flex justify-content-between align-items-center mb-1">
-                      <label className="form-label mb-0">Checklist de recepción</label>
+                      <label htmlFor="orderscart-checklist-de-recepcion" className="form-label mb-0">Checklist de recepción</label>
                       <button type="button" className="btn btn-sm btn-soft-primary" onClick={addChecklistItem}>
                         <i className="ri-add-line me-1"></i>Agregar item
                       </button>
@@ -719,7 +719,7 @@ export default function OrdersCart() {
 
                     {serviceChecklist.map((item) => (
                       <div className="d-flex align-items-center gap-2 mb-1" key={item.id}>
-                        <input
+                        <input id="orderscart-checklist-de-recepcion"
                           className="form-check-input mt-0"
                           type="checkbox"
                           checked={item.checked}
@@ -746,8 +746,8 @@ export default function OrdersCart() {
 
                   <div className="row g-2 mb-2">
                     <div className="col-md-6">
-                      <label className="form-label">Fotos antes</label>
-                      <input
+                      <label htmlFor="orderscart-fotos-antes" className="form-label">Fotos antes</label>
+                      <input id="orderscart-fotos-antes"
                         type="file"
                         accept="image/*"
                         className="form-control"
@@ -775,8 +775,8 @@ export default function OrdersCart() {
                       )}
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label">Fotos después</label>
-                      <input
+                      <label htmlFor="orderscart-fotos-despues" className="form-label">Fotos después</label>
+                      <input id="orderscart-fotos-despues"
                         type="file"
                         accept="image/*"
                         className="form-control"
@@ -807,7 +807,7 @@ export default function OrdersCart() {
 
                   <div>
                     <div className="d-flex justify-content-between align-items-center mb-2">
-                      <label className="form-label mb-0">Piezas</label>
+                      <div className="form-label mb-0">Piezas</div>
                       <button type="button" className="btn btn-sm btn-soft-primary" onClick={addServicePiece}>
                         <i className="ri-add-line me-1"></i>Agregar pieza
                       </button>
@@ -817,8 +817,8 @@ export default function OrdersCart() {
                       <div key={`piece-${index}`} className="border rounded p-2 mb-2">
                         <div className="row g-2">
                           <div className="col-md-6">
-                            <label className="form-label">Nombre de pieza *</label>
-                            <input
+                            <label htmlFor={`orderscart-nombre-de-pieza-${index}`} className="form-label">Nombre de pieza *</label>
+                            <input id={`orderscart-nombre-de-pieza-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.itemName}
@@ -826,8 +826,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Servicio solicitado</label>
-                            <input
+                            <label htmlFor={`orderscart-servicio-solicitado-${index}`} className="form-label">Servicio solicitado</label>
+                            <input id={`orderscart-servicio-solicitado-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.requestedService || ''}
@@ -835,8 +835,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Servicio del catálogo</label>
-                            <select
+                            <label htmlFor={`orderscart-servicio-del-catalogo-${index}`} className="form-label">Servicio del catálogo</label>
+                            <select id={`orderscart-servicio-del-catalogo-${index}`}
                               className="form-select"
                               value={piece.serviceProductId || ''}
                               onChange={(e) =>
@@ -852,8 +852,8 @@ export default function OrdersCart() {
                             </select>
                           </div>
                           <div className="col-md-2">
-                            <label className="form-label d-block">Rastreable</label>
-                            <input
+                            <label htmlFor={`orderscart-rastreable-${index}`} className="form-label d-block">Rastreable</label>
+                            <input id={`orderscart-rastreable-${index}`}
                               type="checkbox"
                               className="form-check-input"
                               checked={piece.isTrackable ?? true}
@@ -861,8 +861,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-2">
-                            <label className="form-label d-block">Notificar</label>
-                            <input
+                            <label htmlFor={`orderscart-notificar-${index}`} className="form-label d-block">Notificar</label>
+                            <input id={`orderscart-notificar-${index}`}
                               type="checkbox"
                               className="form-check-input"
                               checked={piece.notifyCustomer ?? false}
@@ -870,8 +870,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Marca</label>
-                            <input
+                            <label htmlFor={`orderscart-marca-${index}`} className="form-label">Marca</label>
+                            <input id={`orderscart-marca-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.brand || ''}
@@ -879,8 +879,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Modelo</label>
-                            <input
+                            <label htmlFor={`orderscart-modelo-${index}`} className="form-label">Modelo</label>
+                            <input id={`orderscart-modelo-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.model || ''}
@@ -888,8 +888,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-4">
-                            <label className="form-label">Color</label>
-                            <input
+                            <label htmlFor={`orderscart-color-${index}`} className="form-label">Color</label>
+                            <input id={`orderscart-color-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.color || ''}
@@ -897,8 +897,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-4">
-                            <label className="form-label">Talla</label>
-                            <input
+                            <label htmlFor={`orderscart-talla-${index}`} className="form-label">Talla</label>
+                            <input id={`orderscart-talla-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.size || ''}
@@ -906,8 +906,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-4">
-                            <label className="form-label">Material</label>
-                            <input
+                            <label htmlFor={`orderscart-material-${index}`} className="form-label">Material</label>
+                            <input id={`orderscart-material-${index}`}
                               type="text"
                               className="form-control"
                               value={piece.material || ''}
@@ -915,8 +915,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Condición</label>
-                            <textarea
+                            <label htmlFor={`orderscart-condicion-${index}`} className="form-label">Condición</label>
+                            <textarea id={`orderscart-condicion-${index}`}
                               className="form-control"
                               rows={2}
                               value={piece.conditionNotes || ''}
@@ -924,8 +924,8 @@ export default function OrdersCart() {
                             />
                           </div>
                           <div className="col-md-6">
-                            <label className="form-label">Nota interna</label>
-                            <textarea
+                            <label htmlFor={`orderscart-nota-interna-${index}`} className="form-label">Nota interna</label>
+                            <textarea id={`orderscart-nota-interna-${index}`}
                               className="form-control"
                               rows={2}
                               value={piece.internalNotes || ''}
@@ -950,8 +950,8 @@ export default function OrdersCart() {
               )}
 
               <div className="mb-0">
-                <label className="form-label">Notas</label>
-                <textarea
+                <label htmlFor="orderscart-notas" className="form-label">Notas</label>
+                <textarea id="orderscart-notas"
                   className="form-control"
                   rows={3}
                   value={customerNotes}

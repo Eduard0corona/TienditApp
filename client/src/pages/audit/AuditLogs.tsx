@@ -76,8 +76,8 @@ export default function AuditLogs() {
         <div className="card-body">
           <div className="row g-2 mb-3">
             <div className="col-md-3">
-              <label className="form-label">Entidad</label>
-              <input
+              <label htmlFor="auditlogs-entidad" className="form-label">Entidad</label>
+              <input id="auditlogs-entidad"
                 type="text"
                 className="form-control form-control-sm"
                 value={entityName}
@@ -88,8 +88,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-3">
-              <label className="form-label">Acción</label>
-              <input
+              <label htmlFor="auditlogs-accion" className="form-label">Acción</label>
+              <input id="auditlogs-accion"
                 type="text"
                 className="form-control form-control-sm"
                 value={action}
@@ -100,8 +100,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-2">
-              <label className="form-label">Desde</label>
-              <input
+              <label htmlFor="auditlogs-desde" className="form-label">Desde</label>
+              <input id="auditlogs-desde"
                 type="date"
                 className="form-control form-control-sm"
                 value={fromDate}
@@ -112,8 +112,8 @@ export default function AuditLogs() {
               />
             </div>
             <div className="col-md-2">
-              <label className="form-label">Hasta</label>
-              <input
+              <label htmlFor="auditlogs-hasta" className="form-label">Hasta</label>
+              <input id="auditlogs-hasta"
                 type="date"
                 className="form-control form-control-sm"
                 value={toDate}

@@ -342,10 +342,10 @@ export default function BusinessSettings() {
               {editMode ? (
                 <form id="business-form" onSubmit={handleSubmit(onSubmit)}>
                   <div className="mb-3">
-                    <label className="form-label">
+                    <label htmlFor="businesssettings-nombre-comercial" className="form-label">
                       Nombre Comercial <span className="text-danger">*</span>
                     </label>
-                    <input
+                    <input id="businesssettings-nombre-comercial"
                       className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                       type="text"
                       {...register('name', { required: 'El nombre comercial es requerido' })}
@@ -355,10 +355,10 @@ export default function BusinessSettings() {
                     )}
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">
+                    <label htmlFor="businesssettings-email-de-contacto" className="form-label">
                       Email de Contacto <span className="text-danger">*</span>
                     </label>
-                    <input
+                    <input id="businesssettings-email-de-contacto"
                       className={`form-control ${errors.contactEmail ? 'is-invalid' : ''}`}
                       type="email"
                       {...register('contactEmail', { required: 'El email es requerido' })}
@@ -368,8 +368,8 @@ export default function BusinessSettings() {
                     )}
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Teléfono de Contacto</label>
-                    <input className="form-control" type="tel" {...register('contactPhone')} />
+                    <label htmlFor="businesssettings-telefono-de-contacto" className="form-label">Teléfono de Contacto</label>
+                    <input id="businesssettings-telefono-de-contacto" className="form-control" type="tel" {...register('contactPhone')} />
                   </div>
                   <div className="mb-3">
                     <label className="form-label" htmlFor="business-time-zone">Zona horaria</label>
@@ -381,8 +381,8 @@ export default function BusinessSettings() {
                     <div className="form-text">Los días, cortes y reportes empiezan a la medianoche de esta zona, aunque abras la app desde otra.</div>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Giro del Negocio</label>
-                    <select className="form-select" {...register('industry')}>
+                    <label htmlFor="businesssettings-giro-del-negocio" className="form-label">Giro del Negocio</label>
+                    <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}>
                       <option value="">Seleccionar...</option>
                       {INDUSTRY_OPTIONS.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
@@ -390,7 +390,7 @@ export default function BusinessSettings() {
                     </select>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label d-block">Modulos habilitados</label>
+                    <div className="form-label d-block">Módulos habilitados</div>
                     <div className="d-flex flex-wrap gap-2 mb-2">
                       {CAPABILITY_PRESETS.map((preset) => (
                         <button
@@ -550,8 +550,8 @@ export default function BusinessSettings() {
                   <div className="row">
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">RFC</label>
-                        <input
+                        <label htmlFor="businesssettings-rfc" className="form-label">RFC</label>
+                        <input id="businesssettings-rfc"
                           className="form-control"
                           type="text"
                           placeholder="XAXX010101000"
@@ -564,8 +564,8 @@ export default function BusinessSettings() {
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">Razón Social</label>
-                        <input
+                        <label htmlFor="businesssettings-razon-social" className="form-label">Razón Social</label>
+                        <input id="businesssettings-razon-social"
                           className="form-control"
                           type="text"
                           form="business-form"
@@ -575,8 +575,8 @@ export default function BusinessSettings() {
                     </div>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Régimen Fiscal</label>
-                    <select className="form-select" form="business-form" {...register('taxRegime')}>
+                    <label htmlFor="businesssettings-regimen-fiscal" className="form-label">Régimen Fiscal</label>
+                    <select id="businesssettings-regimen-fiscal" className="form-select" form="business-form" {...register('taxRegime')}>
                       <option value="">Seleccionar...</option>
                       {TAX_REGIME_OPTIONS.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
@@ -614,8 +614,8 @@ export default function BusinessSettings() {
               {editMode ? (
                 <>
                   <div className="mb-3">
-                    <label className="form-label">Calle</label>
-                    <input
+                    <label htmlFor="businesssettings-calle" className="form-label">Calle</label>
+                    <input id="businesssettings-calle"
                       className="form-control"
                       type="text"
                       form="business-form"
@@ -625,8 +625,8 @@ export default function BusinessSettings() {
                   <div className="row">
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">Número Exterior</label>
-                        <input
+                        <label htmlFor="businesssettings-numero-exterior" className="form-label">Número Exterior</label>
+                        <input id="businesssettings-numero-exterior"
                           className="form-control"
                           type="text"
                           form="business-form"
@@ -636,8 +636,8 @@ export default function BusinessSettings() {
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">Número Interior</label>
-                        <input
+                        <label htmlFor="businesssettings-numero-interior" className="form-label">Número Interior</label>
+                        <input id="businesssettings-numero-interior"
                           className="form-control"
                           type="text"
                           form="business-form"
@@ -647,8 +647,8 @@ export default function BusinessSettings() {
                     </div>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Colonia</label>
-                    <input
+                    <label htmlFor="businesssettings-colonia" className="form-label">Colonia</label>
+                    <input id="businesssettings-colonia"
                       className="form-control"
                       type="text"
                       form="business-form"
@@ -658,8 +658,8 @@ export default function BusinessSettings() {
                   <div className="row">
                     <div className="col-md-4">
                       <div className="mb-3">
-                        <label className="form-label">Código Postal</label>
-                        <input
+                        <label htmlFor="businesssettings-codigo-postal" className="form-label">Código Postal</label>
+                        <input id="businesssettings-codigo-postal"
                           className="form-control"
                           type="text"
                           maxLength={5}
@@ -670,8 +670,8 @@ export default function BusinessSettings() {
                     </div>
                     <div className="col-md-8">
                       <div className="mb-3">
-                        <label className="form-label">Ciudad / Municipio</label>
-                        <input
+                        <label htmlFor="businesssettings-ciudad-municipio" className="form-label">Ciudad / Municipio</label>
+                        <input id="businesssettings-ciudad-municipio"
                           className="form-control"
                           type="text"
                           form="business-form"
@@ -681,8 +681,8 @@ export default function BusinessSettings() {
                     </div>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Estado</label>
-                    <select className="form-select" form="business-form" {...register('state')}>
+                    <label htmlFor="businesssettings-estado" className="form-label">Estado</label>
+                    <select id="businesssettings-estado" className="form-select" form="business-form" {...register('state')}>
                       <option value="">Seleccionar...</option>
                       {MX_STATES.map((s) => (
                         <option key={s} value={s}>{s}</option>

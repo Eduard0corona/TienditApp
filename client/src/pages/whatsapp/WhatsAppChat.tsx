@@ -13,6 +13,7 @@ import { buildSellLink } from '../../utils/sellLink';
 import './WhatsAppChat.css';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatInBusinessZone } from '../../utils/dates';
+import { asButton } from '../../utils/a11y';
 
 /** Same Mexican number whichever way it was stored (+52 or +521 and ten digits). */
 function isSamePhone(a: string, b: string): boolean {
@@ -397,7 +398,8 @@ export default function WhatsAppChat() {
                         selectedId === convo.id ? 'bg-light' : ''
                       }`}
                       style={{ cursor: 'pointer' }}
-                      onClick={() => setSelectedId(convo.id)}
+                      aria-current={selectedId === convo.id ? 'true' : undefined}
+                      {...asButton(() => setSelectedId(convo.id))}
                     >
                       {/* Avatar */}
                       <div className="flex-shrink-0 me-3">

@@ -282,13 +282,12 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
 
           {/* User Dropdown */}
           <li className="dropdown">
-            <a
-              className="nav-link dropdown-toggle arrow-none nav-user px-2"
+            <button
+              type="button"
+              className="nav-link dropdown-toggle arrow-none nav-user px-2 border-0 bg-transparent"
               data-bs-toggle="dropdown"
-              href="#"
-              role="button"
-              aria-haspopup="false"
               aria-expanded="false"
+              aria-label="Menú de tu cuenta"
             >
               <span className="account-user-avatar">
                 <img
@@ -304,7 +303,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                 </h5>
                 <h6 className="my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</h6>
               </span>
-            </a>
+            </button>
             <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated profile-dropdown">
               {/* Welcome header */}
               <div className="dropdown-header noti-title">
@@ -330,10 +329,10 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                 </button>
               )}
 
-              <a href="#" className="dropdown-item" onClick={handleLogout}>
-                <i className="ri-login-circle-line font-16 me-1"></i>
+              <button type="button" className="dropdown-item" onClick={handleLogout}>
+                <i className="ri-login-circle-line font-16 me-1" aria-hidden="true"></i>
                 <span>Cerrar sesión</span>
-              </a>
+              </button>
             </div>
           </li>
         </ul>

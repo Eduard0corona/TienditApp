@@ -59,12 +59,12 @@ export default function OperationalReports() {
         <div className="card-body">
           <div className="row align-items-end">
             <div className="col-md-3 mb-2">
-              <label className="form-label">Desde</label>
-              <input type="date" className="form-control" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <label htmlFor="operationalreports-desde" className="form-label">Desde</label>
+              <input id="operationalreports-desde" type="date" className="form-control" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Hasta</label>
-              <input type="date" className="form-control" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <label htmlFor="operationalreports-hasta" className="form-label">Hasta</label>
+              <input id="operationalreports-hasta" type="date" className="form-control" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="col-md-2 mb-2">
               <button className="btn btn-primary w-100" onClick={loadReport}>Actualizar</button>

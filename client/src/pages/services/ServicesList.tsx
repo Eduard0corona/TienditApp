@@ -428,8 +428,8 @@ export default function ServicesList() {
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
             <div className="mb-3">
-              <label className="form-label">Nombre <span className="text-danger">*</span></label>
-              <input
+              <label htmlFor="serviceslist-nombre" className="form-label">Nombre <span className="text-danger">*</span></label>
+              <input id="serviceslist-nombre"
                 type="text"
                 className={`form-control ${errors.name ? 'is-invalid' : ''}`}
                 {...register('name', {
@@ -441,8 +441,8 @@ export default function ServicesList() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Categoría <span className="text-danger">*</span></label>
-              <select
+              <label htmlFor="serviceslist-categoria" className="form-label">Categoría <span className="text-danger">*</span></label>
+              <select id="serviceslist-categoria"
                 className={`form-select ${errors.categoryId ? 'is-invalid' : ''}`}
                 {...register('categoryId', { required: 'Selecciona una categoría' })}
               >
@@ -457,8 +457,8 @@ export default function ServicesList() {
             </div>
 
             <div className="mb-3">
-              <label className="form-label">Descripción</label>
-              <textarea
+              <label htmlFor="serviceslist-descripcion" className="form-label">Descripción</label>
+              <textarea id="serviceslist-descripcion"
                 className="form-control"
                 rows={3}
                 {...register('description', {
@@ -469,8 +469,8 @@ export default function ServicesList() {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Precio <span className="text-danger">*</span></label>
-                <input
+                <label htmlFor="serviceslist-precio" className="form-label">Precio <span className="text-danger">*</span></label>
+                <input id="serviceslist-precio"
                   type="number"
                   step="0.01"
                   className={`form-control ${errors.priceAmount ? 'is-invalid' : ''}`}
@@ -505,8 +505,8 @@ export default function ServicesList() {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Unidad de servicio</label>
-                <select className="form-select" {...register('unit', { valueAsNumber: true })}>
+                <label htmlFor="serviceslist-unidad-de-servicio" className="form-label">Unidad de servicio</label>
+                <select id="serviceslist-unidad-de-servicio" className="form-select" {...register('unit', { valueAsNumber: true })}>
                   {UNIT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -515,8 +515,8 @@ export default function ServicesList() {
                 </select>
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Duración (min)</label>
-                <input
+                <label htmlFor="serviceslist-duracion-min" className="form-label">Duración (min)</label>
+                <input id="serviceslist-duracion-min"
                   type="number"
                   className="form-control"
                   {...register('preparationTimeMinutes', { valueAsNumber: true })}
@@ -526,16 +526,16 @@ export default function ServicesList() {
 
             <div className="row">
               <div className="col-md-6 mb-3">
-                <label className="form-label">Disponible desde</label>
-                <input
+                <label htmlFor="serviceslist-disponible-desde" className="form-label">Disponible desde</label>
+                <input id="serviceslist-disponible-desde"
                   type="time"
                   className="form-control"
                   {...register('availableFromTime')}
                 />
               </div>
               <div className="col-md-6 mb-3">
-                <label className="form-label">Disponible hasta</label>
-                <input
+                <label htmlFor="serviceslist-disponible-hasta" className="form-label">Disponible hasta</label>
+                <input id="serviceslist-disponible-hasta"
                   type="time"
                   className="form-control"
                   {...register('availableToTime')}
@@ -544,8 +544,8 @@ export default function ServicesList() {
             </div>
 
             <div className="mb-0">
-              <label className="form-label">Orden</label>
-              <input
+              <label htmlFor="serviceslist-orden" className="form-label">Orden</label>
+              <input id="serviceslist-orden"
                 type="number"
                 className="form-control"
                 {...register('sortOrder', { valueAsNumber: true })}
