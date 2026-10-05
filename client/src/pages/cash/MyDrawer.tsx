@@ -7,6 +7,7 @@ import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useRefreshCashState } from '../../api/queries';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type {
@@ -60,6 +61,7 @@ interface MyDrawerProps {
 export default function MyDrawer({ branches, workingBranchId, onBranchChosen, onChanged }: MyDrawerProps) {
   const toast = useToast();
   const { tenant } = useTenant();
+  const refreshCashState = useRefreshCashState();
   const [session, setSession] = useState<CashSessionDto | null>(null);
   // The drawer just closed: its cut stays at hand to print it or send it.
   const [closedCut, setClosedCut] = useState<{ session: CashSessionDto; movements: CashTransactionDto[] } | null>(null);
@@ -132,6 +134,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       });
       setSession(data);
       setClosedCut(null);
+      refreshCashState();
       if (data.branchId) onBranchChosen(data.branchId);
       setOpeningAmount('');
       setOpeningNotes('');
@@ -154,6 +157,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       setSession(null);
       setMovements(EMPTY_PAGE);
       setClosedCut({ session: data, movements: [] });
+      refreshCashState();
       cashApi.getTransactions({ cashSessionId: data.id, pageSize: 200 })
         .then(({ data: page }) => setClosedCut((current) => (current?.session.id === data.id ? { ...current, movements: page.items } : current)))
         .catch(() => undefined);
@@ -193,6 +197,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
       setMovementReference('');
       setMovementNotes('');
       toast.success(`${getTransactionTypeLabel(movementType)} registrado.`);
+      refreshCashState();
       await loadSession();
     } catch (err: unknown) {
       setActionError(getApiErrorMessage(err, 'No se pudo registrar el movimiento.'));

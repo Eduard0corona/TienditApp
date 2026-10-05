@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Attention;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
 using MediatR;
@@ -30,4 +31,9 @@ public class DashboardController : ControllerBase
         });
         return Ok(result);
     }
+
+    /// <summary>What needs someone now (the bell and "Requiere atención"), only for what the person may handle.</summary>
+    [HttpGet("attention")]
+    public async Task<ActionResult<AttentionDto>> GetAttention(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetAttentionQuery(), cancellationToken));
 }

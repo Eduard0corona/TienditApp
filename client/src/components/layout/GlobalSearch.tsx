@@ -9,7 +9,7 @@ import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
 import { formatMoney } from '../../utils/money';
 import { getOrderStatusLabel } from '../../utils/labels';
-import { getAllowedNavGroups } from './navigation';
+import { getAllowedPages } from './navigation';
 
 interface GlobalSearchProps {
   show: boolean;
@@ -49,8 +49,7 @@ export default function GlobalSearch({ show, onClose }: GlobalSearchProps) {
 
   const pageResults = useMemo<SearchResult[]>(() => {
     const query = normalize(term.trim());
-    return getAllowedNavGroups(access, capabilities)
-      .flatMap((group) => group.items)
+    return getAllowedPages(access, capabilities)
       .filter((item) => !query || normalize(`${item.label} ${item.keywords ?? ''}`).includes(query))
       .slice(0, query ? 6 : 8)
       .map((item) => ({ key: `page-${item.path}`, group: 'Ir a', icon: item.icon, title: item.label, path: item.path }));

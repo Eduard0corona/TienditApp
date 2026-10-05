@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
@@ -11,6 +12,7 @@ import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
+import { queryKeys } from '../../api/queries';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { getServicePriorityLabel, parseChecklist, parsePhotos } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
@@ -90,6 +92,7 @@ function getStatusLabel(status: OrderStatus): string {
 const EVENT_RELOAD_DELAY_MS = 400;
 
 export default function OrdersList() {
+  const queryClient = useQueryClient();
   const today = getTodayInputDate();
   const [searchParams] = useSearchParams();
   // A search from the global search (Ctrl K) or a link looks in every date, not only today.
@@ -280,6 +283,8 @@ export default function OrdersList() {
     setStatusError('');
     try {
       await ordersApi.updateStatus(order.id, newStatus);
+      // Confirming an online order takes it off the bell.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
     } catch (err: unknown) {
       setStatusError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la orden.'));
@@ -306,6 +311,7 @@ export default function OrdersList() {
     setStatusError('');
     try {
       await ordersApi.cancel(order.id, reason || undefined);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
       toast.success(`Pedido ${order.orderNumber} cancelado.`);
     } catch (err: unknown) {

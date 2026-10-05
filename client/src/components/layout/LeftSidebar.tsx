@@ -3,7 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
 import BrandLogo from '../common/BrandLogo';
-import { getAllowedNavGroups, isNavItemActive } from './navigation';
+import { getAllowedNavGroups, getNavEntryPath, isNavEntryActive } from './navigation';
 
 interface LeftSidebarProps {
   /** Closes the slide-out menu on phones (the close button only shows in that mode). */
@@ -56,13 +56,13 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
               <li key={group.title} className="side-nav-group">
                 <div className="side-nav-title">{group.title}</div>
                 <ul className="list-unstyled">
-                  {group.items.map((item) => {
-                    const active = isNavItemActive(item, pathname);
+                  {group.entries.map((entry) => {
+                    const active = isNavEntryActive(entry, pathname);
                     return (
-                      <li key={item.path} className={`side-nav-item ${active ? 'menuitem-active' : ''}`}>
-                        <Link to={item.path} className={`side-nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
-                          <i className={item.icon} aria-hidden="true"></i>
-                          <span>{item.label}</span>
+                      <li key={entry.label} className={`side-nav-item ${active ? 'menuitem-active' : ''}`}>
+                        <Link to={getNavEntryPath(entry)} className={`side-nav-link ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined}>
+                          <i className={entry.icon} aria-hidden="true"></i>
+                          <span>{entry.label}</span>
                         </Link>
                       </li>
                     );

@@ -1,0 +1,56 @@
+import type { Schemas } from '../api/typedClient';
+
+export type AttentionItem = Schemas['AttentionItemDto'];
+
+export type AttentionTone = 'danger' | 'warning' | 'info';
+
+export interface AttentionNotice {
+  key: string;
+  text: string;
+  path: string;
+  icon: string;
+  tone: AttentionTone;
+}
+
+const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
+
+/**
+ * What a notice from the API says and where it leads (the keys of AttentionKeys). A key the screen does not know yet
+ * is left out instead of showing a raw name.
+ */
+export function describeAttention(item: AttentionItem): AttentionNotice | null {
+  const { key, count, urgentCount } = item;
+  switch (key) {
+    case 'onlineOrdersToConfirm':
+      return { key, text: `${plural(count, 'pedido en línea', 'pedidos en línea')} por confirmar`, path: '/orders', icon: 'ri-global-line', tone: 'warning' };
+    case 'lowStock':
+      return {
+        key,
+        text: `${plural(count, 'insumo', 'insumos')} por reabastecer${urgentCount > 0 ? ` (${urgentCount} agotado${urgentCount === 1 ? '' : 's'} o crítico${urgentCount === 1 ? '' : 's'})` : ''}`,
+        path: '/inventory',
+        icon: 'ri-archive-drawer-line',
+        tone: urgentCount > 0 ? 'danger' : 'warning',
+      };
+    case 'drawersOpenSinceYesterday':
+      return { key, text: `${plural(count, 'caja abierta', 'cajas abiertas')} desde otro día`, path: '/cash', icon: 'ri-safe-2-line', tone: 'warning' };
+    case 'failedMessages':
+      return { key, text: `${plural(count, 'mensaje', 'mensajes')} sin enviar en las últimas 24 h`, path: '/campaigns', icon: 'ri-error-warning-line', tone: 'danger' };
+    case 'unreadChats':
+      return { key, text: `${plural(count, 'conversación', 'conversaciones')} sin leer`, path: '/whatsapp/chat', icon: 'ri-chat-3-line', tone: 'info' };
+    case 'lateServices':
+      return { key, text: `${plural(count, 'servicio atrasado', 'servicios atrasados')}`, path: '/services/board', icon: 'ri-time-line', tone: 'warning' };
+    case 'appointmentsToConfirm':
+      return { key, text: `${plural(count, 'cita', 'citas')} de hoy sin confirmar`, path: '/appointments', icon: 'ri-calendar-check-line', tone: 'info' };
+    default:
+      return null;
+  }
+}
+
+/** The notices the screens know, the most urgent first. */
+export function describeAttentionItems(items: AttentionItem[]): AttentionNotice[] {
+  const order: Record<AttentionTone, number> = { danger: 0, warning: 1, info: 2 };
+  return items
+    .map(describeAttention)
+    .filter((notice): notice is AttentionNotice => notice !== null)
+    .sort((a, b) => order[a.tone] - order[b.tone]);
+}

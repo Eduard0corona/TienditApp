@@ -768,3 +768,125 @@ input[data-switch='primary']:checked + label {
   min-height: 52px;
   font-size: 1.05rem;
 }
+
+/* Pages of a menu section (Catálogo, Inventario, Clientes, Configuración): tabs under the page title. */
+.section-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: -0.5rem 0 1.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.section-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--ta-touch);
+  padding: 0 0.85rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--ct-secondary-color);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.section-tab:hover,
+.section-tab:focus-visible {
+  color: var(--ct-link-color);
+}
+
+.section-tab.active {
+  color: var(--ct-link-color);
+  border-bottom-color: var(--ct-link-color);
+}
+
+/* The bell in the top bar: a count of what needs someone, red when something cannot wait. */
+.attention-bell {
+  padding: 0.35rem 0.5rem;
+}
+
+.attention-badge {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.05rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--ta-warning-fg);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
+}
+
+.attention-badge-urgent {
+  background: var(--ta-danger-fg);
+}
+
+.attention-menu {
+  min-width: 18rem;
+}
+
+.attention-item {
+  display: flex;
+  align-items: center;
+  white-space: normal;
+}
+
+.attention-danger i {
+  color: var(--ta-danger-fg);
+}
+
+.attention-warning i {
+  color: var(--ta-warning-fg);
+}
+
+/* The drawer chip: open (green) or closed (neutral), always one click from Caja. */
+.cash-status-chip {
+  white-space: nowrap;
+}
+
+.cash-status-open {
+  background: var(--ct-primary-bg-subtle);
+  color: var(--ct-primary-text-emphasis);
+}
+
+.cash-status-closed {
+  background: var(--ct-tertiary-bg);
+  color: var(--ct-secondary-color);
+}
+
+/* A line of "Requiere atención" in Inicio: the whole row leads to where it is handled. */
+.attention-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--ta-touch);
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--ta-radius-sm);
+  background: var(--ct-tertiary-bg);
+  color: var(--ct-body-color);
+}
+
+.attention-row:hover,
+.attention-row:focus-visible {
+  color: var(--ct-link-color);
+}
+
+.attention-row.attention-danger {
+  background: var(--ta-danger-bg);
+  color: var(--ta-danger-fg);
+}
+
+.attention-row.attention-warning {
+  background: var(--ta-warning-bg);
+  color: var(--ta-warning-fg);
+}

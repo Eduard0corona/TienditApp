@@ -67,7 +67,7 @@ export default function AuditLogs() {
 
   return (
     <>
-      <PageTitle title="Auditoria" subtitle="Seguridad" />
+      <PageTitle title="Seguridad y actividad" subtitle="Configuración" />
 
       <div className="card">
         <div className="card-body">

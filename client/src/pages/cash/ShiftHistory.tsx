@@ -7,6 +7,7 @@ import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useRefreshCashState } from '../../api/queries';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import type { CashCountLineDto, CashSessionDto, CashTransactionDto, PaginatedList } from '../../types';
@@ -54,6 +55,7 @@ function toEndOfDay(date: string) {
 export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: ShiftHistoryProps) {
   const toast = useToast();
   const { tenant } = useTenant();
+  const refreshCashState = useRefreshCashState();
   const [data, setData] = useState(EMPTY_SESSIONS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,6 +115,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
       setClosing(false);
       setSelected(null);
       toast.success(`Caja de ${selected.openedBy} cerrada.`);
+      refreshCashState();
       await load();
     } catch (err: unknown) {
       setCloseError(getApiErrorMessage(err, 'No se pudo cerrar la caja.'));
