@@ -44,11 +44,14 @@ public class AzureBlobFileStorageService : IFileStorageService
         string folder,
         CancellationToken cancellationToken = default)
     {
+        // Callers build both from the owner and a generated name; anything else could land outside the folder.
+        StorageNamespace.EnsureValidFolder(folder);
+        StorageNamespace.EnsureValidFileName(fileName);
+
         if (_autoCreateContainer)
             await _containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
 
-        var safeFolder = folder.Trim('/').Replace("\\", "/");
-        var blobName = $"{safeFolder}/{fileName}";
+        var blobName = $"{folder}/{fileName}";
         var blobClient = _containerClient.GetBlobClient(blobName);
 
         await blobClient.UploadAsync(
@@ -86,6 +89,9 @@ public class AzureBlobFileStorageService : IFileStorageService
             await DeleteBlobAsync($"{baseBlobName}{suffix}.webp", cancellationToken);
         }
     }
+
+    public bool IsStoredIn(string fileUrl, string folder) =>
+        TryResolveBlobName(_containerClient.Uri, fileUrl, folder, out _);
 
     private async Task DeleteBlobAsync(string blobName, CancellationToken cancellationToken)
     {

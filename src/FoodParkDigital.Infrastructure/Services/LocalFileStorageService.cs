@@ -27,6 +27,9 @@ public class LocalFileStorageService : IFileStorageService
         string folder,
         CancellationToken cancellationToken = default)
     {
+        // Callers build both from the owner and a generated name; anything else could write outside the folder.
+        StorageNamespace.EnsureValidFolder(folder);
+        StorageNamespace.EnsureValidFileName(fileName);
         var folderPath = Path.Combine(_basePath, folder);
         Directory.CreateDirectory(folderPath);
 
@@ -57,30 +60,37 @@ public class LocalFileStorageService : IFileStorageService
         return Task.CompletedTask;
     }
 
-    // Maps "/uploads/{folder}/..." to a path below the folder's directory; any other URL is refused.
+    public bool IsStoredIn(string fileUrl, string folder) => Resolve(fileUrl, folder, out _);
+
     private bool TryResolvePath(string fileUrl, string folder, out string fullPath)
+    {
+        if (Resolve(fileUrl, folder, out fullPath))
+            return true;
+
+        if (!string.IsNullOrEmpty(fileUrl))
+            _logger.LogWarning("Refused to delete a file outside the storage folder {Folder}.", folder);
+        return false;
+    }
+
+    // Maps "/uploads/{folder}/..." to a path below the folder's directory; any other URL is refused.
+    private bool Resolve(string fileUrl, string folder, out string fullPath)
     {
         StorageNamespace.EnsureValidFolder(folder);
         fullPath = string.Empty;
 
-        if (string.IsNullOrEmpty(fileUrl))
+        if (string.IsNullOrEmpty(fileUrl)
+            || !fileUrl.StartsWith(UrlPrefix, StringComparison.Ordinal)
+            || !StorageNamespace.IsInsideFolder(fileUrl[UrlPrefix.Length..], folder))
             return false;
 
-        if (fileUrl.StartsWith(UrlPrefix, StringComparison.Ordinal)
-            && StorageNamespace.IsInsideFolder(fileUrl[UrlPrefix.Length..], folder))
-        {
-            // Defense in depth: the normalized absolute path must still sit below the folder's directory.
-            var folderPath = Path.GetFullPath(Path.Combine(_basePath, folder)) + Path.DirectorySeparatorChar;
-            var candidate = Path.GetFullPath(Path.Combine(_basePath, fileUrl[UrlPrefix.Length..]));
-            if (candidate.StartsWith(folderPath, StringComparison.Ordinal))
-            {
-                fullPath = candidate;
-                return true;
-            }
-        }
+        // Defense in depth: the normalized absolute path must still sit below the folder's directory.
+        var folderPath = Path.GetFullPath(Path.Combine(_basePath, folder)) + Path.DirectorySeparatorChar;
+        var candidate = Path.GetFullPath(Path.Combine(_basePath, fileUrl[UrlPrefix.Length..]));
+        if (!candidate.StartsWith(folderPath, StringComparison.Ordinal))
+            return false;
 
-        _logger.LogWarning("Refused to delete a file outside the storage folder {Folder}.", folder);
-        return false;
+        fullPath = candidate;
+        return true;
     }
 
     private static void DeleteIfExists(string path)

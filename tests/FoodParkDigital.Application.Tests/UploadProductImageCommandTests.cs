@@ -118,6 +118,30 @@ public class UploadProductImageCommandTests
         Assert.Equal(foreignImageUrl, persisted.ImageUrl);
     }
 
+    [Fact]
+    public async Task Handle_ShouldKeepThePreviousImage_WhenTheNewOneCannotBeStored()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var previousImageUrl = $"https://storage.test/products/{fixture.TenantId}/previous";
+        var product = await fixture.SeedProductAsync(new Product(
+            fixture.TenantId,
+            fixture.CategoryId,
+            "Café de olla",
+            null,
+            30m,
+            "MXN",
+            imageUrl: previousImageUrl));
+        fixture.Storage.FailUploads = true;
+
+        await Assert.ThrowsAsync<IOException>(
+            () => fixture.CreateHandler().Handle(CreateCommand(product.Id), CancellationToken.None));
+
+        // The previous files go only once the new image is stored.
+        Assert.Empty(fixture.Storage.DeletedUrls);
+        var persisted = await fixture.Context.Products.AsNoTracking().SingleAsync(p => p.Id == product.Id);
+        Assert.Equal(previousImageUrl, persisted.ImageUrl);
+    }
+
     private static async Task<Product> UploadAndAssertOnlyImageChangedAsync(TestFixture fixture, Product product)
     {
         var previousImageUrl = product.ImageUrl;
@@ -235,6 +259,7 @@ public class UploadProductImageCommandTests
     {
         public List<string> UploadedUrls { get; } = [];
         public List<string> DeletedUrls { get; } = [];
+        public bool FailUploads { get; set; }
 
         public Task<string> UploadAsync(
             Stream fileStream,
@@ -243,6 +268,9 @@ public class UploadProductImageCommandTests
             string folder,
             CancellationToken cancellationToken = default)
         {
+            if (FailUploads)
+                throw new IOException("The storage is not available.");
+
             var url = $"https://storage.test/{folder}/{fileName}";
             UploadedUrls.Add(url);
             return Task.FromResult(url);
@@ -259,6 +287,9 @@ public class UploadProductImageCommandTests
             DeletedUrls.Add(baseImageUrl);
             return Task.CompletedTask;
         }
+
+        public bool IsStoredIn(string fileUrl, string folder) =>
+            fileUrl.StartsWith($"https://storage.test/{folder}/", StringComparison.Ordinal);
     }
 
     private sealed class FakeImageProcessingService : IImageProcessingService

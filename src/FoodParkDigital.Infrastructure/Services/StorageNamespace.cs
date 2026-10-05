@@ -18,6 +18,13 @@ internal static class StorageNamespace
             throw new ArgumentException("La carpeta de almacenamiento no es válida.", nameof(folder));
     }
 
+    // A file name as the upload pipeline produces it: one canonical segment, so it cannot leave its folder.
+    public static void EnsureValidFileName(string fileName)
+    {
+        if (!IsCanonical(fileName) || fileName.Contains('/'))
+            throw new ArgumentException("El nombre del archivo no es válido.", nameof(fileName));
+    }
+
     // A private file key ("orders/{tenant}/..."): canonical, with a folder and a file name. Traversal is rejected.
     public static bool IsValidKey(string? key) => IsCanonical(key) && key!.Contains('/');
 

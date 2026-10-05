@@ -64,6 +64,8 @@ public class TenantFilterBypassAllowlistTests
         // The online menu finds its business by slug, with its settings, before any business is in context; it then
         // enters that business.
         ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 1,
+        // The memberships of the account itself (by its user id), in every business: its old avatars live in their folders.
+        ["src/FoodParkDigital.Application/Identity/AvatarFiles.cs"] = 1,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).
         ["src/FoodParkDigital.Application/Orders/Queries/GetMyOrdersQuery.cs"] = 1, // a customer account's own orders, filtered by its user id
         ["src/FoodParkDigital.Application/Orders/Commands/CreateOrderCommand.cs"] = 1,

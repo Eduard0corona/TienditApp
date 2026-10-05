@@ -46,20 +46,20 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUserService _currentUserService;
-    private readonly ICurrentTenantService _tenantService;
+    private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorageService;
     private readonly IImageProcessingService _imageProcessingService;
 
     public UploadAvatarCommandHandler(
         UserManager<ApplicationUser> userManager,
         ICurrentUserService currentUserService,
-        ICurrentTenantService tenantService,
+        IApplicationDbContext context,
         IFileStorageService fileStorageService,
         IImageProcessingService imageProcessingService)
     {
         _userManager = userManager;
         _currentUserService = currentUserService;
-        _tenantService = tenantService;
+        _context = context;
         _fileStorageService = fileStorageService;
         _imageProcessingService = imageProcessingService;
     }
@@ -74,7 +74,8 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
         if (user is null || !user.IsActive)
             return Result.Failure<AvatarImageUrlsDto>("Usuario no encontrado.");
 
-        var folder = TenantStorageFolders.Avatars(_tenantService.TenantId);
+        // The account's own folder: the avatar is the same in every business of the person.
+        var folder = TenantStorageFolders.UserAvatars(user.Id);
         var previousAvatarUrl = user.AvatarUrl;
 
         // Generar variantes de imagen
@@ -122,7 +123,7 @@ public class UploadAvatarCommandHandler : IRequestHandler<UploadAvatarCommand, R
         // Las variantes anteriores se eliminan solo cuando la nueva imagen ya quedo guardada; antes se
         // borraban primero y una imagen rechazada dejaba al usuario apuntando a archivos inexistentes.
         if (!string.IsNullOrEmpty(previousAvatarUrl))
-            await _fileStorageService.DeleteVariantsAsync(previousAvatarUrl, folder, cancellationToken);
+            await AvatarFiles.DeleteAsync(_fileStorageService, _context, user.Id, previousAvatarUrl, cancellationToken);
 
         return Result.Success(AvatarImageUrlsDto.FromBaseUrl(baseUrl)!);
     }
