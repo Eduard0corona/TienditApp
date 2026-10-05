@@ -161,12 +161,9 @@ public class AutoRepliesAndChatTests
     }
 
     private static AiAgentAutoReplyService AutoReplies(SalesTestFixture fixture, string? appUrl = null)
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(appUrl is null ? [] : new Dictionary<string, string?> { ["AppUrl"] = appUrl })
-            .Build();
-        return new AiAgentAutoReplyService(fixture.Context, configuration);
-    }
+        => new(fixture.Context, new Links(appUrl));
+
+    private sealed record Links(string? BaseUrl) : IAppLinks;
 
     private static async Task<AiAgent> AddAgentAsync(SalesTestFixture fixture, Tenant tenant, string? products = null)
     {

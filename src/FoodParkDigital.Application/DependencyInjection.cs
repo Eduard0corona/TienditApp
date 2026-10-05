@@ -2,9 +2,11 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using System.Globalization;
 using System.Reflection;
+using FoodParkDigital.Application.AiAgents;
 using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Application.Inventory;
@@ -51,6 +53,11 @@ public static class DependencyInjection
         services.AddScoped<AppointmentReminderPlanner>();
         services.AddScoped<OutgoingMessageSender>();
         services.AddScoped<AppointmentNotices>();
+
+        // Rules that used to live in Infrastructure: who an order's phone belongs to, and the automatic replies.
+        services.AddScoped<ICustomerLookupService, CustomerLookupService>();
+        services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
+        services.AddScoped<IAiAgentAutoReplyService, AiAgentAutoReplyService>();
 
         // Durable handlers of domain events, run by the outbox dispatcher (one registration per event type).
         foreach (var type in assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false }))

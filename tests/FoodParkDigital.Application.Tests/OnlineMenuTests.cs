@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tests.Support;
@@ -192,7 +193,6 @@ public class OnlineMenuTests
         var lookup = new CustomerLookupService(
             fixture.Context,
             phones,
-            new HostingEnvironment { EnvironmentName = Environments.Production },
             NullLogger<CustomerLookupService>.Instance);
         return new PlacePublicOrderCommandHandler(
             fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance, new FolioGenerator(fixture.Context));

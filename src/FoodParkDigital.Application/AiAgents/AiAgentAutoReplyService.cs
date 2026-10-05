@@ -1,11 +1,9 @@
-using FoodParkDigital.Application.AiAgents;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 
-namespace FoodParkDigital.Infrastructure.Services;
+namespace FoodParkDigital.Application.AiAgents;
 
 /// <summary>
 /// "Respuestas automáticas": answers by keywords (whole words, without accents) with the texts the business wrote.
@@ -32,12 +30,12 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         ["gracias", "muchas", "mil", "ok", "okay", "oki", "vale", "perfecto", "listo", "excelente", "genial", "sale"];
 
     private readonly IApplicationDbContext _context;
-    private readonly IConfiguration? _configuration;
+    private readonly IAppLinks _links;
 
-    public AiAgentAutoReplyService(IApplicationDbContext context, IConfiguration? configuration = null)
+    public AiAgentAutoReplyService(IApplicationDbContext context, IAppLinks links)
     {
         _context = context;
-        _configuration = configuration;
+        _links = links;
     }
 
     public async Task<string?> BuildReplyAsync(
@@ -100,7 +98,7 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
     {
         const string PersonHelps = "Escríbenos qué te gustaría y te ayudamos con tu pedido.";
 
-        var appUrl = _configuration?["AppUrl"]?.Trim().TrimEnd('/');
+        var appUrl = _links.BaseUrl?.TrimEnd('/');
         if (string.IsNullOrEmpty(appUrl))
             return PersonHelps;
 

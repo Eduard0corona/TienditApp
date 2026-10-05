@@ -1,11 +1,14 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Customers.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace FoodParkDigital.Infrastructure.Services;
+namespace FoodParkDigital.Application.Customers.Services;
 
+/// <summary>
+/// When someone confirms a phone number, the temporary customers of that number (in one business or in all) become
+/// theirs, and so do the orders placed with it.
+/// </summary>
 public class TemporaryCustomerClaimService : ITemporaryCustomerClaimService
 {
     private readonly IApplicationDbContext _context;

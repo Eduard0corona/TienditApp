@@ -160,15 +160,13 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ITenantAccessService, TenantAccessService>();
         services.AddScoped<IFolioGenerator, FolioGenerator>();
-        services.AddScoped<IAiAgentAutoReplyService, AiAgentAutoReplyService>();
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
-        services.AddScoped<ICustomerLookupService, CustomerLookupService>();
-        services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ISignInService, SignInService>();
         services.AddScoped<ITwoFactorLoginChallengeService, TwoFactorLoginChallengeService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<IAppLinks, AppLinks>();
         services.AddSingleton<WhatsAppCloudClient>();
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<IWhatsAppService, WhatsAppService>();

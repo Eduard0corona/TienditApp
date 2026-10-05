@@ -457,7 +457,7 @@ public class WhatsAppWebhookControllerTests
             TenantA = tenantA;
             TenantB = tenantB;
             SaveFaults = saveFaults;
-            Mediator = new RecordingMediator(context);
+            Mediator = new RecordingMediator(context) { TenantService = tenantService };
         }
 
         public ApplicationDbContext Context { get; }
@@ -540,6 +540,7 @@ public class WhatsAppWebhookControllerTests
                 services.AddSingleton(notifications);
             var provider = services.BuildServiceProvider();
             _providers.Add(provider);
+            Mediator.Notifications = notifications;
 
             return new WhatsAppWebhookProcessor(
                 provider.GetRequiredService<IServiceScopeFactory>(),
@@ -591,6 +592,10 @@ public class WhatsAppWebhookControllerTests
 
         public List<object> Requests { get; } = [];
 
+        /// <summary>The business in scope and the chat notifications of the real delivery statuses handler.</summary>
+        public ICurrentTenantService? TenantService { get; set; }
+        public IWhatsAppNotificationService? Notifications { get; set; }
+
         /// <summary>When set, processing an inbound message throws it, like a failed save would.</summary>
         public Exception? ProcessFailure { get; set; }
 
@@ -613,6 +618,13 @@ public class WhatsAppWebhookControllerTests
                 ProcessInboundMessageCommand command when DuplicateMessageIds.Contains(command.ExternalMessageId) =>
                     Result.Failure<ChatMessageDto>(ProcessInboundMessageCommandHandler.DuplicateMessageError),
                 ProcessInboundMessageCommand => Result.Success(new ChatMessageDto()),
+                ApplyWhatsAppStatusesCommand command => await new ApplyWhatsAppStatusesCommandHandler(
+                        _context,
+                        TenantService!,
+                        new FixedClock(),
+                        NullLogger<ApplyWhatsAppStatusesCommandHandler>.Instance,
+                        Notifications)
+                    .Handle(command, ct),
                 _ => throw new NotSupportedException($"Unexpected request {request.GetType().Name}.")
             };
 

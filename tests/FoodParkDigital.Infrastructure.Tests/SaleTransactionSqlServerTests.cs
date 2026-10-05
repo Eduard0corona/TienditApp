@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -191,7 +192,7 @@ public class SaleTransactionSqlServerTests
                 context,
                 tenant,
                 user,
-                new CustomerLookupService(context, phones, new TestHostEnvironment("Production"), NullLogger<CustomerLookupService>.Instance),
+                new CustomerLookupService(context, phones, NullLogger<CustomerLookupService>.Instance),
                 clock,
                 phones,
                 orderInventoryService: new OrderInventoryService(context, clock, folios, NullLogger<OrderInventoryService>.Instance),

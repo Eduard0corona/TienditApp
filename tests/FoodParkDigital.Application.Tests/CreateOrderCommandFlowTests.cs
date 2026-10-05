@@ -490,7 +490,6 @@ public class CreateOrderCommandFlowTests
             var customerLookup = new CustomerLookupService(
                 Context,
                 new PhoneNormalizationService(),
-                new HostingEnvironment { EnvironmentName = Environments.Production },
                 NullLogger<CustomerLookupService>.Instance);
 
             return new CreateOrderCommandHandler(
