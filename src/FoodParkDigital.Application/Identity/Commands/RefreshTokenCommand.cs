@@ -2,19 +2,19 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
-using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
 [AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
-public record RefreshTokenCommand(string? ExpiredToken, string RefreshToken) : IRequest<Result<AuthResponse>>;
+public record RefreshTokenCommand(string RefreshToken) : IRequest<Result<AuthResponse>>;
 
 public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenCommand>
 {
@@ -24,54 +24,88 @@ public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenComman
     }
 }
 
+/// <summary>
+/// Renews the session of a refresh token: same session, next token. A token already replaced that comes back was
+/// copied, so the session ends for whoever holds its newest token too.
+/// </summary>
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, Result<AuthResponse>>
 {
+    public const string InvalidSessionError = "La sesión ya no es válida. Inicia sesión de nuevo.";
+    public const string ConcurrentRenewalError = "La sesión se acaba de renovar en otra pestaña. Intenta de nuevo.";
+
+    /// <summary>
+    /// How long a replaced token counts as a renewal that lost a race (two requests of the same browser, one a moment
+    /// later) rather than as a copy. It gets no tokens either way; it only does not end the session.
+    /// </summary>
+    public static readonly TimeSpan ConcurrentRenewalWindow = TimeSpan.FromSeconds(10);
+
     private readonly IApplicationDbContext _context;
-    private readonly UserManager<ApplicationUser> _userManager;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ITenantAccessService _tenantAccessService;
+    private readonly IDateTimeProvider _clock;
+    private readonly ILogger<RefreshTokenCommandHandler> _logger;
 
     public RefreshTokenCommandHandler(
         IApplicationDbContext context,
-        UserManager<ApplicationUser> userManager,
         IJwtTokenService jwtTokenService,
-        ITenantAccessService tenantAccessService)
+        ITenantAccessService tenantAccessService,
+        IDateTimeProvider clock,
+        ILogger<RefreshTokenCommandHandler> logger)
     {
         _context = context;
-        _userManager = userManager;
         _jwtTokenService = jwtTokenService;
         _tenantAccessService = tenantAccessService;
+        _clock = clock;
+        _logger = logger;
     }
 
     public async Task<Result<AuthResponse>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
-        Guid? userId = null;
+        var now = _clock.UtcNow;
+        var presented = await UserSessions.FindAsync(_context, request.RefreshToken, cancellationToken);
+        if (presented is null)
+            return Result.Failure<AuthResponse>(InvalidSessionError);
 
-        // Si hay un JWT expirado, extraer el userId de ahí
-        if (!string.IsNullOrEmpty(request.ExpiredToken))
+        // Issued by the previous version: from now on only its hash is stored.
+        presented.HashLegacyValue();
+
+        if (presented.IsRevoked)
         {
-            var principal = _jwtTokenService.GetPrincipalFromExpiredToken(request.ExpiredToken);
-            var userIdClaim = principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (Guid.TryParse(userIdClaim, out var parsedId))
-                userId = parsedId;
+            // Its twin request replaced it a moment ago and brought the new cookie: this one tries again with it.
+            if (presented.WasRotated && presented.RevokedAt > now - ConcurrentRenewalWindow)
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result.Failure<AuthResponse>(ConcurrentRenewalError);
+            }
+
+            if (presented.WasRotated)
+            {
+                await UserSessions.EndSessionAsync(
+                    _context, presented.SessionId, RefreshTokenRevocationReason.ReuseDetected, now, cancellationToken);
+                _logger.LogWarning(
+                    "A replaced refresh token was presented again: session {SessionId} of user {UserId} ended.",
+                    presented.SessionId,
+                    presented.UserId);
+            }
+            else
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            return Result.Failure<AuthResponse>(InvalidSessionError);
         }
 
-        // Si no se pudo obtener el userId del JWT, buscarlo desde el refresh token
-        userId ??= await _jwtTokenService.GetUserIdFromRefreshTokenAsync(request.RefreshToken);
-
-        if (userId is null)
-            return Result.Failure<AuthResponse>("Token inválido.");
+        if (presented.ExpiresAt <= now)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result.Failure<AuthResponse>(InvalidSessionError);
+        }
 
         var user = await _context.Users
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.Id == userId.Value, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Id == presented.UserId, cancellationToken);
         if (user is null || !user.IsActive)
             return Result.Failure<AuthResponse>("Usuario no encontrado o inactivo.");
-
-        // Validar refresh token
-        var isValid = await _jwtTokenService.ValidateRefreshTokenAsync(userId.Value, request.RefreshToken);
-        if (!isValid)
-            return Result.Failure<AuthResponse>("Refresh token inválido o expirado.");
 
         var tenantMembership = await _context.TenantUsers
             .IgnoreQueryFilters()
@@ -112,20 +146,26 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         if (user.DefaultTenantId is null && tenantMembership is not null)
             user.DefaultTenantId = tenantMembership.TenantId;
 
-        // Generar nuevo par de tokens
-        var newAccessToken = _jwtTokenService.GenerateAccessToken(user, tenantContext);
-        var newRefreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
+        // Same session, next token: the one presented is replaced and cannot renew it again.
+        var accessToken = _jwtTokenService.GenerateAccessToken(user, presented.SessionId, tenantContext);
+        var next = _jwtTokenService.GenerateRefreshToken(user.Id, presented.SessionId);
+        presented.Revoke(RefreshTokenRevocationReason.Rotated, now);
+        _context.RefreshTokens.Add(next.Token);
 
-        // Revocar el refresh token anterior
-        await _jwtTokenService.RevokeRefreshTokenAsync(request.RefreshToken, newRefreshToken.Token);
-
-        _context.RefreshTokens.Add(newRefreshToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another request renewed with the same token first; its answer carries the session's new token.
+            return Result.Failure<AuthResponse>(ConcurrentRenewalError);
+        }
 
         return Result.Success(new AuthResponse
         {
-            AccessToken = newAccessToken,
-            RefreshToken = newRefreshToken.Token,
+            AccessToken = accessToken,
+            RefreshToken = next.Value,
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
             User = new UserDto
             {

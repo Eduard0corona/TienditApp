@@ -47,6 +47,9 @@ public class UseCaseRulesTests
         // Charging and the drawer.
         { typeof(AddOrderPaymentCommand), "Permission(ChargeOrders)" },
         { typeof(UploadOrderPaymentEvidenceCommand), "Permission(ChargeOrders)" },
+        // Private files open where they are seen: receipts with the payments, service photos with the service.
+        { typeof(GetPaymentEvidenceFileQuery), "Permission(ManageOrders, ChargeOrders)" },
+        { typeof(GetServicePhotoFileQuery), "Permission(ManageOrders, ManageServiceBoard)" },
         { typeof(OpenCashSessionCommand), "Permission(ManageCash)" },
         // Reports, and the business's activity for owners and admins.
         { typeof(GetDashboardMetricsQuery), "Permission(ViewReports)" },

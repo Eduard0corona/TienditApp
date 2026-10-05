@@ -410,7 +410,10 @@ internal static class PublicMenuTenant
         CancellationToken cancellationToken)
     {
         var normalized = slug.Trim().ToLowerInvariant();
+        // The public menu finds its business by slug before any business is in context; only that business's
+        // settings come with it. The caller then enters the business.
         var tenant = await context.Tenants
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Include(t => t.Settings)
             .FirstOrDefaultAsync(t => t.Slug == normalized && t.Status == TenantStatus.Active, cancellationToken);

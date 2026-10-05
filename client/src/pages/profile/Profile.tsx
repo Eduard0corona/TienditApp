@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
@@ -15,8 +15,11 @@ interface DisableTwoFactorForm {
 }
 
 export default function Profile() {
-  const { user, refreshProfile } = useAuth();
+  const { user, refreshProfile, logout } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const signOutTimeoutRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(signOutTimeoutRef.current), []);
 
   // Edit profile state
   const [editMode, setEditMode] = useState(false);
@@ -114,7 +117,12 @@ export default function Profile() {
     try {
       await profileApi.changePassword(data);
       resetPassword();
-      setPasswordMsg({ type: 'success', text: 'Contraseña actualizada. Tu sesión se cerrará pronto.' });
+      // The server ended every session of the account, this one too: the person signs in again with the new one.
+      setPasswordMsg({
+        type: 'success',
+        text: 'Contraseña actualizada. Cerramos tus sesiones en todos los dispositivos; inicia sesión con la nueva contraseña.',
+      });
+      signOutTimeoutRef.current = window.setTimeout(() => void logout(), 3000);
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, 'Error al cambiar la contraseña.');
       setPasswordMsg({ type: 'danger', text: msg });

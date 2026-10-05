@@ -55,8 +55,8 @@ public sealed class OrderPaymentRegistrar
         if (order.Status == OrderStatus.Cancelled)
             return Result.Failure<OrderPayment>("No se pueden registrar pagos en una orden cancelada.");
 
-        // The evidence is shown to staff as a link: it must be a file uploaded for this tenant.
-        if (!OrderUploadRules.IsOwnPaymentEvidence(input.EvidenceUrl, order.TenantId))
+        // The evidence is a private file uploaded for this tenant, opened by its staff through the API.
+        if (!OrderUploadRules.TryGetPaymentEvidencePath(input.EvidenceUrl, order.TenantId, out var evidencePath))
             return Result.Failure<OrderPayment>("La evidencia del pago debe subirse desde el sistema.");
 
         if (input.Amount > order.Balance)
@@ -88,7 +88,7 @@ public sealed class OrderPaymentRegistrar
             // Stamped by the server: a client-provided date could rewrite already reported cuts.
             paidAt: _dateTimeProvider.UtcNow,
             inventoryLocationId: inventoryLocationId,
-            evidenceUrl: input.EvidenceUrl?.Trim(),
+            evidenceUrl: evidencePath,
             reference: input.Reference?.Trim(),
             notes: input.Notes?.Trim(),
             tip: input.Tip,

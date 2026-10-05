@@ -1,4 +1,3 @@
-using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Identity.Queries;
@@ -23,16 +22,11 @@ namespace FoodParkDigital.WebApi.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly IJwtTokenService _jwtTokenService;
     private readonly IWebHostEnvironment _env;
 
-    public AuthController(
-        IMediator mediator,
-        IJwtTokenService jwtTokenService,
-        IWebHostEnvironment env)
+    public AuthController(IMediator mediator, IWebHostEnvironment env)
     {
         _mediator = mediator;
-        _jwtTokenService = jwtTokenService;
         _env = env;
     }
 
@@ -64,16 +58,15 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(refreshToken))
             return this.ApiError(StatusCodes.Status401Unauthorized, "No hay una sesión que renovar. Inicia sesión de nuevo.");
 
-        var authHeader = Request.Headers.Authorization.ToString();
-        var expiredToken = !string.IsNullOrEmpty(authHeader)
-            ? authHeader.Replace("Bearer ", "")
-            : null;
-
-        var command = new RefreshTokenCommand(expiredToken, refreshToken);
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken));
 
         if (result.IsFailure)
         {
+            // Another request renewed the session with this token a moment earlier: its answer set the new cookie,
+            // which stays. The client tries again.
+            if (result.Error == RefreshTokenCommandHandler.ConcurrentRenewalError)
+                return this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.ConcurrencyConflict);
+
             DeleteRefreshTokenCookie();
             return this.ApiError(StatusCodes.Status401Unauthorized, result.Error);
         }

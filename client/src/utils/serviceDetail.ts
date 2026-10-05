@@ -1,4 +1,4 @@
-import { isSafeFileUrl } from './safeUrl';
+import { toPrivateFilePath } from './privateFiles';
 
 /** One line of the intake checklist of a service (stored as JSON by the intake form). */
 export interface ChecklistItem {
@@ -8,7 +8,8 @@ export interface ChecklistItem {
 
 /** A photo of a service: before (intake) or after (delivery). */
 export interface ServicePhoto {
-  url: string;
+  /** Private file path ("/files/orders/..."): the photo opens only with the session. */
+  path: string;
   fileName?: string;
 }
 
@@ -26,11 +27,14 @@ export function parseChecklist(raw?: string | null): ChecklistItem[] {
   return safeParseArray<ChecklistItem>(raw);
 }
 
-/** Photos stored as URLs or { url, fileName }; only files of the app (or https) are linked. */
+/** Photos stored as addresses or { url, fileName }: only the business's own private photos are shown. */
 export function parsePhotos(raw?: string | null): ServicePhoto[] {
   return safeParseArray<{ url?: string; fileName?: string } | string>(raw)
     .map((item) => (typeof item === 'string' ? { url: item } : item))
-    .filter((item): item is ServicePhoto => isSafeFileUrl(item.url));
+    .flatMap((item) => {
+      const path = toPrivateFilePath(item.url);
+      return path ? [{ path, fileName: item.fileName }] : [];
+    });
 }
 
 /**

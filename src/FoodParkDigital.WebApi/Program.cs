@@ -233,6 +233,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 app.UseHttpsRedirection();
 app.UseCors(CorsPolicyName);
+app.UseMiddleware<PrivateUploadsGuardMiddleware>();
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {

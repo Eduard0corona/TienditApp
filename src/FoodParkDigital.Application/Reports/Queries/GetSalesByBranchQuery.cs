@@ -56,7 +56,6 @@ public class GetSalesByBranchQueryHandler : IRequestHandler<GetSalesByBranchQuer
     {
         var tenantId = _tenantService.TenantId;
         var utcNow = _dateTimeProvider.UtcNow;
-        // TenantSettings is not ITenantScoped (no global filter): the tenant must be explicit.
         var timeZoneId = await _context.TenantSettings
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)

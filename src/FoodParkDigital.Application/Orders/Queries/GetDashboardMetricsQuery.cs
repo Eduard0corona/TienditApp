@@ -182,8 +182,8 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
         bool canReadRetailOrders,
         bool canReadServiceOrders)
     {
-        // OrderItem is not ITenantScoped: scope it through its order. IgnoreQueryFilters() here would
-        // disable the tenant filters of the whole query, not only of the joined set.
+        // Lines and orders are both filtered by the business; the explicit condition keeps the report scoped even if
+        // a filter were ever turned off for the query.
         return (
             from oi in _context.OrderItems.AsNoTracking()
             join o in _context.Orders.AsNoTracking() on oi.OrderId equals o.Id

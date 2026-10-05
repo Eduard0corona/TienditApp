@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
@@ -28,6 +29,7 @@
     <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\CapturingLogger.cs" Link="Support\CapturingLogger.cs" />
     <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\InMemoryApplicationDbContext.cs" Link="Support\InMemoryApplicationDbContext.cs" />
     <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\SqlExceptionFactory.cs" Link="Support\SqlExceptionFactory.cs" />
+    <Compile Include="..\FoodParkDigital.Infrastructure.Tests\Support\SqlServerTestDatabase.cs" Link="Support\SqlServerTestDatabase.cs" />
   </ItemGroup>
 
 </Project>

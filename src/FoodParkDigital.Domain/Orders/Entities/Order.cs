@@ -65,7 +65,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var stateMachine = OrderStateMachineFactory.Create(businessType, orderType);
         Status = stateMachine.GetInitialStatus();
 
-        _statusHistory.Add(new OrderStatusHistory(Id, Status, Status, null));
+        _statusHistory.Add(new OrderStatusHistory(TenantId, Id, Status, Status, null));
     }
 
     public Guid TenantId { get; private set; }
@@ -385,7 +385,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var previousStatus = Status;
         Status = newStatus;
         ReleaseTableWhenClosed();
-        _statusHistory.Add(new OrderStatusHistory(Id, previousStatus, newStatus, performedBy));
+        _statusHistory.Add(new OrderStatusHistory(TenantId, Id, previousStatus, newStatus, performedBy));
         AddDomainEvent(new OrderStatusChangedEvent(Id, TenantId, previousStatus, newStatus, notifyCustomer));
     }
 
@@ -413,7 +413,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         Status = OrderStatus.Cancelled;
         ReleaseTableWhenClosed();
         CancellationReason = reason;
-        _statusHistory.Add(new OrderStatusHistory(Id, previousStatus, OrderStatus.Cancelled, performedBy));
+        _statusHistory.Add(new OrderStatusHistory(TenantId, Id, previousStatus, OrderStatus.Cancelled, performedBy));
 
         // Pieces still pending or in progress belong to an order that no longer exists: they leave the
         // service board and can no longer be completed (which would consume inventory).

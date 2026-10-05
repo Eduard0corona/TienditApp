@@ -1,6 +1,7 @@
 using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
@@ -121,6 +122,17 @@ public static class DependencyInjection
                         context.Token = accessToken;
                     }
                     return Task.CompletedTask;
+                },
+                // A genuine, unexpired token also needs its session open: signing out, a reused refresh token or a
+                // change of the account's security end it before it expires.
+                OnTokenValidated = async context =>
+                {
+                    var sessions = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenSessionValidator>();
+                    if (context.Principal is null
+                        || !await sessions.IsOpenAsync(context.Principal, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("La sesión ya no es válida.");
+                    }
                 }
             };
         });
@@ -146,6 +158,8 @@ public static class DependencyInjection
         services.AddScoped<IWebhookInbox, WebhookInbox>();
         services.AddScoped<WhatsAppWebhookProcessor>();
         services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
+        // Data the previous version left without a business while the migration was applied, completed at start.
+        services.AddHostedService<OrderTenantBackfillService>();
         if (configuration.GetValue($"{BackgroundJobOptions.SectionName}:Enabled", defaultValue: true))
         {
             services.AddHostedService<OutboxDispatcherService>();
@@ -153,6 +167,8 @@ public static class DependencyInjection
             services.AddHostedService<MessagingWorkerService>();
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
+            services.AddHostedService<PrivateFilesMigrationService>();
+            services.AddHostedService<LegacyRefreshTokenHashingService>();
         }
 
         // Services
@@ -173,9 +189,19 @@ public static class DependencyInjection
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
         var fileStorageProvider = configuration["FileStorage:Provider"];
         if (string.Equals(fileStorageProvider, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+        {
             services.AddScoped<IFileStorageService, AzureBlobFileStorageService>();
+            services.AddSingleton<AzureBlobPrivateFileStorage>();
+            services.AddSingleton<IPrivateFileStorage>(sp => sp.GetRequiredService<AzureBlobPrivateFileStorage>());
+            services.AddSingleton<ILegacyPrivateFileMover>(sp => sp.GetRequiredService<AzureBlobPrivateFileStorage>());
+        }
         else
+        {
             services.AddScoped<IFileStorageService, LocalFileStorageService>();
+            services.AddSingleton<LocalPrivateFileStorage>();
+            services.AddSingleton<IPrivateFileStorage>(sp => sp.GetRequiredService<LocalPrivateFileStorage>());
+            services.AddSingleton<ILegacyPrivateFileMover>(sp => sp.GetRequiredService<LocalPrivateFileStorage>());
+        }
 
         services.AddSingleton<ImageProcessingService>();
         services.AddSingleton<IImageProcessingService>(sp => sp.GetRequiredService<ImageProcessingService>());

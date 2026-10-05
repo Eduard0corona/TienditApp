@@ -25,11 +25,12 @@ public class WhatsAppServiceLoggingTests
     {
         var http = new StubHttpMessageHandler(HttpStatusCode.BadRequest, MetaRejectedMessageResponse);
         var tenantId = Guid.NewGuid();
-        await using var context = InMemoryApplicationDbContext.Create();
+        var scope = Scope(tenantId);
+        await using var context = InMemoryApplicationDbContext.Create(scope);
         await SeedWhatsAppConfigAsync(context, tenantId);
         var logger = new CapturingLogger<WhatsAppService>();
         var clientLogger = new CapturingLogger<WhatsAppCloudClient>();
-        var service = new WhatsAppService(context, Scope(tenantId), Client(http, Environments.Production, clientLogger), logger);
+        var service = new WhatsAppService(context, scope, Client(http, Environments.Production, clientLogger), logger);
 
         var result = await service.SendTextMessageAsync(tenantId, PhoneNumber, Message);
 
@@ -52,11 +53,12 @@ public class WhatsAppServiceLoggingTests
     {
         var http = new StubHttpMessageHandler(HttpStatusCode.BadRequest, MetaRejectedMessageResponse);
         var tenantId = Guid.NewGuid();
-        await using var context = InMemoryApplicationDbContext.Create();
+        var scope = Scope(tenantId);
+        await using var context = InMemoryApplicationDbContext.Create(scope);
         await SeedWhatsAppConfigAsync(context, tenantId);
         var clientLogger = new CapturingLogger<WhatsAppCloudClient>();
         var service = new WhatsAppService(
-            context, Scope(tenantId), Client(http, Environments.Development, clientLogger), new CapturingLogger<WhatsAppService>());
+            context, scope, Client(http, Environments.Development, clientLogger), new CapturingLogger<WhatsAppService>());
 
         await service.SendTextMessageAsync(tenantId, PhoneNumber, Message);
 

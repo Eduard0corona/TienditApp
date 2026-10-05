@@ -18,6 +18,9 @@ internal static class StorageNamespace
             throw new ArgumentException("La carpeta de almacenamiento no es válida.", nameof(folder));
     }
 
+    // A private file key ("orders/{tenant}/..."): canonical, with a folder and a file name. Traversal is rejected.
+    public static bool IsValidKey(string? key) => IsCanonical(key) && key!.Contains('/');
+
     // True when relativePath is canonical and strictly below folder. Traversal is rejected, not normalized.
     public static bool IsInsideFolder(string relativePath, string folder) =>
         IsCanonical(relativePath)

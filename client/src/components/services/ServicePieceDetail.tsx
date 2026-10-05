@@ -3,6 +3,7 @@ import { Offcanvas } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { ordersApi } from '../../api/ordersApi';
 import { getApiErrorMessage } from '../../api/errors';
+import PrivatePhoto from '../common/PrivatePhoto';
 import type { OrderDto, ServiceBoardPieceDto } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { getServicePieceStatusLabel } from '../../utils/labels';
@@ -22,16 +23,14 @@ function Photos({ title, photos }: { title: string; photos: ServicePhoto[] }) {
       ) : (
         <div className="d-flex flex-wrap gap-2">
           {photos.map((photo, index) => (
-            <a
-              key={`${photo.url}-${index}`}
-              href={photo.url}
-              target="_blank"
-              rel="noreferrer"
-              className="border rounded overflow-hidden d-inline-block"
+            <PrivatePhoto
+              key={`${photo.path}-${index}`}
+              path={photo.path}
+              alt={photo.fileName || title}
+              linked
+              className="border rounded"
               style={{ width: 88, height: 88 }}
-            >
-              <img src={photo.url} alt={photo.fileName || title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </a>
+            />
           ))}
         </div>
       )}

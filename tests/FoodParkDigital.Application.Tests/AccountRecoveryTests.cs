@@ -27,6 +27,13 @@ public class AccountRecoveryTests
     {
         await using var host = await SqliteTestHost.CreateAsync();
         var userId = await SeedAccountAsync(host, phoneConfirmed: true);
+        await host.InScopeAsync(async services =>
+        {
+            var db = services.GetRequiredService<ApplicationDbContext>();
+            db.RefreshTokens.Add(host.Jwt.GenerateRefreshToken(userId, Guid.NewGuid()).Token);
+            db.RefreshTokens.Add(host.Jwt.GenerateRefreshToken(userId, Guid.NewGuid()).Token);
+            await db.SaveChangesAsync();
+        });
 
         Assert.True((await ForgotBySmsAsync(host)).IsSuccess);
         var (phone, code) = Assert.Single(host.Sms.Codes);
@@ -35,7 +42,9 @@ public class AccountRecoveryTests
         Assert.Equal(Phone, phone);
         Assert.True(reset.IsSuccess, reset.Error);
         Assert.True(await CheckPasswordAsync(host, userId, "NuevaClave2"));
-        Assert.Equal([userId], host.Jwt.RevokedUsers);
+        var sessions = await host.QueryAsync(db => db.RefreshTokens.ToListAsync());
+        Assert.Equal(2, sessions.Count);
+        Assert.All(sessions, token => Assert.Equal(RefreshTokenRevocationReason.PasswordReset, token.RevocationReason));
     }
 
     [Fact]

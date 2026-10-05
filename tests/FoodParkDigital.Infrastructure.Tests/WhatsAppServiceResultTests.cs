@@ -74,13 +74,14 @@ public class WhatsAppServiceResultTests
 
     private static async Task<(WhatsAppService Service, Guid TenantId, ApplicationDbContext Context)> CreateAsync(StubHttpMessageHandler http)
     {
-        var context = InMemoryApplicationDbContext.Create();
         var tenantId = Guid.NewGuid();
+        var scope = Scope(tenantId);
+        var context = InMemoryApplicationDbContext.Create(scope);
         var config = new WhatsAppConfig(tenantId);
         config.Update(isEnabled: true, accessToken: "token", phoneNumberId: "2233445566", wabaId: null, displayPhoneNumber: null);
         context.WhatsAppConfigs.Add(config);
         await context.SaveChangesAsync();
-        return (new WhatsAppService(context, Scope(tenantId), Client(http), NullLogger<WhatsAppService>.Instance), tenantId, context);
+        return (new WhatsAppService(context, scope, Client(http), NullLogger<WhatsAppService>.Instance), tenantId, context);
     }
 
     private static WhatsAppCloudClient Client(StubHttpMessageHandler http)

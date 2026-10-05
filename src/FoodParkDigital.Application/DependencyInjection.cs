@@ -39,6 +39,7 @@ public static class DependencyInjection
         ValidatorOptions.Global.LanguageManager.Culture = new CultureInfo("es");
 
         services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
+        services.AddScoped<IAccessTokenSessionValidator, AccessTokenSessionValidator>();
 
         // Inventory: the ledger posts every movement; orders consume and return stock through it.
         services.AddScoped<InventoryLedger>();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
+import PrivatePhoto from '../../components/common/PrivatePhoto';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
@@ -761,10 +762,11 @@ export default function OrdersCart() {
                         <div className="orders-photo-grid mt-2">
                           {beforePhotos.map((photo) => (
                             <div className="orders-photo-item" key={photo.id}>
-                              <img src={photo.url} alt={photo.fileName} className="img-fluid rounded" />
+                              <PrivatePhoto path={photo.url} alt={photo.fileName} className="rounded w-100" style={{ height: 84 }} />
                               <button
                                 type="button"
                                 className="btn btn-xs btn-danger orders-photo-remove"
+                                aria-label={`Quitar ${photo.fileName}`}
                                 onClick={() => removePhoto('before', photo.id)}
                               >
                                 <i className="ri-close-line"></i>
@@ -790,10 +792,11 @@ export default function OrdersCart() {
                         <div className="orders-photo-grid mt-2">
                           {afterPhotos.map((photo) => (
                             <div className="orders-photo-item" key={photo.id}>
-                              <img src={photo.url} alt={photo.fileName} className="img-fluid rounded" />
+                              <PrivatePhoto path={photo.url} alt={photo.fileName} className="rounded w-100" style={{ height: 84 }} />
                               <button
                                 type="button"
                                 className="btn btn-xs btn-danger orders-photo-remove"
+                                aria-label={`Quitar ${photo.fileName}`}
                                 onClick={() => removePhoto('after', photo.id)}
                               >
                                 <i className="ri-close-line"></i>

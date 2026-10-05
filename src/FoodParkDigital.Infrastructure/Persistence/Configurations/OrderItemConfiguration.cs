@@ -13,6 +13,9 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
         builder.ToTable("OrderItems");
         builder.HasKey(i => i.Id);
 
+        builder.Property(i => i.TenantId).IsRequired();
+        builder.HasIndex(i => new { i.TenantId, i.OrderId });
+
         builder.Property(i => i.ProductName).HasMaxLength(200).IsRequired();
         builder.Property(i => i.Quantity).HasColumnType("decimal(18,3)").IsRequired();
         builder.Property(i => i.ReturnedQuantity).HasColumnType("decimal(18,3)").IsRequired();

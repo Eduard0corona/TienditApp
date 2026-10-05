@@ -191,7 +191,7 @@ public class BillingTests
         Assert.True(updated.IsSuccess, updated.Error);
         var plans = await host.QueryAsync(db => db.Plans.ToListAsync());
         Assert.Equal(pro.Id, Assert.Single(plans, p => p.IsDefaultForNewBusinesses).Id);
-        var settings = await host.QueryAsync(db => db.TenantSettings.SingleAsync(s => s.TenantId == tenantId));
+        var settings = await host.QueryAsync(db => db.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == tenantId));
         Assert.Equal(TenantCapability.Retail, settings.Capabilities);
         Assert.Contains(await host.QueryAsync(db => db.AuditLogs.IgnoreQueryFilters().ToListAsync()), a => a.Action == "PlanModulesTrimmed");
     }

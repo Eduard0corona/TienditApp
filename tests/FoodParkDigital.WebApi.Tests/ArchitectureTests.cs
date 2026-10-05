@@ -156,10 +156,6 @@ public class ArchitectureTests
     [Fact]
     public void EntitiesWithATenant_ShouldBeFilteredByIt()
     {
-        // One row per business read before there is a business in context (login, the WhatsApp webhook): they are
-        // queried explicitly by TenantId instead.
-        var readWithoutTenantContext = new HashSet<string> { "TenantSettings", "WhatsAppConfig" };
-
         using var context = NewContext();
         var entityTypes = context.Model.GetEntityTypes().Where(e => !e.IsOwned()).ToList();
 
@@ -167,7 +163,6 @@ public class ArchitectureTests
             .Where(e => e.ClrType.GetProperty("TenantId")?.PropertyType == typeof(Guid))
             .Where(e => !typeof(ITenantScoped).IsAssignableFrom(e.ClrType))
             .Select(e => e.ClrType.Name)
-            .Where(name => !readWithoutTenantContext.Contains(name))
             .ToList();
         var unfiltered = entityTypes
             .Where(e => typeof(ITenantScoped).IsAssignableFrom(e.ClrType) && e.GetDeclaredQueryFilters().Count == 0)
@@ -190,8 +185,8 @@ public class ArchitectureTests
             // Accounts (Identity), shared by the businesses of a person, and their sessions and customer profile.
             "ApplicationUser", "ApplicationRole", "IdentityUserRole`1", "IdentityUserClaim`1", "IdentityUserLogin`1",
             "IdentityRoleClaim`1", "IdentityUserToken`1", "RefreshToken", "CustomerProfile",
-            // Children of a tenant-scoped aggregate, reached only through it.
-            "OrderItem", "OrderStatusHistory", "WhatsAppMessage"
+            // A child of a tenant-scoped aggregate, filtered through it (its conversation's business).
+            "WhatsAppMessage"
         };
 
         using var context = NewContext();

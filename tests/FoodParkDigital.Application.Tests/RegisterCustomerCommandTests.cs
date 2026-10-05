@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Customers.Enums;
+using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
@@ -77,7 +78,7 @@ public class RegisterCustomerCommandTests
         var profile = Assert.Single(stored.Profiles);
         Assert.Equal(user.Id, profile.UserId);
         Assert.Equal(PhoneNormalized, profile.PhoneNormalized);
-        Assert.Equal(result.Value.RefreshToken, Assert.Single(stored.RefreshTokens).Token);
+        Assert.Equal(RefreshToken.HashOf(result.Value.RefreshToken!), Assert.Single(stored.RefreshTokens).TokenHash);
 
         // Guest orders are linked by ConfirmPhone, only after the phone is proven to belong to the user.
         Assert.Equal(TemporaryCustomerStatus.PendingInvited, stored.Temp.Status);

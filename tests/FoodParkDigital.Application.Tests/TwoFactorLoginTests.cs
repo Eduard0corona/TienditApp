@@ -64,7 +64,9 @@ public class TwoFactorLoginTests
         Assert.False(string.IsNullOrEmpty(result.Value.RefreshToken));
         var storedRefreshToken = Assert.Single(await fixture.Context.RefreshTokens.ToListAsync());
         Assert.Equal(fixture.User.Id, storedRefreshToken.UserId);
-        Assert.Equal(result.Value.RefreshToken, storedRefreshToken.Token);
+        // Only its hash is stored.
+        Assert.Equal(RefreshToken.HashOf(result.Value.RefreshToken!), storedRefreshToken.TokenHash);
+        Assert.Equal(string.Empty, storedRefreshToken.LegacyValue);
 
         // Misma sesión que el login sin 2FA: tenant activo y permisos efectivos en el access token.
         var accessToken = new JwtSecurityTokenHandler().ReadJwtToken(result.Value.AccessToken);
@@ -151,7 +153,7 @@ public class TwoFactorLoginTests
     public async Task Login2FA_ShouldRejectAccessTokensAndChallengesSignedWithTheAccessTokenKey()
     {
         await using var fixture = await TwoFactorFixture.CreateAsync();
-        var accessToken = fixture.JwtTokens.GenerateAccessToken(fixture.User);
+        var accessToken = fixture.JwtTokens.GenerateAccessToken(fixture.User, Guid.NewGuid());
         var forgedChallenge = fixture.ResignWithAccessTokenKey(await fixture.GetChallengeAsync());
 
         var withAccessToken = await fixture.Login2FAAsync(accessToken, fixture.CurrentTotp());
@@ -168,7 +170,21 @@ public class TwoFactorLoginTests
         await using var fixture = await TwoFactorFixture.CreateAsync();
         var challenge = await fixture.GetChallengeAsync();
 
-        Assert.Null(fixture.JwtTokens.GetPrincipalFromExpiredToken(challenge));
+        // The parameters the API validates access tokens with.
+        var accessTokenParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = fixture.Settings.Issuer,
+            ValidAudience = fixture.Settings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(fixture.Settings.Secret)),
+            ClockSkew = TimeSpan.Zero
+        };
+
+        Assert.ThrowsAny<SecurityTokenException>(
+            () => new JwtSecurityTokenHandler().ValidateToken(challenge, accessTokenParameters, out _));
     }
 
     [Fact]
@@ -316,7 +332,7 @@ public class TwoFactorLoginTests
                 Audience = "FoodParkDigital.Tests"
             };
             var clock = new TestClock(DateTimeOffset.UtcNow);
-            var jwtTokens = new JwtTokenService(Options.Create(settings), context);
+            var jwtTokens = new JwtTokenService(Options.Create(settings), clock);
             var challenges = new TwoFactorLoginChallengeService(userManager, clock, Options.Create(settings));
             var sessions = new AuthSessionIssuer(context, jwtTokens, new TenantAccessService(context));
 

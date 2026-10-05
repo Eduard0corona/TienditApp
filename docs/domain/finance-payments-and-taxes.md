@@ -6,7 +6,7 @@
 - `Order` calcula `SubTotal`, `Tax`, `Total`, `PaidAmount` y `Balance` con el desglose de IVA por tasa descrito abajo. Admite pagos parciales y rechaza sobrepago.
 - `OrderPayment` conserva método, fecha, ubicación opcional, evidencia URL, referencia y notas. La fecha del pago la pone el servidor (`PaidAt` ya no se acepta del cliente) y el importe admite máximo 2 decimales.
 - Una orden cancelada no acepta pagos y una orden con dinero sin reembolsar no puede cancelarse (ver [reembolsos](#reembolsos-y-anulaciones-fase-2) y ADR 0007); `OrderDto.CanCancel` refleja ambas reglas con el neto pagado.
-- La evidencia de un pago debe ser un archivo subido por el endpoint de evidencias para el mismo tenant (`OrderUploadRules`); las imágenes se re-codifican y los PDF se sirven como descarga.
+- La evidencia de un pago debe ser un archivo subido por el endpoint de evidencias para el mismo tenant (`OrderUploadRules`); las imágenes se re-codifican y los PDF se sirven como descarga. Desde la Fase 8 es privada: el pago guarda `/files/{key}` y solo `GET /api/v1/files/{key}` la entrega, a miembros del negocio con `ManageOrders` o `ChargeOrders`.
 - `CashSession` conserva fondo, apertura/cierre, entradas, salidas y saldo esperado. `CashTransaction` puede referir orden, método y ubicación.
   - El signo del movimiento lo define su tipo (gasto, retiro y reembolso restan; depósito y venta suman); el importe capturado siempre es positivo con 2 decimales y la fecha es la del servidor.
   - Los movimientos manuales solo pueden ser depósito, gasto, retiro o reembolso; la orden referida debe existir.
@@ -95,7 +95,7 @@ Compras redondean línea a 4 decimales y órdenes a 2, sin política transversal
 - No modificar/eliminar transacciones históricas para corregir saldo.
 - Correcciones futuras usan ajustes crédito/débito trazables, relacionados con orden, pago o movimiento original.
 - Los ajustes contemplan cuentas por cobrar, saldo a favor, Wallet y conciliación sin afirmar que esos módulos existan hoy.
-- Evidencias de pago se tratan como archivo sensible tenant-scoped.
+- Evidencias de pago se tratan como archivo sensible tenant-scoped: almacenamiento privado y descarga autorizada (Fase 8).
 - Pago, orden, caja y ubicación deben compartir tenant y correlación verificable.
 
 ## Arquitectura objetivo: Tax Calculation Engine México

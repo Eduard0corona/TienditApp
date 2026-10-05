@@ -41,3 +41,7 @@ appsettings.*.local.json
 *.key
 src/FoodParkDigital.WebApi/Properties/PublishProfiles/
 src/FoodParkDigital.WebApi/Properties/ServiceDependencies/
+
+## Archivos que suben los negocios al probar en local (públicos y privados)
+src/FoodParkDigital.WebApi/wwwroot/uploads/
+src/FoodParkDigital.WebApi/App_Data/

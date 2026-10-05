@@ -390,7 +390,9 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 return Result.Failure<OrderDto>(tabError);
         }
 
-        OrderPlacement.ApplyServiceDetail(order, request.ServiceDetail, _dateTimeProvider.UtcNow);
+        var serviceDetailError = OrderPlacement.ApplyServiceDetail(order, request.ServiceDetail, _dateTimeProvider.UtcNow);
+        if (serviceDetailError is not null)
+            return Result.Failure<OrderDto>(serviceDetailError);
         var piecesError = OrderPlacement.AddServicePieces(
             order,
             request.ServiceDetail,

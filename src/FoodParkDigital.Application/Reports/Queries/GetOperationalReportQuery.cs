@@ -121,7 +121,6 @@ public class GetOperationalReportQueryHandler : IRequestHandler<GetOperationalRe
 
         // The default range is the current month in the tenant's time zone, not the UTC month (which
         // moves the last evening hours of each month into the next one for Mexico).
-        // TenantSettings is not ITenantScoped (no global filter): the tenant must be explicit.
         var timeZoneId = await _context.TenantSettings
             .AsNoTracking()
             .Where(x => x.TenantId == _tenantService.TenantId)

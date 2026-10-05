@@ -32,6 +32,9 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         _connectionString = connectionString;
     }
 
+    /// <summary>The connection to this database, for an API host under test.</summary>
+    public string ConnectionString => _connectionString;
+
     public static async Task<SqlServerTestDatabase> CreateAsync()
     {
         var server = Environment.GetEnvironmentVariable(ConnectionVariable)!.TrimEnd(';');
