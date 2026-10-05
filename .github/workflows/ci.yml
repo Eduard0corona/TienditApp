@@ -223,7 +223,8 @@ jobs:
           fi
 
       # The Down of every migration after the production baseline, newest first (what the
-      # rollback.sql files run), and then the script again.
+      # rollback.sql files run), twice: the second time it must do nothing, so each batch has to
+      # compile once the columns it names are gone. Then the script again.
       - name: Roll back to the production baseline and apply again
         run: |
           latest=$(dotnet ef migrations list --no-connect --json --prefix-output $EF_PROJECTS \
@@ -240,6 +241,11 @@ jobs:
           $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/rollback.sql
           if [ "$(last_migration)" != "$PRODUCTION_BASELINE" ]; then
             echo "::error::The rollback did not return the database to $PRODUCTION_BASELINE."
+            exit 1
+          fi
+          $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/rollback.sql
+          if [ "$(last_migration)" != "$PRODUCTION_BASELINE" ]; then
+            echo "::error::Run again, the rollback changed the migration history."
             exit 1
           fi
           $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/apply.sql
