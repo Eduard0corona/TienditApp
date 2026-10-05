@@ -8021,7 +8021,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        CashTransactionType: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        CashTransactionType: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
         CategoryDto: {
             /** Format: uuid */
             id: string;
@@ -8377,6 +8377,10 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
+            /** Format: double */
+            tip: number;
+            /** Format: double */
+            cashReceived?: number | null;
         };
         CreatePlanCommand: {
             code: string;
@@ -8650,6 +8654,10 @@ export interface components {
             walletTotal: number;
             /** Format: double */
             otherTotal: number;
+            /** Format: double */
+            tipsTotal: number;
+            /** Format: double */
+            cashTipsTotal: number;
             /** Format: double */
             manualIncomeTotal: number;
             /** Format: double */
@@ -9321,6 +9329,8 @@ export interface components {
             /** Format: double */
             balance: number;
             /** Format: double */
+            tipTotal: number;
+            /** Format: double */
             refundedAmount: number;
             /** Format: double */
             netPaidAmount: number;
@@ -9407,6 +9417,12 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
+            /** Format: double */
+            tip: number;
+            /** Format: double */
+            cashReceived?: number | null;
+            /** Format: double */
+            change: number;
         };
         /**
          * Format: int32

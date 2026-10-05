@@ -81,6 +81,8 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
           method: payment.method,
           reference: payment.reference,
           evidenceUrl: payment.evidenceUrl,
+          tip: payment.tip,
+          cashReceived: payment.cashReceived,
         })).data;
       }
       return updated;

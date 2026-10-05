@@ -21,6 +21,9 @@ public class OrderPaymentConfiguration : IEntityTypeConfiguration<OrderPayment>
         builder.Property(x => x.EvidenceUrl).HasMaxLength(1000);
         builder.Property(x => x.Reference).HasMaxLength(120);
         builder.Property(x => x.Notes).HasMaxLength(1000);
+        builder.Property(x => x.Tip).HasColumnType("decimal(18,2)").HasDefaultValue(0m).IsRequired();
+        builder.Property(x => x.CashReceived).HasColumnType("decimal(18,2)").IsRequired(false);
+        builder.Ignore(x => x.Change);
 
         builder.HasOne<InventoryLocation>()
             .WithMany()

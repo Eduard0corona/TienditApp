@@ -71,6 +71,10 @@ internal sealed class SqliteTestHost : IAsyncDisposable
             .AddTienditAppIdentityDefaults();
 
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
+        services.AddScoped<IFolioGenerator, FolioGenerator>();
+        // Sales here are about customers and phones: supplies and the cash drawer stay out, explicitly.
+        services.AddSingleton(NoOpOrderInventoryService.Instance);
+        services.AddSingleton<IOrderCashService>(NoOpOrderCashService.Instance);
         services.AddScoped<ICustomerLookupService, CustomerLookupService>();
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IEmailService>(Email);

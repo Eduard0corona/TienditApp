@@ -17,7 +17,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso y el login distingue cuentas sin confirmar o bloqueadas. (Los intentos fallidos ya bloquean la cuenta: Fase 4E.)
-- Folios de órdenes y movimientos por conteo (una colisión responde 500); la recepción de compra no tiene idempotency key estable.
+- La recepción de compra no tiene idempotency key estable. (Los folios de órdenes, movimientos de inventario y órdenes de compra ya salen de un contador por negocio y no chocan: Fase 4F.)
 - Contratos de error mezclan `ProblemDetails` con objetos `{ error }`; el cliente ya los lee con un solo helper (`src/api/errors.ts`), pero el servidor sigue respondiendo en varias formas y con algunos mensajes de dominio en inglés.
 - Controllers no propagan `CancellationToken`.
 - Política de contraseña (longitud mínima 6) pendiente de evaluación.

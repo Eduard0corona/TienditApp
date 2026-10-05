@@ -16,6 +16,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -505,7 +506,10 @@ public class CreateOrderCommandFlowTests
                 Mapper,
                 customerLookup,
                 _dateTimeProvider,
-                new PhoneNormalizationService());
+                new PhoneNormalizationService(),
+                NoOpOrderInventoryService.Instance,
+                NoOpOrderCashService.Instance,
+                new FolioGenerator(Context));
         }
 
         public async Task<(Tenant Tenant, Product Product)> SeedCatalogAsync()

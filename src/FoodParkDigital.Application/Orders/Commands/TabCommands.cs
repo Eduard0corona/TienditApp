@@ -109,12 +109,12 @@ public class CloseTabCommandHandler : IRequestHandler<CloseTabCommand, Result<Or
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
         IMapper mapper,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _mapper = mapper;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
     }
 
     public async Task<Result<OrderDto>> Handle(CloseTabCommand request, CancellationToken cancellationToken)

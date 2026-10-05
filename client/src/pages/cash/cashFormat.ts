@@ -28,6 +28,7 @@ export function getTransactionTypeLabel(type: CashTransactionType): string {
     case CashTransactionTypeConst.Deposit: return 'Depósito';
     case CashTransactionTypeConst.OpeningAdjustment: return 'Ajuste apertura';
     case CashTransactionTypeConst.ClosingAdjustment: return 'Ajuste cierre';
+    case CashTransactionTypeConst.Tip: return 'Propina';
     default: return String(type);
   }
 }

@@ -165,7 +165,7 @@ public class OrderRefundTests
         fixture.Context.InventoryStocks.Add(stock);
         fixture.Context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(tenant.Id, taco.Id, tortilla.Id, 2m));
         await fixture.Context.SaveChangesAsync();
-        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, NullLogger<OrderInventoryService>.Instance);
+        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context), NullLogger<OrderInventoryService>.Instance);
 
         var sale = await SellAsync(fixture, taco.Id, 5, inventory, (125m, OrderPaymentMethod.Cash));
         Assert.Equal(90m, await OnHandAsync(fixture, tortilla.Id));
@@ -224,11 +224,11 @@ public class OrderRefundTests
     private static RefundOrderCommandHandler RefundHandler(
         SalesTestFixture fixture, bool grantsRefunds = false, IOrderInventoryService? inventory = null)
         => new(fixture.Context, fixture.CurrentUser, new RefundAccess(grantsRefunds), new OrderCashService(fixture.Context, fixture.CurrentUser),
-            fixture.Clock, fixture.Mapper, inventory);
+            fixture.Clock, fixture.Mapper, inventory ?? NoOpOrderInventoryService.Instance);
 
     private static VoidOrderCommandHandler VoidHandler(SalesTestFixture fixture, IOrderInventoryService? inventory = null)
         => new(fixture.Context, fixture.CurrentUser, new RefundAccess(false), new OrderCashService(fixture.Context, fixture.CurrentUser),
-            fixture.Clock, fixture.Mapper, inventory);
+            fixture.Clock, fixture.Mapper, inventory ?? NoOpOrderInventoryService.Instance);
 
     private static async Task<decimal> OnHandAsync(SalesTestFixture fixture, Guid supplyId)
         => (await fixture.Context.InventoryStocks.AsNoTracking().SingleAsync(s => s.SupplyItemId == supplyId)).OnHandQuantity;

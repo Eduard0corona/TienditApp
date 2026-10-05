@@ -59,11 +59,13 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IFolioGenerator _folios;
 
-    public ReceivePurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public ReceivePurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
+        _folios = folios;
     }
 
     public async Task<Result<PurchaseOrderDto>> Handle(ReceivePurchaseOrderCommand request, CancellationToken cancellationToken)
@@ -123,7 +125,7 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
 
         var movement = new InventoryMovement(
             tenantId: _tenantService.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(receivedAt, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(_tenantService.TenantId, receivedAt, cancellationToken),
             movementType: InventoryMovementType.Entry,
             movementReason: InventoryMovementReason.Purchase,
             movementDate: receivedAt,
@@ -174,16 +176,5 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
 
         var dto = await PurchaseOrderReader.LoadAsync(_context, purchaseOrder.Id, cancellationToken);
         return Result.Success(dto);
-    }
-
-    private async Task<string> GenerateMovementNumberAsync(DateTimeOffset movementDate, CancellationToken cancellationToken)
-    {
-        var date = movementDate.UtcDateTime.Date;
-        var prefix = $"INV-{date:yyyyMMdd}";
-
-        var count = await _context.InventoryMovements
-            .CountAsync(x => x.MovementDate >= date && x.MovementDate < date.AddDays(1), cancellationToken);
-
-        return $"{prefix}-{count + 1:0000}";
     }
 }

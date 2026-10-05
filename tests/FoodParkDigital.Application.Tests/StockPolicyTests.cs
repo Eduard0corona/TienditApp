@@ -118,7 +118,7 @@ public class StockPolicyTests
     private static Task<Application.Common.Models.Result<Application.Orders.DTOs.OrderDto>> SellAsync(
         SalesTestFixture fixture, Product product, int quantity, DateTimeOffset? capturedOfflineAt = null)
     {
-        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, NullLogger<OrderInventoryService>.Instance);
+        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context), NullLogger<OrderInventoryService>.Instance);
         return fixture.CreateOrderHandler(inventory).Handle(new CreateOrderCommand
         {
             IdempotencyKey = capturedOfflineAt is null ? null : Guid.NewGuid(),

@@ -121,7 +121,7 @@ export default function OrdersList() {
   const [paymentOrder, setPaymentOrder] = useState<OrderDto | null>(null);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
-  const [paidReceipt, setPaidReceipt] = useState<{ order: OrderDto; change: number; cashReceived: number } | null>(null);
+  const [paidReceipt, setPaidReceipt] = useState<{ order: OrderDto; change: number } | null>(null);
   const [realtimeMessage, setRealtimeMessage] = useState('');
   const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [statusError, setStatusError] = useState('');
@@ -365,12 +365,15 @@ export default function OrdersList() {
           method: payment.method,
           reference: payment.reference,
           evidenceUrl: payment.evidenceUrl,
+          tip: payment.tip,
+          cashReceived: payment.cashReceived,
         });
         updated = data;
       }
       setPaymentOrder(null);
       if (updated) {
-        setPaidReceipt({ order: updated, change: charge.change, cashReceived: charge.cashReceived });
+        // The change of this charge (the ticket adds up every payment of the order).
+        setPaidReceipt({ order: updated, change: charge.change });
         if (selectedOrder?.id === updated.id) setSelectedOrder(updated);
       }
       await loadOrders();
@@ -1093,12 +1096,7 @@ export default function OrdersList() {
                   <strong className="ta-money">{formatMoney(paidReceipt.change)}</strong>
                 </div>
               )}
-              <SaleTicket
-                order={paidReceipt.order}
-                businessName={tenant?.name ?? 'TienditApp'}
-                change={paidReceipt.change}
-                cashReceived={paidReceipt.cashReceived}
-              />
+              <SaleTicket order={paidReceipt.order} businessName={tenant?.name ?? 'TienditApp'} />
             </>
           )}
         </Modal.Body>
@@ -1110,11 +1108,7 @@ export default function OrdersList() {
             <a
               className="btn btn-light btn-touch"
               href={buildWhatsAppTicketUrl(
-                buildTicketText(paidReceipt.order, {
-                  businessName: tenant?.name ?? 'TienditApp',
-                  change: paidReceipt.change,
-                  cashReceived: paidReceipt.cashReceived,
-                }),
+                buildTicketText(paidReceipt.order, { businessName: tenant?.name ?? 'TienditApp' }),
                 paidReceipt.order.customerPhone,
               )}
               target="_blank"

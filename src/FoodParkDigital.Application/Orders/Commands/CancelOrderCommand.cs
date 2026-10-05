@@ -35,11 +35,11 @@ public class CancelOrderCommandHandler : IRequestHandler<CancelOrderCommand, Res
     public CancelOrderCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
     }
 
     public async Task<Result> Handle(CancelOrderCommand request, CancellationToken cancellationToken)

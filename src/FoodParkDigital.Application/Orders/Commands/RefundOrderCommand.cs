@@ -70,7 +70,7 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
         IOrderCashService orderCashService,
         IDateTimeProvider dateTimeProvider,
         IMapper mapper,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _mapper = mapper;
@@ -79,7 +79,7 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
             currentUserService,
             tenantAccessService,
             orderCashService,
-            orderInventoryService ?? NoOpOrderInventoryService.Instance,
+            orderInventoryService,
             dateTimeProvider);
     }
 

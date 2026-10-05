@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,7 +37,8 @@ public class InventoryMovementCommandTests
             context,
             tenantService,
             new TestCurrentUserService(),
-            mapper);
+            mapper,
+            new FolioGenerator(context));
 
         var result = await handler.Handle(new CreateInventoryMovementCommand
         {
@@ -83,7 +85,8 @@ public class InventoryMovementCommandTests
             context,
             tenantService,
             new TestCurrentUserService(),
-            mapper);
+            mapper,
+            new FolioGenerator(context));
 
         await Assert.ThrowsAsync<DomainException>(() => handler.Handle(new CreateInventoryMovementCommand
         {
@@ -205,7 +208,7 @@ public class InventoryMovementCommandTests
         context.InventoryStocks.Add(stock);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new TestCurrentUserService(), mapper);
+        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new TestCurrentUserService(), mapper, new FolioGenerator(context));
         return new StockSetup(context, handler, supply, origin);
     }
 

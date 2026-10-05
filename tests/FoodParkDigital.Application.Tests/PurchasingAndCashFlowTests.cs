@@ -49,7 +49,7 @@ public class PurchasingAndCashFlowTests
         context.InventoryLocations.Add(location);
         await context.SaveChangesAsync();
 
-        var createHandler = new CreatePurchaseOrderCommandHandler(context, tenantService);
+        var createHandler = new CreatePurchaseOrderCommandHandler(context, tenantService, new FolioGenerator(context));
         var createResult = await createHandler.Handle(new CreatePurchaseOrderCommand
         {
             SupplierId = supplier.Id,
@@ -73,7 +73,7 @@ public class PurchasingAndCashFlowTests
             .Include(x => x.Lines)
             .FirstAsync(x => x.Id == createResult.Value.Id);
 
-        var receiveHandler = new ReceivePurchaseOrderCommandHandler(context, tenantService);
+        var receiveHandler = new ReceivePurchaseOrderCommandHandler(context, tenantService, new FolioGenerator(context));
         var receiveResult = await receiveHandler.Handle(new ReceivePurchaseOrderCommand
         {
             PurchaseOrderId = createdOrder.Id,

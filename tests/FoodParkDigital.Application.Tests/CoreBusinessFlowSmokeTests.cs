@@ -209,6 +209,7 @@ public class CoreBusinessFlowSmokeTests
             var orderInventoryService = new OrderInventoryService(
                 Context,
                 _dateTimeProvider,
+                new FolioGenerator(Context),
                 NullLogger<OrderInventoryService>.Instance);
 
             return new CreateOrderCommandHandler(
@@ -219,7 +220,9 @@ public class CoreBusinessFlowSmokeTests
                 customerLookup,
                 _dateTimeProvider,
                 new PhoneNormalizationService(),
-                orderInventoryService);
+                orderInventoryService,
+                new OrderCashService(Context, _currentUserService),
+                new FolioGenerator(Context));
         }
 
         public UpdateOrderStatusCommandHandler CreateUpdateStatusHandler()
@@ -229,6 +232,7 @@ public class CoreBusinessFlowSmokeTests
                 new OrderInventoryService(
                     Context,
                     _dateTimeProvider,
+                    new FolioGenerator(Context),
                     NullLogger<OrderInventoryService>.Instance));
 
         public CancelOrderCommandHandler CreateCancelHandler()
@@ -238,6 +242,7 @@ public class CoreBusinessFlowSmokeTests
                 new OrderInventoryService(
                     Context,
                     _dateTimeProvider,
+                    new FolioGenerator(Context),
                     NullLogger<OrderInventoryService>.Instance));
 
         public GetDashboardMetricsQueryHandler CreateDashboardHandler()

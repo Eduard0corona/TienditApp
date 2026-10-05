@@ -18,13 +18,13 @@ public static class InMemoryApplicationDbContext
         return new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
     }
 
-    private sealed class TestCurrentTenantService : ICurrentTenantService
+    internal sealed class TestCurrentTenantService : ICurrentTenantService
     {
         public Guid TenantId { get; private set; }
         public void SetTenant(Guid tenantId) => TenantId = tenantId;
     }
 
-    private sealed class NullMediator : IMediator
+    internal sealed class NullMediator : IMediator
     {
         public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken ct = default)
             => Task.FromResult<TResponse>(default!);

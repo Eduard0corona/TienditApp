@@ -14,6 +14,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -134,8 +135,9 @@ internal sealed class SalesTestFixture : IAsyncDisposable
             customerLookup,
             Clock,
             phoneNormalization,
-            orderInventoryService: orderInventoryService,
-            orderCashService: new OrderCashService(Context, CurrentUser));
+            orderInventoryService: orderInventoryService ?? NoOpOrderInventoryService.Instance,
+            orderCashService: new OrderCashService(Context, CurrentUser),
+            folios: new FolioGenerator(Context));
     }
 
     public AddOrderPaymentCommandHandler AddPaymentHandler()

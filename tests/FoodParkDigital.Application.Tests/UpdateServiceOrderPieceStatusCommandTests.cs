@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,7 +53,8 @@ public class UpdateServiceOrderPieceStatusCommandTests
         var pieceId = order.ServicePieces.Single().Id;
         var handler = new UpdateServiceOrderPieceStatusCommandHandler(
             context,
-            new TestCurrentUserService());
+            new TestCurrentUserService(),
+            NoOpOrderInventoryService.Instance);
 
         var transitions = new[]
         {
@@ -121,7 +123,8 @@ public class UpdateServiceOrderPieceStatusCommandTests
         var pieceId = order.ServicePieces.Single().Id;
         var handler = new UpdateServiceOrderPieceStatusCommandHandler(
             context,
-            new TestCurrentUserService());
+            new TestCurrentUserService(),
+            NoOpOrderInventoryService.Instance);
 
         var result = await handler.Handle(new UpdateServiceOrderPieceStatusCommand
         {

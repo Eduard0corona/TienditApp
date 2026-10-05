@@ -931,7 +931,7 @@ export interface ReceivePurchaseOrderRequest {
 // ==================== Cash ====================
 
 export type CashSessionStatus = 0 | 1;
-export type CashTransactionType = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type CashTransactionType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export const CashSessionStatus = {
   Open: 0,
@@ -946,6 +946,8 @@ export const CashTransactionType = {
   Deposit: 4,
   OpeningAdjustment: 5,
   ClosingAdjustment: 6,
+  // A tip given with a sale payment: money received, never part of the sale.
+  Tip: 7,
 } as const;
 
 export interface CashSessionDto {
@@ -1035,6 +1037,10 @@ export interface DailyCashCutDto {
   netCashFlow: number;
   /** Cash payments plus manual income minus manual expenses: what the drawers should hold. */
   netCashOnlyFlow: number;
+  /** Tips received with the payments of the day (any method); not part of the sales. */
+  tipsTotal: number;
+  /** Tips paid in cash: they are in the drawers, included in netCashOnlyFlow. */
+  cashTipsTotal: number;
   byUser: DailyCashCutByUserDto[];
   byLocation: DailyCashCutByLocationDto[];
   /** Payments by the branch where the sale was made. */
@@ -1519,6 +1525,7 @@ export interface ServiceBoardPieceDto {
 
 export interface OrderPaymentDto {
   id: string;
+  /** What the payment covers of the sale; the tip is apart. */
   amount: number;
   method: OrderPaymentMethod;
   paidAt: string;
@@ -1526,6 +1533,12 @@ export interface OrderPaymentDto {
   evidenceUrl?: string;
   reference?: string;
   notes?: string;
+  /** Tip given with this payment: not part of the sale, its total or its balance. */
+  tip?: number;
+  /** Cash handed by the customer (cash payments only). */
+  cashReceived?: number | null;
+  /** Cash given back: received minus amount minus tip. */
+  change?: number;
 }
 
 export interface OrderDto {
@@ -1557,6 +1570,8 @@ export interface OrderDto {
   refundedAmount?: number;
   /** Paid minus refunded. */
   netPaidAmount?: number;
+  /** Tips received with the payments; apart from the total. */
+  tipTotal?: number;
   cancellationReason?: string;
   createdAt: string;
   updatedAt?: string;
@@ -1683,6 +1698,10 @@ export interface CreateOrderPaymentRequest {
   evidenceUrl?: string;
   reference?: string;
   notes?: string;
+  /** Tip on top of the amount; never larger than the amount. */
+  tip?: number;
+  /** Cash handed by the customer, to store the change (cash payments only). */
+  cashReceived?: number;
 }
 
 export interface CreateServiceOrderPieceRequest {
@@ -1720,6 +1739,10 @@ export interface AddOrderPaymentRequest {
   evidenceUrl?: string;
   reference?: string;
   notes?: string;
+  /** Tip on top of the amount; never larger than the amount. */
+  tip?: number;
+  /** Cash handed by the customer, to store the change (cash payments only). */
+  cashReceived?: number;
 }
 
 export interface UploadedFileDto {

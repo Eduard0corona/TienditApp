@@ -16,15 +16,18 @@ public class OrderInventoryService : IOrderInventoryService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IFolioGenerator _folios;
     private readonly ILogger<OrderInventoryService> _logger;
 
     public OrderInventoryService(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
+        IFolioGenerator folios,
         ILogger<OrderInventoryService> logger)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
+        _folios = folios;
         _logger = logger;
     }
 
@@ -142,7 +145,7 @@ public class OrderInventoryService : IOrderInventoryService
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Exit,
             movementReason: InventoryMovementReason.Sale,
             movementDate: movementDate,
@@ -272,7 +275,7 @@ public class OrderInventoryService : IOrderInventoryService
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Exit,
             movementReason: InventoryMovementReason.Consumption,
             movementDate: movementDate,
@@ -383,7 +386,7 @@ public class OrderInventoryService : IOrderInventoryService
         var movementDate = _dateTimeProvider.UtcNow;
         var reversalMovement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Entry,
             movementReason: InventoryMovementReason.Return,
             movementDate: movementDate,
@@ -486,7 +489,7 @@ public class OrderInventoryService : IOrderInventoryService
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Entry,
             movementReason: InventoryMovementReason.Return,
             movementDate: movementDate,
@@ -605,23 +608,4 @@ public class OrderInventoryService : IOrderInventoryService
     private static string BuildReturnExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:RETURN:";
     private static string BuildServicePieceConsumptionExternalReference(Guid orderId, Guid pieceId)
         => $"ORDER:{orderId:N}:PIECE:{pieceId:N}:CONSUMPTION";
-
-    private async Task<string> GenerateMovementNumberAsync(
-        Guid tenantId,
-        DateTimeOffset movementDate,
-        CancellationToken cancellationToken)
-    {
-        var date = movementDate.UtcDateTime.Date;
-        var prefix = $"INV-{date:yyyyMMdd}";
-
-        var todayCount = await _context.InventoryMovements
-            .IgnoreQueryFilters()
-            .CountAsync(
-                x => x.TenantId == tenantId &&
-                     x.MovementDate >= date &&
-                     x.MovementDate < date.AddDays(1),
-                cancellationToken);
-
-        return $"{prefix}-{todayCount + 1:0000}";
-    }
 }

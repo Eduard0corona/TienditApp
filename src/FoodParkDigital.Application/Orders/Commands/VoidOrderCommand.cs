@@ -50,12 +50,12 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
         IOrderCashService orderCashService,
         IDateTimeProvider dateTimeProvider,
         IMapper mapper,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _mapper = mapper;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
         _refunds = new OrderRefundProcessor(
             context,
             currentUserService,

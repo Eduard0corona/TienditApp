@@ -122,6 +122,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
     public DbSet<TemporaryCustomer> TemporaryCustomers => Set<TemporaryCustomer>();
     public DbSet<Order> Orders => Set<Order>();
+    public DbSet<FolioSequence> FolioSequences => Set<FolioSequence>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
     public DbSet<OrderPayment> OrderPayments => Set<OrderPayment>();

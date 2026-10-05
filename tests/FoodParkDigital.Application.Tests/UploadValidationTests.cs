@@ -12,6 +12,7 @@ using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SixLabors.ImageSharp;
@@ -140,7 +141,7 @@ public class UploadValidationTests
         context.Orders.Add(order);
         await context.SaveChangesAsync();
         var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-        var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), mapper);
+        var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), mapper, NoOpOrderCashService.Instance);
 
         var external = await handler.Handle(new AddOrderPaymentCommand
         {

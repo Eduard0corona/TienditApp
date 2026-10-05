@@ -20,6 +20,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -191,7 +192,7 @@ public class OrderInventoryRegressionTests
         await using var _ = context;
         var setup = await SeedServiceOrderAsync(context, tenant.TenantId, pieces: 2, stock: 10m);
 
-        var result = await new UpdateOrderStatusCommandHandler(context, new TestCurrentUserService()).Handle(
+        var result = await new UpdateOrderStatusCommandHandler(context, new TestCurrentUserService(), NoOpOrderInventoryService.Instance).Handle(
             new UpdateOrderStatusCommand { OrderId = setup.Order.Id, NewStatus = OrderStatus.Cancelled },
             CancellationToken.None);
 
@@ -211,7 +212,7 @@ public class OrderInventoryRegressionTests
         await context.SaveChangesAsync();
 
         await Assert.ThrowsAsync<DomainException>(() =>
-            new UpdateOrderStatusCommandHandler(context, new TestCurrentUserService()).Handle(
+            new UpdateOrderStatusCommandHandler(context, new TestCurrentUserService(), NoOpOrderInventoryService.Instance).Handle(
                 new UpdateOrderStatusCommand { OrderId = order.Id, NewStatus = OrderStatus.Cancelled },
                 CancellationToken.None));
         Assert.Equal(OrderStatus.Pending, (await context.Orders.AsNoTracking().SingleAsync()).Status);
@@ -476,14 +477,14 @@ public class OrderInventoryRegressionTests
         return order;
     }
 
-    private static UpdateServiceOrderPieceStatusCommandHandler NewPieceHandler(IApplicationDbContext context) =>
+    private static UpdateServiceOrderPieceStatusCommandHandler NewPieceHandler(ApplicationDbContext context) =>
         new(context, new TestCurrentUserService(), NewInventoryService(context));
 
-    private static OrderInventoryService NewInventoryService(IApplicationDbContext context) =>
-        new(context, new FixedClock(Now), NullLogger<OrderInventoryService>.Instance);
+    private static OrderInventoryService NewInventoryService(ApplicationDbContext context) =>
+        new(context, new FixedClock(Now), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance);
 
-    private static CreateInventoryMovementCommandHandler NewMovementHandler(IApplicationDbContext context, ICurrentTenantService tenant) =>
-        new(context, tenant, new TestCurrentUserService(), CreateMapper());
+    private static CreateInventoryMovementCommandHandler NewMovementHandler(ApplicationDbContext context, ICurrentTenantService tenant) =>
+        new(context, tenant, new TestCurrentUserService(), CreateMapper(), new FolioGenerator(context));
 
     private static IMapper CreateMapper() =>
         new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();

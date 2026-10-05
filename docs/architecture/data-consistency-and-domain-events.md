@@ -41,5 +41,5 @@ El dato principal y sus efectos durables comparten transacción, pero los efecto
 ## Pendiente
 
 - Correlación de trazas entre la petición original y el procesamiento en segundo plano (hoy se registra el id del mensaje).
-- El índice único de `InventoryMovement.ExternalReference` y las verificaciones de consumo/reverso ofrecen idempotencia parcial en inventario; los folios generados por conteo aún tienen riesgos de concurrencia.
+- El índice único de `InventoryMovement.ExternalReference` y las verificaciones de consumo/reverso ofrecen idempotencia parcial en inventario. Los folios (órdenes, movimientos y compras) salen de `FolioSequences` sin repetirse aunque dos solicitudes lleguen a la vez; se toman en una sentencia aparte del guardado del documento, así que una solicitud que falla después deja un hueco en la numeración (Fase 4F).
 - Crear una venta acepta una clave del dispositivo (`Order.ClientRequestId`, índice único por tenant): la misma clave devuelve la venta ya creada, también si dos peticiones llegan a la vez (Fase 3, ventas sin conexión).

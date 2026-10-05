@@ -29,7 +29,7 @@ import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
-import { buildTicketText, buildWhatsAppTicketUrl, printTicket } from '../../utils/ticket';
+import { buildTicketText, buildWhatsAppTicketUrl, getTicketPaymentTotals, printTicket } from '../../utils/ticket';
 import {
   allowsFractions,
   formatQuantity,
@@ -122,8 +122,6 @@ function getQuickQuantities(unit?: UnitType): number[] {
 
 interface CompletedSale {
   order: OrderDto;
-  change: number;
-  cashReceived: number;
   /** Saved without charging (a WhatsApp order paid on delivery). */
   unpaid?: boolean;
   /** Charged without connection: kept on the device until it reaches the server. */
@@ -659,13 +657,19 @@ export default function SellPage() {
         lines: cart,
         totals,
         pricesIncludeTax,
-        payments: charge.payments.map((payment) => ({ amount: payment.amount, method: payment.method, reference: payment.reference })),
+        payments: charge.payments.map((payment) => ({
+          amount: payment.amount,
+          method: payment.method,
+          reference: payment.reference,
+          tip: payment.tip,
+          cashReceived: payment.cashReceived,
+        })),
         customerName: request.customerName,
         tableNumber: request.tableNumber,
       });
       clearSale();
       setChargeOpen(false);
-      setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived, offline: true });
+      setCompletedSale({ order, offline: true });
       return true;
     } catch {
       // No IndexedDB on this device (private window): the sale needs the connection.
@@ -692,6 +696,8 @@ export default function SellPage() {
         method: payment.method,
         reference: payment.reference,
         evidenceUrl: payment.evidenceUrl,
+        tip: payment.tip,
+        cashReceived: payment.cashReceived,
       })),
     };
     if (canQueue && !navigator.onLine && await queueOfflineSale(request, charge)) {
@@ -705,10 +711,10 @@ export default function SellPage() {
       clearSale();
       setChargeOpen(false);
       if (charge) {
-        setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived });
+        setCompletedSale({ order });
       } else if (chatOrigin) {
         // From a chat the summary goes back to the customer, paid or not.
-        setCompletedSale({ order, change: 0, cashReceived: 0, unpaid: true });
+        setCompletedSale({ order, unpaid: true });
       } else {
         toast.success(canCharge
           ? `Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`
@@ -781,10 +787,9 @@ export default function SellPage() {
   const businessName = tenant?.name ?? 'TienditApp';
   const ticketText = completedSale ? buildTicketText(completedSale.order, {
     businessName,
-    change: completedSale.change,
-    cashReceived: completedSale.cashReceived,
     provisional: completedSale.offline,
   }) : '';
+  const completedChange = completedSale ? getTicketPaymentTotals(completedSale.order).change : 0;
 
   const cartPanel = (
     <div className="sell-cart-panel">
@@ -1438,17 +1443,15 @@ export default function SellPage() {
                   {hasKitchen && ' La cocina no la verá hasta que se envíe: avísale o entrégale el ticket impreso.'}
                 </div>
               )}
-              {completedSale.change > 0 && (
+              {completedChange > 0 && (
                 <div className="charge-change has-change mb-3" aria-live="polite">
                   <span>Cambio</span>
-                  <strong className="ta-money">{formatMoney(completedSale.change)}</strong>
+                  <strong className="ta-money">{formatMoney(completedChange)}</strong>
                 </div>
               )}
               <SaleTicket
                 order={completedSale.order}
                 businessName={businessName}
-                change={completedSale.change}
-                cashReceived={completedSale.cashReceived}
                 provisional={completedSale.offline}
               />
             </>

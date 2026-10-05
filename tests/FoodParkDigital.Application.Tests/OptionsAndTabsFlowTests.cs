@@ -210,7 +210,7 @@ public class OptionsAndTabsFlowTests
             CancellationToken.None);
         Assert.True(opened.IsSuccess, opened.Error);
 
-        var result = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser)
+        var result = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser, NoOpOrderInventoryService.Instance)
             .Handle(new UpdateOrderStatusCommand { OrderId = opened.Value.Id, NewStatus = OrderStatus.Delivered }, CancellationToken.None);
 
         Assert.True(result.IsFailure);

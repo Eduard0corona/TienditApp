@@ -57,11 +57,13 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IFolioGenerator _folios;
 
-    public CreatePurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public CreatePurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
+        _folios = folios;
     }
 
     public async Task<Result<PurchaseOrderDto>> Handle(CreatePurchaseOrderCommand request, CancellationToken cancellationToken)
@@ -95,7 +97,7 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
             return Result.Failure<PurchaseOrderDto>("Una o más ubicaciones no existen o están inactivas.");
 
         var now = DateTimeOffset.UtcNow;
-        var orderNumber = await GenerateOrderNumberAsync(now, cancellationToken);
+        var orderNumber = await _folios.NextPurchaseOrderNumberAsync(_tenantService.TenantId, now, cancellationToken);
 
         var order = new PurchaseOrder(
             tenantId: _tenantService.TenantId,
@@ -124,17 +126,5 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(await PurchaseOrderReader.LoadAsync(_context, order.Id, cancellationToken));
-    }
-
-    private async Task<string> GenerateOrderNumberAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var dayStart = now.UtcDateTime.Date;
-        var dayEnd = dayStart.AddDays(1);
-        var prefix = $"PO-{dayStart:yyyyMMdd}";
-
-        var count = await _context.PurchaseOrders
-            .CountAsync(x => x.OrderedAt >= dayStart && x.OrderedAt < dayEnd, cancellationToken);
-
-        return $"{prefix}-{count + 1:0000}";
     }
 }

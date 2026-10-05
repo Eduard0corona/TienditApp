@@ -71,10 +71,13 @@ public class DailyCashCutDto
     public decimal TransferTotal { get; set; }
     public decimal WalletTotal { get; set; }
     public decimal OtherTotal { get; set; }
+    /// <summary>Tips given with the payments (not sales), and the part of them paid in cash (in the drawer).</summary>
+    public decimal TipsTotal { get; set; }
+    public decimal CashTipsTotal { get; set; }
     public decimal ManualIncomeTotal { get; set; }
     public decimal ManualExpenseTotal { get; set; }
     public decimal NetCashFlow { get; set; }
-    /// <summary>Cash payments plus manual income minus manual expenses: the net change of the drawer.</summary>
+    /// <summary>Cash payments and cash tips plus manual income minus manual expenses: the net change of the drawer.</summary>
     public decimal NetCashOnlyFlow { get; set; }
     public List<DailyCashCutByUserDto> ByUser { get; set; } = [];
     public List<DailyCashCutByLocationDto> ByLocation { get; set; } = [];

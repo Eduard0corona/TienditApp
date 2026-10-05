@@ -8,13 +8,17 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders;
 
 /// <summary>A payment captured at the counter, before it is applied to an order.</summary>
+/// <param name="Tip">On top of the amount, for the team; never part of the sale.</param>
+/// <param name="CashReceived">What the customer handed over in cash (the change is the rest).</param>
 public sealed record OrderPaymentInput(
     decimal Amount,
     OrderPaymentMethod Method,
     Guid? InventoryLocationId,
     string? EvidenceUrl,
     string? Reference,
-    string? Notes);
+    string? Notes,
+    decimal Tip = 0,
+    decimal? CashReceived = null);
 
 /// <summary>
 /// Registers payments on an order and in the open cash session: validates the evidence and the branch,
@@ -57,6 +61,8 @@ public sealed class OrderPaymentRegistrar
 
         if (input.Amount > order.Balance)
             return Result.Failure<OrderPayment>("El pago excede el saldo pendiente de la orden.");
+        if (order.TipTotal + input.Tip > order.Total)
+            return Result.Failure<OrderPayment>(Order.TipAboveTotalMessage);
 
         Guid? inventoryLocationId = input.InventoryLocationId;
         if (inventoryLocationId.HasValue)
@@ -84,7 +90,9 @@ public sealed class OrderPaymentRegistrar
             inventoryLocationId: inventoryLocationId,
             evidenceUrl: input.EvidenceUrl?.Trim(),
             reference: input.Reference?.Trim(),
-            notes: input.Notes?.Trim());
+            notes: input.Notes?.Trim(),
+            tip: input.Tip,
+            cashReceived: input.CashReceived);
         var inDrawer = await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);
 
         // A business may refuse cash that no drawer would count. The order was changed in memory only: the

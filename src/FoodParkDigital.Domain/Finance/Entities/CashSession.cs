@@ -98,7 +98,7 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
             or CashTransactionType.Refund;
 
     /// <summary>
-    /// The transaction type decides the direction of the money: sales and deposits enter the drawer,
+    /// The transaction type decides the direction of the money: sales, tips and deposits enter the drawer,
     /// refunds, expenses and withdrawals leave it. Adjustments keep the sign they are given.
     /// </summary>
     public static decimal ToSignedAmount(CashTransactionType transactionType, decimal amount)
@@ -108,9 +108,9 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
 
         return transactionType switch
         {
-            CashTransactionType.SalePayment or CashTransactionType.Deposit when amount < 0 =>
+            CashTransactionType.SalePayment or CashTransactionType.Deposit or CashTransactionType.Tip when amount < 0 =>
                 throw new DomainException("El monto de un ingreso debe ser mayor a cero."),
-            CashTransactionType.SalePayment or CashTransactionType.Deposit => amount,
+            CashTransactionType.SalePayment or CashTransactionType.Deposit or CashTransactionType.Tip => amount,
             CashTransactionType.Refund or CashTransactionType.Expense or CashTransactionType.Withdrawal => -Math.Abs(amount),
             _ => amount
         };

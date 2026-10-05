@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Purchasing.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tests;
@@ -100,7 +101,7 @@ public class PurchaseOrderLifecycleTests
         await fixture.Context.SaveChangesAsync();
         var location = await fixture.Context.InventoryLocations.SingleAsync(l => l.TenantId == tenant.Id);
 
-        var result = await new CreatePurchaseOrderCommandHandler(fixture.Context, fixture.TenantService).Handle(new CreatePurchaseOrderCommand
+        var result = await new CreatePurchaseOrderCommandHandler(fixture.Context, fixture.TenantService, new FolioGenerator(fixture.Context)).Handle(new CreatePurchaseOrderCommand
         {
             SupplierId = supplier.Id,
             MarkAsSent = markAsSent,
@@ -114,7 +115,7 @@ public class PurchaseOrderLifecycleTests
     private static async Task<Application.Common.Models.Result<PurchaseOrderDto>> ReceiveAsync(
         SalesTestFixture fixture, Guid orderId, Guid lineId, decimal quantity, decimal? unitCost = null)
     {
-        var result = await new ReceivePurchaseOrderCommandHandler(fixture.Context, fixture.TenantService).Handle(new ReceivePurchaseOrderCommand
+        var result = await new ReceivePurchaseOrderCommandHandler(fixture.Context, fixture.TenantService, new FolioGenerator(fixture.Context)).Handle(new ReceivePurchaseOrderCommand
         {
             PurchaseOrderId = orderId,
             Lines = [new ReceivePurchaseOrderLineRequest { PurchaseOrderLineId = lineId, QuantityReceived = quantity, UnitCost = unitCost }]

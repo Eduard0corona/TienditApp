@@ -66,11 +66,12 @@ public class TenantFilterBypassAllowlistTests
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).
         ["src/FoodParkDigital.Application/Orders/Queries/GetMyOrdersQuery.cs"] = 1, // a customer account's own orders, filtered by its user id
         ["src/FoodParkDigital.Application/Orders/Commands/CreateOrderCommand.cs"] = 1,
-        ["src/FoodParkDigital.Application/Orders/Commands/CreateTenantOrderCommand.cs"] = 4,
+        ["src/FoodParkDigital.Application/Orders/Commands/CreateTenantOrderCommand.cs"] = 3,
         ["src/FoodParkDigital.Infrastructure/Services/CustomerLookupService.cs"] = 2,
         ["src/FoodParkDigital.Infrastructure/Services/TemporaryCustomerClaimService.cs"] = 2,
-        // Inventory consumption fallback (the default location of the business of the order).
-        ["src/FoodParkDigital.Infrastructure/Services/OrderInventoryService.cs"] = 1,
+        // The folio counters of the business named by the document (also the online menu, which has no business in
+        // context): the counter and the folios it continues after, filtered by that tenant.
+        ["src/FoodParkDigital.Infrastructure/Services/FolioGenerator.cs"] = 4,
         // Development seed data.
         ["src/FoodParkDigital.Infrastructure/Persistence/Seeds/SeedData.cs"] = 9,
     };

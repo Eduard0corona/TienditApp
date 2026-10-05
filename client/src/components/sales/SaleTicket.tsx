@@ -2,15 +2,16 @@ import type { OrderDto } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
-import { formatTicketDate, formatTicketQuantity, type TicketExtras } from '../../utils/ticket';
+import { formatTicketDate, formatTicketQuantity, getTicketPaymentTotals, type TicketExtras } from '../../utils/ticket';
 
 interface SaleTicketProps extends TicketExtras {
   order: OrderDto;
 }
 
 /** Customer ticket: what was bought, the IVA breakdown computed by the server and how it was paid. */
-export default function SaleTicket({ order, businessName, cashReceived, change, provisional }: SaleTicketProps) {
+export default function SaleTicket({ order, businessName, provisional }: SaleTicketProps) {
   const taxLines = order.taxBreakdown.filter((line) => line.taxAmount > 0);
+  const { tip, cashReceived, change } = getTicketPaymentTotals(order);
   const showCustomer = order.customerName && order.customerName !== 'Público en general';
 
   return (
@@ -84,13 +85,19 @@ export default function SaleTicket({ order, businessName, cashReceived, change, 
               <span className="ta-money">{formatMoney(payment.amount)}</span>
             </div>
           ))}
-          {cashReceived !== undefined && cashReceived > 0 && (
+          {tip > 0 && (
+            <div className="ta-ticket-row">
+              <span>Propina</span>
+              <span className="ta-money">{formatMoney(tip)}</span>
+            </div>
+          )}
+          {cashReceived > 0 && (
             <div className="ta-ticket-row small">
               <span>Efectivo recibido</span>
               <span className="ta-money">{formatMoney(cashReceived)}</span>
             </div>
           )}
-          {change !== undefined && change > 0 && (
+          {change > 0 && (
             <div className="ta-ticket-row fw-bold">
               <span>Cambio</span>
               <span className="ta-money">{formatMoney(change)}</span>

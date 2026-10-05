@@ -77,7 +77,11 @@ export default function DailyCut({ branches }: DailyCutProps) {
                 { label: 'Tarjeta', value: cut.cardTotal },
                 { label: 'Transferencia', value: cut.transferTotal },
                 { label: 'Otros', value: cut.walletTotal + cut.otherTotal },
-                { label: 'Neto en efectivo', value: cut.netCashOnlyFlow, detail: 'Efectivo + depósitos − gastos' },
+                { label: 'Neto en efectivo', value: cut.netCashOnlyFlow, detail: cut.cashTipsTotal > 0 ? 'Efectivo + propinas + depósitos − gastos' : 'Efectivo + depósitos − gastos' },
+                // Tips are for the team: apart from what was sold.
+                ...(cut.tipsTotal > 0
+                  ? [{ label: 'Propinas', value: cut.tipsTotal, detail: `${formatMoney(cut.cashTipsTotal)} en efectivo` }]
+                  : []),
               ].map((kpi) => (
                 <div key={kpi.label} className="col-6 col-lg-2">
                   <div className="text-muted small">{kpi.label}</div>
@@ -106,6 +110,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
                       ['Transferencia', cut.transferTotal],
                       ['Otros', cut.walletTotal + cut.otherTotal],
                       ['Neto en efectivo', cut.netCashOnlyFlow],
+                      ...(cut.tipsTotal > 0 ? [['Propinas', cut.tipsTotal], ['Propinas en efectivo', cut.cashTipsTotal]] : []),
                     ].map(([label, value]) => (
                       <div key={label as string} className="d-flex justify-content-between gap-2">
                         <span>{label}</span>

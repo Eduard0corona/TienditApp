@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -24,6 +25,10 @@ public record AddOrderPaymentCommand : IRequest<Result<OrderDto>>
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
+    /// <summary>On top of the amount, for the team: not part of the sale or its balance.</summary>
+    public decimal Tip { get; init; }
+    /// <summary>What the customer handed over in cash, to keep the change with the payment.</summary>
+    public decimal? CashReceived { get; init; }
 }
 
 public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPaymentCommand>
@@ -37,6 +42,15 @@ public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPayment
         RuleFor(x => x.EvidenceUrl).MaximumLength(1000);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);
+        RuleFor(x => x.Tip).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
+        RuleFor(x => x.CashReceived!.Value).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
+            .When(x => x.CashReceived.HasValue).WithName(nameof(AddOrderPaymentCommand.CashReceived));
+        RuleFor(x => x.CashReceived).Null().When(x => x.Method != OrderPaymentMethod.Cash)
+            .WithMessage(OrderPayment.CashReceivedOnlyForCashMessage);
+        RuleFor(x => x.CashReceived!.Value).GreaterThanOrEqualTo(x => x.Amount + x.Tip)
+            .When(x => x.CashReceived.HasValue && x.Method == OrderPaymentMethod.Cash)
+            .WithName(nameof(AddOrderPaymentCommand.CashReceived))
+            .WithMessage(OrderPayment.CashReceivedShortMessage);
     }
 }
 
@@ -52,13 +66,13 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
         IMapper mapper,
-        IOrderCashService? orderCashService = null,
+        IOrderCashService orderCashService,
         ICurrentUserService? currentUserService = null)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
         _mapper = mapper;
-        _orderCashService = orderCashService ?? NoOpOrderCashService.Instance;
+        _orderCashService = orderCashService;
         _currentUserService = currentUserService;
     }
 
@@ -79,7 +93,9 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
                 request.InventoryLocationId,
                 request.EvidenceUrl,
                 request.Reference,
-                request.Notes),
+                request.Notes,
+                request.Tip,
+                request.CashReceived),
             cancellationToken);
         if (payment.IsFailure)
             return Result.Failure<OrderDto>(payment.Error!);

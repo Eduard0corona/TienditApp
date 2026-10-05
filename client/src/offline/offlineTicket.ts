@@ -20,7 +20,7 @@ interface OfflineTicketInput {
   lines: OfflineTicketLine[];
   totals: { subtotal: number; tax: number; total: number; breakdown: OrderTaxLineDto[] };
   pricesIncludeTax: boolean;
-  payments: Array<{ amount: number; method: OrderPaymentMethod; reference?: string }>;
+  payments: Array<{ amount: number; method: OrderPaymentMethod; reference?: string; tip?: number; cashReceived?: number }>;
   customerName?: string;
   tableNumber?: string;
 }
@@ -70,12 +70,18 @@ export function buildOfflineTicketOrder(input: OfflineTicketInput): OrderDto {
     })),
     statusHistory: [],
     servicePieces: [],
+    tipTotal: input.payments.reduce((sum, payment) => sum + (payment.tip ?? 0), 0),
     payments: input.payments.map((payment, index) => ({
       id: `${input.folio}-${index}`,
       amount: payment.amount,
       method: payment.method,
       paidAt: input.capturedAt,
       reference: payment.reference,
+      tip: payment.tip,
+      cashReceived: payment.cashReceived,
+      change: payment.cashReceived !== undefined
+        ? Math.round((payment.cashReceived - payment.amount - (payment.tip ?? 0)) * 100) / 100
+        : 0,
     })),
   };
 }

@@ -89,17 +89,20 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IMapper _mapper;
+    private readonly IFolioGenerator _folios;
 
     public CreateInventoryMovementCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IMapper mapper)
+        IMapper mapper,
+        IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
         _mapper = mapper;
+        _folios = folios;
     }
 
     public async Task<Result<InventoryMovementDto>> Handle(CreateInventoryMovementCommand request, CancellationToken cancellationToken)
@@ -121,7 +124,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
         }
 
         var movementDate = request.MovementDate ?? DateTimeOffset.UtcNow;
-        var movementNumber = await GenerateMovementNumberAsync(movementDate, cancellationToken);
+        var movementNumber = await _folios.NextInventoryMovementNumberAsync(_tenantService.TenantId, movementDate, cancellationToken);
 
         var movement = new InventoryMovement(
             tenantId: _tenantService.TenantId,
@@ -286,17 +289,5 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             return supply.LastCost;
 
         return supply.DefaultCost > 0 ? supply.DefaultCost : null;
-    }
-
-    private async Task<string> GenerateMovementNumberAsync(DateTimeOffset movementDate, CancellationToken cancellationToken)
-    {
-        var date = movementDate.UtcDateTime.Date;
-        var prefix = $"INV-{date:yyyyMMdd}";
-
-        var todayCount = await _context.InventoryMovements
-            .CountAsync(x => x.MovementDate >= date && x.MovementDate < date.AddDays(1), cancellationToken);
-
-        var sequence = todayCount + 1;
-        return $"{prefix}-{sequence:0000}";
     }
 }

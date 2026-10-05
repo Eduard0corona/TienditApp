@@ -29,6 +29,8 @@ Contiene invariantes y comportamiento de agregados, value objects, máquinas de 
 
 Orquesta Commands/Queries, validación con FluentValidation, DTOs, interfaces de puertos, autorización contextual y transacciones del caso de uso. Usa `IApplicationDbContext`, lo que introduce referencias de EF Core en Application; es estado actual. AutoMapper está registrado y se usa donde aporta mapeo consistente.
 
+Los puertos que un caso de uso necesita son obligatorios en su constructor (`IOrderInventoryService`, `IOrderCashService`, `IFolioGenerator`): desde la Fase 4F no hay respaldos que no hagan nada si falta el registro, porque una venta guardada sin consumir inventario o sin entrar a la caja pasaría inadvertida. Las pruebas pasan sus dobles de forma explícita (`NoOpOrderInventoryService`, `NoOpOrderCashService` en `tests/.../Support`).
+
 ### Infrastructure
 
 Implementa persistencia SQL Server, configuraciones y migraciones EF, Identity/JWT, archivos, imagen, WhatsApp, email, SMS, reloj y servicios coordinadores de inventario/caja. No debe introducir reglas que solo sean visibles desde un provider; si una regla es de dominio, muévela al agregado.

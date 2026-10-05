@@ -10412,7 +10412,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ],
         "type": "integer",
         "format": "int32"
@@ -11652,7 +11653,8 @@
       "CreateOrderPaymentDto": {
         "required": [
           "amount",
-          "method"
+          "method",
+          "tip"
         ],
         "type": "object",
         "properties": {
@@ -11678,6 +11680,15 @@
           },
           "notes": {
             "type": "string",
+            "nullable": true
+          },
+          "tip": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
@@ -12550,6 +12561,7 @@
           "byLocation",
           "byUser",
           "cardTotal",
+          "cashTipsTotal",
           "cashTotal",
           "date",
           "manualExpenseTotal",
@@ -12559,6 +12571,7 @@
           "otherTotal",
           "salesPaymentsCount",
           "salesPaymentsTotal",
+          "tipsTotal",
           "transferTotal",
           "walletTotal"
         ],
@@ -12593,6 +12606,14 @@
             "format": "double"
           },
           "otherTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "tipsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashTipsTotal": {
             "type": "number",
             "format": "double"
           },
@@ -14702,6 +14723,7 @@
           "subTotal",
           "tax",
           "taxBreakdown",
+          "tipTotal",
           "total"
         ],
         "type": "object",
@@ -14789,6 +14811,10 @@
             "format": "double"
           },
           "balance": {
+            "type": "number",
+            "format": "double"
+          },
+          "tipTotal": {
             "type": "number",
             "format": "double"
           },
@@ -15044,9 +15070,11 @@
       "OrderPaymentDto": {
         "required": [
           "amount",
+          "change",
           "id",
           "method",
-          "paidAt"
+          "paidAt",
+          "tip"
         ],
         "type": "object",
         "properties": {
@@ -15081,6 +15109,19 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "tip": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "change": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
