@@ -8,8 +8,10 @@
 | --- | --- | --- |
 | `GET /health/live` | Nada: responde 200 mientras el proceso corre. | Reinicio del proceso. |
 | `GET /health/ready` | Conexión a la base (`database`) y colas en segundo plano (`background-queues`). | Health check de App Service, balanceador y alertas. |
+| `GET /health/schema` | Que la base tenga todas las migraciones de esta versión (`database-schema`). | Prueba de humo del despliegue (Fase 7). |
 
-- Ambos son anónimos y solo devuelven estados (`{"status":"Healthy","checks":{...}}`), sin mensajes de error ni datos.
+- Los tres son anónimos y solo devuelven estados (`{"status":"Healthy","checks":{...}}`), sin mensajes de error ni datos.
+- `database-schema` queda **Unhealthy** (503) cuando falta en la base una migración de esta versión: producción no migra al arrancar y alguien publicó antes de aplicar su `apply.sql`. El log nombra la migración que falta. No forma parte de `/health/ready` a propósito: un esquema atrasado hace fallar el despliegue (o detiene el swap del slot), no saca de rotación a todas las instancias.
 - `background-queues` queda **Degraded** (sigue respondiendo 200) cuando el outbox o la bandeja del webhook apartaron trabajo en las últimas 24 horas, o cuando hay trabajo pendiente con más de 15 minutos de retraso (workers detenidos o atorados).
 - Sin base de datos, `/health/ready` responde 503.
 - En App Service: Configuración → Health check → ruta `/health/ready`.
