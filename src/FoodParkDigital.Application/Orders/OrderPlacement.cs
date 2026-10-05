@@ -12,11 +12,20 @@ namespace FoodParkDigital.Application.Orders;
 /// </summary>
 internal static class OrderPlacement
 {
-    /// <summary>When the service was received, promised and its intake notes (service orders only).</summary>
-    public static void ApplyServiceDetail(Order order, ServiceOrderDetailInput? detail, DateTimeOffset now)
+    /// <summary>
+    /// When the service was received, promised, its intake notes and its photos (service orders only). The photos must
+    /// be ones the business uploaded through the app: they are private and only open for its members.
+    /// </summary>
+    /// <returns>Why the service detail is refused, or null once it is applied.</returns>
+    public static string? ApplyServiceDetail(Order order, ServiceOrderDetailInput? detail, DateTimeOffset now)
     {
         if (order.OrderType != OrderType.Service || detail is null)
-            return;
+            return null;
+
+        var beforeError = OrderUploadRules.NormalizeServicePhotos(detail.BeforePhotosJson, order.TenantId, out var beforePhotos);
+        var afterError = OrderUploadRules.NormalizeServicePhotos(detail.AfterPhotosJson, order.TenantId, out var afterPhotos);
+        if ((beforeError ?? afterError) is { } photosError)
+            return photosError;
 
         order.SetServiceDetail(
             receivedAt: detail.ReceivedAt ?? now,
@@ -25,8 +34,9 @@ internal static class OrderPlacement
             intakeNotes: detail.IntakeNotes?.Trim(),
             deliveryNotes: detail.DeliveryNotes?.Trim(),
             intakeChecklistJson: detail.IntakeChecklistJson,
-            beforePhotosJson: detail.BeforePhotosJson,
-            afterPhotosJson: detail.AfterPhotosJson);
+            beforePhotosJson: beforePhotos,
+            afterPhotosJson: afterPhotos);
+        return null;
     }
 
     /// <summary>

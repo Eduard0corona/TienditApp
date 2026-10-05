@@ -23,7 +23,7 @@ Sesión y tiempo real:
 - `useSessionSync` propaga logout y cambio de tenant a las demás pestañas con `BroadcastChannel`; cambiar de tenant recarga la aplicación.
 - `src/api/signalr.ts` crea las conexiones: reintenta indefinidamente, reintenta el primer arranque, reinicia tras un cierre del servidor y pide un token vigente en cada (re)conexión.
 - `src/utils/labels.ts` concentra las etiquetas en español de estados, métodos de pago, tipos y roles (acepta el número de REST o el nombre del enum de SignalR); `src/api/errors.ts` (`getApiErrorMessage`, `getApiFieldErrors`, `getApiErrorCode`) es la única forma de leer errores de la API y decide por el `code` del `ProblemDetails`, nunca por el texto.
-- `HomeRedirect`/`AccessRoute` llevan a cada usuario a la pantalla de su trabajo (`getLandingPath`); un administrador cuyo negocio no terminó el arranque guiado va a `/setup`. `isSafeFileUrl` solo deja enlazar archivos de `/uploads` o https; `estimateOrderTotals` replica el desglose de IVA del backend en centavos enteros (el total definitivo es el de la API).
+- `HomeRedirect`/`AccessRoute` llevan a cada usuario a la pantalla de su trabajo (`getLandingPath`); un administrador cuyo negocio no terminó el arranque guiado va a `/setup`. `isSafeFileUrl` solo deja enlazar archivos de `/uploads` o https; los comprobantes y las fotos de servicio son privados (`/files/...`): `PrivatePhoto` y `PrivateFileLink` los piden a la API con el token de la sesión y los muestran desde un object URL que se libera al terminar (Fase 8); `estimateOrderTotals` replica el desglose de IVA del backend en centavos enteros (el total definitivo es el de la API).
 
 Shell y diseño (Fase 1):
 

@@ -41,21 +41,22 @@ public class UploadServiceIntakePhotoCommandValidator : AbstractValidator<Upload
     }
 }
 
+/// <summary>Photos of what a customer leaves for service: private to the business, like its receipts.</summary>
 public class UploadServiceIntakePhotoCommandHandler : IRequestHandler<UploadServiceIntakePhotoCommand, Result<UploadedFileDto>>
 {
     private const int MaxPhotoDimension = 2048;
 
     private readonly ICurrentTenantService _tenantService;
-    private readonly IFileStorageService _fileStorageService;
+    private readonly IPrivateFileStorage _storage;
     private readonly IImageNormalizationService _imageNormalizationService;
 
     public UploadServiceIntakePhotoCommandHandler(
         ICurrentTenantService tenantService,
-        IFileStorageService fileStorageService,
+        IPrivateFileStorage storage,
         IImageNormalizationService imageNormalizationService)
     {
         _tenantService = tenantService;
-        _fileStorageService = fileStorageService;
+        _storage = storage;
         _imageNormalizationService = imageNormalizationService;
     }
 
@@ -81,16 +82,12 @@ public class UploadServiceIntakePhotoCommandHandler : IRequestHandler<UploadServ
         await using (photo)
         {
             var fileName = $"{Guid.NewGuid()}.webp";
-            var url = await _fileStorageService.UploadAsync(
-                photo,
-                fileName,
-                "image/webp",
-                OrderUploadRules.ServiceIntakeFolder(_tenantService.TenantId, DateTimeOffset.UtcNow),
-                cancellationToken);
+            var key = $"{OrderUploadRules.ServiceIntakeFolder(_tenantService.TenantId, DateTimeOffset.UtcNow)}/{fileName}";
+            await _storage.SaveAsync(key, photo, "image/webp", cancellationToken);
 
             return Result.Success(new UploadedFileDto
             {
-                Url = url,
+                Url = OrderUploadRules.ToPrivateFilePath(key),
                 FileName = fileName,
                 ContentType = "image/webp"
             });
@@ -137,16 +134,16 @@ public class UploadOrderPaymentEvidenceCommandHandler : IRequestHandler<UploadOr
     private const int MaxImageDimension = 2048;
 
     private readonly ICurrentTenantService _tenantService;
-    private readonly IFileStorageService _fileStorageService;
+    private readonly IPrivateFileStorage _storage;
     private readonly IImageNormalizationService _imageNormalizationService;
 
     public UploadOrderPaymentEvidenceCommandHandler(
         ICurrentTenantService tenantService,
-        IFileStorageService fileStorageService,
+        IPrivateFileStorage storage,
         IImageNormalizationService imageNormalizationService)
     {
         _tenantService = tenantService;
-        _fileStorageService = fileStorageService;
+        _storage = storage;
         _imageNormalizationService = imageNormalizationService;
     }
 
@@ -176,7 +173,7 @@ public class UploadOrderPaymentEvidenceCommandHandler : IRequestHandler<UploadOr
         }
         else if (kind == UploadedFileKind.Pdf)
         {
-            // PDFs cannot be re-encoded here; they are stored as-is and served as downloads.
+            // PDFs cannot be re-encoded here; they are stored as-is and only downloaded, never rendered by the API.
             stored = content;
             extension = ".pdf";
             contentType = "application/pdf";
@@ -189,16 +186,12 @@ public class UploadOrderPaymentEvidenceCommandHandler : IRequestHandler<UploadOr
         await using (stored)
         {
             var fileName = $"{Guid.NewGuid()}{extension}";
-            var url = await _fileStorageService.UploadAsync(
-                stored,
-                fileName,
-                contentType,
-                OrderUploadRules.PaymentEvidenceFolder(_tenantService.TenantId, DateTimeOffset.UtcNow),
-                cancellationToken);
+            var key = $"{OrderUploadRules.PaymentEvidenceFolder(_tenantService.TenantId, DateTimeOffset.UtcNow)}/{fileName}";
+            await _storage.SaveAsync(key, stored, contentType, cancellationToken);
 
             return Result.Success(new UploadedFileDto
             {
-                Url = url,
+                Url = OrderUploadRules.ToPrivateFilePath(key),
                 FileName = fileName,
                 ContentType = contentType
             });

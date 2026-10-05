@@ -43,6 +43,10 @@ public class UploadValidationTests
 
         Assert.True(result.IsSuccess, result.Error);
         var upload = Assert.Single(storage.Uploads);
+        // Private: kept under its business and opened only through the API.
+        Assert.True(OrderUploadRules.TryParsePrivateKey(upload.Key, out _, out var area));
+        Assert.Equal(OrderUploadRules.ServiceIntakeArea, area);
+        Assert.Equal($"/files/{upload.Key}", result.Value!.Url);
         Assert.Equal("image/webp", upload.ContentType);
         Assert.EndsWith(".webp", upload.FileName);
         Assert.Equal(UploadedFileKind.Webp, FileSignature.Detect(upload.Content));
@@ -105,6 +109,9 @@ public class UploadValidationTests
     }
 
     [Theory]
+    [InlineData("/files/orders/{tenant}/payment-evidence/202610/{file}.webp", true)]
+    [InlineData("/files/orders/{other}/payment-evidence/202610/{file}.webp", false)]
+    [InlineData("/files/orders/{tenant}/service-intake/202610/{file}.webp", false)]
     [InlineData("/uploads/orders/{tenant}/payment-evidence/202610/{file}.webp", true)]
     [InlineData("https://cuenta.blob.core.windows.net/archivos/orders/{tenant}/payment-evidence/202610/{file}.pdf", true)]
     [InlineData("", true)]
@@ -117,12 +124,18 @@ public class UploadValidationTests
     public void PaymentEvidenceUrl_ShouldOnlyAcceptFilesUploadedForTheTenant(string template, bool expected)
     {
         var tenantId = Guid.NewGuid();
+        var file = Guid.NewGuid();
         var url = template
             .Replace("{tenant}", tenantId.ToString())
             .Replace("{other}", Guid.NewGuid().ToString())
-            .Replace("{file}", Guid.NewGuid().ToString());
+            .Replace("{file}", file.ToString());
 
-        Assert.Equal(expected, OrderUploadRules.IsOwnPaymentEvidence(url, tenantId));
+        Assert.Equal(expected, OrderUploadRules.TryGetPaymentEvidencePath(url, tenantId, out var path));
+        // The payment keeps the private path of the file, whichever address it came with.
+        if (expected && url.Length > 0)
+            Assert.Equal($"/files/orders/{tenantId}/payment-evidence/202610/{file}{Path.GetExtension(url)}", path);
+        else
+            Assert.Null(path);
     }
 
     [Fact]
@@ -139,6 +152,7 @@ public class UploadValidationTests
         context.Orders.Add(order);
         await context.SaveChangesAsync();
         var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), NoOpOrderCashService.Instance);
+        var legacyFile = Guid.NewGuid();
 
         var external = await handler.Handle(new AddOrderPaymentCommand
         {
@@ -152,12 +166,16 @@ public class UploadValidationTests
             OrderId = order.Id,
             Amount = 50m,
             Method = OrderPaymentMethod.Transfer,
-            EvidenceUrl = $"/uploads/orders/{tenant.TenantId}/payment-evidence/202610/{Guid.NewGuid()}.webp"
+            EvidenceUrl = $"/uploads/orders/{tenant.TenantId}/payment-evidence/202610/{legacyFile}.webp"
         }, CancellationToken.None);
 
         Assert.True(external.IsFailure);
         Assert.True(uploaded.IsSuccess, uploaded.Error);
         Assert.Equal(50m, uploaded.Value!.PaidAmount);
+        // Uploaded when receipts were public: the payment keeps the private path of the same file.
+        Assert.Equal(
+            $"/files/orders/{tenant.TenantId}/payment-evidence/202610/{legacyFile}.webp",
+            Assert.Single(uploaded.Value.Payments).EvidenceUrl);
     }
 
     private static MemoryStream CreateJpegWithLocation(int width, int height)
@@ -227,26 +245,25 @@ public class UploadValidationTests
         FileSize = stream.Length
     };
 
-    private static UploadServiceIntakePhotoCommandHandler NewIntakeHandler(IFileStorageService storage) =>
+    private static UploadServiceIntakePhotoCommandHandler NewIntakeHandler(IPrivateFileStorage storage) =>
         new(new TestCurrentTenantService(), storage, new ImageProcessingService());
 
-    private static UploadOrderPaymentEvidenceCommandHandler NewEvidenceHandler(IFileStorageService storage) =>
+    private static UploadOrderPaymentEvidenceCommandHandler NewEvidenceHandler(IPrivateFileStorage storage) =>
         new(new TestCurrentTenantService(), storage, new ImageProcessingService());
 
-    private sealed class RecordingStorage : IFileStorageService
+    private sealed class RecordingStorage : IPrivateFileStorage
     {
-        public List<(string FileName, string ContentType, string Folder, byte[] Content)> Uploads { get; } = [];
+        public List<(string Key, string FileName, string ContentType, byte[] Content)> Uploads { get; } = [];
 
-        public async Task<string> UploadAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
+        public async Task SaveAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default)
         {
             using var copy = new MemoryStream();
-            await fileStream.CopyToAsync(copy, cancellationToken);
-            Uploads.Add((fileName, contentType, folder, copy.ToArray()));
-            return $"/uploads/{folder}/{fileName}";
+            await content.CopyToAsync(copy, cancellationToken);
+            Uploads.Add((key, Path.GetFileName(key), contentType, copy.ToArray()));
         }
 
-        public Task DeleteAsync(string fileUrl, string folder, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteVariantsAsync(string baseImageUrl, string folder, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Stream?>(Uploads.Where(u => u.Key == key).Select(u => new MemoryStream(u.Content)).FirstOrDefault());
     }
 
     private sealed class TestDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentTenantService tenantService)

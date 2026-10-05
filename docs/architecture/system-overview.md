@@ -40,6 +40,6 @@ No se propone migrar a microservicios. Solo se reconsiderará si un contexto nec
 - En Development, `Program.cs` ejecuta `MigrateAsync()` y seed al iniciar.
 - En despliegue, el workflow `Deploy WebApp (API + SPA)` corre en cada push a `master`, o a mano desde `master`. Construye `client`, ejecuta lint, build y pruebas, publica WebApi con la SPA en `wwwroot` y despliega un paquete a Azure Web App.
 - Serilog lee su configuración desde `appsettings`.
-- El almacenamiento se elige por `FileStorage:Provider`: Azure Blob o local.
+- El almacenamiento se elige por `FileStorage:Provider`: Azure Blob o local. Las imágenes del catálogo, logos y avatares son públicas (`/uploads` o el contenedor `ContainerName`); los comprobantes de transferencia y las fotos de servicio van a un almacenamiento privado (`FileStorage:Local:PrivateRootPath`, por defecto `App_Data/private-files` fuera de `wwwroot`, o el contenedor `FileStorage:AzureBlob:PrivateContainerName`, por defecto `private-files`, sin lectura anónima) y solo los entrega `GET /api/v1/files/{key}` (Fase 8).
 
 Consulta [capas y dependencias](layers-and-dependencies.md), [contextos](bounded-contexts.md) y [estado actual vs objetivo](../roadmap/current-vs-target.md).

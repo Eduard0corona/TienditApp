@@ -26,7 +26,9 @@ import {
   OrderStatus as OrderStatusConst,
   OrderType as OrderTypeConst,
 } from '../../types';
-import { isSafeFileUrl } from '../../utils/safeUrl';
+import { toPrivateFilePath } from '../../utils/privateFiles';
+import PrivateFileLink from '../../components/common/PrivateFileLink';
+import PrivatePhoto from '../../components/common/PrivatePhoto';
 import { getAccess } from '../../utils/access';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
@@ -846,16 +848,14 @@ export default function OrdersList() {
                         ) : (
                           <div className="d-flex flex-wrap gap-2 mt-1">
                             {selectedOrderBeforePhotos.map((photo, index) => (
-                              <a
-                                key={`${photo.url || 'before'}-${index}`}
-                                href={photo.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="d-inline-flex align-items-center justify-content-center border rounded"
-                                style={{ width: 64, height: 64, overflow: 'hidden' }}
-                              >
-                                <img src={photo.url} alt={photo.fileName || 'Foto antes'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              </a>
+                              <PrivatePhoto
+                                key={`${photo.path}-${index}`}
+                                path={photo.path}
+                                alt={photo.fileName || 'Foto antes'}
+                                linked
+                                className="border rounded"
+                                style={{ width: 64, height: 64 }}
+                              />
                             ))}
                           </div>
                         )}
@@ -867,16 +867,14 @@ export default function OrdersList() {
                         ) : (
                           <div className="d-flex flex-wrap gap-2 mt-1">
                             {selectedOrderAfterPhotos.map((photo, index) => (
-                              <a
-                                key={`${photo.url || 'after'}-${index}`}
-                                href={photo.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="d-inline-flex align-items-center justify-content-center border rounded"
-                                style={{ width: 64, height: 64, overflow: 'hidden' }}
-                              >
-                                <img src={photo.url} alt={photo.fileName || 'Foto después'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              </a>
+                              <PrivatePhoto
+                                key={`${photo.path}-${index}`}
+                                path={photo.path}
+                                alt={photo.fileName || 'Foto después'}
+                                linked
+                                className="border rounded"
+                                style={{ width: 64, height: 64 }}
+                              />
                             ))}
                           </div>
                         )}
@@ -954,10 +952,8 @@ export default function OrdersList() {
                             <td>{getPaymentMethodLabel(payment.method)}</td>
                             <td>{payment.reference || '-'}</td>
                             <td>
-                              {isSafeFileUrl(payment.evidenceUrl) ? (
-                                <a href={payment.evidenceUrl} target="_blank" rel="noopener noreferrer">
-                                  Ver
-                                </a>
+                              {toPrivateFilePath(payment.evidenceUrl) ? (
+                                <PrivateFileLink path={toPrivateFilePath(payment.evidenceUrl)!}>Ver</PrivateFileLink>
                               ) : '-'}
                             </td>
                             <td className="text-end">{formatMoney(payment.amount)}</td>

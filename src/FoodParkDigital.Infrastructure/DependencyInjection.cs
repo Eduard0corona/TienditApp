@@ -153,6 +153,7 @@ public static class DependencyInjection
             services.AddHostedService<MessagingWorkerService>();
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
+            services.AddHostedService<PrivateFilesMigrationService>();
         }
 
         // Services
@@ -173,9 +174,19 @@ public static class DependencyInjection
         services.AddSingleton<ITwoFactorService, TwoFactorService>();
         var fileStorageProvider = configuration["FileStorage:Provider"];
         if (string.Equals(fileStorageProvider, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+        {
             services.AddScoped<IFileStorageService, AzureBlobFileStorageService>();
+            services.AddSingleton<AzureBlobPrivateFileStorage>();
+            services.AddSingleton<IPrivateFileStorage>(sp => sp.GetRequiredService<AzureBlobPrivateFileStorage>());
+            services.AddSingleton<ILegacyPrivateFileMover>(sp => sp.GetRequiredService<AzureBlobPrivateFileStorage>());
+        }
         else
+        {
             services.AddScoped<IFileStorageService, LocalFileStorageService>();
+            services.AddSingleton<LocalPrivateFileStorage>();
+            services.AddSingleton<IPrivateFileStorage>(sp => sp.GetRequiredService<LocalPrivateFileStorage>());
+            services.AddSingleton<ILegacyPrivateFileMover>(sp => sp.GetRequiredService<LocalPrivateFileStorage>());
+        }
 
         services.AddSingleton<ImageProcessingService>();
         services.AddSingleton<IImageProcessingService>(sp => sp.GetRequiredService<ImageProcessingService>());

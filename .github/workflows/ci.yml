@@ -34,7 +34,26 @@ jobs:
       - name: Build
         run: dotnet build FoodParkDigital.sln --no-restore --configuration Release
 
+      # Private files depend on the access level of their Blob container: test classes named *AzuriteTests run against
+      # the emulator and are skipped everywhere else. Its connection string is the emulator's public one.
+      - name: Start Azurite (Blob Storage emulator)
+        run: |
+          docker run --detach --name azurite --publish 127.0.0.1:10000:10000 \
+            mcr.microsoft.com/azure-storage/azurite:3.37.0 \
+            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
+          for _ in $(seq 30); do
+            if curl -s -o /dev/null http://127.0.0.1:10000/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs azurite
+          echo "::error::Azurite did not accept connections."
+          exit 1
+
       - name: Test
+        env:
+          TIENDITAPP_TEST_AZURE_BLOB: UseDevelopmentStorage=true
         run: dotnet test FoodParkDigital.sln --no-build --configuration Release --verbosity normal
 
       # The client is generated from client/openapi/openapi.json: it must be the document the API serves now, so a DTO
