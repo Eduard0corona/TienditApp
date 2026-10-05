@@ -8,8 +8,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
     /// Refresh tokens are found only by their hash. The plain values older versions stored (tokens issued before the
     /// hashing and not used since) get here the same SHA-256 as RefreshToken.HashOf, a replaced one still counts as
     /// rotated, and every value is emptied. The model no longer maps Token and ReplacedByToken, but the columns and
-    /// their index stay: the version running while this is applied, and the one left in the staging slot after the
-    /// swap, still read them. A later migration drops them, once no deployed version maps them.
+    /// their index stay: the version running while this is applied, and the one to go back to if this version is
+    /// reverted (redeployed, or swapped back from the staging slot), still read them. A later migration drops them, once
+    /// no deployable version maps them.
     /// </summary>
     public partial class StopUsingPlainRefreshTokenValues : Migration
     {

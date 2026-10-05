@@ -44,6 +44,13 @@ Sesiones (Fase 8, `UserSessions` y `AccessTokenSessionValidator`):
 - Un token ya reemplazado que vuelve termina la sesión (`ReuseDetected`), salvo en los 10 segundos posteriores a su reemplazo, en los que responde 409 sin tokens.
 - `logout` termina la sesión. Cambiar o recuperar la contraseña termina todas las de la cuenta.
 - El evento `OnTokenValidated` del bearer rechaza el access token de una sesión terminada, de una cuenta inactiva o con otro security stamp.
+- Las conexiones a los hubs pasan la misma revisión mientras viven (Fase 9, `HubAccessSweeper`, cada `Hubs:AccessCheckInterval`): se cierran cuando su sesión termina o pierden el acceso al negocio o el permiso del hub.
+- Desde la Fase 9 los refresh tokens se buscan solo por su hash (`RefreshToken.HashOf`); las columnas del valor en texto quedan sin usar hasta que se borren.
+
+Cuentas (Fase 9):
+- `UserRole.None` (0) es el valor por defecto: no da permisos y no se puede guardar. `SuperAdmin` (9 en el código) se guarda como 0, así que las filas existentes no cambiaron (`UserRoleStorage`).
+- El login responde igual, y tarda lo mismo, para un correo sin cuenta, una cuenta inactiva o bloqueada y una contraseña incorrecta (`LoginTiming` verifica contra un hash ficticio); una cuenta bloqueada responde así aunque la contraseña sea correcta. "Debe confirmar su cuenta" solo sale después de la contraseña correcta.
+- Contraseñas nuevas: al menos 8 caracteres (`PasswordPolicy.MinimumLength`) con mayúscula, minúscula y dígito; `GuessablePasswordValidator`, registrado en Identity, rechaza las comunes y las que contienen la parte local del correo, el nombre o el apellido. El cliente muestra la regla (`utils/passwordRules.ts`).
 
 La verificación de teléfono identifica la cuenta por el `userId` que devuelve el registro: viaja en la URL de `/confirm-phone` (recargar ya no pierde el estado) y `POST /auth/resend-phone-confirmation` acepta `{ userId }` para reenviar el código (o un teléfono E.164), sin revelar si la cuenta existe y con el límite `auth`. El enlace del correo de confirmación abre la página `/confirm-email` de la app, que confirma contra `GET /auth/confirm-email` y, si el enlace venció o está incompleto, ofrece pedir uno nuevo.
 

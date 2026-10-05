@@ -25,8 +25,8 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         builder.Property(r => r.RevokedAt).IsConcurrencyToken();
 
         // The columns Token and ReplacedByToken (plain values from before tokens were hashed, emptied by the migration
-        // StopUsingPlainRefreshTokenValues) stay in the table, unmapped: the version deployed while that migration is
-        // applied, and the one left in the staging slot after the swap, still read them. A later migration drops them.
+        // StopUsingPlainRefreshTokenValues) stay in the table, unmapped: the version running while that migration is
+        // applied, and the one to go back to if this one is reverted, still read them. A later migration drops them.
 
         builder.HasOne(r => r.User)
             .WithMany()
