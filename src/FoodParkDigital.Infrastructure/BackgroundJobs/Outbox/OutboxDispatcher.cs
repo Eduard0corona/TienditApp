@@ -175,10 +175,8 @@ public sealed class OutboxDispatcher
         {
             // Each handler gets its own scope (and DbContext): a failed one leaves nothing half-tracked
             // for the next.
-            await using var scope = _scopeFactory.CreateAsyncScope();
+            await using var scope = _scopeFactory.CreateTenantScope(message.TenantId ?? Guid.Empty, message.ActorName, message.ActorUserId);
             var services = scope.ServiceProvider;
-            services.GetRequiredService<ICurrentTenantService>().SetTenant(message.TenantId ?? Guid.Empty);
-            services.GetRequiredService<IBackgroundExecutionContext>().SetActor(message.ActorUserId, message.ActorName);
 
             var handler = services.GetServices(handlerType).First(h => HandlerName(h!) == handlerName)!;
             var context = services.GetRequiredService<ApplicationDbContext>();

@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using System.Globalization;
 using System.Reflection;
+using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance;
@@ -49,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<CampaignLauncher>();
         services.AddScoped<AppointmentReminderPlanner>();
         services.AddScoped<OutgoingMessageSender>();
+        services.AddScoped<AppointmentNotices>();
 
         // Durable handlers of domain events, run by the outbox dispatcher (one registration per event type).
         foreach (var type in assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false }))

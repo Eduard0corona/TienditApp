@@ -4,7 +4,12 @@ namespace FoodParkDigital.Domain.Messaging.Enums;
 public enum MessagePurpose
 {
     Campaign = 0,
-    AppointmentReminder = 1
+    AppointmentReminder = 1,
+    /// <summary>
+    /// An appointment was booked, moved, confirmed or cancelled. Only queued messages use it (no templates), and an
+    /// opt-out does not stop it: like an order notice, the customer asked for that appointment.
+    /// </summary>
+    AppointmentNotice = 2
 }
 
 public enum OutgoingMessageStatus

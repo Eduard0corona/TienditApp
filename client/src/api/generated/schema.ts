@@ -9301,7 +9301,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        MessagePurpose: 0 | 1;
+        MessagePurpose: 0 | 1 | 2;
         MessageTemplateDto: {
             /** Format: uuid */
             id: string;

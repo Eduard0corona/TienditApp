@@ -6,7 +6,6 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Appointments.Commands;
 
@@ -46,17 +45,17 @@ public class UpdateAppointmentCommandValidator : AbstractValidator<UpdateAppoint
 public class UpdateAppointmentCommandHandler : IRequestHandler<UpdateAppointmentCommand, Result<AppointmentDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IWhatsAppService _whatsAppService;
-    private readonly ILogger<UpdateAppointmentCommandHandler> _logger;
+    private readonly AppointmentNotices _notices;
+    private readonly IOutgoingMessageSignal? _signal;
 
     public UpdateAppointmentCommandHandler(
         IApplicationDbContext context,
-        IWhatsAppService whatsAppService,
-        ILogger<UpdateAppointmentCommandHandler> logger)
+        AppointmentNotices notices,
+        IOutgoingMessageSignal? signal = null)
     {
         _context = context;
-        _whatsAppService = whatsAppService;
-        _logger = logger;
+        _notices = notices;
+        _signal = signal;
     }
 
     public async Task<Result<AppointmentDto>> Handle(UpdateAppointmentCommand request, CancellationToken cancellationToken)
@@ -87,12 +86,12 @@ public class UpdateAppointmentCommandHandler : IRequestHandler<UpdateAppointment
             request.Notes,
             request.ServiceProductId,
             request.StaffUserId);
-        await _context.SaveChangesAsync(cancellationToken);
-
         // The reminder already queued for the old time is skipped when it is due (it checks the time) and the
         // planner queues one for the new time.
-        if (rescheduled)
-            await AppointmentNotifier.NotifyRescheduledAsync(_context, _whatsAppService, _logger, appointment, cancellationToken);
+        var noticeQueued = rescheduled && await _notices.QueueRescheduledAsync(appointment, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+        if (noticeQueued)
+            _signal?.Notify();
 
         return Result.Success(AppointmentDto.From(appointment));
     }

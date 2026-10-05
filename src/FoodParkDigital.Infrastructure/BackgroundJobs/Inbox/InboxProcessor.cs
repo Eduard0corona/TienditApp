@@ -102,9 +102,9 @@ public sealed class InboxProcessor
         string? failure;
         try
         {
-            await using var scope = _scopeFactory.CreateAsyncScope();
+            // No business yet: the processor finds it from the delivery and works in that business's scope.
+            await using var scope = _scopeFactory.CreateSystemScope(WebhookActor);
             var services = scope.ServiceProvider;
-            services.GetRequiredService<IBackgroundExecutionContext>().SetActor(null, WebhookActor);
             var outcome = message.Source switch
             {
                 WebhookSources.WhatsApp => await services.GetRequiredService<WhatsAppWebhookProcessor>()

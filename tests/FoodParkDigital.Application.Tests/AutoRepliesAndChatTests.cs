@@ -193,6 +193,7 @@ public class AutoRepliesAndChatTests
         SalesTestFixture fixture, FakeWhatsApp whatsApp, Guid tenantId, string messageId, string body, bool isMedia = false)
         => new ProcessInboundMessageCommandHandler(
                 fixture.Context,
+                fixture.TenantService,
                 new FixedReply(),
                 whatsApp,
                 new Notifications(),

@@ -63,6 +63,9 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
     /// </summary>
     public void SetTenant(Guid tenantId) => _tenantService.SetTenant(tenantId);
 
+    /// <summary>The tenant of every context, for code under test that checks the business in scope.</summary>
+    public ICurrentTenantService TenantService => _tenantService;
+
     public ValueTask DisposeAsync() => _connection.DisposeAsync();
 
     private ApplicationDbContext Create(params IInterceptor[] interceptors)

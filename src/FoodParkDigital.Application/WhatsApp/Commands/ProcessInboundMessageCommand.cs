@@ -33,6 +33,7 @@ public class ProcessInboundMessageCommandHandler
     public const string DuplicateMessageError = "Mensaje ya procesado.";
 
     private readonly IApplicationDbContext _context;
+    private readonly ICurrentTenantService _tenant;
     private readonly IAiAgentAutoReplyService _aiAgentAutoReplyService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IWhatsAppNotificationService _notificationService;
@@ -42,6 +43,7 @@ public class ProcessInboundMessageCommandHandler
 
     public ProcessInboundMessageCommandHandler(
         IApplicationDbContext context,
+        ICurrentTenantService tenant,
         IAiAgentAutoReplyService aiAgentAutoReplyService,
         IWhatsAppService whatsAppService,
         IWhatsAppNotificationService notificationService,
@@ -50,17 +52,22 @@ public class ProcessInboundMessageCommandHandler
         IDateTimeProvider? clock = null)
     {
         _context = context;
+        _tenant = tenant;
         _aiAgentAutoReplyService = aiAgentAutoReplyService;
         _whatsAppService = whatsAppService;
         _notificationService = notificationService;
         _logger = logger;
         _clock = clock ?? SystemClock.Instance;
-        _consent = consent ?? new MessagingConsentService(context, _clock);
+        _consent = consent ?? new MessagingConsentService(context, tenant, _clock);
     }
 
     public async Task<Result<ChatMessageDto>> Handle(
         ProcessInboundMessageCommand request, CancellationToken cancellationToken)
     {
+        // The webhook processes each business's messages in that business's scope; the filters rely on it.
+        if (request.TenantId != _tenant.TenantId)
+            throw new InvalidOperationException("An inbound message is processed in the scope of the business it was sent to.");
+
         // Dedup: check if message already processed
         if (await IsAlreadyStoredAsync(request.ExternalMessageId, cancellationToken))
             return Result.Failure<ChatMessageDto>(DuplicateMessageError);
@@ -167,7 +174,6 @@ public class ProcessInboundMessageCommandHandler
         }
     }
 
-    // Webhooks run without tenant context, so the tenant the delivery was routed to is filtered explicitly.
     // WhatsApp reports Mexican mobiles as +521…; a conversation the business started with +52… is the same one.
     private async Task<WhatsAppConversation?> FindConversationAsync(
         ProcessInboundMessageCommand request, CancellationToken cancellationToken)
@@ -175,7 +181,6 @@ public class ProcessInboundMessageCommandHandler
         var variants = MessagingPhone.Variants(request.FromPhone).Append(request.FromPhone).Distinct().ToList();
         // At most one conversation per form of the number: the exact one wins, then the most recent.
         var candidates = await _context.WhatsAppConversations
-            .IgnoreQueryFilters()
             .Where(c => c.TenantId == request.TenantId && variants.Contains(c.CustomerPhone))
             .ToListAsync(cancellationToken);
         return candidates
@@ -184,10 +189,9 @@ public class ProcessInboundMessageCommandHandler
             .FirstOrDefault();
     }
 
-    // Webhooks run without tenant context; Meta message ids are globally unique.
+    // Meta message ids are globally unique; a business only ever receives its own.
     private Task<bool> IsAlreadyStoredAsync(string externalMessageId, CancellationToken cancellationToken)
         => _context.WhatsAppMessages
-            .IgnoreQueryFilters()
             .AnyAsync(m => m.ExternalMessageId == externalMessageId, cancellationToken);
 
     /// <summary>

@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Finance.Commands;
+using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -38,7 +39,7 @@ public class CashTransactionCommandTests
         await context.SaveChangesAsync();
         var clock = new FixedClock(new DateTimeOffset(2026, 10, 1, 18, 30, 0, TimeSpan.Zero));
 
-        var result = await new AddCashTransactionCommandHandler(context, clock).Handle(new AddCashTransactionCommand
+        var result = await Handler(context, tenantId, clock).Handle(new AddCashTransactionCommand
         {
             CashSessionId = session.Id,
             TransactionType = CashTransactionType.Expense,
@@ -62,7 +63,7 @@ public class CashTransactionCommandTests
         context.CashSessions.Add(session);
         await context.SaveChangesAsync();
 
-        var result = await new AddCashTransactionCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow)).Handle(
+        var result = await Handler(context, tenantId, new FixedClock(DateTimeOffset.UtcNow)).Handle(
             new AddCashTransactionCommand
             {
                 CashSessionId = session.Id,
@@ -77,6 +78,28 @@ public class CashTransactionCommandTests
     }
 
     [Fact]
+    public async Task Handle_ShouldLetOnlyTheCashierOrAManagerMoveADrawer()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var context = CreateContext(tenantId);
+        var ana = Guid.NewGuid();
+        var session = new CashSession(tenantId, DateTimeOffset.UtcNow.AddHours(-1), "Ana", 500m, openedByUserId: ana);
+        context.CashSessions.Add(session);
+        await context.SaveChangesAsync();
+        var expense = new AddCashTransactionCommand { CashSessionId = session.Id, TransactionType = CashTransactionType.Expense, Amount = 50m };
+        var clock = new FixedClock(DateTimeOffset.UtcNow);
+
+        var byAnotherCashier = await Handler(context, tenantId, clock, new User(Guid.NewGuid(), TenantRole: "Staff")).Handle(expense, CancellationToken.None);
+        var byTheCashier = await Handler(context, tenantId, clock, new User(ana, TenantRole: "Staff")).Handle(expense, CancellationToken.None);
+        var byTheOwner = await Handler(context, tenantId, clock, new User(Guid.NewGuid(), TenantRole: "Owner")).Handle(expense, CancellationToken.None);
+
+        Assert.Equal(AddCashTransactionCommandHandler.NotYourDrawerMessage, byAnotherCashier.Error);
+        Assert.True(byTheCashier.IsSuccess, byTheCashier.Error);
+        Assert.True(byTheOwner.IsSuccess, byTheOwner.Error);
+        Assert.Equal(400m, (await context.CashSessions.Include(x => x.Transactions).SingleAsync()).ExpectedBalance);
+    }
+
+    [Fact]
     public void CloseValidator_ShouldRejectNegativeClosingAmount()
     {
         var result = new CloseCashSessionCommandValidator().Validate(new CloseCashSessionCommand
@@ -88,6 +111,16 @@ public class CashTransactionCommandTests
         Assert.False(result.IsValid);
     }
 
+    /// <summary>The handler as a request builds it: the person and their access in the context's business.</summary>
+    private static AddCashTransactionCommandHandler Handler(
+        ApplicationDbContext context, Guid tenantId, IDateTimeProvider clock, User? user = null)
+    {
+        user ??= new User(Guid.NewGuid(), TenantRole: "Owner");
+        var tenant = new TestCurrentTenantService();
+        tenant.SetTenant(tenantId);
+        return new AddCashTransactionCommandHandler(context, clock, user, TestAccess.For(user, tenant));
+    }
+
     private static ApplicationDbContext CreateContext(Guid tenantId)
     {
         var tenantService = new TestCurrentTenantService();
@@ -96,6 +129,15 @@ public class CashTransactionCommandTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         return new ApplicationDbContext(options, tenantService, new NullMediator());
+    }
+
+    private sealed record User(Guid Id, string? TenantRole) : ICurrentUserService
+    {
+        public string? UserId => Id.ToString();
+        public string? UserName => "cajero";
+        public string? Role => "STAFF";
+        public IReadOnlyCollection<string> Permissions => ["ManageCash"];
+        public Guid? TenantId => null;
     }
 
     private sealed class FixedClock(DateTimeOffset utcNow) : IDateTimeProvider

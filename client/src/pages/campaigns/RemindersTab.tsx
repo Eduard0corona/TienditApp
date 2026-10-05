@@ -13,7 +13,56 @@ import {
 import { formatDateTime } from '../../utils/dates';
 import { MESSAGE_STATUS } from './campaignLabels';
 
-/** Appointment reminders by WhatsApp: when they go out, with which text, and what happened to each. */
+function MessageHistory({ title, hint, empty, history }: {
+  title: string;
+  hint?: string;
+  empty: string;
+  history: PaginatedList<OutgoingMessageDto> | null;
+}) {
+  return (
+    <div className="card">
+      <div className="card-body">
+        <h4 className={`header-title ${hint ? 'mb-1' : 'mb-3'}`}>{title}</h4>
+        {hint && <p className="text-muted small mb-3">{hint}</p>}
+        {!history || history.items.length === 0 ? (
+          <p className="text-muted mb-0">{empty}</p>
+        ) : (
+          <div className="table-responsive">
+            <table className="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Estado</th>
+                  <th>Mensaje</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.items.map((message) => (
+                  <tr key={message.id}>
+                    <td>
+                      {message.recipientName ?? 'Cliente'}
+                      <div className="small text-muted">{formatDateTime(message.sentAt ?? message.createdAt)}</div>
+                    </td>
+                    <td>
+                      <span className={MESSAGE_STATUS[message.status].className}>{MESSAGE_STATUS[message.status].label}</span>
+                      {message.lastError && <div className="small text-muted">{message.lastError}</div>}
+                    </td>
+                    <td className="small" style={{ maxWidth: 380 }}>{message.body}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Appointment reminders by WhatsApp: when they go out, with which text, and what happened to each; below them, the
+ * notices sent when an appointment is booked, moved, confirmed or cancelled.
+ */
 export default function RemindersTab() {
   const toast = useToast();
   const [settings, setSettings] = useState<MessagingSettingsDto | null>(null);
@@ -24,17 +73,20 @@ export default function RemindersTab() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [history, setHistory] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
+  const [notices, setNotices] = useState<PaginatedList<OutgoingMessageDto> | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [{ data: current }, { data: list }, { data: sent }] = await Promise.all([
+      const [{ data: current }, { data: list }, { data: sent }, { data: sentNotices }] = await Promise.all([
         messagingApi.getSettings(),
         messagingApi.getTemplates({ purpose: MessagePurpose.AppointmentReminder, includeInactive: false }),
         messagingApi.getMessages({ purpose: MessagePurpose.AppointmentReminder, pageNumber: 1, pageSize: 20 }),
+        messagingApi.getMessages({ purpose: MessagePurpose.AppointmentNotice, pageNumber: 1, pageSize: 20 }),
       ]);
       setSettings(current);
       setTemplates(list);
       setHistory(sent);
+      setNotices(sentNotices);
       setEnabled(current.appointmentRemindersEnabled);
       setHours(String(current.appointmentReminderHoursBefore));
       setTemplateId(current.appointmentReminderTemplateId ?? '');
@@ -119,41 +171,13 @@ export default function RemindersTab() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-body">
-          <h4 className="header-title mb-3">Últimos recordatorios</h4>
-          {!history || history.items.length === 0 ? (
-            <p className="text-muted mb-0">Todavía no se ha enviado ningún recordatorio.</p>
-          ) : (
-            <div className="table-responsive">
-              <table className="table table-sm align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th>Estado</th>
-                    <th>Mensaje</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.items.map((message) => (
-                    <tr key={message.id}>
-                      <td>
-                        {message.recipientName ?? 'Cliente'}
-                        <div className="small text-muted">{formatDateTime(message.sentAt ?? message.createdAt)}</div>
-                      </td>
-                      <td>
-                        <span className={MESSAGE_STATUS[message.status].className}>{MESSAGE_STATUS[message.status].label}</span>
-                        {message.lastError && <div className="small text-muted">{message.lastError}</div>}
-                      </td>
-                      <td className="small" style={{ maxWidth: 380 }}>{message.body}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      <MessageHistory title="Últimos recordatorios" empty="Todavía no se ha enviado ningún recordatorio." history={history} />
+      <MessageHistory
+        title="Avisos de citas"
+        hint="Salen solos al agendar, reprogramar, confirmar o cancelar una cita, aunque el cliente haya pedido no recibir promociones. Son texto libre: WhatsApp solo los entrega a quien escribió en las últimas 24 horas."
+        empty="Todavía no se ha enviado ningún aviso."
+        history={notices}
+      />
     </>
   );
 }

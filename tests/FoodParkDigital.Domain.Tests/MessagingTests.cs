@@ -36,6 +36,16 @@ public class MessagingTests
         Assert.Equal(MessageTemplate.DefaultLanguageCode, reminder.LanguageCode);
     }
 
+    [Fact]
+    public void AppointmentNotices_ShouldNotHaveTemplates()
+    {
+        // The system writes them with the whole appointment; a template could leave the day or time out.
+        var notice = Assert.Throws<DomainException>(() =>
+            new MessageTemplate(Guid.NewGuid(), "Aviso", MessagePurpose.AppointmentNotice, "Hola {nombre}"));
+
+        Assert.Equal(MessageTemplate.TemplatePurposeError, notice.Message);
+    }
+
     [Theory]
     [InlineData("Recordatorio Cita")]
     [InlineData("cita-1")]

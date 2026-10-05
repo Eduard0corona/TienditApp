@@ -424,6 +424,8 @@ public class ProcessInboundMessageCommandTests
             var otherTenant = new Tenant("Otro Tenant", "otro-tenant", BusinessType.Retail, "otro@tenant.com");
             context.Tenants.AddRange(tenant, otherTenant);
             await context.SaveChangesAsync();
+            // The webhook processes each message in the scope of the business it was sent to.
+            database.SetTenant(tenant.Id);
 
             return new TestFixture(database, context, tenant.Id, otherTenant.Id);
         }
@@ -431,6 +433,7 @@ public class ProcessInboundMessageCommandTests
         public ProcessInboundMessageCommandHandler CreateHandler()
             => new(
                 Context,
+                Database.TenantService,
                 AutoReply,
                 WhatsApp,
                 Notifier,

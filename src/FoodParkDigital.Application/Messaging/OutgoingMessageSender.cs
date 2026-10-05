@@ -22,13 +22,18 @@ public sealed record OutgoingSendOutcome(OutgoingSendDecision Decision, string? 
 
 /// <summary>
 /// Sends one queued message in its business's context, checking first that it still applies: the customer has
-/// not opted out, the campaign was not cancelled and the appointment did not change. The worker records the
-/// outcome and retries transient failures.
+/// not opted out (campaigns and reminders), the campaign was not cancelled, the appointment did not change and no
+/// newer notice of the same appointment is waiting. The worker records the outcome and retries transient failures.
 /// </summary>
 public sealed class OutgoingMessageSender
 {
     public const string OptedOutReason = "El cliente pidió no recibir mensajes.";
     public const string AppointmentChangedReason = "La cita cambió, se canceló o ya pasó.";
+    public const string NoticeSupersededReason = "Hay un aviso más reciente de la misma cita.";
+    public const string NoticeExpiredReason = "El aviso esperó demasiado para enviarse.";
+
+    /// <summary>A notice that could not go out in this time (the worker was stopped) is no longer news.</summary>
+    public static readonly TimeSpan NoticeLifetime = TimeSpan.FromHours(24);
 
     private readonly IApplicationDbContext _context;
     private readonly IWhatsAppService _whatsApp;
@@ -74,7 +79,26 @@ public sealed class OutgoingMessageSender
             }
         }
 
-        if (await _consent.IsOptedOutAsync(message.TenantId, message.Phone, cancellationToken))
+        if (message.Purpose == MessagePurpose.AppointmentNotice)
+        {
+            if (message.CreatedAt < _clock.UtcNow - NoticeLifetime)
+                return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: NoticeExpiredReason);
+            if (message.AppointmentId is null)
+                return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: AppointmentChangedReason);
+
+            // Each notice tells the whole appointment: a newer one makes this one stale (a retry must not arrive last).
+            var superseded = await _context.OutgoingMessages
+                .AsNoTracking()
+                .AnyAsync(m => m.AppointmentId == message.AppointmentId
+                    && m.Purpose == MessagePurpose.AppointmentNotice
+                    && m.CreatedAt > message.CreatedAt, cancellationToken);
+            if (superseded)
+                return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: NoticeSupersededReason);
+        }
+
+        // An opt-out stops promotions and reminders; notices of the customer's own orders and appointments still go out.
+        if (message.Purpose != MessagePurpose.AppointmentNotice
+            && await _consent.IsOptedOutAsync(message.TenantId, message.Phone, cancellationToken))
             return new OutgoingSendOutcome(OutgoingSendDecision.Skipped, Reason: OptedOutReason);
 
         var result = message.ProviderTemplateName is { } templateName

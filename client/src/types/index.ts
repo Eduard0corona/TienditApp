@@ -1206,9 +1206,11 @@ export interface AuditLogDto {
 
 // ==================== Messaging (campaigns, reminders, opt-outs) ====================
 
+// AppointmentNotice: booked, moved, confirmed or cancelled; queued by the system, it has no templates.
 export const MessagePurpose = {
   Campaign: 0,
   AppointmentReminder: 1,
+  AppointmentNotice: 2,
 } as const;
 export type MessagePurpose = (typeof MessagePurpose)[keyof typeof MessagePurpose];
 

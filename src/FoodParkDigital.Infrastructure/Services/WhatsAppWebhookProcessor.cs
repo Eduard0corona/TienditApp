@@ -3,8 +3,10 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.WhatsApp.Commands;
 using FoodParkDigital.Domain.WhatsApp.Enums;
+using FoodParkDigital.Infrastructure.BackgroundJobs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -15,28 +17,29 @@ namespace FoodParkDigital.Infrastructure.Services;
 public sealed record WhatsAppWebhookOutcome(int FailedItems, bool InvalidPayload);
 
 /// <summary>
-/// Reads a Meta Cloud API webhook delivery (already authenticated and stored in the inbox): routes each
-/// inbound message to the tenant that owns its <c>phone_number_id</c> and applies delivery statuses.
+/// Reads a Meta Cloud API webhook delivery (already authenticated and stored in the inbox). It finds the business
+/// that owns each <c>phone_number_id</c> (the one read across businesses) and processes that part of the delivery
+/// in the business's own scope: its inbound messages and the delivery statuses of what it sent, with the tenant
+/// filter on as in one of its requests.
 /// </summary>
 public sealed class WhatsAppWebhookProcessor
 {
-    private readonly ISender _sender;
+    private const string WebhookActor = "whatsapp-webhook";
+
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IApplicationDbContext _context;
     private readonly ILogger<WhatsAppWebhookProcessor> _logger;
-    private readonly IWhatsAppNotificationService? _notifications;
     private readonly bool _logSensitiveData;
 
     public WhatsAppWebhookProcessor(
-        ISender sender,
+        IServiceScopeFactory scopeFactory,
         IApplicationDbContext context,
         IHostEnvironment environment,
-        ILogger<WhatsAppWebhookProcessor> logger,
-        IWhatsAppNotificationService? notifications = null)
+        ILogger<WhatsAppWebhookProcessor> logger)
     {
-        _sender = sender;
+        _scopeFactory = scopeFactory;
         _context = context;
         _logger = logger;
-        _notifications = notifications;
         // Database errors can quote the sender's phone number: only Development logs them in full.
         _logSensitiveData = environment.IsDevelopment();
     }
@@ -94,8 +97,11 @@ public sealed class WhatsAppWebhookProcessor
                         continue;
                     }
 
-                    failed += await ProcessMessagesAsync(value, tenantId.Value, TryGetProfileName(value));
-                    failed += await ProcessStatusesAsync(value, tenantId.Value, cancellationToken);
+                    // Each business's part in its own scope (and DbContext): its filters apply, and a failure leaves
+                    // nothing half-tracked for another business of the same delivery.
+                    await using var scope = _scopeFactory.CreateTenantScope(tenantId.Value, WebhookActor);
+                    failed += await ProcessMessagesAsync(scope.ServiceProvider, value, tenantId.Value, TryGetProfileName(value));
+                    failed += await ProcessStatusesAsync(scope.ServiceProvider, value, tenantId.Value, cancellationToken);
                 }
             }
 
@@ -104,11 +110,12 @@ public sealed class WhatsAppWebhookProcessor
     }
 
     /// <returns>How many messages could not be stored.</returns>
-    private async Task<int> ProcessMessagesAsync(JsonElement value, Guid tenantId, string? profileName)
+    private async Task<int> ProcessMessagesAsync(IServiceProvider services, JsonElement value, Guid tenantId, string? profileName)
     {
         if (!value.TryGetProperty("messages", out var messages) || messages.ValueKind != JsonValueKind.Array)
             return 0;
 
+        var sender = services.GetRequiredService<ISender>();
         var failed = 0;
         foreach (var msg in messages.EnumerateArray())
         {
@@ -123,7 +130,7 @@ public sealed class WhatsAppWebhookProcessor
             // is allowed to finish (auto-reply included): a retry would be deduplicated by its id.
             try
             {
-                await _sender.Send(new ProcessInboundMessageCommand
+                await sender.Send(new ProcessInboundMessageCommand
                 {
                     TenantId = tenantId,
                     FromPhone = from.StartsWith('+') ? from : $"+{from}",
@@ -148,11 +155,14 @@ public sealed class WhatsAppWebhookProcessor
     }
 
     /// <returns>1 when the statuses could not be saved, 0 otherwise.</returns>
-    private async Task<int> ProcessStatusesAsync(JsonElement value, Guid tenantId, CancellationToken cancellationToken)
+    private async Task<int> ProcessStatusesAsync(
+        IServiceProvider services, JsonElement value, Guid tenantId, CancellationToken cancellationToken)
     {
         if (!value.TryGetProperty("statuses", out var statuses) || statuses.ValueKind != JsonValueKind.Array)
             return 0;
 
+        var context = services.GetRequiredService<IApplicationDbContext>();
+        var notifications = services.GetService<IWhatsAppNotificationService>();
         try
         {
             var anyUpdated = false;
@@ -167,9 +177,8 @@ public sealed class WhatsAppWebhookProcessor
                 if (!TryMapStatus(statusRaw, out var mappedStatus))
                     continue;
 
-                // Provider message ids are unique across tenants (filtered unique index).
-                var message = await _context.WhatsAppMessages
-                    .IgnoreQueryFilters()
+                // Only this business's messages: a status reported to its number for someone else's id changes nothing.
+                var message = await context.WhatsAppMessages
                     .FirstOrDefaultAsync(m => m.ExternalMessageId == externalId, cancellationToken);
                 if (message is not null)
                 {
@@ -178,9 +187,8 @@ public sealed class WhatsAppWebhookProcessor
                     anyUpdated = true;
                 }
 
-                // Campaign and reminder messages keep their own delivery result.
-                var outgoing = await _context.OutgoingMessages
-                    .IgnoreQueryFilters()
+                // Campaign, reminder and notice messages keep their own delivery result.
+                var outgoing = await context.OutgoingMessages
                     .FirstOrDefaultAsync(m => m.ProviderMessageId == externalId, cancellationToken);
                 if (outgoing is not null)
                 {
@@ -203,16 +211,16 @@ public sealed class WhatsAppWebhookProcessor
             }
 
             if (anyUpdated)
-                await _context.SaveChangesAsync(cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
 
             // The chat shows the ticks as they arrive; a lost notification only waits for the next reload.
-            if (_notifications is not null)
+            if (notifications is not null)
             {
                 foreach (var message in chatMessages.DistinctBy(m => m.Id))
                 {
                     try
                     {
-                        await _notifications.NotifyMessageStatus(tenantId, message.ConversationId, message.Id, message.Status.ToString());
+                        await notifications.NotifyMessageStatus(tenantId, message.ConversationId, message.Id, message.Status.ToString());
                     }
                     catch (Exception ex)
                     {

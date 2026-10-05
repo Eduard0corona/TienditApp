@@ -45,9 +45,10 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 
 ## Mensajería
 
-- Quien escribe BAJA (o STOP) deja de recibir campañas y recordatorios; con ALTA vuelve. La baja no se borra al volver: se conserva cuándo y cómo se eligió. Los avisos de sus pedidos siguen llegando.
+- Quien escribe BAJA (o STOP) deja de recibir campañas y recordatorios; con ALTA vuelve. La baja no se borra al volver: se conserva cuándo y cómo se eligió. Los avisos de sus pedidos y de sus citas siguen llegando.
 - Las bajas se revisan al momento de enviar cada mensaje, no solo al elegir destinatarios.
 - Un recordatorio no se envía si la cita cambió de hora, se canceló, se cerró o ya empezó.
+- Agendar, reprogramar, confirmar o cancelar una cita encola un aviso al cliente con la cita completa, en el mismo guardado; si llega uno más reciente de la misma cita antes de enviarse, el anterior se omite.
 - Una campaña llega como máximo a 5,000 clientes y no se envía dos veces al mismo número.
 
 ## Guardrails

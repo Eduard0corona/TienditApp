@@ -50,14 +50,15 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly ICurrentUserService? _currentUserService;
-    private readonly CurrentAccessContext? _access;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly CurrentAccessContext _access;
 
+    // Both are required: without them the drawer check below cannot run, and the movement must not go in unchecked.
     public AddCashTransactionCommandHandler(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
-        ICurrentUserService? currentUserService = null,
-        CurrentAccessContext? access = null)
+        ICurrentUserService currentUserService,
+        CurrentAccessContext access)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
@@ -73,9 +74,9 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
             ?? throw new EntityNotFoundException("CashSession", request.CashSessionId);
 
         // An expense or withdrawal changes what a cashier must count: only they or an admin may record it.
-        if (session.OpenedByUserId is not null && _currentUserService is not null
+        if (session.OpenedByUserId is not null
             && !session.IsOwnedBy(CashSessionMapping.ParseUserId(_currentUserService.UserId))
-            && !(_access is not null && await _access.IsTenantManagerAsync(cancellationToken)))
+            && !await _access.IsTenantManagerAsync(cancellationToken))
         {
             return Result.Failure<CashTransactionDto>(NotYourDrawerMessage);
         }
