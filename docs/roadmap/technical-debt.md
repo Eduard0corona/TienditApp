@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-05 tras las Fases 0 a 5 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-05 tras las Fases 0 a 6 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -191,6 +191,17 @@ Pendientes detectados en la Fase 3:
 - Versiones de NuGet centralizadas en `Directory.Packages.props` (Central Package Management).
 - Azure SignalR Service opcional para varias instancias (`Azure__SignalR__ConnectionString`, ver [despliegue](../development/deploy-azure.md)).
 - Orden de compra al proveedor por WhatsApp (con el teléfono del proveedor y la unidad de cada insumo; reenviarla pide solo lo pendiente) y corte de caja por WhatsApp desde Mi caja al cerrar, Turnos y Corte del día.
+
+## Resuelto el 2026-10-05 (Fase 6: la propuesta de pantallas y la columna asíncrona completa)
+
+- Menú de la propuesta: Catálogo, Inventario, Clientes y Reportes son secciones con pestañas bajo el título, Configuración tiene submenú y la búsqueda global encuentra cada pestaña.
+- Avisos reales en la campana y "Requiere atención" en Inicio (`GET /api/v1/dashboard/attention`): pedidos en línea por confirmar, insumos bajos, cajas abiertas desde ayer, mensajes que fallaron, chats sin leer, servicios atrasados y citas por confirmar, según los permisos de cada quien. El estado de la caja está siempre a la vista en el encabezado.
+- Fechas, "hoy" y los rangos de los reportes en la zona horaria del negocio, que se elige en Mi negocio (cinco zonas de México).
+- La búsqueda de Inventario (movimientos y kardex), Compras, Mi caja y Actividad va al servidor y recorre todas las páginas.
+- Compras: el costo del insumo se precarga al agregar la línea, y una compra que llegó en parte se puede cerrar sin esperar el resto, con motivo y lo que no llegó (migración `AddPurchaseOrderClosing`).
+- Accesibilidad verificada por el lint (`eslint-plugin-jsx-a11y`): etiquetas ligadas a su campo y controles con nombre. WhatsApp sin jerga en la configuración.
+- Avisos de citas por la cola de mensajería, guardados con el cambio y enviados con reintentos; un solo cliente de la API de Meta (`WhatsAppCloudClient`) para los mensajes de cada negocio y los códigos de la plataforma; alcance de negocio explícito (`BackgroundScopes`) en todos los workers y en el webhook, que procesa cada parte de la entrega con el filtro de su negocio.
+- Registrar un movimiento en la caja de otra persona exige siempre ser dueño o administrador: el caso de uso ya no omite la revisión si le faltan dependencias.
 
 ## Decisiones humanas pendientes
 
