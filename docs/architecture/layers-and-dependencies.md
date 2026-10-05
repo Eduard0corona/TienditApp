@@ -45,6 +45,8 @@ Mantiene páginas, componentes, hooks, contextos, tipos y una única capa `src/a
 
 ## Guardrails de revisión
 
+Desde la Fase 4F, `tests/FoodParkDigital.WebApi.Tests/ArchitectureTests.cs` verifica en CI lo que se puede comprobar sobre los ensamblados compilados: las capas solo dependen hacia adentro, Domain no conoce persistencia, web ni proveedores (salvo `MediatR.Contracts` e Identity), Application no conoce HTTP ni proveedores de base de datos, los handlers viven en Application, los controllers no reciben el DbContext (excepción conocida: `WhatsAppWebhookController`), toda entidad con `TenantId` es `ITenantScoped` y tiene el filtro de negocio (excepto `TenantSettings` y `WhatsAppConfig`, que se leen por `TenantId` antes de haber negocio en contexto), y una entidad nueva sin `TenantId` debe clasificarse a propósito (plataforma, cuentas o hija de un agregado filtrado). Una excepción nueva se agrega a su lista con la razón.
+
 Rechaza un cambio si:
 
 - añade referencia ascendente prohibida;
