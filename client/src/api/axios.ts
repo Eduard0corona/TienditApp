@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isFreshForConnection, readTokenClaims } from './tokenClaims';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -31,23 +32,6 @@ const emitSessionEvent = (event: SessionEvent) => {
   sessionListeners.forEach((listener) => listener(event));
 };
 
-interface TokenClaims {
-  exp?: number;
-  tenant_id?: string;
-}
-
-// Reads the payload without validating it: only used to schedule refreshes and detect tenant changes.
-function readTokenClaims(token: string | null): TokenClaims | null {
-  if (!token) return null;
-  try {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-    return JSON.parse(atob(padded)) as TokenClaims;
-  } catch {
-    return null;
-  }
-}
-
 // Refresh tokens rotate on every use: two tabs refreshing with the same cookie made one of them fail and
 // end the session. The Web Locks API serializes refreshes across the tabs of this origin.
 const REFRESH_LOCK_NAME = 'fpd-refresh-token';
@@ -57,13 +41,14 @@ const REFRESH_RETRY_DELAYS_MS = [1000, 2000, 4000];
 const MAX_RETRY_AFTER_MS = 10_000;
 
 /**
- * A refresh answered 429 (too many requests, e.g. many devices of a business behind one IP) or 503 is worth
- * waiting for: it is retried with backoff (or the Retry-After the server sends) instead of failing the request.
+ * A refresh answered 429 (too many requests, e.g. many devices of a business behind one IP), 503, or 409 (the session
+ * was renewed at that moment by another request, whose answer brought the new cookie) is worth waiting for: it is
+ * retried with backoff (or the Retry-After the server sends) instead of failing the request.
  */
 function refreshRetryDelay(error: unknown, attempt: number): number | null {
   if (!axios.isAxiosError(error) || attempt >= REFRESH_RETRY_DELAYS_MS.length) return null;
   const status = error.response?.status;
-  if (status !== 429 && status !== 503) return null;
+  if (status !== 409 && status !== 429 && status !== 503) return null;
   const retryAfterSeconds = Number(error.response?.headers?.['retry-after']);
   return Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
     ? Math.min(retryAfterSeconds * 1000, MAX_RETRY_AFTER_MS)
@@ -129,10 +114,12 @@ export function refreshAccessToken(): Promise<string> {
   return refreshInFlight;
 }
 
-/** Current token, refreshed first when it expires within 30 seconds (SignalR (re)connections). */
+/**
+ * Current token, refreshed first when it expires within 30 seconds or has no session (SignalR (re)connections, which
+ * cannot renew it on a 401 the way requests do).
+ */
 export async function getFreshAccessToken(): Promise<string | null> {
-  const expiresAt = readTokenClaims(accessToken)?.exp;
-  if (accessToken && expiresAt && expiresAt * 1000 - Date.now() > 30_000) {
+  if (accessToken && isFreshForConnection(accessToken, Date.now())) {
     return accessToken;
   }
 

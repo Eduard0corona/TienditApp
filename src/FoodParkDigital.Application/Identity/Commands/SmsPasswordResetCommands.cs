@@ -1,7 +1,9 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -94,16 +96,16 @@ public class ResetPasswordWithSmsCodeCommandHandler : IRequestHandler<ResetPassw
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
-    private readonly IJwtTokenService _jwtTokenService;
+    private readonly IDateTimeProvider _clock;
 
     public ResetPasswordWithSmsCodeCommandHandler(
         UserManager<ApplicationUser> userManager,
         IApplicationDbContext context,
-        IJwtTokenService jwtTokenService)
+        IDateTimeProvider clock)
     {
         _userManager = userManager;
         _context = context;
-        _jwtTokenService = jwtTokenService;
+        _clock = clock;
     }
 
     public async Task<Result> Handle(ResetPasswordWithSmsCodeCommand request, CancellationToken cancellationToken)
@@ -128,8 +130,10 @@ public class ResetPasswordWithSmsCodeCommandHandler : IRequestHandler<ResetPassw
             return Result.Failure(reset.ToErrorMessage());
 
         await AccountSecurity.UnlockAsync(_userManager, user);
-        // Like the reset by email: the sessions open with the old password end.
-        await _jwtTokenService.RevokeAllUserRefreshTokensAsync(user.Id);
+        // Like the reset by email: the sessions open with the old password end (the reset also changed the stamp
+        // their access tokens carry).
+        await UserSessions.EndAllAsync(
+            _context, user.Id, RefreshTokenRevocationReason.PasswordReset, _clock.UtcNow, cancellationToken);
         return Result.Success();
     }
 }

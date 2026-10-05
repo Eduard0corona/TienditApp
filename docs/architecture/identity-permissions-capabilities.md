@@ -36,7 +36,14 @@ Un negocio siempre tiene un tipo de venta (productos, servicios o alimentos), co
 
 En el cliente, `src/utils/access.ts` (`getAccess`) traduce la misma matriz (permiso, módulo y "administra") para el menú, las rutas (`AccessRoute`), la página de entrada (`getLandingPath`: administradores al Dashboard, el resto a la pantalla de su trabajo: Vender, Cocina o Taller) y los botones de acción. Es ayuda de navegación: la API sigue decidiendo.
 
-Cambiar de tenant rota el refresh token de la sesión (el anterior se revoca).
+Cambiar de tenant rota el refresh token de la sesión (el anterior se revoca) sin cambiar de sesión.
+
+Sesiones (Fase 8, `UserSessions` y `AccessTokenSessionValidator`):
+- Cada inicio de sesión (login, 2FA, registro, invitación aceptada) abre una sesión, cuyo id viaja en el access token (`session_id`) junto con una huella del security stamp.
+- Renovar reemplaza el refresh token dentro de la misma sesión.
+- Un token ya reemplazado que vuelve termina la sesión (`ReuseDetected`), salvo en los 10 segundos posteriores a su reemplazo, en los que responde 409 sin tokens.
+- `logout` termina la sesión. Cambiar o recuperar la contraseña termina todas las de la cuenta.
+- El evento `OnTokenValidated` del bearer rechaza el access token de una sesión terminada, de una cuenta inactiva o con otro security stamp.
 
 La verificación de teléfono identifica la cuenta por el `userId` que devuelve el registro: viaja en la URL de `/confirm-phone` (recargar ya no pierde el estado) y `POST /auth/resend-phone-confirmation` acepta `{ userId }` para reenviar el código (o un teléfono E.164), sin revelar si la cuenta existe y con el límite `auth`. El enlace del correo de confirmación abre la página `/confirm-email` de la app, que confirma contra `GET /auth/confirm-email` y, si el enlace venció o está incompleto, ofrece pedir uno nuevo.
 
@@ -114,7 +121,7 @@ Una persona puede ser dueña de un negocio y empleada en otro, con una sola cuen
 
 - `SUPER_ADMIN` tiene todos los permisos en cualquier negocio (no los módulos). `UpdateOwnerWhatsAppConfigCommand` (WhatsApp personal de la cuenta, sin negocio) todavía compara el rol de la cuenta en el handler.
 - La autorización por recurso (por ejemplo, cerrar solo la caja propia) sigue en los handlers, con la membresía de `CurrentAccessContext`.
-- Los access tokens no se pueden revocar antes de expirar (no se valida el security stamp) y los refresh tokens se guardan en texto plano, sin detección de reuso.
+- Una conexión SignalR ya abierta sigue hasta que vence su token aunque su sesión termine (los access tokens y las conexiones nuevas se rechazan al instante).
 - El login todavía distingue cuentas sin confirmar o bloqueadas (el bloqueo por intentos ya existe desde la Fase 4E).
 - La lista del equipo (`GET /employees`) es de dueños y admins: la agenda la usa para elegir quién atiende y el personal con `ManageAppointments` no la ve.
 - La matriz se prueba por caso de uso (`UseCaseRulesTests`, `AuthorizationBehaviorTests`) y la Fase 5 la comprobó contra la API con SQL Server (cocina, mesero y dueño); esa prueba de API no corre en CI.

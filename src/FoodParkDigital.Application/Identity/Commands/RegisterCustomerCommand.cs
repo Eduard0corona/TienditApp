@@ -112,11 +112,11 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         {
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
-                return Result.Failure<RefreshToken>(createResult.ToErrorMessage());
+                return Result.Failure<IssuedRefreshToken>(createResult.ToErrorMessage());
 
             var roleResult = await _userManager.AddToRoleAsync(user, "CUSTOMER");
             if (!roleResult.Succeeded)
-                return Result.Failure<RefreshToken>(roleResult.ToErrorMessage());
+                return Result.Failure<IssuedRefreshToken>(roleResult.ToErrorMessage());
 
             // While an unverified profile holds the number this account starts without one;
             // ConfirmPhoneCommand gives the number to whichever account proves it by SMS.
@@ -130,8 +130,9 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
                     request.LastName));
             }
 
-            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id);
-            _context.RefreshTokens.Add(sessionToken);
+            // The first session of the account, started with its registration.
+            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id, Guid.NewGuid());
+            _context.RefreshTokens.Add(sessionToken.Token);
             await _context.SaveChangesAsync(ct);
 
             return Result.Success(sessionToken);
@@ -148,13 +149,13 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         var phoneCode = await _userManager.GenerateChangePhoneNumberTokenAsync(user, request.PhoneNumber);
         await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(user);
         var refreshToken = registration.Value;
+        var accessToken = _jwtTokenService.GenerateAccessToken(user, refreshToken.Token.SessionId);
 
         return Result.Success(new AuthResponse
         {
             AccessToken = accessToken,
-            RefreshToken = refreshToken.Token,
+            RefreshToken = refreshToken.Value,
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
             RequiresTwoFactor = false,
             UserId = user.Id.ToString(),

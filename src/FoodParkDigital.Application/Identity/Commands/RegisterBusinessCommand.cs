@@ -166,11 +166,11 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
 
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
-                return Result.Failure<RefreshToken>(createResult.ToErrorMessage());
+                return Result.Failure<IssuedRefreshToken>(createResult.ToErrorMessage());
 
             var roleResult = await _userManager.AddToRoleAsync(user, "TENANT_ADMIN");
             if (!roleResult.Succeeded)
-                return Result.Failure<RefreshToken>(roleResult.ToErrorMessage());
+                return Result.Failure<IssuedRefreshToken>(roleResult.ToErrorMessage());
 
             _context.TenantUsers.Add(new TenantUser(
                 tenantId: tenant.Id,
@@ -178,8 +178,9 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
                 role: TenantUserRole.Owner,
                 status: TenantUserStatus.Active));
 
-            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id);
-            _context.RefreshTokens.Add(sessionToken);
+            // The first session of the account, started with its registration.
+            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id, Guid.NewGuid());
+            _context.RefreshTokens.Add(sessionToken.Token);
             await _context.SaveChangesAsync(ct);
 
             return Result.Success(sessionToken);
@@ -196,15 +197,16 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
 
         // Auto-login: generate tokens
+        var refreshToken = registration.Value;
         var accessToken = _jwtTokenService.GenerateAccessToken(
             user,
+            refreshToken.Token.SessionId,
             new TenantTokenContext(tenant.Id, TenantUserRole.Owner.ToString().ToUpperInvariant()));
-        var refreshToken = registration.Value;
 
         return Result.Success(new AuthResponse
         {
             AccessToken = accessToken,
-            RefreshToken = refreshToken.Token,
+            RefreshToken = refreshToken.Value,
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
             RequiresTwoFactor = false,
             UserId = user.Id.ToString(),

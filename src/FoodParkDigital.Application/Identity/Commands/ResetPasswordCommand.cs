@@ -1,7 +1,9 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -30,17 +32,17 @@ public class ResetPasswordCommandValidator : AbstractValidator<ResetPasswordComm
 public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand, Result>
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
     public ResetPasswordCommandHandler(
         UserManager<ApplicationUser> userManager,
-        IJwtTokenService jwtTokenService,
-        IApplicationDbContext context)
+        IApplicationDbContext context,
+        IDateTimeProvider clock)
     {
         _userManager = userManager;
-        _jwtTokenService = jwtTokenService;
         _context = context;
+        _clock = clock;
     }
 
     public async Task<Result> Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
@@ -61,10 +63,9 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand,
         // Recuperar la contraseña también levanta un bloqueo por intentos fallidos.
         await AccountSecurity.UnlockAsync(_userManager, user);
 
-        // Revocar todos los refresh tokens por seguridad
-        await _jwtTokenService.RevokeAllUserRefreshTokensAsync(user.Id);
-
-        // Actualizar security stamp (invalida tokens JWT existentes)
+        // The sessions opened with the old password end, and their access tokens stop working with the new stamp.
+        await UserSessions.EndAllAsync(
+            _context, user.Id, RefreshTokenRevocationReason.PasswordReset, _clock.UtcNow, cancellationToken);
         await _userManager.UpdateSecurityStampAsync(user);
 
         return Result.Success();

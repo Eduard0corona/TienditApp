@@ -199,24 +199,16 @@ internal sealed class SqliteTestHost : IAsyncDisposable
 
     internal sealed class FakeJwtTokenService : IJwtTokenService
     {
-        /// <summary>Accounts whose sessions were ended (password recovered).</summary>
-        public List<Guid> RevokedUsers { get; } = [];
-
-        public string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null)
+        public string GenerateAccessToken(ApplicationUser user, Guid sessionId, TenantTokenContext? tenantContext = null)
             => $"access-token-{user.Id}";
 
-        public RefreshToken GenerateRefreshToken(Guid userId)
-            => new(userId, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow.AddDays(7));
-
-        public Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken) => throw new NotSupportedException();
-        public Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null) => throw new NotSupportedException();
-        public Task RevokeAllUserRefreshTokensAsync(Guid userId)
+        public IssuedRefreshToken GenerateRefreshToken(Guid userId, Guid sessionId)
         {
-            RevokedUsers.Add(userId);
-            return Task.CompletedTask;
+            var value = Guid.NewGuid().ToString("N");
+            return new IssuedRefreshToken(
+                new RefreshToken(userId, sessionId, value, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(7)),
+                value);
         }
-        public Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken) => throw new NotSupportedException();
-        public System.Security.Claims.ClaimsPrincipal? GetPrincipalFromExpiredToken(string token) => throw new NotSupportedException();
     }
 
     internal sealed class RecordingMediator : IMediator

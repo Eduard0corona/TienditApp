@@ -1,7 +1,9 @@
-using System.Security.Claims;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
+using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -17,47 +19,89 @@ namespace FoodParkDigital.Application.Tests;
 public class SwitchTenantCommandTests
 {
     [Fact]
-    public async Task Switch_ShouldRevokeTheSessionsRefreshToken_AndOnlyThatOne()
+    public async Task Switch_ShouldGoOnWithTheSameSession_ReplacingItsToken_AndLeaveOtherSessionsAlone()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        await using var context = new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
-        var userId = Guid.NewGuid();
-        var targetTenantId = Guid.NewGuid();
-        context.Users.Add(new ApplicationUser
-        {
-            Id = userId,
-            Email = "staff@example.com",
-            UserName = "staff@example.com",
-            FirstName = "Staff",
-            LastName = "Test",
-            IsActive = true
-        });
-        context.TenantUsers.Add(new TenantUser(targetTenantId, userId, TenantUserRole.Staff));
-        var current = new RefreshToken(userId, "current-session-token", DateTimeOffset.UtcNow.AddDays(7));
-        var otherSession = new RefreshToken(userId, "other-device-token", DateTimeOffset.UtcNow.AddDays(7));
-        context.RefreshTokens.AddRange(current, otherSession);
-        await context.SaveChangesAsync();
+        await using var fixture = await Fixture.CreateAsync();
+        var current = fixture.Jwt.GenerateRefreshToken(fixture.UserId, Guid.NewGuid());
+        var otherDevice = fixture.Jwt.GenerateRefreshToken(fixture.UserId, Guid.NewGuid());
+        fixture.Context.RefreshTokens.AddRange(current.Token, otherDevice.Token);
+        await fixture.Context.SaveChangesAsync();
 
-        var handler = new SwitchTenantCommandHandler(
-            new TestCurrentUserService(userId),
-            context,
-            new TestUserManager(context),
-            new FakeJwtTokenService(),
-            new FakeTenantAccessService());
-
-        var result = await handler.Handle(
-            new SwitchTenantCommand(targetTenantId) { CurrentRefreshToken = current.Token },
-            CancellationToken.None);
+        var result = await fixture.SwitchAsync(current.Value);
 
         Assert.True(result.IsSuccess, result.Error);
-        var tokens = await context.RefreshTokens.AsNoTracking().ToListAsync();
-        var revoked = tokens.Single(x => x.Token == current.Token);
-        Assert.True(revoked.IsRevoked);
-        Assert.Equal(result.Value!.RefreshToken, revoked.ReplacedByToken);
-        Assert.False(tokens.Single(x => x.Token == otherSession.Token).IsRevoked);
-        Assert.False(tokens.Single(x => x.Token == result.Value.RefreshToken).IsRevoked);
+        var tokens = await fixture.Context.RefreshTokens.AsNoTracking().ToListAsync();
+        var replaced = tokens.Single(x => x.Id == current.Token.Id);
+        var issued = tokens.Single(x => x.TokenHash == RefreshToken.HashOf(result.Value!.RefreshToken!));
+        Assert.Equal(RefreshTokenRevocationReason.Rotated, replaced.RevocationReason);
+        Assert.True(issued.IsActive);
+        Assert.Equal(current.Token.SessionId, issued.SessionId);
+        Assert.Equal(current.Token.SessionId, fixture.Jwt.LastAccessTokenSession);
+        Assert.False(tokens.Single(x => x.Id == otherDevice.Token.Id).IsRevoked);
+    }
+
+    [Fact]
+    public async Task Switch_WithoutAnActiveTokenOfTheAccount_ShouldStartANewSession_AndRevokeNothing()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var someoneElses = fixture.Jwt.GenerateRefreshToken(Guid.NewGuid(), Guid.NewGuid());
+        fixture.Context.RefreshTokens.Add(someoneElses.Token);
+        await fixture.Context.SaveChangesAsync();
+
+        var withAnotherAccountsToken = await fixture.SwitchAsync(someoneElses.Value);
+        var withoutCookie = await fixture.SwitchAsync(null);
+
+        Assert.True(withAnotherAccountsToken.IsSuccess, withAnotherAccountsToken.Error);
+        Assert.True(withoutCookie.IsSuccess, withoutCookie.Error);
+        var tokens = await fixture.Context.RefreshTokens.AsNoTracking().ToListAsync();
+        Assert.False(tokens.Single(x => x.Id == someoneElses.Token.Id).IsRevoked);
+        var issued = tokens.Where(x => x.UserId == fixture.UserId).ToList();
+        Assert.Equal(2, issued.Count);
+        Assert.All(issued, token => Assert.NotEqual(someoneElses.Token.SessionId, token.SessionId));
+        Assert.NotEqual(issued[0].SessionId, issued[1].SessionId);
+    }
+
+    private sealed class Fixture : IAsyncDisposable
+    {
+        private readonly Guid _targetTenantId = Guid.NewGuid();
+
+        private Fixture(ApplicationDbContext context) => Context = context;
+
+        public ApplicationDbContext Context { get; }
+        public Guid UserId { get; } = Guid.NewGuid();
+        public FakeJwtTokenService Jwt { get; } = new();
+
+        public static async Task<Fixture> CreateAsync()
+        {
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            var fixture = new Fixture(new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator()));
+            fixture.Context.Users.Add(new ApplicationUser
+            {
+                Id = fixture.UserId,
+                Email = "staff@example.com",
+                UserName = "staff@example.com",
+                FirstName = "Staff",
+                LastName = "Test",
+                IsActive = true
+            });
+            fixture.Context.TenantUsers.Add(new TenantUser(fixture._targetTenantId, fixture.UserId, TenantUserRole.Staff));
+            await fixture.Context.SaveChangesAsync();
+            return fixture;
+        }
+
+        public Task<Result<AuthResponse>> SwitchAsync(string? currentRefreshToken) =>
+            new SwitchTenantCommandHandler(
+                    new TestCurrentUserService(UserId),
+                    Context,
+                    new TestUserManager(Context),
+                    Jwt,
+                    new FakeTenantAccessService(),
+                    new FixedClock(DateTimeOffset.UtcNow))
+                .Handle(new SwitchTenantCommand(_targetTenantId) { CurrentRefreshToken = currentRefreshToken }, CancellationToken.None);
+
+        public ValueTask DisposeAsync() => Context.DisposeAsync();
     }
 
     private sealed class TestUserManager(ApplicationDbContext context) : UserManager<ApplicationUser>(
@@ -73,13 +117,26 @@ public class SwitchTenantCommandTests
 
     private sealed class FakeJwtTokenService : IJwtTokenService
     {
-        public string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null) => "access-token";
-        public RefreshToken GenerateRefreshToken(Guid userId) => new(userId, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow.AddDays(7));
-        public Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken) => Task.FromResult(true);
-        public Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null) => Task.CompletedTask;
-        public Task RevokeAllUserRefreshTokensAsync(Guid userId) => Task.CompletedTask;
-        public Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken) => Task.FromResult<Guid?>(null);
-        public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token) => null;
+        public Guid? LastAccessTokenSession { get; private set; }
+
+        public string GenerateAccessToken(ApplicationUser user, Guid sessionId, TenantTokenContext? tenantContext = null)
+        {
+            LastAccessTokenSession = sessionId;
+            return "access-token";
+        }
+
+        public IssuedRefreshToken GenerateRefreshToken(Guid userId, Guid sessionId)
+        {
+            var value = Guid.NewGuid().ToString("N");
+            return new IssuedRefreshToken(
+                new RefreshToken(userId, sessionId, value, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(7)),
+                value);
+        }
+    }
+
+    private sealed class FixedClock(DateTimeOffset utcNow) : IDateTimeProvider
+    {
+        public DateTimeOffset UtcNow { get; } = utcNow;
     }
 
     private sealed class FakeTenantAccessService : ITenantAccessService

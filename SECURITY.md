@@ -22,13 +22,23 @@ Los grupos SignalR y rutas/nombres de archivos deben incluir aislamiento verific
 
 ### Autenticación y autorización
 
-El backend usa ASP.NET Identity, JWT HMAC, refresh tokens persistidos con rotación/revocación y 2FA. El access token vive en memoria del cliente; el refresh token se entrega como cookie `HttpOnly` (`Secure` fuera de Development) y no se retorna al cliente después del login normal ni del login con 2FA; cambiar de tenant también lo rota. La llave JWT es obligatoria fuera de Development, debe tener al menos 32 bytes y la API rechaza la que estuvo publicada en el repositorio.
+El backend usa ASP.NET Identity, JWT HMAC, refresh tokens guardados solo como hash, con rotación, detección de reuso y revocación por sesión, y 2FA. El access token vive en memoria del cliente; el refresh token se entrega como cookie `HttpOnly` (`Secure` fuera de Development) y no se retorna al cliente después del login normal ni del login con 2FA; cambiar de tenant también lo rota. La llave JWT es obligatoria fuera de Development, debe tener al menos 32 bytes y la API rechaza la que estuvo publicada en el repositorio.
 
 El login con 2FA tiene dos pasos y no usa cookies de Identity. `POST /api/v1/auth/login` valida la contraseña y, si el usuario tiene 2FA, solo devuelve `twoFactorChallengeToken`: un JWT de 5 minutos firmado con una clave derivada (HKDF) del secreto JWT y con audiencia propia, por lo que no se acepta como access token. Su huella (`jti` + security stamp) se guarda en `AspNetUserTokens`; así es de un solo uso, un login posterior lo reemplaza y deja de valer si cambia el security stamp. `POST /api/v1/twofactor/login` exige ese desafío más un TOTP o un código de recuperación de un solo uso; cada código fallido cuenta con el lockout de Identity (por defecto 5 intentos y 5 minutos) y el bloqueo invalida el desafío.
 
 Desactivar el 2FA (`POST /api/v1/twofactor/disable`, body `{ code, useRecoveryCode }`) exige el segundo factor vigente: un TOTP o un código de recuperación, que se canjea y deja de servir. Una sesión robada ya no basta para quitarlo. Los códigos fallidos cuentan con el mismo lockout de Identity, la acción tiene el rate limit `auth` y, al desactivar, se descarta la clave del autenticador. El código de recuperación permite que quien perdió el teléfono quite el 2FA y lo vuelva a activar. Sin 2FA activo la petición responde 400 y no modifica nada. No se pide la contraseña actual.
 
-Pendiente antes de producción: el paso de contraseña usa `lockoutOnFailure: false` (sus intentos solo los limita el rate limit `auth`), los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso y el login distingue cuentas sin confirmar o bloqueadas. También deben revisarse expiraciones, protección CSRF/cookie y el uso de tokens SignalR en query string.
+Sesiones (Fase 8): cada inicio de sesión abre una sesión, y su refresh token rota en cada renovación sin cambiar de sesión. La base guarda solo el SHA-256 del refresh token, nunca su valor. Si vuelve un token ya reemplazado, fue copiado: la sesión termina para quien tenga el más nuevo y se registra un aviso con la sesión y la cuenta, sin el token. La excepción es un token reemplazado hace menos de 10 segundos: es la renovación de la misma pestaña que perdió la carrera, responde 409 sin entregar tokens y el cliente reintenta con la cookie nueva. Dos renovaciones simultáneas con el mismo token reemplazan una sola vez (control de concurrencia en `RevokedAt`).
+
+Cada access token lleva su sesión (`session_id`) y una huella del security stamp (`stamp`, un hash: el stamp también genera los códigos por SMS). En cada petición autenticada, y al conectar a los hubs, la API exige que la cuenta siga activa, que el stamp no haya cambiado y que la sesión conserve un refresh token vigente. Así, el access token deja de valer en el momento en que:
+- se cierra la sesión: `logout` termina la sesión completa;
+- se cambia o se recupera la contraseña: termina todas las sesiones de la cuenta;
+- se detecta un token reutilizado;
+- cambia la seguridad de la cuenta (2FA, teléfono): ahí el cliente renueva su sesión.
+
+Los tokens emitidos antes del despliegue siguen funcionando: se encuentran por su valor, se guardan como hash al usarse y un proceso único al arrancar convierte los demás.
+
+Pendiente antes de producción: el login distingue cuentas sin confirmar o bloqueadas (los intentos fallidos ya cuentan para el bloqueo de la cuenta). Una conexión SignalR ya abierta sigue hasta que vence su token (máximo 60 minutos) aunque termine la sesión. También deben revisarse expiraciones, protección CSRF/cookie y el uso de tokens SignalR en query string.
 
 La política actual de contraseñas exige mayúscula, minúscula, dígito y longitud 6, sin carácter no alfanumérico. Es una política que debe evaluarse antes de producción. Los guards del frontend solo mejoran UX; cada operación sensible se autoriza en backend por rol, permiso y capability aplicables. Se registran como deuda los controllers que dependen de roles aun cuando existe un modelo granular de permisos.
 

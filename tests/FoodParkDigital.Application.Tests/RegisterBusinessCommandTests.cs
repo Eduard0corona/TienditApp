@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -148,7 +149,8 @@ public class RegisterBusinessCommandTests
 
         var session = Assert.Single(stored.RefreshTokens);
         Assert.Equal(owner.Id, session.UserId);
-        Assert.Equal(response.RefreshToken, session.Token);
+        Assert.Equal(RefreshToken.HashOf(response.RefreshToken!), session.TokenHash);
+        Assert.NotEqual(Guid.Empty, session.SessionId);
 
         // Notifications go out once, after the commit, even when the transaction was retried.
         Assert.Equal("owner@demo.com", Assert.Single(host.Email.ConfirmationRecipients));

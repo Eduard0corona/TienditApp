@@ -78,16 +78,18 @@ public class AuthSessionIssuer : IAuthSessionIssuer
         if (user.DefaultTenantId is null && tenantMembership is not null)
             user.DefaultTenantId = tenantMembership.TenantId;
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(user, tenantContext);
-        var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id);
+        // A new session: its refresh token rotates on every renewal and its access tokens carry its id.
+        var sessionId = Guid.NewGuid();
+        var accessToken = _jwtTokenService.GenerateAccessToken(user, sessionId, tenantContext);
+        var refreshToken = _jwtTokenService.GenerateRefreshToken(user.Id, sessionId);
 
-        _context.RefreshTokens.Add(refreshToken);
+        _context.RefreshTokens.Add(refreshToken.Token);
         await _context.SaveChangesAsync(cancellationToken);
 
         return new AuthResponse
         {
             AccessToken = accessToken,
-            RefreshToken = refreshToken.Token,
+            RefreshToken = refreshToken.Value,
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
             RequiresTwoFactor = false,
             User = new UserDto

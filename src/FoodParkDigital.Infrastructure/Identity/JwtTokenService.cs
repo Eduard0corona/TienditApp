@@ -4,10 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -16,15 +16,15 @@ namespace FoodParkDigital.Infrastructure.Identity;
 public class JwtTokenService : IJwtTokenService
 {
     private readonly JwtSettings _settings;
-    private readonly IApplicationDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
-    public JwtTokenService(IOptions<JwtSettings> settings, IApplicationDbContext context)
+    public JwtTokenService(IOptions<JwtSettings> settings, IDateTimeProvider clock)
     {
         _settings = settings.Value;
-        _context = context;
+        _clock = clock;
     }
 
-    public string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null)
+    public string GenerateAccessToken(ApplicationUser user, Guid sessionId, TenantTokenContext? tenantContext = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -39,7 +39,9 @@ public class JwtTokenService : IJwtTokenService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email!),
             new(ClaimTypes.Name, user.FullName),
-            new(ClaimTypes.Role, ToUpperSnakeCase(role.ToString()))
+            new(ClaimTypes.Role, ToUpperSnakeCase(role.ToString())),
+            new(SessionClaims.SessionId, sessionId.ToString()),
+            new(SessionClaims.SecurityStamp, SessionClaims.StampFingerprint(user.SecurityStamp))
         };
 
         if (tenantContext is not null)
@@ -62,104 +64,23 @@ public class JwtTokenService : IJwtTokenService
             issuer: _settings.Issuer,
             audience: _settings.Audience,
             claims: claims,
+            // Checked by the bearer handler against the system clock.
             expires: DateTime.UtcNow.AddMinutes(_settings.AccessTokenExpirationMinutes),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    public RefreshToken GenerateRefreshToken(Guid userId)
+    public IssuedRefreshToken GenerateRefreshToken(Guid userId, Guid sessionId)
     {
-        var randomBytes = new byte[64];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(randomBytes);
+        var value = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var now = _clock.UtcNow;
 
-        var token = Convert.ToBase64String(randomBytes);
-        var expiresAt = DateTimeOffset.UtcNow.AddDays(_settings.RefreshTokenExpirationDays);
-
-        return new RefreshToken(userId, token, expiresAt);
-    }
-
-    public async Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken)
-    {
-        var token = await _context.RefreshTokens
-            .FirstOrDefaultAsync(t => t.UserId == userId
-                && t.Token == refreshToken
-                && t.RevokedAt == null
-                && t.ExpiresAt > DateTimeOffset.UtcNow);
-
-        return token is not null;
-    }
-
-    public async Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null)
-    {
-        var token = await _context.RefreshTokens
-            .FirstOrDefaultAsync(t => t.Token == refreshToken);
-
-        if (token is null)
-            return;
-
-        token.Revoke(replacedByToken);
-        await _context.SaveChangesAsync(CancellationToken.None);
-    }
-
-    public async Task RevokeAllUserRefreshTokensAsync(Guid userId)
-    {
-        var tokens = await _context.RefreshTokens
-            .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > DateTimeOffset.UtcNow)
-            .ToListAsync();
-
-        foreach (var token in tokens)
-        {
-            token.Revoke();
-        }
-
-        await _context.SaveChangesAsync(CancellationToken.None);
-    }
-
-    public async Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken)
-    {
-        var token = await _context.RefreshTokens
-            .FirstOrDefaultAsync(t => t.Token == refreshToken
-                && t.RevokedAt == null
-                && t.ExpiresAt > DateTimeOffset.UtcNow);
-
-        return token?.UserId;
+        return new IssuedRefreshToken(
+            new RefreshToken(userId, sessionId, value, now, now.AddDays(_settings.RefreshTokenExpirationDays)),
+            value);
     }
 
     private static string ToUpperSnakeCase(string value) =>
         Regex.Replace(value, "(?<!^)([A-Z])", "_$1").ToUpperInvariant();
-
-    public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
-    {
-        var tokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateAudience = true,
-            ValidateIssuer = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = _settings.Issuer,
-            ValidAudience = _settings.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(_settings.Secret)),
-            ValidateLifetime = false
-        };
-
-        var tokenHandler = new JwtSecurityTokenHandler();
-        try
-        {
-            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var securityToken);
-
-            if (securityToken is not JwtSecurityToken jwtSecurityToken ||
-                !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
-            {
-                return null;
-            }
-
-            return principal;
-        }
-        catch
-        {
-            return null;
-        }
-    }
 }

@@ -1,6 +1,7 @@
 using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Billing;
@@ -121,6 +122,17 @@ public static class DependencyInjection
                         context.Token = accessToken;
                     }
                     return Task.CompletedTask;
+                },
+                // A genuine, unexpired token also needs its session open: signing out, a reused refresh token or a
+                // change of the account's security end it before it expires.
+                OnTokenValidated = async context =>
+                {
+                    var sessions = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenSessionValidator>();
+                    if (context.Principal is null
+                        || !await sessions.IsOpenAsync(context.Principal, context.HttpContext.RequestAborted))
+                    {
+                        context.Fail("La sesión ya no es válida.");
+                    }
                 }
             };
         });
@@ -154,6 +166,7 @@ public static class DependencyInjection
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
             services.AddHostedService<PrivateFilesMigrationService>();
+            services.AddHostedService<LegacyRefreshTokenHashingService>();
         }
 
         // Services
