@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Commands;
 
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record SetEmployeeActiveCommand : IRequest<Result>
 {
     public Guid TenantUserId { get; init; }
@@ -34,9 +34,6 @@ public class SetEmployeeActiveCommandHandler : IRequestHandler<SetEmployeeActive
 
     public async Task<Result> Handle(SetEmployeeActiveCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure("No tienes permisos para actualizar empleados.");
-
         var tenantUser = await _context.TenantUsers
             .FirstOrDefaultAsync(
                 x => x.Id == request.TenantUserId && x.TenantId == _tenantService.TenantId,

@@ -76,8 +76,16 @@ public static class TenantCapabilityRules
         if (configuredCapabilities == TenantCapability.Inventory && defaults != TenantCapability.Inventory)
             return defaults;
 
+        // A business always sells something, like its plan: a configuration without a type of sale keeps the one
+        // of its business type, so the modules of a request never depend on one being left on.
+        if (!HasCommerce(configuredCapabilities))
+            return configuredCapabilities | (defaults & CommerceCapabilities);
+
         return configuredCapabilities;
     }
+
+    /// <summary>Whether the modules include a type of sale: products, services or food.</summary>
+    public static bool HasCommerce(TenantCapability capabilities) => (capabilities & CommerceCapabilities) != 0;
 
     private static bool IsServiceUnit(UnitType? unit)
         => unit is UnitType.Hour or UnitType.Session or UnitType.Service;

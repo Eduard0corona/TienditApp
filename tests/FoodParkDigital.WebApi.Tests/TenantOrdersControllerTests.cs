@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Controllers;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -19,7 +18,7 @@ public class TenantOrdersControllerTests
         var tenantService = new FakeCurrentTenantService();
         tenantService.SetTenant(requestTenant);
 
-        var controller = new TenantOrdersController(mediator, new AlwaysMemberAccess(), tenantService)
+        var controller = new TenantOrdersController(mediator, tenantService)
         {
             ControllerContext = new ControllerContext
             {
@@ -41,19 +40,6 @@ public class TenantOrdersControllerTests
     {
         public Guid TenantId { get; private set; }
         public void SetTenant(Guid tenantId) => TenantId = tenantId;
-    }
-
-    private sealed class AlwaysMemberAccess : ITenantAccessService
-    {
-        public Task<TenantAccessSnapshot> GetAccessSnapshotAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>
-            Task.FromResult(new TenantAccessSnapshot(true, TenantCapability.Retail, []));
-        public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<bool> HasCapabilityAsync(Guid tenantId, TenantCapability capability, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<bool> HasAnyCapabilityAsync(Guid tenantId, TenantCapability capabilities, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<IReadOnlyCollection<string>> GetPermissionsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyCollection<string>>([]);
-        public Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken) =>
-            Task.FromResult(true);
     }
 
     private sealed class RecordingMediator : IMediator

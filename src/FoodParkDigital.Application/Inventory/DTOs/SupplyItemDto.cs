@@ -27,6 +27,9 @@ public class SupplyItemDto
     public decimal? TaxRate { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>The product this item is the stock of, when the product controls its own.</summary>
+    public Guid? ProductId { get; set; }
+    public string? ProductName { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 

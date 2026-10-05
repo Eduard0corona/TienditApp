@@ -12,7 +12,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/service-board")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF,KITCHEN")]
+[Authorize]
 public class ServiceBoardController : ControllerBase
 {
     private readonly IMediator _mediator;

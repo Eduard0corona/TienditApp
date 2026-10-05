@@ -157,19 +157,19 @@ public class OptionsAndTabsFlowTests
         Assert.Equal([1, 2], round.Value.KitchenTickets.Select(t => t.Round));
 
         // The kitchen sees each round with its own lines.
-        var tickets = await new GetKitchenTicketsQueryHandler(fixture.Context, fixture.TenantService)
+        var tickets = await new GetKitchenTicketsQueryHandler(fixture.Context)
             .Handle(new GetKitchenTicketsQuery(), CancellationToken.None);
         Assert.Equal(2, tickets.Count);
         Assert.Equal("Tacos al pastor", Assert.Single(tickets[0].Items).ProductName);
         Assert.Equal("Cerveza", Assert.Single(tickets[1].Items).ProductName);
-        var kitchenOrders = await new GetKitchenOrdersQueryHandler(fixture.Context, fixture.TenantService)
+        var kitchenOrders = await new GetKitchenOrdersQueryHandler(fixture.Context)
             .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
         Assert.Empty(kitchenOrders);
 
         var ticketHandler = new UpdateKitchenTicketStatusCommandHandler(fixture.Context, fixture.Clock);
         Assert.True((await ticketHandler.Handle(new UpdateKitchenTicketStatusCommand(tickets[0].Id, KitchenTicketStatus.Ready), CancellationToken.None)).IsSuccess);
         Assert.True((await ticketHandler.Handle(new UpdateKitchenTicketStatusCommand(tickets[0].Id, KitchenTicketStatus.Served), CancellationToken.None)).IsSuccess);
-        var remaining = await new GetKitchenTicketsQueryHandler(fixture.Context, fixture.TenantService)
+        var remaining = await new GetKitchenTicketsQueryHandler(fixture.Context)
             .Handle(new GetKitchenTicketsQuery(), CancellationToken.None);
         Assert.Equal(2, Assert.Single(remaining).Round);
 

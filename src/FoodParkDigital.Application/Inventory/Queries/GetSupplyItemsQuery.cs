@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -23,23 +22,14 @@ public record GetSupplyItemsQuery : IRequest<PaginatedList<SupplyItemDto>>
 public class GetSupplyItemsQueryHandler : IRequestHandler<GetSupplyItemsQuery, PaginatedList<SupplyItemDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetSupplyItemsQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetSupplyItemsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<PaginatedList<SupplyItemDto>> Handle(GetSupplyItemsQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return new PaginatedList<SupplyItemDto>([], 0, request.PageNumber, request.PageSize);
-
         var query = _context.SupplyItems.AsNoTracking();
 
         if (request.IsActive.HasValue)
@@ -83,6 +73,8 @@ public class GetSupplyItemsQueryHandler : IRequestHandler<GetSupplyItemsQuery, P
                 TaxRate = x.TaxRate,
                 Notes = x.Notes,
                 IsActive = x.IsActive,
+                ProductId = x.ProductId,
+                ProductName = _context.Products.Where(p => p.Id == x.ProductId).Select(p => p.Name).FirstOrDefault(),
                 CreatedAt = x.CreatedAt,
                 UpdatedAt = x.UpdatedAt,
                 TotalOnHand = _context.InventoryStocks

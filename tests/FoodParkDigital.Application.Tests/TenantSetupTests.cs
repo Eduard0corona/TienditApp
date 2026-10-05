@@ -33,24 +33,6 @@ public class TenantSetupTests
         Assert.Contains("\"PricesIncludeTax\":false", audit.Metadata);
     }
 
-    [Fact]
-    public async Task UpdateSalesPolicy_ShouldBeRefusedToEmployees()
-    {
-        await using var fixture = SalesTestFixture.Create();
-        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: false);
-        fixture.CurrentUser.Role = "STAFF";
-        fixture.CurrentUser.TenantRole = "Staff";
-        var handler = new UpdateSalesPolicyCommandHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
-
-        var result = await handler.Handle(
-            new UpdateSalesPolicyCommand { PricesIncludeTax = true, DefaultTaxRate = 16m, AutoCloseCounterSales = true },
-            CancellationToken.None);
-
-        Assert.True(result.IsFailure);
-        Assert.False((await fixture.Context.TenantSettings.SingleAsync(x => x.TenantId == tenant.Id)).PricesIncludeTax);
-        Assert.Empty(await fixture.Context.AuditLogs.ToListAsync());
-    }
-
     [Theory]
     [InlineData(16, true)]
     [InlineData(8, true)]
@@ -70,7 +52,7 @@ public class TenantSetupTests
     {
         await using var fixture = SalesTestFixture.Create();
         await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
-        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
 
         var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "abarrotes" }, CancellationToken.None);
 
@@ -90,7 +72,7 @@ public class TenantSetupTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         await fixture.AddProductAsync(tenant, "Producto propio", 10m);
-        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
 
         var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "abarrotes" }, CancellationToken.None);
 
@@ -103,7 +85,7 @@ public class TenantSetupTests
     {
         await using var fixture = SalesTestFixture.Create();
         await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
-        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
 
         var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "lavanderia" }, CancellationToken.None);
 
@@ -116,7 +98,7 @@ public class TenantSetupTests
     {
         await using var fixture = SalesTestFixture.Create();
         await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service, pricesIncludeTax: true);
-        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
 
         var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "lavanderia" }, CancellationToken.None);
 
@@ -125,21 +107,6 @@ public class TenantSetupTests
         Assert.NotEmpty(services);
         Assert.All(services, s => Assert.Equal(UnitType.Service, s.Unit));
         Assert.All(services, s => Assert.True(s.IsTrackable));
-    }
-
-    [Fact]
-    public async Task InstallStarterCatalog_ShouldBeRefusedToEmployees()
-    {
-        await using var fixture = SalesTestFixture.Create();
-        await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
-        fixture.CurrentUser.Role = "STAFF";
-        fixture.CurrentUser.TenantRole = "Staff";
-        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser);
-
-        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "abarrotes" }, CancellationToken.None);
-
-        Assert.True(result.IsFailure);
-        Assert.Empty(await fixture.Context.Products.ToListAsync());
     }
 
     [Fact]

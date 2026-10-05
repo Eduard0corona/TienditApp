@@ -277,7 +277,7 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: Frontend (lint, build, audit)
+    name: Frontend (lint, tests, build, audit)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -287,10 +287,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Node 20 has no support since April 2026; 24 is the active LTS (Vitest 5 needs 22.12 or later).
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: client/package-lock.json
 
@@ -308,6 +309,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

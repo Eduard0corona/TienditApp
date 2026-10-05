@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -21,23 +20,14 @@ public record GetCustomersQuery : IRequest<PaginatedList<CustomerDto>>
 public class GetCustomersQueryHandler : IRequestHandler<GetCustomersQuery, PaginatedList<CustomerDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetCustomersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetCustomersQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<PaginatedList<CustomerDto>> Handle(GetCustomersQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return new PaginatedList<CustomerDto>([], 0, request.PageNumber, request.PageSize);
-
         var query = _context.Customers.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(request.Search))

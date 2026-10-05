@@ -13,27 +13,21 @@ public record DeleteTenantLogoCommand : IRequest<Result>;
 public class DeleteTenantLogoCommandHandler : IRequestHandler<DeleteTenantLogoCommand, Result>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
     private readonly IFileStorageService _fileStorageService;
 
     public DeleteTenantLogoCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
         ICurrentTenantService tenantService,
         IFileStorageService fileStorageService)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _tenantService = tenantService;
         _fileStorageService = fileStorageService;
     }
 
     public async Task<Result> Handle(DeleteTenantLogoCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure("Solo el administrador puede eliminar el logo.");
-
         var tenantId = _tenantService.TenantId;
         var tenant = await _context.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);

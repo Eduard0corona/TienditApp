@@ -100,7 +100,8 @@ public class DtoProjectionSqlServerTests
 
         Assert.Equal(Json(loadedProduct.ToDto()), Json(Assert.Single(products)));
         Assert.True(products[0].HasDiscount);
-        Assert.True(products[0].IsLowStock);
+        // Low stock is read from the inventory ledger (ProductStockSqlServerTests), not from what was captured by hand.
+        Assert.False(products[0].IsLowStock);
         Assert.Equal("/uploads/products/demo/latte_md.webp", products[0].ImageUrl);
         Assert.Equal(TenantCapability.Food, Assert.Single(tenants, t => t.Id == tenantId).Capabilities);
         Assert.Equal(Json((await context.InventoryLocations.AsNoTracking().SingleAsync()).ToDto()), Json(Assert.Single(locations)));

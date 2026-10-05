@@ -1,4 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Finance;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -88,24 +90,6 @@ public class OrderRefundTests
         Assert.True(first.IsSuccess, first.Error);
         Assert.False(second.IsSuccess);
         Assert.Contains("no puede ser mayor", second.Error);
-    }
-
-    [Fact]
-    public async Task Staff_ShouldNeedTheRefundPermission()
-    {
-        await using var fixture = SalesTestFixture.Create();
-        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
-        var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
-        var sale = await SellAsync(fixture, soda.Id, 1, (20m, OrderPaymentMethod.Card));
-        fixture.CurrentUser.Role = "STAFF";
-        fixture.CurrentUser.TenantRole = "STAFF";
-
-        var denied = await RefundHandler(fixture, grantsRefunds: false).Handle(Refund(sale.Id, 5m, OrderPaymentMethod.Card), CancellationToken.None);
-        var allowed = await RefundHandler(fixture, grantsRefunds: true).Handle(Refund(sale.Id, 5m, OrderPaymentMethod.Card), CancellationToken.None);
-
-        Assert.False(denied.IsSuccess);
-        Assert.Equal(OrderRefundProcessor.NotAllowedMessage, denied.Error);
-        Assert.True(allowed.IsSuccess, allowed.Error);
     }
 
     [Fact]
@@ -221,27 +205,14 @@ public class OrderRefundTests
         Reason = "Ajuste de precio"
     };
 
-    private static RefundOrderCommandHandler RefundHandler(
-        SalesTestFixture fixture, bool grantsRefunds = false, IOrderInventoryService? inventory = null)
-        => new(fixture.Context, fixture.CurrentUser, new RefundAccess(grantsRefunds), new OrderCashService(fixture.Context, fixture.CurrentUser),
+    private static RefundOrderCommandHandler RefundHandler(SalesTestFixture fixture, IOrderInventoryService? inventory = null)
+        => new(fixture.Context, fixture.CurrentUser, new OrderCashService(fixture.Context, fixture.CurrentUser),
             fixture.Clock, inventory ?? NoOpOrderInventoryService.Instance);
 
     private static VoidOrderCommandHandler VoidHandler(SalesTestFixture fixture, IOrderInventoryService? inventory = null)
-        => new(fixture.Context, fixture.CurrentUser, new RefundAccess(false), new OrderCashService(fixture.Context, fixture.CurrentUser),
+        => new(fixture.Context, fixture.CurrentUser, new OrderCashService(fixture.Context, fixture.CurrentUser),
             fixture.Clock, inventory ?? NoOpOrderInventoryService.Instance);
 
     private static async Task<decimal> OnHandAsync(SalesTestFixture fixture, Guid supplyId)
         => (await fixture.Context.InventoryStocks.AsNoTracking().SingleAsync(s => s.SupplyItemId == supplyId)).OnHandQuantity;
-
-    private sealed class RefundAccess(bool grantsRefunds) : ITenantAccessService
-    {
-        public Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken)
-            => Task.FromResult(grantsRefunds && permission == TenantPermission.ProcessRefunds);
-
-        public Task<TenantAccessSnapshot> GetAccessSnapshotAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> HasCapabilityAsync(Guid tenantId, TenantCapability capability, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> HasAnyCapabilityAsync(Guid tenantId, TenantCapability capabilities, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyCollection<string>> GetPermissionsAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
 }

@@ -12,7 +12,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+[Authorize]
 public class InventoryController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -235,6 +235,41 @@ public class InventoryController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>The stock of a product by location, when it controls it.</summary>
+    [HttpGet("products/{productId:guid}/stock")]
+    public async Task<ActionResult<ProductStockDto>> GetProductStock(Guid productId)
+        => Ok(await _mediator.Send(new GetProductStockQuery(productId)));
+
+    /// <summary>The product starts controlling its stock, optionally with an opening balance.</summary>
+    [HttpPost("products/{productId:guid}/stock")]
+    public async Task<ActionResult<ProductStockDto>> TrackProductStock(Guid productId, [FromBody] TrackProductStockRequest request)
+    {
+        var result = await _mediator.Send(new TrackProductStockCommand
+        {
+            ProductId = productId,
+            SupplyItemId = request.SupplyItemId,
+            InitialQuantity = request.InitialQuantity,
+            InventoryLocationId = request.InventoryLocationId,
+            UnitCost = request.UnitCost,
+            ReorderPoint = request.ReorderPoint
+        });
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>The product stops controlling its stock; its item stays, with its history, as a supply.</summary>
+    [HttpDelete("products/{productId:guid}/stock")]
+    public async Task<ActionResult<ProductStockDto>> StopTrackingProductStock(Guid productId)
+    {
+        var result = await _mediator.Send(new StopTrackingProductStockCommand(productId));
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+
+        return Ok(result.Value);
+    }
+
     [HttpGet("movements/{id:guid}")]
     public async Task<ActionResult<InventoryMovementDto>> GetMovementById(Guid id)
     {
@@ -254,6 +289,16 @@ public class InventoryController : ControllerBase
 }
 
 public record SetEntityActiveRequest(bool IsActive);
+
+public class TrackProductStockRequest
+{
+    /// <summary>An item the business already keeps for the product, instead of a new one.</summary>
+    public Guid? SupplyItemId { get; init; }
+    public decimal InitialQuantity { get; init; }
+    public Guid? InventoryLocationId { get; init; }
+    public decimal? UnitCost { get; init; }
+    public decimal ReorderPoint { get; init; }
+}
 
 public class UpsertProductRecipeRequest
 {

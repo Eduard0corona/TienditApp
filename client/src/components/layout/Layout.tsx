@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import AppErrorBoundary from '../common/AppErrorBoundary';
 import LeftSidebar from './LeftSidebar';
@@ -9,6 +9,8 @@ import GlobalSearch from './GlobalSearch';
 import PastDueBanner from './PastDueBanner';
 import SuspendedNotice from './SuspendedNotice';
 import PendingSalesSync from '../sales/PendingSalesSync';
+import FocusBar from './FocusBar';
+import { FocusModeContext, getFocusArea, readFocusedAreas, storeFocusedAreas, type FocusArea, type FocusMode } from './focusMode';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
@@ -55,6 +57,10 @@ export default function Layout() {
   // The mobile menu remembers the page where it was opened: navigating anywhere closes it.
   const [mobileMenuOpenedAt, setMobileMenuOpenedAt] = useState<string | null>(null);
   const isMobileMenuOpen = isMobile && mobileMenuOpenedAt === pathname;
+  // Vender and Cocina can run alone on a tablet or a kitchen TV; the device remembers it.
+  const focusArea = getFocusArea(pathname);
+  const [focusedAreas, setFocusedAreas] = useState<FocusArea[]>(readFocusedAreas);
+  const isFocused = !!focusArea && focusedAreas.includes(focusArea) && !isSuspended;
 
   useEffect(() => {
     const media = window.matchMedia(MOBILE_QUERY);
@@ -100,6 +106,25 @@ export default function Layout() {
   }, [desktopSize, isMobile, pathname]);
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpenedAt(null), []);
+
+  const changeFocus = (next: FocusArea[]) => {
+    setFocusedAreas(next);
+    storeFocusedAreas(next);
+  };
+  const focusMode: FocusMode = {
+    area: focusArea,
+    isFocused,
+    enter: () => {
+      if (!focusArea) return;
+      changeFocus([...focusedAreas.filter((area) => area !== focusArea), focusArea]);
+      // Full screen needs the click that asks for it; without support the screen is still focused.
+      if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    },
+    exit: () => {
+      changeFocus(focusedAreas.filter((area) => area !== focusArea));
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    },
+  };
   const openSearch = useCallback(() => setSearchOpen(true), []);
 
   // Shortcuts on every screen: Ctrl/Cmd K searches, F2 starts a sale.
@@ -117,34 +142,54 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [canSell, navigate]);
 
-  return (
-    <div className="wrapper">
-      <Topbar onToggleSidebar={toggleSidebar} isMobileMenuOpen={isMobileMenuOpen} onOpenSearch={openSearch} />
-      <LeftSidebar onClose={closeMobileMenu} />
-      {isMobileMenuOpen && <div className="offcanvas-backdrop fade show" onClick={closeMobileMenu} aria-hidden="true" />}
-      <div className="content-page">
-        <div className="content">
-          <div className="container-fluid">
-            {isSuspended ? <SuspendedNotice businessName={tenant?.name} /> : (
-              <>
-                {/* Mi negocio shows it in the plan card; the platform console is not about this business. */}
-                {!pathname.startsWith('/platform') && pathname !== '/settings/business' && <PastDueBanner />}
-                {/* The menu stays while a screen loads or if it fails; another screen clears the error. */}
-                <AppErrorBoundary resetKey={pathname}>
-                  <Suspense fallback={<div className="p-3 text-muted">Cargando…</div>}>
-                    <Outlet />
-                  </Suspense>
-                </AppErrorBoundary>
-              </>
-            )}
-          </div>
+  const page: ReactNode = (
+    // The menu stays while a screen loads or if it fails; another screen clears the error.
+    <AppErrorBoundary resetKey={pathname}>
+      <Suspense fallback={<div className="p-3 text-muted">Cargando…</div>}>
+        <Outlet />
+      </Suspense>
+    </AppErrorBoundary>
+  );
+
+  if (isFocused && focusArea) {
+    return (
+      <FocusModeContext.Provider value={focusMode}>
+        {/* The kitchen reads from a distance and at night: dark, whatever the theme of the rest of the app. */}
+        <div className="focus-shell" data-area={focusArea} data-bs-theme={focusArea === 'kitchen' ? 'dark' : undefined}>
+          <FocusBar area={focusArea} businessName={tenant?.name} onExit={focusMode.exit} />
+          <main className="focus-content">{page}</main>
+          <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
+          {canSell && <PendingSalesSync />}
         </div>
-        <Footer />
+      </FocusModeContext.Provider>
+    );
+  }
+
+  return (
+    <FocusModeContext.Provider value={focusMode}>
+      <div className="wrapper">
+        <Topbar onToggleSidebar={toggleSidebar} isMobileMenuOpen={isMobileMenuOpen} onOpenSearch={openSearch} />
+        <LeftSidebar onClose={closeMobileMenu} />
+        {isMobileMenuOpen && <div className="offcanvas-backdrop fade show" onClick={closeMobileMenu} aria-hidden="true" />}
+        <div className="content-page">
+          <div className="content">
+            <div className="container-fluid">
+              {isSuspended ? <SuspendedNotice businessName={tenant?.name} /> : (
+                <>
+                  {/* Mi negocio shows it in the plan card; the platform console is not about this business. */}
+                  {!pathname.startsWith('/platform') && pathname !== '/settings/business' && <PastDueBanner />}
+                  {page}
+                </>
+              )}
+            </div>
+          </div>
+          <Footer />
+        </div>
+        <BottomTabBar onOpenMenu={toggleSidebar} isMenuOpen={isMobileMenuOpen} />
+        <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
+        {/* Sales charged without connection are sent from any screen once it comes back. */}
+        {canSell && !isSuspended && <PendingSalesSync />}
       </div>
-      <BottomTabBar onOpenMenu={toggleSidebar} isMenuOpen={isMobileMenuOpen} />
-      <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
-      {/* Sales charged without connection are sent from any screen once it comes back. */}
-      {canSell && !isSuspended && <PendingSalesSync />}
-    </div>
+    </FocusModeContext.Provider>
   );
 }

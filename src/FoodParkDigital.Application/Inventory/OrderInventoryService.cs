@@ -10,7 +10,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace FoodParkDigital.Infrastructure.Services;
+namespace FoodParkDigital.Application.Inventory;
 
 public class OrderInventoryService : IOrderInventoryService
 {

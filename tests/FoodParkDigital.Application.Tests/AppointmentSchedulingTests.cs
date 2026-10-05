@@ -136,7 +136,7 @@ public class AppointmentSchedulingTests
             new Appointment(tenant.Id, "Mañana", "5512345678", "Corte", now.AddDays(1), now.AddDays(1).AddHours(1)),
             new Appointment(tenant.Id, "En una hora", "5512345678", "Corte", now.AddHours(1), now.AddHours(2)));
         await fixture.Context.SaveChangesAsync();
-        var handler = new GetAppointmentsQueryHandler(fixture.Context, fixture.TenantService);
+        var handler = new GetAppointmentsQueryHandler(fixture.Context);
 
         var upcoming = await handler.Handle(new GetAppointmentsQuery { FromDate = now.Date }, CancellationToken.None);
         var history = await handler.Handle(new GetAppointmentsQuery { ToDate = now }, CancellationToken.None);
@@ -161,7 +161,7 @@ public class AppointmentSchedulingTests
 
     private static Task<Result<Application.Appointments.DTOs.AppointmentDto>> UpdateAsync(
         SalesTestFixture fixture, RecordingWhatsApp whatsApp, UpdateAppointmentCommand command)
-        => new UpdateAppointmentCommandHandler(fixture.Context, fixture.TenantService, whatsApp,
+        => new UpdateAppointmentCommandHandler(fixture.Context, whatsApp,
                 NullLogger<UpdateAppointmentCommandHandler>.Instance)
             .Handle(command, CancellationToken.None);
 

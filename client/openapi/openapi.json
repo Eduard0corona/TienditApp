@@ -4557,6 +4557,141 @@
         }
       }
     },
+    "/api/v1/inventory/products/{productId}/stock": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackProductStockRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackProductStockRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackProductStockRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Inventory"
+        ],
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductStockDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/inventory/movements/{id}": {
       "get": {
         "tags": [
@@ -15834,7 +15969,8 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject"
+          "taxObject",
+          "tracksStock"
         ],
         "type": "object",
         "properties": {
@@ -15956,6 +16092,24 @@
           "availableToTime": {
             "type": "string",
             "format": "date-span",
+            "nullable": true
+          },
+          "tracksStock": {
+            "type": "boolean"
+          },
+          "stockItemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "onHand": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reorderPoint": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           },
           "isLowStock": {
@@ -16252,6 +16406,81 @@
         },
         "additionalProperties": false
       },
+      "ProductStockDto": {
+        "required": [
+          "isLowStock",
+          "locations",
+          "onHand",
+          "productId",
+          "reorderPoint",
+          "tracksStock"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tracksStock": {
+            "type": "boolean"
+          },
+          "stockItemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "onHand": {
+            "type": "number",
+            "format": "double"
+          },
+          "reorderPoint": {
+            "type": "number",
+            "format": "double"
+          },
+          "isLowStock": {
+            "type": "boolean"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductStockLocationDto"
+            }
+          },
+          "capturedStockQuantity": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "capturedLowStockThreshold": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductStockLocationDto": {
+        "required": [
+          "inventoryLocationId",
+          "locationName",
+          "onHand"
+        ],
+        "type": "object",
+        "properties": {
+          "inventoryLocationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationName": {
+            "type": "string"
+          },
+          "onHand": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicMenuCategoryDto": {
         "required": [
           "id",
@@ -16445,6 +16674,10 @@
           "supplierName": {
             "type": "string"
           },
+          "supplierPhone": {
+            "type": "string",
+            "nullable": true
+          },
           "orderNumber": {
             "type": "string"
           },
@@ -16550,6 +16783,7 @@
           "taxAmount",
           "taxPercent",
           "total",
+          "unit",
           "unitCost"
         ],
         "type": "object",
@@ -16564,6 +16798,9 @@
           },
           "supplyItemName": {
             "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
           },
           "inventoryLocationId": {
             "type": "string",
@@ -17977,6 +18214,15 @@
           "isActive": {
             "type": "boolean"
           },
+          "productId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "productName": {
+            "type": "string",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -18468,6 +18714,39 @@
             "format": "double"
           },
           "totalAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrackProductStockRequest": {
+        "required": [
+          "initialQuantity",
+          "reorderPoint"
+        ],
+        "type": "object",
+        "properties": {
+          "supplyItemId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "initialQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "inventoryLocationId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "unitCost": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "reorderPoint": {
             "type": "number",
             "format": "double"
           }

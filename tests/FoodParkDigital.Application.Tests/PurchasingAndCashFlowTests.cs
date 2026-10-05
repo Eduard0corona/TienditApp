@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Finance.Commands;
+using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Purchasing.Commands;
 using FoodParkDigital.Domain.Catalog.Entities;

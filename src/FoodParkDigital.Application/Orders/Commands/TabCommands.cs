@@ -161,10 +161,15 @@ public class MoveTabCommandHandler : IRequestHandler<MoveTabCommand, Result<Orde
     }
 }
 
-/// <summary>Moves a round of an open tab forward: preparing, ready or served.</summary>
-[RequiresPermission(TenantPermission.ManageServiceBoard, TenantPermission.ManageOrders)]
-[RequiresCapability(TenantCapability.Food)]
+/// <summary>The kitchen board moves a round of an open tab forward: preparing, ready or served.</summary>
+[RequiresPermission(TenantPermission.ManageServiceBoard)]
+[RequiresCapability(TenantCapability.Kitchen)]
 public record UpdateKitchenTicketStatusCommand(Guid TicketId, KitchenTicketStatus Status) : IRequest<Result>;
+
+/// <summary>Whoever takes the orders marks a round as taken to the table.</summary>
+[RequiresPermission(TenantPermission.ManageOrders)]
+[RequiresCapability(TenantCapability.Food)]
+public record MarkRoundServedCommand(Guid TicketId) : IRequest<Result>;
 
 public class UpdateKitchenTicketStatusCommandValidator : AbstractValidator<UpdateKitchenTicketStatusCommand>
 {
@@ -175,7 +180,16 @@ public class UpdateKitchenTicketStatusCommandValidator : AbstractValidator<Updat
     }
 }
 
-public class UpdateKitchenTicketStatusCommandHandler : IRequestHandler<UpdateKitchenTicketStatusCommand, Result>
+public class MarkRoundServedCommandValidator : AbstractValidator<MarkRoundServedCommand>
+{
+    public MarkRoundServedCommandValidator()
+    {
+        RuleFor(x => x.TicketId).NotEmpty();
+    }
+}
+
+public class UpdateKitchenTicketStatusCommandHandler
+    : IRequestHandler<UpdateKitchenTicketStatusCommand, Result>, IRequestHandler<MarkRoundServedCommand, Result>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
@@ -186,13 +200,19 @@ public class UpdateKitchenTicketStatusCommandHandler : IRequestHandler<UpdateKit
         _dateTimeProvider = dateTimeProvider;
     }
 
-    public async Task<Result> Handle(UpdateKitchenTicketStatusCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(UpdateKitchenTicketStatusCommand request, CancellationToken cancellationToken)
+        => MoveAsync(request.TicketId, request.Status, cancellationToken);
+
+    public Task<Result> Handle(MarkRoundServedCommand request, CancellationToken cancellationToken)
+        => MoveAsync(request.TicketId, KitchenTicketStatus.Served, cancellationToken);
+
+    private async Task<Result> MoveAsync(Guid ticketId, KitchenTicketStatus status, CancellationToken cancellationToken)
     {
         var orderId = await _context.KitchenTickets
-            .Where(t => t.Id == request.TicketId)
+            .Where(t => t.Id == ticketId)
             .Select(t => (Guid?)t.OrderId)
             .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new EntityNotFoundException("KitchenTicket", request.TicketId);
+            ?? throw new EntityNotFoundException("KitchenTicket", ticketId);
 
         var order = await _context.Orders
             .Include(o => o.KitchenTickets)
@@ -200,7 +220,7 @@ public class UpdateKitchenTicketStatusCommandHandler : IRequestHandler<UpdateKit
         if (!order.IsOpenTab)
             return Result.Failure("La cuenta ya está cerrada.");
 
-        order.ChangeKitchenTicketStatus(request.TicketId, request.Status, _dateTimeProvider.UtcNow);
+        order.ChangeKitchenTicketStatus(ticketId, status, _dateTimeProvider.UtcNow);
         try
         {
             await _context.SaveChangesAsync(cancellationToken);

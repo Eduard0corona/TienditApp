@@ -7,13 +7,15 @@ import { categoriesApi } from '../../api/categoriesApi';
 import type { ProductDto, CategoryDto, PaginatedList } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
+import { formatQuantity } from '../../utils/units';
+import { formatMoney } from '../../utils/money';
 
 const COLUMNS = [
   { header: 'Imagen', width: 60 },
   { header: 'Nombre' },
   { header: 'Categoría' },
   { header: 'Precio', className: 'text-end' },
-  { header: 'Stock', className: 'text-center' },
+  { header: 'Existencia', className: 'text-center' },
   { header: 'Horario', className: 'text-center' },
   { header: 'Disponible', className: 'text-center' },
   { header: 'Acciones', className: 'text-center' },
@@ -209,22 +211,23 @@ export default function ProductsList() {
                     <td className="text-end">
                       {product.hasDiscount && product.compareAtPrice && (
                         <span className="text-muted text-decoration-line-through me-1">
-                          ${product.compareAtPrice.toFixed(2)}
+                          {formatMoney(product.compareAtPrice)}
                         </span>
                       )}
                       <span className="fw-semibold">
-                        ${product.priceAmount.toFixed(2)} {product.priceCurrency}
+                        {formatMoney(product.priceAmount)}
                       </span>
                     </td>
                     <td className="text-center">
-                      {product.stockQuantity != null ? (
+                      {product.tracksStock && product.onHand != null ? (
                         <span
-                          className={`badge ${product.isLowStock ? 'bg-warning' : 'bg-success'}`}
+                          className={`badge ${product.onHand <= 0 ? 'bg-danger' : product.isLowStock ? 'bg-warning' : 'bg-success'}`}
+                          title={product.onHand <= 0 ? 'Agotado' : product.isLowStock ? 'Poca existencia' : undefined}
                         >
-                          {product.stockQuantity}
+                          {formatQuantity(product.onHand, product.unit)}
                         </span>
                       ) : (
-                        <span className="text-muted">-</span>
+                        <span className="text-muted" title="No controla existencias">-</span>
                       )}
                     </td>
                     <td className="text-center">

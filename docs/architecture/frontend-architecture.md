@@ -2,7 +2,7 @@
 
 ## Estado actual comprobado
 
-`client` usa React 19.2, TypeScript 5.9, Vite 7, React Router 7, Axios, React Hook Form, Bootstrap/React Bootstrap y SignalR. `App.tsx` define rutas con `lazy` y `Suspense`; `ProtectedRoute` comprueba sesión y `AccessRoute` decide si la pantalla aplica al usuario con la matriz de `src/utils/access.ts` (rol, permiso y capability, igual que la API).
+`client` usa React 19.2, TypeScript 5.9, Vite 7, React Router 7, Axios, React Hook Form, Bootstrap/React Bootstrap y SignalR. `App.tsx` define rutas con `lazy` y `Suspense`; `ProtectedRoute` comprueba sesión y `AccessRoute` decide si la pantalla aplica al usuario con la matriz de `src/utils/access.ts` (permiso, capability y si administra el negocio, igual que cada caso de uso de la API).
 
 Estructura principal:
 
@@ -46,6 +46,7 @@ Datos del servidor y cliente generado (Fase 2):
 Fase 4:
 
 - `AppErrorBoundary` envuelve las rutas (en el layout, alrededor del `Outlet`, con su propio `Suspense`, así el menú se queda mientras carga o si falla una pantalla) y se limpia al cambiar de ruta. Si el error es un archivo de la app que ya no existe (página abierta antes de un despliegue), recarga una vez para tomar la versión nueva (`utils/chunkReload.ts`, también ante `vite:preloadError`), a lo más una vez por minuto.
+- Modo enfocado (Fase 5): Vender y Cocina corren solos en una tableta de mostrador o una pantalla de cocina. El botón "Modo enfocado" de esas pantallas quita el menú, la barra superior, el pie y la barra de pestañas, deja una barra mínima (pantalla, negocio, hora y "Salir del modo enfocado"), pide pantalla completa al navegador y sube los objetivos táctiles a 44 px (52 px en cocina). Cocina se ve en tema oscuro aunque el resto de la app sea claro (`data-bs-theme` en `.focus-shell`). El dispositivo lo recuerda por pantalla (`tienditapp.focusedAreas` en `localStorage`), así una tableta que solo vende vuelve a abrir Vender enfocado; un negocio suspendido ve su aviso normal. `components/layout/focusMode.ts` y `FocusBar` lo implementan; `Layout` elige el shell.
 - `useArrivalChime` toca un aviso de dos notas con Web Audio, activable por dispositivo: Cocina suena con cada comanda nueva y Pedidos con cada pedido en línea por confirmar (`OrderCreated` lleva `status`). El navegador solo deja sonar después de tocar la pantalla; la pantalla lo pide si hace falta.
 - Pedidos recarga en silencio (sin spinner ni perder el scroll) ante los eventos en vivo y al reconectar, y el detalle abierto sigue a su pedido.
 - "Abrir otro negocio" (menú de usuario y selector de negocio) crea un negocio con la misma cuenta y cambia a él, que abre el arranque guiado. `PrintButton` imprime documentos de ticket (corte de caja) sin abrir otra página.

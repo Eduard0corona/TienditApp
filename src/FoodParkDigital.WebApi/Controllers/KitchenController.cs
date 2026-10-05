@@ -11,9 +11,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-// Any employee role: TenantResolutionMiddleware requires ManageServiceBoard and the Kitchen capability,
-// the same rule that shows the kitchen board in the menu.
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF,KITCHEN")]
+[Authorize]
 public class KitchenController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -55,11 +53,7 @@ public class KitchenController : ControllerBase
     [HttpPut("orders/{id:guid}/start")]
     public async Task<IActionResult> StartPreparation(Guid id)
     {
-        var result = await _mediator.Send(new UpdateOrderStatusCommand
-        {
-            OrderId = id,
-            NewStatus = OrderStatus.InPreparation
-        });
+        var result = await _mediator.Send(new MoveKitchenOrderCommand(id, OrderStatus.InPreparation));
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
@@ -68,11 +62,7 @@ public class KitchenController : ControllerBase
     [HttpPut("orders/{id:guid}/ready")]
     public async Task<IActionResult> MarkReady(Guid id)
     {
-        var result = await _mediator.Send(new UpdateOrderStatusCommand
-        {
-            OrderId = id,
-            NewStatus = OrderStatus.Ready
-        });
+        var result = await _mediator.Send(new MoveKitchenOrderCommand(id, OrderStatus.Ready));
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();

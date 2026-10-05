@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -11,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Purchasing.Commands;
 
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record SetSupplierActiveCommand : IRequest<Result>
 {
     public Guid Id { get; init; }
@@ -28,25 +28,14 @@ public class SetSupplierActiveCommandValidator : AbstractValidator<SetSupplierAc
 public class SetSupplierActiveCommandHandler : IRequestHandler<SetSupplierActiveCommand, Result>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public SetSupplierActiveCommandHandler(
-        IApplicationDbContext context,
-        ICurrentTenantService tenantService)
+    public SetSupplierActiveCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<Result> Handle(SetSupplierActiveCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure("El negocio no tiene habilitado el módulo de inventario/compras.");
-
         var entity = await _context.Suppliers
             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Supplier", request.Id);

@@ -29,6 +29,8 @@ import {
 } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import { useActiveBranches } from '../../hooks/useWorkingBranch';
+import { formatMoney, formatUnitCost } from '../../utils/money';
+import { formatStockQuantity } from '../../utils/units';
 
 type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
@@ -1226,10 +1228,17 @@ export default function InventoryManagement() {
                     renderRow={(item) => (
                       <>
                         <td>
-                          <div className="fw-semibold">{item.name}</div>
+                          <div className="fw-semibold">
+                            {item.name}
+                            {item.productId && (
+                              <span className="badge bg-info-subtle text-info-emphasis ms-1" title={`Existencia del producto ${item.productName ?? ''}`.trim()}>
+                                Producto
+                              </span>
+                            )}
+                          </div>
                           <div className="text-muted small">
                             {item.categoryName || '-'}
-                            {item.isCritical && <span className="badge bg-danger ms-1">Critico</span>}
+                            {item.isCritical && <span className="badge bg-danger ms-1">Crítico</span>}
                           </div>
                         </td>
                         <td>
@@ -1237,14 +1246,14 @@ export default function InventoryManagement() {
                           <div className="text-muted small">{item.sku || '-'}</div>
                         </td>
                         <td className="text-center">{getUnitLabel(item.unit)}</td>
-                        <td className="text-end">${item.averageCost.toFixed(2)}</td>
+                        <td className="text-end">{formatUnitCost(item.averageCost)}</td>
                         <td className="text-end">
-                          {item.totalOnHand.toFixed(2)}
+                          {formatStockQuantity(item.totalOnHand)}
                           {item.isLowStock && (
                             <span className="badge bg-warning text-dark ms-1">Bajo</span>
                           )}
                         </td>
-                        <td className="text-end">{item.reorderPoint.toFixed(2)}</td>
+                        <td className="text-end">{formatStockQuantity(item.reorderPoint)}</td>
                         <td className="text-center">
                           <span className={`badge ${item.isActive ? 'bg-success' : 'bg-danger'}`}>
                             {item.isActive ? 'Activo' : 'Inactivo'}
@@ -1260,7 +1269,11 @@ export default function InventoryManagement() {
                           </button>
                           <button
                             className={`btn btn-sm ${item.isActive ? 'btn-soft-warning' : 'btn-soft-success'}`}
-                            title={item.isActive ? 'Desactivar' : 'Activar'}
+                            title={item.productId && item.isActive
+                              ? 'Es la existencia de un producto: deja de controlarla desde el producto'
+                              : item.isActive ? 'Desactivar' : 'Activar'}
+                            aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}
+                            disabled={!!item.productId && item.isActive}
                             onClick={() => toggleSupplyActive(item)}
                           >
                             <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
@@ -1342,16 +1355,16 @@ export default function InventoryManagement() {
                           <div className="text-muted small">{item.inventoryLocationCode}</div>
                         </td>
                         <td className="text-end">
-                          {item.onHandQuantity.toFixed(2)} {getUnitLabel(item.unit)}
+                          {formatStockQuantity(item.onHandQuantity)} {getUnitLabel(item.unit)}
                         </td>
-                        <td className="text-end">{item.reservedQuantity.toFixed(2)}</td>
+                        <td className="text-end">{formatStockQuantity(item.reservedQuantity)}</td>
                         <td className="text-end">
-                          {item.availableQuantity.toFixed(2)}
+                          {formatStockQuantity(item.availableQuantity)}
                           {item.isLowStock && (
                             <span className="badge bg-warning text-dark ms-1">Bajo</span>
                           )}
                         </td>
-                        <td className="text-end">${item.lastCost.toFixed(2)}</td>
+                        <td className="text-end">{formatUnitCost(item.lastCost)}</td>
                         <td className="text-center">
                           <span className={`badge ${item.isSupplyActive && item.isLocationActive ? 'bg-success' : 'bg-secondary'}`}>
                             {item.isSupplyActive && item.isLocationActive ? 'Activo' : 'Inactivo'}
@@ -1462,7 +1475,7 @@ export default function InventoryManagement() {
                           <div>{item.referenceNumber || '-'}</div>
                           <div className="text-muted small">{item.counterpartyName || '-'}</div>
                         </td>
-                        <td className="text-end">${item.totalAmount.toFixed(2)}</td>
+                        <td className="text-end">{formatMoney(item.totalAmount)}</td>
                         <td className="text-center">
                           <button
                             className="btn btn-sm btn-soft-secondary"
@@ -1588,7 +1601,7 @@ export default function InventoryManagement() {
                                   onChange={(e) => updateRecipeLine(lineIndex, { wastePercent: e.target.value })}
                                 />
                               </td>
-                              <td className="text-end">{effectiveQuantity.toFixed(4)}</td>
+                              <td className="text-end">{formatStockQuantity(effectiveQuantity)}</td>
                               <td style={{ minWidth: 220 }}>
                                 <input
                                   type="text"
@@ -1710,10 +1723,10 @@ export default function InventoryManagement() {
                         <td className="fw-semibold">{item.movementNumber}</td>
                         <td>{item.supplyItemName}</td>
                         <td>{item.inventoryLocationName}</td>
-                        <td className="text-end">{item.quantityIn > 0 ? item.quantityIn.toFixed(4) : '-'}</td>
-                        <td className="text-end">{item.quantityOut > 0 ? item.quantityOut.toFixed(4) : '-'}</td>
-                        <td className="text-end">{item.quantityAfter.toFixed(4)}</td>
-                        <td className="text-end">{item.unitCost !== undefined ? `$${item.unitCost.toFixed(4)}` : '-'}</td>
+                        <td className="text-end">{item.quantityIn > 0 ? formatStockQuantity(item.quantityIn) : '-'}</td>
+                        <td className="text-end">{item.quantityOut > 0 ? formatStockQuantity(item.quantityOut) : '-'}</td>
+                        <td className="text-end">{formatStockQuantity(item.quantityAfter)}</td>
+                        <td className="text-end">{item.unitCost !== undefined ? formatUnitCost(item.unitCost) : '-'}</td>
                         <td>
                           <div>{item.referenceNumber || '-'}</div>
                           <div className="text-muted small">{item.externalReference || '-'}</div>
@@ -1782,9 +1795,9 @@ export default function InventoryManagement() {
                       <>
                         <td>{item.supplyItemName}</td>
                         <td>{item.inventoryLocationName}</td>
-                        <td className="text-end">{item.onHandQuantity.toFixed(4)}</td>
-                        <td className="text-end">{item.reorderPoint.toFixed(4)}</td>
-                        <td className="text-end">{item.deficit.toFixed(4)}</td>
+                        <td className="text-end">{formatStockQuantity(item.onHandQuantity)}</td>
+                        <td className="text-end">{formatStockQuantity(item.reorderPoint)}</td>
+                        <td className="text-end">{formatStockQuantity(item.deficit)}</td>
                         <td className="text-center">
                           <span
                             className={`badge ${
@@ -2422,7 +2435,7 @@ export default function InventoryManagement() {
                 <div className="col-md-6">
                   <p className="mb-1"><strong>Fecha:</strong> {formatDateTime(selectedMovement.movementDate)}</p>
                   <p className="mb-1"><strong>Referencia:</strong> {selectedMovement.referenceNumber || '-'}</p>
-                  <p className="mb-1"><strong>Monto:</strong> ${selectedMovement.totalAmount.toFixed(2)}</p>
+                  <p className="mb-1"><strong>Monto:</strong> {formatMoney(selectedMovement.totalAmount)}</p>
                 </div>
               </div>
 
@@ -2446,11 +2459,11 @@ export default function InventoryManagement() {
                       <tr key={line.id}>
                         <td>{line.supplyItemName}</td>
                         <td>{line.inventoryLocationName}</td>
-                        <td className="text-end">{line.quantity.toFixed(2)}</td>
-                        <td className="text-end">{line.unitCost !== undefined ? `$${line.unitCost.toFixed(2)}` : '-'}</td>
-                        <td className="text-end">{line.totalCost !== undefined ? `$${line.totalCost.toFixed(2)}` : '-'}</td>
-                        <td className="text-end">{line.quantityBefore.toFixed(2)}</td>
-                        <td className="text-end">{line.quantityAfter.toFixed(2)}</td>
+                        <td className="text-end">{formatStockQuantity(line.quantity)}</td>
+                        <td className="text-end">{line.unitCost !== undefined ? formatUnitCost(line.unitCost) : '-'}</td>
+                        <td className="text-end">{line.totalCost !== undefined ? formatMoney(line.totalCost) : '-'}</td>
+                        <td className="text-end">{formatStockQuantity(line.quantityBefore)}</td>
+                        <td className="text-end">{formatStockQuantity(line.quantityAfter)}</td>
                         <td>{line.lotNumber || '-'}</td>
                         <td>{formatDate(line.expirationDate)}</td>
                       </tr>

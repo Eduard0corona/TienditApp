@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -23,23 +22,14 @@ public record GetInventoryStocksQuery : IRequest<PaginatedList<InventoryStockDto
 public class GetInventoryStocksQueryHandler : IRequestHandler<GetInventoryStocksQuery, PaginatedList<InventoryStockDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetInventoryStocksQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetInventoryStocksQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<PaginatedList<InventoryStockDto>> Handle(GetInventoryStocksQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return new PaginatedList<InventoryStockDto>([], 0, request.PageNumber, request.PageSize);
-
         var query =
             from stock in _context.InventoryStocks.AsNoTracking()
             join supply in _context.SupplyItems.AsNoTracking() on stock.SupplyItemId equals supply.Id

@@ -1,5 +1,4 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -31,13 +30,6 @@ public class GetInventoryMovementByIdQueryHandler : IRequestHandler<GetInventory
             .FirstOrDefaultAsync(cancellationToken);
 
         if (movementScope is null)
-            throw new EntityNotFoundException("InventoryMovement", request.Id);
-
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            movementScope.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
             throw new EntityNotFoundException("InventoryMovement", request.Id);
 
         var movement = await _context.InventoryMovements

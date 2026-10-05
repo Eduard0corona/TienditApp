@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Purchasing.Entities;
@@ -11,6 +10,7 @@ using MediatR;
 namespace FoodParkDigital.Application.Purchasing.Commands;
 
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record CreateSupplierCommand : IRequest<Result<SupplierDto>>
 {
     public string Name { get; init; } = null!;
@@ -51,13 +51,6 @@ public class CreateSupplierCommandHandler : IRequestHandler<CreateSupplierComman
 
     public async Task<Result<SupplierDto>> Handle(CreateSupplierCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<SupplierDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
-
         var entity = new Supplier(
             tenantId: _tenantService.TenantId,
             name: request.Name,

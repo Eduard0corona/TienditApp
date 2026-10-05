@@ -1865,6 +1865,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<decimal>("ReorderPoint")
                         .HasColumnType("decimal(18,4)");
 
@@ -1895,6 +1898,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ProductId");
+
                     b.HasIndex("TenantId", "Barcode")
                         .HasFilter("[Barcode] IS NOT NULL");
 
@@ -1907,6 +1912,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "IsCritical");
 
                     b.HasIndex("TenantId", "Name");
+
+                    b.HasIndex("TenantId", "ProductId")
+                        .IsUnique()
+                        .HasFilter("[ProductId] IS NOT NULL");
 
                     b.HasIndex("TenantId", "Sku")
                         .IsUnique()
@@ -3969,6 +3978,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("SupplyItem");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Inventory.Entities.SupplyItem", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Catalog.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Messaging.Entities.MessageCampaign", b =>

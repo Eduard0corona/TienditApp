@@ -26,12 +26,11 @@ public class GetInventoryAlertsQueryHandler : IRequestHandler<GetInventoryAlerts
 
     public async Task<InventoryAlertsDto> Handle(GetInventoryAlertsQuery request, CancellationToken cancellationToken)
     {
+        // Services only need a recipe where the business sells them.
         var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
             _context,
             _tenantService.TenantId,
             cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return new InventoryAlertsDto();
 
         var lowStockItems = await (
             from stock in _context.InventoryStocks.AsNoTracking()

@@ -102,6 +102,6 @@ public class CategoryArchiveTests
     }
 
     private static Task<List<Application.Catalog.DTOs.CategoryDto>> GetCategoriesAsync(SalesTestFixture fixture, bool includeArchived)
-        => new GetCategoriesQueryHandler(fixture.Context, fixture.TenantService)
+        => new GetCategoriesQueryHandler(fixture.Context)
             .Handle(new GetCategoriesQuery { IncludeArchived = includeArchived }, CancellationToken.None);
 }

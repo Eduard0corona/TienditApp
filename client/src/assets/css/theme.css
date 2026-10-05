@@ -700,3 +700,71 @@ input[data-switch='primary']:checked + label {
   border-color: var(--ct-primary);
   background: var(--ct-primary-bg-subtle);
 }
+
+/* Focus mode (Vender and Cocina alone, full screen): no menu, a slim bar, 44 px touch targets. */
+.focus-shell {
+  /* The sticky ticket of Vender sits under this bar instead of the top bar. */
+  --ct-topbar-height: 60px;
+  min-height: 100vh;
+  background: var(--ct-body-bg);
+  color: var(--ct-body-color);
+}
+
+.focus-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: var(--ct-topbar-height);
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--ct-border-color);
+  background: var(--ct-secondary-bg);
+}
+
+.focus-bar-title {
+  font-size: 1.15rem;
+}
+
+.focus-bar-clock {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.focus-content {
+  padding: 1rem;
+}
+
+/* The bar above says where you are. */
+.focus-shell .page-title-box {
+  display: none;
+}
+
+.focus-shell .btn,
+.focus-shell .btn-sm,
+.focus-shell .form-control,
+.focus-shell .form-select {
+  min-height: var(--ta-touch);
+}
+
+.focus-shell .btn-sm {
+  padding-inline: 0.9rem;
+}
+
+/* Without the tab bar the phone ticket goes back to the bottom edge. */
+.focus-shell .sell-phone-bar {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+/* Kitchen boards are read from a distance. */
+.focus-shell[data-area='kitchen'] .focus-content {
+  font-size: 1.1rem;
+}
+
+.focus-shell[data-area='kitchen'] .btn {
+  min-height: 52px;
+  font-size: 1.05rem;
+}

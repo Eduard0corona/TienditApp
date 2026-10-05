@@ -14,7 +14,7 @@ namespace FoodParkDigital.Application.Orders.Commands;
 
 /// <summary>Gives money back for an order, optionally for returned units that go back to inventory.</summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record RefundOrderCommand : IRequest<Result<OrderDto>>
+public record RefundOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions
 {
     public Guid OrderId { get; init; }
     public decimal Amount { get; init; }
@@ -24,6 +24,9 @@ public record RefundOrderCommand : IRequest<Result<OrderDto>>
     public List<RefundItemDto> Items { get; init; } = [];
     public Guid? InventoryLocationId { get; init; }
     public string? Reference { get; init; }
+
+    // Giving money back is its own permission (owners and admins have it).
+    public IEnumerable<TenantPermission> RequiredPermissions() => [TenantPermission.ProcessRefunds];
 }
 
 public record RefundItemDto
@@ -64,7 +67,6 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
     public RefundOrderCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        ITenantAccessService tenantAccessService,
         IOrderCashService orderCashService,
         IDateTimeProvider dateTimeProvider,
         IOrderInventoryService orderInventoryService)
@@ -73,7 +75,6 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
         _refunds = new OrderRefundProcessor(
             context,
             currentUserService,
-            tenantAccessService,
             orderCashService,
             orderInventoryService,
             dateTimeProvider);
@@ -84,8 +85,6 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
         var order = await OrderRefundQueries.LoadForRefundAsync(_context, request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        if (!await _refunds.CanRefundAsync(order.TenantId, cancellationToken))
-            return Result.Failure<OrderDto>(OrderRefundProcessor.NotAllowedMessage);
 
         var refund = await _refunds.RefundAsync(
             order,

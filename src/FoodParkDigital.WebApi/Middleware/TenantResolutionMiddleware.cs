@@ -3,9 +3,7 @@ using System.Security.Claims;
 using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using FoodParkDigital.WebApi.Errors;
 
@@ -25,6 +23,25 @@ public class TenantResolutionMiddleware
         "/health",
         "/hubs/"
     ];
+
+    // Requests about the account rather than one business: signing in and the profile, the person's businesses,
+    // two-step verification, the platform console and the public menu. Every other /api route acts on the business
+    // of the token and needs an active membership in it, so a new route is checked unless it is listed here.
+    private static readonly string[] AccountPaths =
+    [
+        "/api/v1/auth",
+        "/api/v1/me",
+        "/api/v1/twofactor",
+        "/api/v1/platform",
+        "/api/v1/public",
+        "/api/v1/whatsapp/webhook"
+    ];
+
+    // The business's own profile, plan and settings, under /auth.
+    private const string MyTenantPath = "/api/v1/auth/my-tenant";
+
+    // The platform's list of businesses (GET and POST /api/v1/tenants); /api/v1/tenants/{id}/... is a business.
+    private const string PlatformTenantsPath = "/api/v1/tenants";
 
     private readonly RequestDelegate _next;
     private readonly ILogger<TenantResolutionMiddleware> _logger;
@@ -92,7 +109,8 @@ public class TenantResolutionMiddleware
             tenantId = overrideTenantId;
         }
 
-        TenantAccessSnapshot? accessSnapshot = null;
+        // Who may do what is decided by each use case (AuthorizationBehavior); here the business is resolved and the
+        // membership in it checked, once per request.
         if (tenantScopedPath && role != "SUPER_ADMIN")
         {
             var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -104,7 +122,7 @@ public class TenantResolutionMiddleware
                 return;
             }
 
-            accessSnapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, context.RequestAborted);
+            var accessSnapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, context.RequestAborted);
             // The authorization behavior reuses it instead of reading it again.
             accessContext?.Prime(userId, tenantId, accessSnapshot);
             if (!accessSnapshot.HasActiveAccess)
@@ -129,58 +147,6 @@ public class TenantResolutionMiddleware
             }
         }
 
-        // Owners and admins of this business (by membership, read above on this request) need no permission codes.
-        if (tenantScopedPath && role != "SUPER_ADMIN" && accessSnapshot is not { IsManager: true })
-        {
-            var requiredPermissions = GetPermissionRequirements(path, context.Request.Method);
-            if (requiredPermissions.Count > 0)
-            {
-                var userPermissions = accessSnapshot?.Permissions ?? [];
-
-                var hasPermission = requiredPermissions.Any(required =>
-                    userPermissions.Contains(required.ToString(), StringComparer.OrdinalIgnoreCase));
-
-                if (!hasPermission)
-                {
-                    // The permission names are for support, not for the person: they go to the log.
-                    _logger.LogInformation(
-                        "Permission denied on {Method} {Path}: requires {Permissions}",
-                        context.Request.Method,
-                        path,
-                        string.Join(" | ", requiredPermissions));
-                    await ApiProblem.WriteAsync(
-                        context, StatusCodes.Status403Forbidden,
-                        "No tienes permiso para realizar esta acción.",
-                        ApiErrorCodes.Forbidden, "Permission denied");
-                    return;
-                }
-            }
-        }
-
-        if (tenantScopedPath && role != "SUPER_ADMIN")
-        {
-            var capabilityRequirement = GetCapabilityRequirement(path);
-            if (capabilityRequirement.HasValue)
-            {
-                var requirement = capabilityRequirement.Value;
-                var tenantCapabilities = accessSnapshot?.NormalizedCapabilities ?? TenantCapability.None;
-                var hasCapability = requirement.Mode switch
-                {
-                    CapabilityMatchMode.All => (tenantCapabilities & requirement.Value) == requirement.Value,
-                    _ => (tenantCapabilities & requirement.Value) != 0
-                };
-
-                if (!hasCapability)
-                {
-                    await ApiProblem.WriteAsync(
-                        context, StatusCodes.Status403Forbidden,
-                        "Este módulo no está habilitado para tu negocio.",
-                        ApiErrorCodes.ModuleDisabled, "Tenant capability denied");
-                    return;
-                }
-            }
-        }
-
         tenantService.SetTenant(tenantId);
         TagTelemetry(context, tenantId);
         await _next(context);
@@ -201,18 +167,6 @@ public class TenantResolutionMiddleware
     private static bool IsExcludedPath(string path) =>
         ExcludedPathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.Ordinal));
 
-    // /api/v1/tenants/{tenantId}/orders[...]
-    private static bool IsTenantOrdersPath(string path)
-    {
-        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return segments.Length >= 5
-            && segments[0] == "api"
-            && segments[1] == "v1"
-            && segments[2] == "tenants"
-            && Guid.TryParse(segments[3], out _)
-            && segments[4] == "orders";
-    }
-
     public const string TenantSuspendedProblemType = "tenant-suspended";
 
     private static bool IsAllowedWhileSuspended(string path, string method) =>
@@ -220,184 +174,10 @@ public class TenantResolutionMiddleware
         && (path == "/api/v1/auth/my-tenant" || path == "/api/v1/auth/my-tenant/subscription");
 
     private static bool IsTenantScopedPath(string path) =>
-        path.StartsWith("/api/v1/tenants/", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/auth/my-tenant", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/cash", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/appointments", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/employees", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/tables", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal)
-        || path.StartsWith("/api/v1/auth/my-tenant/whatsapp", StringComparison.Ordinal);
+        path.StartsWith("/api/", StringComparison.Ordinal)
+        && (IsUnder(path, MyTenantPath)
+            || (!AccountPaths.Any(prefix => IsUnder(path, prefix)) && path.TrimEnd('/') != PlatformTenantsPath));
 
-    private static CapabilityRequirement? GetCapabilityRequirement(string path)
-    {
-        if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal))
-            return new CapabilityRequirement(TenantCapability.Inventory, CapabilityMatchMode.All);
-
-        if (path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
-            return new CapabilityRequirement(TenantCapability.Kitchen, CapabilityMatchMode.All);
-
-        if (path.StartsWith("/api/v1/tables", StringComparison.Ordinal))
-            return new CapabilityRequirement(TenantCapability.Food, CapabilityMatchMode.All);
-
-        if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal))
-            return new CapabilityRequirement(TenantCapability.Service, CapabilityMatchMode.All);
-
-        if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal)
-            || IsTenantOrdersPath(path)
-            || path.StartsWith("/api/v1/branches", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/marketing", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/messaging", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/products", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/categories", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/customers", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/cash", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/appointments", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/employees", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/audit", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/auth/my-tenant/whatsapp", StringComparison.Ordinal))
-        {
-            return new CapabilityRequirement(
-                TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food,
-                CapabilityMatchMode.Any);
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyCollection<TenantPermission> GetPermissionRequirements(string path, string method)
-    {
-        var isReadRequest =
-            HttpMethods.IsGet(method)
-            || HttpMethods.IsHead(method)
-            || HttpMethods.IsOptions(method);
-
-        if (path.StartsWith("/api/v1/employees", StringComparison.Ordinal))
-            return [TenantPermission.ManageEmployees];
-
-        // Branches are read by every member (where they sell, open their drawer, see reports) and managed by
-        // owners and admins: the use cases check it (RequiresTenantMember / RequiresTenantManager).
-        if (path.StartsWith("/api/v1/branches", StringComparison.Ordinal))
-            return [];
-
-        if (path.StartsWith("/api/v1/inventory/locations", StringComparison.Ordinal) && isReadRequest)
-        {
-            // Cash module needs active locations to register payments/cuts by branch.
-            return [TenantPermission.ManageInventory, TenantPermission.ManageCash];
-        }
-
-        if (path.StartsWith("/api/v1/inventory", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/suppliers", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/purchaseorders", StringComparison.Ordinal))
-            return [TenantPermission.ManageInventory];
-
-        // Charging is its own permission (a waiter takes orders, the cashier charges them): payments and their receipts.
-        if (path.StartsWith("/api/v1/orders/", StringComparison.Ordinal) && !isReadRequest
-            && (path.EndsWith("/payments", StringComparison.Ordinal)
-                || path.Equals("/api/v1/orders/uploads/payment-evidence", StringComparison.Ordinal)))
-            return [TenantPermission.ChargeOrders];
-
-        if (path.StartsWith("/api/v1/orders", StringComparison.Ordinal) || IsTenantOrdersPath(path))
-            return [TenantPermission.ManageOrders];
-
-        if (path.StartsWith("/api/v1/marketing", StringComparison.Ordinal))
-            return [TenantPermission.ManageWhatsApp];
-
-        // The dining room is read by whoever takes orders; tables are configured with the catalog.
-        if (path.StartsWith("/api/v1/tables", StringComparison.Ordinal))
-            return isReadRequest ? [TenantPermission.ManageOrders, TenantPermission.ManageCatalog] : [TenantPermission.ManageCatalog];
-
-        // Recording a customer's opt-out is also part of attending them.
-        if (path.StartsWith("/api/v1/messaging/opt-outs", StringComparison.Ordinal))
-            return [TenantPermission.ManageCampaigns, TenantPermission.ManageCustomers];
-
-        if (path.StartsWith("/api/v1/messaging", StringComparison.Ordinal))
-            return [TenantPermission.ManageCampaigns];
-
-        if (path.StartsWith("/api/v1/service-board", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/kitchen", StringComparison.Ordinal))
-            return [TenantPermission.ManageServiceBoard];
-
-        if (path.StartsWith("/api/v1/products", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/categories", StringComparison.Ordinal))
-        {
-            if (isReadRequest)
-            {
-                // Catalog read is needed by other modules (orders, inventory, appointments).
-                return
-                [
-                    TenantPermission.ManageCatalog,
-                    TenantPermission.ManageOrders,
-                    TenantPermission.ManageInventory,
-                    TenantPermission.ManageAppointments
-                ];
-            }
-
-            return [TenantPermission.ManageCatalog];
-        }
-
-        // The customer card is read from the chat and the orders screen too.
-        if (path.StartsWith("/api/v1/customers/card", StringComparison.Ordinal) && isReadRequest)
-            return [TenantPermission.ManageCustomers, TenantPermission.ManageWhatsApp, TenantPermission.ManageOrders];
-
-        // Notes and delivery addresses are kept from the chat and the orders screen too.
-        if (path.StartsWith("/api/v1/customers/", StringComparison.Ordinal)
-            && (path.EndsWith("/notes", StringComparison.Ordinal) || path.Contains("/addresses", StringComparison.Ordinal)))
-            return [TenantPermission.ManageCustomers, TenantPermission.ManageWhatsApp, TenantPermission.ManageOrders];
-
-        if (path.StartsWith("/api/v1/customers", StringComparison.Ordinal))
-            return [TenantPermission.ManageCustomers];
-
-        if (path.StartsWith("/api/v1/cash", StringComparison.Ordinal))
-            return [TenantPermission.ManageCash];
-
-        if (path.StartsWith("/api/v1/reports", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/dashboard", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/audit", StringComparison.Ordinal))
-            return [TenantPermission.ViewReports];
-
-        if (path.StartsWith("/api/v1/whatsapp/chat", StringComparison.Ordinal)
-            || path.StartsWith("/api/v1/auth/my-tenant/whatsapp", StringComparison.Ordinal))
-            return [TenantPermission.ManageWhatsApp];
-
-        if (path.StartsWith("/api/v1/ai-agents", StringComparison.Ordinal))
-            return [TenantPermission.ManageAiAgent];
-
-        if (path.StartsWith("/api/v1/appointments", StringComparison.Ordinal))
-            return [TenantPermission.ManageAppointments];
-
-        return [];
-    }
-
-    private readonly record struct CapabilityRequirement(
-        TenantCapability Value,
-        CapabilityMatchMode Mode);
-
-    private enum CapabilityMatchMode
-    {
-        Any = 0,
-        All = 1
-    }
+    private static bool IsUnder(string path, string prefix) =>
+        path.Equals(prefix, StringComparison.Ordinal) || path.StartsWith(prefix + "/", StringComparison.Ordinal);
 }

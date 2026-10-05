@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
+import { useFocusMode } from '../../components/layout/focusMode';
 import { kitchenApi } from '../../api/kitchenApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
@@ -79,6 +80,7 @@ export default function KitchenBoard() {
   const latestRequestRef = useRef(0);
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onKitchenTicketsChanged, onConnected } = useOrderSignalR();
   const chime = useArrivalChime('tienditapp:kitchen-sound');
+  const focus = useFocusMode();
   // Orders and new rounds already on the board; null until the first load (which must not ring).
   const knownTicketIdsRef = useRef<Set<string> | null>(null);
   const playChimeRef = useRef(chime.play);
@@ -153,14 +155,6 @@ export default function KitchenBoard() {
     }
   };
 
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
-    } else {
-      void document.documentElement.requestFullscreen().catch(() => undefined);
-    }
-  };
-
   const handleStart = (orderId: string) =>
     runAction(orderId, () => kitchenApi.startPreparation(orderId), 'No se pudo iniciar la preparación.');
 
@@ -202,10 +196,12 @@ export default function KitchenBoard() {
           <button type="button" className="btn btn-sm btn-light" onClick={() => void loadOrders()}>
             <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
           </button>
-          {/* Kitchen screens and TVs show the board alone. */}
-          <button type="button" className="btn btn-sm btn-light" onClick={toggleFullscreen}>
-            <i className="ri-fullscreen-line me-1" aria-hidden="true"></i>Pantalla completa
-          </button>
+          {/* Kitchen screens and TVs show the board alone: full screen, dark, with large buttons. */}
+          {!focus.isFocused && (
+            <button type="button" className="btn btn-sm btn-light" onClick={focus.enter}>
+              <i className="ri-fullscreen-line me-1" aria-hidden="true"></i>Modo enfocado
+            </button>
+          )}
         </div>
       </div>
 

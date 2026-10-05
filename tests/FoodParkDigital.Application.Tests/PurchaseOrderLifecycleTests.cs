@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Purchasing.Commands;
 using FoodParkDigital.Application.Purchasing.DTOs;
+using FoodParkDigital.Application.Purchasing.Queries;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
@@ -51,10 +52,10 @@ public class PurchaseOrderLifecycleTests
         var draft = await CreateOrderAsync(fixture, tenant, quantity: 3m, unitCost: 20m, markAsSent: false);
         Assert.Equal(PurchaseOrderStatus.Draft, draft.Status);
 
-        var sent = await new SendPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        var sent = await new SendPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new SendPurchaseOrderCommand(draft.Id), CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
-        var sentAgain = await Assert.ThrowsAsync<DomainException>(() => new SendPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        var sentAgain = await Assert.ThrowsAsync<DomainException>(() => new SendPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new SendPurchaseOrderCommand(draft.Id), CancellationToken.None));
         fixture.Context.ChangeTracker.Clear();
         var cancelled = await CancelAsync(fixture, draft.Id);
@@ -80,6 +81,22 @@ public class PurchaseOrderLifecycleTests
     }
 
     [Fact]
+    public async Task Order_ShouldCarryTheSupplierPhoneAndTheUnitOfEachSupply()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail | TenantCapability.Inventory);
+
+        var order = await CreateOrderAsync(fixture, tenant, quantity: 2.5m, unitCost: 30m, markAsSent: false, supplierPhone: " 55 1234 5678 ");
+        var listed = Assert.Single((await new GetPurchaseOrdersQueryHandler(fixture.Context)
+            .Handle(new GetPurchaseOrdersQuery(), CancellationToken.None)).Items);
+
+        // What the WhatsApp message to the supplier needs: who to send it to and how each quantity is measured.
+        Assert.Equal("55 1234 5678", order.SupplierPhone);
+        Assert.Equal(UnitType.Liter, Assert.Single(order.Lines).Unit);
+        Assert.Equal("55 1234 5678", listed.SupplierPhone);
+    }
+
+    [Fact]
     public async Task OrderOfAnotherBusiness_ShouldNotBeFound()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -87,14 +104,15 @@ public class PurchaseOrderLifecycleTests
         var foreign = await CreateOrderAsync(fixture, other, quantity: 1m, unitCost: 5m, markAsSent: false);
         await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail | TenantCapability.Inventory, slug: "propio");
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() => new SendPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => new SendPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new SendPurchaseOrderCommand(foreign.Id), CancellationToken.None));
         await Assert.ThrowsAsync<EntityNotFoundException>(() => CancelAsync(fixture, foreign.Id));
     }
 
-    private static async Task<PurchaseOrderDto> CreateOrderAsync(SalesTestFixture fixture, Tenant tenant, decimal quantity, decimal unitCost, bool markAsSent)
+    private static async Task<PurchaseOrderDto> CreateOrderAsync(
+        SalesTestFixture fixture, Tenant tenant, decimal quantity, decimal unitCost, bool markAsSent, string? supplierPhone = null)
     {
-        var supplier = new Supplier(tenant.Id, "Proveedor central");
+        var supplier = new Supplier(tenant.Id, "Proveedor central", phone: supplierPhone);
         var supply = new SupplyItem(tenant.Id, "Detergente", UnitType.Liter, defaultCost: 10m);
         fixture.Context.Suppliers.Add(supplier);
         fixture.Context.SupplyItems.Add(supply);
@@ -126,7 +144,7 @@ public class PurchaseOrderLifecycleTests
 
     private static async Task<Application.Common.Models.Result<PurchaseOrderDto>> CancelAsync(SalesTestFixture fixture, Guid orderId)
     {
-        var result = await new CancelPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        var result = await new CancelPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new CancelPurchaseOrderCommand(orderId), CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
         return result;

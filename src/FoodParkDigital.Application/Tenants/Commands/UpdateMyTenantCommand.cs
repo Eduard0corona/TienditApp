@@ -3,6 +3,7 @@ using System;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Tenants.DTOs;
@@ -67,6 +68,10 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.Capabilities)
             .Must(c => !c.HasValue || (c.Value & ~allowedCapabilities) == 0)
             .WithMessage("Las capacidades proporcionadas no son validas.");
+        // Like its plan, a business always sells something.
+        RuleFor(x => x.Capabilities)
+            .Must(c => !c.HasValue || TenantCapabilityRules.HasCommerce(c.Value))
+            .WithMessage("Elige al menos un tipo de venta: productos, servicios o alimentos.");
     }
 }
 
@@ -88,15 +93,6 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
     public async Task<Result<TenantProfileDto>> Handle(UpdateMyTenantCommand request, CancellationToken cancellationToken)
     {
-        var canManageTenant =
-            _currentUserService.Role == "TENANT_ADMIN" ||
-            _currentUserService.Role == "SUPER_ADMIN" ||
-            string.Equals(_currentUserService.TenantRole, "OWNER", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(_currentUserService.TenantRole, "ADMIN", StringComparison.OrdinalIgnoreCase);
-
-        if (!canManageTenant)
-            return Result.Failure<TenantProfileDto>("Solo el administrador del negocio puede modificar los datos de la empresa.");
-
         var tenantId = await MyTenantResolver.ResolveAsync(
             _context,
             _tenantService,

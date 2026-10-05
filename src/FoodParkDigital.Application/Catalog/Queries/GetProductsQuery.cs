@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -148,7 +149,9 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
             .OrderBy(p => p.Name)
             .Select(CatalogMappings.AsDto);
 
-        return await PaginatedList<ProductDto>.CreateAsync(
+        var page = await PaginatedList<ProductDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);
+        await ProductStockReader.ApplyAsync(_context, page.Items, cancellationToken);
+        return page;
     }
 }

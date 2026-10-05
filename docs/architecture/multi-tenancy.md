@@ -2,12 +2,12 @@
 
 ## Estado actual
 
-Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo y agrega un filtro `TenantId == CurrentTenantId` a cada entidad que implementa `ITenantScoped`. `TenantResolutionMiddleware` toma `tenant_id` del JWT, valida acceso para rutas reconocidas y configura `ICurrentTenantService`.
+Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo y agrega un filtro `TenantId == CurrentTenantId` a cada entidad que implementa `ITenantScoped`. `TenantResolutionMiddleware` toma `tenant_id` del JWT, valida la membresía activa y configura `ICurrentTenantService`. Desde la Fase 5 toda ruta `/api` es del negocio salvo las de la cuenta (inicio de sesión y perfil, `/me`, `/twofactor`, `/platform`, `/public`, el webhook y la lista de negocios de la plataforma): una ruta nueva valida la membresía sin agregarla a una lista. Quién puede hacer qué lo declara cada caso de uso (ver [identidad y permisos](identity-permissions-capabilities.md)).
 
 - `TenantSaveChangesInterceptor` completa un `TenantId` vacío en entidades nuevas, rechaza un `TenantId` ajeno (salvo el de un tenant creado en la misma unidad de trabajo, como en el alta de negocio) y rechaza cambiar el `TenantId` de una entidad existente (`TenantMismatchException`, 403).
-- Las exclusiones del middleware se comparan por prefijo y las rutas de "mi tenant" y marketing son tenant-scoped: un miembro desactivado ya no puede usarlas con un token vigente.
+- Las exclusiones del middleware se comparan por prefijo y las rutas de "mi tenant" son del negocio: un miembro desactivado ya no puede usarlas con un token vigente.
 - `TenantOrdersController` rechaza un tenant de ruta distinto del tenant validado.
-- Los hubs validan al conectar membresía activa y permiso (`OrderHub`: gestionar órdenes, tablero o ver reportes; `ChatHub`: WhatsApp) y se cierran cuando expira el token.
+- Los hubs validan al conectar membresía activa y permiso (`OrderHub`: gestionar órdenes, tablero o ver reportes; `ChatHub`: WhatsApp), con dueños y admins leídos de la membresía, y se cierran cuando expira el token.
 - El override `X-Tenant-Id` de `SUPER_ADMIN` queda registrado como evento de auditoría en el log (usuario, tenant, tenant del token, método y ruta).
 
 - Negocio suspendido (Fase 3): `TenantAccessSnapshot.TenantSuspended` (negocio `Suspended` o `Inactive`) hace que el middleware responda 403 `tenant-suspended` a todo excepto leer el perfil y el plan; los hubs no lo unen. Ver [planes y facturación](../domain/billing-and-platform.md).

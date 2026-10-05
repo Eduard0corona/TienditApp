@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tests.Support;

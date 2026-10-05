@@ -32,9 +32,6 @@ public class CompleteTenantSetupCommandHandler : IRequestHandler<CompleteTenantS
 
     public async Task<Result> Handle(CompleteTenantSetupCommand request, CancellationToken cancellationToken)
     {
-        if (!TenantManagementRules.CanManageTenant(_currentUserService))
-            return Result.Failure(TenantManagementRules.NotAllowedMessage);
-
         var tenantId = await MyTenantResolver.ResolveAsync(_context, _tenantService, _currentUserService, cancellationToken);
         if (tenantId is null)
             return Result.Failure("No se encontró el negocio del usuario.");

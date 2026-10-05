@@ -10,8 +10,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/ai-agents")]
-// Staff reach it only with the ManageAiAgent permission (checked by the middleware and by each request).
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+[Authorize]
 public class AiAgentsController : ControllerBase
 {
     private readonly IMediator _mediator;

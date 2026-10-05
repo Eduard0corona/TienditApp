@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -18,23 +17,14 @@ public record GetCategoriesQuery : IRequest<List<CategoryDto>>
 public class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQuery, List<CategoryDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetCategoriesQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetCategoriesQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<List<CategoryDto>> Handle(GetCategoriesQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return [];
-
         var query = _context.Categories.AsNoTracking();
         if (!request.IncludeArchived)
             query = query.Where(c => c.IsActive);

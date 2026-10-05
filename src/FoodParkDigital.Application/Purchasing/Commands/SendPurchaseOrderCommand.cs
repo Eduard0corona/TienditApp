@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -13,6 +12,7 @@ namespace FoodParkDigital.Application.Purchasing.Commands;
 
 /// <summary>A draft goes to the supplier: from now on it waits for the goods.</summary>
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record SendPurchaseOrderCommand(Guid PurchaseOrderId) : IRequest<Result<PurchaseOrderDto>>;
 
 public class SendPurchaseOrderCommandValidator : AbstractValidator<SendPurchaseOrderCommand>
@@ -26,20 +26,14 @@ public class SendPurchaseOrderCommandValidator : AbstractValidator<SendPurchaseO
 public class SendPurchaseOrderCommandHandler : IRequestHandler<SendPurchaseOrderCommand, Result<PurchaseOrderDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public SendPurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public SendPurchaseOrderCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<Result<PurchaseOrderDto>> Handle(SendPurchaseOrderCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, _tenantService.TenantId, cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<PurchaseOrderDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
-
         var purchaseOrder = await _context.PurchaseOrders
             .Include(x => x.Lines)
             .FirstOrDefaultAsync(x => x.Id == request.PurchaseOrderId, cancellationToken)

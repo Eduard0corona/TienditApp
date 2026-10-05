@@ -7,6 +7,7 @@ using MediatR;
 namespace FoodParkDigital.Application.Purchasing.Queries;
 
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record GetPurchaseOrderByIdQuery(Guid Id) : IRequest<PurchaseOrderDto>;
 
 public class GetPurchaseOrderByIdQueryHandler : IRequestHandler<GetPurchaseOrderByIdQuery, PurchaseOrderDto>

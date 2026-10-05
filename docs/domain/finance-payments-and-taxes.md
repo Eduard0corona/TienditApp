@@ -68,6 +68,7 @@
 - Al cerrar se guardan lo esperado (fondo + efectivo neto), lo contado, la diferencia y las notas; las notas son obligatorias si hay faltante o sobrante. El conteo por denominación es opcional y debe cuadrar con el total (`CashCountJson`).
 - `GET /api/v1/cash/sessions` lista los turnos por fecha, sucursal y estado, con filtro de solo diferencias. Caja muestra Mi caja, Turnos (el administrador puede cerrar cajas ajenas) y Corte del día.
 - Desde la Fase 4 el detalle de un turno imprime su corte en formato de ticket de 72 mm (fondo, entradas y salidas de efectivo, esperado, contado, diferencia, conteo por denominación, movimientos y espacio para dos firmas), y Corte del día imprime el resumen del día. Vender abre la caja del cajero en un diálogo, sin salir de la venta.
+- Desde la Fase 5 el corte también sale por WhatsApp como texto (enlace `wa.me`, la persona elige el chat): el del turno desde su detalle en Turnos y desde Mi caja al cerrarla (con imprimir), y el del día desde Corte del día. Lleva las mismas cifras que el impreso, sin la lista de movimientos.
 - `TenantSettings.RequireOpenCashSession` (apagado por defecto) rechaza cobros y reembolsos en efectivo si el cajero no tiene caja abierta; tarjeta y transferencia no la necesitan.
 - Las cajas anteriores a la Fase 2 se completaron en la migración: sucursal predeterminada del negocio, cajero por el correo con que se abrió y, en las cerradas, esperado y diferencia calculados de sus movimientos.
 

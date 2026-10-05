@@ -1,8 +1,19 @@
 const MONEY_FORMAT = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+const UNIT_COST_FORMAT = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
 
 /** Amount with currency symbol and thousands separator ($1,234.50). */
 export function formatMoney(amount: number): string {
   return MONEY_FORMAT.format(amount);
+}
+
+/** Cost of one unit in inventory, which keeps four decimals ($12.3456, $12.50). */
+export function formatUnitCost(amount: number): string {
+  return UNIT_COST_FORMAT.format(amount);
 }
 
 /** Signed amount for money movements: +$100.00 entering, −$50.00 leaving. */

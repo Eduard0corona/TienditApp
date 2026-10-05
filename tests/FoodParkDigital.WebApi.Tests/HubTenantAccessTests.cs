@@ -45,6 +45,19 @@ public class HubTenantAccessTests
     }
 
     [Fact]
+    public async Task EveryPermission_ShouldComeFromTheMembership_NotFromTheTokenRole()
+    {
+        // A TENANT_ADMIN token issued before a demotion, or of an account that owns another business, but staff here.
+        var staffHere = await HubTenantAccess.ResolveAsync(
+            User("TENANT_ADMIN"), new FakeAccess(true, nameof(TenantPermission.ManageOrders)), CancellationToken.None);
+        var ownerHere = await HubTenantAccess.ResolveAsync(
+            User("STAFF"), new FakeAccess(true) { IsManager = true }, CancellationToken.None);
+
+        Assert.False(staffHere!.HasAnyPermission(TenantPermission.ManageWhatsApp));
+        Assert.True(ownerHere!.HasAnyPermission(TenantPermission.ManageWhatsApp));
+    }
+
+    [Fact]
     public async Task SuperAdmin_ShouldNotRequireMembership()
     {
         var access = await HubTenantAccess.ResolveAsync(User("SUPER_ADMIN"), new FakeAccess(active: false), CancellationToken.None);
@@ -63,8 +76,10 @@ public class HubTenantAccessTests
 
     private sealed class FakeAccess(bool active, params string[] permissions) : ITenantAccessService
     {
+        public bool IsManager { get; init; }
+
         public Task<TenantAccessSnapshot> GetAccessSnapshotAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) =>
-            Task.FromResult(new TenantAccessSnapshot(active, TenantCapability.Retail, active ? permissions : []));
+            Task.FromResult(new TenantAccessSnapshot(active, TenantCapability.Retail, active ? permissions : [], IsManager: active && IsManager));
 
         public Task<bool> HasActiveAccessAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(active);
         public Task<bool> HasCapabilityAsync(Guid tenantId, TenantCapability capability, CancellationToken cancellationToken) => Task.FromResult(true);

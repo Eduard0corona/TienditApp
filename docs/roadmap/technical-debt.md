@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-05 tras las Fases 0 a 5 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -14,11 +14,11 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 ## Alta
 
 - Movimientos manuales de inventario registrados desde la pantalla antes de la corrección del 2026-10-04: se guardaron con el tipo y el motivo siguientes al elegido. Movieron las existencias en sentido contrario, y las "Salidas" guardadas como `Entry` promediaron su costo como si fueran compras. Falta revisarlos con cada tenant y compensarlos ([procedimiento y consulta de solo lectura](../../database/production/data-repair/20261004_InventoryMovementEnumOffset/README.md)). El dominio no tiene una operación para revaluar el costo promedio.
-- La autorización v2 ya vive en cada caso de uso, pero el middleware conserva el mapeo por ruta (duplicado) y los controllers sus roles.
+- Resuelto en la Fase 5: la autorización vive solo en cada caso de uso. El middleware resuelve el negocio y la membresía (toda ruta `/api` es del negocio salvo las de la cuenta), los controllers no tienen roles y los handlers ya no comparan el rol del token ni revalidan el módulo que declara su solicitud.
 - `UserRole.SuperAdmin = 0` es el valor por defecto del enum y de `ApplicationUser.Role`: un rol omitido equivale al privilegio máximo. Cambiar los valores exige migración de datos; mientras tanto, `RoleAssignmentGuardTests` exige que todo request con `UserRole` rechace `SuperAdmin`.
 - Sesiones: los access tokens no se pueden revocar antes de expirar (no se valida el security stamp), los refresh tokens se guardan en texto plano sin detección de reuso y el login distingue cuentas sin confirmar o bloqueadas. (Los intentos fallidos ya bloquean la cuenta: Fase 4E.)
 - La recepción de compra no tiene idempotency key estable. (Los folios de órdenes, movimientos de inventario y órdenes de compra ya salen de un contador por negocio y no chocan: Fase 4F; los comandos que crean esos documentos corren en una transacción y devuelven el folio si se rechazan: Fase 4G.)
-- Resuelto en la Fase 4F ([ADR 0008](../adr/0008-api-error-contract.md)): todo error es `ProblemDetails` con `code` estable y el cliente decide por él. Quedan en inglés los mensajes del enlace de modelos de ASP.NET Core y algunos mensajes de dominio.
+- Resuelto en la Fase 4F ([ADR 0008](../adr/0008-api-error-contract.md)): todo error es `ProblemDetails` con `code` estable y el cliente decide por él. Desde la Fase 5 también los errores de enlace de modelos responden en español (`SpanishModelBinding`: campo obligatorio, número mal escrito o JSON que no se lee, sin los mensajes de `System.Text.Json` ni nombres de tipos de .NET), las reglas de FluentValidation sin mensaje propio usan su traducción al español y el último mensaje de dominio en inglés quedó traducido. Los nombres de campo de esos mensajes son los de la API (`Phone`).
 - Controllers no propagan `CancellationToken`.
 - Política de contraseña (longitud mínima 6) pendiente de evaluación.
 
@@ -27,7 +27,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
 - Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
 - `types/index.ts` copia a mano los enums numéricos del dominio. `ClientEnumContractTests` compara sus objetos `as const` con el dominio, pero no genera los tipos ni revisa las uniones literales duplicadas (`PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99` y similares).
-- Sin pruebas frontend. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
+- Las pruebas del cliente (Vitest y Testing Library, desde la Fase 5) cubren utilidades de dinero, unidades, acceso, errores, IVA, mensajes de WhatsApp y componentes con existencias; faltan pruebas de pantallas completas y de extremo a extremo. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
 - No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes. Desde la Fase 4F una prueba de humo confirma que la app responde con la versión nueva y el workflow admite OIDC en lugar del publish profile ([despliegue](../development/deploy-azure.md)); cambiar de credencial requiere configurar Azure.
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Cambios de estado, cancelaciones, reembolsos y rondas que consumen insumos toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
@@ -38,7 +38,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - `client/README.md` sigue siendo template genérico.
 - Un pago puede guardarse sin movimiento de caja si el cajero no tiene caja abierta y hay varias o ninguna en la sucursal, salvo que el negocio active `RequireOpenCashSession`.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
-- `Product.StockQuantity` es informativo: las ventas no lo descuentan.
+- `Product.StockQuantity` y `LowStockThreshold` quedan sin uso: la existencia de un producto vive en el libro mayor de inventario desde la Fase 5A. Falta borrar las columnas cuando ya no se ofrezcan como existencia inicial.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
 - Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.
@@ -181,6 +181,18 @@ Pendientes detectados en la Fase 3:
 - Permisos que se ofrecían al personal y no funcionaban (categorías, borrar productos, respuestas automáticas) ya funcionan; "Equipo" se quitó de los permisos del personal.
 - Recuperar la contraseña por SMS al teléfono confirmado; el teléfono solo cambia con la contraseña y un código al número nuevo (el admin ya no lo cambia) y el número mal escrito al registrarse se corrige con la contraseña.
 - Bloqueo por cuenta (5 intentos, 15 minutos) en login y códigos, un código SMS por minuto por cuenta, mensajes de Identity en español y reintento con espera al renovar la sesión ante 429.
+
+## Resuelto el 2026-10-05 (Fase 5: un solo modelo, un solo lugar)
+
+- Existencias de producto en el libro mayor de inventario: un producto que se vende tal cual controla sus existencias con un artículo de inventario propio, y vender, cancelar, devolver, comprar y ajustar lo mueven con las mismas reglas que a un insumo (migración `AddProductStockItems`). `Product.StockQuantity` ya no se edita.
+- La autorización vive solo en cada caso de uso: el middleware resuelve negocio y membresía, los controllers no tienen roles, los hubs deciden por membresía y la cocina y el mesero tienen sus propios comandos (`MoveKitchenOrderCommand`, `MarkRoundServedCommand`).
+- Un negocio siempre vende algo: productos, servicios o alimentos (no se pueden apagar los tres módulos de venta).
+- Pruebas del cliente en CI y antes de desplegar; dinero, costos unitarios y existencias con un solo formato; Node.js 24 LTS en CI, despliegue y Docker.
+- Errores de enlace de modelos y de FluentValidation en español (`SpanishModelBinding`).
+- Modo enfocado para Vender y Cocina: pantalla completa sin menú, barra con reloj y salida, recordado por dispositivo.
+- Versiones de NuGet centralizadas en `Directory.Packages.props` (Central Package Management).
+- Azure SignalR Service opcional para varias instancias (`Azure__SignalR__ConnectionString`, ver [despliegue](../development/deploy-azure.md)).
+- Orden de compra al proveedor por WhatsApp (con el teléfono del proveedor y la unidad de cada insumo; reenviarla pide solo lo pendiente) y corte de caja por WhatsApp desde Mi caja al cerrar, Turnos y Corte del día.
 
 ## Decisiones humanas pendientes
 

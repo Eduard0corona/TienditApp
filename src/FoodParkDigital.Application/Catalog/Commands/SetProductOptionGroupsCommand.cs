@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -97,6 +98,8 @@ public class SetProductOptionGroupsCommandHandler : IRequestHandler<SetProductOp
             .ToList());
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(product.ToDto());
+        var dto = product.ToDto();
+        await ProductStockReader.ApplyAsync(_context, dto, cancellationToken);
+        return Result.Success(dto);
     }
 }

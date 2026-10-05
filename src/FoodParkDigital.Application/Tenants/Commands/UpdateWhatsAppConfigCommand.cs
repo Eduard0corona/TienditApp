@@ -44,24 +44,18 @@ public class UpdateWhatsAppConfigCommandHandler : IRequestHandler<UpdateWhatsApp
         "El Phone Number ID ya está vinculado a otro negocio. Si este número te pertenece, contacta a soporte para liberarlo.";
 
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
 
     public UpdateWhatsAppConfigCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
         ICurrentTenantService tenantService)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _tenantService = tenantService;
     }
 
     public async Task<Result<WhatsAppConfigDto>> Handle(UpdateWhatsAppConfigCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure<WhatsAppConfigDto>("Solo el administrador puede configurar WhatsApp.");
-
         var tenantId = _tenantService.TenantId;
         var phoneNumberId = WhatsAppConfig.NormalizePhoneNumberId(request.PhoneNumberId);
 

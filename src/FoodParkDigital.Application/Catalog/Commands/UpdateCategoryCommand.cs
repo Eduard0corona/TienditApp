@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -45,13 +44,6 @@ public class UpdateCategoryCommandHandler : IRequestHandler<UpdateCategoryComman
         var category = await _context.Categories
             .FirstOrDefaultAsync(c => c.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("Category", request.Id);
-
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            category.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure<CategoryDto>("El negocio no tiene habilitado el módulo de catálogo.");
 
         category.Update(request.Name, request.Description, request.SortOrder);
         await _context.SaveChangesAsync(cancellationToken);

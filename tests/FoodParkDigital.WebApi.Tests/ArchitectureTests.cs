@@ -1,10 +1,12 @@
 using System.Reflection;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.WebApi.Controllers;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -93,9 +95,11 @@ public class ArchitectureTests
     public void CommandsThatTakeAFolio_ShouldRunInATransaction()
     {
         // Outside one, a folio is committed at once and a refused request leaves a gap in the business's numbering.
+        // The inventory ledger takes the folio of every movement it posts.
+        Type[] takeFolios = [typeof(IFolioGenerator), typeof(InventoryLedger)];
         var offending = Application.GetTypes()
             .Where(type => !type.IsAbstract && type.GetConstructors()
-                .Any(c => c.GetParameters().Any(p => p.ParameterType == typeof(IFolioGenerator))))
+                .Any(c => c.GetParameters().Any(p => takeFolios.Contains(p.ParameterType))))
             .SelectMany(type => type.GetInterfaces()
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>))
                 .Select(i => i.GetGenericArguments()[0]))
@@ -122,6 +126,31 @@ public class ArchitectureTests
             .ToList();
 
         Assert.True(offending.Count == 0, "Controllers with database access: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void Controllers_ShouldLeaveWhoMayDoWhatToTheUseCases()
+    {
+        // A controller asks for a signed-in user or is explicitly public; roles and policies here duplicated the rule
+        // each request declares (and contradicted it). Every action sends a request the authorization behavior checks.
+        var controllers = WebApi.GetTypes()
+            .Where(type => typeof(ControllerBase).IsAssignableFrom(type) && !type.IsAbstract)
+            .ToList();
+
+        var withoutDecision = controllers
+            .Where(type => type.GetCustomAttribute<AuthorizeAttribute>() is null && type.GetCustomAttribute<AllowAnonymousAttribute>() is null)
+            .Select(type => type.Name)
+            .ToList();
+        var byRoleOrPolicy = controllers
+            .SelectMany(type => type.GetCustomAttributes<AuthorizeAttribute>()
+                .Concat(type.GetMethods().SelectMany(method => method.GetCustomAttributes<AuthorizeAttribute>()))
+                .Where(attribute => !string.IsNullOrEmpty(attribute.Roles) || !string.IsNullOrEmpty(attribute.Policy))
+                .Select(_ => type.Name))
+            .Distinct()
+            .ToList();
+
+        Assert.True(withoutDecision.Count == 0, "Controllers without [Authorize] or [AllowAnonymous]: " + string.Join(", ", withoutDecision));
+        Assert.True(byRoleOrPolicy.Count == 0, "Controllers that authorize by role or policy: " + string.Join(", ", byRoleOrPolicy));
     }
 
     [Fact]

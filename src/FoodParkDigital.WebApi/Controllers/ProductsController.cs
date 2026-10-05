@@ -53,7 +53,6 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<ProductDto>> Create(
         [FromBody] CreateProductCommand command,
         [FromQuery] ProductCatalogItemType? itemType)
@@ -72,7 +71,6 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<ProductDto>> Update(
         Guid id,
         [FromBody] UpdateProductCommand command,
@@ -95,7 +93,6 @@ public class ProductsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var result = await _mediator.Send(new DeleteProductCommand(id));
@@ -105,7 +102,6 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/availability")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> ToggleAvailability(Guid id, [FromBody] ToggleAvailabilityRequest request)
     {
         var result = await _mediator.Send(new ToggleProductAvailabilityCommand
@@ -120,7 +116,6 @@ public class ProductsController : ControllerBase
 
     /// <summary>Replaces the variants and extras of the product.</summary>
     [HttpPut("{id:guid}/option-groups")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<ProductDto>> SetOptionGroups(Guid id, [FromBody] SetProductOptionGroupsRequest request)
     {
         var result = await _mediator.Send(new SetProductOptionGroupsCommand { ProductId = id, Groups = request.Groups });
@@ -130,7 +125,6 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/image")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<ProductImageUrlsDto>> UploadImage(Guid id, IFormFile file)
     {

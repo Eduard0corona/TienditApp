@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Inventory.Commands;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Purchasing.Commands;
@@ -46,7 +47,7 @@ public class OrderInventoryRegressionTests
         context.Orders.AddRange(pending, confirmed, ready);
         await context.SaveChangesAsync();
 
-        var result = await new GetKitchenOrdersQueryHandler(context, tenant)
+        var result = await new GetKitchenOrdersQueryHandler(context)
             .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
 
         Assert.Equal(
@@ -68,7 +69,7 @@ public class OrderInventoryRegressionTests
         context.Orders.AddRange(ticket, serviceOrder);
         await context.SaveChangesAsync();
 
-        var result = await new GetKitchenOrdersQueryHandler(context, tenant)
+        var result = await new GetKitchenOrdersQueryHandler(context)
             .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
 
         Assert.Equal([ticket.Id], result.Select(x => x.Id));
@@ -475,14 +476,17 @@ public class OrderInventoryRegressionTests
         return order;
     }
 
-    private static UpdateServiceOrderPieceStatusCommandHandler NewPieceHandler(ApplicationDbContext context) =>
-        new(context, new TestCurrentUserService(), NewInventoryService(context));
+    private static UpdateServiceOrderPieceStatusCommandHandler NewPieceHandler(ApplicationDbContext context)
+    {
+        var user = new TestCurrentUserService();
+        return new(context, user, TestAccess.For(user, new TestCurrentTenantService()), NewInventoryService(context));
+    }
 
     private static OrderInventoryService NewInventoryService(ApplicationDbContext context) =>
         new(context, new FixedClock(Now), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance);
 
     private static CreateInventoryMovementCommandHandler NewMovementHandler(ApplicationDbContext context, ICurrentTenantService tenant) =>
-        new(context, tenant, new TestCurrentUserService(), new FolioGenerator(context));
+        new(context, tenant, new InventoryLedger(context, new FolioGenerator(context)));
 
 
     private static (TestDbContext Context, TestCurrentTenantService Tenant, DbContextOptions<ApplicationDbContext> Options) CreateContext()
@@ -541,7 +545,7 @@ public class OrderInventoryRegressionTests
         public string? UserId { get; } = Guid.NewGuid().ToString();
         public string? UserName => "tester";
         public string? Role => "TENANT_ADMIN";
-        public string? TenantRole => "TENANT_ADMIN";
+        public string? TenantRole => "OWNER";
         public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }

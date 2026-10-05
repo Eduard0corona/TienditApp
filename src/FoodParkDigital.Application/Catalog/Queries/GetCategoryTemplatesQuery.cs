@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -27,13 +26,6 @@ public class GetCategoryTemplatesQueryHandler : IRequestHandler<GetCategoryTempl
 
     public async Task<List<CategoryTemplateDto>> Handle(GetCategoryTemplatesQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return [];
-
         var tenant = await _context.Tenants
             .IgnoreQueryFilters()
             .AsNoTracking()

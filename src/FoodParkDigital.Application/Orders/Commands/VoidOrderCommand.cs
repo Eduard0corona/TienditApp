@@ -17,11 +17,14 @@ namespace FoodParkDigital.Application.Orders.Commands;
 /// cannot be cancelled: it stays in its state, fully refunded.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record VoidOrderCommand : IRequest<Result<OrderDto>>
+public record VoidOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions
 {
     public Guid OrderId { get; init; }
     public string Reason { get; init; } = string.Empty;
     public bool RestockItems { get; init; } = true;
+
+    // Giving money back is its own permission (owners and admins have it).
+    public IEnumerable<TenantPermission> RequiredPermissions() => [TenantPermission.ProcessRefunds];
 }
 
 public class VoidOrderCommandValidator : AbstractValidator<VoidOrderCommand>
@@ -44,7 +47,6 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
     public VoidOrderCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        ITenantAccessService tenantAccessService,
         IOrderCashService orderCashService,
         IDateTimeProvider dateTimeProvider,
         IOrderInventoryService orderInventoryService)
@@ -55,7 +57,6 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
         _refunds = new OrderRefundProcessor(
             context,
             currentUserService,
-            tenantAccessService,
             orderCashService,
             _orderInventoryService,
             dateTimeProvider);
@@ -66,8 +67,6 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
         var order = await OrderRefundQueries.LoadForRefundAsync(_context, request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 
-        if (!await _refunds.CanRefundAsync(order.TenantId, cancellationToken))
-            return Result.Failure<OrderDto>(OrderRefundProcessor.NotAllowedMessage);
         if (order.Status == Domain.Orders.Enums.OrderStatus.Cancelled)
             return Result.Failure<OrderDto>("La orden ya está cancelada.");
 

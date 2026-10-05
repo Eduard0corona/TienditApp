@@ -14,11 +14,11 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
 /// Templates, campaigns, opt-outs and appointment reminders. Staff need ManageCampaigns (opt-outs also accept
-/// ManageCustomers); TenantResolutionMiddleware checks it before the request gets here.
+/// ManageCustomers), as each request declares.
 /// </summary>
 [ApiController]
 [Route("api/v1/messaging")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+[Authorize]
 public class MessagingController : ControllerBase
 {
     private readonly IMediator _mediator;

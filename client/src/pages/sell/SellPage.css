@@ -127,6 +127,19 @@
   color: var(--ct-secondary-color);
 }
 
+.sell-product-stock {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.sell-product-stock.low {
+  color: var(--ta-warning-fg);
+}
+
+.sell-product-stock.out {
+  color: var(--ta-danger-fg);
+}
+
 .sell-product-count {
   position: absolute;
   top: 0.5rem;

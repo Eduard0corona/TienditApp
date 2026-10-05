@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -39,5 +40,12 @@ public class SupplyItemConfiguration : IEntityTypeConfiguration<SupplyItem>
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasFilter("[Code] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.Sku }).IsUnique().HasFilter("[Sku] IS NOT NULL");
         builder.HasIndex(x => new { x.TenantId, x.Barcode }).HasFilter("[Barcode] IS NOT NULL");
+
+        // A product controls its stock through one item at most; deleting the product leaves the item as a supply.
+        builder.HasIndex(x => new { x.TenantId, x.ProductId }).IsUnique().HasFilter("[ProductId] IS NOT NULL");
+        builder.HasOne<Product>()
+            .WithMany()
+            .HasForeignKey(x => x.ProductId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

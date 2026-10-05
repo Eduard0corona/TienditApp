@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -13,6 +12,7 @@ namespace FoodParkDigital.Application.Appointments.Commands;
 
 /// <summary>Edits an open appointment: its customer, service, team member, time (reschedule) and notes.</summary>
 [RequiresPermission(TenantPermission.ManageAppointments)]
+[RequiresCapability(TenantCapability.Appointments)]
 public record UpdateAppointmentCommand : IRequest<Result<AppointmentDto>>
 {
     public Guid AppointmentId { get; init; }
@@ -46,28 +46,21 @@ public class UpdateAppointmentCommandValidator : AbstractValidator<UpdateAppoint
 public class UpdateAppointmentCommandHandler : IRequestHandler<UpdateAppointmentCommand, Result<AppointmentDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ILogger<UpdateAppointmentCommandHandler> _logger;
 
     public UpdateAppointmentCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
         IWhatsAppService whatsAppService,
         ILogger<UpdateAppointmentCommandHandler> logger)
     {
         _context = context;
-        _tenantService = tenantService;
         _whatsAppService = whatsAppService;
         _logger = logger;
     }
 
     public async Task<Result<AppointmentDto>> Handle(UpdateAppointmentCommand request, CancellationToken cancellationToken)
     {
-        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, _tenantService.TenantId, cancellationToken);
-        if ((capabilities & TenantCapability.Appointments) != TenantCapability.Appointments)
-            return Result.Failure<AppointmentDto>("El negocio no tiene habilitado el módulo de citas.");
-
         var appointment = await _context.Appointments.FirstOrDefaultAsync(x => x.Id == request.AppointmentId, cancellationToken);
         if (appointment is null)
             return Result.Failure<AppointmentDto>("Cita no encontrada.");

@@ -26,6 +26,19 @@ El workflow ya soporta ambos caminos: si existen las variables de repositorio de
 
 Para volver al publish profile basta con borrar `AZURE_CLIENT_ID` y restaurar el secreto (y la autenticación básica del sitio).
 
+## Varias instancias: actualizaciones en vivo con Azure SignalR
+
+Cocina, pedidos, caja y chat se actualizan en vivo por SignalR (`/hubs`). Sin configuración extra los hubs corren dentro de la app: con una sola instancia basta. Si el App Service escala a varias instancias, cada navegador queda conectado a una de ellas y no recibe lo que publican las demás (las pantallas se ponen al día con su sondeo de respaldo, pero tarde).
+
+Para escalar se usa Azure SignalR Service, que reparte los mensajes entre instancias sin un backplane propio:
+
+1. Crea un recurso *SignalR Service* en modo de servicio **Default** (el plan *Free* sirve para probar; *Standard* para producción).
+2. Copia su cadena de conexión (*Keys* → *Connection string*).
+3. En el App Service: *Configuration* → *Application settings* → `Azure__SignalR__ConnectionString` con esa cadena (o una referencia a Key Vault). Es un secreto: no va en `appsettings.json` ni en el repositorio.
+4. Reinicia la app. Con el ajuste presente, `Program.cs` llama a `AddAzureSignalR()`; sin él, todo sigue dentro del proceso. Los hubs, sus grupos por negocio y la autenticación con el token no cambian: la app valida el token al negociar y el servicio solo transporta los mensajes.
+
+Para regresar basta con borrar el ajuste y reiniciar. La afinidad de sesión (*ARR affinity*) no hace falta para SignalR cuando se usa el servicio.
+
 ## Pendiente
 
 - Slot de staging con swap: se decidió no tenerlo por ahora (ver [flujo de Git](git-workflow.md)); con él, la prueba de humo correría contra el slot antes del swap.

@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -77,13 +76,6 @@ public class CreateSupplyItemCommandHandler : IRequestHandler<CreateSupplyItemCo
 
     public async Task<Result<SupplyItemDto>> Handle(CreateSupplyItemCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<SupplyItemDto>("El negocio no tiene habilitado el módulo de inventario.");
-
         var code = string.IsNullOrWhiteSpace(request.Code) ? null : request.Code.Trim();
         var sku = string.IsNullOrWhiteSpace(request.Sku) ? null : request.Sku.Trim();
         var barcode = string.IsNullOrWhiteSpace(request.Barcode) ? null : request.Barcode.Trim();

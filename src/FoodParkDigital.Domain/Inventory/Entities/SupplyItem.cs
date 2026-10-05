@@ -1,5 +1,6 @@
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Domain.Exceptions;
 
 namespace FoodParkDigital.Domain.Inventory.Entities;
 
@@ -77,6 +78,57 @@ public class SupplyItem : AuditableEntity, ITenantScoped
     public decimal? TaxRate { get; private set; }
     public string? Notes { get; private set; }
     public bool IsActive { get; private set; }
+    /// <summary>
+    /// The product this item is the stock of, when the product controls its own stock: each unit sold takes one unit of
+    /// it (the product's recipe has it with quantity 1).
+    /// </summary>
+    public Guid? ProductId { get; private set; }
+
+    public const string ProductStockMessage =
+        "Este artículo es la existencia de un producto: deja de controlar sus existencias desde el producto.";
+
+    /// <summary>The stock of a product that starts controlling its own: its name and unit, valued at its cost.</summary>
+    public static SupplyItem ForProduct(
+        Guid tenantId,
+        Guid productId,
+        string name,
+        UnitType unit,
+        string? barcode,
+        decimal defaultCost,
+        decimal reorderPoint)
+    {
+        if (unit.IsService())
+            throw new DomainException("Un servicio no tiene existencias.");
+
+        return new SupplyItem(tenantId, name, unit, barcode: barcode, defaultCost: defaultCost, reorderPoint: reorderPoint)
+        {
+            ProductId = productId
+        };
+    }
+
+    public void LinkToProduct(Guid productId)
+    {
+        if (ProductId.HasValue && ProductId != productId)
+            throw new DomainException("Este artículo ya es la existencia de otro producto.");
+        if (!IsActive)
+            throw new DomainException("El artículo está inactivo.");
+
+        ProductId = productId;
+    }
+
+    /// <summary>The product stops controlling its stock: the item, its stock and its history stay as a supply.</summary>
+    public void UnlinkFromProduct() => ProductId = null;
+
+    /// <summary>The stock of a product goes by the product's name.</summary>
+    public void RenameForProduct(string name)
+    {
+        if (!ProductId.HasValue)
+            throw new DomainException("El artículo no es la existencia de un producto.");
+        if (string.IsNullOrWhiteSpace(name))
+            throw new DomainException("El nombre es obligatorio.");
+
+        Name = name.Trim();
+    }
 
     public void Update(
         string name,
@@ -99,6 +151,9 @@ public class SupplyItem : AuditableEntity, ITenantScoped
         decimal? taxRate = null,
         string? notes = null)
     {
+        if (ProductId.HasValue && unit != Unit)
+            throw new DomainException("La unidad de la existencia de un producto es la del producto.");
+
         Name = name;
         Unit = unit;
         Code = code;
@@ -120,7 +175,13 @@ public class SupplyItem : AuditableEntity, ITenantScoped
         Notes = notes;
     }
 
-    public void SetActive(bool isActive) => IsActive = isActive;
+    public void SetActive(bool isActive)
+    {
+        if (!isActive && ProductId.HasValue)
+            throw new DomainException(ProductStockMessage);
+
+        IsActive = isActive;
+    }
 
     public void ApplyInboundCost(decimal unitCost, decimal currentOnHand, decimal quantityIn)
     {

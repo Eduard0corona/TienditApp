@@ -3,8 +3,10 @@ import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import type { DailyCashCutDto } from '../../types';
 import PrintButton from '../../components/common/PrintButton';
+import WhatsAppLink from '../../components/common/WhatsAppLink';
 import { useTenant } from '../../hooks/useTenant';
 import { formatMoney } from '../../utils/money';
+import { buildDailyCutText, getDailyCutRows, getOtherMethodsTotal } from './cashCutText';
 import { getTodayInputDate } from './cashFormat';
 
 interface DailyCutProps {
@@ -39,6 +41,10 @@ export default function DailyCut({ branches }: DailyCutProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const dateLabel = date ? new Date(`${date}T12:00:00`).toLocaleDateString('es-MX', { dateStyle: 'long' }) : 'Hoy';
+  const scopeLabel = (branchId ? branches.find((branch) => branch.id === branchId)?.name ?? 'Sucursal' : 'Todas las sucursales')
+    + (userName.trim() ? ` · ${userName.trim()}` : '');
 
   return (
     <div className="card">
@@ -76,7 +82,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
                 { label: 'Efectivo', value: cut.cashTotal },
                 { label: 'Tarjeta', value: cut.cardTotal },
                 { label: 'Transferencia', value: cut.transferTotal },
-                { label: 'Otros', value: cut.walletTotal + cut.otherTotal },
+                { label: 'Otros', value: getOtherMethodsTotal(cut) },
                 { label: 'Neto en efectivo', value: cut.netCashOnlyFlow, detail: cut.cashTipsTotal > 0 ? 'Efectivo + propinas + depósitos − gastos' : 'Efectivo + depósitos − gastos' },
                 // Tips are for the team: apart from what was sold.
                 ...(cut.tipsTotal > 0
@@ -90,7 +96,11 @@ export default function DailyCut({ branches }: DailyCutProps) {
                 </div>
               ))}
             </div>
-            <div className="d-flex justify-content-end mb-2">
+            <div className="d-flex flex-wrap justify-content-end gap-2 mb-2">
+              <WhatsAppLink
+                text={buildDailyCutText(cut, { businessName: tenant?.name, dateLabel, scopeLabel })}
+                className="btn btn-sm btn-light"
+              />
               <PrintButton
                 label="Imprimir corte del día"
                 className="btn btn-sm btn-light"
@@ -98,23 +108,11 @@ export default function DailyCut({ branches }: DailyCutProps) {
                   <div>
                     {tenant?.name && <div className="text-center fw-bold">{tenant.name}</div>}
                     <div className="text-center fw-bold">Corte del día</div>
-                    <div className="text-center small mb-2">
-                      {date ? new Date(`${date}T12:00:00`).toLocaleDateString('es-MX', { dateStyle: 'long' }) : 'Hoy'}
-                      {branchId ? ` · ${branches.find((branch) => branch.id === branchId)?.name ?? ''}` : ' · Todas las sucursales'}
-                      {userName.trim() ? ` · ${userName.trim()}` : ''}
-                    </div>
-                    {[
-                      ['Cobrado', cut.salesPaymentsTotal],
-                      ['Efectivo', cut.cashTotal],
-                      ['Tarjeta', cut.cardTotal],
-                      ['Transferencia', cut.transferTotal],
-                      ['Otros', cut.walletTotal + cut.otherTotal],
-                      ['Neto en efectivo', cut.netCashOnlyFlow],
-                      ...(cut.tipsTotal > 0 ? [['Propinas', cut.tipsTotal], ['Propinas en efectivo', cut.cashTipsTotal]] : []),
-                    ].map(([label, value]) => (
-                      <div key={label as string} className="d-flex justify-content-between gap-2">
+                    <div className="text-center small mb-2">{dateLabel} · {scopeLabel}</div>
+                    {getDailyCutRows(cut).map(([label, value]) => (
+                      <div key={label} className="d-flex justify-content-between gap-2">
                         <span>{label}</span>
-                        <span>{formatMoney(value as number)}</span>
+                        <span>{formatMoney(value)}</span>
                       </div>
                     ))}
                     <div className="small">{cut.salesPaymentsCount} pagos</div>

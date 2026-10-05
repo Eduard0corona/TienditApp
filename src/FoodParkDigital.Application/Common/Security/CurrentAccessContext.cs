@@ -1,5 +1,4 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Application.Common.Security;
@@ -31,14 +30,15 @@ public sealed class CurrentAccessContext
 
     /// <summary>
     /// Owner or admin of the current business, read from the membership on this request: a demotion applies at
-    /// once, without waiting for the token to expire. The platform admin manages any business.
+    /// once, without waiting for the token to expire. The platform admin manages any business; without a business
+    /// nobody manages one.
     /// </summary>
     public async Task<bool> IsTenantManagerAsync(CancellationToken cancellationToken)
     {
         if (IsPlatformAdmin)
             return true;
         if (_tenant.TenantId == Guid.Empty)
-            return TenantManagementRules.CanManageTenant(_user);
+            return false;
 
         var snapshot = await GetSnapshotAsync(cancellationToken);
         return snapshot is { HasActiveAccess: true, IsManager: true };

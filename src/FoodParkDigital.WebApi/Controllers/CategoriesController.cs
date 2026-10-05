@@ -28,7 +28,6 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpGet("templates")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<List<CategoryTemplateDto>>> GetTemplates()
     {
         var result = await _mediator.Send(new GetCategoryTemplatesQuery());
@@ -36,7 +35,6 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPost("templates/{templateId}/install")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<InstallCategoryTemplateResultDto>> InstallTemplate(string templateId)
     {
         var result = await _mediator.Send(new InstallCategoryTemplateCommand
@@ -56,7 +54,6 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<CategoryDto>> Create([FromBody] CreateCategoryCommand command)
     {
         var result = await _mediator.Send(command);
@@ -66,7 +63,6 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<CategoryDto>> Update(Guid id, [FromBody] UpdateCategoryCommand command)
     {
         if (id != command.Id)
@@ -79,7 +75,6 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var result = await _mediator.Send(new DeleteCategoryCommand(id));
@@ -89,7 +84,6 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/active")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> ToggleActive(Guid id, [FromBody] ToggleCategoryActiveRequest request)
     {
         var result = await _mediator.Send(new ToggleCategoryActiveCommand

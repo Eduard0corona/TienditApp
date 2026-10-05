@@ -1,5 +1,4 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -17,20 +16,14 @@ public record GetKitchenTicketsQuery : IRequest<List<KitchenTicketDto>>;
 public class GetKitchenTicketsQueryHandler : IRequestHandler<GetKitchenTicketsQuery, List<KitchenTicketDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetKitchenTicketsQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetKitchenTicketsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<List<KitchenTicketDto>> Handle(GetKitchenTicketsQuery request, CancellationToken cancellationToken)
     {
-        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, _tenantService.TenantId, cancellationToken);
-        if (!TenantCapabilityRules.CanAccessKitchen(capabilities))
-            return [];
-
         var tickets = await _context.KitchenTickets
             .AsNoTracking()
             .Where(t => t.Status != KitchenTicketStatus.Served)

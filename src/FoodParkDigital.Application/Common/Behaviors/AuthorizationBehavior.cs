@@ -14,6 +14,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
 {
     public const string NotAllowedMessage = "No tienes permiso para hacer esto.";
     public const string ChargeNotAllowedMessage = "No tienes permiso para cobrar: guarda el pedido sin cobrar para que lo cobre la caja.";
+    public const string RefundNotAllowedMessage = "No tienes permiso para hacer reembolsos.";
 
     private readonly CurrentAccessContext _access;
 
@@ -83,7 +84,12 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
         foreach (var permission in required)
         {
             if (!granted.Contains(permission.ToString(), StringComparer.OrdinalIgnoreCase))
-                throw new ForbiddenAccessException(permission == TenantPermission.ChargeOrders ? ChargeNotAllowedMessage : NotAllowedMessage);
+                throw new ForbiddenAccessException(permission switch
+                {
+                    TenantPermission.ChargeOrders => ChargeNotAllowedMessage,
+                    TenantPermission.ProcessRefunds => RefundNotAllowedMessage,
+                    _ => NotAllowedMessage
+                });
         }
     }
 

@@ -6,7 +6,7 @@ using MediatR;
 
 namespace FoodParkDigital.Application.Employees.Queries;
 
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record GetEmployeePermissionOptionsQuery : IRequest<IReadOnlyList<EmployeePermissionOptionDto>>;
 
 public class GetEmployeePermissionOptionsQueryHandler : IRequestHandler<GetEmployeePermissionOptionsQuery, IReadOnlyList<EmployeePermissionOptionDto>>
@@ -15,7 +15,7 @@ public class GetEmployeePermissionOptionsQueryHandler : IRequestHandler<GetEmplo
         => Task.FromResult<IReadOnlyList<EmployeePermissionOptionDto>>(EmployeeDefinitions.PermissionOptions);
 }
 
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record GetEmployeeRolePresetsQuery : IRequest<IReadOnlyList<EmployeeRolePresetDto>>;
 
 public class GetEmployeeRolePresetsQueryHandler : IRequestHandler<GetEmployeeRolePresetsQuery, IReadOnlyList<EmployeeRolePresetDto>>

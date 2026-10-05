@@ -8,4 +8,5 @@
 - Conserva estados loading, empty, error y success y accesibilidad básica de formularios/controles.
 - No guardes access/refresh tokens o secretos de integración en almacenamiento accesible a JavaScript. El access token actual permanece en memoria.
 - Limpia conexiones SignalR y preserva aislamiento tenant.
-- Ejecuta `npm ci`, `npm run lint` y `npm run build`; `package-lock.json` no debe cambiar por validación.
+- Ejecuta `npm ci`, `npm run lint`, `npm test` y `npm run build`; `package-lock.json` no debe cambiar por validación.
+- Las pruebas (Vitest y Testing Library) viven junto al código como `*.test.ts(x)`: utilidades que reflejan reglas de la API, la matriz de acceso y componentes con dinero, existencias o errores.

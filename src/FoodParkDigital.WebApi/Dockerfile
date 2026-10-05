@@ -4,7 +4,7 @@ EXPOSE 8080
 EXPOSE 8081
 
 # The SPA is served by the API from wwwroot (the csproj publishes client/dist there).
-FROM node:20-alpine AS client
+FROM node:24-alpine AS client
 WORKDIR /client
 COPY ["client/package.json", "client/package-lock.json", "./"]
 RUN npm ci
@@ -15,7 +15,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-COPY ["Directory.Build.props", "."]
+COPY ["Directory.Build.props", "Directory.Packages.props", "./"]
 COPY ["src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj", "src/FoodParkDigital.WebApi/"]
 COPY ["src/FoodParkDigital.Infrastructure/FoodParkDigital.Infrastructure.csproj", "src/FoodParkDigital.Infrastructure/"]
 COPY ["src/FoodParkDigital.Application/FoodParkDigital.Application.csproj", "src/FoodParkDigital.Application/"]

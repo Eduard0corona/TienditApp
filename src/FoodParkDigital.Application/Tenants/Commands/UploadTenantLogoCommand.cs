@@ -44,20 +44,17 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
     private const string OriginalVariantSuffix = "_original.webp";
 
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
     private readonly IFileStorageService _fileStorageService;
     private readonly IImageProcessingService _imageProcessingService;
 
     public UploadTenantLogoCommandHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
         ICurrentTenantService tenantService,
         IFileStorageService fileStorageService,
         IImageProcessingService imageProcessingService)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _tenantService = tenantService;
         _fileStorageService = fileStorageService;
         _imageProcessingService = imageProcessingService;
@@ -65,9 +62,6 @@ public class UploadTenantLogoCommandHandler : IRequestHandler<UploadTenantLogoCo
 
     public async Task<Result<LogoImageUrlsDto>> Handle(UploadTenantLogoCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure<LogoImageUrlsDto>("Solo el administrador puede cambiar el logo.");
-
         var tenantId = _tenantService.TenantId;
         var tenant = await _context.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId, cancellationToken);

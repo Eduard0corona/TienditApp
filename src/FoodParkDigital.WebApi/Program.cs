@@ -128,7 +128,10 @@ builder.Services.AddRateLimiter(options =>
 
 // Controllers. Every error leaves as ProblemDetails with a stable code (see ApiErrorCodes), also the ones the
 // framework writes: model binding, NotFound(), and empty 401/403/404 answers of /api (status code pages below).
-builder.Services.AddControllers();
+// Binding errors answer in Spanish and as ProblemDetails, like the rest; the JSON reader's own messages stay out.
+builder.Services.AddControllers(options => SpanishModelBinding.Apply(options.ModelBindingMessageProvider))
+    .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = SpanishModelBinding.InvalidModelStateResponse)
+    .AddJsonOptions(options => options.AllowInputFormatterExceptionMessages = false);
 builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = context => ApiProblem.Complete(context.ProblemDetails, context.HttpContext));
 builder.Services.AddEndpointsApiExplorer();
@@ -174,7 +177,11 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // SignalR
-builder.Services.AddSignalR();
+// Live updates run in this process; with Azure:SignalR:ConnectionString they go through Azure SignalR Service,
+// so several instances of the app share them (scale out) without a backplane of our own.
+var signalR = builder.Services.AddSignalR();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Azure:SignalR:ConnectionString"]))
+    signalR.AddAzureSignalR();
 
 // CORS: the SPA is served by this API (and proxied by Vite in development), so cross-origin
 // access is only granted to the origins listed in Cors:AllowedOrigins.

@@ -71,9 +71,6 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
 
     public async Task<Result<TenantSalesPolicyDto>> Handle(UpdateSalesPolicyCommand request, CancellationToken cancellationToken)
     {
-        if (!TenantManagementRules.CanManageTenant(_currentUserService))
-            return Result.Failure<TenantSalesPolicyDto>(TenantManagementRules.NotAllowedMessage);
-
         var tenantId = await MyTenantResolver.ResolveAsync(_context, _tenantService, _currentUserService, cancellationToken);
         if (tenantId is null)
             return Result.Failure<TenantSalesPolicyDto>("No se encontró el negocio del usuario.");

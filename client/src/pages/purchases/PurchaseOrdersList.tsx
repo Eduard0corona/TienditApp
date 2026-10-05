@@ -208,11 +208,13 @@ export default function PurchaseOrdersList() {
 
     try {
       setSaving(true);
-      await purchaseOrdersApi.create(payload);
+      const { data: created } = await purchaseOrdersApi.create(payload);
       setSuccess('Compra registrada.');
       setShowModal(false);
       setForm(buildForm());
       await loadOrders();
+      // Its detail opens next: from there it goes to the supplier by WhatsApp.
+      setDetail({ id: created.id, mode: 'view' });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo registrar la compra.'));
     } finally {

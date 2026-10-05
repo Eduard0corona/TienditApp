@@ -11,7 +11,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/whatsapp/chat")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+[Authorize]
 public class WhatsAppChatController : ControllerBase
 {
     private readonly IMediator _mediator;

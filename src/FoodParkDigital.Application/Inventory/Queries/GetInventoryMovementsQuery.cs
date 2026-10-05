@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Inventory.Enums;
@@ -25,23 +24,14 @@ public record GetInventoryMovementsQuery : IRequest<PaginatedList<InventoryMovem
 public class GetInventoryMovementsQueryHandler : IRequestHandler<GetInventoryMovementsQuery, PaginatedList<InventoryMovementDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetInventoryMovementsQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetInventoryMovementsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<PaginatedList<InventoryMovementDto>> Handle(GetInventoryMovementsQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return new PaginatedList<InventoryMovementDto>([], 0, request.PageNumber, request.PageSize);
-
         var query = _context.InventoryMovements.AsNoTracking();
 
         if (request.MovementType.HasValue)

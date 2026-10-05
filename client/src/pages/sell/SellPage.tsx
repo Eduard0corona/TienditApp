@@ -8,6 +8,7 @@ import { cashApi } from '../../api/cashApi';
 import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
 import BranchPicker from '../../components/branches/BranchPicker';
+import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
@@ -168,6 +169,7 @@ export default function SellPage() {
   const { tenant, capabilities } = useTenant();
   const toast = useToast();
   const access = getAccess(user, capabilities);
+  const focus = useFocusMode();
   const canCharge = access.charge;
   const tenantId = tenant?.id ?? '';
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? false;
@@ -1041,8 +1043,9 @@ export default function SellPage() {
   return (
     <div className="sell-page">
       <div className="sell-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <h1 className="h3 mb-0">Vender</h1>
-        <div className="d-flex flex-wrap align-items-center gap-2">
+        {/* In focus mode the bar above says where you are. */}
+        {!focus.isFocused && <h1 className="h3 mb-0">Vender</h1>}
+        <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
           {!online && (
             <span className="badge text-bg-warning" role="status">
               <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>Sin conexión
@@ -1076,6 +1079,12 @@ export default function SellPage() {
             <Link to="/orders" className="btn btn-sm btn-light">
               <i className="ri-file-list-3-line me-1" aria-hidden="true"></i>Pedidos
             </Link>
+          )}
+          {!focus.isFocused && (
+            <button type="button" className="btn btn-sm btn-light" onClick={focus.enter}
+              title="Vender a pantalla completa, sin el menú: para la tableta del mostrador">
+              <i className="ri-fullscreen-line me-1" aria-hidden="true"></i>Modo enfocado
+            </button>
           )}
         </div>
       </div>
@@ -1222,6 +1231,11 @@ export default function SellPage() {
                     <span className="sell-product-price ta-money">{price}</span>
                     {isServiceProduct(product) && <span className="sell-product-tag">Servicio</span>}
                     {unitLabel && !isServiceProduct(product) && <span className="sell-product-tag">Por {unitLabel}</span>}
+                    {product.tracksStock && product.onHand != null && (product.onHand <= 0 || product.isLowStock) && (
+                      <span className={`sell-product-stock ${product.onHand <= 0 ? 'out' : 'low'}`}>
+                        {product.onHand <= 0 ? 'Agotado' : `Quedan ${formatQuantity(product.onHand, product.unit)}`}
+                      </span>
+                    )}
                     {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{badge}</span>}
                   </button>
                 );

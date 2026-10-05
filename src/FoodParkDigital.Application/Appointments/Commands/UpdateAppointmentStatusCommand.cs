@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace FoodParkDigital.Application.Appointments.Commands;
 
 [RequiresPermission(TenantPermission.ManageAppointments)]
+[RequiresCapability(TenantCapability.Appointments)]
 public record UpdateAppointmentStatusCommand : IRequest<Result<AppointmentDto>>
 {
     public Guid AppointmentId { get; init; }
@@ -31,18 +32,15 @@ public class UpdateAppointmentStatusCommandValidator : AbstractValidator<UpdateA
 public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppointmentStatusCommand, Result<AppointmentDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ILogger<UpdateAppointmentStatusCommandHandler> _logger;
 
     public UpdateAppointmentStatusCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
         IWhatsAppService whatsAppService,
         ILogger<UpdateAppointmentStatusCommandHandler> logger)
     {
         _context = context;
-        _tenantService = tenantService;
         _whatsAppService = whatsAppService;
         _logger = logger;
     }

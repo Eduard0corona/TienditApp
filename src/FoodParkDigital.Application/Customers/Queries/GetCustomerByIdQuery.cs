@@ -1,5 +1,4 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -28,13 +27,6 @@ public class GetCustomerByIdQueryHandler : IRequestHandler<GetCustomerByIdQuery,
             .Include(c => c.Addresses)
             .FirstOrDefaultAsync(c => c.Id == request.CustomerId, cancellationToken)
             ?? throw new EntityNotFoundException("Customer", request.CustomerId);
-
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            customer.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            throw new EntityNotFoundException("Customer", request.CustomerId);
 
         return CustomerDto.From(customer);
     }

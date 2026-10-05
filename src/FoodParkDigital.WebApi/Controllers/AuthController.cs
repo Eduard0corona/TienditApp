@@ -347,7 +347,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("profile/whatsapp")]
-    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<ActionResult<OwnerWhatsAppConfigDto>> GetOwnerWhatsAppConfig()
     {
         var result = await _mediator.Send(new GetOwnerWhatsAppConfigQuery());
@@ -357,7 +356,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("profile/whatsapp")]
-    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<ActionResult<OwnerWhatsAppConfigDto>> UpdateOwnerWhatsAppConfig([FromBody] UpdateOwnerWhatsAppConfigCommand command)
     {
         var result = await _mediator.Send(command);
@@ -387,7 +385,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("my-tenant/logo")]
-    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantLogo(IFormFile file)
     {
@@ -407,7 +404,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpDelete("my-tenant/logo")]
-    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> DeleteTenantLogo()
     {
         var result = await _mediator.Send(new DeleteTenantLogoCommand());
@@ -417,7 +413,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("my-tenant/whatsapp")]
-    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<ActionResult<WhatsAppConfigDto>> GetWhatsAppConfig()
     {
         var result = await _mediator.Send(new GetWhatsAppConfigQuery());
@@ -427,7 +422,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpPut("my-tenant/whatsapp")]
-    [Authorize(Roles = "TENANT_ADMIN,SUPER_ADMIN")]
     public async Task<ActionResult<WhatsAppConfigDto>> UpdateWhatsAppConfig([FromBody] UpdateWhatsAppConfigCommand command)
     {
         var result = await _mediator.Send(command);
@@ -437,7 +431,6 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("my-tenant/whatsapp/send")]
-    [Authorize(Roles = "TENANT_ADMIN,STAFF,SUPER_ADMIN")]
     public async Task<IActionResult> SendWhatsAppMessage([FromBody] SendWhatsAppMessageCommand command)
     {
         var result = await _mediator.Send(command);

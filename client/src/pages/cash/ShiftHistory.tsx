@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable from '../../components/common/DataTable';
 import PrintButton from '../../components/common/PrintButton';
+import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -12,6 +13,7 @@ import type { CashCountLineDto, CashSessionDto, CashTransactionDto, PaginatedLis
 import { CashSessionStatus } from '../../types';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
+import { buildShiftCutText } from './cashCutText';
 import { describeDifference, getTransactionTypeLabel } from './cashFormat';
 
 const EMPTY_SESSIONS: PaginatedList<CashSessionDto> = {
@@ -275,6 +277,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
                 label={selected.status === CashSessionStatus.Closed ? 'Imprimir corte' : 'Imprimir corte parcial'}
                 render={() => <CashCutTicket businessName={tenant?.name} session={selected} movements={selectedMovements} />}
               />
+              <WhatsAppLink text={buildShiftCutText(selected, tenant?.name)} />
               {selected.status === CashSessionStatus.Open && !selected.isMine && canCloseOthers && (
                 <button type="button" className="btn btn-outline-danger" onClick={() => { setCloseError(''); setClosing(true); }}>
                   Cerrar esta caja

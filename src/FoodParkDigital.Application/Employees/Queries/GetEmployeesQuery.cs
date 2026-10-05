@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Queries;
 
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record GetEmployeesQuery : IRequest<PaginatedList<EmployeeDto>>
 {
     public string? Search { get; init; }

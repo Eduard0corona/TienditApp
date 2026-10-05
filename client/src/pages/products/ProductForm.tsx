@@ -10,13 +10,16 @@ import { CfdiTaxObject } from '../../types';
 import SatFiscalFields from '../../components/catalog/SatFiscalFields';
 import { satProductCodeRules, satUnitCodeRules, toSatCodePayload } from '../../utils/satCodes';
 import { getApiErrorMessage } from '../../api/errors';
+import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { fromVatOption, getVatOptions, toVatOption, type VatOption } from '../../utils/vatOptions';
 import { getDefaultSatUnitCode } from '../../utils/units';
 import ProductOptionsEditor from '../../components/catalog/ProductOptionsEditor';
+import ProductStockCard from '../../components/catalog/ProductStockCard';
 import type { ProductOptionGroupInput } from '../../api/productsApi';
 import { getOptionGroupsError, toOptionGroupInputs } from '../../utils/productOptions';
+import { getAccess } from '../../utils/access';
 
 type ProductFormValues = CreateProductRequest & { vatOption: VatOption };
 
@@ -44,7 +47,9 @@ export default function ProductForm() {
   const navigate = useNavigate();
   const isEditing = !!id;
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const { tenant, capabilities } = useTenant();
+  const access = getAccess(user, capabilities);
   const toast = useToast();
 
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -83,8 +88,6 @@ export default function ProductForm() {
           taxObject: product.taxObject ?? CfdiTaxObject.Subject,
           calories: product.calories ?? undefined,
           allergens: product.allergens || '',
-          stockQuantity: product.stockQuantity ?? undefined,
-          lowStockThreshold: product.lowStockThreshold ?? undefined,
           maxQuantityPerOrder: product.maxQuantityPerOrder ?? undefined,
           unit: product.unit ?? undefined,
           preparationTimeMinutes: product.preparationTimeMinutes ?? undefined,
@@ -165,8 +168,6 @@ export default function ProductForm() {
       unit: data.unit != null && data.unit !== ('' as unknown) ? (Number(data.unit) as UnitType) : undefined,
       compareAtPrice: data.compareAtPrice ? Number(data.compareAtPrice) : undefined,
       calories: data.calories ? Number(data.calories) : undefined,
-      stockQuantity: data.stockQuantity != null && data.stockQuantity !== ('' as unknown) ? Number(data.stockQuantity) : undefined,
-      lowStockThreshold: data.lowStockThreshold ? Number(data.lowStockThreshold) : undefined,
       maxQuantityPerOrder: data.maxQuantityPerOrder ? Number(data.maxQuantityPerOrder) : undefined,
       preparationTimeMinutes: data.preparationTimeMinutes ? Number(data.preparationTimeMinutes) : undefined,
       availableFromTime: data.availableFromTime ? `${data.availableFromTime}:00` : undefined,
@@ -399,10 +400,10 @@ export default function ProductForm() {
               </div>
             </div>
 
-            {/* Inventory */}
+            {/* Codes */}
             <div className="card">
               <div className="card-body">
-                <h5 className="header-title mb-3">Inventario</h5>
+                <h5 className="header-title mb-3">Códigos y límites</h5>
 
                 <div className="row">
                   <div className="col-md-4 mb-3">
@@ -430,27 +431,20 @@ export default function ProductForm() {
                     />
                   </div>
                 </div>
-
-                <div className="row">
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">Cantidad en stock</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      {...register('stockQuantity')}
-                    />
-                  </div>
-                  <div className="col-md-6 mb-3">
-                    <label className="form-label">Alerta stock bajo</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      {...register('lowStockThreshold')}
-                    />
-                  </div>
-                </div>
               </div>
             </div>
+
+            {/* Stock: one model, the inventory ledger */}
+            {isEditing && product ? (
+              <ProductStockCard product={product} canManage={access.inventory} />
+            ) : (
+              <div className="card">
+                <div className="card-body">
+                  <h5 className="header-title mb-1">Existencias</h5>
+                  <p className="text-muted small mb-0">Guarda el producto para controlar sus existencias.</p>
+                </div>
+              </div>
+            )}
 
             {/* Food Details */}
             <div className="card">

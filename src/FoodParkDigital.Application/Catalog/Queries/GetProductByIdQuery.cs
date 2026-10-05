@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -37,6 +38,8 @@ public class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, P
         if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, product.Unit))
             throw new EntityNotFoundException("Product", request.Id);
 
-        return product.ToDto();
+        var dto = product.ToDto();
+        await ProductStockReader.ApplyAsync(_context, dto, cancellationToken);
+        return dto;
     }
 }

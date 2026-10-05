@@ -2,45 +2,45 @@ import { TenantCapability, type UserProfileDto } from '../types';
 import { COMMERCE_CAPABILITIES, hasAnyCapability, hasCapability } from './tenantCapabilities';
 
 /**
- * What the signed-in user can open, mirroring the API: TenantResolutionMiddleware checks the permission
- * code and the module (capability) of every route, and each controller lists the roles that may call it.
- * The menu, the routes, the landing page and the action buttons read this one matrix so nobody is
- * offered something the API will reject. It is a navigation aid: the API still authorizes each request.
+ * What the signed-in user can open, mirroring the API: each request declares the permission and the module it
+ * needs (owners and admins of the business have every permission). The menu, the routes, the landing page and the
+ * action buttons read this one matrix so nobody is offered something the API will reject. It is a navigation aid:
+ * the API still authorizes each request.
  */
 export interface Access {
   isAdmin: boolean;
-  /** DashboardController: counter roles + ViewReports. */
+  /** ViewReports. */
   dashboard: boolean;
-  /** ReportsController: counter roles + ViewReports. */
+  /** ViewReports. */
   reports: boolean;
-  /** AuditController: admins. */
+  /** The business's activity: owners and admins. */
   audit: boolean;
   catalog: boolean;
   inventory: boolean;
   cash: boolean;
-  /** Order list and detail (GET): every employee role + ManageOrders. */
+  /** Order list and detail: ManageOrders. */
   orders: boolean;
-  /** Create orders, change status and cancel: counter roles + ManageOrders. */
+  /** Create orders, change status and cancel: ManageOrders. */
   sell: boolean;
-  /** Register payments (in Vender, Pedidos and Mesas): counter roles + ManageOrders + ChargeOrders. A waiter leaves them for the cashier. */
+  /** Register payments (in Vender, Pedidos and Mesas): ManageOrders + ChargeOrders. A waiter leaves them for the cashier. */
   charge: boolean;
-  /** KitchenController: every employee role + ManageServiceBoard + Kitchen module. */
+  /** Kitchen board: ManageServiceBoard + Kitchen module. */
   kitchen: boolean;
-  /** TablesController and open tabs: counter roles + ManageOrders + Food module. */
+  /** Tables and open tabs: ManageOrders + Food module. */
   tables: boolean;
   serviceBoard: boolean;
   customers: boolean;
   appointments: boolean;
   employees: boolean;
-  /** WhatsAppChatController: counter roles + ManageWhatsApp. */
+  /** WhatsApp chat: ManageWhatsApp. */
   chat: boolean;
   whatsAppSettings: boolean;
-  /** AiAgentsController: counter roles + ManageAiAgent. */
+  /** Automatic replies: ManageAiAgent. */
   aiAgent: boolean;
   businessSettings: boolean;
-  /** Refund and void paid sales: owners, admins and staff with ProcessRefunds. */
+  /** Refund and void paid sales: ManageOrders + ProcessRefunds (owners and admins have both). */
   refunds: boolean;
-  /** WhatsApp campaigns, templates, appointment reminders and opt-outs: owners, admins and ManageCampaigns. */
+  /** WhatsApp campaigns, templates, appointment reminders and opt-outs: ManageCampaigns. */
   campaigns: boolean;
   /** Platform console (businesses, plans and billing): the platform admin only. */
   platform: boolean;
@@ -54,7 +54,7 @@ function normalizeRole(role: string | null | undefined): string {
   return (role ?? '').replace(/[\s_-]/g, '').toLowerCase();
 }
 
-/** SUPER_ADMIN and TENANT_ADMIN are not restricted by permission codes in the middleware. */
+/** Owners and admins of this business (the role the server reports for it) and the platform admin have every permission. */
 export function isAdminUser(user: UserProfileDto | null): boolean {
   const role = normalizeRole(user?.role);
   return role === 'tenantadmin' || role === 'superadmin';
@@ -70,35 +70,32 @@ export function hasUserPermission(user: UserProfileDto | null, permission: strin
 export function getAccess(user: UserProfileDto | null, capabilities: number | null): Access {
   const role = normalizeRole(user?.role);
   const isAdmin = role === 'tenantadmin' || role === 'superadmin';
-  // Counter roles: the ones OrdersController accepts to sell and charge.
-  const isCounterRole = isAdmin || role === 'staff';
-  const isEmployeeRole = isCounterRole || role === 'kitchen';
   const can = (permission: string) => hasUserPermission(user, permission);
   const commerce = hasAnyCapability(capabilities, COMMERCE_CAPABILITIES);
 
   return {
     isAdmin,
-    dashboard: commerce && isCounterRole && can('ViewReports'),
-    reports: commerce && isCounterRole && can('ViewReports'),
+    dashboard: commerce && can('ViewReports'),
+    reports: commerce && can('ViewReports'),
     audit: commerce && isAdmin,
-    catalog: commerce && isCounterRole && can('ManageCatalog'),
-    inventory: hasCapability(capabilities, TenantCapability.Inventory) && isCounterRole && can('ManageInventory'),
-    cash: commerce && isCounterRole && can('ManageCash'),
-    orders: commerce && isEmployeeRole && can('ManageOrders'),
-    sell: commerce && isCounterRole && can('ManageOrders'),
-    charge: commerce && isCounterRole && can('ManageOrders') && can('ChargeOrders'),
-    kitchen: hasCapability(capabilities, TenantCapability.Kitchen) && isEmployeeRole && can('ManageServiceBoard'),
-    tables: hasCapability(capabilities, TenantCapability.Food) && isCounterRole && can('ManageOrders'),
-    serviceBoard: hasCapability(capabilities, TenantCapability.Service) && isEmployeeRole && can('ManageServiceBoard'),
-    customers: commerce && isCounterRole && can('ManageCustomers'),
-    appointments: hasCapability(capabilities, TenantCapability.Appointments) && isCounterRole && can('ManageAppointments'),
+    catalog: commerce && can('ManageCatalog'),
+    inventory: hasCapability(capabilities, TenantCapability.Inventory) && can('ManageInventory'),
+    cash: commerce && can('ManageCash'),
+    orders: commerce && can('ManageOrders'),
+    sell: commerce && can('ManageOrders'),
+    charge: commerce && can('ManageOrders') && can('ChargeOrders'),
+    kitchen: hasCapability(capabilities, TenantCapability.Kitchen) && can('ManageServiceBoard'),
+    tables: hasCapability(capabilities, TenantCapability.Food) && can('ManageOrders'),
+    serviceBoard: hasCapability(capabilities, TenantCapability.Service) && can('ManageServiceBoard'),
+    customers: commerce && can('ManageCustomers'),
+    appointments: hasCapability(capabilities, TenantCapability.Appointments) && can('ManageAppointments'),
     employees: commerce && isAdmin,
-    chat: commerce && isCounterRole && can('ManageWhatsApp'),
+    chat: commerce && can('ManageWhatsApp'),
     whatsAppSettings: commerce && isAdmin,
-    aiAgent: commerce && isCounterRole && can('ManageAiAgent'),
+    aiAgent: commerce && can('ManageAiAgent'),
     businessSettings: isAdmin,
-    refunds: commerce && isCounterRole && can('ManageOrders') && can('ProcessRefunds'),
-    campaigns: commerce && isCounterRole && can('ManageCampaigns'),
+    refunds: commerce && can('ManageOrders') && can('ProcessRefunds'),
+    campaigns: commerce && can('ManageCampaigns'),
     platform: role === 'superadmin',
     myOrders: role === 'customer',
   };
