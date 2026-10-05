@@ -34,6 +34,7 @@ dotnet test FoodParkDigital.sln
 Set-Location client
 npm ci
 npm run lint
+npm test
 npm run build
 ```
 

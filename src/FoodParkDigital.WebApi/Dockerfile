@@ -4,7 +4,7 @@ EXPOSE 8080
 EXPOSE 8081
 
 # The SPA is served by the API from wwwroot (the csproj publishes client/dist there).
-FROM node:20-alpine AS client
+FROM node:24-alpine AS client
 WORKDIR /client
 COPY ["client/package.json", "client/package-lock.json", "./"]
 RUN npm ci

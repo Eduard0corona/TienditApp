@@ -3,7 +3,7 @@
 ## Requisitos
 
 - .NET SDK 10: la API y las pruebas apuntan a `net10.0` desde `Directory.Build.props`.
-- Node.js y npm. Los workflows usan Node.js 20 (Vite 7 requiere 20.19 o posterior); `client/package-lock.json` es la fuente de dependencias.
+- Node.js y npm. Los workflows y la imagen de Docker usan Node.js 24 (Vitest 5 requiere 22.12 o posterior); `client/package-lock.json` es la fuente de dependencias. `npm test` corre las pruebas del cliente (Vitest y Testing Library).
 - SQL Server; `docker-compose.yml` ofrece SQL Server 2022 y la API.
 - Opcional: Docker Desktop y `dotnet-ef` para administrar migraciones manualmente.
 
@@ -90,6 +90,7 @@ dotnet build FoodParkDigital.sln
 dotnet test FoodParkDigital.sln
 Set-Location client
 npm run lint
+npm test
 npm run build
 ```
 

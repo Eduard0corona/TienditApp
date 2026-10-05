@@ -19,4 +19,4 @@ La API respondía errores en cuatro formas: objetos `{ error }` en 147 respuesta
 
 ## Consecuencias
 
-Un cliente nuevo (otra app, una integración) puede reaccionar a los errores sin interpretar textos. Los mensajes del enlace de modelos de ASP.NET Core ("The Email field is required.") siguen en inglés. El reporte de oasdiff de esta fase marca como incompatibles propiedades que el contrato marcaba obligatorias por error y que en C# siempre fueron anulables: es una corrección del contrato, no un cambio de comportamiento.
+Un cliente nuevo (otra app, una integración) puede reaccionar a los errores sin interpretar textos. Los mensajes del enlace de modelos de ASP.NET Core ("The Email field is required.") seguían en inglés; desde la Fase 5 `SpanishModelBinding` los responde en español con `validation_failed` y el cuerpo que no se lee ya no expone el mensaje del lector de JSON. El reporte de oasdiff de esta fase marca como incompatibles propiedades que el contrato marcaba obligatorias por error y que en C# siempre fueron anulables: es una corrección del contrato, no un cambio de comportamiento.

@@ -89,6 +89,13 @@ export function formatQuantity(quantity: number, unit?: UnitType | null): string
   return label ? `${number} ${label}` : number;
 }
 
+/** Stock in inventory, which keeps four decimals (recipes take fractions of a unit): "1,250.5", "0.0125 kg". */
+export function formatStockQuantity(quantity: number, unit?: UnitType | null): string {
+  const number = quantity.toLocaleString('es-MX', { maximumFractionDigits: 4 });
+  const label = getUnitShortLabel(unit);
+  return label ? `${number} ${label}` : number;
+}
+
 /**
  * Parses what the cashier typed ("1.25", "1,25", ".5"). Null when it is not a valid quantity for the unit:
  * not positive, more than three decimals, or a fraction of a piece.

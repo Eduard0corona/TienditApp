@@ -156,7 +156,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         IReadOnlyList<OrderLineOption>? options = null)
     {
         if (Status != OrderStatus.Pending)
-            throw new DomainException("Cannot add items to an order that is not pending.");
+            throw new DomainException("Solo se agregan productos a un pedido pendiente.");
 
         _items.Add(new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General, fiscal, options, TenantId));
         RecalculateTotals();

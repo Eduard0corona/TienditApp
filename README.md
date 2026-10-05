@@ -14,7 +14,7 @@ Consulta [la documentación](docs/README.md) para distinguir estado actual, deci
 
 ## Inicio rápido
 
-Requisitos comprobados: .NET SDK 10, Node.js/npm y SQL Server accesible. La API y las pruebas apuntan a `net10.0` (`Directory.Build.props`); los workflows usan Node.js 20 y .NET 10.
+Requisitos comprobados: .NET SDK 10, Node.js/npm y SQL Server accesible. La API y las pruebas apuntan a `net10.0` (`Directory.Build.props`); los workflows usan Node.js 24 y .NET 10.
 
 ```powershell
 dotnet restore FoodParkDigital.sln
@@ -38,6 +38,7 @@ dotnet build FoodParkDigital.sln
 dotnet test FoodParkDigital.sln
 Set-Location client
 npm run lint
+npm test
 npm run build
 ```
 

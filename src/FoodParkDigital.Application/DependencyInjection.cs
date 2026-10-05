@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
+using System.Globalization;
 using System.Reflection;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Security;
@@ -31,6 +32,8 @@ public static class DependencyInjection
         });
 
         services.AddValidatorsFromAssembly(assembly);
+        // The rules without their own message speak Spanish too, whatever the server's culture.
+        ValidatorOptions.Global.LanguageManager.Culture = new CultureInfo("es");
 
         services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
 
