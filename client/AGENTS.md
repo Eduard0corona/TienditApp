@@ -4,6 +4,7 @@
 - React Router/guards controlan UX, no seguridad. Backend sigue siendo autoridad de tenant, permisos y capabilities.
 - No calcules de forma autoritativa estados, totales, impuestos, saldos o existencias.
 - Mantén TypeScript estricto; no introduzcas `any` sin justificación localizada.
+- Los enums del dominio salen del contrato: `npm run api:types` genera `src/api/generated/schema.ts` y `src/api/generated/enums.ts` (no se editan) y `src/types/index.ts` los reexporta. No copies un enum a mano.
 - Reutiliza componentes comunes, hooks y tipos; divide componentes grandes solo en refactors focalizados.
 - Conserva estados loading, empty, error y success y accesibilidad básica de formularios/controles. El lint incluye `eslint-plugin-jsx-a11y`: cada etiqueta va con `htmlFor`/`id` (con el índice dentro de listas) o envuelve su control, y lo clicable es un `button` o un enlace real (`utils/a11y.ts` `asButton` solo para bloques que no caben en un botón).
 - No guardes access/refresh tokens o secretos de integración en almacenamiento accesible a JavaScript. El access token actual permanece en memoria.

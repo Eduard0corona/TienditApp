@@ -26,7 +26,6 @@ Actualizada el 2026-10-05 tras las Fases 0 a 6 del roadmap de producto (la audit
 
 - Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
 - Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
-- `types/index.ts` copia a mano los enums numéricos del dominio. `ClientEnumContractTests` compara sus objetos `as const` con el dominio, pero no genera los tipos ni revisa las uniones literales duplicadas (`PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99` y similares).
 - Las pruebas del cliente (Vitest y Testing Library, desde la Fase 5) cubren utilidades de dinero, unidades, acceso, errores, IVA, mensajes de WhatsApp y componentes con existencias; faltan pruebas de pantallas completas y de extremo a extremo. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
 - No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes. Desde la Fase 4F una prueba de humo confirma que la app responde con la versión nueva y el workflow admite OIDC en lugar del publish profile ([despliegue](../development/deploy-azure.md)); cambiar de credencial requiere configurar Azure.
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.

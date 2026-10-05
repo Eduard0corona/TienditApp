@@ -8,7 +8,7 @@ Las entradas/salidas manuales pasan por `CreateInventoryMovementCommand`, que re
 
 Reglas vigentes:
 
-- Tipos y motivos se guardan y viajan como enteros (la API no usa `JsonStringEnumConverter`). `InventoryMovementType` va de 1 (`Entry`) a 8 (`ReturnToSupplier`) e `InventoryMovementReason` de 1 (`Purchase`) a 10 (`ManualAdjustment`), más 99 (`Other`). Suman existencias `Entry`, `AdjustmentIncrease`, `TransferIn` y `ReturnFromProduction`; restan `Exit`, `AdjustmentDecrease`, `TransferOut` y `ReturnToSupplier`. Renumerarlos reinterpretaría el historial: `InventoryEnumValuesTests` (Domain.Tests) fija los valores y `ClientEnumContractTests` (WebApi.Tests) compara la copia de `client/src/types/index.ts`.
+- Tipos y motivos se guardan y viajan como enteros (la API no usa `JsonStringEnumConverter`). `InventoryMovementType` va de 1 (`Entry`) a 8 (`ReturnToSupplier`) e `InventoryMovementReason` de 1 (`Purchase`) a 10 (`ManualAdjustment`), más 99 (`Other`). Suman existencias `Entry`, `AdjustmentIncrease`, `TransferIn` y `ReturnFromProduction`; restan `Exit`, `AdjustmentDecrease`, `TransferOut` y `ReturnToSupplier`. Renumerarlos reinterpretaría el historial: `InventoryEnumValuesTests` (Domain.Tests) fija los valores y `ClientEnumContractTests` (WebApi.Tests) compara las constantes del cliente, generadas del contrato en `client/src/api/generated/enums.ts`.
 - Solo las entradas (`Entry`) modifican el costo promedio; transferencias, ajustes y devoluciones se valoran al promedio vigente.
 - Los movimientos manuales no pueden usar los prefijos reservados `ORDER:` y `PO:` ni repetir una referencia externa existente, ni fecharse en el futuro.
 - Una recepción no puede repetir líneas ni fecharse en el futuro; el stock sube con las cantidades que la compra aceptó.

@@ -5,10 +5,12 @@ using FoodParkDigital.Domain.Inventory.Enums;
 namespace FoodParkDigital.WebApi.Tests;
 
 /// <summary>
-/// The API exchanges enums as numbers (there is no JsonStringEnumConverter), so client/src/types/index.ts keeps
-/// a copy of each one as an <c>export const X = { ... } as const</c> object. A copy that drifts makes the screens
-/// send and show the wrong values: the inventory movement copies started at 0 while the domain starts at 1, so
-/// "Salida" was saved as Entry and added stock. Every exported const named like a domain enum is compared with it.
+/// The API exchanges enums as numbers (there is no JsonStringEnumConverter), so the client keeps each one as an
+/// <c>export const X = { ... } as const</c> object. A copy that drifts makes the screens send and show the wrong
+/// values: the inventory movement copies started at 0 while the domain starts at 1, so "Salida" was saved as Entry
+/// and added stock. Since the Fase 7 they are generated from the contract (client/src/api/generated/enums.ts, from
+/// the names EnumNamesSchemaFilter writes); every exported const named like a domain enum, generated or still
+/// written in client/src/types/index.ts, is compared with it, and one defined in both places fails.
 /// </summary>
 public class ClientEnumContractTests
 {
@@ -102,12 +104,18 @@ public class ClientEnumContractTests
             .GroupBy(type => type.Name)
             .ToDictionary(group => group.Key, group => group.Single());
 
+    /// <summary>The generated enums and the hand-written types, as one source (a name in both is two declarations).</summary>
     private static string ReadClientTypes()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
             if (File.Exists(Path.Combine(directory.FullName, "FoodParkDigital.sln")))
-                return File.ReadAllText(Path.Combine(directory.FullName, "client", "src", "types", "index.ts"));
+            {
+                var source = Path.Combine(directory.FullName, "client", "src");
+                return File.ReadAllText(Path.Combine(source, "api", "generated", "enums.ts"))
+                    + "\n"
+                    + File.ReadAllText(Path.Combine(source, "types", "index.ts"));
+            }
         }
 
         throw new InvalidOperationException($"FoodParkDigital.sln was not found above {AppContext.BaseDirectory}.");

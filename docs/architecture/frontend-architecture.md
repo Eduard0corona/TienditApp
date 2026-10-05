@@ -11,7 +11,7 @@ Estructura principal:
 - `src/components/common` y `layout`: reutilización y shell.
 - `src/hooks`: Auth/Tenant y conexiones SignalR.
 - `src/contexts`: estado de autenticación y tenant.
-- `src/types/index.ts`: contratos TypeScript compartidos. Los enums del dominio se copian como objetos `as const` con los mismos números, porque la API los intercambia como enteros; `ClientEnumContractTests` (WebApi.Tests) los compara con el dominio.
+- `src/types/index.ts`: contratos TypeScript compartidos. Los enums del dominio no se escriben aquí: `npm run api:types` los genera del contrato en `src/api/generated/enums.ts` como objetos `as const` con los nombres y números del servidor (la API los intercambia como enteros) y `index.ts` los reexporta. Un enum nuevo se agrega al contrato, no a mano. `ClientEnumContractTests` (WebApi.Tests) los compara con el dominio.
 - `src/utils/tenantCapabilities.ts`: helpers de capabilities.
 
 El access token se mantiene en memoria y se agrega con interceptor. El refresh token usa cookie `HttpOnly`; `localStorage` solo conserva un marcador de sesión. Vite proxya API, uploads y hubs a `localhost:5203`.
@@ -40,7 +40,7 @@ Shell y diseño (Fase 1):
 
 Datos del servidor y cliente generado (Fase 2):
 
-- `client/openapi/openapi.json` es el documento OpenAPI de la API (rutas en minúsculas, propiedades no nulas como requeridas). `npm run api:pull` lo descarga de una API corriendo en Development y `npm run api:types` genera `src/api/generated/schema.ts` con openapi-typescript; ambos archivos se versionan y se regeneran cuando cambia un contrato. CI falla si alguno no coincide con la API y reporta en cada PR los cambios incompatibles contra la rama base ([ADR 0008](../adr/0008-api-error-contract.md)).
+- `client/openapi/openapi.json` es el documento OpenAPI de la API (rutas en minúsculas, propiedades no nulas como requeridas). `npm run api:pull` lo descarga de una API corriendo en Development y `npm run api:types` genera `src/api/generated/schema.ts` con openapi-typescript y `src/api/generated/enums.ts` con `scripts/generate-enums.mjs`; ambos archivos se versionan y se regeneran cuando cambia un contrato. CI falla si alguno no coincide con la API y reporta en cada PR los cambios incompatibles contra la rama base ([ADR 0008](../adr/0008-api-error-contract.md)).
 - `src/api/typedClient.ts` (`apiRequest('get', '/api/v1/…', { path, query, body })`) tipa ruta, parámetros, cuerpo y respuesta desde ese esquema y usa la misma instancia axios (token, refresh, negocio). `Schemas['CampaignDto']` da los tipos de los DTOs.
 - TanStack Query maneja el estado del servidor de las pantallas migradas: `src/api/queryClient.ts` (un reintento, 30 s de frescura) y hooks en `src/api/queries.ts` (`useMyAccess`, `useCustomerCard`, `useCampaigns`, `useCampaignMessages`, `useCreateCampaign`, `useCancelCampaign`). Las mutaciones invalidan sus claves; cerrar sesión limpia la caché.
 - Migradas: ficha del cliente y campañas (lista, detalle, crear y cancelar). El resto sigue con los módulos de `src/api` y `types/index.ts`; se migran al tocar cada pantalla, sin reescrituras incidentales.
