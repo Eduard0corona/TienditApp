@@ -57,10 +57,13 @@ public class TenantFilterBypassAllowlistTests
         // webhook token, what is due). The work itself runs in that business's scope (BackgroundScopes).
         ["src/FoodParkDigital.Application/WhatsApp/Queries/VerifyWhatsAppWebhookTokenQuery.cs"] = 1,
         ["src/FoodParkDigital.Infrastructure/BackgroundJobs/BackgroundQueuesHealthCheck.cs"] = 1,
-        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Messaging/MessagingWorker.cs"] = 4,
+        ["src/FoodParkDigital.Infrastructure/BackgroundJobs/Messaging/MessagingWorker.cs"] = 5,
         ["src/FoodParkDigital.Infrastructure/Services/WhatsAppWebhookProcessor.cs"] = 1,
         // Verification codes by WhatsApp: the platform's account, owned by an active platform admin.
         ["src/FoodParkDigital.Infrastructure/Services/SmsService.cs"] = 2,
+        // The online menu finds its business by slug, with its settings, before any business is in context; it then
+        // enters that business.
+        ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 1,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).
         ["src/FoodParkDigital.Application/Orders/Queries/GetMyOrdersQuery.cs"] = 1, // a customer account's own orders, filtered by its user id
         ["src/FoodParkDigital.Application/Orders/Commands/CreateOrderCommand.cs"] = 1,

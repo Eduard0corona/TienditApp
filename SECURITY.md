@@ -12,11 +12,11 @@ El tenant efectivo debe derivarse de identidad autenticada y acceso validado, nu
 
 Riesgos actuales comprobados:
 
-- `TenantSettings` y `WhatsAppConfig` contienen `TenantId` pero no implementan `ITenantScoped`; por ello el filtro global automático no las cubre y cada consulta debe filtrar por tenant de forma explícita. `OrderItem` y `OrderStatusHistory` no tienen `TenantId`.
+- Resuelto en la Fase 8: toda entidad con `TenantId` implementa `ITenantScoped` y tiene el filtro global, también `TenantSettings`, `WhatsAppConfig`, `OrderItem` y `OrderStatusHistory` (estas dos con el negocio de su orden); `ArchitectureTests` lo exige a las entidades nuevas.
 - Existen usos de `IgnoreQueryFilters()` en autenticación, administración, webhooks y servicios. Cada uso debe revisarse por alcance y autorización; está prohibido añadirlo como atajo. El del dashboard, que exponía los productos más vendidos de todos los tenants, ya se corrigió.
 - `TenantResolutionMiddleware` permite a `SUPER_ADMIN` sustituir el tenant mediante `X-Tenant-Id` sin comprobar membresía/capability. El uso queda registrado en el log como evento de auditoría, pero falta justificación, límites y persistencia antes de considerarlo un control cross-tenant suficiente.
 - El interceptor de guardado rechaza entidades nuevas con un `TenantId` ajeno y cambios de `TenantId`; el middleware revalida la membresía en "mi tenant", marketing y órdenes por tenant, y los hubs la validan al conectar.
-- Las pruebas existentes no constituyen una suite completa que demuestre imposibilidad de consultar, modificar, eliminar o descargar datos de otro tenant.
+- La suite HTTP de la Fase 8 (`CrossTenantHttpSqlServerTests`, API completa contra SQL Server) demuestra que un negocio no consulta, modifica, elimina ni descarga catálogo, clientes, proveedores, órdenes ni archivos privados de otro, ni con su encabezado, su ruta o el cambio de negocio; todavía no cubre el resto de los recursos, los hubs ni los webhooks.
 
 Los grupos SignalR y rutas/nombres de archivos deben incluir aislamiento verificable por tenant. Un rol global, incluido `SUPER_ADMIN`, no concede por sí solo permiso para ignorar ese aislamiento.
 
@@ -36,7 +36,7 @@ Cada access token lleva su sesión (`session_id`) y una huella del security stam
 - se detecta un token reutilizado;
 - cambia la seguridad de la cuenta (2FA, teléfono): ahí el cliente renueva su sesión.
 
-Los tokens emitidos antes del despliegue siguen funcionando: se encuentran por su valor, se guardan como hash al usarse y un proceso único al arrancar convierte los demás.
+Los tokens emitidos antes del despliegue siguen funcionando: se encuentran por su valor, se guardan como hash al usarse y un proceso único al arrancar convierte los demás. La versión nueva deja la columna del valor vacía (`''`), nunca nula: la anterior la lee como obligatoria, así que volver a ella con un swap sigue funcionando (sus sesiones guardadas como hash terminan) y, como las dos rechazan un token vacío, esas filas no abren ninguna sesión.
 
 Pendiente antes de producción: el login distingue cuentas sin confirmar o bloqueadas (los intentos fallidos ya cuentan para el bloqueo de la cuenta). Una conexión SignalR ya abierta sigue hasta que vence su token (máximo 60 minutos) aunque termine la sesión. También deben revisarse expiraciones, protección CSRF/cookie y el uso de tokens SignalR en query string.
 

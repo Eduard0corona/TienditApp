@@ -158,6 +158,8 @@ public static class DependencyInjection
         services.AddScoped<IWebhookInbox, WebhookInbox>();
         services.AddScoped<WhatsAppWebhookProcessor>();
         services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
+        // Data the previous version left without a business while the migration was applied, completed at start.
+        services.AddHostedService<OrderTenantBackfillService>();
         if (configuration.GetValue($"{BackgroundJobOptions.SectionName}:Enabled", defaultValue: true))
         {
             services.AddHostedService<OutboxDispatcherService>();

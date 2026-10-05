@@ -11,6 +11,9 @@ public class OrderStatusHistoryConfiguration : IEntityTypeConfiguration<OrderSta
         builder.ToTable("OrderStatusHistory");
         builder.HasKey(h => h.Id);
 
+        builder.Property(h => h.TenantId).IsRequired();
+        builder.HasIndex(h => new { h.TenantId, h.OrderId });
+
         builder.Property(h => h.PreviousStatus).HasConversion<int>().IsRequired();
         builder.Property(h => h.NewStatus).HasConversion<int>().IsRequired();
         builder.Property(h => h.ChangedBy).HasMaxLength(256);

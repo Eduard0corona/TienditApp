@@ -9,13 +9,17 @@ namespace FoodParkDigital.Infrastructure.Tests.Support;
 public static class InMemoryApplicationDbContext
 {
     public static ApplicationDbContext Create(params IInterceptor[] interceptors)
+        => Create(new TestCurrentTenantService(), interceptors);
+
+    /// <param name="tenant">The business of the request: the global filters show only its rows.</param>
+    public static ApplicationDbContext Create(ICurrentTenantService tenant, params IInterceptor[] interceptors)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .AddInterceptors(interceptors)
             .Options;
 
-        return new ApplicationDbContext(options, new TestCurrentTenantService(), new NullMediator());
+        return new ApplicationDbContext(options, tenant, new NullMediator());
     }
 
     internal sealed class TestCurrentTenantService : ICurrentTenantService

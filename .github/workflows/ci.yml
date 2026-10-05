@@ -281,11 +281,14 @@ jobs:
             dotnet ef database update --connection "$MSSQL_CONNECTION;Database=TienditAppCiNew" $EF_PROJECTS
 
       # What depends on SQL Server itself (the folio counters take the next number under a row lock; the lists project
-      # in SQL) runs against the same container: test classes named *SqlServerTests, skipped everywhere else.
+      # in SQL) runs against the same container: test classes named *SqlServerTests, skipped everywhere else. The
+      # WebApi ones run the whole API in process: two businesses that try to reach each other's data.
       - name: SQL Server tests
         env:
           TIENDITAPP_TEST_SQLSERVER: ${{ env.MSSQL_CONNECTION }}
-        run: dotnet test tests/FoodParkDigital.Infrastructure.Tests --configuration Release --filter "FullyQualifiedName~SqlServerTests"
+        run: |
+          dotnet test tests/FoodParkDigital.Infrastructure.Tests --configuration Release --filter "FullyQualifiedName~SqlServerTests"
+          dotnet test tests/FoodParkDigital.WebApi.Tests --configuration Release --filter "FullyQualifiedName~SqlServerTests"
 
       - name: Upload the scripts
         if: failure()

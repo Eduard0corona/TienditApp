@@ -2,7 +2,7 @@ using FoodParkDigital.Domain.Common;
 
 namespace FoodParkDigital.Domain.Tenants.Entities;
 
-public class WhatsAppConfig : AuditableEntity
+public class WhatsAppConfig : AuditableEntity, ITenantScoped
 {
     private WhatsAppConfig() { }
 

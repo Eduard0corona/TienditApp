@@ -22,7 +22,6 @@ public sealed record TenantSalesSettings(
         Guid tenantId,
         CancellationToken cancellationToken)
     {
-        // TenantSettings has no tenant query filter: it is always read by its TenantId.
         var settings = await context.TenantSettings
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)

@@ -5,7 +5,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 
 namespace FoodParkDigital.Domain.Tenants.Entities;
 
-public class TenantSettings : BaseEntity
+public class TenantSettings : BaseEntity, ITenantScoped
 {
     private TenantSettings() { }
 

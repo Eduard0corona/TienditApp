@@ -7,7 +7,7 @@ using FoodParkDigital.Domain.Fiscal;
 
 namespace FoodParkDigital.Domain.Orders.Entities;
 
-public class OrderItem : BaseEntity
+public class OrderItem : BaseEntity, ITenantScoped
 {
     private readonly List<OrderItemOption> _options = new();
 
@@ -40,6 +40,7 @@ public class OrderItem : BaseEntity
         if (unitPrice < 0)
             throw new ArgumentException("Unit price cannot be negative.", nameof(unitPrice));
 
+        TenantId = tenantId;
         OrderId = orderId;
         ProductId = productId;
         ProductName = productName;
@@ -59,6 +60,7 @@ public class OrderItem : BaseEntity
             _options.Add(new OrderItemOption(tenantId, Id, option));
     }
 
+    public Guid TenantId { get; private set; }
     public Guid OrderId { get; private set; }
     public Guid ProductId { get; private set; }
     public string ProductName { get; private set; } = null!;

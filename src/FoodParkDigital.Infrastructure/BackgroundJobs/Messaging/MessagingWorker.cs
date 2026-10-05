@@ -136,7 +136,9 @@ public sealed class MessagingWorker
         await using (var scope = _scopeFactory.CreateAsyncScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            // Which businesses have reminders on, before entering each one's scope below.
             tenants = await context.TenantSettings
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(s => s.AppointmentRemindersEnabled
                     && (s.Capabilities & TenantCapability.Appointments) == TenantCapability.Appointments

@@ -2494,6 +2494,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("TaxRate")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<decimal>("TotalPrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -2509,6 +2512,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("TenantId", "OrderId");
 
                     b.ToTable("OrderItems", (string)null);
                 });
@@ -2735,9 +2740,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("PreviousStatus")
                         .HasColumnType("int");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId", "ChangedAt");
+
+                    b.HasIndex("TenantId", "OrderId");
 
                     b.ToTable("OrderStatusHistory", (string)null);
                 });

@@ -51,6 +51,15 @@ Al arrancar con `BackgroundJobs__Enabled` (no en el slot de staging), la app mue
 
 Si hubiera que volver a la versión anterior, los archivos no se pierden, pero esa versión solo los muestra desde el almacenamiento público: copia `orders/` del privado al público (`azcopy copy` entre contenedores, o de `PrivateRootPath` a `wwwroot/uploads`). Los pagos y servicios registrados después guardan `/files/...`, que la versión anterior no muestra.
 
+## Sesiones y aislamiento (Fase 8)
+
+El `apply.sql` de la Fase 8 se aplica, como siempre, mientras corre la versión anterior, y ella sigue funcionando: escribe sus refresh tokens en texto (cada uno con una sesión propia) y agrega partidas y cambios de estado sin negocio. Al arrancar, la versión nueva:
+
+- da a esas partidas y cambios de estado el negocio de su orden (`OrderTenantBackfillService`, en cada arranque y también en el slot de staging; no hace nada cuando no hay pendientes). Hasta entonces el filtro por negocio los oculta;
+- con `BackgroundJobs__Enabled` (no en el slot), convierte a hash los refresh tokens en texto y registra cuántos (`Hashed {Count} refresh tokens stored as plain values`); un token que llega antes se convierte al usarse.
+
+Después del despliegue, cada cliente renueva su sesión una vez sin notarlo, porque los access tokens anteriores no traen sesión. Volver a la versión anterior con un swap funciona sin `rollback.sql`: esa versión sigue leyendo todas las filas (la nueva deja vacía, nunca nula, la columna del valor del token); las sesiones abiertas por la versión nueva terminan y cada quien inicia sesión otra vez.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

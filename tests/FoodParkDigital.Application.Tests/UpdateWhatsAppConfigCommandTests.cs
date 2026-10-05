@@ -120,8 +120,12 @@ public class UpdateWhatsAppConfigCommandTests
             return new TestFixture(database, context, tenantA.Id, tenantB.Id);
         }
 
+        /// <summary>The handler of a request of <paramref name="tenantId"/>: the filters of the context are its own.</summary>
         public UpdateWhatsAppConfigCommandHandler CreateHandler(Guid tenantId)
-            => new(Context, new TestCurrentTenantService(tenantId));
+        {
+            Database.SetTenant(tenantId);
+            return new(Context, new TestCurrentTenantService(tenantId));
+        }
 
         public async Task StoreConfigAsync(Guid tenantId, string phoneNumberId)
         {
@@ -134,8 +138,10 @@ public class UpdateWhatsAppConfigCommandTests
 
         public async Task<WhatsAppConfig?> FindConfigAsync(Guid tenantId)
         {
+            // What any business has stored, read by the test whatever business is in context.
             await using var readContext = Database.CreateIndependentContext();
             return await readContext.WhatsAppConfigs
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .SingleOrDefaultAsync(c => c.TenantId == tenantId);
         }
