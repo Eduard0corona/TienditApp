@@ -23,4 +23,8 @@ export const chatApi = {
 
   markAsRead: (conversationId: string) =>
     api.put<ApiMessage>(`/whatsapp/chat/${conversationId}/read`),
+
+  /** Pauses the automatic replies of the conversation for a day, or resumes them. */
+  setAutoReplies: (conversationId: string, paused: boolean) =>
+    api.put<ConversationDto>(`/whatsapp/chat/${conversationId}/auto-replies`, { paused }),
 };

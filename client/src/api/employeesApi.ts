@@ -1,12 +1,7 @@
 import api from './axios';
-import type {
-  CreateEmployeeRequest,
-  EmployeeDto,
-  EmployeePermissionOptionDto,
-  PaginatedList,
-  UpdateEmployeeRequest,
-} from '../types';
+import type { EmployeeDto, PaginatedList } from '../types';
 
+/** The team as other screens read it (who attends an appointment). The team screen uses the typed client. */
 export const employeesApi = {
   getAll: (params?: {
     search?: string;
@@ -17,19 +12,4 @@ export const employeesApi = {
     pageSize?: number;
   }) =>
     api.get<PaginatedList<EmployeeDto>>('/employees', { params }),
-
-  getById: (tenantUserId: string) =>
-    api.get<EmployeeDto>(`/employees/${tenantUserId}`),
-
-  getPermissionOptions: () =>
-    api.get<EmployeePermissionOptionDto[]>('/employees/permission-options'),
-
-  create: (data: CreateEmployeeRequest) =>
-    api.post<EmployeeDto>('/employees', data),
-
-  update: (tenantUserId: string, data: UpdateEmployeeRequest) =>
-    api.put<EmployeeDto>(`/employees/${tenantUserId}`, data),
-
-  setActive: (tenantUserId: string, isActive: boolean) =>
-    api.patch(`/employees/${tenantUserId}/active`, { isActive }),
 };

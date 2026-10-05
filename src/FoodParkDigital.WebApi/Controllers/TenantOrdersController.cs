@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Orders.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -37,7 +38,7 @@ public class TenantOrdersController : ControllerBase
 
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new { error = "Invalid user context." });
+            return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
 
         var hasAccess = await _tenantAccessService.HasActiveAccessAsync(userId, tenantId, HttpContext.RequestAborted);
         if (!hasAccess)
@@ -56,7 +57,7 @@ public class TenantOrdersController : ControllerBase
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }

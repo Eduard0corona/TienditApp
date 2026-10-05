@@ -45,52 +45,42 @@ public class SetEmployeeActiveCommandHandler : IRequestHandler<SetEmployeeActive
         if (tenantUser is null)
             return Result.Failure("Empleado no encontrado.");
 
-        if (request.IsActive)
-        {
-            if (tenantUser.Status != TenantUserStatus.Active)
-            {
-                var planError = await SubscriptionRules.CheckUserLimitAsync(_context, tenantUser.TenantId, cancellationToken);
-                if (planError is not null)
-                    return Result.Failure(planError);
-            }
-
-            tenantUser.SetStatus(TenantUserStatus.Active);
-            await _context.SaveChangesAsync(cancellationToken);
-            return Result.Success();
-        }
-
         var user = await _context.Users
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(x => x.Id == tenantUser.UserId, cancellationToken);
         if (user is null)
             return Result.Failure("Empleado no encontrado.");
 
+        if (request.IsActive)
+        {
+            // A pending invitation already holds its seat; a disabled person takes one back.
+            if (tenantUser.Status == TenantUserStatus.Disabled)
+            {
+                var planError = await SubscriptionRules.CheckUserLimitAsync(_context, tenantUser.TenantId, cancellationToken);
+                if (planError is not null)
+                    return Result.Failure(planError);
+            }
+
+            // Someone who never chose a password keeps (or gets back) their invitation, not an access they cannot use.
+            tenantUser.SetStatus(user.PasswordHash is null ? TenantUserStatus.Invited : TenantUserStatus.Active);
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+
         if (!Guid.TryParse(_currentUserService.UserId, out var currentUserId))
-            return Result.Failure("Usuario no valido.");
+            return Result.Failure("Usuario no válido.");
 
         if (currentUserId == tenantUser.UserId)
             return Result.Failure("No puedes desactivar tu propio acceso.");
 
-        if (tenantUser.Role is TenantUserRole.Owner or TenantUserRole.Admin || user.Role == UserRole.TenantAdmin)
-        {
-            var activeAdmins = await _context.TenantUsers
-                .IgnoreQueryFilters()
-                .Where(x =>
-                    x.TenantId == _tenantService.TenantId
-                    && x.Status == TenantUserStatus.Active)
-                .Join(
-                    _context.Users.IgnoreQueryFilters(),
-                    tu => tu.UserId,
-                    u => u.Id,
-                    (tu, u) => new { tu, u })
-                .CountAsync(
-                    x =>
-                        (x.tu.Role == TenantUserRole.Owner || x.tu.Role == TenantUserRole.Admin)
-                        || x.u.Role == UserRole.TenantAdmin,
-                    cancellationToken);
+        if (tenantUser.Role == TenantUserRole.Owner)
+            return Result.Failure(EmployeeAccessRules.OwnerIsPermanentMessage);
 
-            if (activeAdmins <= 1)
-                return Result.Failure("Debe existir al menos un administrador activo en el tenant.");
+        // Administering the business comes from the membership (owning another business gives nothing here).
+        if (EmployeeAccessRules.IsManagerRole(tenantUser.Role)
+            && !await EmployeeAccessRules.HasAnotherActiveManagerAsync(_context, _tenantService.TenantId, tenantUser.Id, cancellationToken))
+        {
+            return Result.Failure(EmployeeAccessRules.LastManagerMessage);
         }
 
         tenantUser.SetStatus(TenantUserStatus.Disabled);

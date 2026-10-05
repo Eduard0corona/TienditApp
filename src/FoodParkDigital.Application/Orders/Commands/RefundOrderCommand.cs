@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -61,7 +60,6 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
 {
     private readonly IApplicationDbContext _context;
     private readonly OrderRefundProcessor _refunds;
-    private readonly IMapper _mapper;
 
     public RefundOrderCommandHandler(
         IApplicationDbContext context,
@@ -69,17 +67,15 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
         ITenantAccessService tenantAccessService,
         IOrderCashService orderCashService,
         IDateTimeProvider dateTimeProvider,
-        IMapper mapper,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
-        _mapper = mapper;
         _refunds = new OrderRefundProcessor(
             context,
             currentUserService,
             tenantAccessService,
             orderCashService,
-            orderInventoryService ?? NoOpOrderInventoryService.Instance,
+            orderInventoryService,
             dateTimeProvider);
     }
 
@@ -106,7 +102,7 @@ public class RefundOrderCommandHandler : IRequestHandler<RefundOrderCommand, Res
             return Result.Failure<OrderDto>(refund.Error!);
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(await OrderRefundQueries.ToDtoAsync(_context, _mapper, order.Id, cancellationToken));
+        return Result.Success(await OrderRefundQueries.ToDtoAsync(_context, order.Id, cancellationToken));
     }
 }
 
@@ -121,7 +117,7 @@ internal static class OrderRefundQueries
             .Include(o => o.ServicePieces)
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
 
-    public static async Task<OrderDto> ToDtoAsync(IApplicationDbContext context, IMapper mapper, Guid orderId, CancellationToken cancellationToken)
+    public static async Task<OrderDto> ToDtoAsync(IApplicationDbContext context, Guid orderId, CancellationToken cancellationToken)
     {
         var order = await context.Orders
             .AsNoTracking()
@@ -132,7 +128,7 @@ internal static class OrderRefundQueries
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)
             .FirstAsync(o => o.Id == orderId, cancellationToken);
-        var dto = mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
         return dto;
     }

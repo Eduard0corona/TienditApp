@@ -27,7 +27,11 @@ Contiene invariantes y comportamiento de agregados, value objects, máquinas de 
 
 ### Application
 
-Orquesta Commands/Queries, validación con FluentValidation, DTOs, interfaces de puertos, autorización contextual y transacciones del caso de uso. Usa `IApplicationDbContext`, lo que introduce referencias de EF Core en Application; es estado actual. AutoMapper está registrado y se usa donde aporta mapeo consistente.
+Orquesta Commands/Queries, validación con FluentValidation, DTOs, interfaces de puertos, autorización contextual y transacciones del caso de uso. Usa `IApplicationDbContext`, lo que introduce referencias de EF Core en Application; es estado actual. Los DTOs se mapean a mano (`XxxMappings` junto a cada DTO); desde la Fase 4F no hay AutoMapper.
+
+Los puertos que un caso de uso necesita son obligatorios en su constructor (`IOrderInventoryService`, `IOrderCashService`, `IFolioGenerator`): desde la Fase 4F no hay respaldos que no hagan nada si falta el registro, porque una venta guardada sin consumir inventario o sin entrar a la caja pasaría inadvertida. Las pruebas pasan sus dobles de forma explícita (`NoOpOrderInventoryService`, `NoOpOrderCashService` en `tests/.../Support`).
+
+El pipeline de MediatR corre, en orden, `AuthorizationBehavior`, `ValidationBehavior`, `LoggingBehavior` y `TransactionBehavior`. El último solo envuelve los comandos marcados `ITransactionalRequest` (sus restricciones genéricas lo dejan fuera de los demás) y corre el handler en una transacción (ver [consistencia de datos](data-consistency-and-domain-events.md)).
 
 ### Infrastructure
 
@@ -42,6 +46,8 @@ Es el composition root. Controllers deben recibir DTOs/commands, delegar a Media
 Mantiene páginas, componentes, hooks, contextos, tipos y una única capa `src/api`. Puede calcular valores para presentación, pero backend decide estados, totales, impuestos, saldos y existencias finales.
 
 ## Guardrails de revisión
+
+Desde la Fase 4F, `tests/FoodParkDigital.WebApi.Tests/ArchitectureTests.cs` verifica en CI lo que se puede comprobar sobre los ensamblados compilados: las capas solo dependen hacia adentro, Domain no conoce persistencia, web ni proveedores (salvo `MediatR.Contracts` e Identity), Application no conoce HTTP ni proveedores de base de datos, los handlers viven en Application, los controllers no reciben el DbContext (excepción conocida: `WhatsAppWebhookController`), toda entidad con `TenantId` es `ITenantScoped` y tiene el filtro de negocio (excepto `TenantSettings` y `WhatsAppConfig`, que se leen por `TenantId` antes de haber negocio en contexto), y una entidad nueva sin `TenantId` debe clasificarse a propósito (plataforma, cuentas o hija de un agregado filtrado). Una excepción nueva se agrega a su lista con la razón.
 
 Rechaza un cambio si:
 

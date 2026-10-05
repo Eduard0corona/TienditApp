@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
@@ -16,12 +15,10 @@ public record GetProductByIdQuery(Guid Id) : IRequest<ProductDto>;
 public class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, ProductDto>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetProductByIdQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetProductByIdQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<ProductDto> Handle(GetProductByIdQuery request, CancellationToken cancellationToken)
@@ -40,6 +37,6 @@ public class GetProductByIdQueryHandler : IRequestHandler<GetProductByIdQuery, P
         if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, product.Unit))
             throw new EntityNotFoundException("Product", request.Id);
 
-        return _mapper.Map<ProductDto>(product);
+        return product.ToDto();
     }
 }

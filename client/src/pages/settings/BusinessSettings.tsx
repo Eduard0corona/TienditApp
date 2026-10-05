@@ -301,7 +301,7 @@ export default function BusinessSettings() {
                         setEditMode(!editMode);
                       }}
                     >
-                      <i className="mdi mdi-store-edit me-1"></i>
+                      <i className="ri-store-2-line me-1" aria-hidden="true"></i>
                       {editMode ? 'Cancelar' : 'Editar Empresa'}
                     </button>
                   </div>
@@ -500,7 +500,7 @@ export default function BusinessSettings() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={logoLoading}
                 >
-                  <i className="mdi mdi-upload me-1"></i>
+                  <i className="ri-upload-2-line me-1" aria-hidden="true"></i>
                   Subir Logo
                 </button>
                 {tenant?.logoUrl && (
@@ -509,7 +509,7 @@ export default function BusinessSettings() {
                     onClick={onDeleteLogo}
                     disabled={logoLoading}
                   >
-                    <i className="mdi mdi-delete me-1"></i>
+                    <i className="ri-delete-bin-line me-1" aria-hidden="true"></i>
                     Eliminar
                   </button>
                 )}

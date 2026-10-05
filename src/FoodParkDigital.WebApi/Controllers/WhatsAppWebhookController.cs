@@ -6,6 +6,7 @@ using FoodParkDigital.WebApi.Services;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -46,13 +47,13 @@ public class WhatsAppWebhookController : ControllerBase
         CancellationToken cancellationToken)
     {
         if (mode != "subscribe" || string.IsNullOrEmpty(verifyToken) || string.IsNullOrEmpty(challenge))
-            return BadRequest("Invalid verification request.");
+            return this.ApiError(StatusCodes.Status400BadRequest, "Invalid verification request.");
 
         var result = await _mediator.Send(new VerifyWhatsAppWebhookTokenQuery(verifyToken), cancellationToken);
         if (result.IsFailure)
         {
             _logger.LogWarning("Webhook verification failed: unknown verify token");
-            return Unauthorized("Invalid verify token.");
+            return this.ApiError(StatusCodes.Status401Unauthorized, "Invalid verify token.");
         }
 
         _logger.LogInformation("Webhook verified for tenant {TenantId}", result.Value);
@@ -78,7 +79,7 @@ public class WhatsAppWebhookController : ControllerBase
 
         if (signatureStatus is not (WhatsAppWebhookSignatureStatus.Valid
             or WhatsAppWebhookSignatureStatus.VerificationDisabled))
-            return Unauthorized("Invalid webhook signature.");
+            return this.ApiError(StatusCodes.Status401Unauthorized, "Invalid webhook signature.");
 
         var rawBody = Encoding.UTF8.GetString(body);
         if (string.IsNullOrWhiteSpace(rawBody))

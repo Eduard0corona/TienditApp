@@ -25,7 +25,7 @@ public class OrderSearchTests
         await AddOrderAsync(fixture, tenant, "ORD-000001", "Público en general", null);
         await AddOrderAsync(fixture, tenant, "ORD-000002", "Mariana López", "+525522223333");
 
-        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService, fixture.Mapper);
+        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService);
         var result = await handler.Handle(new GetOrdersByBusinessQuery { Search = search }, CancellationToken.None);
 
         var order = Assert.Single(result.Items);
@@ -40,7 +40,7 @@ public class OrderSearchTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         await AddOrderAsync(fixture, tenant, "ORD-000001", "Cliente", "+525522223333");
 
-        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService, fixture.Mapper);
+        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService);
         var result = await handler.Handle(new GetOrdersByBusinessQuery { Search = "52" }, CancellationToken.None);
 
         Assert.Empty(result.Items);
@@ -66,7 +66,7 @@ public class OrderSearchTests
         await fixture.AddProductAsync(tenant, "Jabón de tocador", 18m);
         await fixture.Context.SaveChangesAsync();
 
-        var handler = new GetProductsQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock, fixture.Mapper);
+        var handler = new GetProductsQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock);
         var byName = await handler.Handle(new GetProductsQuery { Search = "cola" }, CancellationToken.None);
         var bySku = await handler.Handle(new GetProductsQuery { Search = "ref-600" }, CancellationToken.None);
         var byBarcode = await handler.Handle(new GetProductsQuery { Search = "7501055300075" }, CancellationToken.None);

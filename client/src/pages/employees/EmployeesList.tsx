@@ -1,467 +1,265 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
-import { useForm } from 'react-hook-form';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import DataTable from '../../components/common/DataTable';
 import PageTitle from '../../components/common/PageTitle';
-import { employeesApi } from '../../api/employeesApi';
-import type {
-  CreateEmployeeRequest,
-  EmployeeDto,
-  EmployeePermissionOptionDto,
-  PaginatedList,
-  UpdateEmployeeRequest,
-} from '../../types';
+import EmployeeFormModal from '../../components/employees/EmployeeFormModal';
+import InvitationShare from '../../components/employees/InvitationShare';
+import { apiRequest } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
+import { useConfirm } from '../../hooks/useConfirm';
+import { useTenant } from '../../hooks/useTenant';
+import { useToast } from '../../hooks/useToast';
+import { describeEmployeeRole, type EmployeeRecord } from '../../utils/teamRoles';
 
 const COLUMNS = [
-  { header: 'Empleado' },
-  { header: 'Rol app', className: 'text-center' },
-  { header: 'Rol tenant', className: 'text-center' },
+  { header: 'Persona' },
+  { header: 'Rol' },
   { header: 'Estado', className: 'text-center' },
   { header: 'Permisos' },
-  { header: 'Acciones', className: 'text-center' },
+  { header: 'Acciones', className: 'text-end' },
 ];
 
-const APP_ROLE_OPTIONS = [
-  { value: 1, label: 'Administrador' },
-  { value: 2, label: 'Staff' },
-  { value: 3, label: 'Kitchen' },
-];
-
-const TENANT_ROLE_OPTIONS = [
-  { value: 1, label: 'Admin' },
-  { value: 2, label: 'Staff' },
-];
-
-type EmployeeForm = {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber?: string;
-  appRole: number;
-  tenantRole: number;
-  permissions: string[];
+const STATUS_BADGES: Record<string, { label: string; className: string }> = {
+  Active: { label: 'Activo', className: 'bg-success' },
+  Invited: { label: 'Invitación pendiente', className: 'bg-warning text-dark' },
+  Disabled: { label: 'Desactivado', className: 'bg-secondary' },
 };
 
+interface ShareTarget {
+  path: string;
+  firstName: string;
+  email: string;
+  phone?: string | null;
+}
+
+/** Equipo: who enters the business, with which role, and their pending invitations. */
 export default function EmployeesList() {
-  const [data, setData] = useState<PaginatedList<EmployeeDto>>({
-    items: [],
-    pageNumber: 1,
-    totalPages: 0,
-    totalCount: 0,
-    hasPreviousPage: false,
-    hasNextPage: false,
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<EmployeeDto | null>(null);
-  const [permissionOptions, setPermissionOptions] = useState<EmployeePermissionOptionDto[]>([]);
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
-  const [pageNumber, setPageNumber] = useState(1);
+  const toast = useToast();
+  const { confirm } = useConfirm();
+  const { tenant } = useTenant();
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterRole, setFilterRole] = useState('');
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [editing, setEditing] = useState<EmployeeRecord | 'new' | null>(null);
+  const [share, setShare] = useState<ShareTarget | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<EmployeeForm>({
-    defaultValues: {
-      email: '',
-      password: '',
-      firstName: '',
-      lastName: '',
-      phoneNumber: '',
-      appRole: 2,
-      tenantRole: 2,
-      permissions: [],
-    },
+  const employees = useQuery({
+    queryKey: ['employees', { page, pageSize, search, status }],
+    queryFn: () => apiRequest('get', '/api/v1/employees', {
+      query: { pageNumber: page, pageSize, search: search || undefined, status: status || undefined },
+    }),
+    placeholderData: keepPreviousData,
   });
+  const presets = useQuery({
+    queryKey: ['employees', 'role-presets'],
+    queryFn: () => apiRequest('get', '/api/v1/employees/role-presets'),
+    staleTime: Infinity,
+  });
+  const permissionOptions = useQuery({
+    queryKey: ['employees', 'permission-options'],
+    queryFn: () => apiRequest('get', '/api/v1/employees/permission-options'),
+    staleTime: Infinity,
+  });
+  const presetList = presets.data ?? [];
+  const optionNames = new Map((permissionOptions.data ?? []).map((option) => [option.code, option.name]));
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['employees'] });
 
-  const watchedAppRole = watch('appRole');
-
-  useEffect(() => {
-    if (watchedAppRole === 1) {
-      setValue('tenantRole', 1);
+  const onSaved = (saved: EmployeeRecord) => {
+    setEditing(null);
+    void refresh();
+    if (saved.invitationUrl) {
+      setShare({ path: saved.invitationUrl, firstName: saved.firstName, email: saved.email, phone: saved.phoneNumber });
+    } else {
+      toast.success(`${saved.firstName} ${saved.lastName}: guardado.`);
     }
-  }, [setValue, watchedAppRole]);
+  };
 
-  const loadEmployees = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const resendInvitation = async (employee: EmployeeRecord) => {
+    setBusyId(employee.tenantUserId);
     try {
-      const params: {
-        status?: string;
-        appRole?: string;
-        search?: string;
-        pageNumber: number;
-        pageSize: number;
-      } = {
-        pageNumber,
-        pageSize,
-      };
-
-      if (filterStatus) params.status = filterStatus;
-      if (filterRole) params.appRole = filterRole;
-      if (search) params.search = search;
-
-      const { data: response } = await employeesApi.getAll(params);
-      setData(response);
-    } catch {
-      setError('No se pudieron cargar los empleados.');
+      const invitation = await apiRequest('post', '/api/v1/employees/{tenantUserId}/resend-invitation', {
+        path: { tenantUserId: employee.tenantUserId },
+      });
+      setShare({ path: invitation.invitationUrl, firstName: employee.firstName, email: invitation.email, phone: employee.phoneNumber });
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se pudo crear la invitación.'));
     } finally {
-      setLoading(false);
+      setBusyId(null);
     }
-  }, [filterRole, filterStatus, pageNumber, pageSize, search]);
+  };
 
-  const loadPermissionOptions = useCallback(async () => {
-    try {
-      const { data: response } = await employeesApi.getPermissionOptions();
-      setPermissionOptions(response);
-    } catch {
-      setPermissionOptions([]);
+  const setActive = async (employee: EmployeeRecord, isActive: boolean) => {
+    const name = `${employee.firstName} ${employee.lastName}`;
+    if (!isActive) {
+      const ok = await confirm({
+        title: employee.status === 'Invited' ? 'Cancelar invitación' : 'Desactivar acceso',
+        message: employee.status === 'Invited'
+          ? `El enlace de ${name} deja de servir. Puedes volver a invitarle después.`
+          : `${name} deja de entrar a este negocio. Su historial se conserva.`,
+        confirmLabel: employee.status === 'Invited' ? 'Cancelar invitación' : 'Desactivar',
+        danger: true,
+      });
+      if (!ok) return;
     }
-  }, []);
-
-  useEffect(() => {
-    void loadEmployees();
-  }, [loadEmployees]);
-
-  useEffect(() => {
-    void loadPermissionOptions();
-  }, [loadPermissionOptions]);
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditingEmployee(null);
-    setSelectedPermissions([]);
-  };
-
-  const openCreateModal = () => {
-    setEditingEmployee(null);
-    setSelectedPermissions([]);
-    reset({
-      email: '',
-      password: '',
-      firstName: '',
-      lastName: '',
-      phoneNumber: '',
-      appRole: 2,
-      tenantRole: 2,
-      permissions: [],
-    });
-    setShowModal(true);
-  };
-
-  const openEditModal = (employee: EmployeeDto) => {
-    setEditingEmployee(employee);
-    setSelectedPermissions(employee.permissions);
-    reset({
-      email: employee.email,
-      password: '',
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-      phoneNumber: employee.phoneNumber || '',
-      appRole: employee.appRole === 'TenantAdmin' ? 1 : employee.appRole === 'Kitchen' ? 3 : 2,
-      tenantRole: employee.tenantRole === 'Admin' ? 1 : 2,
-      permissions: employee.permissions,
-    });
-    setShowModal(true);
-  };
-
-  const togglePermission = (code: string, checked: boolean) => {
-    setSelectedPermissions((current) =>
-      checked ? [...current, code] : current.filter((item) => item !== code),
-    );
-  };
-
-  const permissionSummary = useMemo(() => {
-    const map = new Map(permissionOptions.map((option) => [option.code, option.name]));
-    return (codes: string[]) => codes.map((code) => map.get(code) || code).join(', ');
-  }, [permissionOptions]);
-
-  const onSubmit = async (form: EmployeeForm) => {
+    setBusyId(employee.tenantUserId);
     try {
-      if (editingEmployee) {
-        const payload: UpdateEmployeeRequest = {
-          tenantUserId: editingEmployee.tenantUserId,
-          firstName: form.firstName.trim(),
-          lastName: form.lastName.trim(),
-          phoneNumber: form.phoneNumber?.trim() || undefined,
-          appRole: form.appRole,
-          tenantRole: form.appRole === 1 ? 1 : form.tenantRole,
-          permissions: selectedPermissions,
-        };
-
-        await employeesApi.update(editingEmployee.tenantUserId, payload);
-      } else {
-        const payload: CreateEmployeeRequest = {
-          email: form.email.trim(),
-          password: form.password,
-          firstName: form.firstName.trim(),
-          lastName: form.lastName.trim(),
-          phoneNumber: form.phoneNumber?.trim() || undefined,
-          appRole: form.appRole,
-          tenantRole: form.appRole === 1 ? 1 : form.tenantRole,
-          permissions: selectedPermissions,
-        };
-
-        await employeesApi.create(payload);
-      }
-
-      closeModal();
-      await loadEmployees();
+      await apiRequest('patch', '/api/v1/employees/{tenantUserId}/active', {
+        path: { tenantUserId: employee.tenantUserId },
+        body: { isActive },
+      });
+      await refresh();
+      toast.success(isActive ? `${name} puede entrar de nuevo.` : `${name} ya no tiene acceso.`);
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'No se pudo guardar el empleado.');
-      setError(msg);
+      toast.error(getApiErrorMessage(err, 'No se pudo cambiar el acceso.'));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const toggleActive = async (employee: EmployeeDto) => {
-    try {
-      await employeesApi.setActive(employee.tenantUserId, !employee.isActive);
-      await loadEmployees();
-    } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'No se pudo actualizar el estado del empleado.');
-      setError(msg);
-    }
-  };
+  const data = employees.data;
 
   return (
     <>
-      <PageTitle title="Empleados" subtitle="Administracion de accesos" />
+      <PageTitle title="Equipo" subtitle="Quién entra al negocio y qué puede hacer" />
 
-      <div className="row">
-        <div className="col-12">
-          <div className="card">
-            <div className="card-body">
-              <div className="row mb-2">
-                <div className="col-sm-4">
-                  <button className="btn btn-primary mb-2" onClick={openCreateModal}>
-                    <i className="ri-user-add-line me-1"></i> Nuevo Empleado
-                  </button>
-                </div>
-                <div className="col-sm-8">
-                  <div className="d-flex justify-content-sm-end gap-2">
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterRole}
-                      onChange={(e) => {
-                        setFilterRole(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todos los roles</option>
-                      <option value="TenantAdmin">Administrador</option>
-                      <option value="Staff">Staff</option>
-                      <option value="Kitchen">Kitchen</option>
-                    </select>
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterStatus}
-                      onChange={(e) => {
-                        setFilterStatus(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todos</option>
-                      <option value="Active">Activos</option>
-                      <option value="Disabled">Inactivos</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {error && (
-                <div className="alert alert-danger alert-dismissible fade show">
-                  {error}
-                  <button type="button" className="btn-close" onClick={() => setError('')}></button>
-                </div>
-              )}
-
-              <DataTable
-                data={data.items}
-                columns={COLUMNS}
-                keyExtractor={(item) => item.tenantUserId}
-                loading={loading}
-                emptyMessage="No hay empleados registrados."
-                searchPlaceholder="Nombre o correo"
-                serverSide={{
-                  totalCount: data.totalCount,
-                  page: pageNumber,
-                  pageSize,
-                  onPageChange: setPageNumber,
-                  onPageSizeChange: (size) => {
-                    setPageSize(size);
-                    setPageNumber(1);
-                  },
-                  onSearchChange: (term) => {
-                    setSearch(term);
-                    setPageNumber(1);
-                  },
-                }}
-                renderRow={(employee) => (
-                  <>
-                    <td>
-                      <div className="fw-semibold">{employee.firstName} {employee.lastName}</div>
-                      <small className="text-muted">{employee.email}</small>
-                    </td>
-                    <td className="text-center">{employee.appRole}</td>
-                    <td className="text-center">{employee.tenantRole}</td>
-                    <td className="text-center">
-                      <span className={`badge ${employee.isActive ? 'bg-success' : 'bg-danger'}`}>
-                        {employee.isActive ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </td>
-                    <td>
-                      <small className="text-muted">{permissionSummary(employee.permissions) || '-'}</small>
-                    </td>
-                    <td className="text-center">
-                      <button
-                        className="btn btn-sm btn-soft-secondary me-1"
-                        title={employee.isActive ? 'Desactivar' : 'Activar'}
-                        onClick={() => void toggleActive(employee)}
-                      >
-                        <i className={employee.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
-                      </button>
-                      <button
-                        className="btn btn-sm btn-soft-primary"
-                        title="Editar"
-                        onClick={() => openEditModal(employee)}
-                      >
-                        <i className="ri-pencil-line"></i>
-                      </button>
-                    </td>
-                  </>
-                )}
-              />
-            </div>
+      <div className="card">
+        <div className="card-body">
+          <div className="d-flex flex-wrap justify-content-between gap-2 mb-2">
+            <button type="button" className="btn btn-primary" onClick={() => setEditing('new')} disabled={!presets.data}>
+              <i className="ri-user-add-line me-1" aria-hidden="true"></i>Invitar persona
+            </button>
+            <select
+              className="form-select form-select-sm w-auto"
+              aria-label="Estado"
+              value={status}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="Active">Activos</option>
+              <option value="Invited">Invitación pendiente</option>
+              <option value="Disabled">Desactivados</option>
+            </select>
           </div>
+
+          {employees.isError && <div className="alert alert-danger">No se pudo cargar el equipo.</div>}
+
+          <DataTable
+            data={data?.items ?? []}
+            columns={COLUMNS}
+            keyExtractor={(item) => item.tenantUserId}
+            loading={employees.isLoading}
+            emptyMessage="Nadie en el equipo con ese filtro."
+            searchPlaceholder="Nombre, correo o teléfono"
+            serverSide={{
+              totalCount: data?.totalCount ?? 0,
+              page,
+              pageSize,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size);
+                setPage(1);
+              },
+              onSearchChange: (term) => {
+                setSearch(term);
+                setPage(1);
+              },
+            }}
+            renderRow={(employee) => {
+              const badge = STATUS_BADGES[employee.status] ?? STATUS_BADGES.Disabled;
+              const isOwner = employee.tenantRole === 'Owner';
+              const isManager = isOwner || employee.tenantRole === 'Admin';
+              const role = describeEmployeeRole(employee, presetList);
+              const busy = busyId === employee.tenantUserId;
+              return (
+                <>
+                  <td>
+                    <div className="fw-semibold">{employee.firstName} {employee.lastName}</div>
+                    <small className="text-muted d-block">{employee.email}</small>
+                    {employee.phoneNumber && <small className="text-muted">{employee.phoneNumber}</small>}
+                  </td>
+                  <td>{role === 'Sin acceso' ? <span className="badge bg-warning-subtle text-warning">Sin acceso</span> : role}</td>
+                  <td className="text-center"><span className={`badge ${badge.className}`}>{badge.label}</span></td>
+                  <td>
+                    <small className="text-muted">
+                      {isManager ? 'Todo' : employee.permissions.map((code) => optionNames.get(code) ?? code).join(', ') || 'Ninguno'}
+                    </small>
+                  </td>
+                  <td className="text-end text-nowrap">
+                    {employee.status === 'Invited' && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-soft-success me-1"
+                        disabled={busy}
+                        onClick={() => void resendInvitation(employee)}
+                      >
+                        <i className="ri-send-plane-line me-1" aria-hidden="true"></i>Invitación
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-soft-primary me-1"
+                      aria-label={`Editar a ${employee.firstName} ${employee.lastName}`}
+                      onClick={() => setEditing(employee)}
+                      disabled={!presets.data}
+                    >
+                      <i className="ri-pencil-line" aria-hidden="true"></i>
+                    </button>
+                    {!isOwner && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-soft-secondary"
+                        disabled={busy}
+                        aria-label={`${employee.status === 'Disabled' ? 'Activar' : 'Quitar acceso a'} ${employee.firstName} ${employee.lastName}`}
+                        title={employee.status === 'Disabled' ? 'Activar' : employee.status === 'Invited' ? 'Cancelar invitación' : 'Desactivar'}
+                        onClick={() => void setActive(employee, employee.status === 'Disabled')}
+                      >
+                        <i className={employee.status === 'Disabled' ? 'ri-play-line' : 'ri-pause-line'} aria-hidden="true"></i>
+                      </button>
+                    )}
+                  </td>
+                </>
+              );
+            }}
+          />
         </div>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered size="lg">
+      {editing && presets.data && (
+        <EmployeeFormModal
+          key={editing === 'new' ? 'new' : editing.tenantUserId}
+          employee={editing === 'new' ? null : editing}
+          presets={presets.data}
+          permissionOptions={permissionOptions.data ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={onSaved}
+        />
+      )}
+
+      <Modal show={!!share} onHide={() => setShare(null)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingEmployee ? 'Editar Empleado' : 'Nuevo Empleado'}</Modal.Title>
+          <Modal.Title as="h2" className="h5">Invitación lista</Modal.Title>
         </Modal.Header>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <Modal.Body>
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Nombre *</label>
-                <input
-                  type="text"
-                  className={`form-control ${errors.firstName ? 'is-invalid' : ''}`}
-                  {...register('firstName', { required: 'Requerido', maxLength: 100 })}
-                />
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Apellido *</label>
-                <input
-                  type="text"
-                  className={`form-control ${errors.lastName ? 'is-invalid' : ''}`}
-                  {...register('lastName', { required: 'Requerido', maxLength: 100 })}
-                />
-              </div>
-            </div>
-
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Email *</label>
-                <input
-                  type="email"
-                  className={`form-control ${errors.email ? 'is-invalid' : ''}`}
-                  disabled={!!editingEmployee}
-                  {...register('email', { required: 'Requerido' })}
-                />
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Telefono</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  {...register('phoneNumber')}
-                />
-              </div>
-            </div>
-
-            {!editingEmployee && (
-              <div className="mb-3">
-                <label className="form-label">Password temporal *</label>
-                <input
-                  type="password"
-                  className={`form-control ${errors.password ? 'is-invalid' : ''}`}
-                  {...register('password', { required: 'Requerido', minLength: 6 })}
-                />
-              </div>
-            )}
-
-            <div className="row">
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Rol de aplicacion</label>
-                <select className="form-select" {...register('appRole', { valueAsNumber: true })}>
-                  {APP_ROLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-6 mb-3">
-                <label className="form-label">Rol de tenant</label>
-                <select
-                  className="form-select"
-                  disabled={watchedAppRole === 1}
-                  {...register('tenantRole', { valueAsNumber: true })}
-                >
-                  {TENANT_ROLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-0">
-              <label className="form-label d-block">Permisos</label>
-              <div className="row">
-                {permissionOptions.map((permission) => {
-                  const checked = selectedPermissions.includes(permission.code);
-                  return (
-                    <div className="col-md-6 mb-2" key={permission.code}>
-                      <label className="form-check-label d-flex gap-2">
-                        <input
-                          className="form-check-input mt-1"
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => togglePermission(permission.code, e.target.checked)}
-                        />
-                        <span>
-                          <span className="fw-semibold d-block">{permission.name}</span>
-                          <small className="text-muted">{permission.description}</small>
-                        </span>
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Modal.Body>
-          <Modal.Footer>
-            <button type="button" className="btn btn-light" onClick={closeModal}>
-              Cancelar
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Guardando...' : editingEmployee ? 'Guardar cambios' : 'Crear empleado'}
-            </button>
-          </Modal.Footer>
-        </form>
+        <Modal.Body>
+          {share && (
+            <InvitationShare
+              invitationPath={share.path}
+              firstName={share.firstName}
+              email={share.email}
+              phone={share.phone}
+              businessName={tenant?.name ?? 'el negocio'}
+            />
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <button type="button" className="btn btn-light" onClick={() => setShare(null)}>Listo</button>
+        </Modal.Footer>
       </Modal>
     </>
   );

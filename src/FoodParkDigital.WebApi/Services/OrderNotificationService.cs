@@ -15,9 +15,9 @@ public class OrderNotificationService : IOrderNotificationService
         _hubContext = hubContext;
     }
 
-    public async Task NotifyOrderCreated(Guid tenantId, Guid orderId, string orderNumber, BusinessType businessType, decimal total)
+    public async Task NotifyOrderCreated(Guid tenantId, Guid orderId, string orderNumber, BusinessType businessType, decimal total, OrderStatus status)
     {
-        var payload = new { OrderId = orderId, OrderNumber = orderNumber, BusinessType = businessType.ToString(), Total = total };
+        var payload = new { OrderId = orderId, OrderNumber = orderNumber, BusinessType = businessType.ToString(), Total = total, Status = status.ToString() };
 
         await _hubContext.Clients
             .Group($"tenant_{tenantId}")

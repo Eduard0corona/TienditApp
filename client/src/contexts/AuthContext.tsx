@@ -6,7 +6,7 @@ import { queryKeys } from '../api/queries';
 import { queryClient } from '../api/queryClient';
 import { apiRequest } from '../api/typedClient';
 import type { LoginRequest, TwoFactorLoginRequest, UserProfileDto } from '../types';
-import { AuthContext, type LoginResult } from './AuthContextDefinition';
+import { AuthContext, type AcceptInvitationRequest, type LoginResult } from './AuthContextDefinition';
 import { broadcastSessionChange, reloadForTenantChange, useSessionSync } from './useSessionSync';
 
 const SESSION_MARKER_KEY = 'fpd_has_session';
@@ -48,10 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     try {
       const { data } = await profileApi.getProfile();
-      // The token's permission claims can be older than a change made by an admin: the server's current
+      // The token's role and permission claims can be older than a change made by an admin: the server's current
       // access wins when it answers (menus and guards only; the API checks every request itself).
       const access = await apiRequest('get', '/api/v1/me/access').catch(() => null);
-      setUser(access?.isMember ? { ...data, permissions: access.permissions ?? data.permissions } : data);
+      setUser(access?.isMember
+        ? { ...data, role: access.role ?? data.role, permissions: access.permissions ?? data.permissions }
+        : data);
       queryClient.removeQueries({ queryKey: queryKeys.myAccess });
     } catch {
       setUser(null);
@@ -114,6 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await startSession(data.accessToken);
   };
 
+  const acceptInvitation = async (request: AcceptInvitationRequest) => {
+    const data = await apiRequest('post', '/api/v1/auth/accept-invitation', { body: request });
+    await startSession(data.accessToken ?? undefined);
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -143,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         completeTwoFactorLogin,
+        acceptInvitation,
         logout,
         refreshProfile,
         switchTenant,

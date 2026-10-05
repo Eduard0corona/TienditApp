@@ -8,8 +8,9 @@ import type {
 } from '../types';
 
 export const categoriesApi = {
-  getAll: () =>
-    api.get<CategoryDto[]>('/categories'),
+  /** Active categories; the Categorías screen also asks for the archived ones to restore them. */
+  getAll: (includeArchived = false) =>
+    api.get<CategoryDto[]>('/categories', { params: includeArchived ? { includeArchived } : undefined }),
 
   getById: (id: string) =>
     api.get<CategoryDto>(`/categories/${id}`),
@@ -20,11 +21,9 @@ export const categoriesApi = {
   update: (id: string, data: UpdateCategoryRequest) =>
     api.put<CategoryDto>(`/categories/${id}`, data),
 
-  delete: (id: string) =>
-    api.delete(`/categories/${id}`),
-
-  toggleActive: (id: string, isActive: boolean) =>
-    api.patch(`/categories/${id}/active`, { isActive }),
+  /** Archiving a category with products needs another active category to move them to. */
+  toggleActive: (id: string, isActive: boolean, moveProductsToCategoryId?: string) =>
+    api.patch(`/categories/${id}/active`, { isActive, moveProductsToCategoryId }),
 
   getTemplates: () =>
     api.get<CategoryTemplateDto[]>('/categories/templates'),

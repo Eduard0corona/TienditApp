@@ -26,10 +26,10 @@ public class AzureBlobFileStorageService : IFileStorageService
         var containerName = configuration["FileStorage:AzureBlob:ContainerName"];
 
         if (string.IsNullOrWhiteSpace(connectionString))
-            throw new InvalidOperationException("FileStorage:AzureBlob:ConnectionString no esta configurado.");
+            throw new InvalidOperationException("FileStorage:AzureBlob:ConnectionString no está configurado.");
 
         if (string.IsNullOrWhiteSpace(containerName))
-            throw new InvalidOperationException("FileStorage:AzureBlob:ContainerName no esta configurado.");
+            throw new InvalidOperationException("FileStorage:AzureBlob:ContainerName no está configurado.");
 
         _autoCreateContainer = configuration.GetValue<bool>("FileStorage:AzureBlob:AutoCreateContainer");
 

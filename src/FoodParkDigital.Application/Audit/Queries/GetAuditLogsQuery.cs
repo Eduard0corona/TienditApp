@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Audit.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -24,12 +22,10 @@ public record GetAuditLogsQuery : IRequest<PaginatedList<AuditLogDto>>
 public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, PaginatedList<AuditLogDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetAuditLogsQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetAuditLogsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedList<AuditLogDto>> Handle(GetAuditLogsQuery request, CancellationToken cancellationToken)
@@ -50,7 +46,7 @@ public class GetAuditLogsQueryHandler : IRequestHandler<GetAuditLogsQuery, Pagin
 
         var projectedQuery = query
             .OrderByDescending(a => a.Timestamp)
-            .ProjectTo<AuditLogDto>(_mapper.ConfigurationProvider);
+            .Select(AuditLogMappings.AsDto);
 
         return await PaginatedList<AuditLogDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);

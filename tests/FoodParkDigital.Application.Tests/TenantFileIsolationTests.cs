@@ -1,8 +1,6 @@
 using System.Text.Json;
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.Commands;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Domain.Catalog.Entities;
@@ -125,7 +123,7 @@ public class TenantFileIsolationTests
             json,
             new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
 
-        var created = await new CreateProductCommandHandler(fixture.Context, fixture.TenantService, fixture.Mapper)
+        var created = await new CreateProductCommandHandler(fixture.Context, fixture.TenantService)
             .Handle(command, CancellationToken.None);
 
         Assert.True(created.IsSuccess, created.Error);
@@ -299,7 +297,6 @@ public class TenantFileIsolationTests
             Storage = new LocalFileStorageService(
                 new TestWebHostEnvironment(contentRoot),
                 NullLogger<LocalFileStorageService>.Instance);
-            Mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
             CurrentUser = new TestCurrentUserService(user.Id, tenant.Id);
             UserManager = new UserManager<ApplicationUser>(
                 new UserStore<ApplicationUser, ApplicationRole, ApplicationDbContext, Guid>(context),
@@ -315,7 +312,6 @@ public class TenantFileIsolationTests
 
         public ApplicationDbContext Context { get; }
         public LocalFileStorageService Storage { get; }
-        public IMapper Mapper { get; }
         public TestCurrentUserService CurrentUser { get; }
         public UserManager<ApplicationUser> UserManager { get; }
         public ICurrentTenantService TenantService => _tenantService;

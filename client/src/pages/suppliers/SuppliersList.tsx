@@ -9,7 +9,7 @@ import { getApiErrorMessage } from '../../api/errors';
 const COLUMNS = [
   { header: 'Proveedor' },
   { header: 'Contacto' },
-  { header: 'Email / Telefono' },
+  { header: 'Email / Teléfono' },
   { header: 'Estado', className: 'text-center' },
   { header: 'Acciones', className: 'text-center' },
 ];
@@ -269,7 +269,7 @@ export default function SuppliersList() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Telefono</label>
+              <label className="form-label">Teléfono</label>
               <input
                 className="form-control"
                 value={form.phone}
@@ -293,7 +293,7 @@ export default function SuppliersList() {
               />
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Direccion</label>
+              <label className="form-label">Dirección</label>
               <input
                 className="form-control"
                 value={form.address}

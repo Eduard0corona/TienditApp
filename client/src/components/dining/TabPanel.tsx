@@ -12,6 +12,9 @@ import { formatMoney } from '../../utils/money';
 import { describeItem } from '../../utils/productOptions';
 import { formatTicketQuantity, printTicket } from '../../utils/ticket';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
+import { getAccess } from '../../utils/access';
 
 interface TabPanelProps {
   orderId: string;
@@ -33,6 +36,10 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  // A waiter takes the rounds; the cashier charges the table.
+  const canCharge = getAccess(user, capabilities).charge;
   const [mode, setMode] = useState<'detail' | 'charge' | 'move' | 'bill'>('detail');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +81,8 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
           method: payment.method,
           reference: payment.reference,
           evidenceUrl: payment.evidenceUrl,
+          tip: payment.tip,
+          cashReceived: payment.cashReceived,
         })).data;
       }
       return updated;
@@ -224,9 +233,15 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
                 <button type="button" className="btn btn-light btn-touch" onClick={() => setMode('move')}>Cambiar de mesa</button>
               )}
               {order.balance > 0 ? (
-                <button type="button" className="btn btn-success btn-touch ms-md-auto" onClick={() => setMode('charge')}>
-                  Cobrar {formatMoney(order.balance)}
-                </button>
+                canCharge ? (
+                  <button type="button" className="btn btn-success btn-touch ms-md-auto" onClick={() => setMode('charge')}>
+                    Cobrar {formatMoney(order.balance)}
+                  </button>
+                ) : (
+                  <span className="small text-muted ms-md-auto align-self-center">
+                    La caja cobra {formatMoney(order.balance)}.
+                  </span>
+                )
               ) : (
                 <button type="button" className="btn btn-success btn-touch ms-md-auto" disabled={busy} onClick={() => void closeTab()}>
                   Cerrar cuenta

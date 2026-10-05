@@ -21,7 +21,7 @@ Se exporta solo si hay destino configurado:
 - `APPLICATIONINSIGHTS_CONNECTION_STRING`: distro de Azure Monitor (trazas y métricas de ASP.NET Core, HttpClient y SQL Client, más el meter `TienditApp`).
 - `OTEL_EXPORTER_OTLP_ENDPOINT` (y las variables estándar `OTEL_*`): exportador OTLP hacia cualquier colector, con las mismas fuentes y métricas de runtime.
 
-Sin ninguno de los dos no se registra OpenTelemetry. Los logs siguen saliendo por Serilog a la consola (log stream de App Service); no se exportan por OpenTelemetry.
+Sin ninguno de los dos no se registra OpenTelemetry. Los logs salen por Serilog a la consola (log stream de App Service) y, con destino, Serilog también se los entrega al proveedor de logs de OpenTelemetry (`writeToProviders`), así llegan junto con trazas y métricas (Fase 4). Los proveedores de logging predeterminados se quitan para no duplicar la consola.
 
 ### Etiqueta por negocio
 
@@ -29,6 +29,8 @@ Sin ninguno de los dos no se registra OpenTelemetry. Los logs siguen saliendo po
 
 - a la traza de la petición (`Activity`);
 - a la métrica integrada `http.server.request.duration` (`IHttpMetricsTagsFeature`), junto con ruta y código de estado.
+
+`RequestTelemetryEnrichmentMiddleware` (después de resolver el negocio) etiqueta además la traza con `tienditapp.tenant_id` y `enduser.id` y agrega `TenantId` y `UserId` (solo identificadores, nunca nombre, correo ni teléfono) a cada log escrito durante la petición.
 
 ### Métricas propias (meter `TienditApp`)
 
@@ -76,5 +78,5 @@ Disponibilidad: una prueba de disponibilidad (o el health check de App Service) 
 ## Deuda
 
 - No hay paneles ni reglas de alerta versionados; las consultas de arriba son el punto de partida.
-- Los logs no llevan `tenant.id` como propiedad estructurada ni se exportan por OpenTelemetry.
+- Los logs de los workers (outbox, mensajería, reportes) no llevan todavía el negocio como propiedad; las peticiones HTTP sí.
 - Los mensajes apartados (dead-lettered) se revisan con SQL sobre `OutboxMessages` e `InboxMessages`; no hay pantalla para reintentarlos.

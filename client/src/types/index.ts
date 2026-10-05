@@ -65,33 +65,6 @@ export interface EmployeeDto {
   permissions: string[];
 }
 
-export interface EmployeePermissionOptionDto {
-  code: string;
-  name: string;
-  description: string;
-}
-
-export interface CreateEmployeeRequest {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber?: string;
-  appRole: number;
-  tenantRole: number;
-  permissions: string[];
-}
-
-export interface UpdateEmployeeRequest {
-  tenantUserId: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber?: string;
-  appRole: number;
-  tenantRole: number;
-  permissions: string[];
-}
-
 export interface MyTenantDto {
   tenantId: string;
   name: string;
@@ -119,7 +92,6 @@ export interface DisableTwoFactorRequest {
 export interface UpdateProfileRequest {
   firstName: string;
   lastName: string;
-  phoneNumber?: string;
 }
 
 export interface ChangePasswordRequest {
@@ -167,6 +139,10 @@ export interface TenantProfileDto {
   requireOpenCashSession?: boolean;
   /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
   onlineMenuMode?: OnlineMenuMode;
+  /** Which orders send the customer WhatsApp messages (paid templates). */
+  orderNotificationPolicy?: OrderNotificationPolicy;
+  /** Refuse (default) or warn when a sale's recipe supplies are short. */
+  insufficientStockPolicy?: InsufficientStockPolicy;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
   rfc?: string;
@@ -189,6 +165,10 @@ export interface TenantSalesPolicyDto {
   autoCloseCounterSales: boolean;
   /** Refuse cash payments when the cashier has no open drawer. Omitted keeps the current value. */
   requireOpenCashSession?: boolean;
+  /** Which orders send the customer WhatsApp messages. Omitted keeps the current value. */
+  orderNotificationPolicy?: OrderNotificationPolicy;
+  /** Refuse or warn when a sale's recipe supplies are short. Omitted keeps the current value. */
+  insufficientStockPolicy?: InsufficientStockPolicy;
 }
 
 export type TenantSetupStepKey = 'salesPolicy' | 'catalog' | 'cash' | 'firstSale' | 'team' | 'logo';
@@ -278,6 +258,8 @@ export interface ConversationDto {
   lastMessageBody?: string;
   lastMessageAt: string;
   unreadCount: number;
+  /** The automatic replies stay quiet until then (a person answered or paused them). */
+  autoRepliesPausedUntil?: string | null;
 }
 
 export interface ChatMessageDto {
@@ -376,6 +358,27 @@ export const OnlineMenuMode = {
 } as const;
 export type OnlineMenuMode = (typeof OnlineMenuMode)[keyof typeof OnlineMenuMode];
 
+/**
+ * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders
+ * placed from a distance and services; a counter sale gets no message.
+ */
+export const OrderNotificationPolicy = {
+  RemoteAndServices: 0,
+  AllOrders: 1,
+  Off: 2,
+} as const;
+export type OrderNotificationPolicy = (typeof OrderNotificationPolicy)[keyof typeof OrderNotificationPolicy];
+
+/**
+ * Same numbers as Domain.Tenants.Enums.InsufficientStockPolicy: a sale made by the team whose recipe supplies are
+ * short is refused naming them (Block, the default) or goes through and warns (Warn).
+ */
+export const InsufficientStockPolicy = {
+  Block: 0,
+  Warn: 1,
+} as const;
+export type InsufficientStockPolicy = (typeof InsufficientStockPolicy)[keyof typeof InsufficientStockPolicy];
+
 /** CFDI 4.0 ObjetoImp of a product: 02 subject to tax (also exempt), 01 outside IVA. */
 export const CfdiTaxObject = {
   NotSubject: 1,
@@ -455,6 +458,8 @@ export interface CategoryDto {
   description?: string;
   sortOrder: number;
   isActive: boolean;
+  /** Products filed under it (archiving asks where to move them). */
+  productCount: number;
 }
 
 export interface CategoryTemplateItemDto {
@@ -914,6 +919,8 @@ export interface CreatePurchaseOrderRequest {
 export interface ReceivePurchaseOrderLineRequest {
   purchaseOrderLineId: string;
   quantityReceived: number;
+  /** Supplier's actual price when it differs from the ordered one; the stock is valued at it. */
+  unitCost?: number;
 }
 
 export interface ReceivePurchaseOrderRequest {
@@ -924,7 +931,7 @@ export interface ReceivePurchaseOrderRequest {
 // ==================== Cash ====================
 
 export type CashSessionStatus = 0 | 1;
-export type CashTransactionType = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type CashTransactionType = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export const CashSessionStatus = {
   Open: 0,
@@ -939,6 +946,8 @@ export const CashTransactionType = {
   Deposit: 4,
   OpeningAdjustment: 5,
   ClosingAdjustment: 6,
+  // A tip given with a sale payment: money received, never part of the sale.
+  Tip: 7,
 } as const;
 
 export interface CashSessionDto {
@@ -1028,6 +1037,10 @@ export interface DailyCashCutDto {
   netCashFlow: number;
   /** Cash payments plus manual income minus manual expenses: what the drawers should hold. */
   netCashOnlyFlow: number;
+  /** Tips received with the payments of the day (any method); not part of the sales. */
+  tipsTotal: number;
+  /** Tips paid in cash: they are in the drawers, included in netCashOnlyFlow. */
+  cashTipsTotal: number;
   byUser: DailyCashCutByUserDto[];
   byLocation: DailyCashCutByLocationDto[];
   /** Payments by the branch where the sale was made. */
@@ -1080,6 +1093,10 @@ export interface AppointmentDto {
   customerPhone: string;
   serviceName: string;
   staffName?: string;
+  /** The service of the catalog it books (older appointments only have the name). */
+  serviceProductId?: string | null;
+  /** The team member who attends it. */
+  staffUserId?: string | null;
   startAt: string;
   endAt: string;
   status: AppointmentStatus;
@@ -1089,8 +1106,11 @@ export interface AppointmentDto {
 export interface CreateAppointmentRequest {
   customerName: string;
   customerPhone: string;
-  serviceName: string;
+  /** Free name; with serviceProductId the catalog name is used. */
+  serviceName?: string;
+  serviceProductId?: string;
   staffName?: string;
+  staffUserId?: string;
   startAt: string;
   endAt: string;
   notes?: string;
@@ -1292,13 +1312,25 @@ export interface UpdateAppointmentRemindersRequest {
 
 // ==================== Customers ====================
 
+export interface CustomerAddressDto {
+  id: string;
+  label: string;
+  addressLine: string;
+  references?: string | null;
+  isDefault: boolean;
+}
+
 export interface CustomerDto {
   id: string;
   name: string;
+  /** E.164 (+52 and ten digits for Mexican numbers). */
   phone?: string;
   email?: string;
   isPublicGeneral: boolean;
   isActive: boolean;
+  notes?: string | null;
+  /** Only in the detail of one customer. */
+  addresses?: CustomerAddressDto[];
   createdAt: string;
   updatedAt?: string;
 }
@@ -1307,6 +1339,7 @@ export interface CreateCustomerRequest {
   name: string;
   phone: string;
   email?: string;
+  notes?: string;
 }
 
 export interface UpdateCustomerRequest extends CreateCustomerRequest {
@@ -1492,6 +1525,7 @@ export interface ServiceBoardPieceDto {
 
 export interface OrderPaymentDto {
   id: string;
+  /** What the payment covers of the sale; the tip is apart. */
   amount: number;
   method: OrderPaymentMethod;
   paidAt: string;
@@ -1499,6 +1533,12 @@ export interface OrderPaymentDto {
   evidenceUrl?: string;
   reference?: string;
   notes?: string;
+  /** Tip given with this payment: not part of the sale, its total or its balance. */
+  tip?: number;
+  /** Cash handed by the customer (cash payments only). */
+  cashReceived?: number | null;
+  /** Cash given back: received minus amount minus tip. */
+  change?: number;
 }
 
 export interface OrderDto {
@@ -1530,6 +1570,8 @@ export interface OrderDto {
   refundedAmount?: number;
   /** Paid minus refunded. */
   netPaidAmount?: number;
+  /** Tips received with the payments; apart from the total. */
+  tipTotal?: number;
   cancellationReason?: string;
   createdAt: string;
   updatedAt?: string;
@@ -1545,6 +1587,8 @@ export interface OrderDto {
   isOpenTab?: boolean;
   diningTableId?: string | null;
   kitchenTickets?: KitchenTicketSummaryDto[];
+  /** Only in the answer to a new sale: recipe supplies it took below zero ("Tortilla quedó en -3"). */
+  stockWarnings?: string[];
   /** When the device captured it without connection; it reached the server later. */
   capturedOfflineAt?: string | null;
 }
@@ -1654,6 +1698,10 @@ export interface CreateOrderPaymentRequest {
   evidenceUrl?: string;
   reference?: string;
   notes?: string;
+  /** Tip on top of the amount; never larger than the amount. */
+  tip?: number;
+  /** Cash handed by the customer, to store the change (cash payments only). */
+  cashReceived?: number;
 }
 
 export interface CreateServiceOrderPieceRequest {
@@ -1691,6 +1739,10 @@ export interface AddOrderPaymentRequest {
   evidenceUrl?: string;
   reference?: string;
   notes?: string;
+  /** Tip on top of the amount; never larger than the amount. */
+  tip?: number;
+  /** Cash handed by the customer, to store the change (cash payments only). */
+  cashReceived?: number;
 }
 
 export interface UploadedFileDto {

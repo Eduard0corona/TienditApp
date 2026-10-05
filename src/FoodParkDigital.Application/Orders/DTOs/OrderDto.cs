@@ -34,6 +34,8 @@ public class OrderDto
     public List<OrderTaxLineDto> TaxBreakdown { get; set; } = new();
     public decimal PaidAmount { get; set; }
     public decimal Balance { get; set; }
+    /// <summary>Tips given with the payments, on top of the sale.</summary>
+    public decimal TipTotal { get; set; }
     /// <summary>Money given back; payments are not edited.</summary>
     public decimal RefundedAmount { get; set; }
     /// <summary>Paid minus refunded.</summary>
@@ -56,6 +58,11 @@ public class OrderDto
     public Guid? DiningTableId { get; set; }
     /// <summary>Rounds of the tab sent to the kitchen.</summary>
     public List<KitchenTicketSummaryDto> KitchenTickets { get; set; } = new();
+    /// <summary>
+    /// Only in the answer to the sale that just happened: recipe supplies it took below zero ("Tortilla quedó en -3"),
+    /// when the business sells and warns instead of refusing.
+    /// </summary>
+    public List<string> StockWarnings { get; set; } = new();
 }
 
 public class KitchenTicketSummaryDto
@@ -199,6 +206,11 @@ public class OrderPaymentDto
     public string? EvidenceUrl { get; set; }
     public string? Reference { get; set; }
     public string? Notes { get; set; }
+    /// <summary>On top of the amount, for the team: not part of the sale.</summary>
+    public decimal Tip { get; set; }
+    /// <summary>What the customer handed over in cash; null for other methods or payments before it was kept.</summary>
+    public decimal? CashReceived { get; set; }
+    public decimal Change { get; set; }
 }
 
 public class KitchenOrderDto

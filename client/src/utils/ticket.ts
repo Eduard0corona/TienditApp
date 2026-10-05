@@ -7,11 +7,28 @@ import { allowsFractions, formatQuantity } from './units';
 
 export interface TicketExtras {
   businessName: string;
-  /** Cash handed over and change, known only at the counter right after charging. */
-  cashReceived?: number;
-  change?: number;
   /** Charged without connection: the folio is the device's until the server gives the real one. */
   provisional?: boolean;
+}
+
+export interface TicketPaymentTotals {
+  /** Tips given with the payments (apart from the total). */
+  tip: number;
+  /** Cash the customer handed over. */
+  cashReceived: number;
+  /** Cash given back. */
+  change: number;
+}
+
+/** Tip, cash handed over and change as the payments stored them, so a reprinted ticket shows them too. */
+export function getTicketPaymentTotals(order: OrderDto): TicketPaymentTotals {
+  const sumCents = (pick: (payment: OrderDto['payments'][number]) => number | null | undefined) =>
+    order.payments.reduce((sum, payment) => sum + Math.round((pick(payment) ?? 0) * 100), 0) / 100;
+  return {
+    tip: sumCents((payment) => payment.tip),
+    cashReceived: sumCents((payment) => payment.cashReceived),
+    change: sumCents((payment) => payment.change),
+  };
 }
 
 /** "2 ×" for pieces, "1.255 kg" for what is weighed or measured. */
@@ -57,9 +74,12 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
   }
 
   if (order.payments.length > 0) {
+    const { tip, cashReceived, change } = getTicketPaymentTotals(order);
     lines.push('');
     order.payments.forEach((payment) => lines.push(`${getPaymentMethodLabel(payment.method)}: ${formatMoney(payment.amount)}`));
-    if (extras.change && extras.change > 0) lines.push(`Cambio: ${formatMoney(extras.change)}`);
+    if (tip > 0) lines.push(`Propina: ${formatMoney(tip)}`);
+    if (cashReceived > 0) lines.push(`Efectivo recibido: ${formatMoney(cashReceived)}`);
+    if (change > 0) lines.push(`Cambio: ${formatMoney(change)}`);
   }
   if (order.balance > 0) lines.push(`Saldo pendiente: ${formatMoney(order.balance)}`);
 

@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
@@ -18,13 +17,11 @@ public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuer
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
-    public GetKitchenOrdersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IMapper mapper)
+    public GetKitchenOrdersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<List<KitchenOrderDto>> Handle(GetKitchenOrdersQuery request, CancellationToken cancellationToken)
@@ -54,6 +51,6 @@ public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuer
             .OrderBy(o => o.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return _mapper.Map<List<KitchenOrderDto>>(orders);
+        return orders.Select(o => o.ToKitchenDto()).ToList();
     }
 }

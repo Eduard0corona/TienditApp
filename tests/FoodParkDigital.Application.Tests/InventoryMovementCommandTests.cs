@@ -1,13 +1,12 @@
 using System.Text.Json;
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,7 +23,6 @@ public class InventoryMovementCommandTests
             .Options;
 
         await using var context = new ApplicationDbContext(options, tenantService, new NullMediator());
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
 
         var supply = new SupplyItem(tenantService.TenantId, "Harina", UnitType.Kg, code: "INS-001");
         var location = new InventoryLocation(tenantService.TenantId, "Almacen", "MAIN", isDefault: true);
@@ -36,7 +34,7 @@ public class InventoryMovementCommandTests
             context,
             tenantService,
             new TestCurrentUserService(),
-            mapper);
+            new FolioGenerator(context));
 
         var result = await handler.Handle(new CreateInventoryMovementCommand
         {
@@ -71,7 +69,6 @@ public class InventoryMovementCommandTests
             .Options;
 
         await using var context = new ApplicationDbContext(options, tenantService, new NullMediator());
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
 
         var supply = new SupplyItem(tenantService.TenantId, "Queso", UnitType.Kg, code: "INS-002");
         var location = new InventoryLocation(tenantService.TenantId, "Almacen", "MAIN", isDefault: true);
@@ -83,7 +80,7 @@ public class InventoryMovementCommandTests
             context,
             tenantService,
             new TestCurrentUserService(),
-            mapper);
+            new FolioGenerator(context));
 
         await Assert.ThrowsAsync<DomainException>(() => handler.Handle(new CreateInventoryMovementCommand
         {
@@ -193,7 +190,6 @@ public class InventoryMovementCommandTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         var context = new ApplicationDbContext(options, tenantService, new NullMediator());
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
 
         var supply = new SupplyItem(tenantService.TenantId, "Harina", UnitType.Kg, code: "INS-010");
         supply.ApplyInboundCost(5, 0, onHand);
@@ -205,7 +201,7 @@ public class InventoryMovementCommandTests
         context.InventoryStocks.Add(stock);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new TestCurrentUserService(), mapper);
+        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new TestCurrentUserService(), new FolioGenerator(context));
         return new StockSetup(context, handler, supply, origin);
     }
 

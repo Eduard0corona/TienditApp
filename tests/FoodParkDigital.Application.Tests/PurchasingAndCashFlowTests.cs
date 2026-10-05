@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Finance.Commands;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Purchasing.Commands;
@@ -49,7 +47,7 @@ public class PurchasingAndCashFlowTests
         context.InventoryLocations.Add(location);
         await context.SaveChangesAsync();
 
-        var createHandler = new CreatePurchaseOrderCommandHandler(context, tenantService);
+        var createHandler = new CreatePurchaseOrderCommandHandler(context, tenantService, new FolioGenerator(context));
         var createResult = await createHandler.Handle(new CreatePurchaseOrderCommand
         {
             SupplierId = supplier.Id,
@@ -73,7 +71,7 @@ public class PurchasingAndCashFlowTests
             .Include(x => x.Lines)
             .FirstAsync(x => x.Id == createResult.Value.Id);
 
-        var receiveHandler = new ReceivePurchaseOrderCommandHandler(context, tenantService);
+        var receiveHandler = new ReceivePurchaseOrderCommandHandler(context, tenantService, new FolioGenerator(context));
         var receiveResult = await receiveHandler.Handle(new ReceivePurchaseOrderCommand
         {
             PurchaseOrderId = createdOrder.Id,
@@ -107,7 +105,6 @@ public class PurchasingAndCashFlowTests
             .Options;
 
         await using var context = new TestApplicationDbContext(options, tenantService, new NullMediator());
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
 
         var tenant = new Tenant("Tenant Caja", "tenant-caja", BusinessType.Retail, "tenant@test.com");
         context.Tenants.Add(tenant);
@@ -144,7 +141,6 @@ public class PurchasingAndCashFlowTests
         var handler = new AddOrderPaymentCommandHandler(
             context,
             new TestDateTimeProvider(),
-            mapper,
             new OrderCashService(context, new CashierUser()));
 
         var result = await handler.Handle(new AddOrderPaymentCommand

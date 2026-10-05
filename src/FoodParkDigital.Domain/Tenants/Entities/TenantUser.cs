@@ -34,4 +34,8 @@ public class TenantUser : AuditableEntity, ITenantScoped
 
     public void SetPermissionCodes(IEnumerable<string>? permissionCodes) =>
         PermissionCodes = TenantPermissionCatalog.ToStoredValue(permissionCodes);
+
+    /// <summary>The permissions an admin chose; none chosen is "sin acceso", not the role's defaults.</summary>
+    public void SetExplicitPermissions(IEnumerable<string> permissionCodes) =>
+        PermissionCodes = TenantPermissionCatalog.ToExplicitStoredValue(permissionCodes);
 }

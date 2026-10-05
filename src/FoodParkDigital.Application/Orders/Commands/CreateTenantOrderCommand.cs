@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -21,7 +20,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.Commands;
 
 [RequiresAuthentication]
-public record CreateTenantOrderCommand : IRequest<Result<OrderDto>>
+public record CreateTenantOrderCommand : IRequest<Result<OrderDto>>, ITransactionalRequest
 {
     public Guid TenantId { get; init; }
     public string Phone { get; init; } = null!;
@@ -46,13 +45,13 @@ public class CreateTenantOrderCommandValidator : AbstractValidator<CreateTenantO
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleFor(x => x.TableNumber).MaximumLength(50);
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
 
         When(x => x.OrderType == OrderType.Service && !x.CreatedByBusiness, () =>
         {
@@ -66,25 +65,28 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
     private readonly ICustomerLookupService _customerLookupService;
+    private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IOrderInventoryService _orderInventoryService;
+    private readonly IFolioGenerator _folios;
 
     public CreateTenantOrderCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IMapper mapper,
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
-        IOrderInventoryService? orderInventoryService = null)
+        IPhoneNormalizationService phoneNormalizationService,
+        IOrderInventoryService orderInventoryService,
+        IFolioGenerator folios)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _mapper = mapper;
         _customerLookupService = customerLookupService;
         _dateTimeProvider = dateTimeProvider;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _phoneNormalizationService = phoneNormalizationService;
+        _orderInventoryService = orderInventoryService;
+        _folios = folios;
     }
 
     public async Task<Result<OrderDto>> Handle(CreateTenantOrderCommand request, CancellationToken cancellationToken)
@@ -102,8 +104,12 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         {
             var typeLabel = request.OrderType == OrderType.Service ? "servicios" : "ventas retail";
             return Result.Failure<OrderDto>(
-                $"El tenant no tiene habilitado el modulo requerido para crear ordenes de {typeLabel}.");
+                $"El negocio no tiene habilitado el módulo requerido para crear órdenes de {typeLabel}.");
         }
+
+        // A mistyped number is the customer's to fix (400 in Spanish), not a server error.
+        if (!_phoneNormalizationService.TryNormalizeToE164(request.Phone, request.DefaultCountry, out _))
+            return Result.Failure<OrderDto>(PhoneNumberRules.InvalidPhoneMessage);
 
         var linkedCustomer = await _customerLookupService.ResolveForOrderAsync(
             request.TenantId,
@@ -115,11 +121,6 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         var salesSettings = await TenantSalesSettings.ReadAsync(_context, request.TenantId, cancellationToken);
         var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
         var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, tenantZone);
-
-        var orderCountForTenant = await _context.Orders
-            .IgnoreQueryFilters()
-            .CountAsync(o => o.TenantId == request.TenantId, cancellationToken);
-        var orderNumber = $"ORD-{orderCountForTenant + 1:D6}";
 
         // Orders placed by customers go to the default branch of the business named by the route.
         var defaultBranchId = await _context.Branches
@@ -137,7 +138,7 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
             customerUserId: linkedCustomer.CustomerUserId,
             temporaryCustomerId: linkedCustomer.TemporaryCustomerId,
             createdByBusiness: request.CreatedByBusiness,
-            orderNumber: orderNumber,
+            orderNumber: Order.NumberNotAssigned,
             businessType: tenant.BusinessType,
             orderType: request.OrderType,
             customerName: resolvedName,
@@ -174,104 +175,34 @@ public class CreateTenantOrderCommandHandler : IRequestHandler<CreateTenantOrder
         }
         var quantitiesByProduct = lineBuilder.QuantitiesByProduct;
 
-        if (request.OrderType == OrderType.Service && request.ServiceDetail is not null)
-        {
-            var receivedAt = request.ServiceDetail.ReceivedAt ?? _dateTimeProvider.UtcNow;
-            order.SetServiceDetail(
-                receivedAt: receivedAt,
-                promisedAt: request.ServiceDetail.PromisedAt,
-                priority: request.ServiceDetail.Priority,
-                intakeNotes: request.ServiceDetail.IntakeNotes?.Trim(),
-                deliveryNotes: request.ServiceDetail.DeliveryNotes?.Trim(),
-                intakeChecklistJson: request.ServiceDetail.IntakeChecklistJson,
-                beforePhotosJson: request.ServiceDetail.BeforePhotosJson,
-                afterPhotosJson: request.ServiceDetail.AfterPhotosJson);
-
-        }
-
-        var manualPieces = request.ServiceDetail?.Pieces
-            .Where(piece => !string.IsNullOrWhiteSpace(piece.ItemName))
-            .ToList()
-            ?? [];
-
-        var piecesError = OrderLimits.ValidateServicePieces(
-            manualPieces,
+        OrderPlacement.ApplyServiceDetail(order, request.ServiceDetail, _dateTimeProvider.UtcNow);
+        var piecesError = OrderPlacement.AddServicePieces(
+            order,
+            request.ServiceDetail,
             checklistCandidates,
             quantitiesByProduct.Keys.ToHashSet());
         if (piecesError is not null)
             return Result.Failure<OrderDto>(piecesError);
 
-        if (manualPieces.Count > 0)
-        {
-            foreach (var piece in manualPieces)
-            {
-                order.AddServicePiece(
-                    itemName: piece.ItemName.Trim(),
-                    brand: piece.Brand?.Trim(),
-                    model: piece.Model?.Trim(),
-                    color: piece.Color?.Trim(),
-                    size: piece.Size?.Trim(),
-                    material: piece.Material?.Trim(),
-                    conditionNotes: piece.ConditionNotes?.Trim(),
-                    requestedService: piece.RequestedService?.Trim(),
-                    internalNotes: piece.InternalNotes?.Trim(),
-                    serviceProductId: piece.ServiceProductId,
-                    isTrackable: piece.IsTrackable,
-                    notifyCustomer: piece.NotifyCustomer);
-            }
-        }
-        else
-        {
-            foreach (var (product, item) in checklistCandidates)
-            {
-                var pieces = (int)item.Quantity;
-                for (var index = 0; index < pieces; index++)
-                {
-                    var itemName = item.Quantity > 1
-                        ? $"{product.Name} #{index + 1}"
-                        : product.Name;
-
-                    order.AddServicePiece(
-                        itemName: itemName,
-                        brand: null,
-                        model: null,
-                        color: null,
-                        size: null,
-                        material: null,
-                        conditionNotes: item.Notes?.Trim(),
-                        requestedService: product.Name,
-                        internalNotes: null,
-                        serviceProductId: product.Id,
-                        isTrackable: true,
-                        notifyCustomer: product.NotifyCustomer);
-                }
-            }
-        }
-
         if (request.CreatedByBusiness)
-            ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
+            OrderPlacement.ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
 
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        // The folio before supplies, which name the order by it.
+        order.AssignNumber(await _folios.NextOrderNumberAsync(request.TenantId, cancellationToken));
+
+        // An order the customer placed (chat bot) is reviewed by the business; one the team captures follows its policy.
+        var shortages = await _orderInventoryService.ApplyConsumptionForOrderAsync(
+            order,
+            cancellationToken,
+            request.CreatedByBusiness ? StockShortageHandling.TenantPolicy : StockShortageHandling.Allow);
 
         order.MarkAsCreated();
         _context.Orders.Add(order);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = _mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
+        dto.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
         return Result.Success(dto);
-    }
-
-    private static void ApplyBusinessDefaultStatus(Order order, string? performedBy)
-    {
-        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-        var defaultStatus = order.OrderType switch
-        {
-            OrderType.Service => OrderStatus.Accepted,
-            _ => OrderStatus.Confirmed
-        };
-
-        if (stateMachine.GetAllowedTransitions(order.Status).Contains(defaultStatus))
-            order.TransitionTo(defaultStatus, stateMachine, performedBy);
     }
 }

@@ -16,7 +16,8 @@ export default function Login() {
   // Kept only in component memory: never in router state or browser storage.
   const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState<string | null>(null);
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+  // Without a page to return to, '/' picks the start: the guided setup for a new business, or the screen of each role.
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   const {
     register,

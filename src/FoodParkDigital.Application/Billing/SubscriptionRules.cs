@@ -57,10 +57,11 @@ public static class SubscriptionRules
         var plan = await CurrentPlanAsync(context, tenantId, cancellationToken);
         if (plan is null)
             return null;
-        var active = await context.TenantUsers.CountAsync(x => x.TenantId == tenantId && x.Status == TenantUserStatus.Active, cancellationToken);
-        return active < plan.MaxUsers
+        // A pending invitation holds its seat: accepting it must not go over the plan.
+        var seats = await context.TenantUsers.CountAsync(x => x.TenantId == tenantId && x.Status != TenantUserStatus.Disabled, cancellationToken);
+        return seats < plan.MaxUsers
             ? null
-            : $"Tu plan {plan.Name} permite {plan.MaxUsers} {(plan.MaxUsers == 1 ? "usuario activo" : "usuarios activos")}.";
+            : $"Tu plan {plan.Name} permite {plan.MaxUsers} {(plan.MaxUsers == 1 ? "usuario" : "usuarios")}, contando las invitaciones pendientes.";
     }
 
     /// <summary>Businesses without access for billing reasons are suspended (unpaid, by the platform) or inactive (cancelled).</summary>

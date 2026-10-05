@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -34,7 +33,7 @@ public class AddTabRoundCommandValidator : AbstractValidator<AddTabRoundCommand>
         RuleFor(x => x.Items).NotEmpty().WithMessage("La ronda necesita al menos un producto.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
     }
 }
@@ -45,20 +44,17 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IMapper _mapper;
 
     public AddTabRoundCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IDateTimeProvider dateTimeProvider,
-        IMapper mapper)
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
         _dateTimeProvider = dateTimeProvider;
-        _mapper = mapper;
     }
 
     public async Task<Result<OrderDto>> Handle(AddTabRoundCommand request, CancellationToken cancellationToken)
@@ -67,7 +63,7 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
         if (!order.IsOpenTab)
             return Result.Failure<OrderDto>("La cuenta ya está cerrada: abre una nueva.");
         if (order.Items.Count + request.Items.Count > OrderLimits.MaxItemsPerOrder)
-            return Result.Failure<OrderDto>($"Una cuenta puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            return Result.Failure<OrderDto>($"Una cuenta puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
 
         var salesSettings = await TenantSalesSettings.ReadAsync(_context, _tenantService.TenantId, cancellationToken);
         var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
@@ -89,7 +85,7 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
         }
 
         order.AddRound(lines, _dateTimeProvider.UtcNow, _currentUserService.UserName);
-        return await TabLoader.SaveAsync(_context, _mapper, order, cancellationToken);
+        return await TabLoader.SaveAsync(_context, order, cancellationToken);
     }
 }
 
@@ -102,19 +98,16 @@ public class CloseTabCommandHandler : IRequestHandler<CloseTabCommand, Result<Or
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
     private readonly IOrderInventoryService _orderInventoryService;
 
     public CloseTabCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IMapper mapper,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _mapper = mapper;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
     }
 
     public async Task<Result<OrderDto>> Handle(CloseTabCommand request, CancellationToken cancellationToken)
@@ -129,8 +122,9 @@ public class CloseTabCommandHandler : IRequestHandler<CloseTabCommand, Result<Or
         }
 
         order.CloseTab(OrderStateMachineFactory.Create(order.BusinessType, order.OrderType), _currentUserService.UserName);
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
-        return await TabLoader.SaveAsync(_context, _mapper, order, cancellationToken);
+        // The rounds were served and paid already: missing supplies never keep the table's tab open.
+        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
+        return await TabLoader.SaveAsync(_context, order, cancellationToken);
     }
 }
 
@@ -142,12 +136,10 @@ public record MoveTabCommand(Guid OrderId, Guid DiningTableId) : IRequest<Result
 public class MoveTabCommandHandler : IRequestHandler<MoveTabCommand, Result<OrderDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public MoveTabCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public MoveTabCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<OrderDto>> Handle(MoveTabCommand request, CancellationToken cancellationToken)
@@ -165,7 +157,7 @@ public class MoveTabCommandHandler : IRequestHandler<MoveTabCommand, Result<Orde
             return Result.Failure<OrderDto>($"La mesa {table.Name} ya tiene una cuenta abierta.");
 
         order.MoveToTable(table.Id, table.Name);
-        return await TabLoader.SaveAsync(_context, _mapper, order, cancellationToken);
+        return await TabLoader.SaveAsync(_context, order, cancellationToken);
     }
 }
 
@@ -235,7 +227,6 @@ internal static class TabLoader
 
     public static async Task<Result<OrderDto>> SaveAsync(
         IApplicationDbContext context,
-        IMapper mapper,
         Order order,
         CancellationToken cancellationToken)
     {
@@ -252,7 +243,7 @@ internal static class TabLoader
             return Result.Failure<OrderDto>("Esa mesa ya tiene una cuenta abierta.");
         }
 
-        var dto = mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
         return Result.Success(dto);
     }

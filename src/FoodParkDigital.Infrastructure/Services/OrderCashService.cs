@@ -31,6 +31,20 @@ public class OrderCashService : IOrderCashService
             orderId: order.Id,
             reference: payment.Reference ?? order.OrderNumber,
             notes: payment.Notes);
+        // The tip enters the same drawer as its own movement: the cut shows it apart from the sales.
+        if (payment.Tip > 0)
+        {
+            session.RegisterTransaction(
+                transactionType: CashTransactionType.Tip,
+                amount: payment.Tip,
+                occurredAt: payment.PaidAt,
+                paymentMethod: payment.Method,
+                inventoryLocationId: payment.InventoryLocationId,
+                orderId: order.Id,
+                reference: payment.Reference ?? order.OrderNumber,
+                notes: "Propina");
+        }
+
         return true;
     }
 

@@ -17,6 +17,9 @@ import type {
 } from '../../types';
 import { PurchaseOrderStatus as PurchaseOrderStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import PurchaseOrderDetail, { type PurchaseOrderDetailMode } from '../../components/purchases/PurchaseOrderDetail';
+import { getPurchaseOrderStatusBadge, getPurchaseOrderStatusLabel } from '../../utils/labels';
+import { formatMoney } from '../../utils/money';
 
 const COLUMNS = [
   { header: 'Folio' },
@@ -72,27 +75,6 @@ const buildForm = (): FormState => ({
   lines: [buildLine()],
 });
 
-const statusLabel = (status: PurchaseOrderStatus) => {
-  switch (status) {
-    case PurchaseOrderStatusConst.Draft: return 'Borrador';
-    case PurchaseOrderStatusConst.Sent: return 'Enviada';
-    case PurchaseOrderStatusConst.PartiallyReceived: return 'Recepción parcial';
-    case PurchaseOrderStatusConst.Received: return 'Recibida';
-    case PurchaseOrderStatusConst.Cancelled: return 'Cancelada';
-    default: return String(status);
-  }
-};
-
-const statusBadge = (status: PurchaseOrderStatus) => {
-  switch (status) {
-    case PurchaseOrderStatusConst.Received: return 'bg-success';
-    case PurchaseOrderStatusConst.PartiallyReceived: return 'bg-info';
-    case PurchaseOrderStatusConst.Cancelled: return 'bg-danger';
-    case PurchaseOrderStatusConst.Sent: return 'bg-primary';
-    default: return 'bg-secondary';
-  }
-};
-
 export default function PurchaseOrdersList() {
   const [orders, setOrders] = useState<PaginatedList<PurchaseOrderDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
@@ -108,8 +90,7 @@ export default function PurchaseOrdersList() {
 
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  // A repeated click would receive (and add to stock) the same pending quantities twice.
-  const [receivingOrderId, setReceivingOrderId] = useState('');
+  const [detail, setDetail] = useState<{ id: string; mode: PurchaseOrderDetailMode } | null>(null);
   const [form, setForm] = useState<FormState>(buildForm());
 
   const activeSuppliers = useMemo(() => suppliers.filter((x) => x.isActive), [suppliers]);
@@ -190,19 +171,19 @@ export default function PurchaseOrdersList() {
       const unitCost = Number(line.unitCost);
       const taxPercent = Number(line.taxPercent);
       if (!line.supplyItemId || !line.inventoryLocationId) {
-        setError(`Linea ${index + 1}: insumo y ubicación son obligatorios.`);
+        setError(`Línea ${index + 1}: insumo y ubicación son obligatorios.`);
         return;
       }
       if (Number.isNaN(quantity) || quantity <= 0) {
-        setError(`Linea ${index + 1}: cantidad inválida.`);
+        setError(`Línea ${index + 1}: cantidad inválida.`);
         return;
       }
       if (Number.isNaN(unitCost) || unitCost < 0) {
-        setError(`Linea ${index + 1}: costo inválido.`);
+        setError(`Línea ${index + 1}: costo inválido.`);
         return;
       }
       if (Number.isNaN(taxPercent) || taxPercent < 0 || taxPercent > 100) {
-        setError(`Linea ${index + 1}: impuesto inválido.`);
+        setError(`Línea ${index + 1}: impuesto inválido.`);
         return;
       }
 
@@ -236,35 +217,6 @@ export default function PurchaseOrdersList() {
       setError(getApiErrorMessage(err, 'No se pudo registrar la compra.'));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const receivePending = async (orderId: string) => {
-    if (receivingOrderId) return;
-    setError('');
-    setSuccess('');
-    setReceivingOrderId(orderId);
-    try {
-      const { data } = await purchaseOrdersApi.getById(orderId);
-      const pendingLines = data.lines
-        .filter((line) => line.pendingQuantity > 0)
-        .map((line) => ({
-          purchaseOrderLineId: line.id,
-          quantityReceived: line.pendingQuantity,
-        }));
-
-      if (pendingLines.length === 0) {
-        setError('La compra no tiene cantidades pendientes de recibir.');
-        return;
-      }
-
-      await purchaseOrdersApi.receive(orderId, { lines: pendingLines });
-      setSuccess('Recepción aplicada correctamente.');
-      await loadOrders();
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo recibir la compra.'));
-    } finally {
-      setReceivingOrderId('');
     }
   };
 
@@ -334,23 +286,32 @@ export default function PurchaseOrdersList() {
             }}
             renderRow={(item) => (
               <>
-                <td className="fw-semibold">{item.orderNumber}</td>
+                <td className="fw-semibold">
+                  <button type="button" className="btn btn-link p-0 fw-semibold" onClick={() => setDetail({ id: item.id, mode: 'view' })}>
+                    {item.orderNumber}
+                  </button>
+                </td>
                 <td>{item.supplierName}</td>
                 <td className="text-center">
-                  <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
+                  <span className={`badge ${getPurchaseOrderStatusBadge(item.status)}`}>{getPurchaseOrderStatusLabel(item.status)}</span>
                 </td>
                 <td className="text-center">{new Date(item.orderedAt).toLocaleDateString('es-MX')}</td>
-                <td className="text-end">${item.total.toFixed(2)}</td>
-                <td className="text-center">
+                <td className="text-end">{formatMoney(item.total)}</td>
+                <td className="text-center text-nowrap">
+                  <button
+                    className="btn btn-sm btn-soft-primary me-1"
+                    aria-label={`Ver ${item.orderNumber}`}
+                    onClick={() => setDetail({ id: item.id, mode: 'view' })}
+                  >
+                    <i className="ri-eye-line"></i>
+                  </button>
                   {(item.status === PurchaseOrderStatusConst.Sent ||
                     item.status === PurchaseOrderStatusConst.PartiallyReceived) && (
                     <button
                       className="btn btn-sm btn-soft-success"
-                      onClick={() => receivePending(item.id)}
-                      disabled={receivingOrderId !== ''}
+                      onClick={() => setDetail({ id: item.id, mode: 'receive' })}
                     >
-                      <i className="ri-download-2-line me-1"></i>
-                      {receivingOrderId === item.id ? 'Recibiendo...' : 'Recibir'}
+                      <i className="ri-download-2-line me-1"></i>Recibir
                     </button>
                   )}
                 </td>
@@ -359,6 +320,14 @@ export default function PurchaseOrdersList() {
           />
         </div>
       </div>
+
+      <PurchaseOrderDetail
+        orderId={detail?.id ?? null}
+        mode={detail?.mode ?? 'view'}
+        onModeChange={(mode) => setDetail((current) => (current ? { ...current, mode } : current))}
+        onHide={() => setDetail(null)}
+        onChanged={loadOrders}
+      />
 
       <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered>
         <Modal.Header closeButton>

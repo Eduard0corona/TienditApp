@@ -107,5 +107,8 @@ public class CategoryDto
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public int SortOrder { get; set; }
+    /// <summary>False when archived: it leaves the menus and lists, and can be restored.</summary>
     public bool IsActive { get; set; }
+    /// <summary>Products and services in it (filled by the categories list).</summary>
+    public int ProductCount { get; set; }
 }

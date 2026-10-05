@@ -22,6 +22,10 @@ export const appointmentsApi = {
   create: (data: CreateAppointmentRequest) =>
     api.post<AppointmentDto>('/appointments', data),
 
+  /** Edits an open appointment, including moving it to another time. */
+  update: (id: string, data: CreateAppointmentRequest) =>
+    api.put<AppointmentDto>(`/appointments/${id}`, data),
+
   updateStatus: (id: string, newStatus: AppointmentStatus) =>
     api.put<AppointmentDto>(`/appointments/${id}/status`, { newStatus }),
 };

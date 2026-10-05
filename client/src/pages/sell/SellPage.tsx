@@ -8,6 +8,7 @@ import { cashApi } from '../../api/cashApi';
 import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
 import BranchPicker from '../../components/branches/BranchPicker';
+import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import SaleTicket from '../../components/sales/SaleTicket';
@@ -28,7 +29,7 @@ import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
-import { buildTicketText, buildWhatsAppTicketUrl, printTicket } from '../../utils/ticket';
+import { buildTicketText, buildWhatsAppTicketUrl, getTicketPaymentTotals, printTicket } from '../../utils/ticket';
 import {
   allowsFractions,
   formatQuantity,
@@ -47,6 +48,7 @@ import {
   hasOptions,
 } from '../../utils/productOptions';
 import './SellPage.css';
+import { STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
 
 // Same limits as the API (OrderLimits).
 const MAX_QUANTITY_PER_LINE = 10_000;
@@ -120,8 +122,6 @@ function getQuickQuantities(unit?: UnitType): number[] {
 
 interface CompletedSale {
   order: OrderDto;
-  change: number;
-  cashReceived: number;
   /** Saved without charging (a WhatsApp order paid on delivery). */
   unpaid?: boolean;
   /** Charged without connection: kept on the device until it reaches the server. */
@@ -168,6 +168,7 @@ export default function SellPage() {
   const { tenant, capabilities } = useTenant();
   const toast = useToast();
   const access = getAccess(user, capabilities);
+  const canCharge = access.charge;
   const tenantId = tenant?.id ?? '';
   const pricesIncludeTax = tenant?.pricesIncludeTax ?? false;
   const defaultTaxRate = tenant?.defaultTaxRate ?? 16;
@@ -194,6 +195,7 @@ export default function SellPage() {
   const [completedSale, setCompletedSale] = useState<CompletedSale | null>(null);
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
+  const [showOpenDrawer, setShowOpenDrawer] = useState(false);
   const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
   const online = useOnlineStatus();
   const pendingSales = usePendingSales();
@@ -599,12 +601,13 @@ export default function SellPage() {
   };
 
   const openCharge = useCallback(() => {
-    // A table's round is sent to the kitchen and charged when the table leaves (Mesas).
-    if (cart.length === 0 || submitting || tabTarget) return;
+    // A table's round is sent to the kitchen and charged when the table leaves (Mesas). Without the charge
+    // permission (a waiter) the order is saved for the cashier.
+    if (cart.length === 0 || submitting || tabTarget || !canCharge) return;
     setSaleError('');
     setCartOpenOnPhone(false);
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget]);
+  }, [cart.length, submitting, tabTarget, canCharge]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -654,13 +657,19 @@ export default function SellPage() {
         lines: cart,
         totals,
         pricesIncludeTax,
-        payments: charge.payments.map((payment) => ({ amount: payment.amount, method: payment.method, reference: payment.reference })),
+        payments: charge.payments.map((payment) => ({
+          amount: payment.amount,
+          method: payment.method,
+          reference: payment.reference,
+          tip: payment.tip,
+          cashReceived: payment.cashReceived,
+        })),
         customerName: request.customerName,
         tableNumber: request.tableNumber,
       });
       clearSale();
       setChargeOpen(false);
-      setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived, offline: true });
+      setCompletedSale({ order, offline: true });
       return true;
     } catch {
       // No IndexedDB on this device (private window): the sale needs the connection.
@@ -687,6 +696,8 @@ export default function SellPage() {
         method: payment.method,
         reference: payment.reference,
         evidenceUrl: payment.evidenceUrl,
+        tip: payment.tip,
+        cashReceived: payment.cashReceived,
       })),
     };
     if (canQueue && !navigator.onLine && await queueOfflineSale(request, charge)) {
@@ -695,15 +706,19 @@ export default function SellPage() {
     }
     try {
       const { data: order } = await ordersApi.create(request);
+      const stockWarning = stockWarningMessage(order.stockWarnings);
+      if (stockWarning) toast.warning(stockWarning, { title: STOCK_WARNING_TITLE });
       clearSale();
       setChargeOpen(false);
       if (charge) {
-        setCompletedSale({ order, change: charge.change, cashReceived: charge.cashReceived });
+        setCompletedSale({ order });
       } else if (chatOrigin) {
         // From a chat the summary goes back to the customer, paid or not.
-        setCompletedSale({ order, change: 0, cashReceived: 0, unpaid: true });
+        setCompletedSale({ order, unpaid: true });
       } else {
-        toast.success(`Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`);
+        toast.success(canCharge
+          ? `Pedido ${order.orderNumber} guardado. Cóbralo desde Pedidos.`
+          : `Pedido ${order.orderNumber} guardado: la caja lo cobra desde Pedidos.`);
       }
     } catch (err: unknown) {
       if (canQueue && isNetworkError(err) && await queueOfflineSale(request, charge)) return;
@@ -772,10 +787,9 @@ export default function SellPage() {
   const businessName = tenant?.name ?? 'TienditApp';
   const ticketText = completedSale ? buildTicketText(completedSale.order, {
     businessName,
-    change: completedSale.change,
-    cashReceived: completedSale.cashReceived,
     provisional: completedSale.offline,
   }) : '';
+  const completedChange = completedSale ? getTicketPaymentTotals(completedSale.order).change : 0;
 
   const cartPanel = (
     <div className="sell-cart-panel">
@@ -989,7 +1003,7 @@ export default function SellPage() {
           </button>
           <Link to="/tables" className="btn btn-light btn-touch">Cancelar</Link>
         </div>
-      ) : (
+      ) : canCharge ? (
         <div className="d-grid gap-2 mt-3">
           <button
             type="button"
@@ -1007,6 +1021,18 @@ export default function SellPage() {
           >
             Guardar sin cobrar
           </button>
+        </div>
+      ) : (
+        <div className="d-grid gap-2 mt-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-touch btn-touch-lg"
+            onClick={() => void submitSale(null)}
+            disabled={cart.length === 0 || submitting}
+          >
+            {submitting ? 'Guardando…' : `Guardar pedido · ${formatMoney(totals.total)}`}
+          </button>
+          <p className="small text-muted text-center mb-0">La caja lo cobra desde Pedidos.</p>
         </div>
       )}
     </div>
@@ -1068,9 +1094,28 @@ export default function SellPage() {
             <i className="ri-safe-2-line me-1" aria-hidden="true"></i>
             La caja está cerrada: los cobros se guardan, pero no entran al corte.
           </span>
-          <Link to="/cash" className="btn btn-sm btn-warning">Abrir caja</Link>
+          <button type="button" className="btn btn-sm btn-warning" onClick={() => setShowOpenDrawer(true)}>
+            Abrir caja
+          </button>
         </div>
       )}
+
+      <OpenDrawerModal
+        show={showOpenDrawer}
+        onHide={() => setShowOpenDrawer(false)}
+        branches={workingBranch.branches}
+        defaultBranchId={workingBranch.branch?.id}
+        onOpened={(session) => {
+          setShowOpenDrawer(false);
+          setCashClosed(false);
+          if (session.isMine && session.branchId) {
+            setDrawerBranch({ id: session.branchId, name: session.branchName ?? '' });
+            // The device keeps working where the drawer is.
+            workingBranch.setBranch(session.branchId);
+          }
+          toast.success('Tu caja quedó abierta.');
+        }}
+      />
 
       <div className="sell-layout mt-3">
         <section className="sell-catalog" aria-label="Catálogo">
@@ -1199,10 +1244,10 @@ export default function SellPage() {
         <button
           type="button"
           className="btn btn-primary btn-touch"
-          onClick={tabTarget ? () => void sendToKitchen() : openCharge}
+          onClick={tabTarget ? () => void sendToKitchen() : canCharge ? openCharge : () => void submitSale(null)}
           disabled={cart.length === 0 || submitting}
         >
-          {tabTarget ? 'Enviar' : 'Cobrar'}
+          {tabTarget ? 'Enviar' : canCharge ? 'Cobrar' : 'Guardar'}
         </button>
       </div>
       <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet">
@@ -1398,17 +1443,15 @@ export default function SellPage() {
                   {hasKitchen && ' La cocina no la verá hasta que se envíe: avísale o entrégale el ticket impreso.'}
                 </div>
               )}
-              {completedSale.change > 0 && (
+              {completedChange > 0 && (
                 <div className="charge-change has-change mb-3" aria-live="polite">
                   <span>Cambio</span>
-                  <strong className="ta-money">{formatMoney(completedSale.change)}</strong>
+                  <strong className="ta-money">{formatMoney(completedChange)}</strong>
                 </div>
               )}
               <SaleTicket
                 order={completedSale.order}
                 businessName={businessName}
-                change={completedSale.change}
-                cashReceived={completedSale.cashReceived}
                 provisional={completedSale.offline}
               />
             </>

@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -6,6 +5,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
 using FoodParkDigital.Domain.WhatsApp.Enums;
@@ -23,6 +23,8 @@ public record ProcessInboundMessageCommand : IRequest<Result<ChatMessageDto>>
     public string? ProfileName { get; init; }
     public string Body { get; init; } = null!;
     public string ExternalMessageId { get; init; } = null!;
+    /// <summary>A photo, voice note, location... stored as a marker ("📷 Foto"): the automatic replies skip it.</summary>
+    public bool IsMedia { get; init; }
 }
 
 public class ProcessInboundMessageCommandHandler
@@ -34,26 +36,26 @@ public class ProcessInboundMessageCommandHandler
     private readonly IAiAgentAutoReplyService _aiAgentAutoReplyService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IWhatsAppNotificationService _notificationService;
-    private readonly IMapper _mapper;
     private readonly ILogger<ProcessInboundMessageCommandHandler> _logger;
     private readonly MessagingConsentService _consent;
+    private readonly IDateTimeProvider _clock;
 
     public ProcessInboundMessageCommandHandler(
         IApplicationDbContext context,
         IAiAgentAutoReplyService aiAgentAutoReplyService,
         IWhatsAppService whatsAppService,
         IWhatsAppNotificationService notificationService,
-        IMapper mapper,
         ILogger<ProcessInboundMessageCommandHandler> logger,
-        MessagingConsentService? consent = null)
+        MessagingConsentService? consent = null,
+        IDateTimeProvider? clock = null)
     {
         _context = context;
         _aiAgentAutoReplyService = aiAgentAutoReplyService;
         _whatsAppService = whatsAppService;
         _notificationService = notificationService;
-        _mapper = mapper;
         _logger = logger;
-        _consent = consent ?? new MessagingConsentService(context, SystemClock.Instance);
+        _clock = clock ?? SystemClock.Instance;
+        _consent = consent ?? new MessagingConsentService(context, _clock);
     }
 
     public async Task<Result<ChatMessageDto>> Handle(
@@ -68,14 +70,17 @@ public class ProcessInboundMessageCommandHandler
             return Result.Failure<ChatMessageDto>(DuplicateMessageError);
 
         var (conversation, message) = stored.Value;
-        var messageDto = _mapper.Map<ChatMessageDto>(message);
-        var conversationDto = _mapper.Map<ConversationDto>(conversation);
+        var messageDto = message.ToDto();
+        var conversationDto = conversation.ToDto();
 
         // Notify via SignalR
         await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, messageDto);
 
-        // BAJA / ALTA get a confirmation instead of an automatic answer.
-        if (!await TryHandleOptOutKeywordAsync(request, conversation, cancellationToken))
+        // BAJA / ALTA get a confirmation instead of an automatic answer. The bot never answers over a person of the
+        // team (who paused it by writing) nor to a photo or voice note it cannot read.
+        if (!await TryHandleOptOutKeywordAsync(request, conversation, cancellationToken)
+            && !request.IsMedia
+            && !conversation.AutoRepliesPausedAt(_clock.UtcNow))
             await TryAutoReplyAsync(request, conversation, cancellationToken);
 
         return Result.Success(messageDto);
@@ -163,14 +168,21 @@ public class ProcessInboundMessageCommandHandler
     }
 
     // Webhooks run without tenant context, so the tenant the delivery was routed to is filtered explicitly.
-    private Task<WhatsAppConversation?> FindConversationAsync(
+    // WhatsApp reports Mexican mobiles as +521…; a conversation the business started with +52… is the same one.
+    private async Task<WhatsAppConversation?> FindConversationAsync(
         ProcessInboundMessageCommand request, CancellationToken cancellationToken)
-        => _context.WhatsAppConversations
+    {
+        var variants = MessagingPhone.Variants(request.FromPhone).Append(request.FromPhone).Distinct().ToList();
+        // At most one conversation per form of the number: the exact one wins, then the most recent.
+        var candidates = await _context.WhatsAppConversations
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(c =>
-                c.TenantId == request.TenantId &&
-                c.CustomerPhone == request.FromPhone,
-                cancellationToken);
+            .Where(c => c.TenantId == request.TenantId && variants.Contains(c.CustomerPhone))
+            .ToListAsync(cancellationToken);
+        return candidates
+            .OrderByDescending(c => c.CustomerPhone == request.FromPhone)
+            .ThenByDescending(c => c.LastMessageAt)
+            .FirstOrDefault();
+    }
 
     // Webhooks run without tenant context; Meta message ids are globally unique.
     private Task<bool> IsAlreadyStoredAsync(string externalMessageId, CancellationToken cancellationToken)
@@ -293,10 +305,10 @@ public class ProcessInboundMessageCommandHandler
             }
 
             var (repliedConversation, outboundMessage) =
-                await StoreAutoReplyAsync(request, conversation, reply, cancellationToken);
+                await StoreAutoReplyAsync(request, conversation, reply, sendResult.ProviderMessageId, cancellationToken);
 
-            var outboundDto = _mapper.Map<ChatMessageDto>(outboundMessage);
-            var conversationDto = _mapper.Map<ConversationDto>(repliedConversation);
+            var outboundDto = outboundMessage.ToDto();
+            var conversationDto = repliedConversation.ToDto();
             await _notificationService.NotifyNewMessage(request.TenantId, conversationDto, outboundDto);
         }
         catch (Exception ex)
@@ -318,11 +330,13 @@ public class ProcessInboundMessageCommandHandler
         ProcessInboundMessageCommand request,
         WhatsAppConversation conversation,
         string reply,
+        string? providerMessageId,
         CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
-            var message = conversation.AddMessage(MessageDirection.Outbound, reply, externalMessageId: null);
+            // The wamid lets the delivery statuses (the ticks) reach the reply.
+            var message = conversation.AddMessage(MessageDirection.Outbound, reply, providerMessageId);
 
             try
             {

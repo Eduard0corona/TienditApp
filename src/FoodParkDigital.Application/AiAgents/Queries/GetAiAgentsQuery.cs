@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
@@ -18,12 +16,10 @@ public record GetAiAgentsQuery : IRequest<List<AiAgentDto>>
 public class GetAiAgentsQueryHandler : IRequestHandler<GetAiAgentsQuery, List<AiAgentDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetAiAgentsQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetAiAgentsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<List<AiAgentDto>> Handle(GetAiAgentsQuery request, CancellationToken cancellationToken)
@@ -38,7 +34,7 @@ public class GetAiAgentsQueryHandler : IRequestHandler<GetAiAgentsQuery, List<Ai
         return await query
             .OrderByDescending(x => x.IsActive)
             .ThenBy(x => x.Name)
-            .ProjectTo<AiAgentDto>(_mapper.ConfigurationProvider)
+            .Select(AiAgentMappings.AsDto)
             .ToListAsync(cancellationToken);
     }
 }

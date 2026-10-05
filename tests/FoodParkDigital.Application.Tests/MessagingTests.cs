@@ -208,7 +208,6 @@ public class MessagingTests
             autoReply,
             whatsApp,
             new NullNotifications(),
-            fixture.Mapper,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessInboundMessageCommandHandler>.Instance,
             new MessagingConsentService(fixture.Context, fixture.Clock));
 

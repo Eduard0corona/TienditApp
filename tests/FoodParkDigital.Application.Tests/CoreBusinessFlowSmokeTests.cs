@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
@@ -95,10 +93,9 @@ public class CoreBusinessFlowSmokeTests
         Assert.Equal(1, metrics.CompletedOrders);
         Assert.Equal(1, metrics.ActiveProducts);
         Assert.Equal(0, metrics.ActiveServices);
-        Assert.Single(metrics.TopSellingItems);
-        Assert.Equal(seeded.Product.Id, metrics.TopSellingItems[0].ProductId);
-        Assert.Equal("Product", metrics.TopSellingItems[0].ItemType);
-        // Delivered without a payment: revenue counts payments, so the order shows as money still owed.
+        // Delivered without a payment: revenue and best sellers count payments, so the order shows as money
+        // still owed and is not a best seller yet.
+        Assert.Empty(metrics.TopSellingItems);
         Assert.Equal(0m, metrics.TotalRevenue);
         Assert.Equal(1, metrics.UnpaidOrders);
         Assert.Equal(createResult.Value.Total, metrics.OutstandingBalance);
@@ -170,16 +167,13 @@ public class CoreBusinessFlowSmokeTests
 
         private SmokeFixture(
             TestApplicationDbContext context,
-            IMapper mapper,
             TestCurrentTenantService tenantService)
         {
             Context = context;
-            Mapper = mapper;
             _tenantService = tenantService;
         }
 
         public TestApplicationDbContext Context { get; }
-        public IMapper Mapper { get; }
         public DateTimeOffset UtcNow => _dateTimeProvider.UtcNow;
 
         public static async Task<SmokeFixture> CreateAsync()
@@ -190,10 +184,8 @@ public class CoreBusinessFlowSmokeTests
 
             var tenantService = new TestCurrentTenantService();
             var context = new TestApplicationDbContext(options, tenantService, new NullMediator());
-            var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-                .CreateMapper();
 
-            var fixture = new SmokeFixture(context, mapper, tenantService);
+            var fixture = new SmokeFixture(context, tenantService);
             await Task.CompletedTask;
             return fixture;
         }
@@ -210,17 +202,19 @@ public class CoreBusinessFlowSmokeTests
             var orderInventoryService = new OrderInventoryService(
                 Context,
                 _dateTimeProvider,
+                new FolioGenerator(Context),
                 NullLogger<OrderInventoryService>.Instance);
 
             return new CreateOrderCommandHandler(
                 Context,
                 _tenantService,
                 _currentUserService,
-                Mapper,
                 customerLookup,
                 _dateTimeProvider,
                 new PhoneNormalizationService(),
-                orderInventoryService);
+                orderInventoryService,
+                new OrderCashService(Context, _currentUserService),
+                new FolioGenerator(Context));
         }
 
         public UpdateOrderStatusCommandHandler CreateUpdateStatusHandler()
@@ -230,6 +224,7 @@ public class CoreBusinessFlowSmokeTests
                 new OrderInventoryService(
                     Context,
                     _dateTimeProvider,
+                    new FolioGenerator(Context),
                     NullLogger<OrderInventoryService>.Instance));
 
         public CancelOrderCommandHandler CreateCancelHandler()
@@ -239,6 +234,7 @@ public class CoreBusinessFlowSmokeTests
                 new OrderInventoryService(
                     Context,
                     _dateTimeProvider,
+                    new FolioGenerator(Context),
                     NullLogger<OrderInventoryService>.Instance));
 
         public GetDashboardMetricsQueryHandler CreateDashboardHandler()

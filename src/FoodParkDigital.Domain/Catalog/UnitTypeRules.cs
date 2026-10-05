@@ -1,3 +1,4 @@
+using System.Globalization;
 using FoodParkDigital.Domain.Catalog.Enums;
 
 namespace FoodParkDigital.Domain.Catalog;
@@ -34,6 +35,28 @@ public static class UnitTypeRules
         UnitType.Portion or UnitType.Slice or UnitType.Serving => "H87",
         _ => "H87"
     };
+
+    /// <summary>"kg", "L", "h"... for measured units; empty for pieces, packs and portions.</summary>
+    public static string ShortLabel(UnitType? unit) => unit switch
+    {
+        UnitType.Kg => "kg",
+        UnitType.G => "g",
+        UnitType.Lb => "lb",
+        UnitType.Oz => "oz",
+        UnitType.Liter => "L",
+        UnitType.Ml => "ml",
+        UnitType.Meter => "m",
+        UnitType.Hour => "h",
+        _ => string.Empty
+    };
+
+    /// <summary>"1.255 kg", "0.5 L" or "3" (pieces), with at most three decimals.</summary>
+    public static string FormatQuantity(decimal quantity, UnitType? unit)
+    {
+        var number = decimal.Round(quantity, QuantityDecimals).ToString("0.###", CultureInfo.InvariantCulture);
+        var label = ShortLabel(unit);
+        return label.Length == 0 ? number : $"{number} {label}";
+    }
 
     /// <summary>Whole quantities for units that do not allow fractions, and never more than three decimals.</summary>
     public static bool IsValidQuantity(decimal quantity, UnitType? unit)

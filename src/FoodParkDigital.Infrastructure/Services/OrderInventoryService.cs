@@ -1,10 +1,12 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -14,24 +16,32 @@ public class OrderInventoryService : IOrderInventoryService
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IFolioGenerator _folios;
     private readonly ILogger<OrderInventoryService> _logger;
 
     public OrderInventoryService(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
+        IFolioGenerator folios,
         ILogger<OrderInventoryService> logger)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
+        _folios = folios;
         _logger = logger;
     }
 
-    public async Task ApplyConsumptionForOrderAsync(Order order, CancellationToken cancellationToken)
+    private static readonly IReadOnlyList<StockShortage> NoShortages = [];
+
+    public async Task<IReadOnlyList<StockShortage>> ApplyConsumptionForOrderAsync(
+        Order order,
+        CancellationToken cancellationToken,
+        StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy)
     {
         // An open tab keeps getting rounds: it consumes once, when it closes, so no round is left out of the
         // single consumption movement of the order.
         if (!ShouldConsumeInventory(order.Status) || order.IsOpenTab)
-            return;
+            return NoShortages;
 
         var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
         var alreadyApplied = await _context.InventoryMovements
@@ -39,7 +49,7 @@ public class OrderInventoryService : IOrderInventoryService
                 x => x.TenantId == order.TenantId && x.ExternalReference == consumptionExternalReference,
                 cancellationToken);
         if (alreadyApplied)
-            return;
+            return NoShortages;
 
         var orderItems = await _context.OrderItems
             .Where(x => x.OrderId == order.Id)
@@ -71,14 +81,14 @@ public class OrderInventoryService : IOrderInventoryService
         }
 
         if (orderItems.Count == 0)
-            return;
+            return NoShortages;
 
         var productIds = orderItems.Select(x => x.ProductId).Distinct().ToList();
         var requirements = await _context.ProductSupplyRequirements
             .Where(x => x.TenantId == order.TenantId && x.IsActive && productIds.Contains(x.ProductId))
             .ToListAsync(cancellationToken);
         if (requirements.Count == 0)
-            return;
+            return NoShortages;
 
         // Supplies without a location in the recipe leave the stock of the branch where the sale was made.
         var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
@@ -96,7 +106,7 @@ public class OrderInventoryService : IOrderInventoryService
                 if (!locationId.HasValue)
                 {
                     throw new DomainException(
-                        $"La receta del producto '{orderItem.ProductName}' requiere una ubicacion de inventario por defecto.");
+                        $"La receta del producto '{orderItem.ProductName}' requiere una ubicación de inventario por defecto.");
                 }
 
                 var effectiveQuantityPerUnit = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
@@ -110,7 +120,7 @@ public class OrderInventoryService : IOrderInventoryService
         }
 
         if (groupedConsumptions.Count == 0)
-            return;
+            return NoShortages;
 
         var supplyIds = groupedConsumptions.Keys.Select(x => x.SupplyItemId).Distinct().ToList();
         var locationIds = groupedConsumptions.Keys.Select(x => x.InventoryLocationId).Distinct().ToList();
@@ -130,16 +140,18 @@ public class OrderInventoryService : IOrderInventoryService
             x => (x.SupplyItemId, x.InventoryLocationId),
             x => x);
 
+        var shortages = await CheckShortagesAsync(order.TenantId, groupedConsumptions, supplies, stockByKey, shortageHandling, cancellationToken);
+
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Exit,
             movementReason: InventoryMovementReason.Sale,
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
             externalReference: consumptionExternalReference,
-            notes: $"Salida automatica por orden {order.OrderNumber}");
+            notes: $"Salida automática por orden {order.OrderNumber}");
 
         foreach (var entry in groupedConsumptions)
         {
@@ -148,7 +160,7 @@ public class OrderInventoryService : IOrderInventoryService
             var quantity = entry.Value;
 
             if (!supplies.TryGetValue(supplyId, out var supply))
-                throw new DomainException("No se encontro un insumo configurado en la receta.");
+                throw new DomainException("No se encontró un insumo configurado en la receta.");
 
             if (!stockByKey.TryGetValue((supplyId, locationId), out var stock))
             {
@@ -159,7 +171,8 @@ public class OrderInventoryService : IOrderInventoryService
 
             var quantityBefore = stock.OnHandQuantity;
             var unitCost = supply.AverageCost > 0 ? supply.AverageCost : (supply.LastCost > 0 ? supply.LastCost : (decimal?)null);
-            stock.ApplyMovement(-quantity, unitCost, movementDate);
+            // Shortages were already refused or accepted above, per the business's policy.
+            stock.ApplyMovement(-quantity, unitCost, movementDate, allowNegative: true);
 
             var line = movement.AddLine(
                 tenantId: order.TenantId,
@@ -175,25 +188,28 @@ public class OrderInventoryService : IOrderInventoryService
         _context.InventoryMovements.Add(movement);
 
         _logger.LogInformation(
-            "OrderInventoryConsumptionApplied: tenant {TenantId}, order {OrderId}, movement {MovementNumber}.",
+            "OrderInventoryConsumptionApplied: tenant {TenantId}, order {OrderId}, movement {MovementNumber}, shortages {ShortageCount}.",
             order.TenantId,
             order.Id,
-            movement.MovementNumber);
+            movement.MovementNumber,
+            shortages.Count);
+        return shortages;
     }
 
-    public async Task ApplyConsumptionForServicePieceAsync(
+    public async Task<IReadOnlyList<StockShortage>> ApplyConsumptionForServicePieceAsync(
         Order order,
         ServiceOrderPiece piece,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy)
     {
         if (order.OrderType != OrderType.Service)
-            return;
+            return NoShortages;
 
         if (!piece.IsTrackable || piece.ServiceProductId is null)
-            return;
+            return NoShortages;
 
         if (piece.Status != ServiceOrderPieceStatus.Completed)
-            return;
+            return NoShortages;
 
         var externalReference = BuildServicePieceConsumptionExternalReference(order.Id, piece.Id);
         var alreadyApplied = await _context.InventoryMovements
@@ -201,7 +217,7 @@ public class OrderInventoryService : IOrderInventoryService
                 x => x.TenantId == order.TenantId && x.ExternalReference == externalReference,
                 cancellationToken);
         if (alreadyApplied)
-            return;
+            return NoShortages;
 
         var requirements = await _context.ProductSupplyRequirements
             .Where(x =>
@@ -210,7 +226,7 @@ public class OrderInventoryService : IOrderInventoryService
                 && x.ProductId == piece.ServiceProductId.Value)
             .ToListAsync(cancellationToken);
         if (requirements.Count == 0)
-            return;
+            return NoShortages;
 
         // Supplies without a location in the recipe leave the stock of the branch where the sale was made.
         var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
@@ -222,7 +238,7 @@ public class OrderInventoryService : IOrderInventoryService
             if (!locationId.HasValue)
             {
                 throw new DomainException(
-                    $"La receta del servicio '{piece.ItemName}' requiere una ubicacion de inventario por defecto.");
+                    $"La receta del servicio '{piece.ItemName}' requiere una ubicación de inventario por defecto.");
             }
 
             var effectiveQuantity = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
@@ -234,7 +250,7 @@ public class OrderInventoryService : IOrderInventoryService
         }
 
         if (groupedConsumptions.Count == 0)
-            return;
+            return NoShortages;
 
         var supplyIds = groupedConsumptions.Keys.Select(x => x.SupplyItemId).Distinct().ToList();
         var locationIds = groupedConsumptions.Keys.Select(x => x.InventoryLocationId).Distinct().ToList();
@@ -254,16 +270,18 @@ public class OrderInventoryService : IOrderInventoryService
             x => (x.SupplyItemId, x.InventoryLocationId),
             x => x);
 
+        var shortages = await CheckShortagesAsync(order.TenantId, groupedConsumptions, supplies, stockByKey, shortageHandling, cancellationToken);
+
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Exit,
             movementReason: InventoryMovementReason.Consumption,
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
             externalReference: externalReference,
-            notes: $"Consumo automatico por servicio completado ({piece.ItemName}) en orden {order.OrderNumber}");
+            notes: $"Consumo automático por servicio completado ({piece.ItemName}) en orden {order.OrderNumber}");
 
         foreach (var entry in groupedConsumptions)
         {
@@ -272,7 +290,7 @@ public class OrderInventoryService : IOrderInventoryService
             var quantity = entry.Value;
 
             if (!supplies.TryGetValue(supplyId, out var supply))
-                throw new DomainException("No se encontro un insumo configurado en la receta del servicio.");
+                throw new DomainException("No se encontró un insumo configurado en la receta del servicio.");
 
             if (!stockByKey.TryGetValue((supplyId, locationId), out var stock))
             {
@@ -283,7 +301,7 @@ public class OrderInventoryService : IOrderInventoryService
 
             var quantityBefore = stock.OnHandQuantity;
             var unitCost = supply.AverageCost > 0 ? supply.AverageCost : (supply.LastCost > 0 ? supply.LastCost : (decimal?)null);
-            stock.ApplyMovement(-quantity, unitCost, movementDate);
+            stock.ApplyMovement(-quantity, unitCost, movementDate, allowNegative: true);
 
             var line = movement.AddLine(
                 tenantId: order.TenantId,
@@ -304,6 +322,7 @@ public class OrderInventoryService : IOrderInventoryService
             order.Id,
             piece.Id,
             movement.MovementNumber);
+        return shortages;
     }
 
     public async Task ReverseConsumptionForOrderAsync(Order order, string? reason, CancellationToken cancellationToken)
@@ -367,13 +386,13 @@ public class OrderInventoryService : IOrderInventoryService
         var movementDate = _dateTimeProvider.UtcNow;
         var reversalMovement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Entry,
             movementReason: InventoryMovementReason.Return,
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
             externalReference: reversalExternalReference,
-            notes: $"Reverso automatico por cancelacion de orden {order.OrderNumber}. {reason}".Trim());
+            notes: $"Reverso automático por cancelación de orden {order.OrderNumber}. {reason}".Trim());
 
         foreach (var (consumedLine, quantityToReverse) in linesToReverse)
         {
@@ -470,7 +489,7 @@ public class OrderInventoryService : IOrderInventoryService
         var movementDate = _dateTimeProvider.UtcNow;
         var movement = new InventoryMovement(
             tenantId: order.TenantId,
-            movementNumber: await GenerateMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
             movementType: InventoryMovementType.Entry,
             movementReason: InventoryMovementReason.Return,
             movementDate: movementDate,
@@ -529,6 +548,51 @@ public class OrderInventoryService : IOrderInventoryService
             movement.MovementNumber);
     }
 
+    /// <summary>
+    /// The supplies the consumption would take below zero. A sale the team makes now is refused when the business
+    /// blocks such sales (the default); otherwise the shortages go back to the caller to warn the cashier.
+    /// </summary>
+    private async Task<IReadOnlyList<StockShortage>> CheckShortagesAsync(
+        Guid tenantId,
+        Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal> consumptions,
+        Dictionary<Guid, SupplyItem> supplies,
+        Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), InventoryStock> stockByKey,
+        StockShortageHandling shortageHandling,
+        CancellationToken cancellationToken)
+    {
+        var shortages = new List<StockShortage>();
+        foreach (var ((supplyId, locationId), quantity) in consumptions)
+        {
+            // A supply missing from the catalog is reported by the caller.
+            if (!supplies.TryGetValue(supplyId, out var supply))
+                continue;
+
+            var onHand = stockByKey.TryGetValue((supplyId, locationId), out var stock) ? stock.OnHandQuantity : 0m;
+            if (onHand < quantity)
+                shortages.Add(new StockShortage(supply.Name, supply.Unit, quantity, onHand));
+        }
+
+        if (shortages.Count == 0)
+            return NoShortages;
+
+        if (shortageHandling == StockShortageHandling.TenantPolicy)
+        {
+            var policy = await _context.TenantSettings
+                .Where(s => s.TenantId == tenantId)
+                .Select(s => (InsufficientStockPolicy?)s.InsufficientStockPolicy)
+                .FirstOrDefaultAsync(cancellationToken) ?? InsufficientStockPolicy.Block;
+            if (policy == InsufficientStockPolicy.Block)
+                throw new DomainException(StockShortage.BlockMessage(shortages));
+        }
+
+        _logger.LogWarning(
+            "InventoryShortageAccepted: tenant {TenantId}, {ShortageCount} supplies below zero ({Handling}).",
+            tenantId,
+            shortages.Count,
+            shortageHandling);
+        return shortages;
+    }
+
     public static bool ShouldConsumeInventory(OrderStatus status)
         => status is
             OrderStatus.Confirmed or
@@ -544,23 +608,4 @@ public class OrderInventoryService : IOrderInventoryService
     private static string BuildReturnExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:RETURN:";
     private static string BuildServicePieceConsumptionExternalReference(Guid orderId, Guid pieceId)
         => $"ORDER:{orderId:N}:PIECE:{pieceId:N}:CONSUMPTION";
-
-    private async Task<string> GenerateMovementNumberAsync(
-        Guid tenantId,
-        DateTimeOffset movementDate,
-        CancellationToken cancellationToken)
-    {
-        var date = movementDate.UtcDateTime.Date;
-        var prefix = $"INV-{date:yyyyMMdd}";
-
-        var todayCount = await _context.InventoryMovements
-            .IgnoreQueryFilters()
-            .CountAsync(
-                x => x.TenantId == tenantId &&
-                     x.MovementDate >= date &&
-                     x.MovementDate < date.AddDays(1),
-                cancellationToken);
-
-        return $"{prefix}-{todayCount + 1:0000}";
-    }
 }

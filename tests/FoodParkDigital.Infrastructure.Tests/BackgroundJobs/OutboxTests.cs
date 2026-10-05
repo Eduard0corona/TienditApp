@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
@@ -217,7 +218,7 @@ public class OutboxTests
     {
         var events = new FoodParkDigital.Domain.Common.DomainEvent[]
         {
-            new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 123.45m),
+            new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 123.45m, OrderStatus.Pending),
             new OrderStatusChangedEvent(Guid.NewGuid(), TenantA, OrderStatus.Confirmed, OrderStatus.Ready, NotifyCustomer: false),
             new OrderCancelledEvent(Guid.NewGuid(), TenantA, OrderStatus.Pending, "Cliente canceló"),
             new ServiceOrderPieceStatusChangedEvent(Guid.NewGuid(), Guid.NewGuid(), TenantA,
@@ -237,5 +238,20 @@ public class OutboxTests
 
         // A new event type must be added above, so its payload is proven to deserialize.
         Assert.Equal(events.Length, OutboxEventSerializer.KnownEventTypes.Count);
+    }
+
+    [Fact]
+    public void OrderCreatedEventStoredBeforeItHadAStatus_ShouldReadAsConfirmed()
+    {
+        // Messages waiting in the outbox during a deploy were confirmed orders as far as the old handler knew.
+        var current = new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 50m, OrderStatus.Pending);
+        var payload = JsonNode.Parse(OutboxEventSerializer.Serialize(current))!.AsObject();
+        Assert.True(payload.Remove("status"));
+
+        var restored = Assert.IsType<OrderCreatedEvent>(
+            OutboxEventSerializer.Deserialize(OutboxEventSerializer.TypeNameOf(current), payload.ToJsonString()));
+
+        Assert.Equal(OrderStatus.Confirmed, restored.Status);
+        Assert.Equal(current.OrderId, restored.OrderId);
     }
 }

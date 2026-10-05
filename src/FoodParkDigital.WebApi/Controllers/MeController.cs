@@ -1,8 +1,12 @@
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Queries;
+using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.Tenants.Commands;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -28,5 +32,20 @@ public class MeController : ControllerBase
     {
         var result = await _mediator.Send(new GetMyTenantsQuery());
         return Ok(result);
+    }
+
+    /// <summary>The customer account's orders in every business, newest first.</summary>
+    [HttpGet("orders")]
+    public async Task<ActionResult<PaginatedList<MyOrderDto>>> GetMyOrders([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        => Ok(await _mediator.Send(new GetMyOrdersQuery { PageNumber = pageNumber, PageSize = pageSize }));
+
+    /// <summary>Opens another business with this account, as its owner. Switch to it to finish its setup.</summary>
+    [HttpPost("tenants")]
+    public async Task<ActionResult<MyTenantDto>> CreateBusiness([FromBody] CreateBusinessCommand command)
+    {
+        var result = await _mediator.Send(command);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
     }
 }

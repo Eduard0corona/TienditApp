@@ -43,19 +43,31 @@
 ## Cobro en la venta y cierre automático
 
 - `POST /api/v1/orders` acepta `Payments` (hasta 10 por venta, por ejemplo efectivo más tarjeta). `OrderPaymentRegistrar` los registra en el mismo guardado que la venta, con las mismas reglas que `POST /api/v1/orders/{id}/payments`: importe positivo con dos decimales, sin sobrepago, evidencia del tenant y movimiento en la caja abierta si existe. Si un pago es inválido, la venta no se crea.
-- El efectivo recibido y el cambio se calculan en el cliente y salen en el ticket; la API recibe solo el importe aplicado y no guarda el efectivo entregado.
+- Desde la Fase 4F cada pago guarda el efectivo recibido y la propina (ver [Propina y efectivo recibido](#propina-y-efectivo-recibido-fase-4f)).
 - Con `AutoCloseCounterSales`, una venta de mostrador (`CreatedByBusiness`) sin saldo se cierra sola mediante `Order.CloseIfPaidCounterSale` y la máquina de estados:
   - una venta de tienda o de comida sin pantalla de cocina pasa a `Delivered`;
   - un pedido de comida de un negocio con Cocina pasa a `Delivered` cuando la cocina lo marca `Ready` (o cuando se paga después de estar listo);
   - un servicio pasa a `Completed` si no tiene piezas rastreadas aceptadas o en proceso.
 - El cierre se evalúa al crear la venta, al registrar un pago y cuando la orden llega a `Ready`. Queda en el historial con el usuario y no envía WhatsApp al cliente (`OrderStatusChangedEvent.NotifyCustomer = false`).
-- Inicio reporta ingresos por pagos (base de efectivo): `TotalRevenue` suma los pagos con `PaidAt` en el rango sin importar el estado de la orden, `AverageOrderValue` divide entre las órdenes que recibieron esos pagos y `OutstandingBalance`/`UnpaidOrders` muestran el saldo de las órdenes no canceladas del rango.
+- Inicio reporta ingresos por pagos (base de efectivo): `TotalRevenue` suma los pagos con `PaidAt` en el rango sin importar el estado de la orden, `AverageOrderValue` divide entre las órdenes que recibieron esos pagos y `OutstandingBalance`/`UnpaidOrders` muestran el saldo de las órdenes no canceladas del rango. Desde la Fase 4, Más vendidos sigue la misma base: cuenta las líneas de las órdenes no canceladas que recibieron un pago en el rango (una venta cobrada que sigue en cocina cuenta; una entrega a crédito todavía no).
+- La moneda es el peso mexicano: `TenantSettings.Currency` y `Product.PriceCurrency` valen `MXN` por defecto y la migración `UseMexicanPesosByDefault` cambió a `MXN` el `USD` que los negocios recibieron del valor predeterminado anterior (ninguna pantalla permitía elegir otra moneda). Los importes no cambian.
+
+## Propina y efectivo recibido (Fase 4F)
+
+- Cada pago (`OrderPayment`) guarda su propina (`Tip`, cero por defecto) y, en efectivo, lo que entregó el cliente (`CashReceived`); el cambio se calcula (`Change = CashReceived − Amount − Tip`). Así el ticket reimpreso desde Pedidos muestra la propina, el efectivo recibido y el cambio, no solo el ticket recién cobrado.
+- La propina no es parte de la venta: no lleva IVA, no entra en `Total`, `PaidAmount` ni `Balance`, y no cuenta en los ingresos ni en los reportes de ventas. La orden expone `TipTotal`.
+- Reglas: la propina no puede ser negativa ni mayor que el total de la cuenta (la suma de las propinas de la orden); puede ser mayor que el último pago de un cobro mixto (los últimos $5 en efectivo con $20 de propina). `CashReceived` solo se acepta en efectivo y debe cubrir el pago más la propina. Los validadores responden 400 y el dominio repite las reglas.
+- En la caja, la propina entra como su propio movimiento (`CashTransactionType.Tip`, ingreso) en la misma caja y con la forma de pago del pago: en efectivo aumenta el esperado; con tarjeta queda como entrada no efectiva. No es un movimiento manual.
+- El corte del día muestra `TipsTotal` y `CashTipsTotal` aparte de lo cobrado: `NetCashOnlyFlow` incluye las propinas en efectivo (están en los cajones) y `NetCashFlow` todas.
+- Vender, Pedidos y Mesas ofrecen Sin propina, 10 %, 15 % u Otra (sobre lo que se cobra), y la propina va con el último pago del cobro. El botón muestra lo que paga el cliente con la propina incluida.
+- Un reembolso o una anulación devuelven lo pagado de la venta, no la propina; si hay que devolverla, se registra como retiro de caja.
 
 ## Caja por cajero (Fase 2)
 
 - Cada cajero abre su caja en una sucursal (`BranchId`; desde la Fase 3 la sucursal es entidad propia, ver [sucursales](branches-and-reporting.md)) y queda como dueño (`OpenedByUserId`). Solo quien la abrió o un administrador la cierra o registra gastos y retiros en ella.
 - Al cerrar se guardan lo esperado (fondo + efectivo neto), lo contado, la diferencia y las notas; las notas son obligatorias si hay faltante o sobrante. El conteo por denominación es opcional y debe cuadrar con el total (`CashCountJson`).
 - `GET /api/v1/cash/sessions` lista los turnos por fecha, sucursal y estado, con filtro de solo diferencias. Caja muestra Mi caja, Turnos (el administrador puede cerrar cajas ajenas) y Corte del día.
+- Desde la Fase 4 el detalle de un turno imprime su corte en formato de ticket de 72 mm (fondo, entradas y salidas de efectivo, esperado, contado, diferencia, conteo por denominación, movimientos y espacio para dos firmas), y Corte del día imprime el resumen del día. Vender abre la caja del cajero en un diálogo, sin salir de la venta.
 - `TenantSettings.RequireOpenCashSession` (apagado por defecto) rechaza cobros y reembolsos en efectivo si el cajero no tiene caja abierta; tarjeta y transferencia no la necesitan.
 - Las cajas anteriores a la Fase 2 se completaron en la migración: sucursal predeterminada del negocio, cajero por el correo con que se abrió y, en las cerradas, esperado y diferencia calculados de sus movimientos.
 

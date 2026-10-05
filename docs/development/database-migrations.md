@@ -11,7 +11,7 @@ Además, el job `Migrations` de `.github/workflows/ci.yml` aplica las migracione
 1. Crea con `dotnet ef database update` una base en `PRODUCTION_BASELINE`, una migración que producción ya tiene (idealmente la última; hoy `20261004165450_AddOfflineSaleIdempotency`, la de la Fase 3).
 2. Le aplica con el `sqlcmd` clásico y `-b` el mismo contenido que un `apply.sql`: el bloque `SET` de los scripts de producción y la salida de `dotnet ef migrations script --idempotent`.
 3. Lo ejecuta otra vez con la caché de planes vacía y falla si cambia el historial o algún objeto. Así SQL Server vuelve a compilar todos los lotes, incluidos los que salta, como en una ejecución posterior en producción: un lote viejo que nombra una columna que una migración nueva borró falla ahí.
-4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE` y aplica el script de nuevo.
+4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE`, lo ejecuta otra vez (no debe cambiar nada: cada lote tiene que compilar aunque ya no existan las columnas que nombra) y aplica el script de nuevo.
 5. Crea otra base vacía con `dotnet ef database update`, como se crea una base nueva.
 
 La contraseña de SA se genera en el job y el runner la enmascara en los logs. Cuando producción avance, sube `PRODUCTION_BASELINE`; un valor más viejo solo prueba más migraciones. Si el job falla, sus scripts quedan como artefacto `migration-scripts` de la ejecución.
@@ -22,6 +22,7 @@ Migraciones recientes con notas operativas:
 - `InventoryConcurrencyTokens`: solo modelo (tokens de concurrencia); no cambia el esquema.
 - `AddBranchesAndDailySalesSnapshots` (Fase 3): cada ubicación de inventario se vuelve una sucursal con el mismo Id, y las cajas y órdenes existentes quedan en una sucursal (la de su ubicación o la del primer pago; si no, la predeterminada). Después de aplicarla hay que desactivar las sucursales que solo eran almacén (consulta 5 de su `verify.sql`). Su `Down` se niega (error 50003) si hay sucursales que no venían de una ubicación, salvo la "Sucursal principal" predeterminada sin editar.
 - Los `Down` de la Fase 3 que perderían historial se detienen sin cambiar nada: cantidades decimales (50001), mesas de más de 10 caracteres (50002), pagos de planes (50004) y ventas capturadas sin conexión (50005).
+- Fase 4: `AlignTenantAdminMemberships` vuelve administradoras a las cuentas `TENANT_ADMIN` cuya única membresía decía personal (su `Down` no cambia datos); `UseMexicanPesosByDefault` cambia `Currency` de `USD` a `MXN` (el `Down` regresa a `USD` todo `MXN`); `AddChargePermissionAndSmsCooldown` agrega `ChargeOrders` a los permisos guardados con `ManageOrders`, salvo cocina (el `Down` los deja: el código anterior ignora permisos que no conoce); `AddFolioSequences` crea el contador `ORD` de cada negocio con su folio más alto. El código anterior numera contando, así que volver a él con huecos en la numeración repetiría folios: la consulta 4 del `verify.sql` de `AddFolioSequences` lista los negocios afectados antes de regresar. El `Down` de `AddPaymentTipAndCashReceived` se detiene (50006) si hay pagos con propina.
 
 ## Reglas
 
@@ -33,7 +34,7 @@ Migraciones recientes con notas operativas:
 - Cambios destructivos usan expand/contract, backfill, compatibilidad de versiones y rollback/roll-forward.
 - Índices, claves y precisiones conservan `TenantId` cuando corresponda.
 - Consultas aplican filtros y paginación antes de materializar.
-- SQL propio (`migrationBuilder.Sql`) que usa columnas agregadas en la misma migración va dentro de `EXEC(N'...')`. En el script idempotente cada migración es un solo lote que SQL Server compila antes de ejecutarlo, y una sentencia que nombra una columna que todavía no existe en una tabla existente hace fallar el lote (`Invalid column name`). `dotnet ef database update` no lo detecta porque ejecuta sentencia por sentencia.
+- SQL propio (`migrationBuilder.Sql`) que usa columnas agregadas en la misma migración va dentro de `EXEC(N'...')`, en `Up` y en `Down`. En el script idempotente cada migración es un solo lote que SQL Server compila antes de ejecutarlo, y una sentencia que nombra una columna que todavía no existe en una tabla existente hace fallar el lote (`Invalid column name`); en el `Down`, eso pasa al ejecutar `rollback.sql` por segunda vez, cuando la columna ya se borró. `dotnet ef database update` no lo detecta porque ejecuta sentencia por sentencia.
 
 ## Comandos de desarrollo
 
@@ -70,11 +71,14 @@ El job `Migrations` repite estos pasos en cada PR sobre una base sin datos y con
 
 Los scripts de la Fase 3 se probaron así en SQL Server 2022 (Docker): desde un respaldo en la Fase 0 con negocios con y sin ubicaciones, ventas, pagos y cajas, el `apply.sql` de `20261004165450_AddOfflineSaleIdempotency` aplicó las Fases 1, 2 y 3; los `rollback.sql` revirtieron la Fase 3 (las guardas 50003 y 50005 se detuvieron sin cambiar nada) y volver a aplicar y repetir el script no hizo nada la segunda vez.
 
+Los de la Fase 4 se probaron igual (SQL Server 2022, Docker), desde una base en `20261004165450_AddOfflineSaleIdempotency` con tres negocios (en `USD` y `MXN`, uno con un hueco en sus folios), ventas, un pago, movimientos del día y cuentas con permisos guardados (administrador con una y con dos membresías, cajeros con y sin `ChargeOrders`, cocina): los `verify.sql` mostraron lo que cambia antes y el resultado después; el `apply.sql` de `20261005003444_AddPaymentTipAndCashReceived` aplicó las ocho migraciones; repetirlo, con la caché de planes vacía, y ejecutar el de una carpeta intermedia no cambió nada; la guarda 50006 se detuvo con una propina registrada; los ocho `rollback.sql`, de la más nueva a la más vieja, regresaron la base a la Fase 3 y ejecutarlos otra vez no hizo nada; aplicar de nuevo dejó las ocho migraciones y los contadores.
+
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación.
 
 ## Deuda actual
 
 - `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
 - El CI no prueba migraciones con datos ni ejecuta los `apply.sql`/`rollback.sql` versionados: regenera el script, así que un archivo que quedó desactualizado frente a su migración no se detecta.
+- La guarda 50005 de `20261004165450_AddOfflineSaleIdempotency` nombra `CapturedOfflineAt` fuera de `EXEC`: si su `rollback.sql` se ejecuta otra vez, ya revertido, falla con `Invalid column name` (no cambia nada). La migración está aplicada en producción y no se edita.
 - Falta el proceso productivo: generar `migrations script --idempotent` como artefacto del pipeline, revisarlo y aplicarlo en un paso controlado antes de desplegar.
 - La divergencia de ramas puede contener historias de migración distintas; se resuelve en tarea separada antes de promover esquema.

@@ -1,6 +1,4 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -20,8 +18,7 @@ public class UpdateMyTenantCommandTests
         var handler = new UpdateMyTenantCommandHandler(
             fixture.Context,
             fixture.CurrentUser,
-            fixture.TenantService,
-            fixture.Mapper);
+            fixture.TenantService);
 
         var result = await handler.Handle(
             new UpdateMyTenantCommand
@@ -48,8 +45,7 @@ public class UpdateMyTenantCommandTests
         var handler = new UpdateMyTenantCommandHandler(
             fixture.Context,
             fixture.CurrentUser,
-            fixture.TenantService,
-            fixture.Mapper);
+            fixture.TenantService);
 
         var result = await handler.Handle(
             new UpdateMyTenantCommand
@@ -73,8 +69,7 @@ public class UpdateMyTenantCommandTests
         var handler = new UpdateMyTenantCommandHandler(
             fixture.Context,
             fixture.CurrentUser,
-            emptyTenantService,
-            fixture.Mapper);
+            emptyTenantService);
 
         var result = await handler.Handle(
             new UpdateMyTenantCommand
@@ -93,20 +88,17 @@ public class UpdateMyTenantCommandTests
     {
         private TestFixture(
             ApplicationDbContext context,
-            IMapper mapper,
             TestCurrentUserService currentUser,
             TestCurrentTenantService tenantService,
             Tenant tenant)
         {
             Context = context;
-            Mapper = mapper;
             CurrentUser = currentUser;
             TenantService = tenantService;
             Tenant = tenant;
         }
 
         public ApplicationDbContext Context { get; }
-        public IMapper Mapper { get; }
         public TestCurrentUserService CurrentUser { get; }
         public TestCurrentTenantService TenantService { get; }
         public Tenant Tenant { get; }
@@ -127,11 +119,9 @@ public class UpdateMyTenantCommandTests
 
             tenantService.SetTenant(tenant.Id);
 
-            var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>())
-                .CreateMapper();
 
             var currentUser = new TestCurrentUserService(tenant.Id);
-            return new TestFixture(context, mapper, currentUser, tenantService, tenant);
+            return new TestFixture(context, currentUser, tenantService, tenant);
         }
 
         public ValueTask DisposeAsync() => Context.DisposeAsync();

@@ -37,9 +37,15 @@ public class TwoFactorControllerTests
         var response = await CreateController(mediator, Guid.NewGuid())
             .Disable2FA(new Disable2FARequest("000000"), CancellationToken.None);
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(response);
-        var error = JsonSerializer.SerializeToElement(badRequest.Value, JsonSerializerOptions.Web).GetProperty("error");
-        Assert.Equal(Disable2FACommandHandler.InvalidCodeError, error.GetString());
+        // The one error shape: ProblemDetails with a code, and "error" kept for the clients that read it.
+        var badRequest = Assert.IsType<ObjectResult>(response);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+        Assert.Equal(Disable2FACommandHandler.InvalidCodeError, problem.Detail);
+        Assert.Equal("business_rule", problem.Extensions["code"]);
+        Assert.Equal(Disable2FACommandHandler.InvalidCodeError, problem.Extensions["error"]);
+        var json = JsonSerializer.SerializeToElement(problem, JsonSerializerOptions.Web);
+        Assert.Equal(Disable2FACommandHandler.InvalidCodeError, json.GetProperty("error").GetString());
     }
 
     private static TwoFactorController CreateController(IMediator mediator, Guid userId) =>

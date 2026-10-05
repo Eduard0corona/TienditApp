@@ -7,6 +7,7 @@ import type {
   RegisterBusinessRequest,
   RegisterCustomerRequest,
   MyTenantDto,
+  BusinessType,
 } from '../types';
 
 export const authApi = {
@@ -52,4 +53,8 @@ export const authApi = {
 
   switchTenant: (tenantId: string) =>
     api.post<AuthResponse>('/auth/switch-tenant', { tenantId }),
+
+  /** Opens another business with this account, as its owner. */
+  createBusiness: (data: { businessName: string; businessType: BusinessType }) =>
+    api.post<MyTenantDto>('/me/tenants', data),
 };

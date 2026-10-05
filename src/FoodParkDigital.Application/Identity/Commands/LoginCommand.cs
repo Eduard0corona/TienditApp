@@ -63,11 +63,13 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
         if (!user.EmailConfirmed && !user.PhoneNumberConfirmed)
             return Result.Failure<AuthResponse>("Debe confirmar su cuenta por email o SMS antes de iniciar sesión.");
 
-        var signInResult = await _signInService.CheckPasswordSignInAsync(user.Id, request.Password, false);
+        // Wrong passwords count per account (besides the per-IP limit): guessing from many addresses locks the account
+        // for a while. Recovering the password lifts it.
+        var signInResult = await _signInService.CheckPasswordSignInAsync(user.Id, request.Password, lockoutOnFailure: true);
         if (!signInResult.Succeeded)
         {
             if (signInResult.IsLockedOut)
-                return Result.Failure<AuthResponse>("La cuenta está bloqueada. Intente más tarde.");
+                return Result.Failure<AuthResponse>(AccountSecurity.LockedOutMessage);
 
             return Result.Failure<AuthResponse>("Credenciales inválidas.");
         }

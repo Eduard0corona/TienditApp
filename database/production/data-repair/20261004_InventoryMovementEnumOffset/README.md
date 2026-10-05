@@ -37,7 +37,7 @@ Consecuencias:
 
 ## Paso 1. Dimensionar
 
-1. Toma la hora UTC desde la que **todo** lo desplegado incluye la corrección. Sale de `gh run list --workflow deploy-azure-webapp.yml`. `develop` y `master` despliegan la misma app: si después se desplegó una rama sin la corrección, la ventana sigue abierta hasta que se volvió a desplegar con ella.
+1. Toma la hora UTC desde la que **todo** lo desplegado incluye la corrección. Sale de `gh run list --workflow deploy-azure-webapp.yml`. Hasta el 4 de octubre de 2026 `develop` y `master` desplegaban la misma app: si después se desplegó una rama sin la corrección, la ventana sigue abierta hasta que se volvió a desplegar con ella.
 2. En `verify.sql`, asigna esa hora a `@CorreccionDesplegadaUtc` y deja `@TenantId = NULL`.
 3. Ejecuta `sqlcmd -S <servidor> -d <base> <autenticación> -W -s "|" -f o:65001 -i verify.sql`. La consulta 1 lista los tenants con movimientos sospechosos.
 

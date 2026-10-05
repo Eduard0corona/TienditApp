@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -19,12 +17,10 @@ public record GetAllTenantsQuery : IRequest<PaginatedList<TenantDto>>
 public class GetAllTenantsQueryHandler : IRequestHandler<GetAllTenantsQuery, PaginatedList<TenantDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public GetAllTenantsQueryHandler(IApplicationDbContext context, IMapper mapper)
+    public GetAllTenantsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedList<TenantDto>> Handle(GetAllTenantsQuery request, CancellationToken cancellationToken)
@@ -33,7 +29,7 @@ public class GetAllTenantsQueryHandler : IRequestHandler<GetAllTenantsQuery, Pag
             .AsNoTracking()
             .IgnoreQueryFilters()
             .OrderByDescending(t => t.CreatedAt)
-            .ProjectTo<TenantDto>(_mapper.ConfigurationProvider);
+            .Select(TenantMappings.AsDto);
 
         return await PaginatedList<TenantDto>.CreateAsync(
             query, request.PageNumber, request.PageSize, cancellationToken);

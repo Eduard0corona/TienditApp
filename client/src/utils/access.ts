@@ -20,8 +20,10 @@ export interface Access {
   cash: boolean;
   /** Order list and detail (GET): every employee role + ManageOrders. */
   orders: boolean;
-  /** Create orders, register payments, change status and cancel: counter roles + ManageOrders. */
+  /** Create orders, change status and cancel: counter roles + ManageOrders. */
   sell: boolean;
+  /** Register payments (in Vender, Pedidos and Mesas): counter roles + ManageOrders + ChargeOrders. A waiter leaves them for the cashier. */
+  charge: boolean;
   /** KitchenController: every employee role + ManageServiceBoard + Kitchen module. */
   kitchen: boolean;
   /** TablesController and open tabs: counter roles + ManageOrders + Food module. */
@@ -33,6 +35,7 @@ export interface Access {
   /** WhatsAppChatController: counter roles + ManageWhatsApp. */
   chat: boolean;
   whatsAppSettings: boolean;
+  /** AiAgentsController: counter roles + ManageAiAgent. */
   aiAgent: boolean;
   businessSettings: boolean;
   /** Refund and void paid sales: owners, admins and staff with ProcessRefunds. */
@@ -41,6 +44,8 @@ export interface Access {
   campaigns: boolean;
   /** Platform console (businesses, plans and billing): the platform admin only. */
   platform: boolean;
+  /** A customer account's own orders in every business (GET /me/orders). */
+  myOrders: boolean;
 }
 
 export type AccessArea = Exclude<keyof Access, 'isAdmin'>;
@@ -81,6 +86,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     cash: commerce && isCounterRole && can('ManageCash'),
     orders: commerce && isEmployeeRole && can('ManageOrders'),
     sell: commerce && isCounterRole && can('ManageOrders'),
+    charge: commerce && isCounterRole && can('ManageOrders') && can('ChargeOrders'),
     kitchen: hasCapability(capabilities, TenantCapability.Kitchen) && isEmployeeRole && can('ManageServiceBoard'),
     tables: hasCapability(capabilities, TenantCapability.Food) && isCounterRole && can('ManageOrders'),
     serviceBoard: hasCapability(capabilities, TenantCapability.Service) && isEmployeeRole && can('ManageServiceBoard'),
@@ -89,11 +95,12 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     employees: commerce && isAdmin,
     chat: commerce && isCounterRole && can('ManageWhatsApp'),
     whatsAppSettings: commerce && isAdmin,
-    aiAgent: commerce && isAdmin,
+    aiAgent: commerce && isCounterRole && can('ManageAiAgent'),
     businessSettings: isAdmin,
     refunds: commerce && isCounterRole && can('ManageOrders') && can('ProcessRefunds'),
     campaigns: commerce && isCounterRole && can('ManageCampaigns'),
     platform: role === 'superadmin',
+    myOrders: role === 'customer',
   };
 }
 
@@ -113,5 +120,6 @@ export function getLandingPath(user: UserProfileDto | null, capabilities: number
   if (access.appointments) return '/appointments';
   if (access.inventory) return '/inventory';
   if (access.dashboard) return '/dashboard';
+  if (access.myOrders) return '/mis-pedidos';
   return '/profile';
 }

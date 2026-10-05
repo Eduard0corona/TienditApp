@@ -2,9 +2,11 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
+using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +14,9 @@ namespace FoodParkDigital.Application.Orders.EventHandlers;
 
 /// <summary>
 /// WhatsApp templates that tell the customer about their order, sent by the outbox dispatcher after the
-/// commit. A transient failure (timeout, throttling, provider error) is retried with backoff; a rejected
-/// message or a business without WhatsApp is logged and dropped.
+/// commit, following the business's notification policy (by default no messages for counter sales). A
+/// transient failure (timeout, throttling, provider error) is retried with backoff; a rejected message or a
+/// business without WhatsApp is logged and dropped.
 /// </summary>
 public sealed class OrderCustomerNotifications :
     IOutboxEventHandler<OrderCreatedEvent>,
@@ -39,8 +42,12 @@ public sealed class OrderCustomerNotifications :
 
     public async Task HandleAsync(OrderCreatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
     {
+        // A pending order (online, waiting for the business) is not confirmed yet: the confirmation tells the customer.
+        if (domainEvent.Status == OrderStatus.Pending)
+            return;
+
         var order = await FindOrderAsync(domainEvent.OrderId, includePieces: false, cancellationToken);
-        if (order?.CustomerPhone is null)
+        if (order?.CustomerPhone is null || !await ShouldNotifyAsync(order, cancellationToken))
             return;
 
         await SendAsync(
@@ -59,7 +66,7 @@ public sealed class OrderCustomerNotifications :
             return;
 
         var order = await FindOrderAsync(domainEvent.OrderId, includePieces: true, cancellationToken);
-        if (order?.CustomerPhone is null)
+        if (order?.CustomerPhone is null || !await ShouldNotifyAsync(order, cancellationToken))
             return;
 
         if (order.OrderType == OrderType.Service && !ShouldNotifyServiceChecklist(order, domainEvent.NewStatus))
@@ -77,7 +84,7 @@ public sealed class OrderCustomerNotifications :
     public async Task HandleAsync(OrderCancelledEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
     {
         var order = await FindOrderAsync(domainEvent.OrderId, includePieces: false, cancellationToken);
-        if (order?.CustomerPhone is null)
+        if (order?.CustomerPhone is null || !await ShouldNotifyAsync(order, cancellationToken))
             return;
 
         await SendAsync(
@@ -96,7 +103,8 @@ public sealed class OrderCustomerNotifications :
 
         var order = await FindOrderAsync(domainEvent.OrderId, includePieces: true, cancellationToken);
         var piece = order?.ServicePieces.FirstOrDefault(x => x.Id == domainEvent.PieceId);
-        if (order is null || piece is null || string.IsNullOrWhiteSpace(order.CustomerPhone) || !piece.NotifyCustomer)
+        if (order is null || piece is null || string.IsNullOrWhiteSpace(order.CustomerPhone) || !piece.NotifyCustomer
+            || !await ShouldNotifyAsync(order, cancellationToken))
             return;
 
         var statusLabel = domainEvent.NewStatus == ServiceOrderPieceStatus.InProgress ? "En progreso" : "Cancelado";
@@ -107,6 +115,18 @@ public sealed class OrderCustomerNotifications :
             [order.OrderNumber, $"{piece.ItemName}: {statusLabel}"],
             domainEvent.OrderId,
             cancellationToken);
+    }
+
+    /// <summary>The business's policy for this order (businesses without settings use the default).</summary>
+    private async Task<bool> ShouldNotifyAsync(Order order, CancellationToken cancellationToken)
+    {
+        var policy = await _context.TenantSettings
+            .AsNoTracking()
+            .Where(s => s.TenantId == order.TenantId)
+            .Select(s => (OrderNotificationPolicy?)s.OrderNotificationPolicy)
+            .FirstOrDefaultAsync(cancellationToken) ?? OrderNotificationPolicy.RemoteAndServices;
+
+        return OrderNotificationRules.ShouldNotifyCustomer(policy, order.CreatedByBusiness, order.Channel, order.OrderType);
     }
 
     private Task<Order?> FindOrderAsync(Guid orderId, bool includePieces, CancellationToken cancellationToken)

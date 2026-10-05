@@ -85,7 +85,7 @@ public class Product : AuditableEntity, ITenantScoped
 
     // Pricing
     public decimal PriceAmount { get; private set; }
-    public string PriceCurrency { get; private set; } = "USD";
+    public string PriceCurrency { get; private set; } = "MXN";
     public decimal? CompareAtPrice { get; private set; }
     /// <summary>IVA rate in percent; null uses the business default rate.</summary>
     public decimal? TaxRate { get; private set; }
@@ -293,6 +293,14 @@ public class Product : AuditableEntity, ITenantScoped
 
     /// <summary>IVA of the product when sold by a business whose default rate is <paramref name="defaultTaxRate"/>.</summary>
     public VatRate GetVatRate(decimal defaultTaxRate) => VatRate.ForProduct(TaxRate, IsTaxExempt, defaultTaxRate);
+
+    /// <summary>Moves the product to another category of the business (for example, before archiving its own).</summary>
+    public void MoveToCategory(Guid categoryId)
+    {
+        if (categoryId == Guid.Empty)
+            throw new DomainException("La categoría es obligatoria.");
+        CategoryId = categoryId;
+    }
 
     public void SetImage(string? imageUrl) => ImageUrl = imageUrl;
 

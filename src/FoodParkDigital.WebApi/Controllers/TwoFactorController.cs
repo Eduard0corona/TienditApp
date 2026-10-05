@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -27,11 +28,11 @@ public class TwoFactorController : ControllerBase
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new { error = "Usuario no autenticado." });
+            return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
 
         var result = await _mediator.Send(new Enable2FACommand(userId));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -42,11 +43,11 @@ public class TwoFactorController : ControllerBase
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new { error = "Usuario no autenticado." });
+            return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
 
         var result = await _mediator.Send(new Verify2FACommand(userId, request.Code));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -59,13 +60,13 @@ public class TwoFactorController : ControllerBase
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            return Unauthorized(new { error = "Usuario no autenticado." });
+            return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
 
         var result = await _mediator.Send(
             new Disable2FACommand(userId, request.Code, request.UseRecoveryCode),
             cancellationToken);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(new { message = "Autenticación de dos factores deshabilitada exitosamente." });
     }
@@ -79,7 +80,7 @@ public class TwoFactorController : ControllerBase
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
-            return Unauthorized(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status401Unauthorized, result.Error);
 
         // Igual que /auth/login: el refresh token solo viaja en la cookie HttpOnly.
         if (result.Value.RefreshToken is not null)

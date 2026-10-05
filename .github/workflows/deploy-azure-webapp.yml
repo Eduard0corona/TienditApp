@@ -1,7 +1,7 @@
 name: Deploy WebApp (API + SPA)
 
-# Only master reaches production, so an older branch (develop included) cannot overwrite the published
-# version. A manual run started from any other branch is skipped.
+# Only master reaches production, so an older branch cannot overwrite the published version. A manual run
+# started from any other branch is skipped.
 on:
   push:
     branches:
@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  # Only used by azure/login when the OIDC variables exist (see the deploy steps).
+  id-token: write
 
 # Never run two deployments of the same app at the same time.
 concurrency:
@@ -68,9 +70,56 @@ jobs:
           cd "${{ github.workspace }}/publish"
           zip -r "${{ github.workspace }}/webapp.zip" .
 
-      - name: Deploy to Azure Web App
+      # OIDC (recommended, see docs/development/deploy-azure.md): with the AZURE_CLIENT_ID, AZURE_TENANT_ID and
+      # AZURE_SUBSCRIPTION_ID repository variables, the deployment signs in with a federated credential and no
+      # long-lived secret. Without them it keeps using the publish profile, as before.
+      - name: Sign in to Azure (OIDC)
+        if: vars.AZURE_CLIENT_ID != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Web App (OIDC)
+        id: deploy-oidc
+        if: vars.AZURE_CLIENT_ID != ''
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          package: ${{ github.workspace }}/webapp.zip
+
+      - name: Deploy to Azure Web App (publish profile)
+        id: deploy-profile
+        if: vars.AZURE_CLIENT_ID == ''
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ${{ github.workspace }}/webapp.zip
+
+      # The deployment is done when the app answers with this version: ready (database reachable) and serving the
+      # index.html just built (its script names carry the build's hash). App Service restarts take a few minutes.
+      # SMOKE_TEST_URL (a repository variable) overrides the azurewebsites.net address, for a custom domain.
+      - name: Smoke test
+        env:
+          APP_URL: ${{ vars.SMOKE_TEST_URL || steps.deploy-oidc.outputs.webapp-url || steps.deploy-profile.outputs.webapp-url }}
+        run: |
+          url="${APP_URL%/}"
+          if [ -z "$url" ]; then
+            echo "::warning::The deployment gave no URL and SMOKE_TEST_URL is not set: smoke test skipped."
+            exit 0
+          fi
+          script=$(grep -oE '/assets/index-[^"]+\.js' "${{ github.workspace }}/publish/wwwroot/index.html" | head -n 1)
+          for attempt in $(seq 1 30); do
+            ready=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url/health/ready" || true)
+            if curl -s --max-time 20 "$url/" | grep -qF "$script"; then served=yes; else served=no; fi
+            if [ "$ready" = "200" ] && [ "$served" = "yes" ]; then
+              echo "$url answers with this version: ready and serving $script."
+              exit 0
+            fi
+            echo "Attempt $attempt: /health/ready=$ready, new client served=$served."
+            sleep 20
+          done
+          echo "::error::$url did not answer with this version within 10 minutes (readiness or index.html). Check the App Service log stream."
+          exit 1

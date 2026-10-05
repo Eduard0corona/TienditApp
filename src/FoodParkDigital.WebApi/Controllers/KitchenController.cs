@@ -5,6 +5,7 @@ using FoodParkDigital.Domain.Orders.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -47,7 +48,7 @@ public class KitchenController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateKitchenTicketStatusCommand(id, status));
         if (result.IsFailure)
-            return Conflict(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
     }
 
@@ -60,7 +61,7 @@ public class KitchenController : ControllerBase
             NewStatus = OrderStatus.InPreparation
         });
         if (result.IsFailure)
-            return Conflict(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
     }
 
@@ -73,7 +74,7 @@ public class KitchenController : ControllerBase
             NewStatus = OrderStatus.Ready
         });
         if (result.IsFailure)
-            return Conflict(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
     }
 }

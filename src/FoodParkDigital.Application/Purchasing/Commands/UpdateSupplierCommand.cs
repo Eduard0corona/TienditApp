@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -44,16 +43,13 @@ public class UpdateSupplierCommandHandler : IRequestHandler<UpdateSupplierComman
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public UpdateSupplierCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<SupplierDto>> Handle(UpdateSupplierCommand request, CancellationToken cancellationToken)
@@ -63,7 +59,7 @@ public class UpdateSupplierCommandHandler : IRequestHandler<UpdateSupplierComman
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<SupplierDto>("El tenant no tiene habilitado el modulo de inventario/compras.");
+            return Result.Failure<SupplierDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
 
         var entity = await _context.Suppliers
             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
@@ -79,6 +75,6 @@ public class UpdateSupplierCommandHandler : IRequestHandler<UpdateSupplierComman
             notes: request.Notes);
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<SupplierDto>(entity));
+        return Result.Success(entity.ToDto());
     }
 }

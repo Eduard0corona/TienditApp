@@ -237,7 +237,7 @@ export default function Dashboard() {
               {loading ? (
                 <p className="text-muted mb-0">Cargando…</p>
               ) : (metrics?.topSellingItems.length ?? 0) === 0 ? (
-                <p className="text-muted mb-0">Aún no hay ventas entregadas en el periodo.</p>
+                <p className="text-muted mb-0">Aún no hay ventas cobradas en el periodo.</p>
               ) : (
                 <div className="table-responsive">
                   <table className="table table-sm mb-0">

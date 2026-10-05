@@ -18,6 +18,7 @@ using FoodParkDigital.Domain.WhatsApp.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace FoodParkDigital.Application.Common.Interfaces;
 
@@ -32,6 +33,7 @@ public interface IApplicationDbContext
     DbSet<Category> Categories { get; }
     DbSet<Product> Products { get; }
     DbSet<Customer> Customers { get; }
+    DbSet<CustomerAddress> CustomerAddresses { get; }
     DbSet<CustomerProfile> CustomerProfiles { get; }
     DbSet<TemporaryCustomer> TemporaryCustomers { get; }
     DbSet<Order> Orders { get; }
@@ -76,4 +78,10 @@ public interface IApplicationDbContext
     ChangeTracker ChangeTracker { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Publishes the realtime events of what was saved inside <paramref name="transaction"/>, once it committed. Inside a
+    /// transaction they wait, so a screen never reloads before the data is there; a rolled-back one never publishes them.
+    /// </summary>
+    Task PublishCommittedEventsAsync(IDbContextTransaction transaction, CancellationToken cancellationToken);
 }

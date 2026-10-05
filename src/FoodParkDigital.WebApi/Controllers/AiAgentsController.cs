@@ -4,12 +4,14 @@ using FoodParkDigital.Application.AiAgents.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/ai-agents")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+// Staff reach it only with the ManageAiAgent permission (checked by the middleware and by each request).
+[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
 public class AiAgentsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -42,7 +44,7 @@ public class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
@@ -51,11 +53,11 @@ public class AiAgentsController : ControllerBase
     public async Task<ActionResult<AiAgentDto>> Update(Guid id, [FromBody] UpdateAiAgentCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -70,7 +72,7 @@ public class AiAgentsController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }
@@ -80,7 +82,7 @@ public class AiAgentsController : ControllerBase
     {
         var result = await _mediator.Send(new DeleteAiAgentCommand(id));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }

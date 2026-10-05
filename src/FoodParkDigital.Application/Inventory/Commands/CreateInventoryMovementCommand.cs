@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -27,7 +26,7 @@ public record CreateInventoryMovementLineRequest
 
 [RequiresPermission(TenantPermission.ManageInventory)]
 [RequiresCapability(TenantCapability.Inventory)]
-public record CreateInventoryMovementCommand : IRequest<Result<InventoryMovementDto>>
+public record CreateInventoryMovementCommand : IRequest<Result<InventoryMovementDto>>, ITransactionalRequest
 {
     public InventoryMovementType MovementType { get; init; }
     public InventoryMovementReason MovementReason { get; init; }
@@ -88,18 +87,18 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
+    private readonly IFolioGenerator _folios;
 
     public CreateInventoryMovementCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IMapper mapper)
+        IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
-        _mapper = mapper;
+        _folios = folios;
     }
 
     public async Task<Result<InventoryMovementDto>> Handle(CreateInventoryMovementCommand request, CancellationToken cancellationToken)
@@ -109,7 +108,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryMovementDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<InventoryMovementDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var externalReference = string.IsNullOrWhiteSpace(request.ExternalReference)
             ? null
@@ -121,7 +120,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
         }
 
         var movementDate = request.MovementDate ?? DateTimeOffset.UtcNow;
-        var movementNumber = await GenerateMovementNumberAsync(movementDate, cancellationToken);
+        var movementNumber = await _folios.NextInventoryMovementNumberAsync(_tenantService.TenantId, movementDate, cancellationToken);
 
         var movement = new InventoryMovement(
             tenantId: _tenantService.TenantId,
@@ -147,10 +146,10 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             .ToDictionaryAsync(x => x.Id, cancellationToken);
 
         if (supplies.Count != supplyIds.Count)
-            return Result.Failure<InventoryMovementDto>("Uno o mas insumos no existen o estan inactivos.");
+            return Result.Failure<InventoryMovementDto>("Uno o más insumos no existen o están inactivos.");
 
         if (locations.Count != locationIds.Count)
-            return Result.Failure<InventoryMovementDto>("Una o mas ubicaciones no existen o estan inactivas.");
+            return Result.Failure<InventoryMovementDto>("Una o más ubicaciones no existen o están inactivas.");
 
         var existingStocks = await _context.InventoryStocks
             .Where(x => supplyIds.Contains(x.SupplyItemId) && locationIds.Contains(x.InventoryLocationId))
@@ -222,7 +221,7 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
         if (movement is null)
             throw new EntityNotFoundException("InventoryMovement", movementId);
 
-        var dto = _mapper.Map<InventoryMovementDto>(movement);
+        var dto = movement.ToDto();
         dto.Lines = await (
             from line in _context.InventoryMovementLines.AsNoTracking()
             join supply in _context.SupplyItems.AsNoTracking() on line.SupplyItemId equals supply.Id
@@ -286,17 +285,5 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             return supply.LastCost;
 
         return supply.DefaultCost > 0 ? supply.DefaultCost : null;
-    }
-
-    private async Task<string> GenerateMovementNumberAsync(DateTimeOffset movementDate, CancellationToken cancellationToken)
-    {
-        var date = movementDate.UtcDateTime.Date;
-        var prefix = $"INV-{date:yyyyMMdd}";
-
-        var todayCount = await _context.InventoryMovements
-            .CountAsync(x => x.MovementDate >= date && x.MovementDate < date.AddDays(1), cancellationToken);
-
-        var sequence = todayCount + 1;
-        return $"{prefix}-{sequence:0000}";
     }
 }

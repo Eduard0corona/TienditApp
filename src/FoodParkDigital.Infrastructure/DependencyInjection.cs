@@ -70,6 +70,10 @@ public static class DependencyInjection
             options.ConfigureWarnings(w =>
             {
                 w.Ignore(RelationalEventId.PendingModelChangesWarning);
+                // Logged on every save inside a transaction when the connection string enables MARS. Handled: a
+                // transactional request never goes on after a failed save, it fails or discards its whole transaction
+                // (data-consistency-and-domain-events.md).
+                w.Ignore(SqlServerEventId.SavepointsDisabledBecauseOfMARS);
                 if (!logSensitiveData)
                     w.Ignore(DatabaseErrorEvents);
             });
@@ -80,7 +84,7 @@ public static class DependencyInjection
         // Identity
         services.AddIdentity<ApplicationUser, ApplicationRole>(ConfigureIdentityOptions)
         .AddEntityFrameworkStores<ApplicationDbContext>()
-        .AddDefaultTokenProviders();
+        .AddTienditAppIdentityDefaults();
 
         // JWT
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()!;
@@ -157,6 +161,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantAccessService, TenantAccessService>();
         services.AddScoped<IOrderInventoryService, OrderInventoryService>();
         services.AddScoped<IOrderCashService, OrderCashService>();
+        services.AddScoped<IFolioGenerator, FolioGenerator>();
         services.AddScoped<IAiAgentAutoReplyService, AiAgentAutoReplyService>();
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddScoped<ICustomerLookupService, CustomerLookupService>();
@@ -206,5 +211,13 @@ public static class DependencyInjection
         options.Password.RequireUppercase = true;
         options.Password.RequireLowercase = true;
         options.User.RequireUniqueEmail = true;
+        // Per account, besides the per-IP limit of the auth endpoints: guessing a password or an SMS code from many
+        // addresses locks the account for a while. Recovering the password unlocks it.
+        options.Lockout.AllowedForNewUsers = true;
+        options.Lockout.MaxFailedAccessAttempts = MaxFailedAccessAttempts;
+        options.Lockout.DefaultLockoutTimeSpan = LockoutDuration;
     }
+
+    public const int MaxFailedAccessAttempts = 5;
+    public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 }

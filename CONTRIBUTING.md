@@ -3,7 +3,7 @@
 ## Antes de cambiar
 
 1. Lee el `AGENTS.md` raíz y el anidado que aplique.
-2. Parte de la rama objetivo; hoy `develop` es la integración activa y `master` la estable.
+2. Parte de `master`, la única rama permanente; cada merge a ella despliega a producción.
 3. Conserva cambios locales ajenos y revisa `git status` antes de editar.
 4. Clasifica la tarea como bug, feature, refactor, migración o deuda.
 5. Identifica capas, contexto, contratos, tenant, autorización y capabilities afectados.

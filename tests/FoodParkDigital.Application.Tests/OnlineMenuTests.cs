@@ -194,6 +194,7 @@ public class OnlineMenuTests
             phones,
             new HostingEnvironment { EnvironmentName = Environments.Production },
             NullLogger<CustomerLookupService>.Instance);
-        return new PlacePublicOrderCommandHandler(fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock);
+        return new PlacePublicOrderCommandHandler(
+            fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance, new FolioGenerator(fixture.Context));
     }
 }

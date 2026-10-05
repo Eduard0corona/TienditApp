@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
 import { kitchenApi } from '../../api/kitchenApi';
 import { getApiErrorMessage } from '../../api/errors';
+import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { KitchenTicketStatus, OrderStatus } from '../../types';
 import type { KitchenOrderDto, KitchenTicketDto, OrderItemDto } from '../../types';
@@ -77,6 +78,13 @@ export default function KitchenBoard() {
   const [now, setNow] = useState(() => Date.now());
   const latestRequestRef = useRef(0);
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onKitchenTicketsChanged, onConnected } = useOrderSignalR();
+  const chime = useArrivalChime('tienditapp:kitchen-sound');
+  // Orders and new rounds already on the board; null until the first load (which must not ring).
+  const knownTicketIdsRef = useRef<Set<string> | null>(null);
+  const playChimeRef = useRef(chime.play);
+  useEffect(() => {
+    playChimeRef.current = chime.play;
+  }, [chime.play]);
 
   const loadOrders = useCallback(async () => {
     const requestId = ++latestRequestRef.current;
@@ -85,6 +93,13 @@ export default function KitchenBoard() {
       const [{ data }, { data: rounds }] = await Promise.all([kitchenApi.getOrders(), kitchenApi.getTickets()]);
       // A slower, older reload must not overwrite a newer one.
       if (requestId !== latestRequestRef.current) return;
+      const arrivals = new Set([
+        ...data.map((order) => order.id),
+        ...rounds.filter((ticket) => ticket.status === KitchenTicketStatus.Pending).map((ticket) => ticket.id),
+      ]);
+      const known = knownTicketIdsRef.current;
+      if (known && [...arrivals].some((id) => !known.has(id))) playChimeRef.current();
+      knownTicketIdsRef.current = arrivals;
       setOrders(data);
       setTickets(rounds);
       setLoadError('');
@@ -173,7 +188,17 @@ export default function KitchenBoard() {
             ? `${pendingCount} ${pendingCount === 1 ? 'comanda' : 'comandas'} · actualizado a las ${lastUpdated.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
             : 'Cargando comandas…'}
         </div>
-        <div className="d-flex gap-2">
+        <div className="d-flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={`btn btn-sm ${chime.enabled ? 'btn-primary' : 'btn-light'}`}
+            onClick={chime.toggle}
+            aria-pressed={chime.enabled}
+            title="Suena cuando llega una comanda nueva"
+          >
+            <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
+            {chime.enabled ? 'Sonido activado' : 'Activar sonido'}
+          </button>
           <button type="button" className="btn btn-sm btn-light" onClick={() => void loadOrders()}>
             <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
           </button>
@@ -183,6 +208,12 @@ export default function KitchenBoard() {
           </button>
         </div>
       </div>
+
+      {chime.needsTouch && (
+        <div className="alert alert-info py-2 small" role="status">
+          Toca cualquier parte de la pantalla para que el sonido de comandas nuevas pueda sonar.
+        </div>
+      )}
 
       {actionError && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">

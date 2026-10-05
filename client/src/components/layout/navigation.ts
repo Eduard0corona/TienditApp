@@ -37,6 +37,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: 'Agenda', path: '/appointments', icon: 'ri-calendar-schedule-line', area: 'appointments', keywords: 'citas reservaciones' },
       { label: 'Mensajes', path: '/whatsapp/chat', icon: 'ri-chat-3-line', area: 'chat', keywords: 'whatsapp chat conversaciones' },
       { label: 'Caja', path: '/cash', icon: 'ri-safe-2-line', area: 'cash', keywords: 'corte turno efectivo gastos retiros' },
+      { label: 'Mis pedidos', path: '/mis-pedidos', icon: 'ri-shopping-bag-3-line', area: 'myOrders', keywords: 'compras historial pedir otra vez' },
     ],
   },
   {

@@ -5,6 +5,12 @@ namespace FoodParkDigital.Domain.Tenants;
 
 public static class TenantPermissionCatalog
 {
+    /// <summary>
+    /// Stored when a person was saved without any permission on purpose ("sin acceso"). A null value still means the
+    /// defaults of their role.
+    /// </summary>
+    public const string NoAccessValue = "None";
+
     private static readonly HashSet<string> ValidCodes = Enum.GetNames<TenantPermission>()
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -36,6 +42,9 @@ public static class TenantPermissionCatalog
         UserRole userRole,
         TenantUserRole tenantRole)
     {
+        if (string.Equals(explicitCodes?.Trim(), NoAccessValue, StringComparison.OrdinalIgnoreCase))
+            return [];
+
         var normalized = NormalizeCodes(
             string.IsNullOrWhiteSpace(explicitCodes)
                 ? []
@@ -47,15 +56,27 @@ public static class TenantPermissionCatalog
         return GetDefaultCodes(userRole, tenantRole);
     }
 
+    /// <summary>
+    /// The role a person has inside one business. The membership decides it: owners and admins of the business
+    /// administer it; anyone else is staff there (kitchen staff if their account is a kitchen one), even if they
+    /// own another business. Only the platform admin keeps their role everywhere.
+    /// </summary>
+    public static UserRole EffectiveRole(UserRole userRole, TenantUserRole tenantRole) => userRole switch
+    {
+        UserRole.SuperAdmin => UserRole.SuperAdmin,
+        UserRole.Customer => UserRole.Customer,
+        _ when tenantRole is TenantUserRole.Owner or TenantUserRole.Admin => UserRole.TenantAdmin,
+        UserRole.Kitchen => UserRole.Kitchen,
+        _ => UserRole.Staff
+    };
+
     public static IReadOnlyCollection<string> GetDefaultCodes(UserRole userRole, TenantUserRole tenantRole)
     {
-        if (userRole is UserRole.SuperAdmin or UserRole.TenantAdmin
-            || tenantRole is TenantUserRole.Owner or TenantUserRole.Admin)
-        {
+        var effectiveRole = EffectiveRole(userRole, tenantRole);
+        if (effectiveRole is UserRole.SuperAdmin or UserRole.TenantAdmin)
             return GetAllCodes();
-        }
 
-        if (userRole == UserRole.Kitchen)
+        if (effectiveRole == UserRole.Kitchen)
         {
             return
             [
@@ -68,6 +89,7 @@ public static class TenantPermissionCatalog
         [
             nameof(TenantPermission.ManageCatalog),
             nameof(TenantPermission.ManageOrders),
+            nameof(TenantPermission.ChargeOrders),
             nameof(TenantPermission.ManageServiceBoard),
             nameof(TenantPermission.ManageInventory),
             nameof(TenantPermission.ManageCash),
@@ -83,4 +105,7 @@ public static class TenantPermissionCatalog
         var normalized = NormalizeCodes(codes);
         return normalized.Count == 0 ? null : string.Join(',', normalized);
     }
+
+    /// <summary>What was chosen, where choosing nothing is "sin acceso" rather than the role's defaults.</summary>
+    public static string ToExplicitStoredValue(IEnumerable<string> codes) => ToStoredValue(codes) ?? NoAccessValue;
 }

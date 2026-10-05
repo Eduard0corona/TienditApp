@@ -9,6 +9,10 @@ export interface ChargePayment {
   amount: number;
   reference?: string;
   evidenceUrl?: string;
+  /** On top of the amount, for the team (kept with the payment, never part of the sale). */
+  tip?: number;
+  /** Cash handed over for this payment (cash only); the change is the rest. */
+  cashReceived?: number;
 }
 
 export interface ChargeResult {
@@ -17,7 +21,18 @@ export interface ChargeResult {
   change: number;
   /** Cash the customer handed over, to print on the ticket. */
   cashReceived: number;
+  /** Tip given with the charge (0 without one). */
+  tip: number;
 }
+
+type TipChoice = 'none' | 10 | 15 | 'other';
+
+const TIP_CHOICES: Array<{ value: TipChoice; label: string }> = [
+  { value: 'none', label: 'Sin propina' },
+  { value: 10, label: '10 %' },
+  { value: 15, label: '15 %' },
+  { value: 'other', label: 'Otra' },
+];
 
 interface ChargePanelProps {
   /** What has to be collected now: the sale total or an order's balance. */
@@ -31,6 +46,8 @@ interface ChargePanelProps {
   onCancel: () => void;
   /** Uploads a transfer receipt; without it the panel does not offer one. */
   uploadEvidence?: (file: File) => Promise<{ url: string; fileName: string }>;
+  /** Offers a tip on top of what is owed (the counter, the tables and the orders). */
+  allowTip?: boolean;
 }
 
 const METHODS: Array<{ value: OrderPaymentMethod; icon: string }> = [
@@ -68,6 +85,7 @@ export default function ChargePanel({
   onSubmit,
   onCancel,
   uploadEvidence,
+  allowTip = true,
 }: ChargePanelProps) {
   const [added, setAdded] = useState<ChargePayment[]>([]);
   const [method, setMethod] = useState<OrderPaymentMethod>(PaymentMethod.Cash);
@@ -77,28 +95,40 @@ export default function ChargePanel({
   const [evidence, setEvidence] = useState<{ url: string; fileName: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [tipChoice, setTipChoice] = useState<TipChoice>('none');
+  const [tipInput, setTipInput] = useState('');
 
   const dueCents = toCents(amountDue);
   const addedCents = added.reduce((sum, payment) => sum + toCents(payment.amount), 0);
   const remainingCents = Math.max(0, dueCents - addedCents);
   const isCash = method === PaymentMethod.Cash;
 
-  // Cash: what was handed over covers the remaining amount and the difference is change. Left empty, the
-  // customer paid the exact amount (one tap less for the most common sale).
+  // The tip goes on top of what is owed, with the last payment of the charge.
+  const tipCents = !allowTip || tipChoice === 'none'
+    ? 0
+    : tipChoice === 'other'
+      ? Math.max(0, toCents(parseMoneyInput(tipInput) ?? 0))
+      : Math.round((dueCents * tipChoice) / 100);
+  const tipIsValid = tipChoice !== 'other' || tipInput.trim() === '' || parseMoneyInput(tipInput) !== null;
+
+  // Cash: what was handed over covers the remaining amount (and the tip) and the difference is change. Left empty,
+  // the customer paid the exact amount (one tap less for the most common sale).
   const cashTyped = cashReceived.trim() !== '';
-  const receivedCents = cashTyped ? toCents(parseMoneyInput(cashReceived) ?? 0) : remainingCents;
-  const cashAppliedCents = Math.min(receivedCents, remainingCents);
-  const changeCents = Math.max(0, receivedCents - remainingCents);
+  const receivedCents = cashTyped ? toCents(parseMoneyInput(cashReceived) ?? 0) : remainingCents + tipCents;
+  const cashAppliedCents = Math.min(Math.max(0, receivedCents - tipCents), remainingCents);
+  const changeCents = Math.max(0, receivedCents - remainingCents - tipCents);
   // Card, transfer and others: the amount typed, never above what is owed (there is no change).
   const typedCents = amountInput.trim() === '' ? remainingCents : toCents(parseMoneyInput(amountInput) ?? -1);
   const currentCents = isCash ? cashAppliedCents : typedCents;
   const currentIsValid = isCash ? true : typedCents >= 0 && typedCents <= remainingCents;
   const coveredCents = addedCents + (currentIsValid ? currentCents : 0);
   const missingCents = Math.max(0, dueCents - coveredCents);
-  const canSubmit = !submitting && !uploading && currentIsValid
+  // More tip than bill is a typing mistake (the server refuses it too).
+  const tipFits = tipCents <= dueCents;
+  const canSubmit = !submitting && !uploading && currentIsValid && tipIsValid && tipFits
     && (allowPartial ? coveredCents > 0 : missingCents === 0);
   const canAddAnother = currentIsValid && currentCents > 0 && currentCents < remainingCents;
-  const suggestions = useMemo(() => getCashSuggestions(remainingCents), [remainingCents]);
+  const suggestions = useMemo(() => getCashSuggestions(remainingCents + tipCents), [remainingCents, tipCents]);
 
   const resetCurrent = () => {
     setCashReceived('');
@@ -108,13 +138,17 @@ export default function ChargePanel({
     setLocalError('');
   };
 
-  const buildCurrent = (): ChargePayment | null => {
+  const buildCurrent = (withTip = false): ChargePayment | null => {
     if (!currentIsValid || currentCents <= 0) return null;
+    const tip = withTip ? tipCents : 0;
     return {
       method,
       amount: currentCents / 100,
       reference: reference.trim() || undefined,
       evidenceUrl: evidence?.url,
+      tip: tip > 0 ? tip / 100 : undefined,
+      // What was handed over for this payment: typed, or exactly the amount plus the tip.
+      cashReceived: isCash ? (cashTyped ? receivedCents : currentCents + tip) / 100 : undefined,
     };
   };
 
@@ -130,15 +164,18 @@ export default function ChargePanel({
   const submit = () => {
     if (!canSubmit) {
       if (!currentIsValid) setLocalError('El monto no puede ser mayor a lo que falta por cobrar.');
+      else if (!tipIsValid) setLocalError('Escribe una propina válida, por ejemplo 20 o 15.50.');
+      else if (!tipFits) setLocalError('La propina no puede ser mayor que el total de la cuenta.');
       else if (missingCents > 0) setLocalError(`Faltan ${formatMoney(missingCents / 100)} por cobrar.`);
       return;
     }
-    const current = buildCurrent();
+    const current = buildCurrent(true);
     const payments = current ? [...added, current] : added;
     onSubmit({
       payments,
       change: isCash ? changeCents / 100 : 0,
       cashReceived: isCash ? receivedCents / 100 : 0,
+      tip: current?.tip ?? 0,
     });
   };
 
@@ -227,7 +264,7 @@ export default function ChargePanel({
             inputMode="decimal"
             autoComplete="off"
             autoFocus
-            placeholder={formatMoney(remainingCents / 100)}
+            placeholder={formatMoney((remainingCents + tipCents) / 100)}
             value={cashReceived}
             onChange={(event) => setCashReceived(event.target.value)}
             disabled={submitting}
@@ -236,7 +273,7 @@ export default function ChargePanel({
             <button
               type="button"
               className="btn btn-light btn-touch"
-              onClick={() => setCashReceived((remainingCents / 100).toFixed(2))}
+              onClick={() => setCashReceived(((remainingCents + tipCents) / 100).toFixed(2))}
               disabled={submitting || remainingCents === 0}
             >
               Exacto
@@ -258,7 +295,7 @@ export default function ChargePanel({
           )}
           {cashTyped && receivedCents > 0 && (
             <div className={`charge-change mt-3 ${changeCents > 0 ? 'has-change' : ''}`} aria-live="polite">
-              {receivedCents >= remainingCents ? (
+              {receivedCents >= remainingCents + tipCents ? (
                 <>
                   <span>Cambio</span>
                   <strong className="ta-money">{formatMoney(changeCents / 100)}</strong>
@@ -266,7 +303,7 @@ export default function ChargePanel({
               ) : (
                 <>
                   <span>Faltan</span>
-                  <strong className="ta-money text-danger">{formatMoney((remainingCents - receivedCents) / 100)}</strong>
+                  <strong className="ta-money text-danger">{formatMoney((remainingCents + tipCents - receivedCents) / 100)}</strong>
                 </>
               )}
             </div>
@@ -322,6 +359,48 @@ export default function ChargePanel({
         </div>
       )}
 
+      {allowTip && (
+        <fieldset className="charge-tip mt-3">
+          <legend className="form-label fw-semibold fs-6 mb-1">Propina</legend>
+          <div className="d-flex flex-wrap gap-2" role="radiogroup" aria-label="Propina">
+            {TIP_CHOICES.map((choice) => (
+              <button
+                key={String(choice.value)}
+                type="button"
+                role="radio"
+                aria-checked={tipChoice === choice.value}
+                className={`btn btn-sm ${tipChoice === choice.value ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => {
+                  setTipChoice(choice.value);
+                  setLocalError('');
+                }}
+                disabled={submitting}
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+          {tipChoice === 'other' && (
+            <input
+              className={`form-control mt-2 ta-money ${tipIsValid ? '' : 'is-invalid'}`}
+              inputMode="decimal"
+              autoComplete="off"
+              aria-label="Monto de la propina"
+              placeholder="0.00"
+              value={tipInput}
+              onChange={(event) => setTipInput(event.target.value)}
+              disabled={submitting}
+            />
+          )}
+          {tipCents > 0 && (
+            <div className="small text-muted mt-1">
+              Propina <span className="ta-money">{formatMoney(tipCents / 100)}</span> · total con propina{' '}
+              <span className="ta-money">{formatMoney((remainingCents + tipCents) / 100)}</span>
+            </div>
+          )}
+        </fieldset>
+      )}
+
       {(localError || error) && <div className="alert alert-danger py-2 mt-2 mb-0">{localError || error}</div>}
 
       <div className="charge-actions mt-3">
@@ -334,7 +413,8 @@ export default function ChargePanel({
           </button>
         )}
         <button type="submit" className="btn btn-primary btn-touch btn-touch-lg flex-grow-1" disabled={!canSubmit}>
-          {submitting ? 'Cobrando…' : `${confirmLabel} ${formatMoney((allowPartial ? coveredCents : dueCents) / 100)}`}
+          {/* What the customer pays now: the tip goes on top of the sale. */}
+          {submitting ? 'Cobrando…' : `${confirmLabel} ${formatMoney(((allowPartial ? coveredCents : dueCents) + tipCents) / 100)}`}
         </button>
       </div>
     </form>

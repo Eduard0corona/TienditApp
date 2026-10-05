@@ -422,6 +422,63 @@
             }
           }
         }
+      },
+      "put": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppointmentCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppointmentDto"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/appointments/{id}/status": {
@@ -978,6 +1035,193 @@
         }
       }
     },
+    "/api/v1/auth/forgot-password/sms": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordBySmsCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordBySmsCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordBySmsCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset-password/sms": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithSmsCodeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithSmsCodeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordWithSmsCodeCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/change-unconfirmed-phone": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUnconfirmedPhoneCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUnconfirmedPhoneCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUnconfirmedPhoneCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/invitation": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/accept-invitation": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/profile": {
       "get": {
         "tags": [
@@ -1105,6 +1349,68 @@
         "tags": [
           "Auth"
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/profile/phone": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneChangeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneChangeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPhoneChangeCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/profile/phone/confirm": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneChangeCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneChangeCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPhoneChangeCommand"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -2100,6 +2406,16 @@
         "tags": [
           "Categories"
         ],
+        "parameters": [
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2731,6 +3047,239 @@
         }
       }
     },
+    "/api/v1/customers/{id}/notes": {
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerNotesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerNotesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCustomerNotesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/{id}/addresses": {
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAddressRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAddressRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAddressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/customers/{id}/addresses/{addressId}": {
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "addressId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAddressRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAddressRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerAddressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "addressId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboard/metrics": {
       "get": {
         "tags": [
@@ -3029,6 +3578,84 @@
                   "items": {
                     "$ref": "#/components/schemas/EmployeePermissionOptionDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/role-presets": {
+      "get": {
+        "tags": [
+          "Employees"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmployeeRolePresetDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmployeeRolePresetDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmployeeRolePresetDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/{tenantUserId}/resend-invitation": {
+      "post": {
+        "tags": [
+          "Employees"
+        ],
+        "parameters": [
+          {
+            "name": "tenantUserId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeInvitationDto"
                 }
               }
             }
@@ -4252,6 +4879,101 @@
                   "items": {
                     "$ref": "#/components/schemas/MyTenantDto"
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Me"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBusinessCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBusinessCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBusinessCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyTenantDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyTenantDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyTenantDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/orders": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyOrderDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyOrderDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyOrderDtoPaginatedList"
                 }
               }
             }
@@ -7008,6 +7730,86 @@
         }
       }
     },
+    "/api/v1/purchaseorders/{id}/send": {
+      "post": {
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/purchaseorders/{id}/cancel": {
+      "post": {
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseOrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports/operational-summary": {
       "get": {
         "tags": [
@@ -8344,6 +9146,65 @@
         }
       }
     },
+    "/api/v1/whatsapp/chat/{id}/auto-replies": {
+      "put": {
+        "tags": [
+          "WhatsAppChat"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAutoRepliesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAutoRepliesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAutoRepliesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/whatsapp/webhook": {
       "get": {
         "tags": [
@@ -8392,11 +9253,31 @@
   },
   "components": {
     "schemas": {
+      "AcceptInvitationCommand": {
+        "required": [
+          "newPassword",
+          "token",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "AddCashTransactionRequest": {
         "required": [
           "amount",
           "cashSessionId",
-          "paymentMethod",
           "transactionType"
         ],
         "type": "object",
@@ -8627,6 +9508,16 @@
             "type": "string",
             "nullable": true
           },
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "startAt": {
             "type": "string",
             "format": "date-time"
@@ -8799,8 +9690,7 @@
       },
       "AuthResponse": {
         "required": [
-          "requiresTwoFactor",
-          "user"
+          "requiresTwoFactor"
         ],
         "type": "object",
         "properties": {
@@ -9417,7 +10307,6 @@
           "cashSessionId",
           "id",
           "occurredAt",
-          "paymentMethod",
           "transactionType"
         ],
         "type": "object",
@@ -9523,7 +10412,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ],
         "type": "integer",
         "format": "int32"
@@ -9533,6 +10423,7 @@
           "id",
           "isActive",
           "name",
+          "productCount",
           "sortOrder"
         ],
         "type": "object",
@@ -9554,13 +10445,16 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "productCount": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
       },
       "CategoryTemplateDto": {
         "required": [
-          "businessType",
           "categories",
           "categoryCount",
           "description",
@@ -9627,7 +10521,6 @@
           "productCode",
           "quantity",
           "taxObject",
-          "transfer",
           "unitCode",
           "unitValue"
         ],
@@ -9862,6 +10755,27 @@
         },
         "additionalProperties": false
       },
+      "ChangeUnconfirmedPhoneCommand": {
+        "required": [
+          "password",
+          "phoneNumber",
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "password": {
+            "type": "string"
+          },
+          "phoneNumber": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatMessageDto": {
         "required": [
           "body",
@@ -9963,6 +10877,22 @@
         },
         "additionalProperties": false
       },
+      "ConfirmPhoneChangeCommand": {
+        "required": [
+          "code",
+          "phoneNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ConfirmPhoneCommand": {
         "required": [
           "code",
@@ -10010,6 +10940,11 @@
           "unreadCount": {
             "type": "integer",
             "format": "int32"
+          },
+          "autoRepliesPausedUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10155,7 +11090,6 @@
           "customerName",
           "customerPhone",
           "endAt",
-          "serviceName",
           "startAt"
         ],
         "type": "object",
@@ -10167,10 +11101,21 @@
             "type": "string"
           },
           "serviceName": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
+          },
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           },
           "staffName": {
             "type": "string",
+            "nullable": true
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
             "nullable": true
           },
           "startAt": {
@@ -10240,6 +11185,22 @@
           },
           "isDefault": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateBusinessCommand": {
+        "required": [
+          "businessName",
+          "businessType"
+        ],
+        "type": "object",
+        "properties": {
+          "businessName": {
+            "type": "string"
+          },
+          "businessType": {
+            "$ref": "#/components/schemas/BusinessType"
           }
         },
         "additionalProperties": false
@@ -10317,6 +11278,10 @@
           "email": {
             "type": "string",
             "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10353,8 +11318,6 @@
           "email",
           "firstName",
           "lastName",
-          "password",
-          "permissions",
           "tenantRole"
         ],
         "type": "object",
@@ -10363,7 +11326,8 @@
             "type": "string"
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "firstName": {
             "type": "string"
@@ -10385,7 +11349,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10575,8 +11540,7 @@
           "items",
           "openTab",
           "orderType",
-          "payments",
-          "serviceDetail"
+          "payments"
         ],
         "type": "object",
         "properties": {
@@ -10716,6 +11680,16 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "tip": {
+            "type": "number",
+            "format": "double",
+            "default": 0
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10784,8 +11758,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject",
-          "unit"
+          "taxObject"
         ],
         "type": "object",
         "properties": {
@@ -11163,6 +12136,59 @@
         },
         "additionalProperties": false
       },
+      "CustomerAddressDto": {
+        "required": [
+          "addressLine",
+          "id",
+          "isDefault",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomerAddressRequest": {
+        "required": [
+          "addressLine",
+          "isDefault"
+        ],
+        "type": "object",
+        "properties": {
+          "addressLine": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "CustomerCardAppointmentDto": {
         "required": [
           "id",
@@ -11191,6 +12217,7 @@
       },
       "CustomerCardDto": {
         "required": [
+          "addresses",
           "averageTicket",
           "balance",
           "favoriteProducts",
@@ -11218,6 +12245,16 @@
           "email": {
             "type": "string",
             "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerAddressDto"
+            }
           },
           "ordersCount": {
             "type": "integer",
@@ -11348,6 +12385,7 @@
       },
       "CustomerDto": {
         "required": [
+          "addresses",
           "createdAt",
           "id",
           "isActive",
@@ -11376,6 +12414,16 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerAddressDto"
+            }
           },
           "createdAt": {
             "type": "string",
@@ -11513,6 +12561,7 @@
           "byLocation",
           "byUser",
           "cardTotal",
+          "cashTipsTotal",
           "cashTotal",
           "date",
           "manualExpenseTotal",
@@ -11522,6 +12571,7 @@
           "otherTotal",
           "salesPaymentsCount",
           "salesPaymentsTotal",
+          "tipsTotal",
           "transferTotal",
           "walletTotal"
         ],
@@ -11556,6 +12606,14 @@
             "format": "double"
           },
           "otherTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "tipsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashTipsTotal": {
             "type": "number",
             "format": "double"
           },
@@ -11759,7 +12817,6 @@
           "id",
           "isActive",
           "name",
-          "openTab",
           "sortOrder"
         ],
         "type": "object",
@@ -11867,6 +12924,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "invitationUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11913,6 +12974,22 @@
         },
         "additionalProperties": false
       },
+      "EmployeeInvitationDto": {
+        "required": [
+          "email",
+          "invitationUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "invitationUrl": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "EmployeePermissionOptionDto": {
         "required": [
           "code",
@@ -11929,6 +13006,41 @@
           },
           "description": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EmployeeRolePresetDto": {
+        "required": [
+          "appRole",
+          "description",
+          "key",
+          "name",
+          "permissions",
+          "tenantRole"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "appRole": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "tenantRole": {
+            "$ref": "#/components/schemas/TenantUserRole"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -11962,6 +13074,18 @@
           "days": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ForgotPasswordBySmsCommand": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -12046,6 +13170,14 @@
           }
         },
         "additionalProperties": false
+      },
+      "InsufficientStockPolicy": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32"
       },
       "InventoryAlertItemDto": {
         "required": [
@@ -12707,6 +13839,29 @@
         },
         "additionalProperties": false
       },
+      "InvitationDto": {
+        "required": [
+          "businesses",
+          "email",
+          "firstName"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "businesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "KitchenOrderDto": {
         "required": [
           "createdAt",
@@ -13191,6 +14346,124 @@
         },
         "additionalProperties": false
       },
+      "MyOrderDto": {
+        "required": [
+          "businessName",
+          "businessSlug",
+          "canOrderAgain",
+          "createdAt",
+          "id",
+          "items",
+          "orderNumber",
+          "orderType",
+          "paidAmount",
+          "status",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "businessSlug": {
+            "type": "string"
+          },
+          "canOrderAgain": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "orderType": {
+            "$ref": "#/components/schemas/OrderType"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "paidAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyOrderItemDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "MyOrderDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyOrderDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MyOrderItemDto": {
+        "required": [
+          "productName",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "productName": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "MyTenantDto": {
         "required": [
           "name",
@@ -13443,13 +14716,14 @@
           "pricesIncludeTax",
           "refundedAmount",
           "refunds",
-          "serviceDetail",
           "servicePieces",
           "status",
           "statusHistory",
+          "stockWarnings",
           "subTotal",
           "tax",
           "taxBreakdown",
+          "tipTotal",
           "total"
         ],
         "type": "object",
@@ -13540,6 +14814,10 @@
             "type": "number",
             "format": "double"
           },
+          "tipTotal": {
+            "type": "number",
+            "format": "double"
+          },
           "refundedAmount": {
             "type": "number",
             "format": "double"
@@ -13618,6 +14896,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/KitchenTicketSummaryDto"
+            }
+          },
+          "stockWarnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         },
@@ -13774,12 +15058,23 @@
         },
         "additionalProperties": false
       },
+      "OrderNotificationPolicy": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
       "OrderPaymentDto": {
         "required": [
           "amount",
+          "change",
           "id",
           "method",
-          "paidAt"
+          "paidAt",
+          "tip"
         ],
         "type": "object",
         "properties": {
@@ -13814,6 +15109,19 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "tip": {
+            "type": "number",
+            "format": "double"
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "change": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -14361,7 +15669,6 @@
           "createdAt",
           "name",
           "slug",
-          "subscriptionStatus",
           "tenantId",
           "tenantStatus",
           "usersCount"
@@ -14516,7 +15823,6 @@
           "categoryId",
           "hasDiscount",
           "id",
-          "images",
           "isAvailable",
           "isFeatured",
           "isLowStock",
@@ -14528,8 +15834,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject",
-          "unit"
+          "taxObject"
         ],
         "type": "object",
         "properties": {
@@ -15027,8 +16332,7 @@
           "isTaxExempt",
           "name",
           "optionGroups",
-          "price",
-          "unit"
+          "price"
         ],
         "type": "object",
         "properties": {
@@ -15332,6 +16636,11 @@
           "quantityReceived": {
             "type": "number",
             "format": "double"
+          },
+          "unitCost": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -15553,6 +16862,22 @@
         },
         "additionalProperties": false
       },
+      "RequestPhoneChangeCommand": {
+        "required": [
+          "currentPassword",
+          "phoneNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "phoneNumber": {
+            "type": "string"
+          },
+          "currentPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "ResendConfirmationEmailCommand": {
         "required": [
           "email"
@@ -15592,6 +16917,26 @@
             "type": "string"
           },
           "token": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResetPasswordWithSmsCodeCommand": {
+        "required": [
+          "code",
+          "email",
+          "newPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "code": {
             "type": "string"
           },
           "newPassword": {
@@ -16170,6 +17515,18 @@
         },
         "additionalProperties": false
       },
+      "SetAutoRepliesRequest": {
+        "required": [
+          "paused"
+        ],
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "SetBranchActiveRequest": {
         "required": [
           "isActive"
@@ -16290,8 +17647,6 @@
           "branchesUsed",
           "hasPlan",
           "payments",
-          "plan",
-          "status",
           "suspendedByPlatform",
           "usersUsed"
         ],
@@ -16818,9 +18173,10 @@
           "createdAt",
           "defaultTaxRate",
           "id",
-          "logoImages",
+          "insufficientStockPolicy",
           "name",
           "onlineMenuMode",
+          "orderNotificationPolicy",
           "pricesIncludeTax",
           "requireOpenCashSession",
           "slug",
@@ -16877,6 +18233,12 @@
           },
           "requireOpenCashSession": {
             "type": "boolean"
+          },
+          "orderNotificationPolicy": {
+            "$ref": "#/components/schemas/OrderNotificationPolicy"
+          },
+          "insufficientStockPolicy": {
+            "$ref": "#/components/schemas/InsufficientStockPolicy"
           },
           "onlineMenuMode": {
             "$ref": "#/components/schemas/OnlineMenuMode"
@@ -16941,6 +18303,8 @@
         "required": [
           "autoCloseCounterSales",
           "defaultTaxRate",
+          "insufficientStockPolicy",
+          "orderNotificationPolicy",
           "pricesIncludeTax",
           "requireOpenCashSession"
         ],
@@ -16958,6 +18322,12 @@
           },
           "requireOpenCashSession": {
             "type": "boolean"
+          },
+          "orderNotificationPolicy": {
+            "$ref": "#/components/schemas/OrderNotificationPolicy"
+          },
+          "insufficientStockPolicy": {
+            "$ref": "#/components/schemas/InsufficientStockPolicy"
           }
         },
         "additionalProperties": false
@@ -17064,6 +18434,11 @@
         "properties": {
           "isActive": {
             "type": "boolean"
+          },
+          "moveProductsToCategoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17222,6 +18597,59 @@
         },
         "additionalProperties": false
       },
+      "UpdateAppointmentCommand": {
+        "required": [
+          "appointmentId",
+          "customerName",
+          "customerPhone",
+          "endAt",
+          "startAt"
+        ],
+        "type": "object",
+        "properties": {
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "serviceName": {
+            "type": "string",
+            "nullable": true
+          },
+          "serviceProductId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffName": {
+            "type": "string",
+            "nullable": true
+          },
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateAppointmentRemindersCommand": {
         "required": [
           "enabled",
@@ -17360,6 +18788,20 @@
           "email": {
             "type": "string",
             "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateCustomerNotesRequest": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17404,7 +18846,6 @@
           "appRole",
           "firstName",
           "lastName",
-          "permissions",
           "tenantRole",
           "tenantUserId"
         ],
@@ -17420,10 +18861,6 @@
           "lastName": {
             "type": "string"
           },
-          "phoneNumber": {
-            "type": "string",
-            "nullable": true
-          },
           "appRole": {
             "$ref": "#/components/schemas/UserRole"
           },
@@ -17434,7 +18871,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17544,7 +18982,6 @@
       },
       "UpdateMyTenantCommand": {
         "required": [
-          "capabilities",
           "contactEmail",
           "name"
         ],
@@ -17748,8 +19185,7 @@
           "priceAmount",
           "priceCurrency",
           "sortOrder",
-          "taxObject",
-          "unit"
+          "taxObject"
         ],
         "type": "object",
         "properties": {
@@ -17890,6 +19326,12 @@
           "requireOpenCashSession": {
             "type": "boolean",
             "nullable": true
+          },
+          "orderNotificationPolicy": {
+            "$ref": "#/components/schemas/OrderNotificationPolicy"
+          },
+          "insufficientStockPolicy": {
+            "$ref": "#/components/schemas/InsufficientStockPolicy"
           }
         },
         "additionalProperties": false
@@ -18053,10 +19495,6 @@
           },
           "lastName": {
             "type": "string"
-          },
-          "phoneNumber": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18163,7 +19601,6 @@
       },
       "UserDto": {
         "required": [
-          "avatarImages",
           "email",
           "firstName",
           "id",
@@ -18217,7 +19654,6 @@
       },
       "UserProfileDto": {
         "required": [
-          "avatarImages",
           "createdAt",
           "email",
           "emailConfirmed",

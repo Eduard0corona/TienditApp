@@ -27,6 +27,12 @@ public record UpdateSalesPolicyCommand : IRequest<Result<TenantSalesPolicyDto>>
 
     /// <summary>Null keeps the current value (the guided setup does not ask about the drawer).</summary>
     public bool? RequireOpenCashSession { get; init; }
+
+    /// <summary>Which orders send the customer WhatsApp messages; null keeps the current policy.</summary>
+    public OrderNotificationPolicy? OrderNotificationPolicy { get; init; }
+
+    /// <summary>Refuse or warn when a sale's recipe supplies are short; null keeps the current policy.</summary>
+    public InsufficientStockPolicy? InsufficientStockPolicy { get; init; }
 }
 
 public class UpdateSalesPolicyCommandValidator : AbstractValidator<UpdateSalesPolicyCommand>
@@ -36,6 +42,14 @@ public class UpdateSalesPolicyCommandValidator : AbstractValidator<UpdateSalesPo
         RuleFor(x => x.DefaultTaxRate)
             .Must(VatRateRules.IsAllowed)
             .WithMessage(VatRateRules.InvalidRateMessage);
+        RuleFor(x => x.OrderNotificationPolicy)
+            .IsInEnum()
+            .When(x => x.OrderNotificationPolicy.HasValue)
+            .WithMessage("La política de avisos no es válida.");
+        RuleFor(x => x.InsufficientStockPolicy)
+            .IsInEnum()
+            .When(x => x.InsufficientStockPolicy.HasValue)
+            .WithMessage("La política de existencias no es válida.");
     }
 }
 
@@ -62,7 +76,7 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
 
         var tenantId = await MyTenantResolver.ResolveAsync(_context, _tenantService, _currentUserService, cancellationToken);
         if (tenantId is null)
-            return Result.Failure<TenantSalesPolicyDto>("No se encontro el negocio del usuario.");
+            return Result.Failure<TenantSalesPolicyDto>("No se encontró el negocio del usuario.");
 
         var settings = await _context.TenantSettings
             .FirstOrDefaultAsync(x => x.TenantId == tenantId.Value, cancellationToken);
@@ -85,16 +99,24 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
             settings.PricesIncludeTax,
             settings.DefaultTaxRate,
             settings.AutoCloseCounterSales,
-            settings.RequireOpenCashSession
+            settings.RequireOpenCashSession,
+            settings.OrderNotificationPolicy,
+            settings.InsufficientStockPolicy
         };
         settings.UpdateSalesPolicy(request.PricesIncludeTax, request.DefaultTaxRate, request.AutoCloseCounterSales);
         if (request.RequireOpenCashSession is { } requireOpenCashSession)
             settings.SetRequireOpenCashSession(requireOpenCashSession);
+        if (request.OrderNotificationPolicy is { } notificationPolicy)
+            settings.SetOrderNotificationPolicy(notificationPolicy);
+        if (request.InsufficientStockPolicy is { } stockPolicy)
+            settings.SetInsufficientStockPolicy(stockPolicy);
 
         var changed = previous.PricesIncludeTax != settings.PricesIncludeTax
             || previous.DefaultTaxRate != settings.DefaultTaxRate
             || previous.AutoCloseCounterSales != settings.AutoCloseCounterSales
-            || previous.RequireOpenCashSession != settings.RequireOpenCashSession;
+            || previous.RequireOpenCashSession != settings.RequireOpenCashSession
+            || previous.OrderNotificationPolicy != settings.OrderNotificationPolicy
+            || previous.InsufficientStockPolicy != settings.InsufficientStockPolicy;
         if (changed)
         {
             // How totals are computed is a financial setting: who changed it, and from what, stays recorded.
@@ -112,7 +134,9 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
                         settings.PricesIncludeTax,
                         settings.DefaultTaxRate,
                         settings.AutoCloseCounterSales,
-                        settings.RequireOpenCashSession
+                        settings.RequireOpenCashSession,
+                        settings.OrderNotificationPolicy,
+                        settings.InsufficientStockPolicy
                     }
                 })));
         }
@@ -124,7 +148,9 @@ public class UpdateSalesPolicyCommandHandler : IRequestHandler<UpdateSalesPolicy
             PricesIncludeTax = settings.PricesIncludeTax,
             DefaultTaxRate = settings.DefaultTaxRate,
             AutoCloseCounterSales = settings.AutoCloseCounterSales,
-            RequireOpenCashSession = settings.RequireOpenCashSession
+            RequireOpenCashSession = settings.RequireOpenCashSession,
+            OrderNotificationPolicy = settings.OrderNotificationPolicy,
+            InsufficientStockPolicy = settings.InsufficientStockPolicy
         });
     }
 }

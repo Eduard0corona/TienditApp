@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.AiAgents.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -22,8 +21,8 @@ public record CreateAiAgentCommand : IRequest<Result<AiAgentDto>>
     public string? BusinessName { get; init; }
     public string? BusinessDescription { get; init; }
     public string? BusinessProductsAndServices { get; init; }
-    public string WelcomeMessage { get; init; } = "Hola, soy tu asistente virtual. Te ayudo con productos, servicios y ordenes.";
-    public string FallbackMessage { get; init; } = "No tengo esa informacion por ahora, pero puedo ayudarte con otra consulta.";
+    public string WelcomeMessage { get; init; } = "Hola, soy tu asistente virtual. Te ayudo con productos, servicios y órdenes.";
+    public string FallbackMessage { get; init; } = "No tengo esa información por ahora, pero puedo ayudarte con otra consulta.";
     public string ClosingMessage { get; init; } = "Gracias por contactarnos. Quedo atento para ayudarte nuevamente.";
     public bool AskForName { get; init; } = true;
     public bool AskForPhone { get; init; } = true;
@@ -63,16 +62,13 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public CreateAiAgentCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<AiAgentDto>> Handle(CreateAiAgentCommand request, CancellationToken cancellationToken)
@@ -84,7 +80,7 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
             .IgnoreQueryFilters()
             .AnyAsync(x => x.Id == _tenantService.TenantId, cancellationToken);
         if (!exists)
-            return Result.Failure<AiAgentDto>("No se encontro configuracion del tenant para crear el agente.");
+            return Result.Failure<AiAgentDto>("No se encontró configuración del negocio para crear el agente.");
 
         var duplicatedName = await _context.AiAgents
             .AnyAsync(x => x.Name == name, cancellationToken);
@@ -121,7 +117,7 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
         _context.AiAgents.Add(agent);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(_mapper.Map<AiAgentDto>(agent));
+        return Result.Success(agent.ToDto());
     }
 
     private static string? TrimToNull(string? value)

@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 
 namespace FoodParkDigital.Application.Common.Behaviors;
@@ -12,6 +13,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
     where TRequest : notnull
 {
     public const string NotAllowedMessage = "No tienes permiso para hacer esto.";
+    public const string ChargeNotAllowedMessage = "No tienes permiso para cobrar: guarda el pedido sin cobrar para que lo cobre la caja.";
 
     private readonly CurrentAccessContext _access;
 
@@ -39,7 +41,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
                 break;
             case RequiresTenantManagerAttribute:
                 await RequireMemberAsync(cancellationToken);
-                if (!_access.IsTenantManager)
+                if (!await _access.IsTenantManagerAsync(cancellationToken))
                     throw new ForbiddenAccessException("Solo el administrador del negocio puede hacer esto.");
                 break;
             case RequiresTenantMemberAttribute:
@@ -47,7 +49,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
                 break;
             case RequiresPermissionAttribute permission:
                 await RequireMemberAsync(cancellationToken);
-                if (!_access.IsTenantManager)
+                if (!await _access.IsTenantManagerAsync(cancellationToken))
                 {
                     var granted = await _access.GetPermissionsAsync(cancellationToken);
                     if (!permission.AnyOf.Any(required => granted.Contains(required.ToString(), StringComparer.OrdinalIgnoreCase)))
@@ -62,10 +64,27 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
         if (rule.Capability is { } capability
             && !await _access.HasAnyCapabilityAsync(capability.AnyOf, cancellationToken))
         {
-            throw new ForbiddenAccessException("El módulo no está activo en este negocio.");
+            throw ForbiddenAccessException.ForDisabledModule("El módulo no está activo en este negocio.");
         }
 
+        if (request is IRequiresContentPermissions content)
+            await RequireContentPermissionsAsync(content, cancellationToken);
+
         return await next();
+    }
+
+    private async Task RequireContentPermissionsAsync(IRequiresContentPermissions content, CancellationToken cancellationToken)
+    {
+        var required = content.RequiredPermissions().Distinct().ToList();
+        if (required.Count == 0 || await _access.IsTenantManagerAsync(cancellationToken))
+            return;
+
+        var granted = await _access.GetPermissionsAsync(cancellationToken);
+        foreach (var permission in required)
+        {
+            if (!granted.Contains(permission.ToString(), StringComparer.OrdinalIgnoreCase))
+                throw new ForbiddenAccessException(permission == TenantPermission.ChargeOrders ? ChargeNotAllowedMessage : NotAllowedMessage);
+        }
     }
 
     private void RequireAuthenticated()

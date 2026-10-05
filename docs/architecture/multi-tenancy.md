@@ -32,7 +32,7 @@ Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen 
 ## Riesgos comprobados
 
 1. `TenantSettings` y `WhatsAppConfig` tienen `TenantId` sin `ITenantScoped`; el filtro automático no se aplica y cada consulta debe filtrar por tenant de forma explícita (la auditoría del 2026-10-01 encontró y corrigió una consulta del reporte operativo que no lo hacía).
-2. Hay múltiples `IgnoreQueryFilters()` en autenticación, empleados, tenants, webhooks e integraciones. El uso del dashboard, que exponía los productos más vendidos de todos los tenants, se corrige en una tarea separada.
+2. Hay múltiples `IgnoreQueryFilters()` en autenticación, empleados, tenants, webhooks e integraciones. `TenantFilterBypassAllowlistTests` (Fase 4) fija cada archivo que lo usa, cuántas veces y por qué (flujos sin negocio, membresías del usuario, consola de plataforma, workers, webhooks): un uso nuevo o adicional, o una entrada que ya no se usa, rompe CI hasta revisarlo y anotar su motivo. Cada uso sigue necesitando su predicado explícito.
 3. El override `X-Tenant-Id` de `SUPER_ADMIN` ya se audita en el log, pero no exige justificación, no tiene límites y no se persiste en `AuditLog`.
 4. El middleware decide si una ruta es tenant-scoped mediante una lista manual; una ruta nueva puede quedar fuera por omisión.
 5. `OrderItem` y `OrderStatusHistory` no tienen `TenantId` y se exponen como `DbSet`; una consulta directa sin unir con `Order` no tiene filtro.

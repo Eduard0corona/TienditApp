@@ -65,7 +65,7 @@ public class OptionsAndTabsFlowTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, Restaurant);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 29m);
-        var handler = new SetProductOptionGroupsCommandHandler(fixture.Context, fixture.Mapper);
+        var handler = new SetProductOptionGroupsCommandHandler(fixture.Context);
 
         var created = await handler.Handle(new SetProductOptionGroupsCommand
         {
@@ -150,26 +150,26 @@ public class OptionsAndTabsFlowTests
         Assert.Contains("ya tiene una cuenta abierta", secondTab.Error);
 
         // A second round.
-        var round = await new AddTabRoundCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock, fixture.Mapper)
+        var round = await new AddTabRoundCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock)
             .Handle(new AddTabRoundCommand { OrderId = opened.Value.Id, Items = [new CreateOrderItemDto { ProductId = beer.Id, Quantity = 2 }] }, CancellationToken.None);
         Assert.True(round.IsSuccess, round.Error);
         Assert.Equal(165m, round.Value.Total);
         Assert.Equal([1, 2], round.Value.KitchenTickets.Select(t => t.Round));
 
         // The kitchen sees each round with its own lines.
-        var tickets = await new GetKitchenTicketsQueryHandler(fixture.Context, fixture.TenantService, fixture.Mapper)
+        var tickets = await new GetKitchenTicketsQueryHandler(fixture.Context, fixture.TenantService)
             .Handle(new GetKitchenTicketsQuery(), CancellationToken.None);
         Assert.Equal(2, tickets.Count);
         Assert.Equal("Tacos al pastor", Assert.Single(tickets[0].Items).ProductName);
         Assert.Equal("Cerveza", Assert.Single(tickets[1].Items).ProductName);
-        var kitchenOrders = await new GetKitchenOrdersQueryHandler(fixture.Context, fixture.TenantService, fixture.Mapper)
+        var kitchenOrders = await new GetKitchenOrdersQueryHandler(fixture.Context, fixture.TenantService)
             .Handle(new GetKitchenOrdersQuery(), CancellationToken.None);
         Assert.Empty(kitchenOrders);
 
         var ticketHandler = new UpdateKitchenTicketStatusCommandHandler(fixture.Context, fixture.Clock);
         Assert.True((await ticketHandler.Handle(new UpdateKitchenTicketStatusCommand(tickets[0].Id, KitchenTicketStatus.Ready), CancellationToken.None)).IsSuccess);
         Assert.True((await ticketHandler.Handle(new UpdateKitchenTicketStatusCommand(tickets[0].Id, KitchenTicketStatus.Served), CancellationToken.None)).IsSuccess);
-        var remaining = await new GetKitchenTicketsQueryHandler(fixture.Context, fixture.TenantService, fixture.Mapper)
+        var remaining = await new GetKitchenTicketsQueryHandler(fixture.Context, fixture.TenantService)
             .Handle(new GetKitchenTicketsQuery(), CancellationToken.None);
         Assert.Equal(2, Assert.Single(remaining).Round);
 
@@ -180,7 +180,7 @@ public class OptionsAndTabsFlowTests
         Assert.Equal(1, busy.OpenTab.RoundsInKitchen);
 
         // Closing needs the bill paid; then the table is free and the inventory consumed once.
-        var closeHandler = new CloseTabCommandHandler(fixture.Context, fixture.CurrentUser, fixture.Mapper, inventory);
+        var closeHandler = new CloseTabCommandHandler(fixture.Context, fixture.CurrentUser, inventory);
         var unpaid = await closeHandler.Handle(new CloseTabCommand(opened.Value.Id), CancellationToken.None);
         Assert.True(unpaid.IsFailure);
 
@@ -210,7 +210,7 @@ public class OptionsAndTabsFlowTests
             CancellationToken.None);
         Assert.True(opened.IsSuccess, opened.Error);
 
-        var result = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser)
+        var result = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser, NoOpOrderInventoryService.Instance)
             .Handle(new UpdateOrderStatusCommand { OrderId = opened.Value.Id, NewStatus = OrderStatus.Delivered }, CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -243,7 +243,7 @@ public class OptionsAndTabsFlowTests
             new CreateOrderCommand { OpenTab = true, DiningTableId = inside.Id, Items = [new CreateOrderItemDto { ProductId = tacos.Id, Quantity = 1 }] },
             CancellationToken.None);
 
-        var moved = await new MoveTabCommandHandler(fixture.Context, fixture.Mapper)
+        var moved = await new MoveTabCommandHandler(fixture.Context)
             .Handle(new MoveTabCommand(opened.Value.Id, terrace.Id), CancellationToken.None);
 
         Assert.True(moved.IsSuccess, moved.Error);
@@ -302,18 +302,23 @@ public class OptionsAndTabsFlowTests
     {
         public int Consumed { get; private set; }
 
-        public Task ApplyConsumptionForOrderAsync(FoodParkDigital.Domain.Orders.Entities.Order order, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>> ApplyConsumptionForOrderAsync(
+            FoodParkDigital.Domain.Orders.Entities.Order order,
+            CancellationToken cancellationToken,
+            FoodParkDigital.Application.Common.Models.StockShortageHandling shortageHandling)
         {
             // Mirrors OrderInventoryService: open tabs consume when they close.
             if (!order.IsOpenTab)
                 Consumed++;
-            return Task.CompletedTask;
+            return Task.FromResult<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>>([]);
         }
 
-        public Task ApplyConsumptionForServicePieceAsync(
+        public Task<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>> ApplyConsumptionForServicePieceAsync(
             FoodParkDigital.Domain.Orders.Entities.Order order,
             FoodParkDigital.Domain.Orders.Entities.ServiceOrderPiece piece,
-            CancellationToken cancellationToken) => Task.CompletedTask;
+            CancellationToken cancellationToken,
+            FoodParkDigital.Application.Common.Models.StockShortageHandling shortageHandling)
+            => Task.FromResult<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>>([]);
 
         public Task ReverseConsumptionForOrderAsync(FoodParkDigital.Domain.Orders.Entities.Order order, string? reason, CancellationToken cancellationToken)
             => Task.CompletedTask;

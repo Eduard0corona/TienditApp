@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Customers.DTOs;
 using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -39,6 +40,9 @@ public class CustomerCardDto
     public string? Name { get; set; }
     public Guid? CustomerId { get; set; }
     public string? Email { get; set; }
+    /// <summary>Of the customer record with this phone (empty while there is none).</summary>
+    public string? Notes { get; set; }
+    public List<CustomerAddressDto> Addresses { get; set; } = [];
     public int OrdersCount { get; set; }
     /// <summary>Paid minus refunded, over orders that were not cancelled.</summary>
     public decimal TotalSpent { get; set; }
@@ -111,13 +115,13 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
         string? rawPhone = request.Phone;
         if (request.CustomerId is { } customerId)
         {
-            var customer = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == customerId, cancellationToken);
+            var customer = await _context.Customers.AsNoTracking()
+                .Include(c => c.Addresses)
+                .FirstOrDefaultAsync(c => c.Id == customerId, cancellationToken);
             if (customer is null)
                 return Result.Failure<CustomerCardDto>("El cliente no existe.");
 
-            card.CustomerId = customer.Id;
-            card.Name = customer.Name;
-            card.Email = customer.Email;
+            FillFromRecord(card, customer);
             rawPhone ??= customer.Phone;
         }
 
@@ -129,6 +133,19 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
         var key = MessagingPhone.ToKey(phone);
         var variants = MessagingPhone.Variants(phone).ToList();
         card.Phone = key;
+
+        // From the chat or an order: the customer record with this number, however it was typed.
+        if (card.CustomerId is null)
+        {
+            var forms = CustomerPhones.StoredForms(key);
+            var record = await _context.Customers.AsNoTracking()
+                .Include(c => c.Addresses)
+                .Where(c => !c.IsPublicGeneral && c.Phone != null && forms.Contains(c.Phone))
+                .OrderByDescending(c => c.IsActive)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (record is not null)
+                FillFromRecord(card, record);
+        }
 
         var orders = _context.Orders.AsNoTracking()
             .Where(o => o.CustomerPhone != null && variants.Contains(o.CustomerPhone) && o.Status != OrderStatus.Cancelled);
@@ -212,6 +229,16 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
             .FirstOrDefaultAsync(cancellationToken);
 
         return Result.Success(card);
+    }
+
+    private static void FillFromRecord(CustomerCardDto card, Domain.Customers.Entities.Customer customer)
+    {
+        var dto = CustomerDto.From(customer);
+        card.CustomerId = dto.Id;
+        card.Name = dto.Name;
+        card.Email = dto.Email;
+        card.Notes = dto.Notes;
+        card.Addresses = dto.Addresses;
     }
 
     /// <summary>

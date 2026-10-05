@@ -1,5 +1,3 @@
-using AutoMapper;
-using AutoMapper.QueryableExtensions;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -46,18 +44,15 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly IDateTimeProvider _dateTimeProvider;
-    private readonly IMapper _mapper;
 
     public GetProductsQueryHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        IDateTimeProvider dateTimeProvider,
-        IMapper mapper)
+        IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _tenantService = tenantService;
         _dateTimeProvider = dateTimeProvider;
-        _mapper = mapper;
     }
 
     public async Task<PaginatedList<ProductDto>> Handle(GetProductsQuery request, CancellationToken cancellationToken)
@@ -151,7 +146,7 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
 
         var projectedQuery = query
             .OrderBy(p => p.Name)
-            .ProjectTo<ProductDto>(_mapper.ConfigurationProvider);
+            .Select(CatalogMappings.AsDto);
 
         return await PaginatedList<ProductDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);

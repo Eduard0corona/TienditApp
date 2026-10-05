@@ -173,7 +173,7 @@ public class GetPlatformTenantsQueryHandler : IRequestHandler<GetPlatformTenants
                 PaidThrough = x.subscription != null ? x.subscription.PaidThrough : null,
                 StatusReason = x.subscription != null ? x.subscription.StatusReason : null,
                 BranchesCount = _context.Branches.IgnoreQueryFilters().Count(b => b.TenantId == x.tenant.Id && b.IsActive),
-                UsersCount = _context.TenantUsers.IgnoreQueryFilters().Count(u => u.TenantId == x.tenant.Id && u.Status == TenantUserStatus.Active),
+                UsersCount = _context.TenantUsers.IgnoreQueryFilters().Count(u => u.TenantId == x.tenant.Id && u.Status != TenantUserStatus.Disabled),
                 LastOrderAt = _context.Orders.IgnoreQueryFilters()
                     .Where(o => o.TenantId == x.tenant.Id)
                     .Max(o => (DateTimeOffset?)o.CreatedAt)
@@ -223,7 +223,7 @@ public class SubscriptionDetailDto
         var detail = new SubscriptionDetailDto
         {
             BranchesUsed = await context.Branches.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken),
-            UsersUsed = await context.TenantUsers.CountAsync(x => x.TenantId == tenantId && x.Status == TenantUserStatus.Active, cancellationToken)
+            UsersUsed = await context.TenantUsers.CountAsync(x => x.TenantId == tenantId && x.Status != TenantUserStatus.Disabled, cancellationToken)
         };
         if (subscription is null)
             return detail;

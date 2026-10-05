@@ -204,7 +204,7 @@ public class CounterSaleCheckoutTests
         Assert.Equal(OrderStatus.Confirmed, result.Value.Status);
 
         // The kitchen marks it ready: the paid sale is handed over and closed without a second message.
-        var ready = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser).Handle(
+        var ready = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser, NoOpOrderInventoryService.Instance).Handle(
             new UpdateOrderStatusCommand { OrderId = result.Value.Id, NewStatus = OrderStatus.Ready },
             CancellationToken.None);
 
@@ -227,7 +227,7 @@ public class CounterSaleCheckoutTests
             CancellationToken.None);
         Assert.True(created.IsSuccess, created.Error);
 
-        var ready = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser).Handle(
+        var ready = await new UpdateOrderStatusCommandHandler(fixture.Context, fixture.CurrentUser, NoOpOrderInventoryService.Instance).Handle(
             new UpdateOrderStatusCommand { OrderId = created.Value.Id, NewStatus = OrderStatus.Ready },
             CancellationToken.None);
         Assert.True(ready.IsSuccess, ready.Error);

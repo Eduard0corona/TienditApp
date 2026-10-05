@@ -89,14 +89,30 @@ stateDiagram-v2
 
 ## Efectos coordinados actuales
 
-- Al crear una orden de negocio, el caso de uso puede aplicar un estado inicial operativo (`Confirmed`) y consumo de inventario. El tablero de cocina lista solo pedidos de alimentos (`OrderType.Retail` de un negocio Food; las órdenes de servicio van a su tablero) en los estados anteriores a `Ready` (Pending, Confirmed, Accepted, InPreparation e InProgress). Se actualiza con los eventos de `OrderHub` del grupo del tenant, recarga al reconectar (los eventos perdidos no se reenvían) y sondea cada 30 segundos como respaldo.
+- Al crear una orden de negocio, el caso de uso puede aplicar un estado inicial operativo (`Confirmed`) y consumo de inventario. El tablero de cocina lista solo pedidos de alimentos (`OrderType.Retail` de un negocio Food; las órdenes de servicio van a su tablero) en los estados anteriores a `Ready` (Pending, Confirmed, Accepted, InPreparation e InProgress). Se actualiza con los eventos de `OrderHub` del grupo del tenant, recarga al reconectar (los eventos perdidos no se reenvían) y sondea cada 30 segundos como respaldo. Desde la Fase 4 puede sonar con cada comanda nueva (activable por dispositivo). La cocina toma los pedidos de negocios de giro alimentos: un negocio de otro giro con el módulo de cocina no ve comandas hasta que el producto pueda marcarse como preparado en cocina.
 - Al entrar en estados operativos definidos por `ShouldConsumeInventory`, se crea una salida idempotente por `ExternalReference`. En órdenes de servicio se consumen a nivel orden los productos que no se rastrean como pieza (por ejemplo, un producto vendido junto con el servicio); las líneas rastreadas consumen su receta al completar cada pieza.
 - `CanCancel` se deriva de la tabla de transiciones de cada máquina, y `CancelOrderCommand` y `UpdateOrderStatusCommand` (con destino `Cancelled`) pasan por `Order.Cancel`: se rechaza si la orden conserva dinero sin reembolsar (neto pagado mayor a cero), se cancelan las piezas aceptadas o en progreso (las completadas se conservan) y se crea el movimiento compensatorio si existió consumo.
-- Al completar una pieza, su receta se consume dentro del mismo comando y del mismo guardado que el cambio de estado; si falta stock, la pieza no cambia. Cada cambio de pieza pasa por `Order.ChangeServicePieceStatus`, que modifica la fila de la orden: dos piezas completadas al mismo tiempo chocan en el rowversion de `Order` y el comando reintenta con datos frescos, de modo que la orden sí llega a `Completed`.
+- Al completar una pieza, su receta se consume dentro del mismo comando y del mismo guardado que el cambio de estado; si falta stock y el negocio bloquea (por defecto), la pieza no cambia y el error nombra el insumo. Cada cambio de pieza pasa por `Order.ChangeServicePieceStatus`, que modifica la fila de la orden: dos piezas completadas al mismo tiempo chocan en el rowversion de `Order` y el comando reintenta con datos frescos, de modo que la orden sí llega a `Completed`.
 - Las órdenes canceladas salen del tablero de servicios y no aceptan cambios de piezas ni pagos.
 - Cierre automático de ventas de mostrador pagadas (política `AutoCloseCounterSales` del negocio, activa por defecto): al crear la venta, al registrar un pago y cuando la orden llega a `Ready`, `CounterSaleClosing` cierra una venta `CreatedByBusiness` sin saldo con la máquina de estados. Una venta pasa a `Delivered`; un pedido de comida de un negocio con Cocina espera a que la cocina lo marque `Ready`; un servicio pasa a `Completed` si no tiene piezas rastreadas pendientes. El cierre no envía WhatsApp.
 - Reembolsar no cambia el estado: registra el reembolso, saca el efectivo de la caja y, si se pide, regresa insumos. "Anular venta" reembolsa lo que queda de cada pago y después cancela si la máquina lo permite; una orden ya entregada o completada queda en su estado, reembolsada por completo.
+- Folios (Fase 4F): los tres caminos que crean órdenes (Vender, pedido del chat o de un número y menú en línea) comparten `OrderPlacement` y toman el folio de `IFolioGenerator` después de las validaciones sin efectos (total esperado, pagos que no exceden el total). Cada negocio tiene su contador en `FolioSequences` (ámbito `ORD`): en SQL Server un `UPDATE ... OUTPUT` toma el siguiente número bajo el bloqueo de la fila, así que dos cajas que venden al mismo tiempo nunca repiten folio (antes se contaban las órdenes y el choque respondía 500). Desde la Fase 4G la venta completa es una transacción (`ITransactionalRequest`): una venta rechazada después de tomar folio (por ejemplo, por falta de existencias con la política de bloqueo, o una propina mayor que el total) lo devuelve y la siguiente venta lo usa, sin huecos. Un contador que no existe se crea al primer uso, después del folio más alto que el negocio ya tenía.
 - La auditoría y los avisos de WhatsApp de cada evento se procesan por el outbox, después del commit y con reintentos; SignalR se notifica en proceso (best-effort). Las notificaciones de citas se esperan dentro de la solicitud, son best-effort y muestran la hora del tenant; los recordatorios de citas salen por la cola de mensajería.
+
+### Avisos al cliente (Fase 4)
+
+Cada aviso de pedido (`order_confirmed`, `order_status_update`, `order_cancelled`) es una plantilla de WhatsApp que Meta cobra. La política del negocio (`TenantSettings.OrderNotificationPolicy`, en Mi negocio > Impuestos y ventas) decide qué pedidos los reciben; `OrderNotificationRules` la evalúa en el handler del outbox:
+
+| Política | Quién recibe avisos |
+| --- | --- |
+| Pedidos a distancia y servicios (`RemoteAndServices`, por defecto) | Pedidos del cliente (menú en línea, su cuenta), pedidos que el negocio toma de un chat (canal WhatsApp) y servicios. Una venta de mostrador (`CreatedByBusiness`, canal `Counter`, que no es servicio) no: el cliente está ahí y tiene su ticket. |
+| Todos los pedidos con teléfono (`AllOrders`) | También las ventas de mostrador con teléfono. |
+| Ninguno (`Off`) | Nadie. |
+
+- El cliente sabe del pedido una vez, al crearse: el estado inicial que aplica la venta (`Order.AdvanceOnCreation`, por ejemplo `Pending` → `Confirmed`) no manda además un "cambió a Confirmada". `OrderCreatedEvent.Status` lleva el estado con el que nació la orden.
+- Un pedido que espera al negocio (`Pending`, pedido en línea sin aceptación automática) no recibe "pedido confirmado" al llegar; el cliente recibe el aviso cuando el negocio lo confirma.
+- Los eventos guardados en el outbox antes de este cambio no traen `Status` y se leen como `Confirmed`, igual que los trataba el handler anterior.
+- La baja del cliente (BAJA) no detiene estos avisos (ver [mensajería](messaging.md#bajas)).
 
 ## Cuentas abiertas por mesa (Fase 3)
 
@@ -122,7 +138,8 @@ stateDiagram-v2
 - En Mi negocio, "Menú en línea" tiene tres modos (`OnlineMenuMode`): apagado (por defecto), solo menú y menú con pedidos. El enlace es `/m/{slug}`; hay QR descargable, botón para compartir por WhatsApp y QR por mesa (`?mesa=Mesa 4`, que llega como mesa del pedido).
 - El cliente arma el pedido con opciones y lo envía con su nombre y teléfono. Llega como cualquier pedido de cliente (`CreatedByBusiness = false`, canal `Online`, ligado a su cliente temporal o registrado), en `Pending` para que el negocio lo confirme, o en `Confirmed` si el negocio acepta pedidos automáticamente (`AutoAcceptOrders`). La cocina lo ve como cualquier pedido de comida.
 - Mismas reglas de precio que en mostrador (`OrderLineBuilder`); el pedido se rechaza si el total cambió desde que el cliente lo vio, si un producto ya no está disponible o es un servicio.
-- Pendiente: pago en línea, entrega a domicilio con costo de envío y aviso de confirmación automático al cliente.
+- El cliente recibe el aviso por WhatsApp cuando el negocio confirma su pedido (o al llegar, si se acepta automáticamente), según la [política de avisos](#avisos-al-cliente-fase-4).
+- Pendiente: pago en línea y entrega a domicilio con costo de envío.
 
 ## Variantes y extras (Fase 3)
 

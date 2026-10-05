@@ -4,6 +4,8 @@ using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.Queries;
+using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 
@@ -42,10 +44,11 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal(
         [
-            "ConfirmEmailCommand", "ConfirmPhoneCommand", "ForgotPasswordCommand", "GetPublicMenuQuery", "Login2FACommand", "LoginCommand",
-            "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand", "RegisterBusinessCommand",
-            "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand", "ResetPasswordCommand",
-            "VerifyWhatsAppWebhookTokenQuery"
+            "AcceptInvitationCommand", "ChangeUnconfirmedPhoneCommand", "ConfirmEmailCommand", "ConfirmPhoneCommand",
+            "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicMenuQuery", "Login2FACommand",
+            "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand",
+            "RegisterBusinessCommand", "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand",
+            "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "VerifyWhatsAppWebhookTokenQuery"
         ], anonymous);
     }
 
@@ -65,6 +68,36 @@ public class AuthorizationBehaviorTests
 
         Assert.Equal("ok", await Behavior<NeedsCash>(Staff(permissions: ["managecash"])).Handle(new NeedsCash(), Next, CancellationToken.None));
         Assert.Equal("ok", await Behavior<NeedsCash>(Staff(permissions: [], tenantRole: "OWNER")).Handle(new NeedsCash(), Next, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Waiter_ShouldTakeOrdersButNotCharge()
+    {
+        var waiter = Staff(permissions: ["ManageOrders"]);
+        var cashier = Staff(permissions: ["ManageOrders", "ChargeOrders"]);
+        var owner = Staff(permissions: [], tenantRole: "OWNER");
+
+        Assert.Equal("ok", await Behavior<SaleShape>(waiter).Handle(new SaleShape(Charged: false), Next, CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<SaleShape>(waiter).Handle(new SaleShape(Charged: true), Next, CancellationToken.None));
+        Assert.Equal(AuthorizationBehavior<SaleShape, string>.ChargeNotAllowedMessage, refused.Message);
+        Assert.Equal("ok", await Behavior<SaleShape>(cashier).Handle(new SaleShape(Charged: true), Next, CancellationToken.None));
+        Assert.Equal("ok", await Behavior<SaleShape>(owner).Handle(new SaleShape(Charged: true), Next, CancellationToken.None));
+    }
+
+    [Fact]
+    public void Sales_ShouldNeedTheChargePermissionOnlyWithPayments()
+    {
+        Assert.Empty(new Orders.Commands.CreateOrderCommand().RequiredPermissions());
+        Assert.Equal(
+            [TenantPermission.ChargeOrders],
+            new Orders.Commands.CreateOrderCommand { Payments = [new() { Amount = 10m }] }.RequiredPermissions());
+        Assert.Equal(
+            TenantPermission.ChargeOrders,
+            Assert.Single(typeof(Orders.Commands.AddOrderPaymentCommand).GetCustomAttribute<RequiresPermissionAttribute>()!.AnyOf));
+        Assert.Equal(
+            TenantPermission.ChargeOrders,
+            Assert.Single(typeof(Orders.Commands.UploadOrderPaymentEvidenceCommand).GetCustomAttribute<RequiresPermissionAttribute>()!.AnyOf));
     }
 
     [Fact]
@@ -102,7 +135,24 @@ public class AuthorizationBehaviorTests
     {
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             Behavior<ManagersOnly>(Staff(permissions: ["ManageCash", "ManageEmployees"])).Handle(new ManagersOnly(), Next, CancellationToken.None));
-        Assert.Equal("ok", await Behavior<ManagersOnly>(Staff(permissions: [], role: "TENANT_ADMIN")).Handle(new ManagersOnly(), Next, CancellationToken.None));
+        Assert.Equal("ok", await Behavior<ManagersOnly>(Staff(permissions: [], role: "TENANT_ADMIN", tenantRole: "ADMIN")).Handle(new ManagersOnly(), Next, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task OwningAnotherBusiness_ShouldGiveNoAdminRightsWhereThePersonIsStaff()
+    {
+        // A TENANT_ADMIN account (it owns another business) that is staff here, or an admin demoted after the token was issued.
+        var staffHere = Staff(permissions: ["ManageOrders"], role: "TENANT_ADMIN", tenantRole: "STAFF");
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<ManagersOnly>(staffHere).Handle(new ManagersOnly(), Next, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<NeedsCash>(staffHere).Handle(new NeedsCash(), Next, CancellationToken.None));
+        var access = await new GetMyAccessQueryHandler(staffHere.Context, staffHere.User).Handle(new GetMyAccessQuery(), CancellationToken.None);
+        Assert.False(access.IsTenantManager);
+        Assert.Equal(["ManageOrders"], access.Permissions);
+        // The menu follows the role in this business, not the one an older token carries.
+        Assert.Equal("STAFF", access.Role);
     }
 
     [Fact]
@@ -119,6 +169,8 @@ public class AuthorizationBehaviorTests
         Assert.Equal((int)(TenantCapability.Retail | TenantCapability.Inventory), staffAccess.Capabilities);
         Assert.True(ownerAccess.IsTenantManager);
         Assert.Equal(Enum.GetNames<TenantPermission>().Length, ownerAccess.Permissions.Count);
+        Assert.Equal("STAFF", staffAccess.Role);
+        Assert.Equal("TENANT_ADMIN", ownerAccess.Role);
     }
 
     private static Task<string> Next() => Task.FromResult("ok");
@@ -137,9 +189,24 @@ public class AuthorizationBehaviorTests
         {
             Role = role,
             TenantRole = tenantRole,
-            Snapshot = new TenantAccessSnapshot(active, capabilities, permissions),
+            Snapshot = new TenantAccessSnapshot(
+                active,
+                capabilities,
+                permissions,
+                IsManager: active && tenantRole is "OWNER" or "ADMIN",
+                EffectiveRole: active
+                    ? TenantPermissionCatalog.EffectiveRole(AccountRole(role), Enum.Parse<TenantUserRole>(tenantRole, ignoreCase: true))
+                    : null),
             Capabilities = capabilities
         };
+
+    private static UserRole AccountRole(string role) => role switch
+    {
+        "SUPER_ADMIN" => UserRole.SuperAdmin,
+        "TENANT_ADMIN" => UserRole.TenantAdmin,
+        "KITCHEN" => UserRole.Kitchen,
+        _ => UserRole.Staff
+    };
 
     private sealed record Unruled : IRequest<string>;
 
@@ -158,6 +225,13 @@ public class AuthorizationBehaviorTests
 
     [RequiresTenantManager]
     private sealed record ManagersOnly : IRequest<string>;
+
+    /// <summary>Like a sale: taking it needs ManageOrders, charging it in the same request needs ChargeOrders too.</summary>
+    [RequiresPermission(TenantPermission.ManageOrders)]
+    private sealed record SaleShape(bool Charged) : IRequest<string>, IRequiresContentPermissions
+    {
+        public IEnumerable<TenantPermission> RequiredPermissions() => Charged ? [TenantPermission.ChargeOrders] : [];
+    }
 
     private sealed class FakeAccess : ICurrentUserService, ICurrentTenantService, ITenantAccessService
     {

@@ -38,11 +38,11 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
     public UpdateOrderStatusCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
     }
 
     public async Task<Result> Handle(UpdateOrderStatusCommand request, CancellationToken cancellationToken)

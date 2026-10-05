@@ -3,6 +3,10 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useCustomerCard } from '../../api/queries';
 import type { Schemas } from '../../api/typedClient';
 import StatusChip from '../common/StatusChip';
+import CustomerNotesAndAddresses from './CustomerNotesAndAddresses';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
+import { getAccess } from '../../utils/access';
 import { OrderChannel } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
@@ -21,6 +25,9 @@ interface CustomerCardPanelProps {
 /** What the business knows about a customer: purchases, balance, favorites, appointments and opt-out. */
 export default function CustomerCardPanel({ phone, customerId, fallbackName, onNewOrder, inChat = false }: CustomerCardPanelProps) {
   const { data: card, error, isPending } = useCustomerCard(phone, customerId);
+  const { user } = useAuth();
+  const { capabilities } = useTenant();
+  const canCreateCustomer = getAccess(user, capabilities).customers;
 
   if (error) return <div className="alert alert-warning mb-0">{getApiErrorMessage(error, 'No se pudo cargar la ficha del cliente.')}</div>;
   if (isPending || !card) return <p className="text-muted mb-0">Cargando ficha…</p>;
@@ -77,6 +84,16 @@ export default function CustomerCardPanel({ phone, customerId, fallbackName, onN
           </Link>
         )}
       </div>
+
+      <CustomerNotesAndAddresses
+        key={card.customerId ?? 'sin-registro'}
+        customerId={card.customerId}
+        notes={card.notes}
+        addresses={card.addresses ?? []}
+        phone={card.phone}
+        name={card.name ?? fallbackName}
+        canCreateCustomer={canCreateCustomer}
+      />
 
       {(card.favoriteProducts ?? []).length > 0 && (
         <div className="mb-3">

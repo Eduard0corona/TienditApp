@@ -17,8 +17,8 @@ public class AiAgent : AuditableEntity, ITenantScoped
         Language = "Espanol";
         Tone = "Amigable";
 
-        WelcomeMessage = "Hola, soy tu asistente virtual. Te ayudo con productos, servicios y ordenes.";
-        FallbackMessage = "No tengo esa informacion por ahora, pero puedo ayudarte con otra consulta.";
+        WelcomeMessage = "Hola, soy tu asistente virtual. Te ayudo con productos, servicios y órdenes.";
+        FallbackMessage = "No tengo esa información por ahora, pero puedo ayudarte con otra consulta.";
         ClosingMessage = "Gracias por contactarnos. Quedo atento para ayudarte nuevamente.";
 
         AskForName = true;
@@ -120,7 +120,7 @@ public class AiAgent : AuditableEntity, ITenantScoped
             throw new DomainException("La temperatura debe estar entre 0 y 1.");
 
         if (maxTokens is < 100 or > 4000)
-            throw new DomainException("El maximo de tokens debe estar entre 100 y 4000.");
+            throw new DomainException("El máximo de tokens debe estar entre 100 y 4000.");
 
         Model = model;
         Temperature = temperature;

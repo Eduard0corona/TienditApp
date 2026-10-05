@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
+import ServicePieceDetail from '../../components/services/ServicePieceDetail';
 import { ordersApi } from '../../api/ordersApi';
 import { serviceBoardApi } from '../../api/serviceBoardApi';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { ServiceOrderPieceStatus as ServiceOrderPieceStatusConst } from '../../types';
 import type { PaginatedList, ServiceBoardPieceDto, ServiceOrderPieceStatus } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { formatDuration } from '../../utils/serviceDetail';
 
 const STATUS_COLUMNS: Array<{
   status: ServiceOrderPieceStatus;
@@ -57,6 +59,7 @@ export default function ServiceBoard() {
   const [showCancelled, setShowCancelled] = useState(false);
   const [onlyMine, setOnlyMine] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>('');
+  const [detailPiece, setDetailPiece] = useState<ServiceBoardPieceDto | null>(null);
   const refreshTimeoutRef = useRef<number | undefined>(undefined);
   const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onServiceBoardPieceUpdated } = useOrderSignalR();
 
@@ -211,7 +214,7 @@ export default function ServiceBoard() {
       await serviceBoardApi.release(pieceId);
       await loadBoard();
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'No se pudo liberar la asignacion de la pieza.');
+      const msg = getApiErrorMessage(err, 'No se pudo liberar la asignación de la pieza.');
       setError(msg);
     } finally {
       setProcessingPieceId('');
@@ -220,7 +223,7 @@ export default function ServiceBoard() {
 
   return (
     <>
-      <PageTitle title="Tablero de Servicios" subtitle="Operacion" />
+      <PageTitle title="Tablero de Servicios" subtitle="Operación" />
 
       <div className="row mb-3">
         <div className="col-xl-2 col-md-6 mb-2">
@@ -265,7 +268,7 @@ export default function ServiceBoard() {
                   style={{ width: 260 }}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por orden, cliente, pieza o telefono"
+                  placeholder="Buscar por orden, cliente, pieza o teléfono"
                 />
                 <div className="form-check">
                   <input
@@ -306,7 +309,7 @@ export default function ServiceBoard() {
               </div>
               <div className="d-flex flex-column align-items-end">
                 <small className="text-muted">
-                  Ultima actualizacion: {lastUpdatedAt ? toLocalDateTime(lastUpdatedAt) : '-'}
+                  Última actualización: {lastUpdatedAt ? toLocalDateTime(lastUpdatedAt) : '-'}
                 </small>
                 <button type="button" className="btn btn-light btn-sm mt-1" onClick={() => void loadBoard()}>
                   Recargar
@@ -357,23 +360,28 @@ export default function ServiceBoard() {
                         <div key={piece.pieceId} className="border rounded p-2 mb-2 bg-light-subtle">
                           <div className="d-flex justify-content-between align-items-start mb-1">
                             <div>
-                              <div className="fw-semibold">{piece.itemName}</div>
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 text-start fw-semibold text-body"
+                                onClick={() => setDetailPiece(piece)}
+                              >
+                                {piece.itemName}
+                              </button>
                               {piece.requestedService && (
-                                <small className="text-muted">{piece.requestedService}</small>
+                                <small className="d-block text-muted">{piece.requestedService}</small>
                               )}
                             </div>
                             <div className="d-flex flex-column align-items-end gap-1">
-                              {piece.priority > 0 && (
-                                <span className="badge bg-warning text-dark">P{piece.priority}</span>
+                              {/* Normal priority needs no badge: only what changes the order of work. */}
+                              {piece.priority >= 4 && <span className="badge bg-danger">Urgente</span>}
+                              {piece.priority === 1 && <span className="badge bg-light text-muted border">Baja</span>}
+                              {piece.isOverdue && piece.delayMinutes != null && (
+                                <span className="badge bg-danger">Atrasada {formatDuration(piece.delayMinutes)}</span>
                               )}
-                              {piece.isOverdue && (
-                                <span className="badge bg-danger">
-                                  Atrasada {Math.max(1, Math.floor((piece.delayMinutes ?? 0) / 60))}h
-                                </span>
-                              )}
-                              {!piece.isOverdue && piece.minutesToPromise !== undefined && (
-                                <span className="badge bg-secondary-subtle text-dark">
-                                  SLA {Math.max(0, piece.minutesToPromise)} min
+                              {/* Without a promised date there is nothing to count down. */}
+                              {!piece.isOverdue && piece.minutesToPromise != null && (
+                                <span className={`badge ${piece.minutesToPromise <= 60 ? 'bg-warning text-dark' : 'bg-secondary-subtle text-dark'}`}>
+                                  Entrega en {formatDuration(piece.minutesToPromise)}
                                 </span>
                               )}
                             </div>
@@ -396,7 +404,7 @@ export default function ServiceBoard() {
 
                           <div className="d-flex justify-content-between align-items-center mt-2 gap-2 flex-wrap">
                             <span className={`badge ${piece.notifyCustomer ? 'bg-info' : 'bg-secondary'}`}>
-                              {piece.notifyCustomer ? 'Notifica al cliente' : 'Sin notificacion'}
+                              {piece.notifyCustomer ? 'Notifica al cliente' : 'Sin notificación'}
                             </span>
                             {piece.assignedToUserId ? (
                               <span className="badge bg-primary-subtle text-primary">
@@ -464,6 +472,8 @@ export default function ServiceBoard() {
           ))}
         </div>
       )}
+
+      <ServicePieceDetail piece={detailPiece} onHide={() => setDetailPiece(null)} />
     </>
   );
 }

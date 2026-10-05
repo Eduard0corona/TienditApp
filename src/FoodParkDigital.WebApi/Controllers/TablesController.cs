@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Dining;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -27,7 +28,7 @@ public class TablesController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -36,7 +37,7 @@ public class TablesController : ControllerBase
     {
         var result = await _mediator.Send(command with { Id = id });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 }

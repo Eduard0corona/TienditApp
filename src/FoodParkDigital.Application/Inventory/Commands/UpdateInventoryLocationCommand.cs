@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -57,12 +56,10 @@ public class UpdateInventoryLocationCommandValidator : AbstractValidator<UpdateI
 public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInventoryLocationCommand, Result<InventoryLocationDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public UpdateInventoryLocationCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public UpdateInventoryLocationCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<InventoryLocationDto>> Handle(UpdateInventoryLocationCommand request, CancellationToken cancellationToken)
@@ -76,7 +73,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
             entity.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryLocationDto>("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure<InventoryLocationDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var branchError = await InventoryLocationBranches.ValidateAsync(_context, entity.TenantId, request.BranchId, cancellationToken);
         if (branchError is not null)
@@ -84,7 +81,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
 
         var code = request.Code.Trim().ToUpperInvariant();
         if (await _context.InventoryLocations.AnyAsync(x => x.Id != request.Id && x.Code == code, cancellationToken))
-            return Result.Failure<InventoryLocationDto>("Ya existe una ubicacion con ese codigo.");
+            return Result.Failure<InventoryLocationDto>("Ya existe una ubicación con ese código.");
 
         entity.Update(
             name: request.Name.Trim(),
@@ -123,7 +120,7 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        var dto = await InventoryLocationBranches.NameAsync(_context, [_mapper.Map<InventoryLocationDto>(entity)], cancellationToken);
+        var dto = await InventoryLocationBranches.NameAsync(_context, [entity.ToDto()], cancellationToken);
         return Result.Success(dto[0]);
     }
 }

@@ -53,16 +53,41 @@ function readTokenClaims(token: string | null): TokenClaims | null {
 const REFRESH_LOCK_NAME = 'fpd-refresh-token';
 let refreshInFlight: Promise<string> | null = null;
 
+const REFRESH_RETRY_DELAYS_MS = [1000, 2000, 4000];
+const MAX_RETRY_AFTER_MS = 10_000;
+
+/**
+ * A refresh answered 429 (too many requests, e.g. many devices of a business behind one IP) or 503 is worth
+ * waiting for: it is retried with backoff (or the Retry-After the server sends) instead of failing the request.
+ */
+function refreshRetryDelay(error: unknown, attempt: number): number | null {
+  if (!axios.isAxiosError(error) || attempt >= REFRESH_RETRY_DELAYS_MS.length) return null;
+  const status = error.response?.status;
+  if (status !== 429 && status !== 503) return null;
+  const retryAfterSeconds = Number(error.response?.headers?.['retry-after']);
+  return Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+    ? Math.min(retryAfterSeconds * 1000, MAX_RETRY_AFTER_MS)
+    : REFRESH_RETRY_DELAYS_MS[attempt];
+}
+
 async function requestNewAccessToken(): Promise<string> {
-  const { data } = await axios.post(
-    '/api/v1/auth/refresh-token',
-    {},
-    {
-      withCredentials: true,
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const { data } = await axios.post(
+        '/api/v1/auth/refresh-token',
+        {},
+        {
+          withCredentials: true,
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        }
+      );
+      return data.accessToken as string;
+    } catch (error: unknown) {
+      const delay = refreshRetryDelay(error, attempt);
+      if (delay === null) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
-  );
-  return data.accessToken as string;
+  }
 }
 
 function isRejectedRefresh(status: number | undefined): boolean {
@@ -88,8 +113,8 @@ export function refreshAccessToken(): Promise<string> {
         return token;
       })
       .catch((error: unknown) => {
-        // Only a refresh the server rejects (400/401/403) ends the session. Rate limiting (429), server
-        // errors and network failures are transient: the session stays and the next call retries.
+        // Only a refresh the server rejects (400/401/403) ends the session. Rate limiting (429, retried above),
+        // server errors and network failures are transient: the session stays and the next call retries.
         if (axios.isAxiosError(error) && isRejectedRefresh(error.response?.status)) {
           accessToken = null;
           emitSessionEvent('expired');

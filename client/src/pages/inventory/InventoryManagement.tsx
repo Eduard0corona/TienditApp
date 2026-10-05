@@ -116,11 +116,11 @@ const SUPPLY_COLUMNS = [
 
 const STOCK_COLUMNS = [
   { header: 'Insumo' },
-  { header: 'Ubicacion' },
+  { header: 'Ubicación' },
   { header: 'Existencia', className: 'text-end' },
   { header: 'Reservado', className: 'text-end' },
   { header: 'Disponible', className: 'text-end' },
-  { header: 'Ultimo costo', className: 'text-end' },
+  { header: 'Último costo', className: 'text-end' },
   { header: 'Estado', className: 'text-center' },
 ];
 
@@ -136,7 +136,7 @@ const MOVEMENT_COLUMNS = [
 
 const LOCATION_COLUMNS = [
   { header: 'Nombre' },
-  { header: 'Codigo' },
+  { header: 'Código' },
   { header: 'Contacto' },
   { header: 'Ciudad / Estado' },
   { header: 'Estado', className: 'text-center' },
@@ -145,7 +145,7 @@ const LOCATION_COLUMNS = [
 
 const RECIPE_COLUMNS = [
   { header: 'Insumo' },
-  { header: 'Ubicacion' },
+  { header: 'Ubicación' },
   { header: 'Cantidad', className: 'text-end' },
   { header: 'Merma %', className: 'text-end' },
   { header: 'Cantidad efectiva', className: 'text-end' },
@@ -157,7 +157,7 @@ const KARDEX_COLUMNS = [
   { header: 'Fecha', className: 'text-center' },
   { header: 'Folio' },
   { header: 'Insumo' },
-  { header: 'Ubicacion' },
+  { header: 'Ubicación' },
   { header: 'Entrada', className: 'text-end' },
   { header: 'Salida', className: 'text-end' },
   { header: 'Saldo', className: 'text-end' },
@@ -185,20 +185,20 @@ const MOVEMENT_TYPE_OPTIONS: Array<{ value: InventoryMovementType; label: string
   { value: InventoryMovementTypeConst.AdjustmentDecrease, label: 'Ajuste (-)' },
   { value: InventoryMovementTypeConst.TransferIn, label: 'Transferencia entrada' },
   { value: InventoryMovementTypeConst.TransferOut, label: 'Transferencia salida' },
-  { value: InventoryMovementTypeConst.ReturnFromProduction, label: 'Devolucion produccion' },
-  { value: InventoryMovementTypeConst.ReturnToSupplier, label: 'Devolucion proveedor' },
+  { value: InventoryMovementTypeConst.ReturnFromProduction, label: 'Devolución producción' },
+  { value: InventoryMovementTypeConst.ReturnToSupplier, label: 'Devolución proveedor' },
 ];
 
 const MOVEMENT_REASON_OPTIONS: Array<{ value: InventoryMovementReason; label: string }> = [
   { value: InventoryMovementReasonConst.Purchase, label: 'Compra' },
   { value: InventoryMovementReasonConst.Sale, label: 'Venta' },
-  { value: InventoryMovementReasonConst.Production, label: 'Produccion' },
+  { value: InventoryMovementReasonConst.Production, label: 'Producción' },
   { value: InventoryMovementReasonConst.Consumption, label: 'Consumo' },
   { value: InventoryMovementReasonConst.Waste, label: 'Merma' },
   { value: InventoryMovementReasonConst.Damaged, label: 'Danado' },
   { value: InventoryMovementReasonConst.InventoryCount, label: 'Conteo fisico' },
   { value: InventoryMovementReasonConst.InitialLoad, label: 'Carga inicial' },
-  { value: InventoryMovementReasonConst.Return, label: 'Devolucion' },
+  { value: InventoryMovementReasonConst.Return, label: 'Devolución' },
   { value: InventoryMovementReasonConst.ManualAdjustment, label: 'Ajuste manual' },
   { value: InventoryMovementReasonConst.Other, label: 'Otro' },
 ];
@@ -681,22 +681,22 @@ export default function InventoryManagement() {
     const parsedTaxRate = supplyForm.taxRate === '' ? undefined : Number(supplyForm.taxRate);
 
     if (Number.isNaN(parsedDefaultCost) || parsedDefaultCost < 0) {
-      setError('Costo por defecto invalido.');
+      setError('Costo por defecto inválido.');
       return;
     }
 
     if (Number.isNaN(parsedMinStock) || parsedMinStock < 0) {
-      setError('Stock minimo invalido.');
+      setError('Stock mínimo inválido.');
       return;
     }
 
     if (Number.isNaN(parsedReorderPoint) || parsedReorderPoint < 0) {
-      setError('Punto de reorden invalido.');
+      setError('Punto de reorden inválido.');
       return;
     }
 
     if (parsedMaxStock !== undefined && (Number.isNaN(parsedMaxStock) || parsedMaxStock < parsedMinStock)) {
-      setError('El stock maximo debe ser mayor o igual al stock minimo.');
+      setError('El stock máximo debe ser mayor o igual al stock mínimo.');
       return;
     }
 
@@ -793,7 +793,7 @@ export default function InventoryManagement() {
     const name = locationForm.name.trim();
     const code = locationForm.code.trim();
     if (!name || !code) {
-      setError('Nombre y codigo de ubicacion son obligatorios.');
+      setError('Nombre y código de ubicación son obligatorios.');
       return;
     }
 
@@ -822,17 +822,17 @@ export default function InventoryManagement() {
           detachFromBranch: !locationForm.branchId,
         };
         await inventoryApi.updateLocation(editingLocation.id, updatePayload);
-        setSuccess('Ubicacion actualizada correctamente.');
+        setSuccess('Ubicación actualizada correctamente.');
       } else {
         await inventoryApi.createLocation(payload);
-        setSuccess('Ubicacion creada correctamente.');
+        setSuccess('Ubicación creada correctamente.');
       }
 
       setShowLocationModal(false);
       setEditingLocation(null);
       await Promise.all([loadLocations(), loadStocks(), loadMovements()]);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Error al guardar la ubicacion.'));
+      setError(getApiErrorMessage(err, 'Error al guardar la ubicación.'));
     } finally {
       setSavingLocation(false);
     }
@@ -843,10 +843,10 @@ export default function InventoryManagement() {
     setSuccess('');
     try {
       await inventoryApi.setLocationActive(location.id, !location.isActive);
-      setSuccess('Estado de la ubicacion actualizado.');
+      setSuccess('Estado de la ubicación actualizado.');
       await Promise.all([loadLocations(), loadStocks()]);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la ubicacion.'));
+      setError(getApiErrorMessage(err, 'No se pudo actualizar el estado de la ubicación.'));
     }
   };
 
@@ -892,15 +892,15 @@ export default function InventoryManagement() {
       const line = movementForm.lines[index];
       const quantity = Number(line.quantity);
       if (!line.supplyItemId || !line.inventoryLocationId) {
-        setError(`Linea ${index + 1}: insumo y ubicacion son obligatorios.`);
+        setError(`Línea ${index + 1}: insumo y ubicación son obligatorios.`);
         return;
       }
       if (Number.isNaN(quantity) || quantity <= 0) {
-        setError(`Linea ${index + 1}: cantidad invalida.`);
+        setError(`Línea ${index + 1}: cantidad inválida.`);
         return;
       }
       if (line.unitCost && (Number.isNaN(Number(line.unitCost)) || Number(line.unitCost) < 0)) {
-        setError(`Linea ${index + 1}: costo unitario invalido.`);
+        setError(`Línea ${index + 1}: costo unitario inválido.`);
         return;
       }
     }
@@ -990,17 +990,17 @@ export default function InventoryManagement() {
       const wastePercent = Number(line.wastePercent);
 
       if (!line.supplyItemId) {
-        setError(`Linea ${index + 1}: el insumo es obligatorio.`);
+        setError(`Línea ${index + 1}: el insumo es obligatorio.`);
         return;
       }
 
       if (Number.isNaN(quantity) || quantity <= 0) {
-        setError(`Linea ${index + 1}: cantidad invalida.`);
+        setError(`Línea ${index + 1}: cantidad inválida.`);
         return;
       }
 
       if (Number.isNaN(wastePercent) || wastePercent < 0 || wastePercent > 100) {
-        setError(`Linea ${index + 1}: merma invalida (0 a 100).`);
+        setError(`Línea ${index + 1}: merma inválida (0 a 100).`);
         return;
       }
     }
@@ -1043,7 +1043,7 @@ export default function InventoryManagement() {
 
   return (
     <>
-      <PageTitle title="Inventario" subtitle="Operacion" />
+      <PageTitle title="Inventario" subtitle="Operación" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">
@@ -1142,7 +1142,7 @@ export default function InventoryManagement() {
                 )}
                 {activeTab === 'locations' && (
                   <button className="btn btn-primary btn-sm" onClick={openLocationModalForCreate}>
-                    <i className="ri-add-line me-1"></i>Nueva ubicacion
+                    <i className="ri-add-line me-1"></i>Nueva ubicación
                   </button>
                 )}
                 {activeTab === 'recipes' && (
@@ -1276,7 +1276,7 @@ export default function InventoryManagement() {
                 <>
                   <div className="row mb-2">
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Ubicacion</label>
+                      <label className="form-label">Ubicación</label>
                       <select
                         className="form-select form-select-sm"
                         value={stocksLocationFilter}
@@ -1562,7 +1562,7 @@ export default function InventoryManagement() {
                                   value={item.inventoryLocationId}
                                   onChange={(e) => updateRecipeLine(lineIndex, { inventoryLocationId: e.target.value })}
                                 >
-                                  <option value="">Ubicacion por defecto</option>
+                                  <option value="">Ubicación por defecto</option>
                                   {activeLocations.map((option) => (
                                     <option key={option.id} value={option.id}>
                                       {option.name}
@@ -1639,7 +1639,7 @@ export default function InventoryManagement() {
                       </select>
                     </div>
                     <div className="col-md-3 mb-2">
-                      <label className="form-label">Ubicacion</label>
+                      <label className="form-label">Ubicación</label>
                       <select
                         className="form-select form-select-sm"
                         value={kardexLocationFilter}
@@ -1765,7 +1765,7 @@ export default function InventoryManagement() {
                     data={alertsData.items}
                     columns={[
                       { header: 'Insumo' },
-                      { header: 'Ubicacion' },
+                      { header: 'Ubicación' },
                       { header: 'Existencia', className: 'text-end' },
                       { header: 'Reorden', className: 'text-end' },
                       { header: 'Deficit', className: 'text-end' },
@@ -1876,7 +1876,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Codigo</label>
+              <label className="form-label">Código</label>
               <input
                 type="text"
                 className="form-control"
@@ -1894,7 +1894,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Codigo de barras</label>
+              <label className="form-label">Código de barras</label>
               <input
                 type="text"
                 className="form-control"
@@ -1903,7 +1903,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Categoria</label>
+              <label className="form-label">Categoría</label>
               <input
                 type="text"
                 className="form-control"
@@ -1954,7 +1954,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Stock minimo</label>
+              <label className="form-label">Stock mínimo</label>
               <input
                 type="number"
                 step="0.01"
@@ -1964,7 +1964,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Stock maximo</label>
+              <label className="form-label">Stock máximo</label>
               <input
                 type="number"
                 step="0.01"
@@ -2034,7 +2034,7 @@ export default function InventoryManagement() {
               </div>
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Descripcion</label>
+              <label className="form-label">Descripción</label>
               <textarea
                 className="form-control"
                 rows={2}
@@ -2065,7 +2065,7 @@ export default function InventoryManagement() {
 
       <Modal show={showLocationModal} onHide={() => setShowLocationModal(false)} size="lg" centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingLocation ? 'Editar ubicacion' : 'Nueva ubicacion'}</Modal.Title>
+          <Modal.Title>{editingLocation ? 'Editar ubicación' : 'Nueva ubicación'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row">
@@ -2079,7 +2079,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-3 mb-2">
-              <label className="form-label">Codigo *</label>
+              <label className="form-label">Código *</label>
               <input
                 type="text"
                 className="form-control"
@@ -2095,7 +2095,7 @@ export default function InventoryManagement() {
                   checked={locationForm.isDefault}
                   onChange={(e) => setLocationForm((current) => ({ ...current, isDefault: e.target.checked }))}
                 />
-                <label className="form-check-label">Ubicacion por defecto</label>
+                <label className="form-check-label">Ubicación por defecto</label>
               </div>
             </div>
             <div className="col-12 mb-2">
@@ -2114,7 +2114,7 @@ export default function InventoryManagement() {
               <div className="form-text">Las ventas de una sucursal descuentan del almacén de esa sucursal.</div>
             </div>
             <div className="col-12 mb-2">
-              <label className="form-label">Descripcion</label>
+              <label className="form-label">Descripción</label>
               <textarea
                 className="form-control"
                 rows={2}
@@ -2123,7 +2123,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Direccion linea 1</label>
+              <label className="form-label">Dirección linea 1</label>
               <input
                 type="text"
                 className="form-control"
@@ -2132,7 +2132,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Direccion linea 2</label>
+              <label className="form-label">Dirección linea 2</label>
               <input
                 type="text"
                 className="form-control"
@@ -2159,7 +2159,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-4 mb-2">
-              <label className="form-label">Codigo postal</label>
+              <label className="form-label">Código postal</label>
               <input
                 type="text"
                 className="form-control"
@@ -2177,7 +2177,7 @@ export default function InventoryManagement() {
               />
             </div>
             <div className="col-md-6 mb-2">
-              <label className="form-label">Telefono contacto</label>
+              <label className="form-label">Teléfono contacto</label>
               <input
                 type="text"
                 className="form-control"
@@ -2192,7 +2192,7 @@ export default function InventoryManagement() {
             Cancelar
           </button>
           <button type="button" className="btn btn-primary" onClick={submitLocation} disabled={savingLocation}>
-            {savingLocation ? 'Guardando...' : editingLocation ? 'Guardar cambios' : 'Crear ubicacion'}
+            {savingLocation ? 'Guardando...' : editingLocation ? 'Guardar cambios' : 'Crear ubicación'}
           </button>
         </Modal.Footer>
       </Modal>
@@ -2299,7 +2299,7 @@ export default function InventoryManagement() {
           {movementForm.lines.map((line, index) => (
             <div className="border rounded p-2 mb-2" key={`line-${index}`}>
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <strong>Linea {index + 1}</strong>
+                <strong>Línea {index + 1}</strong>
                 {movementForm.lines.length > 1 && (
                   <button
                     type="button"
@@ -2327,7 +2327,7 @@ export default function InventoryManagement() {
                   </select>
                 </div>
                 <div className="col-md-3 mb-2">
-                  <label className="form-label">Ubicacion *</label>
+                  <label className="form-label">Ubicación *</label>
                   <select
                     className="form-select"
                     value={line.inventoryLocationId}
@@ -2431,12 +2431,12 @@ export default function InventoryManagement() {
                   <thead>
                     <tr>
                       <th>Insumo</th>
-                      <th>Ubicacion</th>
+                      <th>Ubicación</th>
                       <th className="text-end">Cantidad</th>
                       <th className="text-end">Costo unit.</th>
                       <th className="text-end">Total</th>
                       <th className="text-end">Antes</th>
-                      <th className="text-end">Despues</th>
+                      <th className="text-end">Después</th>
                       <th>Lote</th>
                       <th>Caducidad</th>
                     </tr>
@@ -2466,7 +2466,7 @@ export default function InventoryManagement() {
               )}
             </>
           ) : (
-            <p className="text-muted mb-0">No se encontro informacion.</p>
+            <p className="text-muted mb-0">No se encontro información.</p>
           )}
         </Modal.Body>
       </Modal>

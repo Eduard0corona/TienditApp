@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Tenants;
+using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -27,12 +29,17 @@ public class JwtTokenService : IJwtTokenService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        // With a business, the role is the one the person has in it (owning another business gives nothing here).
+        var role = tenantContext is not null && Enum.TryParse<TenantUserRole>(tenantContext.TenantRole, ignoreCase: true, out var membershipRole)
+            ? TenantPermissionCatalog.EffectiveRole(user.Role, membershipRole)
+            : user.Role;
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email!),
             new(ClaimTypes.Name, user.FullName),
-            new(ClaimTypes.Role, ToUpperSnakeCase(user.Role.ToString()))
+            new(ClaimTypes.Role, ToUpperSnakeCase(role.ToString()))
         };
 
         if (tenantContext is not null)

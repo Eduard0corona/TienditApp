@@ -45,7 +45,7 @@ public static class OrderLimits
             : (int)trackableServiceLines.Sum(line => decimal.Ceiling(line.Item.Quantity));
 
         if (piecesToCreate > MaxServicePiecesPerOrder)
-            return $"Una orden puede generar como maximo {MaxServicePiecesPerOrder} piezas de servicio.";
+            return $"Una orden puede generar como máximo {MaxServicePiecesPerOrder} piezas de servicio.";
 
         var foreignPiece = manualPieces.FirstOrDefault(piece =>
             piece.ServiceProductId.HasValue && !orderProductIds.Contains(piece.ServiceProductId.Value));

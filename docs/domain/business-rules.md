@@ -27,15 +27,17 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Una pieza inicia `Accepted`; pasa a `InProgress`, luego `Completed`, o puede cancelarse desde los dos primeros estados.
 - Una pieza completada/cancelada no puede asignarse.
 - El caso de uso sincroniza estado de la orden desde las piezas trackeables. Los cambios de pieza pasan por `Order.ChangeServicePieceStatus` para que el rowversion de la orden detecte cambios simultáneos.
-- Completar una pieza consume su receta en el mismo guardado; si falta stock, la pieza no se completa.
+- Completar una pieza consume su receta en el mismo guardado; si falta stock y el negocio bloquea (por defecto), la pieza no se completa y el mensaje nombra el insumo; con "vender y avisar" se completa y el insumo queda en negativo.
 - Las citas tienen su propio enum y método de cambio de estado; deben mantener reglas en el agregado.
+- Una cita puede ligarse a un servicio del catálogo y a una persona activa del equipo del mismo negocio (sus nombres se toman de ahí); una misma persona no tiene dos citas que se traslapen. Una cita cerrada (completada, cancelada o no presentada) ya no se edita ni se reprograma; reprogramar avisa al cliente por WhatsApp. La agenda abre con las citas de hoy, la más próxima primero; el historial se lee de la más reciente hacia atrás.
 
 ## Inventario, compras y caja
 
-- Existencia disponible es `OnHandQuantity - ReservedQuantity`; una salida normal no permite negativo.
+- Existencia disponible es `OnHandQuantity - ReservedQuantity`; una salida normal no permite negativo. El consumo de una venta sigue la política de existencias del negocio (bloquear o vender y avisar, ver [inventario](inventory-and-purchasing.md)).
+- Archivar una categoría la saca de Vender, del menú en línea y de los formularios; si tiene productos, primero se pasan a otra categoría activa del mismo negocio. Restaurarla la devuelve tal como estaba.
 - Reservado no puede ser negativo ni superar existencia.
 - Los movimientos tienen líneas positivas y el tipo define el signo aplicado.
-- Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total.
+- Una compra no repite insumo+ubicación, no recibe más de lo pendiente y distingue recepción parcial/total; un borrador se envía, y solo una compra sin nada recibido se cancela.
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
 - Cada cajero tiene como máximo una caja abierta por negocio; solo él o un administrador la cierra o le registra gastos y retiros. Un cierre con diferencia exige notas.

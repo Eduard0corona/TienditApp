@@ -12,6 +12,7 @@ using FoodParkDigital.WebApi.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using FoodParkDigital.WebApi.Errors;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,9 +43,13 @@ if (jwtSecretError is not null)
     usesEphemeralJwtSecret = true;
 }
 
-// Serilog
-builder.Host.UseSerilog((ctx, config) =>
-    config.ReadFrom.Configuration(ctx.Configuration));
+// Serilog writes the console and hands every event to the other logging providers: OpenTelemetry, when a
+// destination is configured, so logs reach Application Insights or the collector with traces and metrics.
+// The default providers go away so the console does not get every line twice.
+builder.Logging.ClearProviders();
+builder.Host.UseSerilog(
+    (ctx, config) => config.ReadFrom.Configuration(ctx.Configuration).Enrich.FromLogContext(),
+    writeToProviders: true);
 
 // Layer registrations
 builder.Services.AddApplicationServices();
@@ -65,13 +70,12 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.OnRejected = async (context, token) =>
+    options.OnRejected = async (context, _) =>
     {
-        context.HttpContext.Response.ContentType = "application/json";
         var message = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
-            ? $"{{\"error\": \"Demasiadas solicitudes. Intente de nuevo en {retryAfter.TotalSeconds} segundos.\"}}"
-            : "{\"error\": \"Demasiadas solicitudes. Por favor, espere antes de intentar de nuevo.\"}";
-        await context.HttpContext.Response.WriteAsync(message, token);
+            ? $"Demasiadas solicitudes. Intente de nuevo en {retryAfter.TotalSeconds} segundos."
+            : "Demasiadas solicitudes. Por favor, espere antes de intentar de nuevo.";
+        await ApiProblem.WriteAsync(context.HttpContext, StatusCodes.Status429TooManyRequests, message, ApiErrorCodes.TooManyRequests);
     };
 
     // Credential and code endpoints (login, registration, confirmation codes, password reset, 2FA codes),
@@ -122,8 +126,11 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// Controllers
+// Controllers. Every error leaves as ProblemDetails with a stable code (see ApiErrorCodes), also the ones the
+// framework writes: model binding, NotFound(), and empty 401/403/404 answers of /api (status code pages below).
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails(options =>
+    options.CustomizeProblemDetails = context => ApiProblem.Complete(context.ProblemDetails, context.HttpContext));
 builder.Services.AddEndpointsApiExplorer();
 
 // Swagger with JWT
@@ -202,6 +209,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/api"),
+    api => api.UseStatusCodePages());
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
@@ -233,6 +243,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<RequestTelemetryEnrichmentMiddleware>();
 app.MapHealthEndpoints();
 app.MapControllers();
 // Close hub connections when the access token expires so that reconnecting re-validates

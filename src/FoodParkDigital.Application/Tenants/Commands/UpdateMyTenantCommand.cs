@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Billing;
 using System;
 using System.Text.Json;
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -54,7 +53,7 @@ public class UpdateMyTenantCommandValidator : AbstractValidator<UpdateMyTenantCo
         RuleFor(x => x.Rfc)
             .Matches(@"^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$")
             .When(x => !string.IsNullOrEmpty(x.Rfc))
-            .WithMessage("El RFC no tiene un formato valido.");
+            .WithMessage("El RFC no tiene un formato válido.");
         RuleFor(x => x.LegalName).MaximumLength(300);
         RuleFor(x => x.Industry).MaximumLength(200);
         RuleFor(x => x.TaxRegime).MaximumLength(200);
@@ -76,18 +75,15 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
-    private readonly IMapper _mapper;
 
     public UpdateMyTenantCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        ICurrentTenantService tenantService,
-        IMapper mapper)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _tenantService = tenantService;
-        _mapper = mapper;
     }
 
     public async Task<Result<TenantProfileDto>> Handle(UpdateMyTenantCommand request, CancellationToken cancellationToken)
@@ -99,7 +95,7 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
             string.Equals(_currentUserService.TenantRole, "ADMIN", StringComparison.OrdinalIgnoreCase);
 
         if (!canManageTenant)
-            return Result.Failure<TenantProfileDto>("Solo el administrador del tenant puede modificar los datos de la empresa.");
+            return Result.Failure<TenantProfileDto>("Solo el administrador del negocio puede modificar los datos de la empresa.");
 
         var tenantId = await MyTenantResolver.ResolveAsync(
             _context,
@@ -108,13 +104,13 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
             cancellationToken);
 
         if (tenantId is null)
-            return Result.Failure<TenantProfileDto>("No se encontro el tenant del usuario.");
+            return Result.Failure<TenantProfileDto>("No se encontró el negocio del usuario.");
 
         var tenant = await _context.Tenants
             .FirstOrDefaultAsync(t => t.Id == tenantId.Value, cancellationToken);
 
         if (tenant is null)
-            return Result.Failure<TenantProfileDto>("Tenant no encontrado.");
+            return Result.Failure<TenantProfileDto>("Negocio no encontrado.");
 
         tenant.Update(request.Name, request.ContactEmail, request.ContactPhone, tenant.LogoUrl);
 
@@ -178,12 +174,14 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = _mapper.Map<TenantProfileDto>(tenant);
+        var dto = tenant.ToProfileDto();
         dto.Capabilities = settings.Capabilities;
         dto.PricesIncludeTax = settings.PricesIncludeTax;
         dto.DefaultTaxRate = settings.DefaultTaxRate;
         dto.AutoCloseCounterSales = settings.AutoCloseCounterSales;
         dto.RequireOpenCashSession = settings.RequireOpenCashSession;
+        dto.OrderNotificationPolicy = settings.OrderNotificationPolicy;
+        dto.InsufficientStockPolicy = settings.InsufficientStockPolicy;
         dto.OnboardingCompletedAt = settings.OnboardingCompletedAt;
         return Result.Success(dto);
     }

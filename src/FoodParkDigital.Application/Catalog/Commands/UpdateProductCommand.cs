@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
@@ -22,7 +21,7 @@ public record UpdateProductCommand : IRequest<Result<ProductDto>>
     public string Name { get; init; } = null!;
     public string? Description { get; init; }
     public decimal PriceAmount { get; init; }
-    public string PriceCurrency { get; init; } = "USD";
+    public string PriceCurrency { get; init; } = "MXN";
     public int? PreparationTimeMinutes { get; init; }
     public string? Sku { get; init; }
     public string? Barcode { get; init; }
@@ -162,12 +161,10 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
 public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand, Result<ProductDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IMapper _mapper;
 
-    public UpdateProductCommandHandler(IApplicationDbContext context, IMapper mapper)
+    public UpdateProductCommandHandler(IApplicationDbContext context)
     {
         _context = context;
-        _mapper = mapper;
     }
 
     public async Task<Result<ProductDto>> Handle(UpdateProductCommand request, CancellationToken cancellationToken)
@@ -188,7 +185,7 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         if (!TenantCapabilityRules.CanManageProductUnit(tenantCapabilities, resultingUnit))
         {
             return Result.Failure<ProductDto>(
-                "El tenant no tiene habilitado el modulo requerido para este tipo de item.");
+                "El negocio no tiene habilitado el módulo requerido para este tipo de artículo.");
         }
 
         var category = await _context.Categories
@@ -197,7 +194,7 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         if (category is null)
             throw new EntityNotFoundException("Category", request.CategoryId);
         if (!category.IsActive)
-            return Result.Failure<ProductDto>("La categoria seleccionada no esta activa.");
+            return Result.Failure<ProductDto>("La categoría seleccionada no está activa.");
 
         if (!string.IsNullOrEmpty(request.Sku))
         {
@@ -235,6 +232,6 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
         product.SetFiscalData(request.SatProductCode, request.SatUnitCode, request.TaxObject);
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(_mapper.Map<ProductDto>(product));
+        return Result.Success(product.ToDto());
     }
 }

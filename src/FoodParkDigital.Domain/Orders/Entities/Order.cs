@@ -107,6 +107,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>What the business kept from this order: paid minus refunded.</summary>
     public decimal NetPaidAmount => PaidAmount - RefundedAmount;
     public decimal Balance => Total - PaidAmount;
+    /// <summary>Tips given with the payments: on top of the sale, never part of its total or balance.</summary>
+    public decimal TipTotal => _payments.Sum(p => p.Tip);
     public string? CancellationReason { get; private set; }
     public byte[] Version { get; private set; } = null!;
     public ServiceOrderDetail? ServiceDetail { get; private set; }
@@ -257,7 +259,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         string? afterPhotosJson)
     {
         if (OrderType != OrderType.Service)
-            throw new DomainException("Solo las ordenes de servicio pueden tener detalle de servicio.");
+            throw new DomainException("Solo las órdenes de servicio pueden tener detalle de servicio.");
 
         if (ServiceDetail is null)
         {
@@ -332,6 +334,13 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     public void TransitionTo(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
         => Transition(newStatus, stateMachine, performedBy, notifyCustomer: true);
+
+    /// <summary>
+    /// The status a new order starts in (confirmed or accepted by the business, or accepted automatically
+    /// online). The customer hears about the order once, from its creation, and not again for this step.
+    /// </summary>
+    public void AdvanceOnCreation(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
+        => Transition(newStatus, stateMachine, performedBy, notifyCustomer: false);
 
     /// <summary>
     /// Closes a fully paid counter sale: the customer leaves with what they bought, so nobody has to mark
@@ -414,9 +423,30 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         AddDomainEvent(new OrderCancelledEvent(Id, TenantId, previousStatus, reason));
     }
 
+    /// <summary>A new order is built before its folio is taken (<see cref="AssignNumber"/>).</summary>
+    public const string NumberNotAssigned = "";
+    public const string TipAboveTotalMessage = "La propina no puede ser mayor que el total de la cuenta.";
+
+    /// <summary>
+    /// Gives a new order the folio its business assigned. Handlers take it once the checks without side effects
+    /// passed, so a refused sale rarely uses one. A stored order keeps its folio.
+    /// </summary>
+    public void AssignNumber(string orderNumber)
+    {
+        if (string.IsNullOrWhiteSpace(orderNumber))
+            throw new DomainException("El folio del pedido es obligatorio.");
+        if (!string.IsNullOrEmpty(OrderNumber))
+            throw new DomainException("El pedido ya tiene folio.");
+
+        OrderNumber = orderNumber.Trim();
+    }
+
     public void MarkAsCreated()
     {
-        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total));
+        if (string.IsNullOrEmpty(OrderNumber))
+            throw new DomainException("El pedido no tiene folio.");
+
+        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total, Status));
     }
 
     public void LinkToCustomerUser(Guid userId)
@@ -432,7 +462,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         Guid? inventoryLocationId,
         string? evidenceUrl,
         string? reference,
-        string? notes)
+        string? notes,
+        decimal tip = 0,
+        decimal? cashReceived = null)
     {
         var payment = new OrderPayment(
             tenantId: TenantId,
@@ -443,7 +475,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             inventoryLocationId: inventoryLocationId,
             evidenceUrl: evidenceUrl,
             reference: reference,
-            notes: notes);
+            notes: notes,
+            tip: tip,
+            cashReceived: cashReceived);
 
         if (Status == OrderStatus.Cancelled)
             throw new DomainException("No se pueden registrar pagos en una orden cancelada.");
@@ -451,6 +485,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var newPaidAmount = PaidAmount + payment.Amount;
         if (newPaidAmount > Total)
             throw new DomainException("El pago excede el total de la orden.");
+        // The tip may come with a small last payment of a mixed charge, but more tip than bill is a typing mistake.
+        if (TipTotal + payment.Tip > Total)
+            throw new DomainException(TipAboveTotalMessage);
 
         _payments.Add(payment);
         PaidAmount = newPaidAmount;

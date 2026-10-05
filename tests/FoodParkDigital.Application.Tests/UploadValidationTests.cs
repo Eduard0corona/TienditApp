@@ -1,8 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -12,6 +10,7 @@ using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.Application.Tests.Support;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SixLabors.ImageSharp;
@@ -139,8 +138,7 @@ public class UploadValidationTests
         order.AddItem(Guid.NewGuid(), "Producto", 1, 100m);
         context.Orders.Add(order);
         await context.SaveChangesAsync();
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-        var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), mapper);
+        var handler = new AddOrderPaymentCommandHandler(context, new FixedClock(DateTimeOffset.UtcNow), NoOpOrderCashService.Instance);
 
         var external = await handler.Handle(new AddOrderPaymentCommand
         {

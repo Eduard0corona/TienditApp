@@ -170,7 +170,7 @@ public class BranchesTests
         }
         fixture.Context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(tenant.Id, taco.Id, tortilla.Id, 2m));
         await fixture.Context.SaveChangesAsync();
-        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, NullLogger<OrderInventoryService>.Instance);
+        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context), NullLogger<OrderInventoryService>.Instance);
 
         var sale = await fixture.CreateOrderHandler(inventory).Handle(Sale(taco.Id, norte.Id, quantity: 3, paid: 75m), CancellationToken.None);
 

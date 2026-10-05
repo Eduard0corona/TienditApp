@@ -244,7 +244,7 @@ public class PublicOrderReceiptDto
 
 /// <summary>An order placed from the public menu. It arrives in Pedidos with the Online channel.</summary>
 [AllowAnonymousRequest("Pedido del menú público: el negocio activó los pedidos en línea y el cliente se identifica con su teléfono.")]
-public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>
+public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>, ITransactionalRequest
 {
     public string Slug { get; init; } = null!;
     public string CustomerName { get; init; } = null!;
@@ -289,6 +289,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IOrderInventoryService _orderInventoryService;
+    private readonly IFolioGenerator _folios;
 
     public PlacePublicOrderCommandHandler(
         IApplicationDbContext context,
@@ -296,14 +297,16 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         ICustomerLookupService customerLookupService,
         IPhoneNormalizationService phoneNormalizationService,
         IDateTimeProvider dateTimeProvider,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService,
+        IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
         _customerLookupService = customerLookupService;
         _phoneNormalizationService = phoneNormalizationService;
         _dateTimeProvider = dateTimeProvider;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
+        _folios = folios;
     }
 
     public async Task<Result<PublicOrderReceiptDto>> Handle(PlacePublicOrderCommand request, CancellationToken cancellationToken)
@@ -330,7 +333,6 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         var customer = await _customerLookupService.ResolveForOrderAsync(
             tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
-        var orderCount = await _context.Orders.CountAsync(cancellationToken);
         // Online orders arrive at the default branch of the business.
         var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
         var order = new Order(
@@ -338,7 +340,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             customerUserId: customer.CustomerUserId,
             temporaryCustomerId: customer.TemporaryCustomerId,
             createdByBusiness: false,
-            orderNumber: $"ORD-{orderCount + 1:D6}",
+            orderNumber: Order.NumberNotAssigned,
             businessType: tenant.BusinessType,
             orderType: OrderType.Retail,
             customerName: request.CustomerName.Trim(),
@@ -375,23 +377,18 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         {
             var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
             if (stateMachine.GetAllowedTransitions(order.Status).Contains(OrderStatus.Confirmed))
-                order.TransitionTo(OrderStatus.Confirmed, stateMachine, "menu-en-linea");
+                order.AdvanceOnCreation(OrderStatus.Confirmed, stateMachine, "menu-en-linea");
             else
                 accepted = false;
         }
 
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        order.AssignNumber(await _folios.NextOrderNumberAsync(tenant.Id, cancellationToken));
+
+        // The customer's order is never refused for recipe stock: the business sees it and decides.
+        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, StockShortageHandling.Allow);
         order.MarkAsCreated();
         _context.Orders.Add(order);
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            // Two orders took the same folio at the same time (unique per business): the customer retries.
-            return Result.Failure<PublicOrderReceiptDto>("No se pudo registrar el pedido en este momento. Intenta de nuevo.");
-        }
+        await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new PublicOrderReceiptDto
         {

@@ -19,7 +19,7 @@ public class TenantSettings : BaseEntity
         bool pricesIncludeTax = false)
     {
         TenantId = tenantId;
-        Currency = "USD";
+        Currency = "MXN";
         TimeZone = "America/Mexico_City";
         AutoAcceptOrders = false;
         MaxConcurrentOrders = 50;
@@ -30,7 +30,8 @@ public class TenantSettings : BaseEntity
     }
 
     public Guid TenantId { get; private set; }
-    public string Currency { get; private set; } = "USD";
+    /// <summary>Mexican pesos: the app formats every amount as MXN.</summary>
+    public string Currency { get; private set; } = "MXN";
     public string TimeZone { get; private set; } = "America/Mexico_City";
     public bool AutoAcceptOrders { get; private set; }
     public int MaxConcurrentOrders { get; private set; }
@@ -51,6 +52,15 @@ public class TenantSettings : BaseEntity
     public bool RequireOpenCashSession { get; private set; }
     /// <summary>When the owner finished or skipped the guided setup.</summary>
     public DateTimeOffset? OnboardingCompletedAt { get; private set; }
+
+    /// <summary>Which orders send the customer WhatsApp messages: by default not counter sales (the customer is there).</summary>
+    public OrderNotificationPolicy OrderNotificationPolicy { get; private set; } = OrderNotificationPolicy.RemoteAndServices;
+
+    /// <summary>
+    /// Whether a sale whose recipes need more supplies than there are is refused (default) or goes through with a
+    /// warning. Orders customers place themselves and work already done (tabs, completed services) never block.
+    /// </summary>
+    public InsufficientStockPolicy InsufficientStockPolicy { get; private set; } = InsufficientStockPolicy.Block;
 
     public const int MinReminderHoursBefore = 1;
     public const int MaxReminderHoursBefore = 72;
@@ -88,6 +98,20 @@ public class TenantSettings : BaseEntity
     }
 
     public void SetRequireOpenCashSession(bool required) => RequireOpenCashSession = required;
+
+    public void SetOrderNotificationPolicy(OrderNotificationPolicy policy)
+    {
+        if (!Enum.IsDefined(policy))
+            throw new DomainException("La política de avisos no es válida.");
+        OrderNotificationPolicy = policy;
+    }
+
+    public void SetInsufficientStockPolicy(InsufficientStockPolicy policy)
+    {
+        if (!Enum.IsDefined(policy))
+            throw new DomainException("La política de existencias no es válida.");
+        InsufficientStockPolicy = policy;
+    }
 
     public void UpdateAppointmentReminders(bool enabled, int hoursBefore, Guid? templateId)
     {

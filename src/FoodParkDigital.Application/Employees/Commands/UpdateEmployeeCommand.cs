@@ -13,16 +13,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Commands;
 
+/// <summary>
+/// Changes the role and permissions of a person in this business. Their account is theirs: the phone only changes from
+/// their profile, with a code (it recovers the password by SMS), and the name only here while nobody else shares it.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageEmployees)]
 public record UpdateEmployeeCommand : IRequest<Result<EmployeeDto>>
 {
     public Guid TenantUserId { get; init; }
     public string FirstName { get; init; } = null!;
     public string LastName { get; init; } = null!;
-    public string? PhoneNumber { get; init; }
     public UserRole AppRole { get; init; } = UserRole.Staff;
     public TenantUserRole TenantRole { get; init; } = TenantUserRole.Staff;
-    public List<string> Permissions { get; init; } = [];
+    /// <summary>Null takes the defaults of the role; an empty list is "sin acceso".</summary>
+    public List<string>? Permissions { get; init; }
 }
 
 public class UpdateEmployeeCommandValidator : AbstractValidator<UpdateEmployeeCommand>
@@ -32,18 +36,20 @@ public class UpdateEmployeeCommandValidator : AbstractValidator<UpdateEmployeeCo
         RuleFor(x => x.TenantUserId).NotEmpty();
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.PhoneNumber).MaximumLength(30);
         RuleFor(x => x.AppRole)
             .Must(role => role is UserRole.TenantAdmin or UserRole.Staff or UserRole.Kitchen)
-            .WithMessage("El rol de aplicacion no es valido para empleados.");
+            .WithMessage("El rol de aplicación no es válido para empleados.");
         RuleFor(x => x.TenantRole)
             .Must(role => role is TenantUserRole.Admin or TenantUserRole.Staff)
-            .WithMessage("El rol de tenant no es valido para empleados.");
+            .WithMessage("El rol en el negocio no es válido para empleados.");
     }
 }
 
 public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeCommand, Result<EmployeeDto>>
 {
+    public const string SharedAccountNameMessage =
+        "Esta persona usa su cuenta también en otro negocio: solo ella puede cambiar su nombre, desde su perfil.";
+
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
@@ -81,23 +87,41 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
         if (user is null || user.Role == UserRole.Customer)
             return Result.Failure<EmployeeDto>("Empleado no encontrado.");
 
-        var tenantRole = request.AppRole == UserRole.TenantAdmin
-            ? TenantUserRole.Admin
-            : request.TenantRole;
+        // The owner keeps the business: their role never changes from here.
+        var isOwner = tenantUser.Role == TenantUserRole.Owner;
+        var appRole = isOwner ? user.Role : request.AppRole;
+        var tenantRole = isOwner
+            ? TenantUserRole.Owner
+            : request.AppRole == UserRole.TenantAdmin ? TenantUserRole.Admin : request.TenantRole;
 
-        var permissions = TenantPermissionCatalog.NormalizeCodes(request.Permissions);
-        if (permissions.Count == 0)
+        if (EmployeeAccessRules.IsManagerRole(tenantUser.Role) && !EmployeeAccessRules.IsManagerRole(tenantRole))
         {
-            permissions = TenantPermissionCatalog.GetDefaultCodes(request.AppRole, tenantRole);
+            if (Guid.TryParse(_currentUserService.UserId, out var currentUserId) && currentUserId == tenantUser.UserId)
+                return Result.Failure<EmployeeDto>(EmployeeAccessRules.SelfDemotionMessage);
+            if (!await EmployeeAccessRules.HasAnotherActiveManagerAsync(_context, _tenantService.TenantId, tenantUser.Id, cancellationToken))
+                return Result.Failure<EmployeeDto>(EmployeeAccessRules.LastManagerMessage);
         }
 
-        user.FirstName = request.FirstName.Trim();
-        user.LastName = request.LastName.Trim();
-        user.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
+        // The account is shared by every business of the person: with another business, only this membership changes
+        // (the role inside each business comes from its membership) and the name is theirs to change.
+        var belongsToAnotherBusiness = await _context.TenantUsers
+            .IgnoreQueryFilters()
+            .AnyAsync(x => x.UserId == user.Id && x.TenantId != _tenantService.TenantId, cancellationToken);
 
-        if (user.Role != request.AppRole)
+        var firstName = request.FirstName.Trim();
+        var lastName = request.LastName.Trim();
+        if (firstName != user.FirstName || lastName != user.LastName)
         {
-            user.Role = request.AppRole;
+            if (belongsToAnotherBusiness)
+                return Result.Failure<EmployeeDto>(SharedAccountNameMessage);
+
+            user.FirstName = firstName;
+            user.LastName = lastName;
+        }
+
+        if (user.Role != appRole && !belongsToAnotherBusiness)
+        {
+            user.Role = appRole;
             var currentRoles = await _userManager.GetRolesAsync(user);
             if (currentRoles.Count > 0)
             {
@@ -109,7 +133,7 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
                 }
             }
 
-            var addRoleResult = await _userManager.AddToRoleAsync(user, EmployeeDefinitions.ToIdentityRole(request.AppRole));
+            var addRoleResult = await _userManager.AddToRoleAsync(user, EmployeeDefinitions.ToIdentityRole(appRole));
             if (!addRoleResult.Succeeded)
             {
                 var addErrors = string.Join(", ", addRoleResult.Errors.Select(e => e.Description));
@@ -118,7 +142,10 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
         }
 
         tenantUser.SetRole(tenantRole);
-        tenantUser.SetPermissionCodes(permissions);
+        if (request.Permissions is null)
+            tenantUser.SetPermissionCodes(TenantPermissionCatalog.GetDefaultCodes(appRole, tenantRole));
+        else
+            tenantUser.SetExplicitPermissions(request.Permissions);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -135,7 +162,7 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
             Status = tenantUser.Status.ToString(),
             IsActive = tenantUser.Status == TenantUserStatus.Active && user.IsActive,
             CreatedAt = tenantUser.CreatedAt,
-            Permissions = permissions.ToList()
+            Permissions = TenantPermissionCatalog.ResolveEffectiveCodes(tenantUser.PermissionCodes, user.Role, tenantUser.Role).ToList()
         });
     }
 }

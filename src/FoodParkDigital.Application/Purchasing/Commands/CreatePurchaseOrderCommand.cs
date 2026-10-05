@@ -23,7 +23,7 @@ public record CreatePurchaseOrderLineRequest
 }
 
 [RequiresPermission(TenantPermission.ManageInventory)]
-public record CreatePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>
+public record CreatePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>, ITransactionalRequest
 {
     public Guid SupplierId { get; init; }
     public DateTimeOffset? ExpectedDeliveryAt { get; init; }
@@ -57,11 +57,13 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IFolioGenerator _folios;
 
-    public CreatePurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public CreatePurchaseOrderCommandHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
+        _folios = folios;
     }
 
     public async Task<Result<PurchaseOrderDto>> Handle(CreatePurchaseOrderCommand request, CancellationToken cancellationToken)
@@ -71,7 +73,7 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
             _tenantService.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<PurchaseOrderDto>("El tenant no tiene habilitado el modulo de inventario/compras.");
+            return Result.Failure<PurchaseOrderDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
 
         var supplier = await _context.Suppliers
             .AsNoTracking()
@@ -95,7 +97,7 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
             return Result.Failure<PurchaseOrderDto>("Una o más ubicaciones no existen o están inactivas.");
 
         var now = DateTimeOffset.UtcNow;
-        var orderNumber = await GenerateOrderNumberAsync(now, cancellationToken);
+        var orderNumber = await _folios.NextPurchaseOrderNumberAsync(_tenantService.TenantId, now, cancellationToken);
 
         var order = new PurchaseOrder(
             tenantId: _tenantService.TenantId,
@@ -123,87 +125,6 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
         _context.PurchaseOrders.Add(order);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(await BuildDtoAsync(order.Id, cancellationToken));
-    }
-
-    private async Task<PurchaseOrderDto> BuildDtoAsync(Guid purchaseOrderId, CancellationToken cancellationToken)
-    {
-        var header = await (
-            from po in _context.PurchaseOrders.AsNoTracking()
-            join supplier in _context.Suppliers.AsNoTracking() on po.SupplierId equals supplier.Id
-            where po.Id == purchaseOrderId
-            select new
-            {
-                po.Id,
-                po.SupplierId,
-                SupplierName = supplier.Name,
-                po.OrderNumber,
-                po.Status,
-                po.OrderedAt,
-                po.ExpectedDeliveryAt,
-                po.ReceivedAt,
-                po.ReferenceNumber,
-                po.Notes,
-                po.SubTotal,
-                po.Tax,
-                po.Total
-            })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new EntityNotFoundException("PurchaseOrder", purchaseOrderId);
-
-        var lines = await (
-            from line in _context.PurchaseOrderLines.AsNoTracking()
-            join supply in _context.SupplyItems.AsNoTracking() on line.SupplyItemId equals supply.Id
-            join location in _context.InventoryLocations.AsNoTracking() on line.InventoryLocationId equals location.Id
-            where line.PurchaseOrderId == purchaseOrderId
-            orderby line.CreatedAt
-            select new PurchaseOrderLineDto
-            {
-                Id = line.Id,
-                SupplyItemId = line.SupplyItemId,
-                SupplyItemName = supply.Name,
-                InventoryLocationId = line.InventoryLocationId,
-                InventoryLocationName = location.Name,
-                Quantity = line.Quantity,
-                ReceivedQuantity = line.ReceivedQuantity,
-                PendingQuantity = line.Quantity - line.ReceivedQuantity,
-                UnitCost = line.UnitCost,
-                TaxPercent = line.TaxPercent,
-                SubTotal = line.SubTotal,
-                TaxAmount = line.TaxAmount,
-                Total = line.Total,
-                Notes = line.Notes
-            })
-            .ToListAsync(cancellationToken);
-
-        return new PurchaseOrderDto
-        {
-            Id = header.Id,
-            SupplierId = header.SupplierId,
-            SupplierName = header.SupplierName,
-            OrderNumber = header.OrderNumber,
-            Status = header.Status,
-            OrderedAt = header.OrderedAt,
-            ExpectedDeliveryAt = header.ExpectedDeliveryAt,
-            ReceivedAt = header.ReceivedAt,
-            ReferenceNumber = header.ReferenceNumber,
-            Notes = header.Notes,
-            SubTotal = header.SubTotal,
-            Tax = header.Tax,
-            Total = header.Total,
-            Lines = lines
-        };
-    }
-
-    private async Task<string> GenerateOrderNumberAsync(DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var dayStart = now.UtcDateTime.Date;
-        var dayEnd = dayStart.AddDays(1);
-        var prefix = $"PO-{dayStart:yyyyMMdd}";
-
-        var count = await _context.PurchaseOrders
-            .CountAsync(x => x.OrderedAt >= dayStart && x.OrderedAt < dayEnd, cancellationToken);
-
-        return $"{prefix}-{count + 1:0000}";
+        return Result.Success(await PurchaseOrderReader.LoadAsync(_context, order.Id, cancellationToken));
     }
 }

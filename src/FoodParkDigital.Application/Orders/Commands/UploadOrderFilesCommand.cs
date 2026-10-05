@@ -98,7 +98,8 @@ public class UploadServiceIntakePhotoCommandHandler : IRequestHandler<UploadServ
     }
 }
 
-[RequiresPermission(TenantPermission.ManageOrders)]
+/// <summary>The transfer receipt of a payment: part of charging, like registering the payment itself.</summary>
+[RequiresPermission(TenantPermission.ChargeOrders)]
 public record UploadOrderPaymentEvidenceCommand : IRequest<Result<UploadedFileDto>>
 {
     public Stream FileStream { get; init; } = null!;
@@ -121,7 +122,7 @@ public class UploadOrderPaymentEvidenceCommandValidator : AbstractValidator<Uplo
             .Must(ct =>
                 ct.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
                 || ct.Equals("application/pdf", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Solo se permiten imagenes o PDF.");
+            .WithMessage("Solo se permiten imágenes o PDF.");
         RuleFor(x => x.FileSize)
             .LessThanOrEqualTo(MaxFileSizeBytes)
             .WithMessage("El archivo no puede exceder 12 MB.");
@@ -182,7 +183,7 @@ public class UploadOrderPaymentEvidenceCommandHandler : IRequestHandler<UploadOr
         }
         else
         {
-            return Result.Failure<UploadedFileDto>("Solo se permiten imagenes JPG, PNG o WebP, o documentos PDF.");
+            return Result.Failure<UploadedFileDto>("Solo se permiten imágenes JPG, PNG o WebP, o documentos PDF.");
         }
 
         await using (stored)

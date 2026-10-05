@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Employees;
 using MediatR;
 
 namespace FoodParkDigital.Application.Identity.Queries;
@@ -52,11 +53,14 @@ public class GetMyAccessQueryHandler : IRequestHandler<GetMyAccessQuery, MyAcces
         var snapshot = await _access.GetSnapshotAsync(cancellationToken);
         dto.TenantId = _access.TenantId;
         dto.IsMember = snapshot?.HasActiveAccess == true;
-        dto.IsTenantManager = (dto.IsMember || dto.IsPlatformAdmin) && _access.IsTenantManager;
+        dto.IsTenantManager = (dto.IsMember || dto.IsPlatformAdmin) && await _access.IsTenantManagerAsync(cancellationToken);
         dto.Permissions = dto.IsMember || dto.IsPlatformAdmin
             ? (await _access.GetPermissionsAsync(cancellationToken)).OrderBy(p => p, StringComparer.Ordinal).ToList()
             : [];
         dto.Capabilities = (int)await _access.GetCapabilitiesAsync(cancellationToken);
+        // The role in this business now: a token issued before a change of role still carries the old one.
+        if (dto.IsMember && snapshot!.EffectiveRole is { } effectiveRole)
+            dto.Role = EmployeeDefinitions.ToIdentityRole(effectiveRole);
         return dto;
     }
 }

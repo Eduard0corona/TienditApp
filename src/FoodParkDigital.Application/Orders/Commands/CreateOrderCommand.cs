@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
@@ -22,8 +21,12 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Orders.Commands;
 
 [RequiresPermission(TenantPermission.ManageOrders)]
-public record CreateOrderCommand : IRequest<Result<OrderDto>>
+public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions, ITransactionalRequest
 {
+    /// <summary>Taking an order needs ManageOrders; charging it at once also needs ChargeOrders.</summary>
+    public IEnumerable<TenantPermission> RequiredPermissions()
+        => Payments is { Count: > 0 } ? [TenantPermission.ChargeOrders] : [];
+
     public Guid? CustomerId { get; init; }
     public string? CustomerName { get; init; }
     public string? CustomerPhone { get; init; }
@@ -71,6 +74,11 @@ public record CreateOrderPaymentDto
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
+    /// <summary>On top of the amount, for the team: not part of the sale or its total. 0 when not sent.</summary>
+    [System.ComponentModel.DefaultValue(0)]
+    public decimal Tip { get; init; }
+    /// <summary>What the customer handed over in cash, to keep the change with the payment.</summary>
+    public decimal? CashReceived { get; init; }
 }
 
 public record CreateOrderItemDto
@@ -103,7 +111,8 @@ public record ServiceOrderDetailInput
 {
     public DateTimeOffset? ReceivedAt { get; init; }
     public DateTimeOffset? PromisedAt { get; init; }
-    public int Priority { get; init; } = 1;
+    /// <summary>1 low, 3 normal, 5 urgent (the intake offers those three).</summary>
+    public int Priority { get; init; } = 3;
     public string? IntakeNotes { get; init; }
     public string? DeliveryNotes { get; init; }
     public string? IntakeChecklistJson { get; init; }
@@ -142,12 +151,12 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxItemsPerOrder} lineas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxItemsPerOrder} lineas.");
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ServiceDetail!.Pieces.Count)
             .LessThanOrEqualTo(OrderLimits.MaxServicePiecesPerOrder)
             .When(x => x.ServiceDetail is not null)
-            .WithMessage($"Una orden puede tener como maximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
+            .WithMessage($"Una orden puede tener como máximo {OrderLimits.MaxServicePiecesPerOrder} piezas.");
 
         RuleFor(x => x.Payments)
             .Empty()
@@ -155,7 +164,7 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             .WithMessage("Solo el negocio registra pagos al crear una venta.");
         RuleFor(x => x.Payments.Count)
             .LessThanOrEqualTo(OrderLimits.MaxPaymentsPerSale)
-            .WithMessage($"Una venta admite como maximo {OrderLimits.MaxPaymentsPerSale} pagos.");
+            .WithMessage($"Una venta admite como máximo {OrderLimits.MaxPaymentsPerSale} pagos.");
         RuleFor(x => x.IdempotencyKey)
             .NotEqual(Guid.Empty)
             .When(x => x.IdempotencyKey.HasValue)
@@ -172,6 +181,15 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             payment.RuleFor(p => p.EvidenceUrl).MaximumLength(1000);
             payment.RuleFor(p => p.Reference).MaximumLength(120);
             payment.RuleFor(p => p.Notes).MaximumLength(1000);
+            payment.RuleFor(p => p.Tip).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
+            payment.RuleFor(p => p.CashReceived!.Value).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
+                .When(p => p.CashReceived.HasValue).WithName(nameof(CreateOrderPaymentDto.CashReceived));
+            payment.RuleFor(p => p.CashReceived).Null().When(p => p.Method != OrderPaymentMethod.Cash)
+                .WithMessage(OrderPayment.CashReceivedOnlyForCashMessage);
+            payment.RuleFor(p => p.CashReceived!.Value).GreaterThanOrEqualTo(p => p.Amount + p.Tip)
+                .When(p => p.CashReceived.HasValue && p.Method == OrderPaymentMethod.Cash)
+                .WithName(nameof(CreateOrderPaymentDto.CashReceived))
+                .WithMessage(OrderPayment.CashReceivedShortMessage);
         });
         RuleFor(x => x.ExpectedTotal)
             .GreaterThanOrEqualTo(0)
@@ -207,33 +225,33 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMapper _mapper;
     private readonly ICustomerLookupService _customerLookupService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IOrderInventoryService _orderInventoryService;
     private readonly IOrderCashService _orderCashService;
+    private readonly IFolioGenerator _folios;
 
     public CreateOrderCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IMapper mapper,
         ICustomerLookupService customerLookupService,
         IDateTimeProvider dateTimeProvider,
         IPhoneNormalizationService phoneNormalizationService,
-        IOrderInventoryService? orderInventoryService = null,
-        IOrderCashService? orderCashService = null)
+        IOrderInventoryService orderInventoryService,
+        IOrderCashService orderCashService,
+        IFolioGenerator folios)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
-        _mapper = mapper;
         _customerLookupService = customerLookupService;
         _dateTimeProvider = dateTimeProvider;
         _phoneNormalizationService = phoneNormalizationService;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
-        _orderCashService = orderCashService ?? NoOpOrderCashService.Instance;
+        _orderInventoryService = orderInventoryService;
+        _orderCashService = orderCashService;
+        _folios = folios;
     }
 
     public async Task<Result<OrderDto>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
@@ -264,7 +282,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         {
             var typeLabel = request.OrderType == OrderType.Service ? "servicios" : "ventas retail";
             return Result.Failure<OrderDto>(
-                $"El tenant no tiene habilitado el modulo requerido para crear ordenes de {typeLabel}.");
+                $"El negocio no tiene habilitado el módulo requerido para crear órdenes de {typeLabel}.");
         }
 
         string? customerName = request.CustomerName;
@@ -310,7 +328,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         }
         else if (request.CustomerId.HasValue && !isPublicGeneralCustomer)
         {
-            return Result.Failure<OrderDto>("El cliente seleccionado no tiene telefono. Captura uno para continuar.");
+            return Result.Failure<OrderDto>("El cliente seleccionado no tiene teléfono. Captura uno para continuar.");
         }
 
         var branch = await BranchRules.ResolveForSaleAsync(
@@ -326,15 +344,12 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
         var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, tenantZone);
 
-        var orderCount = await _context.Orders.CountAsync(cancellationToken);
-        var orderNumber = $"ORD-{orderCount + 1:D6}";
-
         var order = new Order(
             tenantId: _tenantService.TenantId,
             customerUserId: linkedCustomer?.CustomerUserId,
             temporaryCustomerId: linkedCustomer?.TemporaryCustomerId,
             createdByBusiness: request.CreatedByBusiness,
-            orderNumber: orderNumber,
+            orderNumber: Order.NumberNotAssigned,
             businessType: tenant.BusinessType,
             orderType: request.OrderType,
             customerName: ResolveCustomerName(customerName, linkedCustomer, customerPhone),
@@ -375,82 +390,17 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 return Result.Failure<OrderDto>(tabError);
         }
 
-        if (request.OrderType == OrderType.Service && request.ServiceDetail is not null)
-        {
-            var receivedAt = request.ServiceDetail.ReceivedAt ?? _dateTimeProvider.UtcNow;
-            order.SetServiceDetail(
-                receivedAt: receivedAt,
-                promisedAt: request.ServiceDetail.PromisedAt,
-                priority: request.ServiceDetail.Priority,
-                intakeNotes: request.ServiceDetail.IntakeNotes?.Trim(),
-                deliveryNotes: request.ServiceDetail.DeliveryNotes?.Trim(),
-                intakeChecklistJson: request.ServiceDetail.IntakeChecklistJson,
-                beforePhotosJson: request.ServiceDetail.BeforePhotosJson,
-                afterPhotosJson: request.ServiceDetail.AfterPhotosJson);
-
-        }
-
-        var manualPieces = request.ServiceDetail?.Pieces
-            .Where(piece => !string.IsNullOrWhiteSpace(piece.ItemName))
-            .ToList()
-            ?? [];
-
-        var piecesError = OrderLimits.ValidateServicePieces(
-            manualPieces,
+        OrderPlacement.ApplyServiceDetail(order, request.ServiceDetail, _dateTimeProvider.UtcNow);
+        var piecesError = OrderPlacement.AddServicePieces(
+            order,
+            request.ServiceDetail,
             checklistCandidates,
             quantitiesByProduct.Keys.ToHashSet());
         if (piecesError is not null)
             return Result.Failure<OrderDto>(piecesError);
 
-        if (manualPieces.Count > 0)
-        {
-            foreach (var piece in manualPieces)
-            {
-                order.AddServicePiece(
-                    itemName: piece.ItemName.Trim(),
-                    brand: piece.Brand?.Trim(),
-                    model: piece.Model?.Trim(),
-                    color: piece.Color?.Trim(),
-                    size: piece.Size?.Trim(),
-                    material: piece.Material?.Trim(),
-                    conditionNotes: piece.ConditionNotes?.Trim(),
-                    requestedService: piece.RequestedService?.Trim(),
-                    internalNotes: piece.InternalNotes?.Trim(),
-                    serviceProductId: piece.ServiceProductId,
-                    isTrackable: piece.IsTrackable,
-                    notifyCustomer: piece.NotifyCustomer);
-            }
-        }
-        else
-        {
-            foreach (var (product, item) in checklistCandidates)
-            {
-                var pieces = (int)item.Quantity;
-                for (var index = 0; index < pieces; index++)
-                {
-                    var itemName = item.Quantity > 1
-                        ? $"{product.Name} #{index + 1}"
-                        : product.Name;
-
-                    order.AddServicePiece(
-                        itemName: itemName,
-                        brand: null,
-                        model: null,
-                        color: null,
-                        size: null,
-                        material: null,
-                        conditionNotes: item.Notes?.Trim(),
-                        requestedService: product.Name,
-                        internalNotes: null,
-                        serviceProductId: product.Id,
-                        isTrackable: true,
-                        notifyCustomer: product.NotifyCustomer);
-                }
-            }
-        }
-
         if (request.CreatedByBusiness)
-            ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
+            OrderPlacement.ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
 
         if (request.ExpectedTotal.HasValue && request.ExpectedTotal.Value != order.Total)
         {
@@ -460,11 +410,14 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 "Revisa la venta antes de cobrar.");
         }
 
+        if (request.Payments.Sum(p => p.Amount) > order.Total)
+            return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
+
+        // The folio, once the checks without side effects passed: payments and supplies name the order by it.
+        order.AssignNumber(await _folios.NextOrderNumberAsync(_tenantService.TenantId, cancellationToken));
+
         if (request.Payments.Count > 0)
         {
-            if (request.Payments.Sum(p => p.Amount) > order.Total)
-                return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
-
             var registrar = new OrderPaymentRegistrar(_context, _orderCashService, _dateTimeProvider);
             foreach (var paymentDto in request.Payments)
             {
@@ -476,7 +429,9 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                         paymentDto.InventoryLocationId,
                         paymentDto.EvidenceUrl,
                         paymentDto.Reference,
-                        paymentDto.Notes),
+                        paymentDto.Notes,
+                        paymentDto.Tip,
+                        paymentDto.CashReceived),
                     cancellationToken);
                 if (payment.IsFailure)
                     return Result.Failure<OrderDto>(payment.Error!);
@@ -486,7 +441,12 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (request.CreatedByBusiness)
             CounterSaleClosing.TryClose(order, salesSettings, tenantCapabilities, _currentUserService.UserName);
 
-        await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
+        // A sale captured offline already happened, and a customer's own order is reviewed by the business: only a
+        // sale the team is making now can be refused for missing supplies.
+        var shortages = await _orderInventoryService.ApplyConsumptionForOrderAsync(
+            order,
+            cancellationToken,
+            request.CreatedByBusiness && request.CapturedOfflineAt is null ? StockShortageHandling.TenantPolicy : StockShortageHandling.Allow);
 
         if (request.IdempotencyKey is { } requestKey)
             order.IdentifyClientRequest(requestKey, request.CapturedOfflineAt);
@@ -505,14 +465,17 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         catch (DbUpdateException) when (request.IdempotencyKey is { } racedKey)
         {
             // The same sale arrived twice at once and the other request stored it first (IX_Orders_TenantId_ClientRequestId).
-            _context.ChangeTracker.Clear();
+            // This copy is undone whole, its folio, payments and supplies included (with MARS, SQL Server keeps no
+            // savepoint for the failed save), and the stored one is the answer.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
             if (await ExistingSaleAsync(racedKey, cancellationToken) is { } stored)
                 return Result.Success(stored);
             throw;
         }
 
-        var dto = _mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
+        dto.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
         return Result.Success(dto);
     }
 
@@ -530,7 +493,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (order is null)
             return null;
 
-        var dto = _mapper.Map<OrderDto>(order);
+        var dto = order.ToDto();
         dto.ApplyStateMetadata();
         return dto;
     }
@@ -565,18 +528,5 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             return requestedName.Trim();
 
         return linkedCustomer?.ResolvedName ?? rawPhone ?? WalkInCustomerName;
-    }
-
-    private static void ApplyBusinessDefaultStatus(Order order, string? performedBy)
-    {
-        var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
-        var defaultStatus = order.OrderType switch
-        {
-            OrderType.Service => OrderStatus.Accepted,
-            _ => order.BusinessType == BusinessType.Food ? OrderStatus.Confirmed : OrderStatus.Confirmed
-        };
-
-        if (stateMachine.GetAllowedTransitions(order.Status).Contains(defaultStatus))
-            order.TransitionTo(defaultStatus, stateMachine, performedBy);
     }
 }

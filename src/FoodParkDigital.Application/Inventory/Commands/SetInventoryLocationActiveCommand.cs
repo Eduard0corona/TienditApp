@@ -37,10 +37,10 @@ public class SetInventoryLocationActiveCommandHandler : IRequestHandler<SetInven
             entity.TenantId,
             cancellationToken);
         if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure("El tenant no tiene habilitado el modulo de inventario.");
+            return Result.Failure("El negocio no tiene habilitado el módulo de inventario.");
 
         if (!request.IsActive && entity.IsDefault)
-            return Result.Failure("No puedes desactivar la ubicacion por defecto.");
+            return Result.Failure("No puedes desactivar la ubicación por defecto.");
 
         entity.SetActive(request.IsActive);
         await _context.SaveChangesAsync(cancellationToken);

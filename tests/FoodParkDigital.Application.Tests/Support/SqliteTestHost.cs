@@ -1,9 +1,8 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Mappings;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Interceptors;
 using FoodParkDigital.Infrastructure.Services;
@@ -57,7 +56,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddSingleton<ICurrentTenantService>(_tenantService);
         services.AddSingleton<ICurrentUserService, FixedCurrentUserService>();
         services.AddSingleton<IDateTimeProvider, FixedDateTimeProvider>();
-        services.AddSingleton<IMediator, NoOpMediator>();
+        services.AddSingleton<IMediator>(Mediator);
         services.AddScoped<ApplicationDbContext>(sp => new SqliteTestApplicationDbContext(
             options,
             sp.GetRequiredService<ICurrentTenantService>(),
@@ -67,20 +66,26 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddIdentityCore<ApplicationUser>(InfrastructureDependencyInjection.ConfigureIdentityOptions)
             .AddRoles<ApplicationRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddDefaultTokenProviders();
+            .AddTienditAppIdentityDefaults();
 
         services.AddScoped<IPhoneNormalizationService, PhoneNormalizationService>();
+        services.AddScoped<IFolioGenerator, FolioGenerator>();
+        // Sales here are about customers and phones: supplies and the cash drawer stay out, explicitly.
+        services.AddSingleton(NoOpOrderInventoryService.Instance);
+        services.AddSingleton<IOrderCashService>(NoOpOrderCashService.Instance);
         services.AddScoped<ICustomerLookupService, CustomerLookupService>();
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IEmailService>(Email);
         services.AddSingleton<ISmsService>(Sms);
-        services.AddSingleton<IJwtTokenService, FakeJwtTokenService>();
-        services.AddSingleton<IMapper>(new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper());
+        services.AddSingleton<IJwtTokenService>(Jwt);
 
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     }
 
     public RecordingEmailService Email { get; } = new();
+    /// <summary>Realtime events published by the contexts of the host (none is sent: requests return default).</summary>
+    public RecordingMediator Mediator { get; } = new();
+    public FakeJwtTokenService Jwt { get; } = new();
     public RecordingSmsService Sms { get; } = new();
     public BeforeSaveInterceptor BeforeSave { get; } = new();
     public CommandFaultInterceptor CommandFaults { get; } = new();
@@ -191,8 +196,11 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         public DateTimeOffset UtcNow => new(2026, 2, 16, 16, 0, 0, TimeSpan.Zero);
     }
 
-    private sealed class FakeJwtTokenService : IJwtTokenService
+    internal sealed class FakeJwtTokenService : IJwtTokenService
     {
+        /// <summary>Accounts whose sessions were ended (password recovered).</summary>
+        public List<Guid> RevokedUsers { get; } = [];
+
         public string GenerateAccessToken(ApplicationUser user, TenantTokenContext? tenantContext = null)
             => $"access-token-{user.Id}";
 
@@ -201,21 +209,43 @@ internal sealed class SqliteTestHost : IAsyncDisposable
 
         public Task<bool> ValidateRefreshTokenAsync(Guid userId, string refreshToken) => throw new NotSupportedException();
         public Task RevokeRefreshTokenAsync(string refreshToken, string? replacedByToken = null) => throw new NotSupportedException();
-        public Task RevokeAllUserRefreshTokensAsync(Guid userId) => throw new NotSupportedException();
+        public Task RevokeAllUserRefreshTokensAsync(Guid userId)
+        {
+            RevokedUsers.Add(userId);
+            return Task.CompletedTask;
+        }
         public Task<Guid?> GetUserIdFromRefreshTokenAsync(string refreshToken) => throw new NotSupportedException();
         public System.Security.Claims.ClaimsPrincipal? GetPrincipalFromExpiredToken(string token) => throw new NotSupportedException();
     }
 
-    private sealed class NoOpMediator : IMediator
+    internal sealed class RecordingMediator : IMediator
     {
+        private readonly List<object> _published = [];
+
+        public IReadOnlyList<object> Published
+        {
+            get
+            {
+                lock (_published)
+                    return _published.ToList();
+            }
+        }
+
         public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken ct = default) => Task.FromResult<TResponse>(default!);
         public Task Send<TRequest>(TRequest request, CancellationToken ct = default) where TRequest : IRequest => Task.CompletedTask;
-        public Task Publish(object notification, CancellationToken ct = default) => Task.CompletedTask;
-        public Task Publish<TNotification>(TNotification notification, CancellationToken ct = default) where TNotification : INotification => Task.CompletedTask;
+        public Task Publish(object notification, CancellationToken ct = default) => Record(notification);
+        public Task Publish<TNotification>(TNotification notification, CancellationToken ct = default) where TNotification : INotification => Record(notification!);
         public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken ct = default) => AsyncEnumerable.Empty<TResponse>();
         public IAsyncEnumerable<TResponse> CreateStream<TResponse>(object request, CancellationToken ct = default) => AsyncEnumerable.Empty<TResponse>();
         public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken ct = default) => AsyncEnumerable.Empty<object?>();
         public Task<object?> Send(object request, CancellationToken ct = default) => Task.FromResult<object?>(null);
+
+        private Task Record(object notification)
+        {
+            lock (_published)
+                _published.Add(notification);
+            return Task.CompletedTask;
+        }
     }
 }
 

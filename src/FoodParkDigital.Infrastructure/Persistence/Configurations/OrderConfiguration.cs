@@ -38,6 +38,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.PaidAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
         builder.Property(o => o.RefundedAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
         builder.Ignore(o => o.NetPaidAmount);
+        builder.Ignore(o => o.TipTotal);
         builder.Ignore(o => o.IsOpenTab);
         builder.Ignore(o => o.CurrentRound);
         builder.Property(o => o.IsTab).HasDefaultValue(false).ValueGeneratedNever();

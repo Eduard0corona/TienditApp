@@ -300,7 +300,36 @@ export interface paths {
                 };
             };
         };
-        put?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAppointmentCommand"];
+                    "text/json": components["schemas"]["UpdateAppointmentCommand"];
+                    "application/*+json": components["schemas"]["UpdateAppointmentCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AppointmentDto"];
+                        "application/json": components["schemas"]["AppointmentDto"];
+                        "text/json": components["schemas"]["AppointmentDto"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -870,6 +899,206 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/forgot-password/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ForgotPasswordBySmsCommand"];
+                    "text/json": components["schemas"]["ForgotPasswordBySmsCommand"];
+                    "application/*+json": components["schemas"]["ForgotPasswordBySmsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/reset-password/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ResetPasswordWithSmsCodeCommand"];
+                    "text/json": components["schemas"]["ResetPasswordWithSmsCodeCommand"];
+                    "application/*+json": components["schemas"]["ResetPasswordWithSmsCodeCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/change-unconfirmed-phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
+                    "text/json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
+                    "application/*+json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    userId?: string;
+                    token?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvitationDto"];
+                        "application/json": components["schemas"]["InvitationDto"];
+                        "text/json": components["schemas"]["InvitationDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/accept-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AcceptInvitationCommand"];
+                    "text/json": components["schemas"]["AcceptInvitationCommand"];
+                    "application/*+json": components["schemas"]["AcceptInvitationCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AuthResponse"];
+                        "application/json": components["schemas"]["AuthResponse"];
+                        "text/json": components["schemas"]["AuthResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/profile": {
         parameters: {
             query?: never;
@@ -990,6 +1219,84 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/profile/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RequestPhoneChangeCommand"];
+                    "text/json": components["schemas"]["RequestPhoneChangeCommand"];
+                    "application/*+json": components["schemas"]["RequestPhoneChangeCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/profile/phone/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmPhoneChangeCommand"];
+                    "text/json": components["schemas"]["ConfirmPhoneChangeCommand"];
+                    "application/*+json": components["schemas"]["ConfirmPhoneChangeCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1806,7 +2113,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    includeArchived?: boolean;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -2302,6 +2611,166 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/customers/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCustomerNotesRequest"];
+                    "text/json": components["schemas"]["UpdateCustomerNotesRequest"];
+                    "application/*+json": components["schemas"]["UpdateCustomerNotesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/{id}/addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CustomerAddressRequest"];
+                    "text/json": components["schemas"]["CustomerAddressRequest"];
+                    "application/*+json": components["schemas"]["CustomerAddressRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/customers/{id}/addresses/{addressId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    addressId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CustomerAddressRequest"];
+                    "text/json": components["schemas"]["CustomerAddressRequest"];
+                    "application/*+json": components["schemas"]["CustomerAddressRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    addressId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerDto"];
+                        "application/json": components["schemas"]["CustomerDto"];
+                        "text/json": components["schemas"]["CustomerDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard/metrics": {
         parameters: {
             query?: never;
@@ -2512,6 +2981,82 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/role-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["EmployeeRolePresetDto"][];
+                        "application/json": components["schemas"]["EmployeeRolePresetDto"][];
+                        "text/json": components["schemas"]["EmployeeRolePresetDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{tenantUserId}/resend-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    tenantUserId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["EmployeeInvitationDto"];
+                        "application/json": components["schemas"]["EmployeeInvitationDto"];
+                        "text/json": components["schemas"]["EmployeeInvitationDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -3542,6 +4087,73 @@ export interface paths {
                         "text/plain": components["schemas"]["MyTenantDto"][];
                         "application/json": components["schemas"]["MyTenantDto"][];
                         "text/json": components["schemas"]["MyTenantDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateBusinessCommand"];
+                    "text/json": components["schemas"]["CreateBusinessCommand"];
+                    "application/*+json": components["schemas"]["CreateBusinessCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyTenantDto"];
+                        "application/json": components["schemas"]["MyTenantDto"];
+                        "text/json": components["schemas"]["MyTenantDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["MyOrderDtoPaginatedList"];
+                        "application/json": components["schemas"]["MyOrderDtoPaginatedList"];
+                        "text/json": components["schemas"]["MyOrderDtoPaginatedList"];
                     };
                 };
             };
@@ -5714,6 +6326,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/purchaseorders/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurchaseOrderDto"];
+                        "application/json": components["schemas"]["PurchaseOrderDto"];
+                        "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchaseorders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PurchaseOrderDto"];
+                        "application/json": components["schemas"]["PurchaseOrderDto"];
+                        "text/json": components["schemas"]["PurchaseOrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/operational-summary": {
         parameters: {
             query?: never;
@@ -6870,6 +7560,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/whatsapp/chat/{id}/auto-replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetAutoRepliesRequest"];
+                    "text/json": components["schemas"]["SetAutoRepliesRequest"];
+                    "application/*+json": components["schemas"]["SetAutoRepliesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ConversationDto"];
+                        "application/json": components["schemas"]["ConversationDto"];
+                        "text/json": components["schemas"]["ConversationDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/whatsapp/webhook": {
         parameters: {
             query?: never;
@@ -6928,13 +7663,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AcceptInvitationCommand: {
+            /** Format: uuid */
+            userId: string;
+            token: string;
+            newPassword: string;
+        };
         AddCashTransactionRequest: {
             /** Format: uuid */
             cashSessionId: string;
             transactionType: components["schemas"]["CashTransactionType"];
             /** Format: double */
             amount: number;
-            paymentMethod: components["schemas"]["OrderPaymentMethod"];
+            paymentMethod?: components["schemas"]["OrderPaymentMethod"];
             /** Format: uuid */
             inventoryLocationId?: string | null;
             /** Format: uuid */
@@ -6994,6 +7735,10 @@ export interface components {
             customerPhone: string;
             serviceName: string;
             staffName?: string | null;
+            /** Format: uuid */
+            serviceProductId?: string | null;
+            /** Format: uuid */
+            staffUserId?: string | null;
             /** Format: date-time */
             startAt: string;
             /** Format: date-time */
@@ -7053,7 +7798,7 @@ export interface components {
             requiresTwoFactor: boolean;
             twoFactorChallengeToken?: string | null;
             userId?: string | null;
-            user: components["schemas"]["UserDto"];
+            user?: components["schemas"]["UserDto"];
         };
         AvatarImageUrlsDto: {
             original: string;
@@ -7251,7 +7996,7 @@ export interface components {
             amount: number;
             /** Format: date-time */
             occurredAt: string;
-            paymentMethod: components["schemas"]["OrderPaymentMethod"];
+            paymentMethod?: components["schemas"]["OrderPaymentMethod"];
             /** Format: uuid */
             inventoryLocationId?: string | null;
             inventoryLocationName?: string | null;
@@ -7276,7 +8021,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        CashTransactionType: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        CashTransactionType: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
         CategoryDto: {
             /** Format: uuid */
             id: string;
@@ -7285,12 +8030,14 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isActive: boolean;
+            /** Format: int32 */
+            productCount: number;
         };
         CategoryTemplateDto: {
             id: string;
             name: string;
             description: string;
-            businessType: components["schemas"]["BusinessType"];
+            businessType?: components["schemas"]["BusinessType"];
             isRecommended: boolean;
             /** Format: int32 */
             categoryCount: number;
@@ -7315,7 +8062,7 @@ export interface components {
             /** Format: double */
             amount: number;
             taxObject: string;
-            transfer: components["schemas"]["CfdiTransferDto"];
+            transfer?: components["schemas"]["CfdiTransferDto"];
         };
         CfdiDraftDto: {
             /** Format: uuid */
@@ -7373,6 +8120,12 @@ export interface components {
             currentPassword: string;
             newPassword: string;
         };
+        ChangeUnconfirmedPhoneCommand: {
+            /** Format: uuid */
+            userId: string;
+            password: string;
+            phoneNumber: string;
+        };
         ChatMessageDto: {
             /** Format: uuid */
             id: string;
@@ -7401,6 +8154,10 @@ export interface components {
             notes?: string | null;
             cashCount?: components["schemas"]["CashCountLineDto"][] | null;
         };
+        ConfirmPhoneChangeCommand: {
+            phoneNumber: string;
+            code: string;
+        };
         ConfirmPhoneCommand: {
             userId: string;
             code: string;
@@ -7415,6 +8172,8 @@ export interface components {
             lastMessageAt: string;
             /** Format: int32 */
             unreadCount: number;
+            /** Format: date-time */
+            autoRepliesPausedUntil?: string | null;
         };
         ConversationDtoPaginatedList: {
             items: components["schemas"]["ConversationDto"][];
@@ -7455,8 +8214,12 @@ export interface components {
         CreateAppointmentCommand: {
             customerName: string;
             customerPhone: string;
-            serviceName: string;
+            serviceName?: string | null;
+            /** Format: uuid */
+            serviceProductId?: string | null;
             staffName?: string | null;
+            /** Format: uuid */
+            staffUserId?: string | null;
             /** Format: date-time */
             startAt: string;
             /** Format: date-time */
@@ -7476,6 +8239,10 @@ export interface components {
             contactName?: string | null;
             contactPhone?: string | null;
             isDefault: boolean;
+        };
+        CreateBusinessCommand: {
+            businessName: string;
+            businessType: components["schemas"]["BusinessType"];
         };
         CreateCampaignCommand: {
             name: string;
@@ -7499,6 +8266,7 @@ export interface components {
             name: string;
             phone?: string | null;
             email?: string | null;
+            notes?: string | null;
         };
         CreateDiningTableCommand: {
             name: string;
@@ -7510,13 +8278,13 @@ export interface components {
         };
         CreateEmployeeCommand: {
             email: string;
-            password: string;
+            password?: string | null;
             firstName: string;
             lastName: string;
             phoneNumber?: string | null;
             appRole: components["schemas"]["UserRole"];
             tenantRole: components["schemas"]["TenantUserRole"];
-            permissions: string[];
+            permissions?: string[] | null;
         };
         CreateInventoryLocationCommand: {
             name: string;
@@ -7576,7 +8344,7 @@ export interface components {
             tableNumber?: string | null;
             createdByBusiness: boolean;
             orderType: components["schemas"]["OrderType"];
-            serviceDetail: components["schemas"]["ServiceOrderDetailInput"];
+            serviceDetail?: components["schemas"]["ServiceOrderDetailInput"];
             items: components["schemas"]["CreateOrderItemDto"][];
             payments: components["schemas"]["CreateOrderPaymentDto"][];
             /** Format: double */
@@ -7609,6 +8377,13 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
+            /**
+             * Format: double
+             * @default 0
+             */
+            tip: number;
+            /** Format: double */
+            cashReceived?: number | null;
         };
         CreatePlanCommand: {
             code: string;
@@ -7660,7 +8435,7 @@ export interface components {
             lowStockThreshold?: number | null;
             /** Format: int32 */
             maxQuantityPerOrder?: number | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             /** Format: date-span */
             availableFromTime?: string | null;
             /** Format: date-span */
@@ -7741,6 +8516,20 @@ export interface components {
             defaultCountry: string;
             items: components["schemas"]["CreateOrderItemDto"][];
         };
+        CustomerAddressDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            addressLine: string;
+            references?: string | null;
+            isDefault: boolean;
+        };
+        CustomerAddressRequest: {
+            addressLine: string;
+            label?: string | null;
+            references?: string | null;
+            isDefault: boolean;
+        };
         CustomerCardAppointmentDto: {
             /** Format: uuid */
             id: string;
@@ -7755,6 +8544,8 @@ export interface components {
             /** Format: uuid */
             customerId?: string | null;
             email?: string | null;
+            notes?: string | null;
+            addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: int32 */
             ordersCount: number;
             /** Format: double */
@@ -7806,6 +8597,8 @@ export interface components {
             email?: string | null;
             isPublicGeneral: boolean;
             isActive: boolean;
+            notes?: string | null;
+            addresses: components["schemas"]["CustomerAddressDto"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -7864,6 +8657,10 @@ export interface components {
             walletTotal: number;
             /** Format: double */
             otherTotal: number;
+            /** Format: double */
+            tipsTotal: number;
+            /** Format: double */
+            cashTipsTotal: number;
             /** Format: double */
             manualIncomeTotal: number;
             /** Format: double */
@@ -7940,7 +8737,7 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isActive: boolean;
-            openTab: components["schemas"]["OpenTabSummaryDto"];
+            openTab?: components["schemas"]["OpenTabSummaryDto"];
         };
         Disable2FARequest: {
             code: string;
@@ -7962,6 +8759,7 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             permissions: string[];
+            invitationUrl?: string | null;
         };
         EmployeeDtoPaginatedList: {
             items: components["schemas"]["EmployeeDto"][];
@@ -7974,10 +8772,22 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        EmployeeInvitationDto: {
+            invitationUrl: string;
+            email: string;
+        };
         EmployeePermissionOptionDto: {
             code: string;
             name: string;
             description: string;
+        };
+        EmployeeRolePresetDto: {
+            key: string;
+            name: string;
+            description: string;
+            appRole: components["schemas"]["UserRole"];
+            tenantRole: components["schemas"]["TenantUserRole"];
+            permissions: string[];
         };
         Enable2FAResponse: {
             sharedKey: string;
@@ -7987,6 +8797,9 @@ export interface components {
         ExtendTrialRequest: {
             /** Format: int32 */
             days: number;
+        };
+        ForgotPasswordBySmsCommand: {
+            email: string;
         };
         ForgotPasswordCommand: {
             email: string;
@@ -8012,6 +8825,11 @@ export interface components {
             /** Format: int32 */
             productsCreated: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        InsufficientStockPolicy: 0 | 1;
         InventoryAlertItemDto: {
             /** Format: uuid */
             supplyItemId: string;
@@ -8216,6 +9034,11 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        InvitationDto: {
+            email: string;
+            firstName: string;
+            businesses: string[];
+        };
         KitchenOrderDto: {
             /** Format: uuid */
             id: string;
@@ -8358,6 +9181,39 @@ export interface components {
             /** Format: int32 */
             capabilities: number;
         };
+        MyOrderDto: {
+            /** Format: uuid */
+            id: string;
+            orderNumber: string;
+            businessName: string;
+            businessSlug: string;
+            canOrderAgain: boolean;
+            status: components["schemas"]["OrderStatus"];
+            orderType: components["schemas"]["OrderType"];
+            /** Format: double */
+            total: number;
+            /** Format: double */
+            paidAmount: number;
+            /** Format: date-time */
+            createdAt: string;
+            items: components["schemas"]["MyOrderItemDto"][];
+        };
+        MyOrderDtoPaginatedList: {
+            items: components["schemas"]["MyOrderDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        MyOrderItemDto: {
+            productName: string;
+            /** Format: double */
+            quantity: number;
+        };
         MyTenantDto: {
             /** Format: uuid */
             tenantId: string;
@@ -8476,6 +9332,8 @@ export interface components {
             /** Format: double */
             balance: number;
             /** Format: double */
+            tipTotal: number;
+            /** Format: double */
             refundedAmount: number;
             /** Format: double */
             netPaidAmount: number;
@@ -8488,7 +9346,7 @@ export interface components {
             updatedAt?: string | null;
             items: components["schemas"]["OrderItemDto"][];
             statusHistory: components["schemas"]["OrderStatusHistoryDto"][];
-            serviceDetail: components["schemas"]["ServiceOrderDetailDto"];
+            serviceDetail?: components["schemas"]["ServiceOrderDetailDto"];
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
@@ -8497,6 +9355,7 @@ export interface components {
             /** Format: uuid */
             diningTableId?: string | null;
             kitchenTickets: components["schemas"]["KitchenTicketSummaryDto"][];
+            stockWarnings: string[];
         };
         OrderDtoPaginatedList: {
             items: components["schemas"]["OrderDto"][];
@@ -8543,6 +9402,11 @@ export interface components {
             /** Format: double */
             priceDelta: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        OrderNotificationPolicy: 0 | 1 | 2;
         OrderPaymentDto: {
             /** Format: uuid */
             id: string;
@@ -8556,6 +9420,12 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
+            /** Format: double */
+            tip: number;
+            /** Format: double */
+            cashReceived?: number | null;
+            /** Format: double */
+            change: number;
         };
         /**
          * Format: int32
@@ -8744,7 +9614,7 @@ export interface components {
             /** Format: uuid */
             planId?: string | null;
             planName?: string | null;
-            subscriptionStatus: components["schemas"]["SubscriptionStatus"];
+            subscriptionStatus?: components["schemas"]["SubscriptionStatus"];
             /** Format: date-time */
             trialEndsAt?: string | null;
             /** Format: date-time */
@@ -8794,7 +9664,7 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             tags?: string | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             /** Format: double */
             priceAmount: number;
             priceCurrency: string;
@@ -8808,7 +9678,7 @@ export interface components {
             satUnitCode?: string | null;
             taxObject: components["schemas"]["CfdiTaxObject"];
             imageUrl?: string | null;
-            images: components["schemas"]["ProductImageUrlsDto"];
+            images?: components["schemas"]["ProductImageUrlsDto"];
             isAvailable: boolean;
             isFeatured: boolean;
             /** Format: int32 */
@@ -8942,7 +9812,7 @@ export interface components {
             taxRate?: number | null;
             isTaxExempt: boolean;
             imageUrl?: string | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             isFeatured: boolean;
             availableNow: boolean;
             allergens?: string | null;
@@ -9028,6 +9898,8 @@ export interface components {
             purchaseOrderLineId: string;
             /** Format: double */
             quantityReceived: number;
+            /** Format: double */
+            unitCost?: number | null;
         };
         ReceivePurchaseOrderRequest: {
             /** Format: date-time */
@@ -9087,6 +9959,10 @@ export interface components {
             method: components["schemas"]["SubscriptionPaymentMethod"];
             reference?: string | null;
         };
+        RequestPhoneChangeCommand: {
+            phoneNumber: string;
+            currentPassword: string;
+        };
         ResendConfirmationEmailCommand: {
             email: string;
         };
@@ -9098,6 +9974,11 @@ export interface components {
         ResetPasswordCommand: {
             userId: string;
             token: string;
+            newPassword: string;
+        };
+        ResetPasswordWithSmsCodeCommand: {
+            email: string;
+            code: string;
             newPassword: string;
         };
         SalesByBranchReportDto: {
@@ -9274,6 +10155,9 @@ export interface components {
         SetAiAgentActiveRequest: {
             isActive: boolean;
         };
+        SetAutoRepliesRequest: {
+            paused: boolean;
+        };
         SetBranchActiveRequest: {
             isActive: boolean;
         };
@@ -9304,8 +10188,8 @@ export interface components {
         };
         SubscriptionDetailDto: {
             hasPlan: boolean;
-            plan: components["schemas"]["PlanDto"];
-            status: components["schemas"]["SubscriptionStatus"];
+            plan?: components["schemas"]["PlanDto"];
+            status?: components["schemas"]["SubscriptionStatus"];
             /** Format: date-time */
             startedAt?: string | null;
             /** Format: date-time */
@@ -9472,7 +10356,7 @@ export interface components {
             contactEmail: string;
             contactPhone?: string | null;
             logoUrl?: string | null;
-            logoImages: components["schemas"]["LogoImageUrlsDto"];
+            logoImages?: components["schemas"]["LogoImageUrlsDto"];
             capabilities: components["schemas"]["TenantCapability"];
             /** Format: date-time */
             createdAt: string;
@@ -9481,6 +10365,8 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
+            orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
+            insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
@@ -9503,6 +10389,8 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession: boolean;
+            orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
+            insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
         };
         TenantSetupDto: {
             businessType: components["schemas"]["BusinessType"];
@@ -9535,6 +10423,8 @@ export interface components {
         };
         ToggleCategoryActiveRequest: {
             isActive: boolean;
+            /** Format: uuid */
+            moveProductsToCategoryId?: string | null;
         };
         TopSellingItemDto: {
             /** Format: uuid */
@@ -9578,6 +10468,23 @@ export interface components {
             useConversationMemory: boolean;
             strictMode: boolean;
         };
+        UpdateAppointmentCommand: {
+            /** Format: uuid */
+            appointmentId: string;
+            customerName: string;
+            customerPhone: string;
+            serviceName?: string | null;
+            /** Format: uuid */
+            serviceProductId?: string | null;
+            staffName?: string | null;
+            /** Format: uuid */
+            staffUserId?: string | null;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            notes?: string | null;
+        };
         UpdateAppointmentRemindersCommand: {
             enabled: boolean;
             /** Format: int32 */
@@ -9617,6 +10524,10 @@ export interface components {
             name: string;
             phone?: string | null;
             email?: string | null;
+            notes?: string | null;
+        };
+        UpdateCustomerNotesRequest: {
+            notes?: string | null;
         };
         UpdateDiningTableCommand: {
             /** Format: uuid */
@@ -9634,10 +10545,9 @@ export interface components {
             tenantUserId: string;
             firstName: string;
             lastName: string;
-            phoneNumber?: string | null;
             appRole: components["schemas"]["UserRole"];
             tenantRole: components["schemas"]["TenantUserRole"];
-            permissions: string[];
+            permissions?: string[] | null;
         };
         UpdateInventoryLocationCommand: {
             /** Format: uuid */
@@ -9682,7 +10592,7 @@ export interface components {
             zipCode?: string | null;
             city?: string | null;
             state?: string | null;
-            capabilities: components["schemas"]["TenantCapability"];
+            capabilities?: components["schemas"]["TenantCapability"];
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];
@@ -9755,7 +10665,7 @@ export interface components {
             lowStockThreshold?: number | null;
             /** Format: int32 */
             maxQuantityPerOrder?: number | null;
-            unit: components["schemas"]["UnitType"];
+            unit?: components["schemas"]["UnitType"];
             /** Format: date-span */
             availableFromTime?: string | null;
             /** Format: date-span */
@@ -9769,6 +10679,8 @@ export interface components {
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
             requireOpenCashSession?: boolean | null;
+            orderNotificationPolicy?: components["schemas"]["OrderNotificationPolicy"];
+            insufficientStockPolicy?: components["schemas"]["InsufficientStockPolicy"];
         };
         UpdateServiceOrderPieceStatusRequest: {
             newStatus: components["schemas"]["ServiceOrderPieceStatus"];
@@ -9815,7 +10727,6 @@ export interface components {
         UpdateUserProfileCommand: {
             firstName: string;
             lastName: string;
-            phoneNumber?: string | null;
         };
         UpdateWhatsAppConfigCommand: {
             isEnabled: boolean;
@@ -9858,7 +10769,7 @@ export interface components {
             tenantId?: string | null;
             isActive: boolean;
             avatarUrl?: string | null;
-            avatarImages: components["schemas"]["AvatarImageUrlsDto"];
+            avatarImages?: components["schemas"]["AvatarImageUrlsDto"];
         };
         UserProfileDto: {
             /** Format: uuid */
@@ -9877,7 +10788,7 @@ export interface components {
             tenantId?: string | null;
             isActive: boolean;
             avatarUrl?: string | null;
-            avatarImages: components["schemas"]["AvatarImageUrlsDto"];
+            avatarImages?: components["schemas"]["AvatarImageUrlsDto"];
             twoFactorEnabled: boolean;
             /** Format: date-time */
             createdAt: string;

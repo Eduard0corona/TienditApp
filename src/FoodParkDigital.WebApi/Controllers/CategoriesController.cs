@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Catalog.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -20,14 +21,14 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<CategoryDto>>> GetAll()
+    public async Task<ActionResult<List<CategoryDto>>> GetAll([FromQuery] bool includeArchived = false)
     {
-        var result = await _mediator.Send(new GetCategoriesQuery());
+        var result = await _mediator.Send(new GetCategoriesQuery { IncludeArchived = includeArchived });
         return Ok(result);
     }
 
     [HttpGet("templates")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<List<CategoryTemplateDto>>> GetTemplates()
     {
         var result = await _mediator.Send(new GetCategoryTemplatesQuery());
@@ -35,7 +36,7 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPost("templates/{templateId}/install")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<InstallCategoryTemplateResultDto>> InstallTemplate(string templateId)
     {
         var result = await _mediator.Send(new InstallCategoryTemplateCommand
@@ -43,7 +44,7 @@ public class CategoriesController : ControllerBase
             TemplateId = templateId
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -55,51 +56,52 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<CategoryDto>> Create([FromBody] CreateCategoryCommand command)
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<CategoryDto>> Update(Guid id, [FromBody] UpdateCategoryCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var result = await _mediator.Send(new DeleteCategoryCommand(id));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
     [HttpPatch("{id:guid}/active")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN")]
+    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> ToggleActive(Guid id, [FromBody] ToggleCategoryActiveRequest request)
     {
         var result = await _mediator.Send(new ToggleCategoryActiveCommand
         {
             Id = id,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            MoveProductsToCategoryId = request.MoveProductsToCategoryId
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 }
 
-public record ToggleCategoryActiveRequest(bool IsActive);
+public record ToggleCategoryActiveRequest(bool IsActive, Guid? MoveProductsToCategoryId = null);

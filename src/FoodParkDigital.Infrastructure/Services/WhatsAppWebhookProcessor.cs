@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.WhatsApp.Commands;
@@ -22,17 +23,20 @@ public sealed class WhatsAppWebhookProcessor
     private readonly ISender _sender;
     private readonly IApplicationDbContext _context;
     private readonly ILogger<WhatsAppWebhookProcessor> _logger;
+    private readonly IWhatsAppNotificationService? _notifications;
     private readonly bool _logSensitiveData;
 
     public WhatsAppWebhookProcessor(
         ISender sender,
         IApplicationDbContext context,
         IHostEnvironment environment,
-        ILogger<WhatsAppWebhookProcessor> logger)
+        ILogger<WhatsAppWebhookProcessor> logger,
+        IWhatsAppNotificationService? notifications = null)
     {
         _sender = sender;
         _context = context;
         _logger = logger;
+        _notifications = notifications;
         // Database errors can quote the sender's phone number: only Development logs them in full.
         _logSensitiveData = environment.IsDevelopment();
     }
@@ -91,7 +95,7 @@ public sealed class WhatsAppWebhookProcessor
                     }
 
                     failed += await ProcessMessagesAsync(value, tenantId.Value, TryGetProfileName(value));
-                    failed += await ProcessStatusesAsync(value, cancellationToken);
+                    failed += await ProcessStatusesAsync(value, tenantId.Value, cancellationToken);
                 }
             }
 
@@ -110,7 +114,7 @@ public sealed class WhatsAppWebhookProcessor
         {
             var from = msg.TryGetProperty("from", out var fromProp) ? fromProp.GetString() : null;
             var msgId = msg.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
-            var body = ExtractInboundBody(msg);
+            var (body, isMedia) = ExtractInboundBody(msg);
 
             if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(msgId) || string.IsNullOrWhiteSpace(body))
                 continue;
@@ -125,7 +129,8 @@ public sealed class WhatsAppWebhookProcessor
                     FromPhone = from.StartsWith('+') ? from : $"+{from}",
                     ProfileName = profileName,
                     Body = body,
-                    ExternalMessageId = msgId
+                    ExternalMessageId = msgId,
+                    IsMedia = isMedia
                 });
             }
             catch (Exception ex)
@@ -143,7 +148,7 @@ public sealed class WhatsAppWebhookProcessor
     }
 
     /// <returns>1 when the statuses could not be saved, 0 otherwise.</returns>
-    private async Task<int> ProcessStatusesAsync(JsonElement value, CancellationToken cancellationToken)
+    private async Task<int> ProcessStatusesAsync(JsonElement value, Guid tenantId, CancellationToken cancellationToken)
     {
         if (!value.TryGetProperty("statuses", out var statuses) || statuses.ValueKind != JsonValueKind.Array)
             return 0;
@@ -151,6 +156,7 @@ public sealed class WhatsAppWebhookProcessor
         try
         {
             var anyUpdated = false;
+            var chatMessages = new List<Domain.WhatsApp.Entities.WhatsAppMessage>();
             foreach (var statusEvent in statuses.EnumerateArray())
             {
                 var externalId = statusEvent.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
@@ -168,6 +174,7 @@ public sealed class WhatsAppWebhookProcessor
                 if (message is not null)
                 {
                     message.UpdateStatus(mappedStatus);
+                    chatMessages.Add(message);
                     anyUpdated = true;
                 }
 
@@ -197,6 +204,22 @@ public sealed class WhatsAppWebhookProcessor
 
             if (anyUpdated)
                 await _context.SaveChangesAsync(cancellationToken);
+
+            // The chat shows the ticks as they arrive; a lost notification only waits for the next reload.
+            if (_notifications is not null)
+            {
+                foreach (var message in chatMessages.DistinctBy(m => m.Id))
+                {
+                    try
+                    {
+                        await _notifications.NotifyMessageStatus(tenantId, message.ConversationId, message.Id, message.Status.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Status of WhatsApp message {MessageId} could not be pushed to the chat: {ErrorType}", message.Id, ex.GetType().Name);
+                    }
+                }
+            }
             return 0;
         }
         catch (Exception ex)
@@ -226,18 +249,93 @@ public sealed class WhatsAppWebhookProcessor
                 : null;
     }
 
-    private static string? ExtractInboundBody(JsonElement message)
+    /// <summary>
+    /// The text of the message, or a marker for what the chat cannot show yet (photo, voice note, location...) so
+    /// the conversation keeps every message the customer sent. Reactions and system notices are skipped.
+    /// </summary>
+    private static (string? Body, bool IsMedia) ExtractInboundBody(JsonElement message)
     {
         var type = message.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null;
         return type switch
         {
             "text" when message.TryGetProperty("text", out var text)
-                && text.TryGetProperty("body", out var body) => body.GetString(),
+                && text.TryGetProperty("body", out var body) => (body.GetString(), false),
             "button" when message.TryGetProperty("button", out var button)
-                && button.TryGetProperty("text", out var btnText) => btnText.GetString(),
-            "interactive" => ExtractInteractiveText(message),
-            _ => null
+                && button.TryGetProperty("text", out var btnText) => (btnText.GetString(), false),
+            "interactive" => (ExtractInteractiveText(message), false),
+            "image" => (WithCaption("📷 Foto", message, "image"), true),
+            "video" => (WithCaption("🎬 Video", message, "video"), true),
+            "audio" => (IsVoiceNote(message) ? "🎤 Nota de voz" : "🎵 Audio", true),
+            "document" => (DescribeDocument(message), true),
+            "sticker" => ("🙂 Sticker", true),
+            "location" => (DescribeLocation(message), true),
+            "contacts" => (DescribeContacts(message), true),
+            "order" => ("🛒 Pedido desde el catálogo de WhatsApp", true),
+            "reaction" or "system" => (null, false),
+            null => (null, false),
+            _ => ("⚠️ Mensaje que no se puede mostrar aquí; ábrelo en WhatsApp.", true)
         };
+    }
+
+    private static string? StringProperty(JsonElement element, string name)
+        => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static string WithCaption(string marker, JsonElement message, string type)
+    {
+        var caption = message.TryGetProperty(type, out var media) ? StringProperty(media, "caption") : null;
+        return string.IsNullOrWhiteSpace(caption) ? marker : $"{marker}: {caption.Trim()}";
+    }
+
+    private static bool IsVoiceNote(JsonElement message)
+        => message.TryGetProperty("audio", out var audio)
+           && audio.ValueKind == JsonValueKind.Object
+           && audio.TryGetProperty("voice", out var voice)
+           && voice.ValueKind == JsonValueKind.True;
+
+    private static string DescribeDocument(JsonElement message)
+    {
+        if (!message.TryGetProperty("document", out var document))
+            return "📄 Documento";
+        var name = StringProperty(document, "filename");
+        var caption = StringProperty(document, "caption");
+        var text = string.IsNullOrWhiteSpace(name) ? "📄 Documento" : $"📄 Documento: {name.Trim()}";
+        return string.IsNullOrWhiteSpace(caption) ? text : $"{text} ({caption.Trim()})";
+    }
+
+    /// <summary>The place and a map link: deliveries go straight to it.</summary>
+    private static string DescribeLocation(JsonElement message)
+    {
+        if (!message.TryGetProperty("location", out var location) || location.ValueKind != JsonValueKind.Object)
+            return "📍 Ubicación";
+
+        var label = string.Join(", ", new[] { StringProperty(location, "name"), StringProperty(location, "address") }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part!.Trim()));
+        string? map = null;
+        if (location.TryGetProperty("latitude", out var lat) && lat.ValueKind == JsonValueKind.Number
+            && location.TryGetProperty("longitude", out var lng) && lng.ValueKind == JsonValueKind.Number)
+            map = string.Create(CultureInfo.InvariantCulture, $"https://maps.google.com/?q={lat.GetDouble():0.######},{lng.GetDouble():0.######}");
+
+        return (label.Length > 0, map) switch
+        {
+            (true, not null) => $"📍 Ubicación: {label} {map}",
+            (true, null) => $"📍 Ubicación: {label}",
+            (false, not null) => $"📍 Ubicación: {map}",
+            _ => "📍 Ubicación"
+        };
+    }
+
+    private static string DescribeContacts(JsonElement message)
+    {
+        if (!message.TryGetProperty("contacts", out var contacts) || contacts.ValueKind != JsonValueKind.Array)
+            return "👤 Contacto";
+        var names = contacts.EnumerateArray()
+            .Select(contact => contact.TryGetProperty("name", out var name) ? StringProperty(name, "formatted_name") : null)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToList();
+        return names.Count == 0 ? "👤 Contacto" : $"👤 Contacto: {string.Join(", ", names)}";
     }
 
     private static string? ExtractInteractiveText(JsonElement message)

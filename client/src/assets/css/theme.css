@@ -439,6 +439,13 @@ input[data-switch='primary']:checked + label {
   font-weight: 800;
 }
 
+/* Documents built only to be printed (cash cuts): never shown on screen. */
+@media screen {
+  .ta-print-only {
+    display: none !important;
+  }
+}
+
 @media print {
   body.ta-printing-ticket * {
     visibility: hidden;

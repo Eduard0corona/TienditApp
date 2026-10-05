@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +11,8 @@ namespace FoodParkDigital.Application.Tests;
 
 public class RegisterBusinessCommandTests
 {
-    private static readonly IdentityErrorDescriber IdentityErrors = new();
+    // The messages Identity gives in production (in Spanish).
+    private static readonly IdentityErrorDescriber IdentityErrors = new SpanishIdentityErrorDescriber();
 
     [Fact]
     public async Task RegisterBusiness_ShouldNotPersistAnything_WhenPasswordViolatesIdentityPolicy()

@@ -45,6 +45,10 @@ public class TenantProfileDto
     public decimal DefaultTaxRate { get; set; } = 16m;
     public bool AutoCloseCounterSales { get; set; } = true;
     public bool RequireOpenCashSession { get; set; }
+    /// <summary>Which orders send the customer WhatsApp messages (by default not counter sales).</summary>
+    public OrderNotificationPolicy OrderNotificationPolicy { get; set; }
+    /// <summary>Whether a sale whose recipe supplies are short is refused or goes through with a warning.</summary>
+    public InsufficientStockPolicy InsufficientStockPolicy { get; set; }
     /// <summary>The public menu (/m/{slug}): off, menu only, or menu that takes orders.</summary>
     public OnlineMenuMode OnlineMenuMode { get; set; }
     public DateTimeOffset? OnboardingCompletedAt { get; set; }

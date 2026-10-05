@@ -16,7 +16,9 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         DateTimeOffset startAt,
         DateTimeOffset endAt,
         string? staffName = null,
-        string? notes = null)
+        string? notes = null,
+        Guid? serviceProductId = null,
+        Guid? staffUserId = null)
     {
         if (string.IsNullOrWhiteSpace(customerName))
             throw new DomainException("El nombre del cliente es obligatorio.");
@@ -35,6 +37,8 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         EndAt = endAt;
         StaffName = staffName?.Trim();
         Notes = notes?.Trim();
+        ServiceProductId = serviceProductId;
+        StaffUserId = staffUserId;
         Status = AppointmentStatus.Scheduled;
     }
 
@@ -47,6 +51,12 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
     public DateTimeOffset EndAt { get; private set; }
     public AppointmentStatus Status { get; private set; }
     public string? Notes { get; private set; }
+    /// <summary>The service of the catalog it books (its name is kept in <see cref="ServiceName"/>); null for older ones.</summary>
+    public Guid? ServiceProductId { get; private set; }
+    /// <summary>The team member who attends it (their name is kept in <see cref="StaffName"/>); null for older ones.</summary>
+    public Guid? StaffUserId { get; private set; }
+
+    public bool IsClosed => Status is AppointmentStatus.Cancelled or AppointmentStatus.Completed or AppointmentStatus.NoShow;
 
     public void Update(
         string customerName,
@@ -55,8 +65,11 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         DateTimeOffset startAt,
         DateTimeOffset endAt,
         string? staffName,
-        string? notes)
+        string? notes,
+        Guid? serviceProductId = null,
+        Guid? staffUserId = null)
     {
+        EnsureOpen();
         if (string.IsNullOrWhiteSpace(customerName))
             throw new DomainException("El nombre del cliente es obligatorio.");
         if (string.IsNullOrWhiteSpace(customerPhone))
@@ -73,13 +86,19 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         EndAt = endAt;
         StaffName = staffName?.Trim();
         Notes = notes?.Trim();
+        ServiceProductId = serviceProductId;
+        StaffUserId = staffUserId;
     }
 
     public void ChangeStatus(AppointmentStatus newStatus)
     {
-        if (Status is AppointmentStatus.Cancelled or AppointmentStatus.Completed or AppointmentStatus.NoShow)
-            throw new DomainException("La cita ya está cerrada y no permite más cambios.");
-
+        EnsureOpen();
         Status = newStatus;
+    }
+
+    private void EnsureOpen()
+    {
+        if (IsClosed)
+            throw new DomainException("La cita ya está cerrada y no permite más cambios.");
     }
 }

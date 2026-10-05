@@ -1,4 +1,3 @@
-using AutoMapper;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -41,7 +40,6 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
     private readonly ICurrentUserService _currentUserService;
     private readonly OrderRefundProcessor _refunds;
     private readonly IOrderInventoryService _orderInventoryService;
-    private readonly IMapper _mapper;
 
     public VoidOrderCommandHandler(
         IApplicationDbContext context,
@@ -49,13 +47,11 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
         ITenantAccessService tenantAccessService,
         IOrderCashService orderCashService,
         IDateTimeProvider dateTimeProvider,
-        IMapper mapper,
-        IOrderInventoryService? orderInventoryService = null)
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
-        _mapper = mapper;
-        _orderInventoryService = orderInventoryService ?? NoOpOrderInventoryService.Instance;
+        _orderInventoryService = orderInventoryService;
         _refunds = new OrderRefundProcessor(
             context,
             currentUserService,
@@ -135,6 +131,6 @@ public class VoidOrderCommandHandler : IRequestHandler<VoidOrderCommand, Result<
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(await OrderRefundQueries.ToDtoAsync(_context, _mapper, order.Id, cancellationToken));
+        return Result.Success(await OrderRefundQueries.ToDtoAsync(_context, order.Id, cancellationToken));
     }
 }

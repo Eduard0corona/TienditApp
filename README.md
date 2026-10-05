@@ -1,12 +1,12 @@
 # TienditApp
 
-TienditApp (los proyectos conservan el nombre histórico `FoodParkDigital`) es un SaaS multi-tenant para operar negocios locales. En `develop` existen módulos de identidad, tenants, sucursales, empleados, catálogo, órdenes retail y de servicio, inventario, compras, caja, clientes, citas, cocina, WhatsApp, notificaciones en tiempo real, auditoría y reportes.
+TienditApp (los proyectos conservan el nombre histórico `FoodParkDigital`) es un SaaS multi-tenant para operar negocios locales. En `master` existen módulos de identidad, tenants, sucursales, empleados, catálogo, órdenes retail y de servicio, inventario, compras, caja, clientes, citas, cocina, WhatsApp, notificaciones en tiempo real, auditoría y reportes.
 
 ## Arquitectura y tecnologías
 
 La decisión vigente es un monolito modular con Clean Architecture, DDD ligero y CQRS mediante MediatR:
 
-- Backend: ASP.NET Core/.NET 10 (LTS), EF Core 10, SQL Server, ASP.NET Identity, JWT, refresh tokens, 2FA, FluentValidation, AutoMapper, SignalR y Serilog.
+- Backend: ASP.NET Core/.NET 10 (LTS), EF Core 10, SQL Server, ASP.NET Identity, JWT, refresh tokens, 2FA, FluentValidation, SignalR y Serilog.
 - Frontend: React 19, TypeScript, Vite, React Router, Axios, React Hook Form y Bootstrap.
 - Pruebas: xUnit en proyectos de Domain y Application. No se encontraron proyectos de pruebas de WebApi, Infrastructure ni frontend.
 
@@ -45,4 +45,4 @@ Las migraciones están en `src/FoodParkDigital.Infrastructure/Persistence/Migrat
 
 ## Ramas
 
-`master` representa la versión estable y `develop` la integración activa. Al documentar este estado, `origin/develop` tenía 27 commits exclusivos y `origin/master` 5; resolver esa divergencia requiere una tarea separada y revisada.
+`master` es la única rama permanente: lo que se fusiona en ella se despliega a producción. El trabajo se hace en ramas cortas que vuelven por Pull Request (ver [flujo Git](docs/development/git-workflow.md)).

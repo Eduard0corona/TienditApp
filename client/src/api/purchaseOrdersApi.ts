@@ -25,4 +25,12 @@ export const purchaseOrdersApi = {
 
   receive: (id: string, data: ReceivePurchaseOrderRequest) =>
     api.post<PurchaseOrderDto>(`/purchaseorders/${id}/receive`, data),
+
+  /** Draft → sent to the supplier. */
+  send: (id: string) =>
+    api.post<PurchaseOrderDto>(`/purchaseorders/${id}/send`),
+
+  /** Only while nothing has been received. */
+  cancel: (id: string) =>
+    api.post<PurchaseOrderDto>(`/purchaseorders/${id}/cancel`),
 };

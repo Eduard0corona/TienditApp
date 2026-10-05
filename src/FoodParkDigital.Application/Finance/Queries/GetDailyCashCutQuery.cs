@@ -77,6 +77,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .Select(x => new
             {
                 x.Amount,
+                x.Tip,
                 x.Method,
                 x.CreatedBy,
                 x.InventoryLocationId,
@@ -153,7 +154,9 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .Where(x =>
                 x.OccurredAt >= startUtc
                 && x.OccurredAt <= endUtc
-                && x.TransactionType != CashTransactionType.SalePayment)
+                && x.TransactionType != CashTransactionType.SalePayment
+                // Tips come with the sale payments and are reported apart (TipsTotal).
+                && x.TransactionType != CashTransactionType.Tip)
             .AsQueryable();
 
         if (request.InventoryLocationId.HasValue)
@@ -177,8 +180,11 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .Sum(x => Math.Abs(x));
 
         var salesPaymentsTotal = paymentRows.Sum(x => x.Amount);
-        var netCashFlow = salesPaymentsTotal + manualIncomeTotal - manualExpenseTotal;
-        var netCashOnlyFlow = cashTotal + manualIncomeTotal - manualExpenseTotal;
+        // Tips are not sales, but they are money received: in the drawer when paid in cash.
+        var tipsTotal = paymentRows.Sum(x => x.Tip);
+        var cashTipsTotal = paymentRows.Where(x => x.Method == OrderPaymentMethod.Cash).Sum(x => x.Tip);
+        var netCashFlow = salesPaymentsTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
+        var netCashOnlyFlow = cashTotal + cashTipsTotal + manualIncomeTotal - manualExpenseTotal;
 
         return new DailyCashCutDto
         {
@@ -190,6 +196,8 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             TransferTotal = transferTotal,
             WalletTotal = walletTotal,
             OtherTotal = otherTotal,
+            TipsTotal = tipsTotal,
+            CashTipsTotal = cashTipsTotal,
             ManualIncomeTotal = manualIncomeTotal,
             ManualExpenseTotal = manualExpenseTotal,
             NetCashFlow = netCashFlow,
