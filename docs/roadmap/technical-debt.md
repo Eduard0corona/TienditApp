@@ -38,7 +38,7 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - `client/README.md` sigue siendo template genérico.
 - Un pago puede guardarse sin movimiento de caja si el cajero no tiene caja abierta y hay varias o ninguna en la sucursal, salvo que el negocio active `RequireOpenCashSession`.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
-- `Product.StockQuantity` es informativo: las ventas no lo descuentan.
+- `Product.StockQuantity` y `LowStockThreshold` quedan sin uso: la existencia de un producto vive en el libro mayor de inventario desde la Fase 5A. Falta borrar las columnas cuando ya no se ofrezcan como existencia inicial.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
 - Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.

@@ -1,4 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Finance;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;

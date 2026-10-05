@@ -12,7 +12,9 @@ import type {
   InventoryStockDto,
   PaginatedList,
   ProductRecipeDto,
+  ProductStockDto,
   SupplyItemDto,
+  TrackProductStockRequest,
   UpsertProductRecipeRequest,
   UpdateInventoryLocationRequest,
   UpdateSupplyItemRequest,
@@ -95,4 +97,13 @@ export const inventoryApi = {
 
   upsertProductRecipe: (productId: string, data: UpsertProductRecipeRequest) =>
     api.put<ProductRecipeDto>(`/inventory/recipes/products/${productId}`, data),
+
+  getProductStock: (productId: string) =>
+    api.get<ProductStockDto>(`/inventory/products/${productId}/stock`),
+
+  trackProductStock: (productId: string, data: TrackProductStockRequest) =>
+    api.post<ProductStockDto>(`/inventory/products/${productId}/stock`, data),
+
+  stopTrackingProductStock: (productId: string) =>
+    api.delete<ProductStockDto>(`/inventory/products/${productId}/stock`),
 };

@@ -3,7 +3,7 @@ using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace FoodParkDigital.Infrastructure.Services;
+namespace FoodParkDigital.Application.Finance;
 
 public class OrderCashService : IOrderCashService
 {

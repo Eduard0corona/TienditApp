@@ -44,11 +44,21 @@ public class ProductDto
     public string? Allergens { get; set; }
 
     // Inventory
+    /// <summary>Quantity captured by hand before stock was controlled in the inventory ledger; it never moved.</summary>
     public int? StockQuantity { get; set; }
+    /// <summary>Threshold captured by hand with <see cref="StockQuantity"/>.</summary>
     public int? LowStockThreshold { get; set; }
     public int? MaxQuantityPerOrder { get; set; }
     public TimeSpan? AvailableFromTime { get; set; }
     public TimeSpan? AvailableToTime { get; set; }
+    /// <summary>The product controls its own stock in the inventory ledger: each unit sold takes one from it.</summary>
+    public bool TracksStock { get; set; }
+    /// <summary>The inventory item that holds the product's stock (its movements are in the kardex).</summary>
+    public Guid? StockItemId { get; set; }
+    /// <summary>On hand in every location, when it controls its stock.</summary>
+    public decimal? OnHand { get; set; }
+    public decimal? ReorderPoint { get; set; }
+    /// <summary>It controls its stock and has no more than its reorder point (sold out included).</summary>
     public bool IsLowStock { get; set; }
     public bool IsTrackable { get; set; }
     public bool NotifyCustomer { get; set; }

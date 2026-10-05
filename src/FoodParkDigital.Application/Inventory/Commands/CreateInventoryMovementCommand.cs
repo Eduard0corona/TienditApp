@@ -4,7 +4,6 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
-using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Inventory.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -86,19 +85,16 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly ICurrentUserService _currentUserService;
-    private readonly IFolioGenerator _folios;
+    private readonly InventoryLedger _ledger;
 
     public CreateInventoryMovementCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        ICurrentUserService currentUserService,
-        IFolioGenerator folios)
+        InventoryLedger ledger)
     {
         _context = context;
         _tenantService = tenantService;
-        _currentUserService = currentUserService;
-        _folios = folios;
+        _ledger = ledger;
     }
 
     public async Task<Result<InventoryMovementDto>> Handle(CreateInventoryMovementCommand request, CancellationToken cancellationToken)
@@ -119,96 +115,35 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             return Result.Failure<InventoryMovementDto>("Ya existe un movimiento con esa referencia externa.");
         }
 
-        var movementDate = request.MovementDate ?? DateTimeOffset.UtcNow;
-        var movementNumber = await _folios.NextInventoryMovementNumberAsync(_tenantService.TenantId, movementDate, cancellationToken);
-
-        var movement = new InventoryMovement(
-            tenantId: _tenantService.TenantId,
-            movementNumber: movementNumber,
-            movementType: request.MovementType,
-            movementReason: request.MovementReason,
-            movementDate: movementDate,
-            referenceNumber: request.ReferenceNumber?.Trim(),
-            externalReference: externalReference,
-            counterpartyName: request.CounterpartyName?.Trim(),
-            documentNumber: request.DocumentNumber?.Trim(),
-            notes: request.Notes?.Trim());
-
-        var supplyIds = request.Lines.Select(x => x.SupplyItemId).Distinct().ToList();
-        var locationIds = request.Lines.Select(x => x.InventoryLocationId).Distinct().ToList();
-
-        var supplies = await _context.SupplyItems
-            .Where(x => supplyIds.Contains(x.Id) && x.IsActive)
-            .ToDictionaryAsync(x => x.Id, cancellationToken);
-
-        var locations = await _context.InventoryLocations
-            .Where(x => locationIds.Contains(x.Id) && x.IsActive)
-            .ToDictionaryAsync(x => x.Id, cancellationToken);
-
-        if (supplies.Count != supplyIds.Count)
-            return Result.Failure<InventoryMovementDto>("Uno o más insumos no existen o están inactivos.");
-
-        if (locations.Count != locationIds.Count)
-            return Result.Failure<InventoryMovementDto>("Una o más ubicaciones no existen o están inactivas.");
-
-        var existingStocks = await _context.InventoryStocks
-            .Where(x => supplyIds.Contains(x.SupplyItemId) && locationIds.Contains(x.InventoryLocationId))
-            .ToListAsync(cancellationToken);
-
-        var stockMap = existingStocks.ToDictionary(
-            x => $"{x.SupplyItemId:N}-{x.InventoryLocationId:N}",
-            x => x);
-
-        var onHandBySupply = await _context.InventoryStocks
-            .Where(x => supplyIds.Contains(x.SupplyItemId))
-            .GroupBy(x => x.SupplyItemId)
-            .Select(g => new { SupplyItemId = g.Key, Quantity = g.Sum(x => x.OnHandQuantity) })
-            .ToDictionaryAsync(x => x.SupplyItemId, x => x.Quantity, cancellationToken);
-
-        foreach (var line in request.Lines)
-        {
-            var key = $"{line.SupplyItemId:N}-{line.InventoryLocationId:N}";
-            if (!stockMap.TryGetValue(key, out var stock))
+        var posted = await _ledger.PostAsync(
+            _tenantService.TenantId,
+            new InventoryPosting(
+                request.MovementType,
+                request.MovementReason,
+                request.MovementDate ?? DateTimeOffset.UtcNow,
+                request.Lines
+                    .Select(line => new InventoryPostingLine(line.SupplyItemId, line.InventoryLocationId, line.Quantity)
+                    {
+                        UnitCost = line.UnitCost,
+                        LotNumber = line.LotNumber?.Trim(),
+                        ExpirationDate = line.ExpirationDate,
+                        Notes = line.Notes?.Trim()
+                    })
+                    .ToList())
             {
-                stock = new InventoryStock(_tenantService.TenantId, line.SupplyItemId, line.InventoryLocationId);
-                _context.InventoryStocks.Add(stock);
-                stockMap[key] = stock;
-            }
+                ReferenceNumber = request.ReferenceNumber?.Trim(),
+                ExternalReference = externalReference,
+                CounterpartyName = request.CounterpartyName?.Trim(),
+                DocumentNumber = request.DocumentNumber?.Trim(),
+                Notes = request.Notes?.Trim()
+            },
+            cancellationToken);
+        if (posted.IsFailure)
+            return Result.Failure<InventoryMovementDto>(posted.Error!);
 
-            var supply = supplies[line.SupplyItemId];
-            var quantityBeforeLocation = stock.OnHandQuantity;
-            var quantityBeforeSupply = onHandBySupply.GetValueOrDefault(line.SupplyItemId);
-            var delta = ResolveDelta(request.MovementType, line.Quantity);
-            var unitCost = ResolveUnitCost(request.MovementType, line.UnitCost, delta, supply);
-
-            stock.ApplyMovement(delta, unitCost, movementDate);
-
-            var movementLine = movement.AddLine(
-                tenantId: _tenantService.TenantId,
-                supplyItemId: line.SupplyItemId,
-                inventoryLocationId: line.InventoryLocationId,
-                quantity: line.Quantity,
-                unitCost: unitCost,
-                lotNumber: line.LotNumber?.Trim(),
-                expirationDate: line.ExpirationDate,
-                notes: line.Notes?.Trim());
-
-            movementLine.SetBalances(quantityBeforeLocation, stock.OnHandQuantity);
-
-            // Only goods acquired from outside change the average cost; transfers, adjustments and returns
-            // move stock the business already valued.
-            if (request.MovementType == InventoryMovementType.Entry && unitCost.HasValue)
-                supply.ApplyInboundCost(unitCost.Value, quantityBeforeSupply, line.Quantity);
-
-            onHandBySupply[line.SupplyItemId] = quantityBeforeSupply + delta;
-        }
-
-        movement.RecalculateTotalAmount();
-
-        _context.InventoryMovements.Add(movement);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var dto = await BuildMovementDto(movement.Id, cancellationToken);
+        var dto = await BuildMovementDto(posted.Value.Id, cancellationToken);
         return Result.Success(dto);
     }
 
@@ -247,43 +182,5 @@ public class CreateInventoryMovementCommandHandler : IRequestHandler<CreateInven
             .ToListAsync(cancellationToken);
 
         return dto;
-    }
-
-    private static decimal ResolveDelta(InventoryMovementType movementType, decimal quantity)
-        => movementType switch
-        {
-            InventoryMovementType.Entry => quantity,
-            InventoryMovementType.AdjustmentIncrease => quantity,
-            InventoryMovementType.TransferIn => quantity,
-            InventoryMovementType.ReturnFromProduction => quantity,
-            InventoryMovementType.Exit => -quantity,
-            InventoryMovementType.AdjustmentDecrease => -quantity,
-            InventoryMovementType.TransferOut => -quantity,
-            InventoryMovementType.ReturnToSupplier => -quantity,
-            _ => quantity
-        };
-
-    private static decimal? ResolveUnitCost(
-        InventoryMovementType movementType,
-        decimal? requestedUnitCost,
-        decimal delta,
-        SupplyItem supply)
-    {
-        if (requestedUnitCost.HasValue)
-            return requestedUnitCost;
-
-        // Outbound and internal inbound movements are valued at the current average cost.
-        if (delta < 0 || movementType != InventoryMovementType.Entry)
-        {
-            if (supply.AverageCost > 0)
-                return supply.AverageCost;
-            if (delta < 0)
-                return null;
-        }
-
-        if (supply.LastCost > 0)
-            return supply.LastCost;
-
-        return supply.DefaultCost > 0 ? supply.DefaultCost : null;
     }
 }

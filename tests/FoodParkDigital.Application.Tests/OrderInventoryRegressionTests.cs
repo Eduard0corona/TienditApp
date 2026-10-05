@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Inventory.Commands;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Purchasing.Commands;
@@ -482,7 +483,7 @@ public class OrderInventoryRegressionTests
         new(context, new FixedClock(Now), new FolioGenerator(context), NullLogger<OrderInventoryService>.Instance);
 
     private static CreateInventoryMovementCommandHandler NewMovementHandler(ApplicationDbContext context, ICurrentTenantService tenant) =>
-        new(context, tenant, new TestCurrentUserService(), new FolioGenerator(context));
+        new(context, tenant, new InventoryLedger(context, new FolioGenerator(context)));
 
 
     private static (TestDbContext Context, TestCurrentTenantService Tenant, DbContextOptions<ApplicationDbContext> Options) CreateContext()

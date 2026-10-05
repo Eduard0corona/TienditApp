@@ -69,6 +69,18 @@ public class UpsertProductRecipeCommandHandler : IRequestHandler<UpsertProductRe
             .FirstOrDefaultAsync(x => x.Id == request.ProductId, cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.ProductId);
 
+        // While the product controls its stock, its own item stays in the recipe (one unit per unit sold).
+        var stockItem = await _context.SupplyItems
+            .AsNoTracking()
+            .Where(x => x.ProductId == product.Id)
+            .Select(x => new { x.Id, x.Name })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (stockItem is not null && request.Lines.All(x => x.SupplyItemId != stockItem.Id))
+        {
+            return Result.Failure<ProductRecipeDto>(
+                $"La receta conserva \"{stockItem.Name}\": es la existencia del producto. Para quitarla, deja de controlar sus existencias.");
+        }
+
         var duplicatedLines = request.Lines
             .GroupBy(x => new { x.SupplyItemId, x.InventoryLocationId })
             .Where(g => g.Count() > 1)

@@ -1,7 +1,7 @@
-using FoodParkDigital.Infrastructure.Services;
-using Drawer = FoodParkDigital.Infrastructure.Services.OrderCashService.DrawerCandidate;
+using FoodParkDigital.Application.Finance;
+using Drawer = FoodParkDigital.Application.Finance.OrderCashService.DrawerCandidate;
 
-namespace FoodParkDigital.Infrastructure.Tests;
+namespace FoodParkDigital.Application.Tests;
 
 /// <summary>Which open drawer takes the cash of a sale (see <see cref="OrderCashService.PickDrawer"/>).</summary>
 public class OrderCashServiceDrawerTests

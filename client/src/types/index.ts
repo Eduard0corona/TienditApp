@@ -423,11 +423,20 @@ export interface ProductDto {
   preparationTimeMinutes?: number;
   calories?: number;
   allergens?: string;
+  /** Captured by hand before stock was controlled in inventory; it never moved. */
   stockQuantity?: number;
   lowStockThreshold?: number;
   maxQuantityPerOrder?: number;
   availableFromTime?: string;
   availableToTime?: string;
+  /** The product controls its own stock in inventory: each unit sold takes one from it. */
+  tracksStock: boolean;
+  /** The inventory item that holds the product's stock. */
+  stockItemId?: string | null;
+  /** On hand in every location, when it controls its stock. */
+  onHand?: number | null;
+  reorderPoint?: number | null;
+  /** It controls its stock and has no more than its reorder point (sold out included). */
   isLowStock: boolean;
   isTrackable: boolean;
   notifyCustomer: boolean;
@@ -594,6 +603,9 @@ export interface SupplyItemDto {
   taxRate?: number;
   notes?: string;
   isActive: boolean;
+  /** The product this item is the stock of, when the product controls its own. */
+  productId?: string | null;
+  productName?: string | null;
   createdAt: string;
   updatedAt?: string;
   totalOnHand: number;
@@ -762,6 +774,35 @@ export interface ProductRecipeLineDto {
   effectiveQuantity: number;
   notes?: string;
   isActive: boolean;
+}
+
+/** The stock of a product in inventory, by location. */
+export interface ProductStockDto {
+  productId: string;
+  tracksStock: boolean;
+  stockItemId?: string | null;
+  onHand: number;
+  reorderPoint: number;
+  isLowStock: boolean;
+  locations: ProductStockLocationDto[];
+  /** What was captured by hand before; offered as the opening balance. */
+  capturedStockQuantity?: number | null;
+  capturedLowStockThreshold?: number | null;
+}
+
+export interface ProductStockLocationDto {
+  inventoryLocationId: string;
+  locationName: string;
+  onHand: number;
+}
+
+export interface TrackProductStockRequest {
+  /** An item the business already keeps for the product, instead of a new one. */
+  supplyItemId?: string | null;
+  initialQuantity: number;
+  inventoryLocationId?: string | null;
+  unitCost?: number | null;
+  reorderPoint: number;
 }
 
 export interface ProductRecipeDto {

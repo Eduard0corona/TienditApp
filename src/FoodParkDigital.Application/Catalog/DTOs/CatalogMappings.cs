@@ -5,7 +5,8 @@ namespace FoodParkDigital.Application.Catalog.DTOs;
 
 /// <summary>
 /// Products and categories as the API returns them. <see cref="AsDto"/> is <see cref="ToDto(Product)"/> written for SQL
-/// (the products list); <c>CatalogMappingTests</c> keeps both equal.
+/// (the products list); <c>CatalogMappingTests</c> keeps both equal. The stock of a product comes from the inventory
+/// ledger: <c>ProductStockReader</c> fills it.
 /// </summary>
 public static class CatalogMappings
 {
@@ -44,7 +45,6 @@ public static class CatalogMappings
         MaxQuantityPerOrder = product.MaxQuantityPerOrder,
         AvailableFromTime = product.AvailableFromTime,
         AvailableToTime = product.AvailableToTime,
-        IsLowStock = product.IsLowStock,
         IsTrackable = product.IsTrackable,
         NotifyCustomer = product.NotifyCustomer,
         OptionGroups = product.OptionGroups
@@ -109,10 +109,6 @@ public static class CatalogMappings
         MaxQuantityPerOrder = product.MaxQuantityPerOrder,
         AvailableFromTime = product.AvailableFromTime,
         AvailableToTime = product.AvailableToTime,
-        // Same rule as Product.IsLowStock.
-        IsLowStock = product.StockQuantity.HasValue
-            && product.LowStockThreshold.HasValue
-            && product.StockQuantity.Value <= product.LowStockThreshold.Value,
         IsTrackable = product.IsTrackable,
         NotifyCustomer = product.NotifyCustomer,
         OptionGroups = product.OptionGroups

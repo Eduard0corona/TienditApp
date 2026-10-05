@@ -1,8 +1,11 @@
 using FoodParkDigital.Application.Common.Events;
+using FoodParkDigital.Application.Common.Interfaces;
 using System.Reflection;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Identity.Services;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Messaging;
 using FluentValidation;
 using MediatR;
@@ -30,6 +33,11 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly);
 
         services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
+
+        // Inventory: the ledger posts every movement; orders consume and return stock through it.
+        services.AddScoped<InventoryLedger>();
+        services.AddScoped<IOrderInventoryService, OrderInventoryService>();
+        services.AddScoped<IOrderCashService, OrderCashService>();
         services.AddScoped<CurrentAccessContext>();
 
         // Messaging: used by the use cases and by the messaging worker, in the business's scope.

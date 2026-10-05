@@ -1,6 +1,7 @@
 using System.Reflection;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.WebApi.Controllers;
@@ -93,9 +94,11 @@ public class ArchitectureTests
     public void CommandsThatTakeAFolio_ShouldRunInATransaction()
     {
         // Outside one, a folio is committed at once and a refused request leaves a gap in the business's numbering.
+        // The inventory ledger takes the folio of every movement it posts.
+        Type[] takeFolios = [typeof(IFolioGenerator), typeof(InventoryLedger)];
         var offending = Application.GetTypes()
             .Where(type => !type.IsAbstract && type.GetConstructors()
-                .Any(c => c.GetParameters().Any(p => p.ParameterType == typeof(IFolioGenerator))))
+                .Any(c => c.GetParameters().Any(p => takeFolios.Contains(p.ParameterType))))
             .SelectMany(type => type.GetInterfaces()
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>))
                 .Select(i => i.GetGenericArguments()[0]))

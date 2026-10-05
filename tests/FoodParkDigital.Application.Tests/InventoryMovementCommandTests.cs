@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
@@ -30,11 +31,7 @@ public class InventoryMovementCommandTests
         context.InventoryLocations.Add(location);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInventoryMovementCommandHandler(
-            context,
-            tenantService,
-            new TestCurrentUserService(),
-            new FolioGenerator(context));
+        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new InventoryLedger(context, new FolioGenerator(context)));
 
         var result = await handler.Handle(new CreateInventoryMovementCommand
         {
@@ -76,11 +73,7 @@ public class InventoryMovementCommandTests
         context.InventoryLocations.Add(location);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInventoryMovementCommandHandler(
-            context,
-            tenantService,
-            new TestCurrentUserService(),
-            new FolioGenerator(context));
+        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new InventoryLedger(context, new FolioGenerator(context)));
 
         await Assert.ThrowsAsync<DomainException>(() => handler.Handle(new CreateInventoryMovementCommand
         {
@@ -201,7 +194,7 @@ public class InventoryMovementCommandTests
         context.InventoryStocks.Add(stock);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new TestCurrentUserService(), new FolioGenerator(context));
+        var handler = new CreateInventoryMovementCommandHandler(context, tenantService, new InventoryLedger(context, new FolioGenerator(context)));
         return new StockSetup(context, handler, supply, origin);
     }
 

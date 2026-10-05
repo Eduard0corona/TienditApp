@@ -58,7 +58,6 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Navigation(p => p.OptionGroups).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Computed properties ignored by EF
-        builder.Ignore(p => p.IsLowStock);
         builder.Ignore(p => p.HasDiscount);
 
         // Indexes

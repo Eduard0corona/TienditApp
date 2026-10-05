@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
@@ -188,6 +189,11 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
                 "El negocio no tiene habilitado el módulo requerido para este tipo de artículo.");
         }
 
+        // A product that controls its stock keeps the unit its stock is counted in.
+        var stockItem = await _context.SupplyItems.FirstOrDefaultAsync(s => s.ProductId == product.Id, cancellationToken);
+        if (stockItem is not null && (request.Unit ?? UnitType.Unit) != stockItem.Unit)
+            return Result.Failure<ProductDto>("Este producto controla sus existencias: deja de controlarlas para cambiar su unidad.");
+
         var category = await _context.Categories
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.CategoryId, cancellationToken);
@@ -220,8 +226,9 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
             taxRate: request.TaxRate,
             calories: request.Calories,
             allergens: request.Allergens,
-            stockQuantity: request.StockQuantity,
-            lowStockThreshold: request.LowStockThreshold,
+            // Captured by hand before the stock was controlled: kept (offered as the opening balance) unless sent.
+            stockQuantity: request.StockQuantity ?? product.StockQuantity,
+            lowStockThreshold: request.LowStockThreshold ?? product.LowStockThreshold,
             maxQuantityPerOrder: request.MaxQuantityPerOrder,
             unit: request.Unit,
             availableFromTime: request.AvailableFromTime,
@@ -230,8 +237,13 @@ public class UpdateProductCommandHandler : IRequestHandler<UpdateProductCommand,
             notifyCustomer: request.NotifyCustomer,
             isTaxExempt: request.IsTaxExempt);
         product.SetFiscalData(request.SatProductCode, request.SatUnitCode, request.TaxObject);
+        // Its stock goes by its name in inventory.
+        if (stockItem is not null && stockItem.Name != product.Name)
+            stockItem.RenameForProduct(product.Name);
 
         await _context.SaveChangesAsync(cancellationToken);
-        return Result.Success(product.ToDto());
+        var dto = product.ToDto();
+        await ProductStockReader.ApplyAsync(_context, dto, cancellationToken);
+        return Result.Success(dto);
     }
 }

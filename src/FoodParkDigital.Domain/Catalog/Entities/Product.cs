@@ -336,10 +336,6 @@ public class Product : AuditableEntity, ITenantScoped
         return localTimeOfDay >= from || localTimeOfDay <= to;
     }
 
-    public bool IsLowStock => StockQuantity.HasValue
-        && LowStockThreshold.HasValue
-        && StockQuantity.Value <= LowStockThreshold.Value;
-
     public bool HasDiscount => CompareAtPrice.HasValue
         && CompareAtPrice.Value > PriceAmount;
 }

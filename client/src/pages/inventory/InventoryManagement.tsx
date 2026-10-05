@@ -1226,10 +1226,17 @@ export default function InventoryManagement() {
                     renderRow={(item) => (
                       <>
                         <td>
-                          <div className="fw-semibold">{item.name}</div>
+                          <div className="fw-semibold">
+                            {item.name}
+                            {item.productId && (
+                              <span className="badge bg-info-subtle text-info-emphasis ms-1" title={`Existencia del producto ${item.productName ?? ''}`.trim()}>
+                                Producto
+                              </span>
+                            )}
+                          </div>
                           <div className="text-muted small">
                             {item.categoryName || '-'}
-                            {item.isCritical && <span className="badge bg-danger ms-1">Critico</span>}
+                            {item.isCritical && <span className="badge bg-danger ms-1">Crítico</span>}
                           </div>
                         </td>
                         <td>
@@ -1260,7 +1267,11 @@ export default function InventoryManagement() {
                           </button>
                           <button
                             className={`btn btn-sm ${item.isActive ? 'btn-soft-warning' : 'btn-soft-success'}`}
-                            title={item.isActive ? 'Desactivar' : 'Activar'}
+                            title={item.productId && item.isActive
+                              ? 'Es la existencia de un producto: deja de controlarla desde el producto'
+                              : item.isActive ? 'Desactivar' : 'Activar'}
+                            aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}
+                            disabled={!!item.productId && item.isActive}
                             onClick={() => toggleSupplyActive(item)}
                           >
                             <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>

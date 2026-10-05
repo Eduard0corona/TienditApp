@@ -89,7 +89,7 @@ public class DtoMappingTests
     }
 
     [Fact]
-    public void Product_ShouldPointToTheMediumImage_AndComputeItsFlags()
+    public void Product_ShouldPointToTheMediumImage_AndComputeItsDiscount()
     {
         var product = new EntityFiller(maxDepth: 2).Create<Product>();
         EntityFiller.Set(product, nameof(Product.ImageUrl), "/uploads/products/t1/cafe");
@@ -103,7 +103,8 @@ public class DtoMappingTests
         Assert.Equal("/uploads/products/t1/cafe_md.webp", dto.ImageUrl);
         Assert.Equal("/uploads/products/t1/cafe_xs.webp", dto.Images!.Thumbnail);
         Assert.True(dto.HasDiscount);
-        Assert.True(dto.IsLowStock);
+        // Low stock comes from the inventory ledger (ProductStockReader), never from what was captured by hand.
+        Assert.False(dto.IsLowStock);
     }
 
     [Fact]

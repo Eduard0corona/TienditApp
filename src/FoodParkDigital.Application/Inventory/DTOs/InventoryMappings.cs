@@ -31,6 +31,7 @@ public static class InventoryMappings
         TaxRate = supply.TaxRate,
         Notes = supply.Notes,
         IsActive = supply.IsActive,
+        ProductId = supply.ProductId,
         CreatedAt = supply.CreatedAt,
         UpdatedAt = supply.UpdatedAt
     };

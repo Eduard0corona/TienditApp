@@ -68,6 +68,8 @@ public class GetSupplyItemByIdQueryHandler : IRequestHandler<GetSupplyItemByIdQu
                 TaxRate = x.TaxRate,
                 Notes = x.Notes,
                 IsActive = x.IsActive,
+                ProductId = x.ProductId,
+                ProductName = _context.Products.Where(p => p.Id == x.ProductId).Select(p => p.Name).FirstOrDefault(),
                 CreatedAt = x.CreatedAt,
                 UpdatedAt = x.UpdatedAt,
                 TotalOnHand = _context.InventoryStocks

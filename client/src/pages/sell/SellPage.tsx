@@ -1222,6 +1222,11 @@ export default function SellPage() {
                     <span className="sell-product-price ta-money">{price}</span>
                     {isServiceProduct(product) && <span className="sell-product-tag">Servicio</span>}
                     {unitLabel && !isServiceProduct(product) && <span className="sell-product-tag">Por {unitLabel}</span>}
+                    {product.tracksStock && product.onHand != null && (product.onHand <= 0 || product.isLowStock) && (
+                      <span className={`sell-product-stock ${product.onHand <= 0 ? 'out' : 'low'}`}>
+                        {product.onHand <= 0 ? 'Agotado' : `Quedan ${formatQuantity(product.onHand, product.unit)}`}
+                      </span>
+                    )}
                     {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{badge}</span>}
                   </button>
                 );

@@ -3698,6 +3698,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inventory/products/{productId}/stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProductStockDto"];
+                        "application/json": components["schemas"]["ProductStockDto"];
+                        "text/json": components["schemas"]["ProductStockDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["TrackProductStockRequest"];
+                    "text/json": components["schemas"]["TrackProductStockRequest"];
+                    "application/*+json": components["schemas"]["TrackProductStockRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProductStockDto"];
+                        "application/json": components["schemas"]["ProductStockDto"];
+                        "text/json": components["schemas"]["ProductStockDto"];
+                    };
+                };
+            };
+        };
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProductStockDto"];
+                        "application/json": components["schemas"]["ProductStockDto"];
+                        "text/json": components["schemas"]["ProductStockDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inventory/movements/{id}": {
         parameters: {
             query?: never;
@@ -9696,6 +9787,13 @@ export interface components {
             availableFromTime?: string | null;
             /** Format: date-span */
             availableToTime?: string | null;
+            tracksStock: boolean;
+            /** Format: uuid */
+            stockItemId?: string | null;
+            /** Format: double */
+            onHand?: number | null;
+            /** Format: double */
+            reorderPoint?: number | null;
             isLowStock: boolean;
             isTrackable: boolean;
             notifyCustomer: boolean;
@@ -9780,6 +9878,30 @@ export interface components {
             effectiveQuantity: number;
             notes?: string | null;
             isActive: boolean;
+        };
+        ProductStockDto: {
+            /** Format: uuid */
+            productId: string;
+            tracksStock: boolean;
+            /** Format: uuid */
+            stockItemId?: string | null;
+            /** Format: double */
+            onHand: number;
+            /** Format: double */
+            reorderPoint: number;
+            isLowStock: boolean;
+            locations: components["schemas"]["ProductStockLocationDto"][];
+            /** Format: int32 */
+            capturedStockQuantity?: number | null;
+            /** Format: int32 */
+            capturedLowStockThreshold?: number | null;
+        };
+        ProductStockLocationDto: {
+            /** Format: uuid */
+            inventoryLocationId: string;
+            locationName: string;
+            /** Format: double */
+            onHand: number;
         };
         PublicMenuCategoryDto: {
             /** Format: uuid */
@@ -10289,6 +10411,9 @@ export interface components {
             taxRate?: number | null;
             notes?: string | null;
             isActive: boolean;
+            /** Format: uuid */
+            productId?: string | null;
+            productName?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -10435,6 +10560,18 @@ export interface components {
             quantitySold: number;
             /** Format: double */
             totalAmount: number;
+        };
+        TrackProductStockRequest: {
+            /** Format: uuid */
+            supplyItemId?: string | null;
+            /** Format: double */
+            initialQuantity: number;
+            /** Format: uuid */
+            inventoryLocationId?: string | null;
+            /** Format: double */
+            unitCost?: number | null;
+            /** Format: double */
+            reorderPoint: number;
         };
         /**
          * Format: int32
