@@ -28,6 +28,7 @@ public class PurchaseOrdersController : ControllerBase
         [FromQuery] PurchaseOrderStatus? status,
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -37,6 +38,7 @@ public class PurchaseOrdersController : ControllerBase
             Status = status,
             FromDate = fromDate,
             ToDate = toDate,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         });

@@ -71,6 +71,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
   const [movements, setMovements] = useState(EMPTY_PAGE);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [movementSearch, setMovementSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
   const [showClose, setShowClose] = useState(false);
@@ -106,7 +107,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    cashApi.getTransactions({ cashSessionId: sessionId, pageNumber, pageSize })
+    cashApi.getTransactions({ cashSessionId: sessionId, search: movementSearch || undefined, pageNumber, pageSize })
       .then(({ data }) => {
         if (!cancelled) setMovements(data);
       })
@@ -116,7 +117,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
     return () => {
       cancelled = true;
     };
-  }, [pageNumber, pageSize, sessionId, session?.expectedBalance]);
+  }, [movementSearch, pageNumber, pageSize, session?.expectedBalance, sessionId]);
 
   const openDrawer = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -349,10 +350,6 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
             keyExtractor={(item) => item.id}
             loading={false}
             emptyMessage="Todavía no hay movimientos en esta caja."
-            searchFilter={(item, search) =>
-              getTransactionTypeLabel(item.transactionType).toLowerCase().includes(search)
-              || (item.reference || '').toLowerCase().includes(search)
-              || (item.notes || '').toLowerCase().includes(search)}
             serverSide={{
               totalCount: movements.totalCount,
               page: pageNumber,
@@ -362,7 +359,12 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
                 setPageSize(size);
                 setPageNumber(1);
               },
+              onSearchChange: (term) => {
+                setMovementSearch(term);
+                setPageNumber(1);
+              },
             }}
+            searchPlaceholder="Referencia, nota o quién lo registró"
             renderRow={(item) => (
               <>
                 <td className="text-center text-nowrap">{formatInBusinessZone(item.occurredAt, { timeStyle: 'short' })}</td>

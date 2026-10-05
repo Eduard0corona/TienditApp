@@ -13,6 +13,8 @@ export const purchaseOrdersApi = {
     status?: PurchaseOrderStatus;
     fromDate?: string;
     toDate?: string;
+    /** Folio, supplier or reference, over every page. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) => api.get<PaginatedList<PurchaseOrderDto>>('/purchaseorders', { params }),

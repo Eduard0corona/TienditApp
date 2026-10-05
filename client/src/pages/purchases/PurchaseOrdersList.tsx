@@ -83,6 +83,7 @@ export default function PurchaseOrdersList() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -117,11 +118,12 @@ export default function PurchaseOrdersList() {
   const loadOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const params: { status?: PurchaseOrderStatus; pageNumber: number; pageSize: number } = {
+      const params: { status?: PurchaseOrderStatus; search?: string; pageNumber: number; pageSize: number } = {
         pageNumber,
         pageSize,
       };
       if (statusFilter !== '') params.status = Number(statusFilter) as PurchaseOrderStatus;
+      if (search) params.search = search;
       const { data } = await purchaseOrdersApi.getAll(params);
       setOrders(data);
     } catch (err: unknown) {
@@ -129,7 +131,7 @@ export default function PurchaseOrdersList() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, statusFilter]);
+  }, [pageNumber, pageSize, search, statusFilter]);
 
   useEffect(() => {
     loadLookups();
@@ -274,11 +276,6 @@ export default function PurchaseOrdersList() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay compras registradas."
-            searchFilter={(item, search) =>
-              item.orderNumber.toLowerCase().includes(search) ||
-              item.supplierName.toLowerCase().includes(search) ||
-              (item.referenceNumber || '').toLowerCase().includes(search)
-            }
             serverSide={{
               totalCount: orders.totalCount,
               page: pageNumber,
@@ -288,7 +285,13 @@ export default function PurchaseOrdersList() {
                 setPageSize(size);
                 setPageNumber(1);
               },
+              onSearchChange: (term) => {
+                setSearch(term);
+                setPageNumber(1);
+              },
             }}
+            searchPlaceholder="Folio, proveedor o referencia"
+
             renderRow={(item) => (
               <>
                 <td className="fw-semibold">

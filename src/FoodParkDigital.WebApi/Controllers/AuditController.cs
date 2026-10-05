@@ -25,6 +25,7 @@ public class AuditController : ControllerBase
         [FromQuery] string? action,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -34,6 +35,7 @@ public class AuditController : ControllerBase
             Action = action,
             FromDate = from,
             ToDate = to,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         });

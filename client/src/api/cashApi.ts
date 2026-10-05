@@ -35,6 +35,8 @@ export const cashApi = {
     transactionType?: number;
     fromDate?: string;
     toDate?: string;
+    /** Reference, notes or who registered it, over every page. */
+    search?: string;
     pageNumber?: number;
     pageSize?: number;
   }) => api.get<PaginatedList<CashTransactionDto>>('/cash/transactions', { params }),

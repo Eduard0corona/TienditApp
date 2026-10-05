@@ -86,6 +86,7 @@ public class CashController : ControllerBase
         [FromQuery] CashTransactionType? transactionType,
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -95,6 +96,7 @@ public class CashController : ControllerBase
             TransactionType = transactionType,
             FromDate = fromDate,
             ToDate = toDate,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         });

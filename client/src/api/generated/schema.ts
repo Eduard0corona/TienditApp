@@ -396,6 +396,7 @@ export interface paths {
                     action?: string;
                     from?: string;
                     to?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -2005,6 +2006,7 @@ export interface paths {
                     transactionType?: components["schemas"]["CashTransactionType"];
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -3529,6 +3531,7 @@ export interface paths {
                     movementReason?: components["schemas"]["InventoryMovementReason"];
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -3600,6 +3603,7 @@ export interface paths {
                     inventoryLocationId?: string;
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -6313,6 +6317,7 @@ export interface paths {
                     status?: components["schemas"]["PurchaseOrderStatus"];
                     fromDate?: string;
                     toDate?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };

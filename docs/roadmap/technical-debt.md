@@ -41,7 +41,7 @@ Actualizada el 2026-10-05 tras las Fases 0 a 5 del roadmap de producto (la audit
 - `Product.StockQuantity` y `LowStockThreshold` quedan sin uso: la existencia de un producto vive en el libro mayor de inventario desde la Fase 5A. Falta borrar las columnas cuando ya no se ofrezcan como existencia inicial.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
-- Inventario, Caja, Compras y Auditoría filtran solo la página cargada; faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan.
+- Faltan etiquetas asociadas y nombres accesibles en botones de icono en las pantallas que aún no se rediseñan. (Desde la Fase 6, Inventario, Caja, Compras y Seguridad y actividad buscan en el servidor, en todas las páginas.)
 - Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
 - Las rondas de una cuenta de mesa no se revisan contra existencias; la cuenta consume al cerrarse y ahí no se rechaza.
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.

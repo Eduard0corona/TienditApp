@@ -39,6 +39,7 @@ export default function AuditLogs() {
   const [toDate, setToDate] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -51,16 +52,17 @@ export default function AuditLogs() {
         action: action || undefined,
         from: fromDate ? businessDayStart(fromDate) : undefined,
         to: toDate ? businessDayEnd(toDate) : undefined,
+        search: search || undefined,
         pageNumber,
         pageSize,
       });
       setData(response);
     } catch {
-      setError('No se pudieron cargar los registros de auditoria.');
+      setError('No se pudo cargar la actividad del negocio.');
     } finally {
       setLoading(false);
     }
-  }, [action, entityName, fromDate, pageNumber, pageSize, toDate]);
+  }, [action, entityName, fromDate, pageNumber, pageSize, search, toDate]);
 
   useEffect(() => {
     loadData();
@@ -150,13 +152,7 @@ export default function AuditLogs() {
             columns={COLUMNS}
             keyExtractor={(item) => item.id}
             loading={loading}
-            emptyMessage="No hay registros de auditoria."
-            searchFilter={(item, search) =>
-              item.entityName.toLowerCase().includes(search)
-              || item.action.toLowerCase().includes(search)
-              || item.performedBy.toLowerCase().includes(search)
-              || item.entityId.toLowerCase().includes(search)
-            }
+            emptyMessage="No hay actividad registrada con estos filtros."
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,
@@ -166,7 +162,13 @@ export default function AuditLogs() {
                 setPageSize(size);
                 setPageNumber(1);
               },
+              onSearchChange: (term) => {
+                setSearch(term);
+                setPageNumber(1);
+              },
             }}
+            searchPlaceholder="Qué cambió, acción o quién"
+
             renderRow={(item) => (
               <>
                 <td>{toLocalDateTime(item.timestamp)}</td>

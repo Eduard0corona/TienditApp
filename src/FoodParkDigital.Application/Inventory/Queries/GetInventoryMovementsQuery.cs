@@ -17,6 +17,8 @@ public record GetInventoryMovementsQuery : IRequest<PaginatedList<InventoryMovem
     public InventoryMovementReason? MovementReason { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
+    /// <summary>Folio, reference, document or counterparty, over every page.</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -45,6 +47,17 @@ public class GetInventoryMovementsQueryHandler : IRequestHandler<GetInventoryMov
 
         if (request.ToDate.HasValue)
             query = query.Where(x => x.MovementDate <= request.ToDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(x =>
+                x.MovementNumber.ToLower().Contains(search) ||
+                (x.ReferenceNumber != null && x.ReferenceNumber.ToLower().Contains(search)) ||
+                (x.ExternalReference != null && x.ExternalReference.ToLower().Contains(search)) ||
+                (x.DocumentNumber != null && x.DocumentNumber.ToLower().Contains(search)) ||
+                (x.CounterpartyName != null && x.CounterpartyName.ToLower().Contains(search)));
+        }
 
         var projected = query
             .OrderByDescending(x => x.MovementDate)

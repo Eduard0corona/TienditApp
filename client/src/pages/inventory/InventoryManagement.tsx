@@ -339,6 +339,7 @@ export default function InventoryManagement() {
   const [suppliesData, setSuppliesData] = useState<PaginatedList<SupplyItemDto>>(EMPTY_PAGINATED);
   const [suppliesLoading, setSuppliesLoading] = useState(true);
   const [suppliesPageNumber, setSuppliesPageNumber] = useState(1);
+  const [suppliesSearch, setSuppliesSearch] = useState('');
   const [suppliesPageSize, setSuppliesPageSize] = useState(10);
   const [suppliesFilterActive, setSuppliesFilterActive] = useState('');
   const [suppliesLowStockOnly, setSuppliesLowStockOnly] = useState(false);
@@ -346,6 +347,7 @@ export default function InventoryManagement() {
   const [stocksData, setStocksData] = useState<PaginatedList<InventoryStockDto>>(EMPTY_PAGINATED);
   const [stocksLoading, setStocksLoading] = useState(true);
   const [stocksPageNumber, setStocksPageNumber] = useState(1);
+  const [stocksSearch, setStocksSearch] = useState('');
   const [stocksPageSize, setStocksPageSize] = useState(10);
   const [stocksLocationFilter, setStocksLocationFilter] = useState('');
   const [stocksLowStockOnly, setStocksLowStockOnly] = useState(false);
@@ -353,6 +355,7 @@ export default function InventoryManagement() {
   const [movementsData, setMovementsData] = useState<PaginatedList<InventoryMovementDto>>(EMPTY_PAGINATED);
   const [movementsLoading, setMovementsLoading] = useState(true);
   const [movementsPageNumber, setMovementsPageNumber] = useState(1);
+  const [movementsSearch, setMovementsSearch] = useState('');
   const [movementsPageSize, setMovementsPageSize] = useState(10);
   const [movementsTypeFilter, setMovementsTypeFilter] = useState('');
   const [movementsReasonFilter, setMovementsReasonFilter] = useState('');
@@ -370,6 +373,7 @@ export default function InventoryManagement() {
   const [kardexData, setKardexData] = useState<PaginatedList<InventoryKardexEntryDto>>(EMPTY_PAGINATED);
   const [kardexLoading, setKardexLoading] = useState(false);
   const [kardexPageNumber, setKardexPageNumber] = useState(1);
+  const [kardexSearch, setKardexSearch] = useState('');
   const [kardexPageSize, setKardexPageSize] = useState(20);
   const [kardexSupplyFilter, setKardexSupplyFilter] = useState('');
   const [kardexLocationFilter, setKardexLocationFilter] = useState('');
@@ -490,6 +494,7 @@ export default function InventoryManagement() {
         inventoryLocationId?: string;
         fromDate?: string;
         toDate?: string;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -501,6 +506,7 @@ export default function InventoryManagement() {
       if (kardexLocationFilter) params.inventoryLocationId = kardexLocationFilter;
       if (kardexFromDate) params.fromDate = businessDayStart(kardexFromDate);
       if (kardexToDate) params.toDate = businessDayEnd(kardexToDate);
+      if (kardexSearch) params.search = kardexSearch;
 
       const { data } = await inventoryApi.getKardex(params);
       setKardexData(data);
@@ -509,7 +515,7 @@ export default function InventoryManagement() {
     } finally {
       setKardexLoading(false);
     }
-  }, [kardexFromDate, kardexLocationFilter, kardexPageNumber, kardexPageSize, kardexSupplyFilter, kardexToDate]);
+  }, [kardexFromDate, kardexLocationFilter, kardexPageNumber, kardexPageSize, kardexSearch, kardexSupplyFilter, kardexToDate]);
 
   const loadAlerts = useCallback(async () => {
     setAlertsLoading(true);
@@ -529,6 +535,7 @@ export default function InventoryManagement() {
       const params: {
         isActive?: boolean;
         lowStockOnly?: boolean;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -538,6 +545,7 @@ export default function InventoryManagement() {
 
       if (suppliesFilterActive !== '') params.isActive = suppliesFilterActive === 'true';
       if (suppliesLowStockOnly) params.lowStockOnly = true;
+      if (suppliesSearch) params.search = suppliesSearch;
 
       const { data } = await inventoryApi.getSupplies(params);
       setSuppliesData(data);
@@ -546,7 +554,7 @@ export default function InventoryManagement() {
     } finally {
       setSuppliesLoading(false);
     }
-  }, [suppliesFilterActive, suppliesLowStockOnly, suppliesPageNumber, suppliesPageSize]);
+  }, [suppliesFilterActive, suppliesLowStockOnly, suppliesPageNumber, suppliesPageSize, suppliesSearch]);
 
   const loadStocks = useCallback(async () => {
     setStocksLoading(true);
@@ -554,6 +562,7 @@ export default function InventoryManagement() {
       const params: {
         inventoryLocationId?: string;
         lowStockOnly?: boolean;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -563,6 +572,7 @@ export default function InventoryManagement() {
 
       if (stocksLocationFilter) params.inventoryLocationId = stocksLocationFilter;
       if (stocksLowStockOnly) params.lowStockOnly = true;
+      if (stocksSearch) params.search = stocksSearch;
 
       const { data } = await inventoryApi.getStocks(params);
       setStocksData(data);
@@ -571,7 +581,7 @@ export default function InventoryManagement() {
     } finally {
       setStocksLoading(false);
     }
-  }, [stocksLocationFilter, stocksLowStockOnly, stocksPageNumber, stocksPageSize]);
+  }, [stocksLocationFilter, stocksLowStockOnly, stocksPageNumber, stocksPageSize, stocksSearch]);
 
   const loadMovements = useCallback(async () => {
     setMovementsLoading(true);
@@ -581,6 +591,7 @@ export default function InventoryManagement() {
         movementReason?: InventoryMovementReason;
         fromDate?: string;
         toDate?: string;
+        search?: string;
         pageNumber: number;
         pageSize: number;
       } = {
@@ -592,6 +603,7 @@ export default function InventoryManagement() {
       if (movementsReasonFilter !== '') params.movementReason = Number(movementsReasonFilter) as InventoryMovementReason;
       if (movementsFromDate) params.fromDate = businessDayStart(movementsFromDate);
       if (movementsToDate) params.toDate = businessDayEnd(movementsToDate);
+      if (movementsSearch) params.search = movementsSearch;
 
       const { data } = await inventoryApi.getMovements(params);
       setMovementsData(data);
@@ -600,7 +612,7 @@ export default function InventoryManagement() {
     } finally {
       setMovementsLoading(false);
     }
-  }, [movementsFromDate, movementsPageNumber, movementsPageSize, movementsReasonFilter, movementsToDate, movementsTypeFilter]);
+  }, [movementsFromDate, movementsPageNumber, movementsPageSize, movementsReasonFilter, movementsSearch, movementsToDate, movementsTypeFilter]);
 
   useEffect(() => {
     loadLocations();
@@ -1210,12 +1222,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.id}
                     loading={suppliesLoading}
                     emptyMessage="No hay insumos registrados."
-                    searchFilter={(item, search) =>
-                      item.name.toLowerCase().includes(search) ||
-                      (item.code || '').toLowerCase().includes(search) ||
-                      (item.sku || '').toLowerCase().includes(search) ||
-                      (item.barcode || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: suppliesData.totalCount,
                       page: suppliesPageNumber,
@@ -1223,6 +1229,10 @@ export default function InventoryManagement() {
                       onPageChange: setSuppliesPageNumber,
                       onPageSizeChange: (size) => {
                         setSuppliesPageSize(size);
+                        setSuppliesPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setSuppliesSearch(term);
                         setSuppliesPageNumber(1);
                       },
                     }}
@@ -1329,12 +1339,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.stockId}
                     loading={stocksLoading}
                     emptyMessage="No hay existencias registradas."
-                    searchFilter={(item, search) =>
-                      item.supplyItemName.toLowerCase().includes(search) ||
-                      item.inventoryLocationName.toLowerCase().includes(search) ||
-                      (item.supplyCode || '').toLowerCase().includes(search) ||
-                      (item.supplySku || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: stocksData.totalCount,
                       page: stocksPageNumber,
@@ -1342,6 +1346,10 @@ export default function InventoryManagement() {
                       onPageChange: setStocksPageNumber,
                       onPageSizeChange: (size) => {
                         setStocksPageSize(size);
+                        setStocksPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setStocksSearch(term);
                         setStocksPageNumber(1);
                       },
                     }}
@@ -1451,11 +1459,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.id}
                     loading={movementsLoading}
                     emptyMessage="No hay movimientos registrados."
-                    searchFilter={(item, search) =>
-                      item.movementNumber.toLowerCase().includes(search) ||
-                      (item.referenceNumber || '').toLowerCase().includes(search) ||
-                      (item.counterpartyName || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: movementsData.totalCount,
                       page: movementsPageNumber,
@@ -1463,6 +1466,10 @@ export default function InventoryManagement() {
                       onPageChange: setMovementsPageNumber,
                       onPageSizeChange: (size) => {
                         setMovementsPageSize(size);
+                        setMovementsPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setMovementsSearch(term);
                         setMovementsPageNumber(1);
                       },
                     }}
@@ -1702,12 +1709,6 @@ export default function InventoryManagement() {
                     keyExtractor={(item) => item.movementLineId}
                     loading={kardexLoading}
                     emptyMessage="No hay movimientos para los filtros seleccionados."
-                    searchFilter={(item, search) =>
-                      item.movementNumber.toLowerCase().includes(search) ||
-                      item.supplyItemName.toLowerCase().includes(search) ||
-                      item.inventoryLocationName.toLowerCase().includes(search) ||
-                      (item.referenceNumber || '').toLowerCase().includes(search)
-                    }
                     serverSide={{
                       totalCount: kardexData.totalCount,
                       page: kardexPageNumber,
@@ -1715,6 +1716,10 @@ export default function InventoryManagement() {
                       onPageChange: setKardexPageNumber,
                       onPageSizeChange: (size) => {
                         setKardexPageSize(size);
+                        setKardexPageNumber(1);
+                      },
+                      onSearchChange: (term) => {
+                        setKardexSearch(term);
                         setKardexPageNumber(1);
                       },
                     }}

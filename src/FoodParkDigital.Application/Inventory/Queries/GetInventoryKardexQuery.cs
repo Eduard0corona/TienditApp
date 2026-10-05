@@ -17,6 +17,8 @@ public record GetInventoryKardexQuery : IRequest<PaginatedList<InventoryKardexEn
     public Guid? InventoryLocationId { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
+    /// <summary>Supply, location, folio or reference, over every page.</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 50;
 }
@@ -88,6 +90,16 @@ public class GetInventoryKardexQueryHandler : IRequestHandler<GetInventoryKardex
 
         if (request.ToDate.HasValue)
             query = query.Where(x => x.MovementDate <= request.ToDate.Value);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(x =>
+                x.SupplyItemName.ToLower().Contains(search) ||
+                x.InventoryLocationName.ToLower().Contains(search) ||
+                x.MovementNumber.ToLower().Contains(search) ||
+                (x.ReferenceNumber != null && x.ReferenceNumber.ToLower().Contains(search)));
+        }
 
         query = query
             .OrderByDescending(x => x.MovementDate)
