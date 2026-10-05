@@ -96,16 +96,85 @@ public class RefreshTokenSqlServerTests
 
         await using (var context = database.CreateContext())
         {
-            var plainValues = await context.Database
-                .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM RefreshTokens WHERE Token IS NOT NULL OR ReplacedByToken IS NOT NULL")
-                .SingleAsync();
-            Assert.Equal(0, plainValues);
+            Assert.Equal(0, await PlainValuesAsync(context));
+            Assert.Equal(0, await NullValuesAsync(context));
             var active = await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None);
             var replaced = await UserSessions.FindAsync(context, "valor-reemplazado", CancellationToken.None);
             Assert.Equal(RefreshToken.HashOf("valor-activo"), active!.TokenHash);
             Assert.True(replaced!.WasRotated);
         }
     }
+
+    [SqlServerFact]
+    public async Task TokensOfThisVersion_ShouldKeepAnEmptyValue_ThatThePreviousVersionStillReads()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var clock = new MutableClock { UtcNow = DateTimeOffset.UtcNow };
+        var userId = await SeedUserAsync(database);
+        var signIn = new JwtTokenService(Options.Create(Settings), clock).GenerateRefreshToken(userId, Guid.NewGuid());
+        await using (var context = database.CreateContext())
+        {
+            context.RefreshTokens.Add(signIn.Token);
+            await context.SaveChangesAsync();
+        }
+
+        var renewed = await RenewAsync(database, clock, signIn.Value);
+        Assert.True(renewed.IsSuccess, renewed.Error);
+        await using (var context = database.CreateContext())
+            await UserSessions.EndAllAsync(
+                context, userId, RefreshTokenRevocationReason.PasswordChanged, clock.UtcNow, CancellationToken.None);
+
+        // The previous version reads Token as required (going back to it with a swap): no row may leave it null.
+        await using var check = database.CreateContext();
+        Assert.Equal(2, await check.RefreshTokens.CountAsync());
+        Assert.Equal(0, await NullValuesAsync(check));
+        Assert.Equal(0, await PlainValuesAsync(check));
+    }
+
+    [SqlServerFact]
+    public async Task RowsLeftWithoutAHashByARollback_ShouldOpenNothing_AndNotStopTheHashing()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var userId = await SeedUserAsync(database);
+        var now = DateTimeOffset.UtcNow;
+        await using (var context = database.CreateContext())
+        {
+            // Two sessions hashed by this version whose hash the rollback dropped (applying the migration again adds
+            // the column empty), and a token the previous version issued meanwhile.
+            foreach (var value in new[] { "", "", "valor-activo" })
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO RefreshTokens (Id, UserId, Token, ExpiresAt, CreatedAt)
+                    VALUES ({Guid.NewGuid()}, {userId}, {value}, {now.AddDays(7)}, {now})
+                    """);
+            }
+        }
+
+        // Only the plain value is hashed: the empty ones would all get the same hash, which the unique index refuses.
+        await using (var context = database.CreateContext())
+            Assert.Equal(1, await UserSessions.HashLegacyTokensAsync(context, 100, CancellationToken.None));
+
+        await using (var context = database.CreateContext())
+        {
+            Assert.Equal(0, await UserSessions.HashLegacyTokensAsync(context, 100, CancellationToken.None));
+            Assert.NotNull(await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None));
+            // SQL Server compares N' ' equal to N'': a blank value is refused before the lookup.
+            Assert.Null(await UserSessions.FindAsync(context, "", CancellationToken.None));
+            Assert.Null(await UserSessions.FindAsync(context, " ", CancellationToken.None));
+            Assert.Equal(2, await context.RefreshTokens.CountAsync(t => t.TokenHash == null));
+        }
+    }
+
+    /// <summary>Rows that keep the plain value of a token or of its replacement.</summary>
+    private static Task<int> PlainValuesAsync(ApplicationDbContext context) =>
+        context.Database
+            .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM RefreshTokens WHERE Token <> '' OR ReplacedByToken IS NOT NULL")
+            .SingleAsync();
+
+    private static Task<int> NullValuesAsync(ApplicationDbContext context) =>
+        context.Database
+            .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM RefreshTokens WHERE Token IS NULL")
+            .SingleAsync();
 
     private static async Task<Result<AuthResponse>> RenewAsync(
         SqlServerTestDatabase database,

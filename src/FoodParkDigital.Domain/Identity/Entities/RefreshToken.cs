@@ -24,6 +24,7 @@ public class RefreshToken : BaseEntity
         UserId = userId;
         SessionId = sessionId;
         TokenHash = HashOf(value);
+        LegacyValue = string.Empty;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
     }
@@ -36,7 +37,11 @@ public class RefreshToken : BaseEntity
     /// <summary>SHA-256 of the value, in hexadecimal. Empty only for a token issued before tokens were hashed, until it is.</summary>
     public string? TokenHash { get; private set; }
 
-    /// <summary>The value of a token issued before tokens were hashed; emptied once it is.</summary>
+    /// <summary>
+    /// The value of a token issued before tokens were hashed; empty once it is, and for the tokens issued since. Empty,
+    /// not null: the previous version reads it as required, so going back to that version keeps working, and both
+    /// reject an empty token, so it opens no session.
+    /// </summary>
     public string? LegacyValue { get; private set; }
 
     /// <summary>The value of the replacement of a token rotated before tokens were hashed; emptied once it is.</summary>
@@ -72,12 +77,12 @@ public class RefreshToken : BaseEntity
     /// </summary>
     public void HashLegacyValue()
     {
-        if (LegacyValue is not null)
+        if (!string.IsNullOrEmpty(LegacyValue))
             TokenHash ??= HashOf(LegacyValue);
         if (RevokedAt is not null && RevocationReason is null && LegacyReplacementValue is not null)
             RevocationReason = RefreshTokenRevocationReason.Rotated;
 
-        LegacyValue = null;
+        LegacyValue = string.Empty;
         LegacyReplacementValue = null;
     }
 

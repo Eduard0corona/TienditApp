@@ -15,7 +15,8 @@ public class RefreshTokenTests
 
         Assert.Equal(RefreshToken.HashOf("valor-del-token"), token.TokenHash);
         Assert.Matches("^[0-9A-F]{64}$", token.TokenHash);
-        Assert.Null(token.LegacyValue);
+        // Empty, not null: the previous version reads it as required.
+        Assert.Equal(string.Empty, token.LegacyValue);
         Assert.True(token.IsActive);
     }
 
@@ -52,9 +53,21 @@ public class RefreshTokenTests
         token.HashLegacyValue();
 
         Assert.Equal(RefreshToken.HashOf("valor-anterior"), token.TokenHash);
-        Assert.Null(token.LegacyValue);
+        Assert.Equal(string.Empty, token.LegacyValue);
         Assert.Null(token.LegacyReplacementValue);
         Assert.Equal(expectedReason, token.RevocationReason);
+    }
+
+    [Fact]
+    public void TokenLeftWithoutItsHashByARollback_ShouldNotGetTheHashOfAnEmptyValue()
+    {
+        // Hashed by this version, then the rollback dropped the hash and kept the empty value: it opens nothing.
+        var token = Legacy("", null, null);
+
+        token.HashLegacyValue();
+
+        Assert.Null(token.TokenHash);
+        Assert.Equal(string.Empty, token.LegacyValue);
     }
 
     [Fact]
@@ -69,7 +82,7 @@ public class RefreshTokenTests
     /// <summary>A row the previous version wrote: the plain value and no hash.</summary>
     private static RefreshToken Legacy(string value, DateTimeOffset? revokedAt, string? replacement)
     {
-        var token = new RefreshToken(Guid.NewGuid(), Guid.NewGuid(), value, Now, Now.AddDays(7));
+        var token = new RefreshToken(Guid.NewGuid(), Guid.NewGuid(), "otro-valor", Now, Now.AddDays(7));
         Set(token, nameof(RefreshToken.TokenHash), null);
         Set(token, nameof(RefreshToken.LegacyValue), value);
         Set(token, nameof(RefreshToken.LegacyReplacementValue), replacement);

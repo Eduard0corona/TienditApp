@@ -51,7 +51,7 @@ public class UserSessionTests
         Assert.Equal(first.SessionId, next.SessionId);
         Assert.Equal(first.SessionId.ToString(), SessionOf(signIn.AccessToken));
         Assert.Equal(first.SessionId.ToString(), SessionOf(renewed.Value.AccessToken));
-        Assert.All(tokens, token => Assert.Null(token.LegacyValue));
+        Assert.All(tokens, token => Assert.Equal(string.Empty, token.LegacyValue));
         Assert.True(await fixture.IsOpenAsync(renewed.Value.AccessToken));
     }
 
@@ -219,7 +219,7 @@ public class UserSessionTests
         Assert.True(renewed.IsSuccess, renewed.Error);
         var stored = (await fixture.TokensAsync()).Single(t => t.Id == legacy.Id);
         Assert.Equal(RefreshToken.HashOf("valor-de-la-version-anterior"), stored.TokenHash);
-        Assert.Null(stored.LegacyValue);
+        Assert.Equal(string.Empty, stored.LegacyValue);
         Assert.Equal(RefreshTokenRevocationReason.Rotated, stored.RevocationReason);
         Assert.Equal(stored.SessionId.ToString(), SessionOf(renewed.Value!.AccessToken));
     }
@@ -243,7 +243,7 @@ public class UserSessionTests
         var tokens = await fixture.TokensAsync();
         Assert.All(tokens, token =>
         {
-            Assert.Null(token.LegacyValue);
+            Assert.Equal(string.Empty, token.LegacyValue);
             Assert.Null(token.LegacyReplacementValue);
             Assert.NotNull(token.TokenHash);
         });
@@ -255,8 +255,8 @@ public class UserSessionTests
         Assert.Equal(RefreshTokenCommandHandler.InvalidSessionError, (await fixture.RenewAsync("dos")).Error);
     }
 
-    private static string? SessionOf(string accessToken) =>
-        new JwtSecurityTokenHandler().ReadJwtToken(accessToken).Claims
+    private static string? SessionOf(string? accessToken) =>
+        new JwtSecurityTokenHandler().ReadJwtToken(Assert.IsType<string>(accessToken)).Claims
             .SingleOrDefault(c => c.Type == SessionClaims.SessionId)?.Value;
 
     private sealed class SessionFixture : IAsyncDisposable
@@ -363,8 +363,9 @@ public class UserSessionTests
         }
 
         /// <summary>Validated as the API does (signature, issuer, audience, lifetime), then the session.</summary>
-        public async Task<bool> IsOpenAsync(string accessToken)
+        public async Task<bool> IsOpenAsync(string? accessToken)
         {
+            Assert.NotNull(accessToken);
             var principal = new JwtSecurityTokenHandler().ValidateToken(accessToken, new TokenValidationParameters
             {
                 ValidateIssuer = true,

@@ -20,7 +20,8 @@ public static class UserSessions
         string? value,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(value))
+        // Blank never matches: SQL Server ignores trailing spaces, and hashed tokens keep an empty value.
+        if (string.IsNullOrWhiteSpace(value))
             return null;
 
         var hash = RefreshToken.HashOf(value);
@@ -59,7 +60,7 @@ public static class UserSessions
         CancellationToken cancellationToken)
     {
         var tokens = await context.RefreshTokens
-            .Where(t => t.LegacyValue != null || t.LegacyReplacementValue != null)
+            .Where(t => (t.LegacyValue != null && t.LegacyValue != "") || t.LegacyReplacementValue != null)
             .OrderBy(t => t.Id)
             .Take(batchSize)
             .ToListAsync(cancellationToken);

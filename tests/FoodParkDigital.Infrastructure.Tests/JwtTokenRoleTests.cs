@@ -63,7 +63,7 @@ public class JwtTokenRoleTests
 
         Assert.Equal(64, Convert.FromBase64String(issued.Value).Length);
         Assert.Equal(RefreshToken.HashOf(issued.Value), issued.Token.TokenHash);
-        Assert.Null(issued.Token.LegacyValue);
+        Assert.Equal(string.Empty, issued.Token.LegacyValue);
         Assert.Equal(userId, issued.Token.UserId);
         Assert.Equal(sessionId, issued.Token.SessionId);
         Assert.Equal(Now, issued.Token.CreatedAt);
