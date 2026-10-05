@@ -209,7 +209,7 @@ export default function Profile() {
                       className="btn btn-light"
                       onClick={() => setEditMode(!editMode)}
                     >
-                      <i className="mdi mdi-account-edit me-1"></i>
+                      <i className="ri-user-settings-line me-1" aria-hidden="true"></i>
                       {editMode ? 'Cancelar' : 'Editar Perfil'}
                     </button>
                   </div>
@@ -338,7 +338,7 @@ export default function Profile() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={avatarLoading}
                 >
-                  <i className="mdi mdi-upload me-1"></i>
+                  <i className="ri-upload-2-line me-1" aria-hidden="true"></i>
                   Subir Avatar
                 </button>
                 {user?.avatarUrl && (
@@ -347,7 +347,7 @@ export default function Profile() {
                     onClick={onDeleteAvatar}
                     disabled={avatarLoading}
                   >
-                    <i className="mdi mdi-delete me-1"></i>
+                    <i className="ri-delete-bin-line me-1" aria-hidden="true"></i>
                     Eliminar
                   </button>
                 )}

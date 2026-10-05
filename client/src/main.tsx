@@ -16,7 +16,6 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 
 // Icon fonts and the app typeface (self-hosted: no request to font services)
 import 'remixicon/fonts/remixicon.css';
-import '@mdi/font/css/materialdesignicons.min.css';
 import '@fontsource-variable/manrope';
 
 // Hyper CSS, then the TienditApp theme and fixes on top of it

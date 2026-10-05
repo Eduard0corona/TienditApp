@@ -52,3 +52,18 @@
 [data-bs-theme='dark'] .brand-logo-dark .brand-logo-accent {
   color: #6fe0b0;
 }
+
+/* Hyper drew these with the Material Design Icons font, which the app no longer loads (one icon set: Remix). */
+.breadcrumb-item + .breadcrumb-item::before {
+  font-family: 'remixicon';
+  content: '\ea6e'; /* ri-arrow-right-s-line */
+}
+
+.password-eye::before {
+  font-family: 'remixicon';
+  content: '\ecb5'; /* ri-eye-line */
+}
+
+.show-password .password-eye::before {
+  content: '\ecb7'; /* ri-eye-off-line */
+}
