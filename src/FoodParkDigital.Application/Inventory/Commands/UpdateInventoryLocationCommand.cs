@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -67,13 +66,6 @@ public class UpdateInventoryLocationCommandHandler : IRequestHandler<UpdateInven
         var entity = await _context.InventoryLocations
             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
             ?? throw new EntityNotFoundException("InventoryLocation", request.Id);
-
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            entity.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryLocationDto>("El negocio no tiene habilitado el módulo de inventario.");
 
         var branchError = await InventoryLocationBranches.ValidateAsync(_context, entity.TenantId, request.BranchId, cancellationToken);
         if (branchError is not null)

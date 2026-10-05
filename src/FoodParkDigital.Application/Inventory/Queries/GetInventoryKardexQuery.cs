@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Inventory.Enums;
@@ -25,23 +24,14 @@ public record GetInventoryKardexQuery : IRequest<PaginatedList<InventoryKardexEn
 public class GetInventoryKardexQueryHandler : IRequestHandler<GetInventoryKardexQuery, PaginatedList<InventoryKardexEntryDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetInventoryKardexQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetInventoryKardexQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<PaginatedList<InventoryKardexEntryDto>> Handle(GetInventoryKardexQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return new PaginatedList<InventoryKardexEntryDto>([], 0, request.PageNumber, request.PageSize);
-
         var query = from line in _context.InventoryMovementLines.AsNoTracking()
                     join movement in _context.InventoryMovements.AsNoTracking() on line.MovementId equals movement.Id
                     join supply in _context.SupplyItems.AsNoTracking() on line.SupplyItemId equals supply.Id

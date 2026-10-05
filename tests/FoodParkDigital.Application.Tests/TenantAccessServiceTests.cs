@@ -52,10 +52,13 @@ public class TenantAccessServiceTests
         var service = new TenantAccessService(context);
         var result = await service.HasAnyCapabilityAsync(
             tenant.Id,
-            TenantCapability.Retail | TenantCapability.Service | TenantCapability.Food,
+            TenantCapability.Inventory | TenantCapability.Kitchen,
             CancellationToken.None);
+        // A business always keeps a type of sale: the one of its kind when its modules leave none.
+        var sells = await service.HasAnyCapabilityAsync(tenant.Id, TenantCapability.Retail, CancellationToken.None);
 
         Assert.False(result);
+        Assert.True(sells);
     }
 
     [Fact]

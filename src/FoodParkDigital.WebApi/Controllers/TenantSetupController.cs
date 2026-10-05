@@ -14,7 +14,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
 /// Guided setup and sales policy of the signed-in user's business. Under /auth/my-tenant, so the
-/// middleware checks the membership; the handlers allow changes only to owners and admins.
+/// middleware checks the membership; the requests allow changes only to owners and admins.
 /// </summary>
 [ApiController]
 [Route("api/v1/auth/my-tenant")]

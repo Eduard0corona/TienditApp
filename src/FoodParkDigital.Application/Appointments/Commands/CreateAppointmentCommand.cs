@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -12,6 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace FoodParkDigital.Application.Appointments.Commands;
 
 [RequiresPermission(TenantPermission.ManageAppointments)]
+[RequiresCapability(TenantCapability.Appointments)]
 public record CreateAppointmentCommand : IRequest<Result<AppointmentDto>>
 {
     public string CustomerName { get; init; } = null!;
@@ -64,13 +64,6 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
 
     public async Task<Result<AppointmentDto>> Handle(CreateAppointmentCommand request, CancellationToken cancellationToken)
     {
-        var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if ((capabilities & TenantCapability.Appointments) != TenantCapability.Appointments)
-            return Result.Failure<AppointmentDto>("El negocio no tiene habilitado el módulo de citas.");
-
         var resources = await AppointmentResources.ResolveAsync(
             _context, request.ServiceProductId, request.ServiceName, request.StaffUserId, request.StaffName, cancellationToken);
         if (resources.IsFailure)

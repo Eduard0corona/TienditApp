@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Employees.Queries;
 
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record GetEmployeeByIdQuery(Guid TenantUserId) : IRequest<Result<EmployeeDto>>;
 
 public class GetEmployeeByIdQueryHandler : IRequestHandler<GetEmployeeByIdQuery, Result<EmployeeDto>>

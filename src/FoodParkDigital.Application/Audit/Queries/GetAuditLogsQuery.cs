@@ -2,13 +2,13 @@ using FoodParkDigital.Application.Audit.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Audit.Queries;
 
-[RequiresPermission(TenantPermission.ViewReports)]
+/// <summary>The business's activity: who changed what, permissions and modules included. Owners and admins only.</summary>
+[RequiresTenantManager]
 public record GetAuditLogsQuery : IRequest<PaginatedList<AuditLogDto>>
 {
     public string? EntityName { get; init; }

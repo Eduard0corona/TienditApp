@@ -1,5 +1,4 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -31,13 +30,6 @@ public class GetSupplyItemByIdQueryHandler : IRequestHandler<GetSupplyItemByIdQu
             .FirstOrDefaultAsync(cancellationToken);
 
         if (supplyItem is null)
-            throw new EntityNotFoundException("SupplyItem", request.Id);
-
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            supplyItem.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
             throw new EntityNotFoundException("SupplyItem", request.Id);
 
         var dto = await _context.SupplyItems

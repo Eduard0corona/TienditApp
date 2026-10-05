@@ -12,7 +12,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF,KITCHEN")]
+[Authorize]
 public class OrdersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -54,7 +54,6 @@ public class OrdersController : ControllerBase
 
     /// <summary>Adds a round to an open tab and sends it to the kitchen.</summary>
     [HttpPost("{id:guid}/rounds")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> AddRound(Guid id, [FromBody] AddTabRoundRequest request)
     {
         var result = await _mediator.Send(new AddTabRoundCommand { OrderId = id, Items = request.Items });
@@ -65,7 +64,6 @@ public class OrdersController : ControllerBase
 
     /// <summary>Closes a paid tab and frees its table.</summary>
     [HttpPost("{id:guid}/close-tab")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> CloseTab(Guid id)
     {
         var result = await _mediator.Send(new CloseTabCommand(id));
@@ -76,7 +74,6 @@ public class OrdersController : ControllerBase
 
     /// <summary>Moves an open tab to another free table.</summary>
     [HttpPut("{id:guid}/table")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> MoveTab(Guid id, [FromBody] MoveTabRequest request)
     {
         var result = await _mediator.Send(new MoveTabCommand(id, request.DiningTableId));
@@ -87,10 +84,9 @@ public class OrdersController : ControllerBase
 
     /// <summary>The waiter took a ready round to the table.</summary>
     [HttpPut("kitchen-tickets/{ticketId:guid}/served")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> MarkRoundServed(Guid ticketId)
     {
-        var result = await _mediator.Send(new UpdateKitchenTicketStatusCommand(ticketId, KitchenTicketStatus.Served));
+        var result = await _mediator.Send(new MarkRoundServedCommand(ticketId));
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
@@ -101,7 +97,6 @@ public class OrdersController : ControllerBase
     /// receiver data the sale goes to the general public. Nothing is stamped.
     /// </summary>
     [HttpGet("{id:guid}/cfdi-draft")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<CfdiDraftDto>> GetCfdiDraft(
         Guid id,
         [FromQuery] string? rfc,
@@ -133,7 +128,6 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> Create([FromBody] CreateOrderCommand command)
     {
         var result = await _mediator.Send(command);
@@ -142,10 +136,8 @@ public class OrdersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
-    // Counter roles, like creating orders and registering payments; the middleware requires ManageOrders.
-    // Kitchen moves food orders through KitchenController.
+    // Whoever takes the orders; the kitchen moves food orders through KitchenController.
     [HttpPut("{id:guid}/status")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusRequest request)
     {
         var result = await _mediator.Send(new UpdateOrderStatusCommand
@@ -163,7 +155,6 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/cancel")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request)
     {
         var result = await _mediator.Send(new CancelOrderCommand
@@ -177,7 +168,6 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/payments")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> AddPayment(Guid id, [FromBody] AddOrderPaymentRequest request)
     {
         var result = await _mediator.Send(new AddOrderPaymentCommand
@@ -199,7 +189,6 @@ public class OrdersController : ControllerBase
 
     /// <summary>Gives money back, optionally for returned units (owner, admin or ProcessRefunds).</summary>
     [HttpPost("{id:guid}/refunds")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> Refund(Guid id, [FromBody] RefundOrderRequest request)
     {
         var result = await _mediator.Send(new RefundOrderCommand
@@ -220,7 +209,6 @@ public class OrdersController : ControllerBase
 
     /// <summary>Refunds what is left of every payment, returns the units and cancels when the state allows it.</summary>
     [HttpPost("{id:guid}/void")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<ActionResult<OrderDto>> Void(Guid id, [FromBody] VoidOrderRequest request)
     {
         var result = await _mediator.Send(new VoidOrderCommand
@@ -235,7 +223,6 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/service-pieces/{pieceId:guid}/status")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     public async Task<IActionResult> UpdateServicePieceStatus(
         Guid id,
         Guid pieceId,
@@ -255,7 +242,6 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost("uploads/service-photo")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<UploadedFileDto>> UploadServicePhoto(IFormFile file)
     {
@@ -277,7 +263,6 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost("uploads/payment-evidence")]
-    [Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<UploadedFileDto>> UploadPaymentEvidence(IFormFile file)
     {

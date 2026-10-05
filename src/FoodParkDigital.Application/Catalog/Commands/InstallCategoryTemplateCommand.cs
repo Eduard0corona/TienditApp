@@ -2,7 +2,6 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Catalog.Templates;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -43,13 +42,6 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
 
     public async Task<Result<InstallCategoryTemplateResultDto>> Handle(InstallCategoryTemplateCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanManageCatalog(tenantCapabilities))
-            return Result.Failure<InstallCategoryTemplateResultDto>("El negocio no tiene habilitado el módulo de catálogo.");
-
         var template = CategoryTemplateCatalog.GetById(request.TemplateId);
         if (template is null)
             return Result.Failure<InstallCategoryTemplateResultDto>("Plantilla no encontrada.");

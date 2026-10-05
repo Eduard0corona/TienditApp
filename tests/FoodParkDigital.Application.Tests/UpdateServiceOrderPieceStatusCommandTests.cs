@@ -51,9 +51,11 @@ public class UpdateServiceOrderPieceStatusCommandTests
         await context.SaveChangesAsync();
 
         var pieceId = order.ServicePieces.Single().Id;
+        var user = new TestCurrentUserService();
         var handler = new UpdateServiceOrderPieceStatusCommandHandler(
             context,
-            new TestCurrentUserService(),
+            user,
+            TestAccess.For(user, tenantService),
             NoOpOrderInventoryService.Instance);
 
         var transitions = new[]
@@ -121,9 +123,11 @@ public class UpdateServiceOrderPieceStatusCommandTests
         await context.SaveChangesAsync();
 
         var pieceId = order.ServicePieces.Single().Id;
+        var user = new TestCurrentUserService();
         var handler = new UpdateServiceOrderPieceStatusCommandHandler(
             context,
-            new TestCurrentUserService(),
+            user,
+            TestAccess.For(user, tenantService),
             NoOpOrderInventoryService.Instance);
 
         var result = await handler.Handle(new UpdateServiceOrderPieceStatusCommand
@@ -148,7 +152,7 @@ public class UpdateServiceOrderPieceStatusCommandTests
         public string? UserId => Guid.NewGuid().ToString();
         public string? UserName => "tester";
         public string? Role => "TENANT_ADMIN";
-        public string? TenantRole => "TENANT_ADMIN";
+        public string? TenantRole => "OWNER";
         public IReadOnlyCollection<string> Permissions => [];
         public Guid? TenantId => null;
     }

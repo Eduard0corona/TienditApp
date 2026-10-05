@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Purchasing.Enums;
@@ -11,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Purchasing.Queries;
 
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record GetPurchaseOrdersQuery : IRequest<PaginatedList<PurchaseOrderDto>>
 {
     public Guid? SupplierId { get; init; }
@@ -24,23 +24,14 @@ public record GetPurchaseOrdersQuery : IRequest<PaginatedList<PurchaseOrderDto>>
 public class GetPurchaseOrdersQueryHandler : IRequestHandler<GetPurchaseOrdersQuery, PaginatedList<PurchaseOrderDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentTenantService _tenantService;
 
-    public GetPurchaseOrdersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetPurchaseOrdersQueryHandler(IApplicationDbContext context)
     {
         _context = context;
-        _tenantService = tenantService;
     }
 
     public async Task<PaginatedList<PurchaseOrderDto>> Handle(GetPurchaseOrdersQuery request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return new PaginatedList<PurchaseOrderDto>([], 0, request.PageNumber, request.PageSize);
-
         var query = from po in _context.PurchaseOrders.AsNoTracking()
                     join supplier in _context.Suppliers.AsNoTracking() on po.SupplierId equals supplier.Id
                     select new PurchaseOrderDto

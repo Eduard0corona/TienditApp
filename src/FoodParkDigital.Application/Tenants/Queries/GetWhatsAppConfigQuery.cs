@@ -13,24 +13,18 @@ public record GetWhatsAppConfigQuery : IRequest<Result<WhatsAppConfigDto>>;
 public class GetWhatsAppConfigQueryHandler : IRequestHandler<GetWhatsAppConfigQuery, Result<WhatsAppConfigDto>>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
 
     public GetWhatsAppConfigQueryHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
         ICurrentTenantService tenantService)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _tenantService = tenantService;
     }
 
     public async Task<Result<WhatsAppConfigDto>> Handle(GetWhatsAppConfigQuery request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure<WhatsAppConfigDto>("Solo el administrador puede ver la configuración de WhatsApp.");
-
         var tenantId = _tenantService.TenantId;
         var config = await _context.WhatsAppConfigs
             .AsNoTracking()

@@ -1,10 +1,8 @@
 using FoodParkDigital.Application.Catalog.Queries;
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Inventory.Queries;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
-using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -49,19 +47,6 @@ public class CapabilityQueryGuardTests
 
         Assert.NotEmpty(result.Items);
         Assert.All(result.Items, x => Assert.Equal(OrderType.Service, x.OrderType));
-    }
-
-    [Fact]
-    public async Task GetSupplyItems_ShouldReturnEmpty_WhenInventoryCapabilityIsMissing()
-    {
-        await using var fixture = await TestFixture.CreateAsync(BusinessType.Retail, TenantCapability.Retail);
-        await fixture.SeedSupplyAsync();
-
-        var handler = new GetSupplyItemsQueryHandler(fixture.Context, fixture.TenantService);
-        var result = await handler.Handle(new GetSupplyItemsQuery(), CancellationToken.None);
-
-        Assert.Empty(result.Items);
-        Assert.Equal(0, result.TotalCount);
     }
 
     private sealed class TestFixture : IAsyncDisposable
@@ -148,16 +133,6 @@ public class CapabilityQueryGuardTests
             serviceOrder.AddItem(service.Id, service.Name, 1, 120m);
 
             Context.Orders.AddRange(retailOrder, serviceOrder);
-            await Context.SaveChangesAsync();
-        }
-
-        public async Task SeedSupplyAsync()
-        {
-            Context.SupplyItems.Add(new SupplyItem(
-                tenantId: Tenant.Id,
-                name: "Detergente",
-                unit: UnitType.Liter,
-                defaultCost: 20m));
             await Context.SaveChangesAsync();
         }
 

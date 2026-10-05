@@ -12,6 +12,7 @@ import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
 import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
+import { COMMERCE_CAPABILITIES, hasAnyCapability } from '../../utils/tenantCapabilities';
 
 
 const INDUSTRY_OPTIONS = [
@@ -156,6 +157,11 @@ export default function BusinessSettings() {
 
   const onSubmit = async (data: UpdateTenantRequest) => {
     setMsg(null);
+    // Like its plan, a business always sells something (the API refuses it too).
+    if (!hasAnyCapability(capabilities, COMMERCE_CAPABILITIES)) {
+      setMsg({ type: 'danger', text: 'Elige al menos un tipo de venta: productos, servicios o alimentos.' });
+      return;
+    }
     try {
       const payload: UpdateTenantRequest = {
         ...data,

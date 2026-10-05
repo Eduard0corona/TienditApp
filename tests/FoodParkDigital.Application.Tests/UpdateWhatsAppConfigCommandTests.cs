@@ -121,7 +121,7 @@ public class UpdateWhatsAppConfigCommandTests
         }
 
         public UpdateWhatsAppConfigCommandHandler CreateHandler(Guid tenantId)
-            => new(Context, new TestCurrentUserService("TENANT_ADMIN"), new TestCurrentTenantService(tenantId));
+            => new(Context, new TestCurrentTenantService(tenantId));
 
         public async Task StoreConfigAsync(Guid tenantId, string phoneNumberId)
         {
@@ -145,21 +145,6 @@ public class UpdateWhatsAppConfigCommandTests
             await Context.DisposeAsync();
             await Database.DisposeAsync();
         }
-    }
-
-    private sealed class TestCurrentUserService : ICurrentUserService
-    {
-        public TestCurrentUserService(string role)
-        {
-            Role = role;
-        }
-
-        public string? UserId => Guid.NewGuid().ToString();
-        public string? UserName => "admin@tenant.com";
-        public string? Role { get; }
-        public string? TenantRole => null;
-        public IReadOnlyCollection<string> Permissions => [];
-        public Guid? TenantId => null;
     }
 
     private sealed class TestCurrentTenantService : ICurrentTenantService

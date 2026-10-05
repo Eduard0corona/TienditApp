@@ -14,14 +14,64 @@ public class TenantResolutionMiddlewareTests
     private static readonly Guid UserId = Guid.NewGuid();
 
     [Fact]
-    public async Task RouteContainingHealthFragment_ShouldNotSkipPermissionChecks()
+    public async Task RouteContainingHealthFragment_ShouldNotSkipTheMembershipCheck()
     {
-        var access = new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageCatalog)]);
+        var access = new FakeTenantAccessService(active: false, permissions: [nameof(TenantPermission.ManageOrders)]);
 
         var result = await InvokeAsync("/api/v1/orders/health", "GET", "STAFF", access);
 
         Assert.False(result.NextCalled);
         Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
+        Assert.Equal(1, access.Calls);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/employees")]
+    [InlineData("/api/v1/tenants/9a4b8f0e-2f6c-4a51-9d39-0d6f1f4f3b11/orders")]
+    [InlineData("/api/v1/a-route-added-later")]
+    public async Task BusinessRoutes_ShouldNeedAnActiveMembership_AndLeavePermissionsToTheUseCase(string path)
+    {
+        // Every /api route acts on the business of the token unless it is about the account: a route nobody listed is
+        // checked too. Who may do what in it (permission and module) is declared by its request.
+        var disabled = await InvokeAsync(path, "POST", "STAFF", new FakeTenantAccessService(active: false, permissions: []));
+        var memberWithoutPermissions = await InvokeAsync(path, "POST", "STAFF", new FakeTenantAccessService(active: true, permissions: []));
+
+        Assert.False(disabled.NextCalled);
+        Assert.Equal(StatusCodes.Status403Forbidden, disabled.StatusCode);
+        Assert.True(memberWithoutPermissions.NextCalled);
+        Assert.Equal(TenantId, memberWithoutPermissions.TenantService.TenantId);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/auth/profile")]
+    [InlineData("/api/v1/auth/switch-tenant")]
+    [InlineData("/api/v1/me/tenants")]
+    [InlineData("/api/v1/twofactor/enable")]
+    [InlineData("/api/v1/platform/overview")]
+    [InlineData("/api/v1/tenants")]
+    [InlineData("/api/v1/public/menu/demo")]
+    public async Task AccountRoutes_ShouldNotNeedTheMembership(string path)
+    {
+        // A person who lost access to the token's business still reaches their profile and the switch to another one.
+        var access = new FakeTenantAccessService(active: false, permissions: []);
+
+        var result = await InvokeAsync(path, "GET", "STAFF", access);
+
+        Assert.True(result.NextCalled);
+        Assert.Equal(0, access.Calls);
+    }
+
+    [Fact]
+    public async Task BusinessRoute_ShouldAskToChooseABusiness_WhenTheTokenHasNone()
+    {
+        var withoutBusiness = await InvokeAsync(
+            "/api/v1/orders", "GET", "STAFF", new FakeTenantAccessService(active: true, permissions: []), withBusiness: false);
+        var account = await InvokeAsync(
+            "/api/v1/me/tenants", "GET", "STAFF", new FakeTenantAccessService(active: true, permissions: []), withBusiness: false);
+
+        Assert.False(withoutBusiness.NextCalled);
+        Assert.Equal(StatusCodes.Status403Forbidden, withoutBusiness.StatusCode);
+        Assert.True(account.NextCalled);
     }
 
     [Theory]
@@ -41,22 +91,6 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Fact]
-    public async Task AdminRoleInTheToken_ShouldNotSkipPermissions_WhenTheMembershipIsStaff()
-    {
-        // The token says TENANT_ADMIN (issued before a demotion, or the account owns another business),
-        // but the membership read on this request is staff: the route's permission still applies.
-        var staffHere = new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageCatalog)]);
-        var managerHere = new FakeTenantAccessService(active: true, permissions: [], isManager: true);
-
-        var denied = await InvokeAsync("/api/v1/orders", "GET", "TENANT_ADMIN", staffHere);
-        var allowed = await InvokeAsync("/api/v1/orders", "GET", "STAFF", managerHere);
-
-        Assert.False(denied.NextCalled);
-        Assert.Equal(StatusCodes.Status403Forbidden, denied.StatusCode);
-        Assert.True(allowed.NextCalled);
-    }
-
-    [Fact]
     public async Task MyTenant_ShouldResolveTenant_ForActiveMemberWithoutPermissions()
     {
         var access = new FakeTenantAccessService(active: true, permissions: []);
@@ -65,72 +99,6 @@ public class TenantResolutionMiddlewareTests
 
         Assert.True(result.NextCalled);
         Assert.Equal(TenantId, result.TenantService.TenantId);
-    }
-
-    [Fact]
-    public async Task TenantOrders_ShouldRequireManageOrders()
-    {
-        var path = $"/api/v1/tenants/{TenantId}/orders";
-
-        var denied = await InvokeAsync(path, "POST", "STAFF",
-            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageCatalog)]));
-        var allowed = await InvokeAsync(path, "POST", "STAFF",
-            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders)]));
-
-        Assert.False(denied.NextCalled);
-        Assert.Equal(StatusCodes.Status403Forbidden, denied.StatusCode);
-        Assert.True(allowed.NextCalled);
-        Assert.Equal(TenantId, allowed.TenantService.TenantId);
-    }
-
-    [Theory]
-    [InlineData("/api/v1/orders/9a4b8f0e-2f6c-4a51-9d39-0d6f1f4f3b11/payments", "POST")]
-    [InlineData("/api/v1/orders/uploads/payment-evidence", "POST")]
-    public async Task Charging_ShouldNeedChargeOrders_NotJustTakingOrders(string path, string method)
-    {
-        var waiter = await InvokeAsync(path, method, "STAFF",
-            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders)]));
-        var cashier = await InvokeAsync(path, method, "STAFF",
-            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders), nameof(TenantPermission.ChargeOrders)]));
-        var takingAnOrder = await InvokeAsync("/api/v1/orders", "POST", "STAFF",
-            new FakeTenantAccessService(active: true, permissions: [nameof(TenantPermission.ManageOrders)]));
-
-        Assert.Equal(StatusCodes.Status403Forbidden, waiter.StatusCode);
-        Assert.True(cashier.NextCalled);
-        Assert.True(takingAnOrder.NextCalled);
-    }
-
-    [Theory]
-    [InlineData(nameof(TenantPermission.ViewReports), true)]
-    [InlineData(nameof(TenantPermission.ManageOrders), false)]
-    public async Task Dashboard_ShouldFollowViewReports_ForStaff(string permission, bool allowed)
-    {
-        var result = await InvokeAsync("/api/v1/dashboard/metrics", "GET", "STAFF",
-            new FakeTenantAccessService(active: true, permissions: [permission]));
-
-        Assert.Equal(allowed, result.NextCalled);
-        Assert.Equal(allowed ? StatusCodes.Status200OK : StatusCodes.Status403Forbidden, result.StatusCode);
-    }
-
-    [Fact]
-    public async Task Kitchen_ShouldRequireManageServiceBoardAndTheKitchenCapability()
-    {
-        const TenantCapability foodWithKitchen = TenantCapability.Food | TenantCapability.Kitchen;
-        string[] boardPermission = [nameof(TenantPermission.ManageServiceBoard)];
-
-        var allowed = await InvokeAsync("/api/v1/kitchen/orders", "GET", "KITCHEN",
-            new FakeTenantAccessService(active: true, boardPermission, foodWithKitchen));
-        var staffAllowed = await InvokeAsync("/api/v1/kitchen/orders", "GET", "STAFF",
-            new FakeTenantAccessService(active: true, boardPermission, foodWithKitchen));
-        var withoutPermission = await InvokeAsync("/api/v1/kitchen/orders", "GET", "STAFF",
-            new FakeTenantAccessService(active: true, [nameof(TenantPermission.ManageOrders)], foodWithKitchen));
-        var withoutCapability = await InvokeAsync("/api/v1/kitchen/orders", "GET", "KITCHEN",
-            new FakeTenantAccessService(active: true, boardPermission, TenantCapability.Food));
-
-        Assert.True(allowed.NextCalled);
-        Assert.True(staffAllowed.NextCalled);
-        Assert.Equal(StatusCodes.Status403Forbidden, withoutPermission.StatusCode);
-        Assert.Equal(StatusCodes.Status403Forbidden, withoutCapability.StatusCode);
     }
 
     [Theory]
@@ -243,7 +211,8 @@ public class TenantResolutionMiddlewareTests
         string path,
         string method,
         string role,
-        FakeTenantAccessService access)
+        FakeTenantAccessService access,
+        bool withBusiness = true)
     {
         var nextCalled = false;
         var middleware = new TenantResolutionMiddleware(_ =>
@@ -256,12 +225,10 @@ public class TenantResolutionMiddlewareTests
         context.Request.Path = path;
         context.Request.Method = method;
         context.Response.Body = new MemoryStream();
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, UserId.ToString()),
-            new Claim(ClaimTypes.Role, role),
-            new Claim("tenant_id", TenantId.ToString())
-        ], authenticationType: "Test"));
+        List<Claim> claims = [new Claim(ClaimTypes.NameIdentifier, UserId.ToString()), new Claim(ClaimTypes.Role, role)];
+        if (withBusiness)
+            claims.Add(new Claim("tenant_id", TenantId.ToString()));
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, authenticationType: "Test"));
 
         var tenantService = new FakeCurrentTenantService();
         await middleware.InvokeAsync(context, tenantService, access);

@@ -30,25 +30,18 @@ public class SendWhatsAppMessageCommandValidator : AbstractValidator<SendWhatsAp
 public class SendWhatsAppMessageCommandHandler : IRequestHandler<SendWhatsAppMessageCommand, Result>
 {
     private readonly IWhatsAppService _whatsAppService;
-    private readonly ICurrentUserService _currentUserService;
     private readonly ICurrentTenantService _tenantService;
 
     public SendWhatsAppMessageCommandHandler(
         IWhatsAppService whatsAppService,
-        ICurrentUserService currentUserService,
         ICurrentTenantService tenantService)
     {
         _whatsAppService = whatsAppService;
-        _currentUserService = currentUserService;
         _tenantService = tenantService;
     }
 
     public async Task<Result> Handle(SendWhatsAppMessageCommand request, CancellationToken cancellationToken)
     {
-        var role = _currentUserService.Role;
-        if (role != "TENANT_ADMIN" && role != "STAFF" && role != "SUPER_ADMIN")
-            return Result.Failure("No tiene permisos para enviar mensajes de WhatsApp.");
-
         var tenantId = _tenantService.TenantId;
         return await _whatsAppService.SendTextMessageAsync(
             tenantId, request.PhoneNumber, request.Message, cancellationToken);

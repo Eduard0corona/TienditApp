@@ -205,7 +205,7 @@ public class CashShiftTests
         if (asUser is null)
             fixture.CurrentUser.UserId = Ana;
         fixture.Context.ChangeTracker.Clear();
-        return await new CloseCashSessionCommandHandler(fixture.Context, fixture.CurrentUser, fixture.Clock)
+        return await new CloseCashSessionCommandHandler(fixture.Context, fixture.CurrentUser, TestAccess.For(fixture.CurrentUser, fixture.TenantService), fixture.Clock)
             .Handle(new CloseCashSessionCommand
             {
                 CashSessionId = sessionId,

@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -15,33 +14,20 @@ namespace FoodParkDigital.WebApi.Controllers;
 public class TenantOrdersController : ControllerBase
 {
     private readonly IMediator _mediator;
-    private readonly ITenantAccessService _tenantAccessService;
     private readonly ICurrentTenantService _currentTenantService;
 
-    public TenantOrdersController(
-        IMediator mediator,
-        ITenantAccessService tenantAccessService,
-        ICurrentTenantService currentTenantService)
+    public TenantOrdersController(IMediator mediator, ICurrentTenantService currentTenantService)
     {
         _mediator = mediator;
-        _tenantAccessService = tenantAccessService;
         _currentTenantService = currentTenantService;
     }
 
     [HttpPost]
     public async Task<ActionResult<OrderDto>> Create(Guid tenantId, [FromBody] CreateTenantOrderRequest request)
     {
-        // The middleware validated membership, permission and capabilities for the request tenant
-        // (token tenant or SUPER_ADMIN override); the route must target that same tenant.
+        // The middleware validated the membership in the request's business (the token's, or the platform admin's
+        // override) and the request declares who may take orders: the route must name that same business.
         if (tenantId != _currentTenantService.TenantId)
-            return Forbid();
-
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdClaim, out var userId))
-            return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
-
-        var hasAccess = await _tenantAccessService.HasActiveAccessAsync(userId, tenantId, HttpContext.RequestAborted);
-        if (!hasAccess)
             return Forbid();
 
         var command = new CreateTenantOrderCommand

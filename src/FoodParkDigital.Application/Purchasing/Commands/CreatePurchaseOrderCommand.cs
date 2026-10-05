@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Purchasing.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -23,6 +22,7 @@ public record CreatePurchaseOrderLineRequest
 }
 
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record CreatePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>, ITransactionalRequest
 {
     public Guid SupplierId { get; init; }
@@ -68,13 +68,6 @@ public class CreatePurchaseOrderCommandHandler : IRequestHandler<CreatePurchaseO
 
     public async Task<Result<PurchaseOrderDto>> Handle(CreatePurchaseOrderCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<PurchaseOrderDto>("El negocio no tiene habilitado el módulo de inventario/compras.");
-
         var supplier = await _context.Suppliers
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == request.SupplierId && x.IsActive, cancellationToken);

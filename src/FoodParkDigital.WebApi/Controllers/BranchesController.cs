@@ -9,7 +9,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// <summary>Branches of the business: every member reads them, owners and admins manage them.</summary>
 [ApiController]
 [Route("api/v1/branches")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+[Authorize]
 public class BranchesController : ControllerBase
 {
     private readonly IMediator _mediator;

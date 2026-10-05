@@ -13,12 +13,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-[RequiresPermission(TenantPermission.ManageOrders, TenantPermission.ManageServiceBoard)]
+/// <summary>Moves an order to another status by hand, cancelling it included.</summary>
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record UpdateOrderStatusCommand : IRequest<Result>
 {
     public Guid OrderId { get; init; }
     public OrderStatus NewStatus { get; init; }
 }
+
+/// <summary>The kitchen board moves an order through preparation: started and ready, nothing else.</summary>
+[RequiresPermission(TenantPermission.ManageServiceBoard)]
+[RequiresCapability(TenantCapability.Kitchen)]
+public record MoveKitchenOrderCommand(Guid OrderId, OrderStatus NewStatus) : IRequest<Result>;
 
 public class UpdateOrderStatusCommandValidator : AbstractValidator<UpdateOrderStatusCommand>
 {
@@ -29,7 +35,19 @@ public class UpdateOrderStatusCommandValidator : AbstractValidator<UpdateOrderSt
     }
 }
 
-public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatusCommand, Result>
+public class MoveKitchenOrderCommandValidator : AbstractValidator<MoveKitchenOrderCommand>
+{
+    public MoveKitchenOrderCommandValidator()
+    {
+        RuleFor(x => x.OrderId).NotEmpty();
+        RuleFor(x => x.NewStatus)
+            .Must(status => status is OrderStatus.InPreparation or OrderStatus.Ready)
+            .WithMessage("La cocina solo marca un pedido en preparación o listo.");
+    }
+}
+
+public class UpdateOrderStatusCommandHandler
+    : IRequestHandler<UpdateOrderStatusCommand, Result>, IRequestHandler<MoveKitchenOrderCommand, Result>
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
@@ -45,7 +63,13 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
         _orderInventoryService = orderInventoryService;
     }
 
-    public async Task<Result> Handle(UpdateOrderStatusCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(UpdateOrderStatusCommand request, CancellationToken cancellationToken)
+        => ChangeStatusAsync(request.OrderId, request.NewStatus, cancellationToken);
+
+    public Task<Result> Handle(MoveKitchenOrderCommand request, CancellationToken cancellationToken)
+        => ChangeStatusAsync(request.OrderId, request.NewStatus, cancellationToken);
+
+    private async Task<Result> ChangeStatusAsync(Guid orderId, OrderStatus newStatus, CancellationToken cancellationToken)
     {
         const int maxAttempts = 3;
 
@@ -55,23 +79,23 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
                 .Include(o => o.Items)
                 .Include(o => o.StatusHistory)
                 .Include(o => o.ServicePieces)
-                .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
-                ?? throw new EntityNotFoundException("Order", request.OrderId);
+                .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
+                ?? throw new EntityNotFoundException("Order", orderId);
 
-            if (order.Status == request.NewStatus)
+            if (order.Status == newStatus)
                 return Result.Success();
 
             // An open tab is closed when it is paid (CloseTabCommand); by hand it could only be cancelled.
-            if (order.IsOpenTab && request.NewStatus != OrderStatus.Cancelled)
+            if (order.IsOpenTab && newStatus != OrderStatus.Cancelled)
                 return Result.Failure("Es una cuenta abierta: ciérrala desde Mesas cuando esté pagada.");
 
             var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
 
-            if (!stateMachine.GetAllowedTransitions(order.Status).Contains(request.NewStatus))
+            if (!stateMachine.GetAllowedTransitions(order.Status).Contains(newStatus))
                 return Result.Failure(
-                    $"No se puede cambiar de '{order.Status}' a '{request.NewStatus}'.");
+                    $"No se puede cambiar de '{order.Status}' a '{newStatus}'.");
 
-            if (request.NewStatus == OrderStatus.Cancelled)
+            if (newStatus == OrderStatus.Cancelled)
             {
                 // Same rules as CancelOrderCommand: cancellation event, payment guard and inventory reversal.
                 order.Cancel(stateMachine, _currentUserService.UserName);
@@ -79,11 +103,11 @@ public class UpdateOrderStatusCommandHandler : IRequestHandler<UpdateOrderStatus
             }
             else
             {
-                order.TransitionTo(request.NewStatus, stateMachine, _currentUserService.UserName);
+                order.TransitionTo(newStatus, stateMachine, _currentUserService.UserName);
                 await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken);
 
                 // A counter sale paid while the kitchen prepared it is handed over once it is ready.
-                if (request.NewStatus == OrderStatus.Ready)
+                if (newStatus == OrderStatus.Ready)
                 {
                     var salesSettings = await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
                     var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, order.TenantId, cancellationToken);

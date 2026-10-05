@@ -2,7 +2,6 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
-using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
@@ -52,15 +51,18 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly ICurrentUserService? _currentUserService;
+    private readonly CurrentAccessContext? _access;
 
     public AddCashTransactionCommandHandler(
         IApplicationDbContext context,
         IDateTimeProvider dateTimeProvider,
-        ICurrentUserService? currentUserService = null)
+        ICurrentUserService? currentUserService = null,
+        CurrentAccessContext? access = null)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
         _currentUserService = currentUserService;
+        _access = access;
     }
 
     public async Task<Result<CashTransactionDto>> Handle(AddCashTransactionCommand request, CancellationToken cancellationToken)
@@ -73,7 +75,7 @@ public class AddCashTransactionCommandHandler : IRequestHandler<AddCashTransacti
         // An expense or withdrawal changes what a cashier must count: only they or an admin may record it.
         if (session.OpenedByUserId is not null && _currentUserService is not null
             && !session.IsOwnedBy(CashSessionMapping.ParseUserId(_currentUserService.UserId))
-            && !TenantManagementRules.CanManageTenant(_currentUserService))
+            && !(_access is not null && await _access.IsTenantManagerAsync(cancellationToken)))
         {
             return Result.Failure<CashTransactionDto>(NotYourDrawerMessage);
         }

@@ -51,10 +51,10 @@ public class PurchaseOrderLifecycleTests
         var draft = await CreateOrderAsync(fixture, tenant, quantity: 3m, unitCost: 20m, markAsSent: false);
         Assert.Equal(PurchaseOrderStatus.Draft, draft.Status);
 
-        var sent = await new SendPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        var sent = await new SendPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new SendPurchaseOrderCommand(draft.Id), CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
-        var sentAgain = await Assert.ThrowsAsync<DomainException>(() => new SendPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        var sentAgain = await Assert.ThrowsAsync<DomainException>(() => new SendPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new SendPurchaseOrderCommand(draft.Id), CancellationToken.None));
         fixture.Context.ChangeTracker.Clear();
         var cancelled = await CancelAsync(fixture, draft.Id);
@@ -87,7 +87,7 @@ public class PurchaseOrderLifecycleTests
         var foreign = await CreateOrderAsync(fixture, other, quantity: 1m, unitCost: 5m, markAsSent: false);
         await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail | TenantCapability.Inventory, slug: "propio");
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() => new SendPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        await Assert.ThrowsAsync<EntityNotFoundException>(() => new SendPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new SendPurchaseOrderCommand(foreign.Id), CancellationToken.None));
         await Assert.ThrowsAsync<EntityNotFoundException>(() => CancelAsync(fixture, foreign.Id));
     }
@@ -126,7 +126,7 @@ public class PurchaseOrderLifecycleTests
 
     private static async Task<Application.Common.Models.Result<PurchaseOrderDto>> CancelAsync(SalesTestFixture fixture, Guid orderId)
     {
-        var result = await new CancelPurchaseOrderCommandHandler(fixture.Context, fixture.TenantService)
+        var result = await new CancelPurchaseOrderCommandHandler(fixture.Context)
             .Handle(new CancelPurchaseOrderCommand(orderId), CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
         return result;

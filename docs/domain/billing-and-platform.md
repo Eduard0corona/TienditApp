@@ -33,7 +33,7 @@
 
 ## Consola de plataforma
 
-- `api/v1/platform/*` (`[Authorize(Roles = "SUPER_ADMIN")]` y `RequiresPlatformAdmin` en cada caso de uso): resumen (negocios, en prueba, al corriente, pago vencido, sin acceso, ingreso mensual recurrente y cobrado en 30 días), listado paginado de negocios con plan, estado, vencimiento, sucursales, usuarios y última venta, y la cobranza de un negocio: asignar o cambiar plan, registrar pago, extender prueba, suspender, quitar suspensión y cancelar.
+- `api/v1/platform/*` (`RequiresPlatformAdmin` en cada caso de uso): resumen (negocios, en prueba, al corriente, pago vencido, sin acceso, ingreso mensual recurrente y cobrado en 30 días), listado paginado de negocios con plan, estado, vencimiento, sucursales, usuarios y última venta, y la cobranza de un negocio: asignar o cambiar plan, registrar pago, extender prueba, suspender, quitar suspensión y cancelar.
 - Las acciones sobre un negocio ponen ese negocio en el scope (`ICurrentTenantService`) antes de leer y escribir, así los filtros y `TenantSaveChangesInterceptor` aplican como en una sesión, y se auditan en el negocio (`PlanAssigned`, `PlanChanged`, `SubscriptionPaymentRegistered`, `TrialExtended`, `TenantSuspended`, `TenantReactivated`, `SubscriptionCancelled`). Las lecturas de toda la plataforma ignoran el filtro de tenant a propósito y no escriben.
 - Cliente: menú "Plataforma" (Negocios y Planes) solo para el administrador de la plataforma; "Mi negocio" muestra el plan a dueños y administradores, deshabilita los módulos fuera del plan y avisa del pago vencido; un negocio suspendido ve una pantalla con el motivo.
 

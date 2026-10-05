@@ -8,16 +8,15 @@ namespace FoodParkDigital.WebApi.Hubs;
 /// Tenant access of a hub connection, validated against the database like the HTTP middleware does:
 /// the tenant comes from the token, and the user must have an active membership in it.
 /// </summary>
-public sealed record HubTenantAccess(Guid TenantId, string? Role, IReadOnlyCollection<string> Permissions)
+public sealed record HubTenantAccess(Guid TenantId, string? Role, IReadOnlyCollection<string> Permissions, bool IsManager = false)
 {
     public bool IsSuperAdmin => Role == "SUPER_ADMIN";
 
-    public bool IsTenantAdmin => Role == "TENANT_ADMIN";
-
-    // Mirrors TenantResolutionMiddleware: SUPER_ADMIN and TENANT_ADMIN are not restricted by permission codes.
+    // Like the authorization behavior: owners and admins of this business (by membership, not by the token's role)
+    // and the platform admin are not restricted by permission codes.
     public bool HasAnyPermission(params TenantPermission[] permissions) =>
         IsSuperAdmin
-        || IsTenantAdmin
+        || IsManager
         || permissions.Any(permission => Permissions.Contains(permission.ToString(), StringComparer.OrdinalIgnoreCase));
 
     public static async Task<HubTenantAccess?> ResolveAsync(
@@ -41,7 +40,7 @@ public sealed record HubTenantAccess(Guid TenantId, string? Role, IReadOnlyColle
         var snapshot = await tenantAccessService.GetAccessSnapshotAsync(userId, tenantId, cancellationToken);
         // A business suspended for billing gets no live updates either.
         return snapshot is { HasActiveAccess: true, TenantSuspended: false }
-            ? new HubTenantAccess(tenantId, role, snapshot.Permissions)
+            ? new HubTenantAccess(tenantId, role, snapshot.Permissions, snapshot.IsManager)
             : null;
     }
 }

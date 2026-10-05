@@ -101,6 +101,23 @@ public class AuthorizationBehaviorTests
     }
 
     [Fact]
+    public async Task Refunds_ShouldNeedTheRefundPermission_BesidesTakingOrders()
+    {
+        var waiter = Staff(permissions: ["ManageOrders"]);
+        var supervisor = Staff(permissions: ["ManageOrders", "ProcessRefunds"]);
+        var owner = Staff(permissions: [], tenantRole: "OWNER");
+
+        var refused = await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<Orders.Commands.RefundOrderCommand>(waiter).Handle(new Orders.Commands.RefundOrderCommand(), Next, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
+            Behavior<Orders.Commands.VoidOrderCommand>(waiter).Handle(new Orders.Commands.VoidOrderCommand(), Next, CancellationToken.None));
+
+        Assert.Equal(AuthorizationBehavior<Orders.Commands.RefundOrderCommand, string>.RefundNotAllowedMessage, refused.Message);
+        Assert.Equal("ok", await Behavior<Orders.Commands.RefundOrderCommand>(supervisor).Handle(new Orders.Commands.RefundOrderCommand(), Next, CancellationToken.None));
+        Assert.Equal("ok", await Behavior<Orders.Commands.VoidOrderCommand>(owner).Handle(new Orders.Commands.VoidOrderCommand(), Next, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task InactiveMember_ShouldBeDeniedEvenWithThePermission()
     {
         var access = Staff(permissions: ["ManageCash"], active: false);

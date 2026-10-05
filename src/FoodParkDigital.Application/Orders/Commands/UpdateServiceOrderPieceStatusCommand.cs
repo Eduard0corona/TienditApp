@@ -36,15 +36,18 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly CurrentAccessContext _access;
     private readonly IOrderInventoryService _orderInventoryService;
 
     public UpdateServiceOrderPieceStatusCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
+        CurrentAccessContext access,
         IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _access = access;
         _orderInventoryService = orderInventoryService;
     }
 
@@ -98,9 +101,7 @@ public class UpdateServiceOrderPieceStatusCommandHandler : IRequestHandler<Updat
         UpdateServiceOrderPieceStatusCommand request,
         CancellationToken cancellationToken)
     {
-        var isAdmin =
-            _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
-            || _currentUserService.TenantRole is "OWNER" or "ADMIN";
+        var isAdmin = await _access.IsTenantManagerAsync(cancellationToken);
         var hasCurrentUser = Guid.TryParse(_currentUserService.UserId, out var currentUserId);
 
         if (!hasCurrentUser && !isAdmin)

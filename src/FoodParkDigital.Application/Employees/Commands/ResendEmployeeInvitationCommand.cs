@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace FoodParkDigital.Application.Employees.Commands;
 
 /// <summary>A new invitation link for someone who has not accepted theirs (lost, expired or never received).</summary>
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record ResendEmployeeInvitationCommand(Guid TenantUserId) : IRequest<Result<EmployeeInvitationDto>>;
 
 public class ResendEmployeeInvitationCommandHandler : IRequestHandler<ResendEmployeeInvitationCommand, Result<EmployeeInvitationDto>>

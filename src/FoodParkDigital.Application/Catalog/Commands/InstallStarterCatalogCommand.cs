@@ -3,7 +3,6 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FluentValidation;
 using MediatR;
@@ -44,25 +43,19 @@ public class InstallStarterCatalogCommandHandler
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly ICurrentUserService _currentUserService;
 
     public InstallStarterCatalogCommandHandler(
         IApplicationDbContext context,
-        ICurrentTenantService tenantService,
-        ICurrentUserService currentUserService)
+        ICurrentTenantService tenantService)
     {
         _context = context;
         _tenantService = tenantService;
-        _currentUserService = currentUserService;
     }
 
     public async Task<Result<InstallStarterCatalogResultDto>> Handle(
         InstallStarterCatalogCommand request,
         CancellationToken cancellationToken)
     {
-        if (!TenantManagementRules.CanManageTenant(_currentUserService))
-            return Result.Failure<InstallStarterCatalogResultDto>(TenantManagementRules.NotAllowedMessage);
-
         var template = StarterCatalogTemplates.GetById(request.TemplateId);
         if (template is null)
             return Result.Failure<InstallStarterCatalogResultDto>("Plantilla no encontrada.");

@@ -1,5 +1,4 @@
 using FoodParkDigital.Application.Common.Interfaces;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Exceptions;
@@ -30,13 +29,6 @@ public class GetProductRecipeQueryHandler : IRequestHandler<GetProductRecipeQuer
             .Select(x => new { x.Id, x.Name, x.IsAvailable, x.TenantId })
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new EntityNotFoundException("Product", request.ProductId);
-
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            product.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            throw new EntityNotFoundException("ProductRecipe", request.ProductId);
 
         var lines = await (
             from req in _context.ProductSupplyRequirements.AsNoTracking()

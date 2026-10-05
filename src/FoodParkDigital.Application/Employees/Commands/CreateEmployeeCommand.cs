@@ -21,7 +21,7 @@ namespace FoodParkDigital.Application.Employees.Commands;
 /// Adds a person to the team. Someone new receives an invitation to choose their own password (the response carries
 /// the link to share it by WhatsApp); someone who already has an account joins with it, without touching it.
 /// </summary>
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record CreateEmployeeCommand : IRequest<Result<EmployeeDto>>
 {
     public string Email { get; init; } = null!;
@@ -58,7 +58,6 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
-    private readonly ICurrentUserService _currentUserService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IEmailService? _emailService;
     private readonly ILogger<CreateEmployeeCommandHandler> _logger;
@@ -66,14 +65,12 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
     public CreateEmployeeCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
-        ICurrentUserService currentUserService,
         UserManager<ApplicationUser> userManager,
         IEmailService? emailService = null,
         ILogger<CreateEmployeeCommandHandler>? logger = null)
     {
         _context = context;
         _tenantService = tenantService;
-        _currentUserService = currentUserService;
         _userManager = userManager;
         _emailService = emailService;
         _logger = logger ?? NullLogger<CreateEmployeeCommandHandler>.Instance;
@@ -81,9 +78,6 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
 
     public async Task<Result<EmployeeDto>> Handle(CreateEmployeeCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure<EmployeeDto>("No tienes permisos para crear empleados.");
-
         var tenantId = _tenantService.TenantId;
         var email = request.Email.Trim();
         // Accounts are shared by every business of a person.

@@ -17,7 +17,7 @@ namespace FoodParkDigital.Application.Employees.Commands;
 /// Changes the role and permissions of a person in this business. Their account is theirs: the phone only changes from
 /// their profile, with a code (it recovers the password by SMS), and the name only here while nobody else shares it.
 /// </summary>
-[RequiresPermission(TenantPermission.ManageEmployees)]
+[RequiresTenantManager]
 public record UpdateEmployeeCommand : IRequest<Result<EmployeeDto>>
 {
     public Guid TenantUserId { get; init; }
@@ -69,9 +69,6 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
 
     public async Task<Result<EmployeeDto>> Handle(UpdateEmployeeCommand request, CancellationToken cancellationToken)
     {
-        if (_currentUserService.Role is not ("TENANT_ADMIN" or "SUPER_ADMIN"))
-            return Result.Failure<EmployeeDto>("No tienes permisos para editar empleados.");
-
         var tenantUser = await _context.TenantUsers
             .FirstOrDefaultAsync(
                 x => x.Id == request.TenantUserId && x.TenantId == _tenantService.TenantId,

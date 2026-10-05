@@ -29,15 +29,18 @@ public class AssignServiceOrderPieceToMeCommandHandler : IRequestHandler<AssignS
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly CurrentAccessContext _access;
     private readonly IOrderNotificationService _orderNotificationService;
 
     public AssignServiceOrderPieceToMeCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
+        CurrentAccessContext access,
         IOrderNotificationService orderNotificationService)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _access = access;
         _orderNotificationService = orderNotificationService;
     }
 
@@ -57,9 +60,7 @@ public class AssignServiceOrderPieceToMeCommandHandler : IRequestHandler<AssignS
         if (piece.Status is ServiceOrderPieceStatus.Completed or ServiceOrderPieceStatus.Cancelled)
             return Result.Failure("No se puede asignar una pieza completada o cancelada.");
 
-        var isAdmin =
-            _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
-            || _currentUserService.TenantRole is "OWNER" or "ADMIN";
+        var isAdmin = await _access.IsTenantManagerAsync(cancellationToken);
 
         if (piece.AssignedToUserId.HasValue && piece.AssignedToUserId.Value == userId)
             return Result.Success();
@@ -100,15 +101,18 @@ public class ReleaseServiceOrderPieceAssignmentCommandHandler : IRequestHandler<
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly CurrentAccessContext _access;
     private readonly IOrderNotificationService _orderNotificationService;
 
     public ReleaseServiceOrderPieceAssignmentCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
+        CurrentAccessContext access,
         IOrderNotificationService orderNotificationService)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _access = access;
         _orderNotificationService = orderNotificationService;
     }
 
@@ -125,9 +129,7 @@ public class ReleaseServiceOrderPieceAssignmentCommandHandler : IRequestHandler<
         if (piece.AssignedToUserId is null)
             return Result.Success();
 
-        var isAdmin =
-            _currentUserService.Role is "TENANT_ADMIN" or "SUPER_ADMIN"
-            || _currentUserService.TenantRole is "OWNER" or "ADMIN";
+        var isAdmin = await _access.IsTenantManagerAsync(cancellationToken);
         var isCurrentAssignee = Guid.TryParse(_currentUserService.UserId, out var userId)
             && piece.AssignedToUserId == userId;
 

@@ -19,7 +19,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-[RequiresAuthentication]
+/// <summary>An order the business takes for a customer in its own name (the route's business, checked to be the current one).</summary>
+[RequiresPermission(TenantPermission.ManageOrders)]
 public record CreateTenantOrderCommand : IRequest<Result<OrderDto>>, ITransactionalRequest
 {
     public Guid TenantId { get; init; }

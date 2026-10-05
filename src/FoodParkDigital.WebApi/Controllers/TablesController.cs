@@ -9,7 +9,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// <summary>Tables of the dining room and their open tabs (businesses with the Food module).</summary>
 [ApiController]
 [Route("api/v1/tables")]
-[Authorize(Roles = "SUPER_ADMIN,TENANT_ADMIN,STAFF")]
+[Authorize]
 public class TablesController : ControllerBase
 {
     private readonly IMediator _mediator;

@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.WebApi.Controllers;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -125,6 +126,31 @@ public class ArchitectureTests
             .ToList();
 
         Assert.True(offending.Count == 0, "Controllers with database access: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void Controllers_ShouldLeaveWhoMayDoWhatToTheUseCases()
+    {
+        // A controller asks for a signed-in user or is explicitly public; roles and policies here duplicated the rule
+        // each request declares (and contradicted it). Every action sends a request the authorization behavior checks.
+        var controllers = WebApi.GetTypes()
+            .Where(type => typeof(ControllerBase).IsAssignableFrom(type) && !type.IsAbstract)
+            .ToList();
+
+        var withoutDecision = controllers
+            .Where(type => type.GetCustomAttribute<AuthorizeAttribute>() is null && type.GetCustomAttribute<AllowAnonymousAttribute>() is null)
+            .Select(type => type.Name)
+            .ToList();
+        var byRoleOrPolicy = controllers
+            .SelectMany(type => type.GetCustomAttributes<AuthorizeAttribute>()
+                .Concat(type.GetMethods().SelectMany(method => method.GetCustomAttributes<AuthorizeAttribute>()))
+                .Where(attribute => !string.IsNullOrEmpty(attribute.Roles) || !string.IsNullOrEmpty(attribute.Policy))
+                .Select(_ => type.Name))
+            .Distinct()
+            .ToList();
+
+        Assert.True(withoutDecision.Count == 0, "Controllers without [Authorize] or [AllowAnonymous]: " + string.Join(", ", withoutDecision));
+        Assert.True(byRoleOrPolicy.Count == 0, "Controllers that authorize by role or policy: " + string.Join(", ", byRoleOrPolicy));
     }
 
     [Fact]

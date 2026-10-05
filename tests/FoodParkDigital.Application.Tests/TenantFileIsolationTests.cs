@@ -149,7 +149,6 @@ public class TenantFileIsolationTests
 
         var result = await new UploadTenantLogoCommandHandler(
                 fixture.Context,
-                fixture.CurrentUser,
                 fixture.TenantService,
                 fixture.Storage,
                 new FakeImageProcessingService())
@@ -411,7 +410,6 @@ public class TenantFileIsolationTests
 
         public DeleteTenantLogoCommandHandler CreateDeleteTenantLogoHandler() => new(
             Context,
-            CurrentUser,
             _tenantService,
             Storage);
 

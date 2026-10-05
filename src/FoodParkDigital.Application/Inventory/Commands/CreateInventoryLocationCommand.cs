@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -64,13 +63,6 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
 
     public async Task<Result<InventoryLocationDto>> Handle(CreateInventoryLocationCommand request, CancellationToken cancellationToken)
     {
-        var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
-            _context,
-            _tenantService.TenantId,
-            cancellationToken);
-        if (!TenantCapabilityRules.CanAccessInventory(tenantCapabilities))
-            return Result.Failure<InventoryLocationDto>("El negocio no tiene habilitado el módulo de inventario.");
-
         var branchError = await InventoryLocationBranches.ValidateAsync(_context, _tenantService.TenantId, request.BranchId, cancellationToken);
         if (branchError is not null)
             return Result.Failure<InventoryLocationDto>(branchError);

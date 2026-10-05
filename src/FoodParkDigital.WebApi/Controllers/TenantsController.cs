@@ -11,7 +11,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize(Roles = "SUPER_ADMIN")]
+[Authorize]
 public class TenantsController : ControllerBase
 {
     private readonly IMediator _mediator;

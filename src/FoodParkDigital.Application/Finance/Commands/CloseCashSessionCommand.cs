@@ -2,7 +2,6 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Finance.DTOs;
-using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -55,15 +54,18 @@ public class CloseCashSessionCommandHandler : IRequestHandler<CloseCashSessionCo
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly CurrentAccessContext _access;
     private readonly IDateTimeProvider _dateTimeProvider;
 
     public CloseCashSessionCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
+        CurrentAccessContext access,
         IDateTimeProvider dateTimeProvider)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _access = access;
         _dateTimeProvider = dateTimeProvider;
     }
 
@@ -78,7 +80,7 @@ public class CloseCashSessionCommandHandler : IRequestHandler<CloseCashSessionCo
         // Drawers from before per-cashier sessions have no owner: anyone with access to the cash closes them.
         var canClose = session.OpenedByUserId is null
             || session.IsOwnedBy(userId)
-            || TenantManagementRules.CanManageTenant(_currentUserService);
+            || await _access.IsTenantManagerAsync(cancellationToken);
         if (!canClose)
             return Result.Failure<CashSessionDto>(NotYourDrawerMessage);
 

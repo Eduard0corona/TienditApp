@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Purchasing.Queries;
 
 [RequiresPermission(TenantPermission.ManageInventory)]
+[RequiresCapability(TenantCapability.Inventory)]
 public record GetSupplierByIdQuery(Guid Id) : IRequest<SupplierDto>;
 
 public class GetSupplierByIdQueryHandler : IRequestHandler<GetSupplierByIdQuery, SupplierDto>

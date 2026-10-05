@@ -205,7 +205,7 @@ public class TeamInvitationTests
     {
         host.SetTenant(tenant.Id);
         return host.InScopeAsync(services => ActivatorUtilities
-            .CreateInstance<CreateEmployeeCommandHandler>(services, Admin(tenant))
+            .CreateInstance<CreateEmployeeCommandHandler>(services)
             .Handle(new CreateEmployeeCommand
             {
                 Email = email,
