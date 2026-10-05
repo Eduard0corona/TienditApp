@@ -80,7 +80,8 @@ public class OrderCustomerLinkConstraintTests
             UserName = "cliente@demo.com",
             Email = "cliente@demo.com",
             FirstName = "Cliente",
-            LastName = "Demo"
+            LastName = "Demo",
+            Role = Domain.Identity.Enums.UserRole.Customer
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();

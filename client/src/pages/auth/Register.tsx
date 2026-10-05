@@ -8,6 +8,7 @@ import './register.css';
 import BrandLogo from '../../components/common/BrandLogo';
 import { getApiErrorMessage } from '../../api/errors';
 import { asButton } from '../../utils/a11y';
+import { newPasswordPattern, PASSWORD_MIN_LENGTH } from '../../utils/passwordRules';
 
 type AccountType = 'business' | 'customer' | null;
 
@@ -235,10 +236,10 @@ export default function Register() {
                             <input id="register-contrasena"
                               type={showPassword ? 'text' : 'password'}
                               className={`form-control ${customerForm.formState.errors.password ? 'is-invalid' : ''}`}
-                              placeholder="Mínimo 6 caracteres"
+                              placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
                               {...customerForm.register('password', {
                                 required: 'La contraseña es requerida',
-                                minLength: { value: 6, message: 'Mínimo 6 caracteres' },
+                                pattern: newPasswordPattern,
                               })}
                             />
                             <button
@@ -363,10 +364,10 @@ export default function Register() {
                               <input id="register-contrasena-2"
                                 type={showPassword ? 'text' : 'password'}
                                 className={`form-control ${businessForm.formState.errors.password ? 'is-invalid' : ''}`}
-                                placeholder="Mínimo 6 caracteres"
+                                placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
                                 {...businessForm.register('password', {
                                   required: 'La contraseña es requerida',
-                                  minLength: { value: 6, message: 'Mínimo 6 caracteres' },
+                                  pattern: newPasswordPattern,
                                 })}
                               />
                               <button

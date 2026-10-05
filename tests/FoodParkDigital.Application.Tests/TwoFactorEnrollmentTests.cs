@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Identity.Commands.TwoFactor;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Services;
@@ -95,7 +96,8 @@ public class TwoFactorEnrollmentTests
             Email = Email,
             EmailConfirmed = true,
             FirstName = "Owner",
-            LastName = "TwoFactor"
+            LastName = "TwoFactor",
+            Role = UserRole.TenantAdmin
         };
         var created = await userManager.CreateAsync(user);
         Assert.True(created.Succeeded, string.Join(", ", created.Errors.Select(e => e.Description)));

@@ -20428,16 +20428,18 @@
           1,
           2,
           3,
-          4
+          4,
+          9
         ],
         "type": "integer",
         "format": "int32",
         "x-enum-varnames": [
-          "SuperAdmin",
+          "None",
           "TenantAdmin",
           "Staff",
           "Kitchen",
-          "Customer"
+          "Customer",
+          "SuperAdmin"
         ]
       },
       "Verify2FAResponse": {

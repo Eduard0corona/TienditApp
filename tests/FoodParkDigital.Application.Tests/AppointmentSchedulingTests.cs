@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Appointments.Enums;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Messaging.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -254,6 +255,7 @@ public class AppointmentSchedulingTests
             UserName = $"{firstName.ToLowerInvariant()}@negocio.test",
             FirstName = firstName,
             LastName = lastName,
+            Role = UserRole.Staff,
             IsActive = true
         };
         fixture.Context.Users.Add(user);

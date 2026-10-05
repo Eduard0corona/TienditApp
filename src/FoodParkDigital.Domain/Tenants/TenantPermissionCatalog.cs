@@ -59,10 +59,12 @@ public static class TenantPermissionCatalog
     /// <summary>
     /// The role a person has inside one business. The membership decides it: owners and admins of the business
     /// administer it; anyone else is staff there (kitchen staff if their account is a kitchen one), even if they
-    /// own another business. Only the platform admin keeps their role everywhere.
+    /// own another business. Only the platform admin keeps their role everywhere, and an account without a role gets
+    /// none in any business.
     /// </summary>
     public static UserRole EffectiveRole(UserRole userRole, TenantUserRole tenantRole) => userRole switch
     {
+        UserRole.None => UserRole.None,
         UserRole.SuperAdmin => UserRole.SuperAdmin,
         UserRole.Customer => UserRole.Customer,
         _ when tenantRole is TenantUserRole.Owner or TenantUserRole.Admin => UserRole.TenantAdmin,
@@ -73,6 +75,9 @@ public static class TenantPermissionCatalog
     public static IReadOnlyCollection<string> GetDefaultCodes(UserRole userRole, TenantUserRole tenantRole)
     {
         var effectiveRole = EffectiveRole(userRole, tenantRole);
+        if (effectiveRole == UserRole.None)
+            return [];
+
         if (effectiveRole is UserRole.SuperAdmin or UserRole.TenantAdmin)
             return GetAllCodes();
 

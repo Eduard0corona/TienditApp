@@ -208,6 +208,7 @@ public class RefreshTokenSqlServerTests
             FirstName = "Sesión",
             LastName = "Demo",
             SecurityStamp = Guid.NewGuid().ToString("N"),
+            Role = UserRole.Staff,
             IsActive = true
         };
         context.Users.Add(user);

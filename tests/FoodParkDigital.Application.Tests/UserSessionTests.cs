@@ -153,6 +153,23 @@ public class UserSessionTests
     }
 
     [Fact]
+    public async Task ManyLiveTokens_ShouldBeCheckedAtOnce_LikeOneByOne()
+    {
+        // The live hub connections are checked this way, all together.
+        await using var fixture = await SessionFixture.CreateAsync();
+        var kept = await fixture.SignInAsync();
+        var signedOut = await fixture.SignInAsync();
+        await fixture.SignOutAsync(signedOut.RefreshToken!);
+
+        var open = await fixture.AreOpenAsync(kept.AccessToken, signedOut.AccessToken, kept.AccessToken);
+        await fixture.ChangeSecurityStampAsync();
+        var afterStampChange = await fixture.AreOpenAsync(kept.AccessToken, signedOut.AccessToken);
+
+        Assert.Equal([true, false, true], open);
+        Assert.Equal([false, false], afterStampChange);
+    }
+
+    [Fact]
     public async Task NewPassword_ShouldEndEverySession_AndTheirAccessTokensRightAway()
     {
         await using var fixture = await SessionFixture.CreateAsync();
@@ -365,8 +382,21 @@ public class UserSessionTests
         /// <summary>Validated as the API does (signature, issuer, audience, lifetime), then the session.</summary>
         public async Task<bool> IsOpenAsync(string? accessToken)
         {
+            await using var context = NewContext();
+            return await new AccessTokenSessionValidator(context, Clock).IsOpenAsync(PrincipalOf(accessToken), CancellationToken.None);
+        }
+
+        public async Task<IReadOnlyList<bool>> AreOpenAsync(params string?[] accessTokens)
+        {
+            await using var context = NewContext();
+            return await new AccessTokenSessionValidator(context, Clock)
+                .AreOpenAsync(accessTokens.Select(PrincipalOf).ToList(), CancellationToken.None);
+        }
+
+        private static ClaimsPrincipal PrincipalOf(string? accessToken)
+        {
             Assert.NotNull(accessToken);
-            var principal = new JwtSecurityTokenHandler().ValidateToken(accessToken, new TokenValidationParameters
+            return new JwtSecurityTokenHandler().ValidateToken(accessToken, new TokenValidationParameters
             {
                 ValidateIssuer = true,
                 ValidateAudience = true,
@@ -377,9 +407,6 @@ public class UserSessionTests
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Settings.Secret)),
                 ClockSkew = TimeSpan.Zero
             }, out _);
-
-            await using var context = NewContext();
-            return await new AccessTokenSessionValidator(context, Clock).IsOpenAsync(principal, CancellationToken.None);
         }
 
         public async Task<List<RefreshToken>> TokensAsync()

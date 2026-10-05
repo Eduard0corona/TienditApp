@@ -184,6 +184,10 @@ builder.Services.AddSwaggerGen(options =>
 var signalR = builder.Services.AddSignalR();
 if (!string.IsNullOrWhiteSpace(builder.Configuration["Azure:SignalR:ConnectionString"]))
     signalR.AddAzureSignalR();
+// A live connection closes when its session ends or it loses access, not only when its token expires.
+builder.Services.Configure<HubAccessOptions>(builder.Configuration.GetSection(HubAccessOptions.SectionName));
+builder.Services.AddSingleton<HubConnections>();
+builder.Services.AddHostedService<HubAccessSweeper>();
 
 // CORS: the SPA is served by this API (and proxied by Vite in development), so cross-origin
 // access is only granted to the origins listed in Cors:AllowedOrigins.

@@ -1,6 +1,7 @@
 using System.Text;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
@@ -229,7 +230,7 @@ public static class DependencyInjection
     public static void ConfigureIdentityOptions(IdentityOptions options)
     {
         options.Password.RequireDigit = true;
-        options.Password.RequiredLength = 6;
+        options.Password.RequiredLength = PasswordPolicy.MinimumLength;
         options.Password.RequireNonAlphanumeric = false;
         options.Password.RequireUppercase = true;
         options.Password.RequireLowercase = true;

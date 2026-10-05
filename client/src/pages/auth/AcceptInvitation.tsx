@@ -6,6 +6,7 @@ import { apiRequest } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
 import AuthCard from '../../components/auth/AuthCard';
 import { useAuth } from '../../hooks/useAuth';
+import { newPasswordPattern } from '../../utils/passwordRules';
 
 interface AcceptInvitationForm {
   newPassword: string;
@@ -13,7 +14,6 @@ interface AcceptInvitationForm {
 }
 
 // Mirrors the Identity policy configured in the API (6+ characters, upper, lower and digit).
-const PASSWORD_RULES = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
 
 /** The link of an invitation to a team: the person sees who invited them, chooses a password and enters. */
 export default function AcceptInvitation() {
@@ -99,7 +99,7 @@ export default function AcceptInvitation() {
             className={`form-control ${errors.newPassword ? 'is-invalid' : ''}`}
             {...register('newPassword', {
               required: 'Escribe una contraseña.',
-              pattern: { value: PASSWORD_RULES, message: 'Usa al menos 6 caracteres, con mayúscula, minúscula y número.' },
+              pattern: newPasswordPattern,
             })}
           />
           {errors.newPassword && <div className="invalid-feedback">{errors.newPassword.message}</div>}

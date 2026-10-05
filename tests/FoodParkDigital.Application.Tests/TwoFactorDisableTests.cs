@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands.TwoFactor;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -196,7 +197,8 @@ public class TwoFactorDisableTests
                 Email = Email,
                 EmailConfirmed = true,
                 FirstName = "Owner",
-                LastName = "TwoFactor"
+                LastName = "TwoFactor",
+                Role = UserRole.TenantAdmin
             };
             var created = await UserManager.CreateAsync(User);
             Assert.True(created.Succeeded, string.Join(", ", created.Errors.Select(e => e.Description)));

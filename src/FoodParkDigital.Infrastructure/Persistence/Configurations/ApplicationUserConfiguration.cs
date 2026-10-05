@@ -10,7 +10,7 @@ public class ApplicationUserConfiguration : IEntityTypeConfiguration<Application
     {
         builder.Property(u => u.FirstName).HasMaxLength(100).IsRequired();
         builder.Property(u => u.LastName).HasMaxLength(100).IsRequired();
-        builder.Property(u => u.Role).HasConversion<int>().IsRequired();
+        builder.Property(u => u.Role).HasConversion(UserRoleStorage.Converter).IsRequired();
         builder.Property(u => u.AvatarUrl).HasMaxLength(500).IsRequired(false);
         builder.Property(u => u.DefaultTenantId).IsRequired(false);
 

@@ -84,6 +84,7 @@ public class SwitchTenantCommandTests
                 UserName = "staff@example.com",
                 FirstName = "Staff",
                 LastName = "Test",
+                Role = UserRole.Staff,
                 IsActive = true
             });
             fixture.Context.TenantUsers.Add(new TenantUser(fixture._targetTenantId, fixture.UserId, TenantUserRole.Staff));
