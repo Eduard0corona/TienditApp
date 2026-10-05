@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Middleware;
 
@@ -64,13 +65,9 @@ public class TenantResolutionMiddleware
                 return;
             }
 
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsJsonAsync(new ProblemDetails
-            {
-                Status = 403,
-                Title = "Missing tenant context",
-                Detail = "The JWT does not contain a valid tenant_id claim."
-            });
+            await ApiProblem.WriteAsync(
+                context, StatusCodes.Status403Forbidden, "Elige un negocio para continuar.",
+                ApiErrorCodes.TenantRequired, "Missing tenant context");
             return;
         }
 
@@ -101,13 +98,9 @@ public class TenantResolutionMiddleware
             var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!Guid.TryParse(userIdClaim, out var userId))
             {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new ProblemDetails
-                {
-                    Status = 403,
-                    Title = "Tenant access denied",
-                    Detail = "No se pudo determinar el usuario autenticado."
-                });
+                await ApiProblem.WriteAsync(
+                    context, StatusCodes.Status403Forbidden, "No se pudo determinar el usuario autenticado.",
+                    ApiErrorCodes.TenantAccessDenied, "Tenant access denied");
                 return;
             }
 
@@ -116,27 +109,22 @@ public class TenantResolutionMiddleware
             accessContext?.Prime(userId, tenantId, accessSnapshot);
             if (!accessSnapshot.HasActiveAccess)
             {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new ProblemDetails
-                {
-                    Status = 403,
-                    Title = "Tenant access denied",
-                    Detail = "User does not belong to the requested tenant or membership is disabled."
-                });
+                await ApiProblem.WriteAsync(
+                    context, StatusCodes.Status403Forbidden, "Ya no tienes acceso a este negocio.",
+                    ApiErrorCodes.TenantAccessDenied, "Tenant access denied");
                 return;
             }
 
             // A business suspended or cancelled for billing keeps only what explains why (its profile and plan).
             if (accessSnapshot.TenantSuspended && !IsAllowedWhileSuspended(path, context.Request.Method))
             {
+                var suspended = ApiProblem.Create(
+                    context, StatusCodes.Status403Forbidden,
+                    "El negocio está suspendido. Revisa tu plan en Mi negocio o contacta a soporte.",
+                    ApiErrorCodes.TenantSuspended, "Tenant suspended");
+                suspended.Type = TenantSuspendedProblemType;
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new ProblemDetails
-                {
-                    Status = 403,
-                    Type = TenantSuspendedProblemType,
-                    Title = "Tenant suspended",
-                    Detail = "El negocio está suspendido. Revisa tu plan en Mi negocio o contacta a soporte."
-                });
+                await context.Response.WriteAsJsonAsync(suspended, (System.Text.Json.JsonSerializerOptions?)null, ApiProblem.ContentType);
                 return;
             }
         }
@@ -154,14 +142,16 @@ public class TenantResolutionMiddleware
 
                 if (!hasPermission)
                 {
-                    var expectedPermissions = string.Join(" | ", requiredPermissions.Select(x => x.ToString()));
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    await context.Response.WriteAsJsonAsync(new ProblemDetails
-                    {
-                        Status = 403,
-                        Title = "Permission denied",
-                        Detail = $"El usuario no tiene permisos requeridos ({expectedPermissions}) para acceder a '{path}'."
-                    });
+                    // The permission names are for support, not for the person: they go to the log.
+                    _logger.LogInformation(
+                        "Permission denied on {Method} {Path}: requires {Permissions}",
+                        context.Request.Method,
+                        path,
+                        string.Join(" | ", requiredPermissions));
+                    await ApiProblem.WriteAsync(
+                        context, StatusCodes.Status403Forbidden,
+                        "No tienes permiso para realizar esta acción.",
+                        ApiErrorCodes.Forbidden, "Permission denied");
                     return;
                 }
             }
@@ -182,13 +172,10 @@ public class TenantResolutionMiddleware
 
                 if (!hasCapability)
                 {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    await context.Response.WriteAsJsonAsync(new ProblemDetails
-                    {
-                        Status = 403,
-                        Title = "Tenant capability denied",
-                        Detail = $"El negocio no tiene habilitado el módulo requerido para '{path}'."
-                    });
+                    await ApiProblem.WriteAsync(
+                        context, StatusCodes.Status403Forbidden,
+                        "Este módulo no está habilitado para tu negocio.",
+                        ApiErrorCodes.ModuleDisabled, "Tenant capability denied");
                     return;
                 }
             }

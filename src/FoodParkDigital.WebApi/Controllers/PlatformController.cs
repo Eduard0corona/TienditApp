@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Billing.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -91,23 +92,23 @@ public class PlatformController : ControllerBase
     public async Task<ActionResult<PlanDto>> CreatePlan([FromBody] CreatePlanCommand command)
     {
         var result = await _mediator.Send(command);
-        return result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
     [HttpPut("plans/{id:guid}")]
     public async Task<ActionResult<PlanDto>> UpdatePlan(Guid id, [FromBody] UpdatePlanCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
-        return result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
     private async Task<IActionResult> SendAsync(IRequest<Result> command)
     {
         var result = await _mediator.Send(command);
-        return result.IsFailure ? BadRequest(new { error = result.Error }) : NoContent();
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : NoContent();
     }
 }
 

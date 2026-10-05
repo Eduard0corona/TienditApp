@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Employees.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -47,7 +48,7 @@ public class EmployeesController : ControllerBase
     {
         var result = await _mediator.Send(new GetEmployeeByIdQuery(tenantUserId));
         if (result.IsFailure)
-            return NotFound(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
 
         return Ok(result.Value);
     }
@@ -72,7 +73,7 @@ public class EmployeesController : ControllerBase
     {
         var result = await _mediator.Send(new ResendEmployeeInvitationCommand(tenantUserId));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -82,7 +83,7 @@ public class EmployeesController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return CreatedAtAction(nameof(GetById), new { tenantUserId = result.Value.TenantUserId }, result.Value);
     }
@@ -91,11 +92,11 @@ public class EmployeesController : ControllerBase
     public async Task<ActionResult<EmployeeDto>> Update(Guid tenantUserId, [FromBody] UpdateEmployeeCommand command)
     {
         if (tenantUserId != command.TenantUserId)
-            return BadRequest(new { error = "El id de ruta no coincide con el cuerpo." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -110,7 +111,7 @@ public class EmployeesController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }

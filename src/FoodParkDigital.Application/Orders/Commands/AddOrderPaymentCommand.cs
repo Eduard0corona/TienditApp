@@ -24,7 +24,8 @@ public record AddOrderPaymentCommand : IRequest<Result<OrderDto>>
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
-    /// <summary>On top of the amount, for the team: not part of the sale or its balance.</summary>
+    /// <summary>On top of the amount, for the team: not part of the sale or its balance. 0 when not sent.</summary>
+    [System.ComponentModel.DefaultValue(0)]
     public decimal Tip { get; init; }
     /// <summary>What the customer handed over in cash, to keep the change with the payment.</summary>
     public decimal? CashReceived { get; init; }

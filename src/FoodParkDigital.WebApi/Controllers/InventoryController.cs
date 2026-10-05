@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Inventory.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -53,7 +54,7 @@ public class InventoryController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return CreatedAtAction(nameof(GetSupplyById), new { id = result.Value.Id }, result.Value);
     }
@@ -62,11 +63,11 @@ public class InventoryController : ControllerBase
     public async Task<ActionResult<SupplyItemDto>> UpdateSupply(Guid id, [FromBody] UpdateSupplyItemCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -81,7 +82,7 @@ public class InventoryController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }
@@ -98,7 +99,7 @@ public class InventoryController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -107,11 +108,11 @@ public class InventoryController : ControllerBase
     public async Task<ActionResult<InventoryLocationDto>> UpdateLocation(Guid id, [FromBody] UpdateInventoryLocationCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -126,7 +127,7 @@ public class InventoryController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }
@@ -229,7 +230,7 @@ public class InventoryController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -246,7 +247,7 @@ public class InventoryController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return CreatedAtAction(nameof(GetMovementById), new { id = result.Value.Id }, result.Value);
     }

@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -27,7 +28,7 @@ public class PublicMenuController : ControllerBase
     public async Task<ActionResult<PublicMenuDto>> GetMenu(string slug)
     {
         var menu = await _mediator.Send(new GetPublicMenuQuery(slug));
-        return menu is null ? NotFound(new { error = "Este negocio no tiene menú en línea." }) : Ok(menu);
+        return menu is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(menu);
     }
 
     [HttpPost("orders")]
@@ -45,7 +46,7 @@ public class PublicMenuController : ControllerBase
             ExpectedTotal = request.ExpectedTotal
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 }

@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Branches;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -34,7 +35,7 @@ public class BranchesController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -43,11 +44,11 @@ public class BranchesController : ControllerBase
     public async Task<ActionResult<BranchDto>> UpdateBranch(Guid id, [FromBody] UpdateBranchCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -62,7 +63,7 @@ public class BranchesController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }
@@ -72,7 +73,7 @@ public class BranchesController : ControllerBase
     {
         var result = await _mediator.Send(new SetDefaultBranchCommand { Id = id });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }

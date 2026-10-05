@@ -59,7 +59,8 @@ public class GlobalExceptionHandlerMiddlewareTests
 
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
         var problem = ReadProblem(context);
-        Assert.Equal("An unexpected error occurred.", problem.GetProperty("detail").GetString());
+        Assert.Equal("Ocurrió un error inesperado.", problem.GetProperty("detail").GetString());
+        Assert.Equal("server_error", problem.GetProperty("code").GetString());
         Assert.Equal(activity.Id, problem.GetProperty("traceId").GetString());
     }
 

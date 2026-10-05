@@ -10,6 +10,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -42,7 +43,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return Unauthorized(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status401Unauthorized, result.Error);
 
         var response = result.Value;
 
@@ -61,7 +62,7 @@ public class AuthController : ControllerBase
     {
         var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
         if (string.IsNullOrEmpty(refreshToken))
-            return Unauthorized(new { error = "No refresh token provided." });
+            return this.ApiError(StatusCodes.Status401Unauthorized, "No hay una sesión que renovar. Inicia sesión de nuevo.");
 
         var authHeader = Request.Headers.Authorization.ToString();
         var expiredToken = !string.IsNullOrEmpty(authHeader)
@@ -74,7 +75,7 @@ public class AuthController : ControllerBase
         if (result.IsFailure)
         {
             DeleteRefreshTokenCookie();
-            return Unauthorized(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status401Unauthorized, result.Error);
         }
 
         if (result.Value.RefreshToken is not null)
@@ -100,7 +101,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         var response = result.Value;
         if (response.RefreshToken is not null)
@@ -116,7 +117,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         var response = result.Value;
         if (response.RefreshToken is not null)
@@ -131,7 +132,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command with { CurrentRefreshToken = Request.Cookies[RefreshTokenCookie.Name] });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         if (result.Value.RefreshToken is not null)
             SetRefreshTokenCookie(result.Value.RefreshToken);
@@ -146,7 +147,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new ConfirmEmailCommand(userId, token));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Email confirmado exitosamente." });
     }
 
@@ -166,7 +167,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Número de teléfono confirmado exitosamente." });
     }
 
@@ -195,7 +196,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Contraseña restablecida exitosamente." });
     }
 
@@ -216,7 +217,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Contraseña restablecida exitosamente." });
     }
 
@@ -228,7 +229,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Te enviamos un código al número nuevo." });
     }
 
@@ -240,7 +241,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new GetInvitationQuery(userId, token));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -252,7 +253,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         var response = result.Value;
         if (response.RefreshToken is not null)
@@ -267,7 +268,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new GetUserProfileQuery());
         if (result.IsFailure)
-            return NotFound(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
     }
 
@@ -277,7 +278,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -287,7 +288,7 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<AvatarImageUrlsDto>> UploadAvatar(IFormFile file)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new { error = "No se proporcionó un archivo." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
 
         var result = await _mediator.Send(new UploadAvatarCommand
         {
@@ -297,7 +298,7 @@ public class AuthController : ControllerBase
             FileSize = file.Length
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -307,7 +308,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new DeleteAvatarCommand());
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -319,7 +320,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Te enviamos un código al número nuevo." });
     }
 
@@ -330,7 +331,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Número de teléfono confirmado exitosamente." });
     }
 
@@ -341,7 +342,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Contraseña actualizada exitosamente." });
     }
 
@@ -351,7 +352,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new GetOwnerWhatsAppConfigQuery());
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -361,7 +362,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -371,7 +372,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new GetMyTenantQuery());
         if (result.IsFailure)
-            return NotFound(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
     }
 
@@ -381,7 +382,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -391,7 +392,7 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantLogo(IFormFile file)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new { error = "No se proporcionó un archivo." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
 
         var result = await _mediator.Send(new UploadTenantLogoCommand
         {
@@ -401,7 +402,7 @@ public class AuthController : ControllerBase
             FileSize = file.Length
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -411,7 +412,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new DeleteTenantLogoCommand());
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -421,7 +422,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(new GetWhatsAppConfigQuery());
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -431,7 +432,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -441,7 +442,7 @@ public class AuthController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Mensaje enviado exitosamente." });
     }
 

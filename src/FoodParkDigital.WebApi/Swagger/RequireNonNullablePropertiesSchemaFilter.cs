@@ -9,7 +9,8 @@ namespace FoodParkDigital.WebApi.Swagger;
 /// <summary>
 /// Marks every property that cannot be null as required, so the generated client types say <c>total: number</c>
 /// instead of <c>total?: number</c>. Nullable properties (<c>string?</c>, <c>int?</c>, <c>OrderStatus?</c>) stay
-/// optional.
+/// optional, and so does a request property with <see cref="System.ComponentModel.DefaultValueAttribute"/>: the
+/// server uses that value when it is not sent (a tip of 0).
 /// </summary>
 public sealed class RequireNonNullablePropertiesSchemaFilter : ISchemaFilter
 {
@@ -32,6 +33,7 @@ public sealed class RequireNonNullablePropertiesSchemaFilter : ISchemaFilter
         var nullability = new NullabilityInfoContext();
         return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => Nullable.GetUnderlyingType(p.PropertyType) is not null
+                        || p.GetCustomAttribute<System.ComponentModel.DefaultValueAttribute>() is not null
                         || (!p.PropertyType.IsValueType && nullability.Create(p).ReadState == NullabilityState.Nullable))
             .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? JsonNamingPolicy.CamelCase.ConvertName(p.Name))
             .ToHashSet(StringComparer.Ordinal);

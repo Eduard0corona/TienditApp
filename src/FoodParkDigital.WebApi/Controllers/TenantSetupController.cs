@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -32,7 +33,7 @@ public class TenantSetupController : ControllerBase
     {
         var result = await _mediator.Send(new GetTenantSetupQuery());
         if (result.IsFailure)
-            return NotFound(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
     }
 
@@ -41,7 +42,7 @@ public class TenantSetupController : ControllerBase
     {
         var result = await _mediator.Send(new CompleteTenantSetupCommand());
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -51,7 +52,7 @@ public class TenantSetupController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -60,7 +61,7 @@ public class TenantSetupController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -75,7 +76,7 @@ public class TenantSetupController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateOnlineMenuCommand(request.Mode));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 }

@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Orders.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -58,7 +59,7 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(new AddTabRoundCommand { OrderId = id, Items = request.Items });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -69,7 +70,7 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(new CloseTabCommand(id));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -80,7 +81,7 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(new MoveTabCommand(id, request.DiningTableId));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -91,7 +92,7 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(new UpdateKitchenTicketStatusCommand(ticketId, KitchenTicketStatus.Served));
         if (result.IsFailure)
-            return Conflict(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
     }
 
@@ -127,7 +128,7 @@ public class OrdersController : ControllerBase
                 : null
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -137,7 +138,7 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
@@ -155,8 +156,8 @@ public class OrdersController : ControllerBase
         if (result.IsFailure)
         {
             if (result.Error!.Contains("otro proceso"))
-                return Conflict(new { error = result.Error });
-            return BadRequest(new { error = result.Error });
+                return this.ApiError(StatusCodes.Status409Conflict, result.Error);
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         }
         return NoContent();
     }
@@ -171,7 +172,7 @@ public class OrdersController : ControllerBase
             Reason = request?.Reason
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -191,7 +192,7 @@ public class OrdersController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -213,7 +214,7 @@ public class OrdersController : ControllerBase
             Reference = request.Reference
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -229,7 +230,7 @@ public class OrdersController : ControllerBase
             RestockItems = request.RestockItems
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -248,7 +249,7 @@ public class OrdersController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }
@@ -259,7 +260,7 @@ public class OrdersController : ControllerBase
     public async Task<ActionResult<UploadedFileDto>> UploadServicePhoto(IFormFile file)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new { error = "No se proporciono un archivo." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
 
         var result = await _mediator.Send(new UploadServiceIntakePhotoCommand
         {
@@ -270,7 +271,7 @@ public class OrdersController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -281,7 +282,7 @@ public class OrdersController : ControllerBase
     public async Task<ActionResult<UploadedFileDto>> UploadPaymentEvidence(IFormFile file)
     {
         if (file is null || file.Length == 0)
-            return BadRequest(new { error = "No se proporciono un archivo." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
 
         var result = await _mediator.Send(new UploadOrderPaymentEvidenceCommand
         {
@@ -292,7 +293,7 @@ public class OrdersController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }

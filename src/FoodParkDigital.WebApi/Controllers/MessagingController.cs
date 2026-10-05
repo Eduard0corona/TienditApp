@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Messaging.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -105,7 +106,7 @@ public class MessagingController : ControllerBase
     public async Task<IActionResult> SetOptOut([FromBody] SetMessagingOptOutCommand command)
     {
         var result = await _mediator.Send(command);
-        return result.IsFailure ? BadRequest(new { error = result.Error }) : NoContent();
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : NoContent();
     }
 
     [HttpGet("settings")]
@@ -117,5 +118,5 @@ public class MessagingController : ControllerBase
         => ToActionResult(await _mediator.Send(command));
 
     private ActionResult<T> ToActionResult<T>(Result<T> result)
-        => result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
+        => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }

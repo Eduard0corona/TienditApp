@@ -40,6 +40,9 @@ public class RequireNonNullablePropertiesSchemaFilterTests
         // Enums and DTOs are references to other schemas, which cannot say "nullable" themselves.
         public OrderStatus? PreviousStatus { get; init; }
         public SampleLine? Highlighted { get; init; }
+        // The server uses the default when the client leaves it out (a tip of 0).
+        [System.ComponentModel.DefaultValue(0)]
+        public decimal Tip { get; init; }
     }
 
     private sealed record SampleLine(string Name);

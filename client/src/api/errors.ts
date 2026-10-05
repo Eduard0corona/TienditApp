@@ -1,15 +1,36 @@
 import { isAxiosError } from 'axios';
 
-// The API answers errors in a few shapes: `{ error }` from controllers, ProblemDetails (`title`,
-// `detail`) from the exception handler and the tenant middleware, and validation ProblemDetails with
-// `errors` per field. Screens read them only through these helpers.
+// Every API error is ProblemDetails (application/problem+json) with a stable `code` (validation_failed,
+// business_rule, module_disabled, concurrency_conflict...), `detail` in Spanish, `errors` per field on
+// validation and `error` repeating `detail` for older readers. Decide by `code`, never by `title` or the
+// wording. Screens read errors only through these helpers.
 
 interface ApiErrorBody {
+  code?: unknown;
   error?: unknown;
   detail?: unknown;
   title?: unknown;
   errors?: unknown;
 }
+
+/** The codes the API answers (see ApiErrorCodes in the WebApi project). */
+export type ApiErrorCode =
+  | 'validation_failed'
+  | 'business_rule'
+  | 'domain_rule'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'tenant_required'
+  | 'tenant_access_denied'
+  | 'tenant_suspended'
+  | 'module_disabled'
+  | 'not_found'
+  | 'conflict'
+  | 'concurrency_conflict'
+  | 'invalid_state_transition'
+  | 'too_many_requests'
+  | 'server_error'
+  | 'bad_request';
 
 const NETWORK_MESSAGE = 'No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.';
 const TOO_MANY_REQUESTS_MESSAGE = 'Demasiados intentos seguidos. Espera un minuto e intenta de nuevo.';
@@ -58,10 +79,16 @@ export function getApiErrorStatus(err: unknown): number | undefined {
   return isAxiosError(err) ? err.response?.status : undefined;
 }
 
+/** The `code` of an API error (or undefined for errors without an answer or from older servers). */
+export function getApiErrorCode(err: unknown): ApiErrorCode | string | undefined {
+  return nonEmptyString(getBody(err)?.code);
+}
+
 /**
- * One message to show for a failed request. Reads `error`, then the first field error, then `detail`;
- * server errors (5xx) and permission errors use a clear Spanish message instead of technical text,
- * and anything unknown falls back to the message of the screen.
+ * One message to show for a failed request, chosen by the error `code`: the few situations every screen
+ * words the same (a module turned off, someone else saved first, the status moved on) use one message;
+ * validation shows the first field error; anything else shows the server's text. Server errors (5xx) and
+ * unknown answers fall back to the message of the screen.
  */
 export function getApiErrorMessage(err: unknown, fallback: string): string {
   if (!isAxiosError(err)) return fallback;
@@ -72,17 +99,26 @@ export function getApiErrorMessage(err: unknown, fallback: string): string {
   if (status >= 500) return fallback;
 
   const body = getBody(err);
-  const explicit = nonEmptyString(body?.error);
-  if (explicit) return explicit;
-
+  const code = nonEmptyString(body?.code);
   const title = nonEmptyString(body?.title);
-  if (status === 403) return title === 'Tenant capability denied' ? MODULE_DISABLED_MESSAGE : FORBIDDEN_MESSAGE;
-  if (status === 409 && title === 'Concurrency Conflict') return CONCURRENCY_MESSAGE;
-  if (status === 409 && title === 'Invalid State Transition') return STATE_CHANGED_MESSAGE;
-  if (status === 404 && title === 'Entity Not Found') return NOT_FOUND_MESSAGE;
-
+  const text = nonEmptyString(body?.detail) ?? nonEmptyString(body?.error);
   const firstFieldError = Object.values(getApiFieldErrors(err))[0]?.[0];
-  if (firstFieldError) return firstFieldError;
 
-  return nonEmptyString(body?.detail) ?? fallback;
+  // An answer without code comes from an older server: its titles meant the same.
+  if (code === 'module_disabled' || title === 'Tenant capability denied') return MODULE_DISABLED_MESSAGE;
+  if (code === 'concurrency_conflict' || (!code && title === 'Concurrency Conflict')) return CONCURRENCY_MESSAGE;
+  if (code === 'invalid_state_transition' || (!code && title === 'Invalid State Transition')) return STATE_CHANGED_MESSAGE;
+  if (code === 'validation_failed') return firstFieldError ?? text ?? fallback;
+  if (!code) {
+    const explicit = nonEmptyString(body?.error);
+    if (explicit) return explicit;
+    if (status === 403) return FORBIDDEN_MESSAGE;
+    if (status === 404 && title === 'Entity Not Found') return NOT_FOUND_MESSAGE;
+    return firstFieldError ?? nonEmptyString(body?.detail) ?? fallback;
+  }
+
+  if (text) return text;
+  if (status === 403) return FORBIDDEN_MESSAGE;
+  if (status === 404) return NOT_FOUND_MESSAGE;
+  return firstFieldError ?? fallback;
 }

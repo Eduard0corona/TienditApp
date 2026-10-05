@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Customers.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -45,7 +46,7 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerCardDto>> GetCard([FromQuery] string? phone, [FromQuery] Guid? customerId)
     {
         var result = await _mediator.Send(new GetCustomerCardQuery { Phone = phone, CustomerId = customerId });
-        return result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
+        return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
     [HttpGet("{id:guid}")]
@@ -60,7 +61,7 @@ public class CustomersController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
@@ -69,11 +70,11 @@ public class CustomersController : ControllerBase
     public async Task<ActionResult<CustomerDto>> Update(Guid id, [FromBody] UpdateCustomerCommand command)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return Ok(result.Value);
     }
@@ -88,7 +89,7 @@ public class CustomersController : ControllerBase
         });
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
         return NoContent();
     }
@@ -98,7 +99,7 @@ public class CustomersController : ControllerBase
     {
         var result = await _mediator.Send(new DeleteCustomerCommand(id));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -134,7 +135,7 @@ public class CustomersController : ControllerBase
         => ToResult(await _mediator.Send(new RemoveCustomerAddressCommand(id, addressId)));
 
     private ActionResult<CustomerDto> ToResult(Result<CustomerDto> result)
-        => result.IsFailure ? BadRequest(new { error = result.Error }) : Ok(result.Value);
+        => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
 }
 
 public record SetCustomerActiveRequest(bool IsActive);

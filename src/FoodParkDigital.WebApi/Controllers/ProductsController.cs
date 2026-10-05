@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -59,15 +60,14 @@ public class ProductsController : ControllerBase
     {
         if (!IsItemTypeConsistent(itemType, command.Unit))
         {
-            return BadRequest(new
-            {
-                error = "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad."
-            });
+            return this.ApiError(
+                StatusCodes.Status400BadRequest,
+                "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad.");
         }
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
@@ -79,19 +79,18 @@ public class ProductsController : ControllerBase
         [FromQuery] ProductCatalogItemType? itemType)
     {
         if (id != command.Id)
-            return BadRequest(new { error = "Route ID and body ID mismatch." });
+            return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
         if (!IsItemTypeConsistent(itemType, command.Unit))
         {
-            return BadRequest(new
-            {
-                error = "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad."
-            });
+            return this.ApiError(
+                StatusCodes.Status400BadRequest,
+                "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad.");
         }
 
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -101,7 +100,7 @@ public class ProductsController : ControllerBase
     {
         var result = await _mediator.Send(new DeleteProductCommand(id));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -115,7 +114,7 @@ public class ProductsController : ControllerBase
             IsAvailable = request.IsAvailable
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
@@ -126,7 +125,7 @@ public class ProductsController : ControllerBase
     {
         var result = await _mediator.Send(new SetProductOptionGroupsCommand { ProductId = id, Groups = request.Groups });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -144,7 +143,7 @@ public class ProductsController : ControllerBase
             FileSize = file.Length
         });
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 

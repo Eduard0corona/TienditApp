@@ -56,7 +56,7 @@ public class SwitchTenantCommandHandler : IRequestHandler<SwitchTenantCommand, R
     public async Task<Result<AuthResponse>> Handle(SwitchTenantCommand request, CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(_currentUserService.UserId, out var userId))
-            return Result.Failure<AuthResponse>("Invalid user context.");
+            return Result.Failure<AuthResponse>("Usuario no autenticado.");
 
         var membership = await _context.TenantUsers
             .IgnoreQueryFilters()

@@ -64,7 +64,7 @@ public sealed class AuthorizationBehavior<TRequest, TResponse> : IPipelineBehavi
         if (rule.Capability is { } capability
             && !await _access.HasAnyCapabilityAsync(capability.AnyOf, cancellationToken))
         {
-            throw new ForbiddenAccessException("El módulo no está activo en este negocio.");
+            throw ForbiddenAccessException.ForDisabledModule("El módulo no está activo en este negocio.");
         }
 
         if (request is IRequiresContentPermissions content)

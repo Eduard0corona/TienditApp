@@ -11653,8 +11653,7 @@
       "CreateOrderPaymentDto": {
         "required": [
           "amount",
-          "method",
-          "tip"
+          "method"
         ],
         "type": "object",
         "properties": {
@@ -11684,7 +11683,8 @@
           },
           "tip": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "default": 0
           },
           "cashReceived": {
             "type": "number",

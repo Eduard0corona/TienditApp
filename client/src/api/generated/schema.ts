@@ -8377,7 +8377,10 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
-            /** Format: double */
+            /**
+             * Format: double
+             * @default 0
+             */
             tip: number;
             /** Format: double */
             cashReceived?: number | null;

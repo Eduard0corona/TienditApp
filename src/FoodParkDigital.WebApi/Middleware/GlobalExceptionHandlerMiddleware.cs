@@ -2,6 +2,7 @@ using System.Diagnostics;
 using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Infrastructure.Services;
+using FoodParkDigital.WebApi.Errors;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -39,17 +40,18 @@ public class GlobalExceptionHandlerMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        var (statusCode, title) = exception switch
+        var (statusCode, title, code) = exception switch
         {
-            InvalidOrderStateTransitionException => (StatusCodes.Status409Conflict, "Invalid State Transition"),
-            EntityNotFoundException => (StatusCodes.Status404NotFound, "Entity Not Found"),
-            TenantMismatchException => (StatusCodes.Status403Forbidden, "Tenant Access Denied"),
-            DomainException => (StatusCodes.Status422UnprocessableEntity, "Domain Rule Violation"),
-            ValidationException => (StatusCodes.Status400BadRequest, "Validation Error"),
-            DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Concurrency Conflict"),
-            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
-            ForbiddenAccessException => (StatusCodes.Status403Forbidden, "Forbidden"),
-            _ => (StatusCodes.Status500InternalServerError, "Internal Server Error")
+            InvalidOrderStateTransitionException => (StatusCodes.Status409Conflict, "Invalid State Transition", ApiErrorCodes.InvalidStateTransition),
+            EntityNotFoundException => (StatusCodes.Status404NotFound, "Entity Not Found", ApiErrorCodes.NotFound),
+            TenantMismatchException => (StatusCodes.Status403Forbidden, "Tenant Access Denied", ApiErrorCodes.TenantAccessDenied),
+            DomainException => (StatusCodes.Status422UnprocessableEntity, "Domain Rule Violation", ApiErrorCodes.DomainRule),
+            ValidationException => (StatusCodes.Status400BadRequest, "Validation Error", ApiErrorCodes.ValidationFailed),
+            DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Concurrency Conflict", ApiErrorCodes.ConcurrencyConflict),
+            UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", ApiErrorCodes.Unauthorized),
+            ForbiddenAccessException { ModuleDisabled: true } => (StatusCodes.Status403Forbidden, "Tenant capability denied", ApiErrorCodes.ModuleDisabled),
+            ForbiddenAccessException => (StatusCodes.Status403Forbidden, "Forbidden", ApiErrorCodes.Forbidden),
+            _ => (StatusCodes.Status500InternalServerError, "Internal Server Error", ApiErrorCodes.ServerError)
         };
 
         // Also returned to the client, so support can find the entry of a reported error.
@@ -67,7 +69,18 @@ public class GlobalExceptionHandlerMiddleware
         {
             Status = statusCode,
             Title = title,
-            Detail = statusCode == 500 ? "An unexpected error occurred." : exception.Message,
+            // What the person can act on, in Spanish; the technical message stays in the log above.
+            Detail = exception switch
+            {
+                _ when statusCode == 500 => "Ocurrió un error inesperado.",
+                // The validators' own message, not FluentValidation's summary of every field.
+                ValidationException validation => validation.Errors.FirstOrDefault()?.ErrorMessage ?? "Revisa los datos enviados.",
+                InvalidOrderStateTransitionException => "El estado cambió mientras lo veías. Recarga para ver el estado actual.",
+                EntityNotFoundException => "No se encontró el registro. Es posible que ya no exista.",
+                TenantMismatchException => "No tienes acceso a este registro.",
+                DbUpdateConcurrencyException => "Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.",
+                _ => exception.Message
+            },
             Instance = context.Request.Path
         };
         problemDetails.Extensions["traceId"] = traceId;
@@ -79,9 +92,9 @@ public class GlobalExceptionHandlerMiddleware
                 .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
         }
 
+        ApiProblem.Complete(problemDetails, context, code);
         context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "application/problem+json";
-        await context.Response.WriteAsJsonAsync(problemDetails);
+        await context.Response.WriteAsJsonAsync(problemDetails, (System.Text.Json.JsonSerializerOptions?)null, ApiProblem.ContentType);
     }
 
     private Exception LoggableException(Exception exception)

@@ -37,6 +37,51 @@ jobs:
       - name: Test
         run: dotnet test FoodParkDigital.sln --no-build --configuration Release --verbosity normal
 
+      # The client is generated from client/openapi/openapi.json: it must be the document the API serves now, so a DTO
+      # changed without regenerating the client fails here instead of in production. Development serves Swagger and
+      # needs no database for it.
+      - name: Check the OpenAPI contract
+        working-directory: src/FoodParkDigital.WebApi
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5099
+          BackgroundJobs__Enabled: "false"
+          Database__AutoMigrateOnStartup: "false"
+          Database__SeedOnStartup: "false"
+        run: |
+          dotnet bin/Release/net10.0/FoodParkDigital.WebApi.dll > "$RUNNER_TEMP/api.log" 2>&1 &
+          api=$!
+          for _ in $(seq 60); do
+            curl -sf -o /dev/null http://127.0.0.1:5099/swagger/v1/swagger.json && break
+            sleep 1
+          done
+          node ../../client/scripts/pull-openapi.mjs http://127.0.0.1:5099/swagger/v1/swagger.json || { cat "$RUNNER_TEMP/api.log"; exit 1; }
+          kill "$api"
+          if ! git diff --exit-code -- ../../client/openapi/openapi.json; then
+            echo "::error::client/openapi/openapi.json is not the contract the API serves. Run the API in Development and, in client/, npm run api:pull and npm run api:types."
+            exit 1
+          fi
+
+      # Breaking changes against the base branch are reported, not blocking: the client in this repository is
+      # regenerated in the same change, but an old tab or another integration may still send the previous shape.
+      - name: Report breaking API changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          mkdir -p "$RUNNER_TEMP/openapi"
+          if ! git show "origin/${{ github.base_ref }}:client/openapi/openapi.json" > "$RUNNER_TEMP/openapi/base.json"; then
+            echo "The base branch has no OpenAPI contract yet." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cp client/openapi/openapi.json "$RUNNER_TEMP/openapi/revision.json"
+          docker run --rm -v "$RUNNER_TEMP/openapi:/specs:ro" \
+            tufin/oasdiff@sha256:b0815c30ec6d99027623ff90acc98d3f7157702ceeedae47d924dc0cf4491fb3 \
+            breaking /specs/base.json /specs/revision.json --format markdown --lang es > "$RUNNER_TEMP/openapi/breaking.md"
+          {
+            echo "## Cambios incompatibles en la API respecto a ${{ github.base_ref }}"
+            if [ -s "$RUNNER_TEMP/openapi/breaking.md" ]; then cat "$RUNNER_TEMP/openapi/breaking.md"; else echo "Ninguno."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Fails when an entity configuration changed without its migration.
       - name: Check pending EF Core model changes
         env:
@@ -210,8 +255,8 @@ jobs:
           env 'Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore.Database.Command=Warning' \
             dotnet ef database update --connection "$MSSQL_CONNECTION;Database=TienditAppCiNew" $EF_PROJECTS
 
-      # What depends on SQL Server itself (the folio counter takes the next number under a row lock) runs against the
-      # same container: test classes named *SqlServerTests, skipped everywhere else.
+      # What depends on SQL Server itself (the folio counters take the next number under a row lock; the lists project
+      # in SQL) runs against the same container: test classes named *SqlServerTests, skipped everywhere else.
       - name: SQL Server tests
         env:
           TIENDITAPP_TEST_SQLSERVER: ${{ env.MSSQL_CONNECTION }}
@@ -245,6 +290,15 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # The generated types must be the ones openapi/openapi.json produces (the backend job checks that document).
+      - name: Check the generated API types
+        run: |
+          npm run api:types
+          if ! git diff --exit-code -- src/api/generated/schema.ts; then
+            echo "::error::src/api/generated/schema.ts does not match openapi/openapi.json: run npm run api:types."
+            exit 1
+          fi
 
       - name: Lint
         run: npm run lint

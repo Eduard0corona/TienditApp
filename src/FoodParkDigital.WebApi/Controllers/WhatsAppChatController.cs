@@ -5,6 +5,7 @@ using FoodParkDigital.Application.WhatsApp.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Controllers;
 
@@ -49,7 +50,7 @@ public class WhatsAppChatController : ControllerBase
         });
 
         if (result.IsFailure)
-            return NotFound(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
 
         return Ok(result.Value);
     }
@@ -59,7 +60,7 @@ public class WhatsAppChatController : ControllerBase
     {
         var result = await _mediator.Send(command);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
@@ -68,7 +69,7 @@ public class WhatsAppChatController : ControllerBase
     {
         var result = await _mediator.Send(new MarkConversationReadCommand(id));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Conversación marcada como leída." });
     }
 
@@ -78,7 +79,7 @@ public class WhatsAppChatController : ControllerBase
     {
         var result = await _mediator.Send(new SetConversationAutoRepliesCommand(id, request.Paused));
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 }
