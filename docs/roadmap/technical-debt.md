@@ -27,8 +27,8 @@ Actualizada el 2026-10-04 tras las Fases 0 a 4 del roadmap de producto (la audit
 - Controllers grandes; `WhatsAppWebhookController` aún accede al DbContext para resolver tenant y estados en el `POST` (el handshake `GET` ya usa `VerifyWhatsAppWebhookTokenQuery`).
 - Componentes frontend de 700–2,450 líneas y `types/index.ts` monolítico.
 - `types/index.ts` copia a mano los enums numéricos del dominio. `ClientEnumContractTests` compara sus objetos `as const` con el dominio, pero no genera los tipos ni revisa las uniones literales duplicadas (`PurchaseOrderStatus = 0 | 1 | 2 | 3 | 99` y similares).
-- Sin pruebas frontend ni de integración con SQL Server.
-- No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes.
+- Sin pruebas frontend. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
+- No hay ambiente de staging: cada push a `master` despliega directo a producción, sin slot ni swap para probar antes. Desde la Fase 4F una prueba de humo confirma que la app responde con la versión nueva y el workflow admite OIDC en lugar del publish profile ([despliegue](../development/deploy-azure.md)); cambiar de credencial requiere configurar Azure.
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Auto-migrate/seed solo existe en Development contra un servidor local, pero falta el proceso productivo de migraciones.
 - Listados pequeños aún materializan colecciones sin paginación (categorías, AI agents, ubicaciones, kitchen).
@@ -107,7 +107,7 @@ Pendientes detectados en la Fase 0:
 
 Pendientes detectados en la Fase 1:
 
-- El efectivo recibido y el cambio no se guardan en la venta (solo salen en el ticket).
+- El efectivo recibido y el cambio no se guardan en la venta (solo salen en el ticket). (Resuelto en la Fase 4F: cada pago guarda el efectivo recibido y la propina.)
 - No hay staging: la decisión fue publicar solo desde `master` sin slot de prueba.
 - Una venta sin conexión no se puede registrar; Vender solo conserva el borrador. (Resuelto en la Fase 3 para ventas de mostrador cobradas; ver [ventas sin conexión](../domain/order-lifecycles.md#ventas-sin-conexión-fase-3).)
 
