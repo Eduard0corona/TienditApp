@@ -91,7 +91,6 @@ public class SwitchTenantCommandHandler : IRequestHandler<SwitchTenantCommand, R
         if (current is not null && (current.UserId != user.Id || !current.IsActive))
             current = null;
         var sessionId = current?.SessionId ?? Guid.NewGuid();
-        current?.HashLegacyValue();
         current?.Revoke(RefreshTokenRevocationReason.Rotated, _clock.UtcNow);
 
         var accessToken = _jwtTokenService.GenerateAccessToken(

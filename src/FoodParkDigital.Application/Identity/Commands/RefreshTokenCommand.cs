@@ -66,9 +66,6 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         if (presented is null)
             return Result.Failure<AuthResponse>(InvalidSessionError);
 
-        // Issued by the previous version: from now on only its hash is stored.
-        presented.HashLegacyValue();
-
         if (presented.IsRevoked)
         {
             // Its twin request replaced it a moment ago and brought the new cookie: this one tries again with it.

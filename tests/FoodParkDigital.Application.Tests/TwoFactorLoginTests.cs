@@ -66,7 +66,6 @@ public class TwoFactorLoginTests
         Assert.Equal(fixture.User.Id, storedRefreshToken.UserId);
         // Only its hash is stored.
         Assert.Equal(RefreshToken.HashOf(result.Value.RefreshToken!), storedRefreshToken.TokenHash);
-        Assert.Equal(string.Empty, storedRefreshToken.LegacyValue);
 
         // Misma sesión que el login sin 2FA: tenant activo y permisos efectivos en el access token.
         var accessToken = new JwtSecurityTokenHandler().ReadJwtToken(result.Value.AccessToken);

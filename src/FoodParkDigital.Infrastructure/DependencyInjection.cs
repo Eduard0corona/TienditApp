@@ -169,7 +169,6 @@ public static class DependencyInjection
             services.AddHostedService<SalesSnapshotWorkerService>();
             services.AddHostedService<SubscriptionStatusWorkerService>();
             services.AddHostedService<PrivateFilesMigrationService>();
-            services.AddHostedService<LegacyRefreshTokenHashingService>();
         }
 
         // Services

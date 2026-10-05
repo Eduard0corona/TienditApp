@@ -37,11 +37,17 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
     public static async Task<SqlServerTestDatabase> CreateAsync()
     {
-        var server = Environment.GetEnvironmentVariable(ConnectionVariable)!.TrimEnd(';');
-        var database = new SqlServerTestDatabase($"{server};Database=TienditAppTest_{Guid.NewGuid():N}");
+        var database = CreateEmpty();
         await using var context = database.CreateContext();
         await context.Database.EnsureCreatedAsync();
         return database;
+    }
+
+    /// <summary>A database not created yet: the test creates it, for example by applying the migrations.</summary>
+    public static SqlServerTestDatabase CreateEmpty()
+    {
+        var server = Environment.GetEnvironmentVariable(ConnectionVariable)!.TrimEnd(';');
+        return new SqlServerTestDatabase($"{server};Database=TienditAppTest_{Guid.NewGuid():N}");
     }
 
     /// <param name="tenantId">The business in context: its rows pass the tenant filter (none without one).</param>

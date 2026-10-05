@@ -26,11 +26,8 @@ public class LogoutCommandHandler : IRequestHandler<LogoutCommand, Result>
     {
         var token = await UserSessions.FindAsync(_context, request.RefreshToken, cancellationToken);
         if (token is not null)
-        {
-            token.HashLegacyValue();
             await UserSessions.EndSessionAsync(
                 _context, token.SessionId, RefreshTokenRevocationReason.SignedOut, _clock.UtcNow, cancellationToken);
-        }
 
         return Result.Success();
     }
