@@ -4,6 +4,7 @@ import { formatMoney } from './money';
 import { getVatLabel } from './orderTotals';
 import { describeItem } from './productOptions';
 import { allowsFractions, formatQuantity } from './units';
+import { formatInBusinessZone } from './dates';
 
 export interface TicketExtras {
   businessName: string;
@@ -37,7 +38,7 @@ export function formatTicketQuantity(item: OrderDto['items'][number]): string {
 }
 
 export function formatTicketDate(value: string): string {
-  return new Date(value).toLocaleString('es-MX', {
+  return formatInBusinessZone(value, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

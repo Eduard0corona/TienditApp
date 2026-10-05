@@ -16,6 +16,7 @@ import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
 import { buildShiftCutText } from './cashCutText';
 import { describeDifference, getTransactionTypeLabel } from './cashFormat';
+import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
 
 const EMPTY_SESSIONS: PaginatedList<CashSessionDto> = {
   items: [],
@@ -44,11 +45,11 @@ interface ShiftHistoryProps {
 }
 
 function toStartOfDay(date: string) {
-  return date ? new Date(`${date}T00:00:00`).toISOString() : undefined;
+  return date ? businessDayStart(date) : undefined;
 }
 
 function toEndOfDay(date: string) {
-  return date ? new Date(`${date}T23:59:59`).toISOString() : undefined;
+  return date ? businessDayEnd(date) : undefined;
 }
 
 /** Every drawer by date, branch and status, with what it should have held, what was counted and why it differed. */
@@ -191,10 +192,10 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
               <>
                 <td>
                   <button type="button" className="btn btn-link p-0 text-start" onClick={() => void openDetail(session)}>
-                    {new Date(session.openedAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                    {formatInBusinessZone(session.openedAt, { dateStyle: 'short', timeStyle: 'short' })}
                   </button>
                   <div className="small text-muted">
-                    {isOpen ? 'Abierta' : `Cerrada ${session.closedAt ? new Date(session.closedAt).toLocaleTimeString('es-MX', { timeStyle: 'short' }) : ''}`}
+                    {isOpen ? 'Abierta' : `Cerrada ${session.closedAt ? formatInBusinessZone(session.closedAt, { timeStyle: 'short' }) : ''}`}
                   </div>
                 </td>
                 <td>{session.openedBy}{session.isMine && <span className="badge bg-light text-dark ms-1">Tú</span>}</td>
@@ -225,7 +226,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
               <Modal.Title as="h2" className="h5">
                 Turno de {selected.openedBy}
                 <span className="d-block small text-muted fw-normal">
-                  {selected.branchName ?? selected.inventoryLocationName ?? 'Sin sucursal'} · {new Date(selected.openedAt).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
+                  {selected.branchName ?? selected.inventoryLocationName ?? 'Sin sucursal'} · {formatInBusinessZone(selected.openedAt, { dateStyle: 'medium', timeStyle: 'short' })}
                 </span>
               </Modal.Title>
             </Modal.Header>
@@ -266,7 +267,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
                   {selectedMovements.map((movement) => (
                     <li key={movement.id} className="d-flex justify-content-between border-bottom py-1">
                       <span>
-                        {new Date(movement.occurredAt).toLocaleTimeString('es-MX', { timeStyle: 'short' })} · {getTransactionTypeLabel(movement.transactionType)}
+                        {formatInBusinessZone(movement.occurredAt, { timeStyle: 'short' })} · {getTransactionTypeLabel(movement.transactionType)}
                         {movement.reference ? ` · ${movement.reference}` : ''}
                       </span>
                       <span className={movement.amount >= 0 ? 'text-success' : 'text-danger'}>{formatSignedMoney(movement.amount)}</span>

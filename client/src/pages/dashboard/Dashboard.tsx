@@ -14,6 +14,7 @@ import { describeAttentionItems } from '../../utils/attention';
 import { formatMoney } from '../../utils/money';
 import { getCatalogItemTypeLabel, getOrderStatusLabel } from '../../utils/labels';
 import type { DashboardMetricsDto, TenantSetupDto, TenantSetupStepKey } from '../../types';
+import { businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
 // Several events usually arrive together (sale + payment + close); one reload covers them.
 const EVENT_RELOAD_DELAY_MS = 600;
@@ -27,20 +28,12 @@ const SETUP_STEPS: Array<{ key: TenantSetupStepKey; label: string; path: string 
   { key: 'logo', label: 'Sube tu logotipo', path: '/settings/business' },
 ];
 
-function getTodayDateInput() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 /** Inicio: what was charged, what is still owed and what needs attention, plus the first steps. */
 export default function Dashboard() {
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const access = getAccess(user, capabilities);
-  const today = getTodayDateInput();
+  const today = getBusinessToday();
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
   const [metrics, setMetrics] = useState<DashboardMetricsDto | null>(null);
@@ -60,8 +53,8 @@ export default function Dashboard() {
 
   const loadMetrics = useCallback(async () => {
     try {
-      const from = new Date(`${fromDate}T00:00:00`).toISOString();
-      const to = new Date(`${toDate}T23:59:59`).toISOString();
+      const from = businessDayStart(fromDate);
+      const to = businessDayEnd(toDate);
       const { data } = await dashboardApi.getMetrics({ from, to });
       setMetrics(data);
       setError('');

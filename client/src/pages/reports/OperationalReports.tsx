@@ -10,6 +10,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
+import { businessDayEnd, businessDayStart } from '../../utils/dates';
 
 export default function OperationalReports() {
   const { user } = useAuth();
@@ -26,8 +27,8 @@ export default function OperationalReports() {
     setLoading(true);
     try {
       const params: { fromDate?: string; toDate?: string } = {};
-      if (fromDate) params.fromDate = new Date(`${fromDate}T00:00:00`).toISOString();
-      if (toDate) params.toDate = new Date(`${toDate}T23:59:59`).toISOString();
+      if (fromDate) params.fromDate = businessDayStart(fromDate);
+      if (toDate) params.toDate = businessDayEnd(toDate);
       const { data } = await reportsApi.getOperationalSummary(params);
       setReport(data);
     } catch (err: unknown) {

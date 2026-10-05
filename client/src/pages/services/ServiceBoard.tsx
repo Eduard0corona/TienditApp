@@ -8,6 +8,7 @@ import { ServiceOrderPieceStatus as ServiceOrderPieceStatusConst } from '../../t
 import type { PaginatedList, ServiceBoardPieceDto, ServiceOrderPieceStatus } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import { formatDuration } from '../../utils/serviceDetail';
+import { formatInBusinessZone } from '../../utils/dates';
 
 const STATUS_COLUMNS: Array<{
   status: ServiceOrderPieceStatus;
@@ -21,7 +22,7 @@ const STATUS_COLUMNS: Array<{
 ];
 
 function toLocalDateTime(date: string) {
-  return new Date(date).toLocaleString('es-MX', {
+  return formatInBusinessZone(date, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

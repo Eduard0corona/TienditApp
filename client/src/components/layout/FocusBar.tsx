@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FocusArea } from './focusMode';
+import { formatInBusinessZone } from '../../utils/dates';
 
 const TITLES: Record<FocusArea, string> = { sell: 'Vender', kitchen: 'Cocina' };
 
@@ -9,7 +10,7 @@ interface FocusBarProps {
   onExit: () => void;
 }
 
-const clock = (date: Date) => date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+const clock = (date: Date) => formatInBusinessZone(date, { hour: '2-digit', minute: '2-digit' });
 
 /** All that stays of the shell in focus mode: where you are, the time, and the way out. */
 export default function FocusBar({ area, businessName, onExit }: FocusBarProps) {

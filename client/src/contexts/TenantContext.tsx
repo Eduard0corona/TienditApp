@@ -3,6 +3,7 @@ import { tenantApi } from '../api/tenantApi';
 import { useAuth } from '../hooks/useAuth';
 import { TenantContext } from './TenantContextDefinition';
 import type { TenantProfileDto } from '../types';
+import { setBusinessTimeZone } from '../utils/dates';
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -11,6 +12,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const refreshTenant = useCallback(async () => {
     if (!isAuthenticated) {
+      setBusinessTimeZone(null);
       setTenant(null);
       setIsLoading(false);
       return;
@@ -18,8 +20,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
     try {
       const { data } = await tenantApi.getMyTenant();
+      // Set before the screens render with the business: their dates are in its zone from the first paint.
+      setBusinessTimeZone(data.timeZone);
       setTenant(data);
     } catch {
+      setBusinessTimeZone(null);
       setTenant(null);
     } finally {
       setIsLoading(false);

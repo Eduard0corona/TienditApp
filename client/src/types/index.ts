@@ -145,6 +145,8 @@ export interface TenantProfileDto {
   insufficientStockPolicy?: InsufficientStockPolicy;
   /** When the owner finished or skipped the guided setup; null while it is pending. */
   onboardingCompletedAt?: string | null;
+  /** IANA time zone of the business: dates show and days start as the business lives them. */
+  timeZone?: string;
   rfc?: string;
   legalName?: string;
   industry?: string;
@@ -221,6 +223,8 @@ export interface UpdateTenantRequest {
   zipCode?: string;
   city?: string;
   state?: string;
+  /** IANA id of the business's time zone; omitted keeps the current one. */
+  timeZone?: string;
 }
 
 // ==================== WhatsApp ====================

@@ -18492,7 +18492,8 @@
           "pricesIncludeTax",
           "requireOpenCashSession",
           "slug",
-          "status"
+          "status",
+          "timeZone"
         ],
         "type": "object",
         "properties": {
@@ -18559,6 +18560,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "timeZone": {
+            "type": "string"
           },
           "rfc": {
             "type": "string",
@@ -19388,6 +19392,10 @@
           },
           "capabilities": {
             "$ref": "#/components/schemas/TenantCapability"
+          },
+          "timeZone": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

@@ -20,6 +20,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import PurchaseOrderDetail, { type PurchaseOrderDetailMode } from '../../components/purchases/PurchaseOrderDetail';
 import { getPurchaseOrderStatusBadge, getPurchaseOrderStatusLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
+import { formatInBusinessZone } from '../../utils/dates';
 
 const COLUMNS = [
   { header: 'Folio' },
@@ -297,7 +298,7 @@ export default function PurchaseOrdersList() {
                 <td className="text-center">
                   <span className={`badge ${getPurchaseOrderStatusBadge(item.status)}`}>{getPurchaseOrderStatusLabel(item.status)}</span>
                 </td>
-                <td className="text-center">{new Date(item.orderedAt).toLocaleDateString('es-MX')}</td>
+                <td className="text-center">{formatInBusinessZone(item.orderedAt, { day: 'numeric', month: 'numeric', year: 'numeric' })}</td>
                 <td className="text-end">{formatMoney(item.total)}</td>
                 <td className="text-center text-nowrap">
                   <button

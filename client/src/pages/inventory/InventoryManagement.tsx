@@ -31,6 +31,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useActiveBranches } from '../../hooks/useWorkingBranch';
 import { formatMoney, formatUnitCost } from '../../utils/money';
 import { formatStockQuantity } from '../../utils/units';
+import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
 
 type InventoryTab = 'supplies' | 'stocks' | 'movements' | 'locations' | 'recipes' | 'kardex' | 'alerts';
 
@@ -315,7 +316,7 @@ const getMovementReasonLabel = (movementReason: InventoryMovementReason) =>
 
 const formatDateTime = (value?: string) => {
   if (!value) return '-';
-  return new Date(value).toLocaleString('es-MX', {
+  return formatInBusinessZone(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -326,7 +327,7 @@ const formatDateTime = (value?: string) => {
 
 const formatDate = (value?: string) => {
   if (!value) return '-';
-  return new Date(value).toLocaleDateString('es-MX');
+  return formatInBusinessZone(value, { day: 'numeric', month: 'numeric', year: 'numeric' });
 };
 
 export default function InventoryManagement() {
@@ -498,8 +499,8 @@ export default function InventoryManagement() {
 
       if (kardexSupplyFilter) params.supplyItemId = kardexSupplyFilter;
       if (kardexLocationFilter) params.inventoryLocationId = kardexLocationFilter;
-      if (kardexFromDate) params.fromDate = new Date(`${kardexFromDate}T00:00:00`).toISOString();
-      if (kardexToDate) params.toDate = new Date(`${kardexToDate}T23:59:59`).toISOString();
+      if (kardexFromDate) params.fromDate = businessDayStart(kardexFromDate);
+      if (kardexToDate) params.toDate = businessDayEnd(kardexToDate);
 
       const { data } = await inventoryApi.getKardex(params);
       setKardexData(data);
@@ -589,8 +590,8 @@ export default function InventoryManagement() {
 
       if (movementsTypeFilter !== '') params.movementType = Number(movementsTypeFilter) as InventoryMovementType;
       if (movementsReasonFilter !== '') params.movementReason = Number(movementsReasonFilter) as InventoryMovementReason;
-      if (movementsFromDate) params.fromDate = new Date(`${movementsFromDate}T00:00:00`).toISOString();
-      if (movementsToDate) params.toDate = new Date(`${movementsToDate}T23:59:59`).toISOString();
+      if (movementsFromDate) params.fromDate = businessDayStart(movementsFromDate);
+      if (movementsToDate) params.toDate = businessDayEnd(movementsToDate);
 
       const { data } = await inventoryApi.getMovements(params);
       setMovementsData(data);
@@ -922,7 +923,7 @@ export default function InventoryManagement() {
         quantity: Number(line.quantity),
         unitCost: line.unitCost ? Number(line.unitCost) : undefined,
         lotNumber: line.lotNumber.trim() || undefined,
-        expirationDate: line.expirationDate ? new Date(`${line.expirationDate}T00:00:00`).toISOString() : undefined,
+        expirationDate: line.expirationDate ? businessDayStart(line.expirationDate) : undefined,
         notes: line.notes.trim() || undefined,
       })),
     };

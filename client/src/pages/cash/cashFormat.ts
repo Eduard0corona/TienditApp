@@ -11,14 +11,6 @@ export function parseCashAmount(value: string): number | null {
   return Number(trimmed);
 }
 
-export function getTodayInputDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export function getTransactionTypeLabel(type: CashTransactionType): string {
   switch (type) {
     case CashTransactionTypeConst.SalePayment: return 'Pago de venta';

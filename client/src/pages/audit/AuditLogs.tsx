@@ -3,6 +3,7 @@ import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import { auditApi } from '../../api/auditApi';
 import type { AuditLogDto, PaginatedList } from '../../types';
+import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
 
 const COLUMNS = [
   { header: 'Fecha' },
@@ -13,7 +14,7 @@ const COLUMNS = [
 ];
 
 function toLocalDateTime(value: string) {
-  return new Date(value).toLocaleString('es-MX', {
+  return formatInBusinessZone(value, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -48,8 +49,8 @@ export default function AuditLogs() {
       const { data: response } = await auditApi.getLogs({
         entityName: entityName || undefined,
         action: action || undefined,
-        from: fromDate ? new Date(`${fromDate}T00:00:00`).toISOString() : undefined,
-        to: toDate ? new Date(`${toDate}T23:59:59`).toISOString() : undefined,
+        from: fromDate ? businessDayStart(fromDate) : undefined,
+        to: toDate ? businessDayEnd(toDate) : undefined,
         pageNumber,
         pageSize,
       });

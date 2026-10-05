@@ -8,6 +8,7 @@ import { profileApi } from '../../api/profileApi';
 import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import PhoneChangeCard from '../../components/profile/PhoneChangeCard';
+import { formatInBusinessZone } from '../../utils/dates';
 
 interface DisableTwoFactorForm {
   code: string;
@@ -291,7 +292,7 @@ export default function Profile() {
                     <strong>Miembro desde:</strong>{' '}
                     <span className="ms-2">
                       {user?.createdAt
-                        ? new Date(user.createdAt).toLocaleDateString('es-MX', {
+                        ? formatInBusinessZone(user.createdAt, {
                             year: 'numeric',
                             month: 'long',
                             day: 'numeric',

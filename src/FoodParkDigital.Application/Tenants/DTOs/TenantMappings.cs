@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -30,6 +31,7 @@ public static class TenantMappings
         InsufficientStockPolicy = tenant.Settings?.InsufficientStockPolicy ?? InsufficientStockPolicy.Block,
         OnlineMenuMode = tenant.Settings?.OnlineMenuMode ?? OnlineMenuMode.Off,
         OnboardingCompletedAt = tenant.Settings?.OnboardingCompletedAt,
+        TimeZone = tenant.Settings?.TimeZone ?? BusinessTimeZones.Default,
         Rfc = tenant.Rfc,
         LegalName = tenant.LegalName,
         Industry = tenant.Industry,

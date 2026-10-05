@@ -9,6 +9,7 @@ import { KitchenTicketStatus, OrderStatus } from '../../types';
 import type { KitchenOrderDto, KitchenTicketDto, OrderItemDto } from '../../types';
 import { getOrderStatusLabel } from '../../utils/labels';
 import { formatTicketQuantity } from '../../utils/ticket';
+import { formatInBusinessZone } from '../../utils/dates';
 
 function KitchenItems({ items }: { items: OrderItemDto[] }) {
   return (
@@ -179,7 +180,7 @@ export default function KitchenBoard() {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted small" aria-live="polite">
           {lastUpdated
-            ? `${pendingCount} ${pendingCount === 1 ? 'comanda' : 'comandas'} · actualizado a las ${lastUpdated.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+            ? `${pendingCount} ${pendingCount === 1 ? 'comanda' : 'comandas'} · actualizado a las ${formatInBusinessZone(lastUpdated, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
             : 'Cargando comandas…'}
         </div>
         <div className="d-flex flex-wrap gap-2">

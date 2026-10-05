@@ -38,6 +38,7 @@ import {
   getPaymentMethodLabel,
 } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
+import { formatInBusinessZone, businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
 const ALL_STATUSES: OrderStatus[] = [0, 1, 2, 3, 4, 5, 6, 7, 99];
 
@@ -67,21 +68,13 @@ const COLUMNS = [
 ];
 
 function toLocalDateTime(date: string) {
-  return new Date(date).toLocaleString('es-MX', {
+  return formatInBusinessZone(date, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function getTodayInputDate(): string {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function getStatusLabel(status: OrderStatus): string {
@@ -93,7 +86,7 @@ const EVENT_RELOAD_DELAY_MS = 400;
 
 export default function OrdersList() {
   const queryClient = useQueryClient();
-  const today = getTodayInputDate();
+  const today = getBusinessToday();
   const [searchParams] = useSearchParams();
   // A search from the global search (Ctrl K) or a link looks in every date, not only today.
   const initialSearch = searchParams.get('search')?.trim() ?? '';
@@ -202,8 +195,8 @@ export default function OrdersList() {
 
       if (selectedOrderType !== '') params.orderType = Number(selectedOrderType) as OrderType;
       if (selectedStatus !== '') params.status = Number(selectedStatus) as OrderStatus;
-      if (fromDate) params.fromDate = new Date(`${fromDate}T00:00:00`).toISOString();
-      if (toDate) params.toDate = new Date(`${toDate}T23:59:59`).toISOString();
+      if (fromDate) params.fromDate = businessDayStart(fromDate);
+      if (toDate) params.toDate = businessDayEnd(toDate);
       if (search) params.search = search;
 
       const { data: response } = await ordersApi.getAll(params);

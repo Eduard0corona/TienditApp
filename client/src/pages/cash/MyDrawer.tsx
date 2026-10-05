@@ -23,6 +23,7 @@ import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
 import { buildShiftCutText } from './cashCutText';
 import { describeDifference, getTransactionTypeLabel, parseCashAmount } from './cashFormat';
+import { formatInBusinessZone } from '../../utils/dates';
 
 const EMPTY_PAGE: PaginatedList<CashTransactionDto> = {
   items: [],
@@ -308,7 +309,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
           {session.isMine ? 'Tu caja' : `Caja de ${session.openedBy}`}
           {(session.branchName ?? session.inventoryLocationName) ? ` · ${session.branchName ?? session.inventoryLocationName}` : ''}
           {' · abierta '}
-          {new Date(session.openedAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+          {formatInBusinessZone(session.openedAt, { dateStyle: 'short', timeStyle: 'short' })}
         </div>
         <div className="d-flex gap-2">
           <button type="button" className="btn btn-light" onClick={() => { setActionError(''); setShowMovement(true); }}>
@@ -364,7 +365,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
             }}
             renderRow={(item) => (
               <>
-                <td className="text-center text-nowrap">{new Date(item.occurredAt).toLocaleTimeString('es-MX', { timeStyle: 'short' })}</td>
+                <td className="text-center text-nowrap">{formatInBusinessZone(item.occurredAt, { timeStyle: 'short' })}</td>
                 <td>
                   {getTransactionTypeLabel(item.transactionType)}
                   {item.paymentMethod !== undefined && item.paymentMethod !== null && (

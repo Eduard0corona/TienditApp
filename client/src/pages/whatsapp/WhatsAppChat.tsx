@@ -12,6 +12,7 @@ import { getAccess } from '../../utils/access';
 import { buildSellLink } from '../../utils/sellLink';
 import './WhatsAppChat.css';
 import { getApiErrorMessage } from '../../api/errors';
+import { formatInBusinessZone } from '../../utils/dates';
 
 /** Same Mexican number whichever way it was stored (+52 or +521 and ten digits). */
 function isSamePhone(a: string, b: string): boolean {
@@ -268,9 +269,9 @@ export default function WhatsAppChat() {
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
     if (isToday) {
-      return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+      return formatInBusinessZone(d, { hour: '2-digit', minute: '2-digit' });
     }
-    return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+    return formatInBusinessZone(d, { day: '2-digit', month: 'short' });
   };
 
   const getInitials = (name?: string, phone?: string) => {
@@ -471,7 +472,7 @@ export default function WhatsAppChat() {
                     )}
                     <small className={`d-block ${repliesPaused ? 'text-warning-emphasis' : 'text-muted'}`}>
                       {repliesPaused && pausedUntil
-                        ? `Respuestas automáticas en pausa hasta las ${pausedUntil.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`
+                        ? `Respuestas automáticas en pausa hasta las ${formatInBusinessZone(pausedUntil, { hour: '2-digit', minute: '2-digit' })}`
                         : 'Respuestas automáticas activas'}
                       <button
                         type="button"
@@ -539,7 +540,7 @@ export default function WhatsAppChat() {
                             </p>
                             <div className="text-end">
                               <small className="text-muted" style={{ fontSize: '0.7rem' }}>
-                                {new Date(msg.sentAt).toLocaleTimeString('es-MX', {
+                                {formatInBusinessZone(msg.sentAt, {
                                   hour: '2-digit',
                                   minute: '2-digit',
                                 })}

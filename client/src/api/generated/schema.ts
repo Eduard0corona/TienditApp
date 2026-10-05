@@ -10544,6 +10544,7 @@ export interface components {
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
+            timeZone: string;
             rfc?: string | null;
             legalName?: string | null;
             industry?: string | null;
@@ -10779,6 +10780,7 @@ export interface components {
             city?: string | null;
             state?: string | null;
             capabilities?: components["schemas"]["TenantCapability"];
+            timeZone?: string | null;
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];

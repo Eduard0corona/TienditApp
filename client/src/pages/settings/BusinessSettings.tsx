@@ -13,6 +13,7 @@ import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
 import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
 import { COMMERCE_CAPABILITIES, hasAnyCapability } from '../../utils/tenantCapabilities';
+import { formatInBusinessZone, BUSINESS_TIME_ZONES, DEFAULT_TIME_ZONE } from '../../utils/dates';
 
 
 const INDUSTRY_OPTIONS = [
@@ -135,6 +136,7 @@ export default function BusinessSettings() {
       zipCode: data.zipCode || '',
       city: data.city || '',
       state: data.state || '',
+      timeZone: data.timeZone || DEFAULT_TIME_ZONE,
     });
   };
 
@@ -370,6 +372,15 @@ export default function BusinessSettings() {
                     <input className="form-control" type="tel" {...register('contactPhone')} />
                   </div>
                   <div className="mb-3">
+                    <label className="form-label" htmlFor="business-time-zone">Zona horaria</label>
+                    <select id="business-time-zone" className="form-select" {...register('timeZone')}>
+                      {BUSINESS_TIME_ZONES.map((zone) => (
+                        <option key={zone.id} value={zone.id}>{zone.label}</option>
+                      ))}
+                    </select>
+                    <div className="form-text">Los días, cortes y reportes empiezan a la medianoche de esta zona, aunque abras la app desde otra.</div>
+                  </div>
+                  <div className="mb-3">
                     <label className="form-label">Giro del Negocio</label>
                     <select className="form-select" {...register('industry')}>
                       <option value="">Seleccionar...</option>
@@ -460,7 +471,7 @@ export default function BusinessSettings() {
                     <strong>Miembro desde:</strong>{' '}
                     <span className="ms-2">
                       {tenant?.createdAt
-                        ? new Date(tenant.createdAt).toLocaleDateString('es-MX', {
+                        ? formatInBusinessZone(tenant.createdAt, {
                             year: 'numeric',
                             month: 'long',
                             day: 'numeric',

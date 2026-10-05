@@ -7,7 +7,7 @@ import WhatsAppLink from '../../components/common/WhatsAppLink';
 import { useTenant } from '../../hooks/useTenant';
 import { formatMoney } from '../../utils/money';
 import { buildDailyCutText, getDailyCutRows, getOtherMethodsTotal } from './cashCutText';
-import { getTodayInputDate } from './cashFormat';
+import { formatCalendarDate, formatInBusinessZone, getBusinessToday } from '../../utils/dates';
 
 interface DailyCutProps {
   branches: Branch[];
@@ -16,7 +16,7 @@ interface DailyCutProps {
 /** Payments of a day by method, user and branch, for every drawer of the business. */
 export default function DailyCut({ branches }: DailyCutProps) {
   const { tenant } = useTenant();
-  const [date, setDate] = useState(getTodayInputDate());
+  const [date, setDate] = useState(getBusinessToday());
   const [branchId, setBranchId] = useState('');
   const [userName, setUserName] = useState('');
   const [cut, setCut] = useState<DailyCashCutDto | null>(null);
@@ -42,7 +42,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
     void load();
   }, [load]);
 
-  const dateLabel = date ? new Date(`${date}T12:00:00`).toLocaleDateString('es-MX', { dateStyle: 'long' }) : 'Hoy';
+  const dateLabel = date ? formatCalendarDate(date, { dateStyle: 'long' }) : 'Hoy';
   const scopeLabel = (branchId ? branches.find((branch) => branch.id === branchId)?.name ?? 'Sucursal' : 'Todas las sucursales')
     + (userName.trim() ? ` · ${userName.trim()}` : '');
 
@@ -124,7 +124,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
                       </div>
                     ))}
                     <div className="text-center small mt-2">
-                      Impreso el {new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                      Impreso el {formatInBusinessZone(new Date(), { dateStyle: 'short', timeStyle: 'short' })}
                     </div>
                   </div>
                 )}
