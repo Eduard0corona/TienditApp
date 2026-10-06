@@ -23,17 +23,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      # Each action runs the commit that was reviewed: a tag can be moved to other code, a commit cannot. The version
-      # stays as a comment; how to update one is in docs/development/deploy-azure.md.
-      - name: Actions pinned by commit
-        run: |
-          unpinned=$(grep -nE '^[[:space:]]*(- )?uses:' .github/workflows/*.yml \
-            | grep -vE 'uses: [^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$)' || true)
-          if [ -n "$unpinned" ]; then
-            echo "$unpinned"
-            echo "::error::Pin these actions to the full SHA of a release commit, with its version as a comment."
-            exit 1
-          fi
+      # Each action and Docker image runs what was reviewed: a tag can be moved to other code, a commit SHA or a digest
+      # cannot. The version stays next to each pin; how to update one is in docs/development/deploy-azure.md.
+      - name: Actions and images pinned
+        run: python3 .github/scripts/check-pins.py
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -51,7 +44,7 @@ jobs:
       - name: Start Azurite (Blob Storage emulator)
         run: |
           docker run --detach --name azurite --publish 127.0.0.1:10000:10000 \
-            mcr.microsoft.com/azure-storage/azurite:3.37.0 \
+            mcr.microsoft.com/azure-storage/azurite:3.37.0@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5 \
             azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
           for _ in $(seq 30); do
             if curl -s -o /dev/null http://127.0.0.1:10000/; then
@@ -184,7 +177,7 @@ jobs:
           MSSQL_SA_PASSWORD="$password" SQLCMDPASSWORD="$password" docker run --detach --name mssql \
             --env ACCEPT_EULA=Y --env MSSQL_SA_PASSWORD --env SQLCMDPASSWORD \
             --publish 127.0.0.1:1433:1433 --volume "$RUNNER_TEMP/sql:/scripts:ro" \
-            mcr.microsoft.com/mssql/server:2022-latest
+            mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
           for _ in $(seq 60); do
             if $SQLCMD -l 2 -Q "SELECT 1" > /dev/null 2>&1; then
               exit 0

@@ -1,17 +1,17 @@
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12@sha256:222759b391a1aaf241166672c8f99b2d4ada452e7b5319f3c6e8f265a37b5ad4 AS base
 WORKDIR /app
 EXPOSE 8080
 EXPOSE 8081
 
-# The SPA is served by the API from wwwroot (the csproj publishes client/dist there).
-FROM node:24-alpine AS client
+# The SPA is served by the API from wwwroot (the csproj publishes client/dist there). Node 24.21.0.
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS client
 WORKDIR /client
 COPY ["client/package.json", "client/package-lock.json", "./"]
 RUN npm ci
 COPY client/ ./
 RUN npm run build
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
