@@ -13,48 +13,56 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// The model no longer maps Products.StockQuantity and LowStockThreshold nor CustomerProfiles.LoyaltyPoints and
-/// LoyaltyTier, but the migrations keep those columns while the previous version, which still reads them, may run:
-/// this version saves rows without them, leaving what that version reads, and never touches what was captured before.
+/// Products.StockQuantity and LowStockThreshold and CustomerProfiles.LoyaltyPoints and LoyaltyTier go in two steps: the
+/// model stops mapping them while the previous version still reads them, and the next migration drops them. Rows saved
+/// by this version work on both sides, and rolling the drop back gives the columns back, empty, for the version that
+/// reads them.
 /// </summary>
 public class UnmappedColumnsSqlServerTests
 {
-    private const string LastMigrationOfThePreviousVersion = "20261006054141_DropPlainRefreshTokenColumns";
+    private const string StopMappingMigration = "20261006101452_StopMappingStockAndLoyaltyColumns";
 
     [SqlServerFact]
-    public async Task Rows_ShouldSaveWithoutTheUnmappedColumns_WhichStayWithWhatWasCapturedBefore()
+    public async Task Columns_ShouldStayWhileUnmapped_ThenGo_AndComeBackEmptyOnRollback()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
-        await MigrateAsync(database);
+        await MigrateAsync(database, StopMappingMigration);
         var (tenantId, productId, userId) = await SeedAsync(database);
 
         await using (var context = database.CreateContext(tenantId))
         {
             Assert.Equal(4, await ColumnsAsync(context));
             // What the previous version reads from a row of this one: no stock captured, and the default 0 points.
-            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM Products WHERE Id = {productId} AND StockQuantity IS NULL AND LowStockThreshold IS NULL"));
-            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM CustomerProfiles WHERE UserId = {userId} AND LoyaltyPoints = 0 AND LoyaltyTier IS NULL"));
+            Assert.Equal(1, await EmptyColumnsAsync(context, productId, userId));
 
-            // Captured by the previous version: editing the rows here keeps it.
+            // Captured by the previous version: editing the product here keeps it until the columns go.
             await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE Products SET StockQuantity = 4, LowStockThreshold = 2 WHERE Id = {productId}");
-            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE CustomerProfiles SET LoyaltyPoints = 7, LoyaltyTier = N'Oro' WHERE UserId = {userId}");
             (await context.Products.SingleAsync(p => p.Id == productId)).SetAvailability(false);
-            (await context.CustomerProfiles.SingleAsync(c => c.UserId == userId)).UpdateProfile("5512345678", "Ana", "Ana", "Pérez");
             await context.SaveChangesAsync();
+            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM Products WHERE Id = {productId} AND StockQuantity = 4 AND LowStockThreshold = 2"));
         }
 
+        await MigrateAsync(database);
         await using (var context = database.CreateContext(tenantId))
         {
-            Assert.False((await context.Products.AsNoTracking().SingleAsync(p => p.Id == productId)).IsAvailable);
-            Assert.Equal(1, await CapturedAsync(context, productId, userId));
+            Assert.Equal(0, await ColumnsAsync(context));
+            await AssertRowsWorkAsync(context, tenantId, productId, userId, "Agua sin columnas");
         }
 
-        // Rolling back to the previous version's migrations leaves the tables as they are.
-        await MigrateAsync(database, LastMigrationOfThePreviousVersion);
+        // Back to the version that reads them: they return empty (no stock captured, no points), the rows unchanged.
+        await MigrateAsync(database, StopMappingMigration);
         await using (var context = database.CreateContext(tenantId))
         {
             Assert.Equal(4, await ColumnsAsync(context));
-            Assert.Equal(1, await CapturedAsync(context, productId, userId));
+            Assert.Equal(1, await EmptyColumnsAsync(context, productId, userId));
+            await AssertRowsWorkAsync(context, tenantId, productId, userId, "Agua con columnas");
+        }
+
+        await MigrateAsync(database);
+        await using (var context = database.CreateContext(tenantId))
+        {
+            Assert.Equal(0, await ColumnsAsync(context));
+            Assert.Equal(3, await context.Products.CountAsync());
         }
     }
 
@@ -93,6 +101,20 @@ public class UnmappedColumnsSqlServerTests
         return (tenant.Id, product.Id, user.Id);
     }
 
+    /// <summary>The rows of this version read, change and grow the same with or without the columns.</summary>
+    private static async Task AssertRowsWorkAsync(ApplicationDbContext context, Guid tenantId, Guid productId, Guid userId, string newProduct)
+    {
+        var product = await context.Products.SingleAsync(p => p.Id == productId);
+        Assert.False(product.IsAvailable);
+        var profile = await context.CustomerProfiles.SingleAsync(c => c.UserId == userId);
+        profile.UpdateProfile(profile.PhoneNormalized, newProduct, profile.FirstName, profile.LastName);
+        context.Products.Add(new Product(tenantId, product.CategoryId, newProduct, null, 12m, "MXN"));
+        await context.SaveChangesAsync();
+
+        Assert.Equal(newProduct, (await context.CustomerProfiles.AsNoTracking().SingleAsync(c => c.UserId == userId)).DisplayName);
+        Assert.True(await context.Products.AnyAsync(p => p.Name == newProduct));
+    }
+
     /// <summary>How many of the four columns the model stopped mapping the tables still have.</summary>
     private static Task<int> ColumnsAsync(ApplicationDbContext context) =>
         CountAsync(context, $"""
@@ -101,13 +123,13 @@ public class UnmappedColumnsSqlServerTests
                 OR ([object_id] = OBJECT_ID(N'dbo.CustomerProfiles') AND [name] IN (N'LoyaltyPoints', N'LoyaltyTier'))
             """);
 
-    /// <summary>1 when both rows keep the values captured by the previous version.</summary>
-    private static Task<int> CapturedAsync(ApplicationDbContext context, Guid productId, Guid userId) =>
+    /// <summary>1 when the product has no stock captured and the profile no points: what a row of this version leaves.</summary>
+    private static Task<int> EmptyColumnsAsync(ApplicationDbContext context, Guid productId, Guid userId) =>
         CountAsync(context, $"""
             SELECT COUNT(*) AS [Value] FROM Products p
             CROSS JOIN CustomerProfiles c
-            WHERE p.Id = {productId} AND p.StockQuantity = 4 AND p.LowStockThreshold = 2
-                AND c.UserId = {userId} AND c.LoyaltyPoints = 7 AND c.LoyaltyTier = N'Oro'
+            WHERE p.Id = {productId} AND p.StockQuantity IS NULL AND p.LowStockThreshold IS NULL
+                AND c.UserId = {userId} AND c.LoyaltyPoints = 0 AND c.LoyaltyTier IS NULL
             """);
 
     private static Task<int> CountAsync(ApplicationDbContext context, FormattableString sql) =>
