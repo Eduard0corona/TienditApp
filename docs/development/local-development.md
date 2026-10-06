@@ -65,7 +65,7 @@ $env:SEED_SUPERADMIN_PASSWORD = "<contraseña local>"
 docker compose up --build
 ```
 
-La imagen compila también el SPA y corre con el usuario no root de la imagen de .NET. Publica API en 5000/5001 y SQL Server en 1433. Variables opcionales: `JWT_SECRET` (sin ella se usa una llave efímera de desarrollo), `SEED_SUPERADMIN_PASSWORD` y `MSSQL_SA_PASSWORD` (la contraseña por defecto del contenedor SQL solo sirve para un entorno local desechable). Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita.
+La imagen compila también el SPA y corre con el usuario no root de la imagen de .NET. Publica API en 5000/5001 y SQL Server en 1433. Variables opcionales: `JWT_SECRET` (sin ella se usa una llave efímera de desarrollo), `SEED_SUPERADMIN_PASSWORD` y `MSSQL_SA_PASSWORD` (la contraseña por defecto del contenedor SQL solo sirve para un entorno local desechable). Detén el stack con `docker compose down`; no borres volúmenes salvo autorización explícita. Las imágenes de `docker-compose.yml` y del `Dockerfile` van fijadas por digest (Fase 13); cómo actualizarlas está en [despliegue](deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13).
 
 ## SMS, correo y códigos OTP
 
