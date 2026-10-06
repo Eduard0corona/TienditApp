@@ -78,6 +78,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IEmailService>(Email);
         services.AddSingleton<ISmsService>(Sms);
+        services.AddSingleton<IVerificationCodeQueue>(Sms);
         services.AddSingleton<IJwtTokenService>(Jwt);
 
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });

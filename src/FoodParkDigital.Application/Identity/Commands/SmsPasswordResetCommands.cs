@@ -39,18 +39,18 @@ public class ForgotPasswordBySmsCommandHandler : IRequestHandler<ForgotPasswordB
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
-    private readonly ISmsService _smsService;
+    private readonly IVerificationCodeQueue _codes;
     private readonly IDateTimeProvider _clock;
 
     public ForgotPasswordBySmsCommandHandler(
         UserManager<ApplicationUser> userManager,
         IApplicationDbContext context,
-        ISmsService smsService,
+        IVerificationCodeQueue codes,
         IDateTimeProvider clock)
     {
         _userManager = userManager;
         _context = context;
-        _smsService = smsService;
+        _codes = codes;
         _clock = clock;
     }
 
@@ -69,7 +69,8 @@ public class ForgotPasswordBySmsCommandHandler : IRequestHandler<ForgotPasswordB
             return Result.Success();
 
         var code = await _userManager.GenerateUserTokenAsync(user, TokenOptions.DefaultPhoneProvider, SmsPasswordReset.TokenPurpose);
-        await _smsService.SendVerificationCodeAsync(user.PhoneNumber, code);
+        // Sent after the answer: waiting for the provider would take longer only for real accounts.
+        _codes.Enqueue(user.PhoneNumber, code);
         return Result.Success();
     }
 }
@@ -115,13 +116,14 @@ public class ResetPasswordWithSmsCodeCommandHandler : IRequestHandler<ResetPassw
         var user = await _context.Users
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
+        // One answer for every failure, a locked account included: telling it apart would say the account exists.
         if (user is null || !user.IsActive || !user.PhoneNumberConfirmed)
-            return Result.Failure(AccountSecurity.InvalidCodeMessage);
+            return Result.Failure(AccountSecurity.SmsRecoveryFailedMessage);
 
         var check = await AccountSecurity.VerifyCodeAsync(
             _userManager, user, TokenOptions.DefaultPhoneProvider, SmsPasswordReset.TokenPurpose, request.Code);
         if (check != CredentialCheck.Valid)
-            return Result.Failure(AccountSecurity.CodeMessageFor(check)!);
+            return Result.Failure(AccountSecurity.SmsRecoveryFailedMessage);
 
         // The code proved the phone; the password is changed through a reset token of the same request.
         var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);

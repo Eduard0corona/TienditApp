@@ -161,6 +161,10 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
         // Data the previous version left without a business while the migration was applied, completed at start.
         services.AddHostedService<OrderTenantBackfillService>();
+        // Codes asked for by anonymous requests go out after the answer, from the instance that queued them.
+        services.AddSingleton<VerificationCodeQueue>();
+        services.AddSingleton<IVerificationCodeQueue>(sp => sp.GetRequiredService<VerificationCodeQueue>());
+        services.AddHostedService<VerificationCodeSender>();
         if (configuration.GetValue($"{BackgroundJobOptions.SectionName}:Enabled", defaultValue: true))
         {
             services.AddHostedService<OutboxDispatcherService>();

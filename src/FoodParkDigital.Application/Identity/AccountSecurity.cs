@@ -16,6 +16,14 @@ public static class AccountSecurity
     public const string InvalidCodeMessage = "El código no es válido o ya expiró. Pide uno nuevo.";
 
     /// <summary>
+    /// The one answer of a failed anonymous recovery by SMS: wrong or expired code, an account that does not exist or has
+    /// no confirmed phone, and a locked one, which is not told apart (it would say the account exists). Everyone learns
+    /// that the account locks after several attempts.
+    /// </summary>
+    public const string SmsRecoveryFailedMessage =
+        "El código no es válido o ya venció. Pide otro; después de varios intentos la cuenta se bloquea unos minutos.";
+
+    /// <summary>
     /// Reserves the next SMS code of <paramref name="user"/>. False while the last one is recent, or when another
     /// request reserved it at the same time (the concurrency stamp of the account decides).
     /// </summary>

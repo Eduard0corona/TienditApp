@@ -39,17 +39,20 @@ public class ResendPhoneConfirmationCommandValidator : AbstractValidator<ResendP
 public class ResendPhoneConfirmationCommandHandler : IRequestHandler<ResendPhoneConfirmationCommand, Result>
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly ISmsService _smsService;
+    private readonly IVerificationCodeQueue _codes;
     private readonly IApplicationDbContext _context;
+    private readonly IDateTimeProvider _clock;
 
     public ResendPhoneConfirmationCommandHandler(
         UserManager<ApplicationUser> userManager,
-        ISmsService smsService,
-        IApplicationDbContext context)
+        IVerificationCodeQueue codes,
+        IApplicationDbContext context,
+        IDateTimeProvider clock)
     {
         _userManager = userManager;
-        _smsService = smsService;
+        _codes = codes;
         _context = context;
+        _clock = clock;
     }
 
     public async Task<Result> Handle(ResendPhoneConfirmationCommand request, CancellationToken cancellationToken)
@@ -59,13 +62,15 @@ public class ResendPhoneConfirmationCommandHandler : IRequestHandler<ResendPhone
             ? await users.FirstOrDefaultAsync(u => u.Id == request.UserId.Value, cancellationToken)
             : await users.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber, cancellationToken);
 
-        // Por seguridad, no revelamos si el usuario existe o no
+        // The same answer whether the account exists, already confirmed its phone or asked for a code a moment ago.
         if (user is null || user.PhoneNumberConfirmed || string.IsNullOrWhiteSpace(user.PhoneNumber))
+            return Result.Success();
+        if (!await AccountSecurity.TryReserveSmsCodeAsync(_userManager, user, _clock.UtcNow))
             return Result.Success();
 
         var code = await _userManager.GenerateChangePhoneNumberTokenAsync(user, user.PhoneNumber!);
-        await _smsService.SendVerificationCodeAsync(user.PhoneNumber!, code);
-
+        // Sent after the answer: waiting for the provider would take longer only for real accounts.
+        _codes.Enqueue(user.PhoneNumber!, code);
         return Result.Success();
     }
 }
