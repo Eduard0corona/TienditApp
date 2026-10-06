@@ -1017,10 +1017,15 @@ export interface DailyCashCutDto {
   transferTotal: number;
   walletTotal: number;
   otherTotal: number;
+  /** Deposits, expenses, withdrawals and refunds of the day, whatever their method. */
   manualIncomeTotal: number;
   manualExpenseTotal: number;
+  /** The part of those movements made in cash: only it enters or leaves the drawers. */
+  cashManualIncomeTotal: number;
+  cashManualExpenseTotal: number;
+  /** All the money of the day, of any method: a card refund lowers it. */
   netCashFlow: number;
-  /** Cash payments plus manual income minus manual expenses: what the drawers should hold. */
+  /** Cash payments plus cash manual income minus cash manual expenses: the net change of the drawers. */
   netCashOnlyFlow: number;
   /** Tips received with the payments of the day (any method); not part of the sales. */
   tipsTotal: number;

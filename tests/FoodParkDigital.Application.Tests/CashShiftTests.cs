@@ -169,6 +169,66 @@ public class CashShiftTests
     }
 
     [Fact]
+    public async Task DailyCutNetCash_ShouldBeWhatTheShiftsCount_WhateverTheRefundMethod()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        var soda = await fixture.AddProductAsync(tenant, "Refresco", 50m);
+        await OpenAsync(fixture, Ana, 500m);
+        await OpenAsync(fixture, Beto, 300m);
+        fixture.CurrentUser.UserId = Ana;
+        var sale = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            Items = [new CreateOrderItemDto { ProductId = soda.Id, Quantity = 3 }],
+            Payments =
+            [
+                new CreateOrderPaymentDto { Amount = 100m, Method = OrderPaymentMethod.Cash },
+                new CreateOrderPaymentDto { Amount = 50m, Method = OrderPaymentMethod.Card }
+            ]
+        }, CancellationToken.None);
+        Assert.True(sale.IsSuccess, sale.Error);
+
+        // Ana gives 20 back by card and Beto 30 in cash, each through their own drawer.
+        await RefundAsync(fixture, Ana, sale.Value.Id, 20m, OrderPaymentMethod.Card);
+        await RefundAsync(fixture, Beto, sale.Value.Id, 30m, OrderPaymentMethod.Cash);
+        var cut = await new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDailyCashCutQuery(), CancellationToken.None);
+        var shifts = (await new GetCashSessionsQueryHandler(fixture.Context, fixture.CurrentUser)
+            .Handle(new GetCashSessionsQuery(), CancellationToken.None)).Items;
+
+        // The card refund left no drawer: only the 30 in cash comes out of the net cash.
+        Assert.Equal(30m, cut.CashManualExpenseTotal);
+        Assert.Equal(70m, cut.NetCashOnlyFlow);
+        Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows), cut.NetCashOnlyFlow);
+        // All the money still drops by both refunds: the drawers' cash plus what stayed by card.
+        Assert.Equal(50m, cut.ManualExpenseTotal);
+        Assert.Equal(100m, cut.NetCashFlow);
+        Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows + s.NonCashInflows), cut.NetCashFlow);
+    }
+
+    [Fact]
+    public async Task DailyCutNetCash_ShouldLeaveOutManualMovementsOfOtherMethods()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var drawer = await fixture.OpenCashSessionAsync(tenant);
+        drawer.RegisterTransaction(CashTransactionType.Deposit, 40m, SalesTestFixture.Now);
+        drawer.RegisterTransaction(CashTransactionType.Deposit, 25m, SalesTestFixture.Now, OrderPaymentMethod.Transfer);
+        drawer.RegisterTransaction(CashTransactionType.Expense, 15m, SalesTestFixture.Now, OrderPaymentMethod.Cash);
+        await fixture.Context.SaveChangesAsync();
+
+        var cut = await new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDailyCashCutQuery(), CancellationToken.None);
+
+        Assert.Equal(65m, cut.ManualIncomeTotal);
+        Assert.Equal(40m, cut.CashManualIncomeTotal);
+        Assert.Equal(15m, cut.CashManualExpenseTotal);
+        Assert.Equal(drawer.Inflows - drawer.Outflows, cut.NetCashOnlyFlow);
+        Assert.Equal(25m, cut.NetCashOnlyFlow);
+        Assert.Equal(50m, cut.NetCashFlow);
+    }
+
+    [Fact]
     public async Task CurrentDrawer_ShouldBeTheCashiersOwn()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -213,6 +273,17 @@ public class CashShiftTests
                 Notes = notes,
                 CashCount = count
             }, CancellationToken.None);
+    }
+
+    private static async Task RefundAsync(SalesTestFixture fixture, string userId, Guid orderId, decimal amount, OrderPaymentMethod method)
+    {
+        fixture.CurrentUser.UserId = userId;
+        fixture.Context.ChangeTracker.Clear();
+        var refund = await new RefundOrderCommandHandler(
+                fixture.Context, fixture.CurrentUser, new Finance.OrderCashService(fixture.Context, fixture.CurrentUser),
+                fixture.Clock, NoOpOrderInventoryService.Instance)
+            .Handle(new RefundOrderCommand { OrderId = orderId, Amount = amount, Method = method, Reason = "Ajuste de precio" }, CancellationToken.None);
+        Assert.True(refund.IsSuccess, refund.Error);
     }
 
     private static CreateOrderCommand CashSale(Guid productId, int quantity, decimal amount) => new()
