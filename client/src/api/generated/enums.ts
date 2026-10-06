@@ -257,10 +257,11 @@ export const UnitType = {
 export type UnitType = (typeof UnitType)[keyof typeof UnitType];
 
 export const UserRole = {
-  SuperAdmin: 0,
+  None: 0,
   TenantAdmin: 1,
   Staff: 2,
   Kitchen: 3,
   Customer: 4,
+  SuperAdmin: 9,
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];

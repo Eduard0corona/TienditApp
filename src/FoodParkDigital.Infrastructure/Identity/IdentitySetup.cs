@@ -13,6 +13,7 @@ public static class IdentitySetup
     public static IdentityBuilder AddTienditAppIdentityDefaults(this IdentityBuilder builder) => builder
         .AddDefaultTokenProviders()
         .AddTokenProvider<InvitationTokenProvider>(EmployeeInvitations.TokenProvider)
+        .AddPasswordValidator<GuessablePasswordValidator>()
         .AddErrorDescriber<SpanishIdentityErrorDescriber>();
 }
 

@@ -1,7 +1,9 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Catalog.Commands;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
+using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -205,26 +207,31 @@ public class TenantFileIsolationTests
         var otherTenantFiles = fixture.SeedVariantFiles($"avatars/{fixture.OtherTenantId}/avatar");
         await fixture.SetAvatarUrlAsync($"/uploads/avatars/{fixture.OtherTenantId}/avatar");
 
-        var result = await new UploadAvatarCommandHandler(
-                fixture.UserManager,
-                fixture.CurrentUser,
-                fixture.TenantService,
-                fixture.Storage,
-                new FakeImageProcessingService())
-            .Handle(
-                new UploadAvatarCommand
-                {
-                    FileStream = new MemoryStream([0x89, 0x50, 0x4E, 0x47]),
-                    FileName = "avatar.png",
-                    ContentType = "image/png",
-                    FileSize = 4
-                },
-                CancellationToken.None);
+        var result = await fixture.UploadAvatarAsync();
 
         Assert.True(result.IsSuccess, result.Error);
         AssertAllExist(otherTenantFiles);
         var user = await fixture.Context.Users.AsNoTracking().SingleAsync(u => u.Id == fixture.UserId);
-        Assert.StartsWith($"/uploads/avatars/{fixture.TenantId}/", user.AvatarUrl);
+        // The account's own folder: the same avatar in every business of the person.
+        Assert.StartsWith($"/uploads/avatars/users/{fixture.UserId}/", user.AvatarUrl);
+    }
+
+    [Fact]
+    public async Task UploadAvatar_ShouldDeleteThePreviousOne_UploadedInAnotherOfTheirBusinesses()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        await fixture.JoinOtherTenantAsync();
+        var previous = fixture.SeedVariantFiles($"avatars/{fixture.OtherTenantId}/avatar");
+        await fixture.SetAvatarUrlAsync($"/uploads/avatars/{fixture.OtherTenantId}/avatar");
+
+        var first = await fixture.UploadAvatarAsync();
+        var firstUrl = (await fixture.Context.Users.AsNoTracking().SingleAsync(u => u.Id == fixture.UserId)).AvatarUrl!;
+        var second = await fixture.UploadAvatarAsync();
+
+        Assert.True(first.IsSuccess, first.Error);
+        Assert.True(second.IsSuccess, second.Error);
+        AssertNoneExist(previous);
+        AssertNoneExist(fixture.VariantPathsOfUrl(firstUrl));
     }
 
     [Fact]
@@ -241,6 +248,36 @@ public class TenantFileIsolationTests
         AssertAllExist(otherTenantFiles);
         var user = await fixture.Context.Users.AsNoTracking().SingleAsync(u => u.Id == fixture.UserId);
         Assert.Null(user.AvatarUrl);
+    }
+
+    [Fact]
+    public async Task DeleteAvatar_ShouldDeleteTheAvatarOfTheAccountFolder()
+    {
+        await using var fixture = await TestFixture.CreateAsync();
+        var ownFiles = fixture.SeedVariantFiles($"avatars/users/{fixture.UserId}/avatar");
+        await fixture.SetAvatarUrlAsync($"/uploads/avatars/users/{fixture.UserId}/avatar");
+
+        var result = await fixture.CreateDeleteAvatarHandler()
+            .Handle(new DeleteAvatarCommand(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertNoneExist(ownFiles);
+        Assert.Null((await fixture.Context.Users.AsNoTracking().SingleAsync(u => u.Id == fixture.UserId)).AvatarUrl);
+    }
+
+    [Fact]
+    public async Task DeleteAvatar_ShouldDeleteTheAvatarUploadedInASessionWithoutBusiness()
+    {
+        // Until Phase 9 a session without a business uploaded avatars to the folder of Guid.Empty.
+        await using var fixture = await TestFixture.CreateAsync();
+        var legacyFiles = fixture.SeedVariantFiles($"avatars/{Guid.Empty}/avatar");
+        await fixture.SetAvatarUrlAsync($"/uploads/avatars/{Guid.Empty}/avatar");
+
+        var result = await fixture.CreateDeleteAvatarHandler()
+            .Handle(new DeleteAvatarCommand(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        AssertNoneExist(legacyFiles);
     }
 
     [Fact]
@@ -352,6 +389,7 @@ public class TenantFileIsolationTests
             context.Tenants.AddRange(tenant, otherTenant);
             context.Categories.Add(category);
             context.Users.Add(user);
+            context.TenantUsers.Add(new TenantUser(tenant.Id, user.Id, TenantUserRole.Owner));
             await context.SaveChangesAsync();
 
             tenantService.SetTenant(tenant.Id);
@@ -416,8 +454,27 @@ public class TenantFileIsolationTests
         public DeleteAvatarCommandHandler CreateDeleteAvatarHandler() => new(
             UserManager,
             CurrentUser,
-            _tenantService,
+            Context,
             Storage);
+
+        public Task<Result<AvatarImageUrlsDto>> UploadAvatarAsync() =>
+            new UploadAvatarCommandHandler(UserManager, CurrentUser, Context, Storage, new FakeImageProcessingService())
+                .Handle(
+                    new UploadAvatarCommand
+                    {
+                        FileStream = new MemoryStream([0x89, 0x50, 0x4E, 0x47]),
+                        FileName = "avatar.png",
+                        ContentType = "image/png",
+                        FileSize = 4
+                    },
+                    CancellationToken.None);
+
+        /// <summary>The account also belongs to the other business (its avatar may have been uploaded there).</summary>
+        public async Task JoinOtherTenantAsync()
+        {
+            Context.TenantUsers.Add(new TenantUser(OtherTenantId, UserId, TenantUserRole.Staff));
+            await Context.SaveChangesAsync();
+        }
 
         public async ValueTask DisposeAsync()
         {

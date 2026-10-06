@@ -29,6 +29,11 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
 
 public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
 {
+    /// <summary>Every refused attempt says this, so it also tells whoever got locked why.</summary>
+    public const string InvalidCredentialsMessage =
+        "Correo o contraseña incorrectos. Después de varios intentos la cuenta se bloquea unos minutos; puedes recuperar tu contraseña.";
+    public const string NotConfirmedMessage = "Debe confirmar su cuenta por email o SMS antes de iniciar sesión.";
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISignInService _signInService;
     private readonly IApplicationDbContext _context;
@@ -57,22 +62,24 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
-        if (user is null || !user.IsActive)
-            return Result.Failure<AuthResponse>("Credenciales inválidas.");
-
-        if (!user.EmailConfirmed && !user.PhoneNumberConfirmed)
-            return Result.Failure<AuthResponse>("Debe confirmar su cuenta por email o SMS antes de iniciar sesión.");
+        // An email without an account, an inactive or locked account and a wrong password get the same answer, in about
+        // the same time. A locked account answers so even to the right password: otherwise guessing it while locked
+        // would still tell which guess is right.
+        if (user is null || !user.IsActive || await _userManager.IsLockedOutAsync(user))
+        {
+            LoginTiming.CheckAgainstNoAccount(_userManager, request.Password);
+            return Result.Failure<AuthResponse>(InvalidCredentialsMessage);
+        }
 
         // Wrong passwords count per account (besides the per-IP limit): guessing from many addresses locks the account
-        // for a while. Recovering the password lifts it.
+        // for a while. Recovering the password lifts it. The attempt that locks it still answers as a wrong password.
         var signInResult = await _signInService.CheckPasswordSignInAsync(user.Id, request.Password, lockoutOnFailure: true);
         if (!signInResult.Succeeded)
-        {
-            if (signInResult.IsLockedOut)
-                return Result.Failure<AuthResponse>(AccountSecurity.LockedOutMessage);
+            return Result.Failure<AuthResponse>(InvalidCredentialsMessage);
 
-            return Result.Failure<AuthResponse>("Credenciales inválidas.");
-        }
+        // Only whoever knows the password learns that the account is not confirmed yet.
+        if (!user.EmailConfirmed && !user.PhoneNumberConfirmed)
+            return Result.Failure<AuthResponse>(NotConfirmedMessage);
 
         // Con 2FA la contraseña solo habilita el desafío del segundo paso; los tokens los emite Login2FACommand.
         var is2FAEnabled = await _userManager.GetTwoFactorEnabledAsync(user);

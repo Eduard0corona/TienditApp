@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Employees.DTOs;
+using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants;
@@ -41,7 +42,7 @@ public class CreateEmployeeCommandValidator : AbstractValidator<CreateEmployeeCo
     public CreateEmployeeCommandValidator()
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
-        RuleFor(x => x.Password).MinimumLength(6).When(x => !string.IsNullOrEmpty(x.Password));
+        RuleFor(x => x.Password).MinimumLength(PasswordPolicy.MinimumLength).When(x => !string.IsNullOrEmpty(x.Password));
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.PhoneNumber).MaximumLength(30);

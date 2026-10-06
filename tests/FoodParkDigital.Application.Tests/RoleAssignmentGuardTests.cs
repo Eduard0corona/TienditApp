@@ -10,10 +10,12 @@ namespace FoodParkDigital.Application.Tests;
 
 public class RoleAssignmentGuardTests
 {
-    [Fact]
-    public async Task Requests_ShouldRejectSuperAdmin_WhenTheyReceiveUserRole()
+    [Theory]
+    // No request assigns the platform admin, nor an omitted role (zero, which grants nothing).
+    [InlineData(UserRole.SuperAdmin)]
+    [InlineData(UserRole.None)]
+    public async Task Requests_ShouldRejectThePlatformAdminAndNoRole_WhenTheyReceiveUserRole(UserRole refused)
     {
-        // UserRole.SuperAdmin = 0, so an omitted role field also arrives as SuperAdmin.
         var applicationAssembly = typeof(CreateEmployeeCommand).Assembly;
         var requestsWithRole = applicationAssembly.GetTypes()
             .Where(type => type is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false }
@@ -28,7 +30,7 @@ public class RoleAssignmentGuardTests
             .AddValidatorsFromAssembly(applicationAssembly)
             .BuildServiceProvider();
 
-        var acceptingSuperAdmin = new List<string>();
+        var accepting = new List<string>();
         foreach (var (requestType, roleProperties) in requestsWithRole)
         {
             var validators = provider
@@ -41,7 +43,7 @@ public class RoleAssignmentGuardTests
                 var request = requestType.GetConstructor(Type.EmptyTypes) is not null
                     ? Activator.CreateInstance(requestType)!
                     : RuntimeHelpers.GetUninitializedObject(requestType);
-                roleProperty.SetValue(request, UserRole.SuperAdmin);
+                roleProperty.SetValue(request, refused);
 
                 var rejected = false;
                 foreach (var validator in validators)
@@ -53,11 +55,11 @@ public class RoleAssignmentGuardTests
                 }
 
                 if (!rejected)
-                    acceptingSuperAdmin.Add($"{requestType.FullName}.{roleProperty.Name}");
+                    accepting.Add($"{requestType.FullName}.{roleProperty.Name}");
             }
         }
 
-        Assert.Empty(acceptingSuperAdmin);
+        Assert.Empty(accepting);
     }
 
     [Theory]
@@ -73,6 +75,7 @@ public class RoleAssignmentGuardTests
     [Theory]
     [InlineData(UserRole.SuperAdmin)]
     [InlineData(UserRole.Customer)]
+    [InlineData(UserRole.None)]
     public void EmployeeValidators_ShouldRejectNonEmployeeRoles(UserRole appRole)
     {
         var createResult = new CreateEmployeeCommandValidator().Validate(CreateEmployee(appRole));

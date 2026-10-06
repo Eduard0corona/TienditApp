@@ -51,7 +51,6 @@ public class UserSessionTests
         Assert.Equal(first.SessionId, next.SessionId);
         Assert.Equal(first.SessionId.ToString(), SessionOf(signIn.AccessToken));
         Assert.Equal(first.SessionId.ToString(), SessionOf(renewed.Value.AccessToken));
-        Assert.All(tokens, token => Assert.Equal(string.Empty, token.LegacyValue));
         Assert.True(await fixture.IsOpenAsync(renewed.Value.AccessToken));
     }
 
@@ -153,6 +152,23 @@ public class UserSessionTests
     }
 
     [Fact]
+    public async Task ManyLiveTokens_ShouldBeCheckedAtOnce_LikeOneByOne()
+    {
+        // The live hub connections are checked this way, all together.
+        await using var fixture = await SessionFixture.CreateAsync();
+        var kept = await fixture.SignInAsync();
+        var signedOut = await fixture.SignInAsync();
+        await fixture.SignOutAsync(signedOut.RefreshToken!);
+
+        var open = await fixture.AreOpenAsync(kept.AccessToken, signedOut.AccessToken, kept.AccessToken);
+        await fixture.ChangeSecurityStampAsync();
+        var afterStampChange = await fixture.AreOpenAsync(kept.AccessToken, signedOut.AccessToken);
+
+        Assert.Equal([true, false, true], open);
+        Assert.Equal([false, false], afterStampChange);
+    }
+
+    [Fact]
     public async Task NewPassword_ShouldEndEverySession_AndTheirAccessTokensRightAway()
     {
         await using var fixture = await SessionFixture.CreateAsync();
@@ -209,50 +225,16 @@ public class UserSessionTests
     }
 
     [Fact]
-    public async Task TokenIssuedByThePreviousVersion_ShouldRenew_AndKeepOnlyItsHash()
+    public async Task TokenStoredWithoutItsHash_ShouldNotRenew()
     {
+        // Tokens are found only by their hash: the migration StopUsingPlainRefreshTokenValues hashed the plain values
+        // left by older versions, and a row without a hash (left by a rollback) opens nothing.
         await using var fixture = await SessionFixture.CreateAsync();
-        var legacy = await fixture.AddLegacyTokenAsync("valor-de-la-version-anterior");
+        await fixture.AddUnhashedTokenAsync("valor-sin-hash");
 
-        var renewed = await fixture.RenewAsync("valor-de-la-version-anterior");
+        var renewed = await fixture.RenewAsync("valor-sin-hash");
 
-        Assert.True(renewed.IsSuccess, renewed.Error);
-        var stored = (await fixture.TokensAsync()).Single(t => t.Id == legacy.Id);
-        Assert.Equal(RefreshToken.HashOf("valor-de-la-version-anterior"), stored.TokenHash);
-        Assert.Equal(string.Empty, stored.LegacyValue);
-        Assert.Equal(RefreshTokenRevocationReason.Rotated, stored.RevocationReason);
-        Assert.Equal(stored.SessionId.ToString(), SessionOf(renewed.Value!.AccessToken));
-    }
-
-    [Fact]
-    public async Task PlainValuesLeftByThePreviousVersion_ShouldBeHashedInBatches()
-    {
-        await using var fixture = await SessionFixture.CreateAsync();
-        await fixture.AddLegacyTokenAsync("uno");
-        await fixture.AddLegacyTokenAsync("dos", revoked: true, replacement: "tres");
-        await fixture.AddLegacyTokenAsync("tres");
-
-        var batches = new List<int>();
-        for (var i = 0; i < 3; i++)
-        {
-            await using var context = fixture.NewContext();
-            batches.Add(await UserSessions.HashLegacyTokensAsync(context, 2, CancellationToken.None));
-        }
-
-        Assert.Equal([2, 1, 0], batches);
-        var tokens = await fixture.TokensAsync();
-        Assert.All(tokens, token =>
-        {
-            Assert.Equal(string.Empty, token.LegacyValue);
-            Assert.Null(token.LegacyReplacementValue);
-            Assert.NotNull(token.TokenHash);
-        });
-        Assert.Equal(
-            RefreshTokenRevocationReason.Rotated,
-            tokens.Single(t => t.TokenHash == RefreshToken.HashOf("dos")).RevocationReason);
-        Assert.True((await fixture.RenewAsync("tres")).IsSuccess);
-        // The replaced one still counts as a copy.
-        Assert.Equal(RefreshTokenCommandHandler.InvalidSessionError, (await fixture.RenewAsync("dos")).Error);
+        Assert.Equal(RefreshTokenCommandHandler.InvalidSessionError, renewed.Error);
     }
 
     private static string? SessionOf(string? accessToken) =>
@@ -365,8 +347,21 @@ public class UserSessionTests
         /// <summary>Validated as the API does (signature, issuer, audience, lifetime), then the session.</summary>
         public async Task<bool> IsOpenAsync(string? accessToken)
         {
+            await using var context = NewContext();
+            return await new AccessTokenSessionValidator(context, Clock).IsOpenAsync(PrincipalOf(accessToken), CancellationToken.None);
+        }
+
+        public async Task<IReadOnlyList<bool>> AreOpenAsync(params string?[] accessTokens)
+        {
+            await using var context = NewContext();
+            return await new AccessTokenSessionValidator(context, Clock)
+                .AreOpenAsync(accessTokens.Select(PrincipalOf).ToList(), CancellationToken.None);
+        }
+
+        private static ClaimsPrincipal PrincipalOf(string? accessToken)
+        {
             Assert.NotNull(accessToken);
-            var principal = new JwtSecurityTokenHandler().ValidateToken(accessToken, new TokenValidationParameters
+            return new JwtSecurityTokenHandler().ValidateToken(accessToken, new TokenValidationParameters
             {
                 ValidateIssuer = true,
                 ValidateAudience = true,
@@ -377,9 +372,6 @@ public class UserSessionTests
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Settings.Secret)),
                 ClockSkew = TimeSpan.Zero
             }, out _);
-
-            await using var context = NewContext();
-            return await new AccessTokenSessionValidator(context, Clock).IsOpenAsync(principal, CancellationToken.None);
         }
 
         public async Task<List<RefreshToken>> TokensAsync()
@@ -388,15 +380,11 @@ public class UserSessionTests
             return await context.RefreshTokens.AsNoTracking().ToListAsync();
         }
 
-        /// <summary>A row the previous version wrote: the plain value, no hash, a session of its own.</summary>
-        public async Task<RefreshToken> AddLegacyTokenAsync(string value, bool revoked = false, string? replacement = null)
+        /// <summary>An active token of a session of its own whose row lost its hash.</summary>
+        public async Task<RefreshToken> AddUnhashedTokenAsync(string value)
         {
             var token = new RefreshToken(UserId, Guid.NewGuid(), value, Clock.UtcNow, Clock.UtcNow.AddDays(7));
             Set(token, nameof(RefreshToken.TokenHash), null);
-            Set(token, nameof(RefreshToken.LegacyValue), value);
-            Set(token, nameof(RefreshToken.LegacyReplacementValue), replacement);
-            // Replaced by the previous version a while ago.
-            Set(token, nameof(RefreshToken.RevokedAt), revoked ? Clock.UtcNow.AddMinutes(-5) : null);
 
             await using var context = NewContext();
             context.RefreshTokens.Add(token);

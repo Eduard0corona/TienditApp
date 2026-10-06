@@ -5,6 +5,7 @@ import { authApi } from '../../api/authApi';
 import { apiRequest } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
 import AuthCard from '../../components/auth/AuthCard';
+import { newPasswordPattern } from '../../utils/passwordRules';
 
 type Channel = 'email' | 'sms';
 
@@ -19,7 +20,6 @@ interface SmsResetForm {
 
 const RESEND_COOLDOWN_SECONDS = 60;
 // Mirrors the Identity policy configured in the API (6+ characters, upper, lower and digit).
-const PASSWORD_RULES = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
 
 /**
  * Recover the password: a link by email, or a code by SMS to the phone the account confirmed (for whoever does not
@@ -162,7 +162,7 @@ export default function ForgotPassword() {
                   className={`form-control ${resetForm.formState.errors.newPassword ? 'is-invalid' : ''}`}
                   {...resetForm.register('newPassword', {
                     required: 'Escribe la contraseña nueva.',
-                    pattern: { value: PASSWORD_RULES, message: 'Usa al menos 6 caracteres, con mayúscula, minúscula y número.' },
+                    pattern: newPasswordPattern,
                   })}
                 />
                 {resetForm.formState.errors.newPassword && (

@@ -14,22 +14,18 @@ public static class UserSessions
 {
     private const int MaxSaveAttempts = 3;
 
-    /// <summary>The stored token whose value the client presented, also one issued before tokens were hashed.</summary>
+    /// <summary>The stored token whose value the client presented.</summary>
     public static async Task<RefreshToken?> FindAsync(
         IApplicationDbContext context,
         string? value,
         CancellationToken cancellationToken)
     {
-        // Blank never matches: SQL Server ignores trailing spaces, and hashed tokens keep an empty value.
+        // Blank is never a token.
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
         var hash = RefreshToken.HashOf(value);
-        return await context.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken)
-            // Issued by the previous version: found by its value until it is hashed.
-            ?? await context.RefreshTokens.FirstOrDefaultAsync(
-                t => t.TokenHash == null && t.LegacyValue == value,
-                cancellationToken);
+        return await context.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, cancellationToken);
     }
 
     /// <summary>Ends a session: its active tokens are revoked and saved, with whatever else the context holds.</summary>
@@ -50,28 +46,6 @@ public static class UserSessions
         CancellationToken cancellationToken) =>
         RevokeAsync(context, context.RefreshTokens.Where(t => t.UserId == userId), reason, now, cancellationToken);
 
-    /// <summary>
-    /// Hashes up to <paramref name="batchSize"/> tokens issued before tokens were hashed (they keep working) and saves.
-    /// Returns how many it hashed.
-    /// </summary>
-    public static async Task<int> HashLegacyTokensAsync(
-        IApplicationDbContext context,
-        int batchSize,
-        CancellationToken cancellationToken)
-    {
-        var tokens = await context.RefreshTokens
-            .Where(t => (t.LegacyValue != null && t.LegacyValue != "") || t.LegacyReplacementValue != null)
-            .OrderBy(t => t.Id)
-            .Take(batchSize)
-            .ToListAsync(cancellationToken);
-
-        foreach (var token in tokens)
-            token.HashLegacyValue();
-
-        await context.SaveChangesAsync(cancellationToken);
-        return tokens.Count;
-    }
-
     private static async Task RevokeAsync(
         IApplicationDbContext context,
         IQueryable<RefreshToken> tokens,
@@ -85,10 +59,7 @@ public static class UserSessions
                 .Where(t => t.RevokedAt == null && t.ExpiresAt > now)
                 .ToListAsync(cancellationToken);
             foreach (var token in active)
-            {
-                token.HashLegacyValue();
                 token.Revoke(reason, now);
-            }
 
             try
             {

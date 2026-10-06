@@ -1,6 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
-using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Domain.Identity.Entities;
 using MediatR;
@@ -15,18 +14,18 @@ public class DeleteAvatarCommandHandler : IRequestHandler<DeleteAvatarCommand, R
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUserService _currentUserService;
-    private readonly ICurrentTenantService _tenantService;
+    private readonly IApplicationDbContext _context;
     private readonly IFileStorageService _fileStorageService;
 
     public DeleteAvatarCommandHandler(
         UserManager<ApplicationUser> userManager,
         ICurrentUserService currentUserService,
-        ICurrentTenantService tenantService,
+        IApplicationDbContext context,
         IFileStorageService fileStorageService)
     {
         _userManager = userManager;
         _currentUserService = currentUserService;
-        _tenantService = tenantService;
+        _context = context;
         _fileStorageService = fileStorageService;
     }
 
@@ -43,13 +42,14 @@ public class DeleteAvatarCommandHandler : IRequestHandler<DeleteAvatarCommand, R
         if (string.IsNullOrEmpty(user.AvatarUrl))
             return Result.Success();
 
-        await _fileStorageService.DeleteVariantsAsync(
-            user.AvatarUrl,
-            TenantStorageFolders.Avatars(_tenantService.TenantId),
-            cancellationToken);
+        // The files go only once the account no longer points to them.
+        var avatarUrl = user.AvatarUrl;
         user.AvatarUrl = null;
-        await _userManager.UpdateAsync(user);
+        var updated = await _userManager.UpdateAsync(user);
+        if (!updated.Succeeded)
+            return Result.Failure("No se pudo quitar el avatar.");
 
+        await AvatarFiles.DeleteAsync(_fileStorageService, _context, user.Id, avatarUrl, cancellationToken);
         return Result.Success();
     }
 }

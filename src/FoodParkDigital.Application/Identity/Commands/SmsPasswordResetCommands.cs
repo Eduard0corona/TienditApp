@@ -88,7 +88,7 @@ public class ResetPasswordWithSmsCodeCommandValidator : AbstractValidator<ResetP
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
         RuleFor(x => x.Code).NotEmpty().Matches(@"^\d{5,6}$").WithMessage("El código tiene 5 o 6 dígitos.");
-        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(6);
+        RuleFor(x => x.NewPassword).NewPassword();
     }
 }
 

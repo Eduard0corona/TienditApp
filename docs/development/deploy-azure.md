@@ -56,9 +56,18 @@ Si hubiera que volver a la versión anterior, los archivos no se pierden, pero e
 El `apply.sql` de la Fase 8 se aplica, como siempre, mientras corre la versión anterior, y ella sigue funcionando: escribe sus refresh tokens en texto (cada uno con una sesión propia) y agrega partidas y cambios de estado sin negocio. Al arrancar, la versión nueva:
 
 - da a esas partidas y cambios de estado el negocio de su orden (`OrderTenantBackfillService`, en cada arranque y también en el slot de staging; no hace nada cuando no hay pendientes). Hasta entonces el filtro por negocio los oculta;
-- con `BackgroundJobs__Enabled` (no en el slot), convierte a hash los refresh tokens en texto y registra cuántos (`Hashed {Count} refresh tokens stored as plain values`); un token que llega antes se convierte al usarse.
+- con `BackgroundJobs__Enabled` (no en el slot), convierte a hash los refresh tokens en texto y registra cuántos (`Hashed {Count} refresh tokens stored as plain values`); un token que llega antes se convierte al usarse. La Fase 9 quita ese proceso: su migración convierte lo que quede.
 
 Después del despliegue, cada cliente renueva su sesión una vez sin notarlo, porque los access tokens anteriores no traen sesión. Volver a la versión anterior con un swap funciona sin `rollback.sql`: esa versión sigue leyendo todas las filas (la nueva deja vacía, nunca nula, la columna del valor del token); las sesiones abiertas por la versión nueva terminan y cada quien inicia sesión otra vez.
+
+## Cuentas, sesiones y archivos (Fase 9)
+
+El `apply.sql` de la Fase 9 no cambia el esquema: convierte a hash los refresh tokens que aún estén en texto (con la Fase 8 desplegada y sus jobs activos, normalmente ninguno) y se aplica, como siempre, mientras corre la versión anterior. Volver a la Fase 8 funciona sin `rollback.sql`: lee las filas con hash y trata como "sin valor en texto" el `Token` nulo que dejan los tokens nuevos. Las columnas `Token` y `ReplacedByToken` se borran en una fase posterior.
+
+- `Hubs__AccessCheckInterval` (por defecto `00:00:30`): cada cuánto se revisan las conexiones abiertas a los hubs. Una conexión cuya sesión terminó, o que perdió el acceso al negocio o el permiso del hub, se cierra en la siguiente revisión. Cada instancia revisa las conexiones que atiende.
+- Las contraseñas nuevas exigen 8 caracteres con mayúscula, minúscula y dígito, y no pueden ser comunes ni contener el correo o el nombre. Las actuales siguen valiendo hasta que se cambien.
+- Los avatares nuevos van a `avatars/users/{cuenta}` en el almacenamiento público; los anteriores se quedan donde están y se borran de ahí al cambiarlos.
+- Aparte, en cualquier momento: el [procedimiento para las fotos de producto con la dirección de otro negocio](../../database/production/data-repair/20261005_StorageUrlsOutsideTheirFolder/README.md).
 
 ## Slot de staging con swap y aprobación
 

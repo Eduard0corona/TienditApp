@@ -19,10 +19,12 @@ public class OrderHub : Hub
     ];
 
     private readonly ITenantAccessService _tenantAccessService;
+    private readonly HubConnections _connections;
 
-    public OrderHub(ITenantAccessService tenantAccessService)
+    public OrderHub(ITenantAccessService tenantAccessService, HubConnections connections)
     {
         _tenantAccessService = tenantAccessService;
+        _connections = connections;
     }
 
     public override async Task OnConnectedAsync()
@@ -35,11 +37,14 @@ public class OrderHub : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"tenant_{access.TenantId}");
+        // Checked again while it lives: it closes when its session ends or it loses these permissions.
+        _connections.Add(Context, access => access.HasAnyPermission(OrderEventPermissions));
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        _connections.Remove(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 }

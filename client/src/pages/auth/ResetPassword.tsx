@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import BrandLogo from '../../components/common/BrandLogo';
 import { getApiErrorMessage } from '../../api/errors';
+import { newPasswordPattern } from '../../utils/passwordRules';
 
 interface ResetPasswordForm {
   newPassword: string;
@@ -11,7 +12,6 @@ interface ResetPasswordForm {
 }
 
 // Mirrors the Identity policy configured in the API (6+ characters, upper, lower and digit).
-const PASSWORD_RULES = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -81,10 +81,7 @@ export default function ResetPassword() {
                           className={`form-control ${errors.newPassword ? 'is-invalid' : ''}`}
                           {...register('newPassword', {
                             required: 'La contraseña es requerida',
-                            pattern: {
-                              value: PASSWORD_RULES,
-                              message: 'Usa al menos 6 caracteres con mayúscula, minúscula y número.',
-                            },
+                            pattern: newPasswordPattern,
                           })}
                         />
                         {errors.newPassword && <div className="invalid-feedback">{errors.newPassword.message}</div>}

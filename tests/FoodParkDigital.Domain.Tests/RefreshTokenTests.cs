@@ -15,8 +15,6 @@ public class RefreshTokenTests
 
         Assert.Equal(RefreshToken.HashOf("valor-del-token"), token.TokenHash);
         Assert.Matches("^[0-9A-F]{64}$", token.TokenHash);
-        // Empty, not null: the previous version reads it as required.
-        Assert.Equal(string.Empty, token.LegacyValue);
         Assert.True(token.IsActive);
     }
 
@@ -40,34 +38,14 @@ public class RefreshTokenTests
         Assert.Equal(Now, token.RevokedAt);
     }
 
-    [Theory]
-    [InlineData(false, false, null)]
-    // Replaced by the previous version: presenting it again still counts as a reuse.
-    [InlineData(true, true, RefreshTokenRevocationReason.Rotated)]
-    // Signed out with the previous version: no replacement.
-    [InlineData(true, false, null)]
-    public void LegacyToken_ShouldKeepOnlyItsHash(bool revoked, bool replaced, RefreshTokenRevocationReason? expectedReason)
-    {
-        var token = Legacy("valor-anterior", revoked ? Now : null, replaced ? "valor-siguiente" : null);
-
-        token.HashLegacyValue();
-
-        Assert.Equal(RefreshToken.HashOf("valor-anterior"), token.TokenHash);
-        Assert.Equal(string.Empty, token.LegacyValue);
-        Assert.Null(token.LegacyReplacementValue);
-        Assert.Equal(expectedReason, token.RevocationReason);
-    }
-
     [Fact]
-    public void TokenLeftWithoutItsHashByARollback_ShouldNotGetTheHashOfAnEmptyValue()
+    public void Hash_ShouldBeTheUppercaseHexOfTheSha256OfTheUtf8Value()
     {
-        // Hashed by this version, then the rollback dropped the hash and kept the empty value: it opens nothing.
-        var token = Legacy("", null, null);
-
-        token.HashLegacyValue();
-
-        Assert.Null(token.TokenHash);
-        Assert.Equal(string.Empty, token.LegacyValue);
+        // The migration StopUsingPlainRefreshTokenValues computes the same in SQL (HASHBYTES, style 2) for the plain
+        // values older versions stored: a change here would end those sessions.
+        Assert.Equal(
+            "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08",
+            RefreshToken.HashOf("test"));
     }
 
     [Fact]
@@ -78,18 +56,4 @@ public class RefreshTokenTests
             Enum.GetValues<RefreshTokenRevocationReason>().Select(reason => (int)reason));
         Assert.Equal(3, (int)RefreshTokenRevocationReason.ReuseDetected);
     }
-
-    /// <summary>A row the previous version wrote: the plain value and no hash.</summary>
-    private static RefreshToken Legacy(string value, DateTimeOffset? revokedAt, string? replacement)
-    {
-        var token = new RefreshToken(Guid.NewGuid(), Guid.NewGuid(), "otro-valor", Now, Now.AddDays(7));
-        Set(token, nameof(RefreshToken.TokenHash), null);
-        Set(token, nameof(RefreshToken.LegacyValue), value);
-        Set(token, nameof(RefreshToken.LegacyReplacementValue), replacement);
-        Set(token, nameof(RefreshToken.RevokedAt), revokedAt);
-        return token;
-    }
-
-    private static void Set(RefreshToken token, string property, object? value) =>
-        typeof(RefreshToken).GetProperty(property)!.SetValue(token, value);
 }

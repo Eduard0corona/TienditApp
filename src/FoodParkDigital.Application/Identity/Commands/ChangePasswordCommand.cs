@@ -22,7 +22,7 @@ public class ChangePasswordCommandValidator : AbstractValidator<ChangePasswordCo
     public ChangePasswordCommandValidator()
     {
         RuleFor(x => x.CurrentPassword).NotEmpty();
-        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(6);
+        RuleFor(x => x.NewPassword).NewPassword();
         RuleFor(x => x.NewPassword)
             .NotEqual(x => x.CurrentPassword)
             .WithMessage("La nueva contraseña debe ser diferente a la actual.");

@@ -1,4 +1,6 @@
 using FoodParkDigital.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Infrastructure.Tests;
 
@@ -89,6 +91,38 @@ public class AzureBlobFileStorageServiceTests
         Assert.Throws<ArgumentException>(() => AzureBlobFileStorageService.TryResolveBlobName(
             ContainerUri, "/uploads/products/tenant/image", folder, out _));
     }
+
+    [Theory]
+    [InlineData("products/../..", "imagen.webp")]
+    [InlineData("/products/tenant", "imagen.webp")]
+    [InlineData("products/tenant", "../imagen.webp")]
+    [InlineData("products/tenant", "sub/imagen.webp")]
+    [InlineData("products/tenant", "imagen%2Fwebp")]
+    public async Task UploadAsync_ShouldRefuse_FoldersAndNamesThatCouldLeaveTheFolder(string folder, string fileName)
+    {
+        // Refused before reaching the storage: the emulator's address is never called.
+        await Assert.ThrowsAsync<ArgumentException>(() => Storage().UploadAsync(
+            new MemoryStream([0x52, 0x49, 0x46, 0x46]), fileName, "image/webp", folder));
+    }
+
+    [Fact]
+    public void IsStoredIn_ShouldFollowTheRulesOfDeleting()
+    {
+        var storage = Storage();
+        var container = "http://127.0.0.1:10000/devstoreaccount1/uploads";
+
+        Assert.True(storage.IsStoredIn($"{container}/{OwnFolder}/image", OwnFolder));
+        Assert.False(storage.IsStoredIn($"{container}/products/{_otherTenantId}/image", OwnFolder));
+        Assert.False(storage.IsStoredIn($"{container}/{OwnFolder}/../{_otherTenantId}/image", OwnFolder));
+    }
+
+    private static AzureBlobFileStorageService Storage() => new(
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["FileStorage:AzureBlob:ConnectionString"] = "UseDevelopmentStorage=true",
+            ["FileStorage:AzureBlob:ContainerName"] = "uploads"
+        }).Build(),
+        NullLogger<AzureBlobFileStorageService>.Instance);
 
     private string Resolve(string template) => template
         .Replace("{own}", _ownTenantId.ToString())

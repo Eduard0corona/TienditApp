@@ -24,11 +24,9 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         // Two renewals with the same token: only the first one replaces it.
         builder.Property(r => r.RevokedAt).IsConcurrencyToken();
 
-        // Plain values of the tokens issued before they were hashed. The new version only empties them; they go
-        // away with their columns once no version writes them.
-        builder.Property(r => r.LegacyValue).HasColumnName("Token").HasMaxLength(500);
-        builder.Property(r => r.LegacyReplacementValue).HasColumnName("ReplacedByToken").HasMaxLength(500);
-        builder.HasIndex(r => r.LegacyValue).HasDatabaseName("IX_RefreshTokens_Token");
+        // The columns Token and ReplacedByToken (plain values from before tokens were hashed, emptied by the migration
+        // StopUsingPlainRefreshTokenValues) stay in the table, unmapped: the version running while that migration is
+        // applied, and the one to go back to if this one is reverted, still read them. A later migration drops them.
 
         builder.HasOne(r => r.User)
             .WithMany()

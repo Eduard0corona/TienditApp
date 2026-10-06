@@ -11,14 +11,16 @@ using FoodParkDigital.Infrastructure.Tests.BackgroundJobs;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// Refresh tokens in SQL Server: a token renews its session once even when two requests present it together, and
-/// the rows the previous version keeps writing while the migration is applied still work.
+/// Refresh tokens in SQL Server: a token renews its session once even when two requests present it together, and the
+/// migration that stops using plain values keeps the sessions of the tokens issued before the hashing.
 /// </summary>
 public class RefreshTokenSqlServerTests
 {
@@ -62,110 +64,73 @@ public class RefreshTokenSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task RowsWrittenByThePreviousVersion_ShouldGetASessionEach_AndStillBeFoundByTheirValue()
+    public async Task Migration_ShouldHashThePlainValuesLeft_SoTheirSessionsKeepWorking_AndStoreNoValue()
     {
-        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var database = SqlServerTestDatabase.CreateEmpty();
+        await MigrateAsync(database, LastMigrationOfThePreviousVersion);
         var userId = await SeedUserAsync(database);
         var now = DateTimeOffset.UtcNow;
         await using (var context = database.CreateContext())
         {
-            // The insert of the previous version: the plain value, no hash and no session.
-            foreach (var (value, revokedAt, replacement) in new[]
+            foreach (var (value, hash, revokedAt, replacement) in new[]
                      {
-                         ("valor-activo", (DateTimeOffset?)null, (string?)null),
-                         ("valor-reemplazado", now, "valor-activo")
+                         // Issued before the hashing and not used since.
+                         ("valor-activo", (string?)null, (DateTimeOffset?)null, (string?)null),
+                         // Replaced before the hashing: presenting it again must still count as a copy.
+                         ("valor-reemplazado", null, now, "valor-activo"),
+                         // Issued by the previous version: only its hash.
+                         ("", RefreshToken.HashOf("valor-con-hash"), null, null),
+                         // Left without its hash by a rollback: it opens nothing, and stays so.
+                         ("", null, null, null)
                      })
             {
                 await context.Database.ExecuteSqlInterpolatedAsync($"""
-                    INSERT INTO RefreshTokens (Id, UserId, Token, ExpiresAt, CreatedAt, RevokedAt, ReplacedByToken)
-                    VALUES ({Guid.NewGuid()}, {userId}, {value}, {now.AddDays(7)}, {now}, {revokedAt}, {replacement})
+                    INSERT INTO RefreshTokens (Id, UserId, Token, TokenHash, ExpiresAt, CreatedAt, RevokedAt, ReplacedByToken)
+                    VALUES ({Guid.NewGuid()}, {userId}, {value}, {hash}, {now.AddDays(7)}, {now}, {revokedAt}, {replacement})
                     """);
             }
         }
 
-        await using (var context = database.CreateContext())
-        {
-            var legacy = await context.RefreshTokens.AsNoTracking().ToListAsync();
-            Assert.All(legacy, token => Assert.NotEqual(Guid.Empty, token.SessionId));
-            Assert.NotEqual(legacy[0].SessionId, legacy[1].SessionId);
-            Assert.NotNull(await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None));
-        }
-
-        await using (var context = database.CreateContext())
-            Assert.Equal(2, await UserSessions.HashLegacyTokensAsync(context, 100, CancellationToken.None));
+        await MigrateAsync(database);
 
         await using (var context = database.CreateContext())
         {
-            Assert.Equal(0, await PlainValuesAsync(context));
-            Assert.Equal(0, await NullValuesAsync(context));
+            // The hash computed in SQL is the one this version computes for the value presented.
             var active = await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None);
             var replaced = await UserSessions.FindAsync(context, "valor-reemplazado", CancellationToken.None);
-            Assert.Equal(RefreshToken.HashOf("valor-activo"), active!.TokenHash);
+            Assert.True(active!.IsActive);
             Assert.True(replaced!.WasRotated);
-        }
-    }
+            Assert.NotNull(await UserSessions.FindAsync(context, "valor-con-hash", CancellationToken.None));
+            Assert.Equal(1, await context.RefreshTokens.CountAsync(t => t.TokenHash == null));
+            Assert.Equal(0, await PlainValuesAsync(context));
 
-    [SqlServerFact]
-    public async Task TokensOfThisVersion_ShouldKeepAnEmptyValue_ThatThePreviousVersionStillReads()
-    {
-        await using var database = await SqlServerTestDatabase.CreateAsync();
-        var clock = new MutableClock { UtcNow = DateTimeOffset.UtcNow };
-        var userId = await SeedUserAsync(database);
-        var signIn = new JwtTokenService(Options.Create(Settings), clock).GenerateRefreshToken(userId, Guid.NewGuid());
-        await using (var context = database.CreateContext())
-        {
-            context.RefreshTokens.Add(signIn.Token);
+            // This version stores no value at all: the column, still there for the previous version, stays null.
+            context.RefreshTokens.Add(new RefreshToken(userId, Guid.NewGuid(), "valor-nuevo", now, now.AddDays(7)));
             await context.SaveChangesAsync();
+            Assert.Equal(1, await NullValuesAsync(context));
         }
 
-        var renewed = await RenewAsync(database, clock, signIn.Value);
-        Assert.True(renewed.IsSuccess, renewed.Error);
+        // A rollback (its Down changes nothing) and the script applied again: the same result.
+        await MigrateAsync(database, LastMigrationOfThePreviousVersion);
+        await MigrateAsync(database);
         await using (var context = database.CreateContext())
-            await UserSessions.EndAllAsync(
-                context, userId, RefreshTokenRevocationReason.PasswordChanged, clock.UtcNow, CancellationToken.None);
-
-        // The previous version reads Token as required (going back to it with a swap): no row may leave it null.
-        await using var check = database.CreateContext();
-        Assert.Equal(2, await check.RefreshTokens.CountAsync());
-        Assert.Equal(0, await NullValuesAsync(check));
-        Assert.Equal(0, await PlainValuesAsync(check));
+        {
+            Assert.True((await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None))!.IsActive);
+            Assert.Equal(0, await PlainValuesAsync(context));
+            Assert.Equal(1, await NullValuesAsync(context));
+        }
     }
 
-    [SqlServerFact]
-    public async Task RowsLeftWithoutAHashByARollback_ShouldOpenNothing_AndNotStopTheHashing()
+    private const string LastMigrationOfThePreviousVersion = "20261005095544_ScopeOrderLinesAndHistoryByTenant";
+
+    /// <summary>Applies the migrations up to <paramref name="target"/> (all of them without one), as a deployment does.</summary>
+    private static async Task MigrateAsync(SqlServerTestDatabase database, string? target = null)
     {
-        await using var database = await SqlServerTestDatabase.CreateAsync();
-        var userId = await SeedUserAsync(database);
-        var now = DateTimeOffset.UtcNow;
-        await using (var context = database.CreateContext())
-        {
-            // Two sessions hashed by this version whose hash the rollback dropped (applying the migration again adds
-            // the column empty), and a token the previous version issued meanwhile.
-            foreach (var value in new[] { "", "", "valor-activo" })
-            {
-                await context.Database.ExecuteSqlInterpolatedAsync($"""
-                    INSERT INTO RefreshTokens (Id, UserId, Token, ExpiresAt, CreatedAt)
-                    VALUES ({Guid.NewGuid()}, {userId}, {value}, {now.AddDays(7)}, {now})
-                    """);
-            }
-        }
-
-        // Only the plain value is hashed: the empty ones would all get the same hash, which the unique index refuses.
-        await using (var context = database.CreateContext())
-            Assert.Equal(1, await UserSessions.HashLegacyTokensAsync(context, 100, CancellationToken.None));
-
-        await using (var context = database.CreateContext())
-        {
-            Assert.Equal(0, await UserSessions.HashLegacyTokensAsync(context, 100, CancellationToken.None));
-            Assert.NotNull(await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None));
-            // SQL Server compares N' ' equal to N'': a blank value is refused before the lookup.
-            Assert.Null(await UserSessions.FindAsync(context, "", CancellationToken.None));
-            Assert.Null(await UserSessions.FindAsync(context, " ", CancellationToken.None));
-            Assert.Equal(2, await context.RefreshTokens.CountAsync(t => t.TokenHash == null));
-        }
+        await using var context = database.CreateContext();
+        await context.GetService<IMigrator>().MigrateAsync(target);
     }
 
-    /// <summary>Rows that keep the plain value of a token or of its replacement.</summary>
+    /// <summary>Rows that keep the plain value of a token or of its replacement (columns this version no longer maps).</summary>
     private static Task<int> PlainValuesAsync(ApplicationDbContext context) =>
         context.Database
             .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM RefreshTokens WHERE Token <> '' OR ReplacedByToken IS NOT NULL")
@@ -208,6 +173,7 @@ public class RefreshTokenSqlServerTests
             FirstName = "Sesión",
             LastName = "Demo",
             SecurityStamp = Guid.NewGuid().ToString("N"),
+            Role = UserRole.Staff,
             IsActive = true
         };
         context.Users.Add(user);

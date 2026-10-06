@@ -9,6 +9,7 @@ import type { UpdateProfileRequest, ChangePasswordRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
 import PhoneChangeCard from '../../components/profile/PhoneChangeCard';
 import { formatInBusinessZone } from '../../utils/dates';
+import { newPasswordPattern } from '../../utils/passwordRules';
 
 interface DisableTwoFactorForm {
   code: string;
@@ -401,7 +402,7 @@ export default function Profile() {
                         className={`form-control ${passwordErrors.newPassword ? 'is-invalid' : ''}`}
                         {...regPassword('newPassword', {
                           required: 'Requerido',
-                          minLength: { value: 6, message: 'Mínimo 6 caracteres' },
+                          pattern: newPasswordPattern,
                         })}
                       />
                       {passwordErrors.newPassword && (

@@ -71,10 +71,7 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
             ?? throw new EntityNotFoundException("Product", request.ProductId);
 
         var folder = TenantStorageFolders.ProductImages(_tenantService.TenantId);
-
-        // Eliminar variantes anteriores si existen (solo dentro de la carpeta del tenant)
-        if (!string.IsNullOrEmpty(product.ImageUrl))
-            await _fileStorageService.DeleteVariantsAsync(product.ImageUrl, folder, cancellationToken);
+        var previousImageUrl = product.ImageUrl;
 
         // Generar variantes de imagen
         var variants = await _imageProcessingService.GenerateVariantsAsync(
@@ -113,6 +110,11 @@ public class UploadProductImageCommandHandler : IRequestHandler<UploadProductIma
         product.SetImage(baseUrl);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        // The previous variants go only once the new image is stored (only inside the business's folder): deleting
+        // them first left the product pointing to missing files whenever the new image was rejected.
+        if (!string.IsNullOrEmpty(previousImageUrl))
+            await _fileStorageService.DeleteVariantsAsync(previousImageUrl, folder, cancellationToken);
 
         return Result.Success(ProductImageUrlsDto.FromBaseUrl(baseUrl)!);
     }

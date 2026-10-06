@@ -24,7 +24,6 @@ public class RefreshToken : BaseEntity
         UserId = userId;
         SessionId = sessionId;
         TokenHash = HashOf(value);
-        LegacyValue = string.Empty;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
     }
@@ -34,18 +33,11 @@ public class RefreshToken : BaseEntity
     /// <summary>The sign-in this token renews: every rotation keeps it, and the access tokens of the session carry it.</summary>
     public Guid SessionId { get; private set; }
 
-    /// <summary>SHA-256 of the value, in hexadecimal. Empty only for a token issued before tokens were hashed, until it is.</summary>
-    public string? TokenHash { get; private set; }
-
     /// <summary>
-    /// The value of a token issued before tokens were hashed; empty once it is, and for the tokens issued since. Empty,
-    /// not null: the previous version reads it as required, so going back to that version keeps working, and both
-    /// reject an empty token, so it opens no session.
+    /// SHA-256 of the value, in hexadecimal. Null only in rows a rollback of the hashing left without it: they open no
+    /// session.
     /// </summary>
-    public string? LegacyValue { get; private set; }
-
-    /// <summary>The value of the replacement of a token rotated before tokens were hashed; emptied once it is.</summary>
-    public string? LegacyReplacementValue { get; private set; }
+    public string? TokenHash { get; private set; }
 
     public DateTimeOffset ExpiresAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -69,21 +61,6 @@ public class RefreshToken : BaseEntity
 
         RevokedAt = now;
         RevocationReason = reason;
-    }
-
-    /// <summary>
-    /// Keeps only the hash of a token issued before tokens were hashed. It goes on working (or, if it was already
-    /// replaced, it still counts as rotated) but its value, and the one of its replacement, are no longer stored.
-    /// </summary>
-    public void HashLegacyValue()
-    {
-        if (!string.IsNullOrEmpty(LegacyValue))
-            TokenHash ??= HashOf(LegacyValue);
-        if (RevokedAt is not null && RevocationReason is null && LegacyReplacementValue is not null)
-            RevocationReason = RefreshTokenRevocationReason.Rotated;
-
-        LegacyValue = string.Empty;
-        LegacyReplacementValue = null;
     }
 
     public static string HashOf(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

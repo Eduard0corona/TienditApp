@@ -116,6 +116,39 @@ public sealed class LocalFileStorageServiceTests : IDisposable
             () => _storage.DeleteVariantsAsync("/uploads/products/tenant/image", folder));
     }
 
+    [Theory]
+    [InlineData("products/../..", "imagen.webp")]
+    [InlineData("/products/tenant", "imagen.webp")]
+    [InlineData("products\\tenant", "imagen.webp")]
+    [InlineData("products/tenant", "../../appsettings.json")]
+    [InlineData("products/tenant", "sub/imagen.webp")]
+    [InlineData("products/tenant", "..")]
+    [InlineData("products/tenant", "imagen%2Fwebp")]
+    [InlineData("products/tenant", "")]
+    public async Task UploadAsync_ShouldRefuse_FoldersAndNamesThatCouldLeaveTheFolder(string folder, string fileName)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _storage.UploadAsync(
+            new MemoryStream([0x52, 0x49, 0x46, 0x46]), fileName, "image/webp", folder));
+
+        Assert.Empty(Directory.Exists(_contentRoot)
+            ? Directory.GetFiles(_contentRoot, "*", SearchOption.AllDirectories)
+            : []);
+    }
+
+    [Theory]
+    [MemberData(nameof(UrlsOutsideOwnFolder))]
+    public void IsStoredIn_ShouldRefuse_WhatDeletingRefuses(string urlTemplate, string targetTemplate)
+    {
+        _ = targetTemplate;
+        Assert.False(_storage.IsStoredIn(Resolve(urlTemplate), OwnFolder));
+    }
+
+    [Fact]
+    public void IsStoredIn_ShouldAccept_AFileOfTheFolder()
+    {
+        Assert.True(_storage.IsStoredIn($"/uploads/{OwnFolder}/image", OwnFolder));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_contentRoot))

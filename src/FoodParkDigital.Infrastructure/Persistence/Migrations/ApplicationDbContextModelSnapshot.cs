@@ -1403,16 +1403,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("LegacyReplacementValue")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
-                        .HasColumnName("ReplacedByToken");
-
-                    b.Property<string>("LegacyValue")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
-                        .HasColumnName("Token");
-
                     b.Property<int?>("RevocationReason")
                         .HasColumnType("int");
 
@@ -1434,9 +1424,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("LegacyValue")
-                        .HasDatabaseName("IX_RefreshTokens_Token");
 
                     b.HasIndex("SessionId");
 
