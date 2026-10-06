@@ -55,26 +55,30 @@ public class InstallCategoryTemplateCommandHandler : IRequestHandler<InstallCate
             existingNames.Select(NormalizeCategoryName),
             StringComparer.Ordinal);
 
-        var createdCount = 0;
+        var toCreate = new List<Category>();
         foreach (var item in template.Categories.OrderBy(x => x.SortOrder))
         {
             var normalizedName = NormalizeCategoryName(item.Name);
-            if (normalizedNames.Contains(normalizedName))
+            if (!normalizedNames.Add(normalizedName))
                 continue;
 
-            var category = new Category(
+            toCreate.Add(new Category(
                 _tenantService.TenantId,
                 item.Name,
                 item.Description,
-                item.SortOrder);
-
-            _context.Categories.Add(category);
-            normalizedNames.Add(normalizedName);
-            createdCount++;
+                item.SortOrder));
         }
 
+        // The whole template or nothing: half of it would leave the business with categories it did not choose.
+        if (existingNames.Count + toCreate.Count > Category.MaxCategoriesPerTenant)
+            return Result.Failure<InstallCategoryTemplateResultDto>(CategoryLimits.Reached);
+
+        var createdCount = toCreate.Count;
         if (createdCount > 0)
+        {
+            _context.Categories.AddRange(toCreate);
             await _context.SaveChangesAsync(cancellationToken);
+        }
 
         var total = template.Categories.Count;
         return Result.Success(new InstallCategoryTemplateResultDto

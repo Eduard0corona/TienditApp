@@ -33,8 +33,6 @@ public class Product : AuditableEntity, ITenantScoped
         decimal? taxRate = null,
         int? calories = null,
         string? allergens = null,
-        int? stockQuantity = null,
-        int? lowStockThreshold = null,
         int? maxQuantityPerOrder = null,
         UnitType? unit = null,
         TimeSpan? availableFromTime = null,
@@ -60,8 +58,6 @@ public class Product : AuditableEntity, ITenantScoped
         SetTax(taxRate, isTaxExempt);
         Calories = calories;
         Allergens = allergens;
-        StockQuantity = stockQuantity;
-        LowStockThreshold = lowStockThreshold;
         MaxQuantityPerOrder = maxQuantityPerOrder;
         Unit = unit;
         IsTrackable = isTrackable;
@@ -110,9 +106,7 @@ public class Product : AuditableEntity, ITenantScoped
     public int? Calories { get; private set; }
     public string? Allergens { get; private set; }
 
-    // Inventory (Retail)
-    public int? StockQuantity { get; private set; }
-    public int? LowStockThreshold { get; private set; }
+    // Retail
     public int? MaxQuantityPerOrder { get; private set; }
     public TimeSpan? AvailableFromTime { get; private set; }
     public TimeSpan? AvailableToTime { get; private set; }
@@ -140,8 +134,6 @@ public class Product : AuditableEntity, ITenantScoped
         decimal? taxRate,
         int? calories,
         string? allergens,
-        int? stockQuantity,
-        int? lowStockThreshold,
         int? maxQuantityPerOrder,
         UnitType? unit,
         TimeSpan? availableFromTime,
@@ -165,8 +157,6 @@ public class Product : AuditableEntity, ITenantScoped
         SetTax(taxRate, isTaxExempt);
         Calories = calories;
         Allergens = allergens;
-        StockQuantity = stockQuantity;
-        LowStockThreshold = lowStockThreshold;
         MaxQuantityPerOrder = maxQuantityPerOrder;
         Unit = unit;
         IsTrackable = isTrackable;

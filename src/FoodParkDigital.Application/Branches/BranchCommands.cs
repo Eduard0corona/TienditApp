@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -109,12 +110,16 @@ public class CreateBranchCommandHandler : IRequestHandler<CreateBranchCommand, R
             if (planError is not null)
                 return Result.Failure<BranchDto>(planError);
 
+            // The branch comes with its warehouse, which counts towards the business's locations.
+            var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, tenantId, ct);
+            var withWarehouse = TenantCapabilityRules.CanAccessInventory(capabilities);
+            if (withWarehouse && await _context.InventoryLocations.CountAsync(ct) >= InventoryLocation.MaxLocationsPerTenant)
+                return Result.Failure<BranchDto>(InventoryLocationLimits.Reached);
+
             var makeDefault = request.IsDefault || !await _context.Branches.AnyAsync(x => x.IsDefault, ct);
             var branch = new Branch(tenantId, request.Name, request.Code, request.ToContact());
             _context.Branches.Add(branch);
-
-            var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, tenantId, ct);
-            if (TenantCapabilityRules.CanAccessInventory(capabilities))
+            if (withWarehouse)
                 _context.InventoryLocations.Add(await NewStockLocationAsync(branch, ct));
 
             await _context.SaveChangesAsync(ct);

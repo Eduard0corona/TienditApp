@@ -15,6 +15,9 @@ public record GetKitchenTicketsQuery : IRequest<List<KitchenTicketDto>>;
 
 public class GetKitchenTicketsQueryHandler : IRequestHandler<GetKitchenTicketsQuery, List<KitchenTicketDto>>
 {
+    /// <summary>The board shows the newest ones: rounds left unmoved for days do not hide today's.</summary>
+    public const int MaxTickets = 200;
+
     private readonly IApplicationDbContext _context;
 
     public GetKitchenTicketsQueryHandler(IApplicationDbContext context)
@@ -43,11 +46,14 @@ public class GetKitchenTicketsQueryHandler : IRequestHandler<GetKitchenTicketsQu
                     order.TableNumber,
                     order.CustomerNotes
                 })
-            .OrderBy(x => x.Ticket.SentAt)
-            .Take(200)
+            .OrderByDescending(x => x.Ticket.SentAt)
+            .ThenByDescending(x => x.Ticket.Round)
+            .ThenByDescending(x => x.Ticket.Id)
+            .Take(MaxTickets)
             .ToListAsync(cancellationToken);
         if (tickets.Count == 0)
             return [];
+        tickets.Reverse();
 
         var orderIds = tickets.Select(x => x.Ticket.OrderId).Distinct().ToList();
         var items = await _context.OrderItems

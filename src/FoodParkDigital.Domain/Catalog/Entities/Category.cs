@@ -4,6 +4,9 @@ namespace FoodParkDigital.Domain.Catalog.Entities;
 
 public class Category : AuditableEntity, ITenantScoped
 {
+    /// <summary>Archived ones included: the list of a business shows them all, without pages.</summary>
+    public const int MaxCategoriesPerTenant = 300;
+
     private Category() { }
 
     public Category(Guid tenantId, string name, string? description, int sortOrder = 0)

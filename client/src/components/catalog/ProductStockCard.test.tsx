@@ -67,7 +67,7 @@ describe('ProductStockCard', () => {
   });
 
   it('starts controlling the stock with an opening balance in the default location', async () => {
-    api.getProductStock.mockResolvedValue({ data: stock({ capturedStockQuantity: 4 }) } as never);
+    api.getProductStock.mockResolvedValue({ data: stock() } as never);
     api.getLocations.mockResolvedValue({ data: [{ id: 'l2', name: 'Bodega', isDefault: false }, { id: 'l1', name: 'Mostrador', isDefault: true }] } as never);
     api.getSupplies.mockResolvedValue({ data: { items: [] } } as never);
     api.trackProductStock.mockResolvedValue({ data: stock({ tracksStock: true, onHand: 10, reorderPoint: 3 }) } as never);
@@ -75,9 +75,9 @@ describe('ProductStockCard', () => {
     renderCard(<ProductStockCard product={product()} canManage />);
 
     const initial = await screen.findByLabelText('Existencia inicial');
-    // What was captured by hand is offered; the person confirms it by counting.
-    expect(initial).toHaveValue('4');
-    await user.clear(initial);
+    // Nothing is suggested: the opening balance is what the person counts.
+    expect(initial).toHaveValue('');
+    expect(screen.getByLabelText('Avisar cuando queden')).toHaveValue(null);
     await user.type(initial, '10');
     await user.type(screen.getByLabelText('Avisar cuando queden'), '3');
     await user.click(screen.getByRole('button', { name: 'Controlar existencias' }));

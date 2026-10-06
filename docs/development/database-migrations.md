@@ -103,6 +103,15 @@ Los de la Fase 10 se probaron igual (SQL Server 2022, Docker), desde la copia de
 
 En CI lo prueba también `RefreshTokenSqlServerTests.Migrations_ShouldHashThePlainValuesLeft_ThenDropTheirColumns_WhileTheSessionsKeepWorking`: migra a la Fase 8, siembra tokens en texto, aplica la Fase 9 y la 10 con las sesiones funcionando, revierte a la Fase 8 y vuelve a aplicar.
 
+Los de la Fase 12 se probaron igual (SQL Server 2022, Docker), desde una copia de la base de pruebas en la Fase 10, como producción, con un producto con existencia capturada que no controla existencias, otro con existencia capturada que ya las controla y dos perfiles de cliente, uno con puntos escritos a mano:
+- el `verify.sql` de `20261006101452_StopMappingStockAndLoyaltyColumns` mostró las cuatro columnas, con el valor por omisión 0 de `LoyaltyPoints`, y lo capturado;
+- el `apply.sql`, con el `sqlcmd` clásico, solo registró la migración y el `verify.sql` mostró las columnas y los conteos sin cambios; repetirlo no hizo nada;
+- con la versión nueva, `/health/schema` sano, el catálogo y la tarjeta de existencias sin esos campos, un producto editado conservó lo capturado y uno nuevo quedó con NULL;
+- con la Fase 11 sobre esa base, como al volver a ella, `/health/schema` sano: leyó el producto de la versión nueva, siguió proponiendo lo capturado y creó productos;
+- el `rollback.sql` solo quitó la migración del historial y el `verify.sql` quedó como antes de aplicar; otra vez no hizo nada, y aplicar de nuevo dejó lo mismo.
+
+En CI lo prueba `UnmappedColumnsSqlServerTests`: migra, guarda filas sin las columnas (quedan en NULL y en 0), conserva lo capturado al editarlas y revierte sin tocar las tablas. La siguiente fase las borra.
+
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación. Cuando basta un cambio de datos acotado, lleva además un `repair.sql` idempotente que lista lo que cambia, como `20261005_StorageUrlsOutsideTheirFolder`.
 
 ## Deuda actual
@@ -111,4 +120,3 @@ Las reparaciones de datos sin cambio de esquema van en `database/production/data
 - El CI no prueba migraciones con datos ni ejecuta los `apply.sql`/`rollback.sql` versionados: regenera el script, así que un archivo que quedó desactualizado frente a su migración no se detecta.
 - La guarda 50005 de `20261004165450_AddOfflineSaleIdempotency` nombra `CapturedOfflineAt` fuera de `EXEC`: si su `rollback.sql` se ejecuta otra vez, ya revertido, falla con `Invalid column name` (no cambia nada). La migración está aplicada en producción y no se edita.
 - Falta el proceso productivo: generar `migrations script --idempotent` como artefacto del pipeline, revisarlo y aplicarlo en un paso controlado antes de desplegar.
-- La divergencia de ramas puede contener historias de migración distintas; se resuelve en tarea separada antes de promover esquema.

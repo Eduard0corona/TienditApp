@@ -62,7 +62,7 @@ public class OrderSearchTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco de cola 600 ml", 20m);
         soda.Update(soda.CategoryId, soda.Name, null, soda.PriceAmount, "MXN", null, "REF-600", "7501055300075", 0, false,
-            null, null, null, null, null, null, null, null, null, null, null, false, false, false);
+            null, null, null, null, null, null, null, null, null, false, false, false);
         await fixture.AddProductAsync(tenant, "Jabón de tocador", 18m);
         await fixture.Context.SaveChangesAsync();
 

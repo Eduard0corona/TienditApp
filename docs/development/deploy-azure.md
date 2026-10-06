@@ -76,7 +76,7 @@ El `apply.sql` de la Fase 10 borra `RefreshTokens.Token`, `ReplacedByToken` y su
 - Los códigos que piden las pantallas sin sesión (recuperar la contraseña por SMS, reenviar la confirmación del teléfono) se envían después de responder. En la Fase 10 salían de una cola en memoria de cada instancia; desde la Fase 11 salen del outbox (sección siguiente).
 - Los rechazos esperados (validación, regla de negocio, sin acceso, no encontrado, cambio concurrente) quedan en el log como advertencia; solo los 500 son errores. La alerta de 5xx por negocio de [observabilidad](../architecture/observability.md) no cambia.
 - Una petición de un `SUPER_ADMIN` con `X-Tenant-Id` en otro negocio queda en la actividad de ese negocio (acción `SupportAccess`) antes de ejecutarse; si la base no la puede guardar, responde 503.
-- Los workflows usan `actions/checkout`, `actions/setup-dotnet` y `actions/setup-node` v5 y `actions/upload-artifact` v6, que corren en Node 24.
+- Los workflows usan `actions/checkout`, `actions/setup-dotnet` y `actions/setup-node` v5 y `actions/upload-artifact` v6, que corren en Node 24 (desde la Fase 12, fijadas por SHA).
 
 ## Códigos por el outbox, recepción idempotente y cancelación (Fase 11)
 
@@ -85,6 +85,15 @@ La Fase 11 no tiene migración ni `apply.sql`, y volver a la Fase 10 no necesita
 - Los códigos por SMS que piden las pantallas sin sesión salen del outbox (`VerificationCodeRequestedHandler`), así que necesitan los workers: con `BackgroundJobs__Enabled=false` (por ejemplo el slot de staging) se guardan y salen cuando una instancia con workers los atiende, si no pasaron 10 minutos. Ya no hay cola en memoria por instancia: un reinicio no los pierde.
 - Recibir una compra acepta `idempotencyKey`; el cliente nuevo la manda y un doble clic o un reintento se registra una vez. Un cliente anterior, sin llave, se comporta como antes.
 - Las lecturas (GET) se detienen cuando su cliente se va y los cambios terminan siempre (`RequestCancellation`); una lectura abandonada queda en el log como Information con 499, no como error.
+
+## Columnas sin uso, listados acotados y actions por SHA (Fase 12)
+
+El `apply.sql` de la Fase 12 no cambia el esquema ni los datos: solo registra `20261006101452_StopMappingStockAndLoyaltyColumns`, y se aplica, como siempre, antes del merge. La versión nueva deja de leer y escribir `Products.StockQuantity`, `LowStockThreshold` y `CustomerProfiles.LoyaltyPoints` y `LoyaltyTier`: las filas que guarda las dejan en NULL y en 0, y la Fase 11 sigue funcionando con ellas, así que volver a ella no necesita `rollback.sql`. La siguiente fase borra las columnas.
+
+- Al empezar a controlar las existencias de un producto, la tarjeta ya no propone como existencia inicial lo capturado a mano: se cuenta.
+- Un negocio tiene como máximo 300 categorías, 100 almacenes (contando el de cada sucursal) y 20 agentes de IA, también los archivados o inactivos; crear uno más se rechaza con un mensaje que lo dice. La cocina muestra los 200 pedidos y las 200 comandas más recientes.
+- Cada action se fija por el SHA completo del commit de su versión, con la versión como comentario, y el job `Backend` de CI falla si una queda por etiqueta. `azure/login` pasa de v2 (Node 20) a v3.1.0 (Node 24) con las mismas entradas; solo corre con OIDC.
+- Para actualizar una action: `git ls-remote --tags https://github.com/<dueño>/<action>` da el commit de cada versión (en una etiqueta anotada, el de la línea que termina en `^{}`). Cambia el SHA y el comentario en cada `uses:` después de leer sus notas de versión; sin Dependabot, nadie lo propone solo.
 
 ## Slot de staging con swap y aprobación
 

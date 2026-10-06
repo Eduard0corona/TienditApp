@@ -59,20 +59,10 @@ public static class ProductStockReader
     /// <summary>The product's stock by location, or null when the product does not exist.</summary>
     public static async Task<ProductStockDto?> GetAsync(IApplicationDbContext context, Guid productId, CancellationToken cancellationToken)
     {
-        var product = await context.Products
-            .AsNoTracking()
-            .Where(p => p.Id == productId)
-            .Select(p => new { p.Id, p.StockQuantity, p.LowStockThreshold })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (product is null)
+        if (!await context.Products.AnyAsync(p => p.Id == productId, cancellationToken))
             return null;
 
-        var dto = new ProductStockDto
-        {
-            ProductId = product.Id,
-            CapturedStockQuantity = product.StockQuantity,
-            CapturedLowStockThreshold = product.LowStockThreshold
-        };
+        var dto = new ProductStockDto { ProductId = productId };
 
         var item = await context.SupplyItems
             .AsNoTracking()

@@ -5,6 +5,9 @@ namespace FoodParkDigital.Domain.AiAgents.Entities;
 
 public class AiAgent : AuditableEntity, ITenantScoped
 {
+    /// <summary>Inactive ones included: the list of a business shows them all, without pages.</summary>
+    public const int MaxAgentsPerTenant = 20;
+
     private AiAgent() { }
 
     public AiAgent(Guid tenantId, string name, string role)

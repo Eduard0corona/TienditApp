@@ -41,8 +41,9 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         _connection = connection;
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlite(_connection, sqlite => sqlite.ExecutionStrategy(
-                dependencies => new TestRetryingExecutionStrategy(dependencies)))
+            .UseSqlite(_connection, sqlite => sqlite
+                .ExecutionStrategy(dependencies => new TestRetryingExecutionStrategy(dependencies))
+                .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
             .AddInterceptors(
                 new AuditableEntityInterceptor(new FixedCurrentUserService(), new FixedDateTimeProvider()),
                 new TenantSaveChangesInterceptor(_tenantService),

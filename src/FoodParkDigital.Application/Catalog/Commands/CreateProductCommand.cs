@@ -44,8 +44,6 @@ public record CreateProductCommand : IRequest<Result<ProductDto>>
     public CfdiTaxObject TaxObject { get; init; } = CfdiTaxObject.Subject;
     public int? Calories { get; init; }
     public string? Allergens { get; init; }
-    public int? StockQuantity { get; init; }
-    public int? LowStockThreshold { get; init; }
     public int? MaxQuantityPerOrder { get; init; }
     public UnitType? Unit { get; init; }
     public TimeSpan? AvailableFromTime { get; init; }
@@ -95,10 +93,6 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
             .WithMessage("Un producto que no es objeto de impuesto debe ser exento o con tasa 0 %.");
         RuleFor(x => x.Calories)
             .GreaterThanOrEqualTo(0).When(x => x.Calories.HasValue);
-        RuleFor(x => x.StockQuantity)
-            .GreaterThanOrEqualTo(0).When(x => x.StockQuantity.HasValue);
-        RuleFor(x => x.LowStockThreshold)
-            .GreaterThanOrEqualTo(0).When(x => x.LowStockThreshold.HasValue);
         RuleFor(x => x.MaxQuantityPerOrder)
             .GreaterThan(0).When(x => x.MaxQuantityPerOrder.HasValue);
         RuleFor(x => x.PreparationTimeMinutes)
@@ -131,12 +125,6 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
             RuleFor(x => x.Allergens)
                 .Must(string.IsNullOrWhiteSpace)
                 .WithMessage("Los servicios no admiten alérgenos.");
-            RuleFor(x => x.StockQuantity)
-                .Must(v => !v.HasValue)
-                .WithMessage("Los servicios no admiten stock.");
-            RuleFor(x => x.LowStockThreshold)
-                .Must(v => !v.HasValue)
-                .WithMessage("Los servicios no admiten alerta de stock.");
             RuleFor(x => x.MaxQuantityPerOrder)
                 .Must(v => !v.HasValue)
                 .WithMessage("Los servicios no admiten máximo por orden.");
@@ -218,8 +206,6 @@ public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand,
             taxRate: request.TaxRate,
             calories: request.Calories,
             allergens: request.Allergens,
-            stockQuantity: request.StockQuantity,
-            lowStockThreshold: request.LowStockThreshold,
             maxQuantityPerOrder: request.MaxQuantityPerOrder,
             unit: request.Unit,
             availableFromTime: request.AvailableFromTime,

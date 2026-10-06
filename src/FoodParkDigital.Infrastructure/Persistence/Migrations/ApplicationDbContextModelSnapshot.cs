@@ -626,9 +626,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
-                    b.Property<int?>("LowStockThreshold")
-                        .HasColumnType("int");
-
                     b.Property<int?>("MaxQuantityPerOrder")
                         .HasColumnType("int");
 
@@ -666,9 +663,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("StockQuantity")
                         .HasColumnType("int");
 
                     b.Property<string>("Tags")
@@ -909,15 +903,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("LastName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<long>("LoyaltyPoints")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValue(0L);
-
-                    b.Property<string>("LoyaltyTier")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("PhoneNormalized")
                         .IsRequired()

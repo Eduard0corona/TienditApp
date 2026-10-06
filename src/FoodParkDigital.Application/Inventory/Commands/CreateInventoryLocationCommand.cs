@@ -72,6 +72,8 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
 
         if (await _context.InventoryLocations.AnyAsync(x => x.Code == code, cancellationToken))
             return Result.Failure<InventoryLocationDto>("Ya existe una ubicación con ese código.");
+        if (await _context.InventoryLocations.CountAsync(cancellationToken) >= InventoryLocation.MaxLocationsPerTenant)
+            return Result.Failure<InventoryLocationDto>(InventoryLocationLimits.Reached);
 
         var hasAnyLocation = await _context.InventoryLocations.AnyAsync(cancellationToken);
         var makeDefault = request.IsDefault || !hasAnyLocation;
@@ -105,4 +107,10 @@ public class CreateInventoryLocationCommandHandler : IRequestHandler<CreateInven
         var dto = await InventoryLocationBranches.NameAsync(_context, [entity.ToDto()], cancellationToken);
         return Result.Success(dto[0]);
     }
+}
+
+internal static class InventoryLocationLimits
+{
+    public static readonly string Reached =
+        $"Un negocio puede tener como máximo {InventoryLocation.MaxLocationsPerTenant} ubicaciones de inventario (también cuentan las inactivas y la de cada sucursal).";
 }

@@ -19,6 +19,8 @@ public sealed class CrossTenantManagementSqlServerTests
     private const string CustomerOfC = "5533334444";
     private const string BuyerOfC = "5544445555";
     private const string OptedOutOfC = "5566667777";
+    // The quick promotions' buyer: the same person buys at both businesses.
+    private const string BuyerOfBoth = "5588889999";
 
     private readonly TwoBusinessesApi _api;
 
@@ -150,14 +152,7 @@ public sealed class CrossTenantManagementSqlServerTests
         await TwoBusinessesApi.IdAsync(c.Client, "/api/v1/customers", new { name = "Clienta de C", phone = CustomerOfC });
         await PaidSaleAsync(c.Client, await ProductAsync(c.Client, "Corte de C"), BuyerOfC, "Comprador de C");
         await OptOutAsync(c.Client, OptedOutOfC);
-        await TwoBusinessesApi.ReadAsync(await c.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/whatsapp", new
-        {
-            isEnabled = true,
-            accessToken = "token-de-prueba",
-            phoneNumberId = $"2{Random.Shared.NextInt64(10_000_000_000, 99_999_999_999)}",
-            wabaId = "waba-de-c",
-            displayPhoneNumber = "+52 55 0000 0003"
-        }));
+        await ConnectWhatsAppAsync(c.Client);
         var template = await TwoBusinessesApi.IdAsync(c.Client, "/api/v1/messaging/templates", new
         {
             name = "Promo de C",
@@ -232,6 +227,33 @@ public sealed class CrossTenantManagementSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task QuickPromotion_ShouldReachOnlyItsBuyers_AndLeaveTheOtherBusinesssTemplate()
+    {
+        // Every quick promotion of a business reuses its template "Promoción rápida", found by name: two businesses
+        // with WhatsApp connected, and one that already sent one to its buyer.
+        var mine = await _api.SignUpAsync("promo-a");
+        var theirs = await _api.SignUpAsync("promo-b");
+        await ConnectWhatsAppAsync(mine.Client);
+        await ConnectWhatsAppAsync(theirs.Client);
+        await PaidSaleAsync(mine.Client, await ProductAsync(mine.Client, "Corte de promo A"), BuyerOfBoth, "Comprador de A");
+        Assert.Equal(1, await SendPromotionAsync(mine.Client, "Promo de A"));
+        var myTemplate = await QuickTemplateAsync(mine.Client);
+        var myCampaigns = await mine.Client.GetFromJsonAsync<JsonElement>("/api/v1/messaging/campaigns?pageSize=100");
+        var myCampaign = Assert.Single(myCampaigns.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid();
+
+        // Theirs reaches none of A's buyers (not even a phone it shares), with its own template; then only its own.
+        Assert.Equal(0, await SendPromotionAsync(theirs.Client, "Promo de B"));
+        Assert.Equal("Promo de B", (await QuickTemplateAsync(theirs.Client)).GetProperty("body").GetString());
+        await PaidSaleAsync(theirs.Client, await ProductAsync(theirs.Client, "Corte de promo B"), BuyerOfBoth, "Comprador de B");
+        Assert.Equal(1, await SendPromotionAsync(theirs.Client, "Otra promo de B"));
+        var theirCampaigns = await theirs.Client.GetStringAsync("/api/v1/messaging/campaigns?pageSize=100");
+        Assert.DoesNotContain(myCampaign.ToString(), theirCampaigns);
+        Assert.DoesNotContain(myTemplate.GetProperty("id").GetGuid().ToString(), theirCampaigns);
+
+        Assert.Equal(myTemplate.GetRawText(), (await QuickTemplateAsync(mine.Client)).GetRawText());
+    }
+
+    [SqlServerFact]
     public async Task Reports_ShouldCountOnlyTheirOwnBusiness()
     {
         var summaryBefore = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/operational-summary");
@@ -272,6 +294,10 @@ public sealed class CrossTenantManagementSqlServerTests
 
     /// <returns>The total of the sale, paid in full by card (so it closes as delivered).</returns>
     internal static async Task<decimal> PaidSaleAsync(HttpClient client, Guid product, string? phone, string name)
+        => (await PaidOrderAsync(client, product, phone, name)).Total;
+
+    /// <returns>The sale, paid in full by card (so it closes as delivered), and its total.</returns>
+    internal static async Task<(Guid Id, decimal Total)> PaidOrderAsync(HttpClient client, Guid product, string? phone, string name)
     {
         // Every payment enters a drawer: the seller opens theirs unless it is open already.
         var drawer = await client.GetAsync("/api/v1/cash/current-session");
@@ -292,7 +318,7 @@ public sealed class CrossTenantManagementSqlServerTests
         var paid = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync(
             $"/api/v1/orders/{order.GetProperty("id").GetGuid()}/payments", new { amount = total, method = 1 }));
         Assert.Equal(0m, paid.GetProperty("balance").GetDecimal());
-        return total;
+        return (order.GetProperty("id").GetGuid(), total);
     }
 
     private static object Tab(Guid product, Guid? table, string? tabName) => new
@@ -320,6 +346,32 @@ public sealed class CrossTenantManagementSqlServerTests
     {
         var branches = await client.GetFromJsonAsync<JsonElement>("/api/v1/branches");
         return branches.EnumerateArray().Single(b => b.GetProperty("isDefault").GetBoolean());
+    }
+
+    /// <summary>WhatsApp connected, as campaigns require. Nothing reaches Meta: the test API runs no workers.</summary>
+    private static async Task ConnectWhatsAppAsync(HttpClient client)
+        => await TwoBusinessesApi.ReadAsync(await client.PutAsJsonAsync("/api/v1/auth/my-tenant/whatsapp", new
+        {
+            isEnabled = true,
+            accessToken = "token-de-prueba",
+            phoneNumberId = $"2{Random.Shared.NextInt64(10_000_000_000, 99_999_999_999)}",
+            wabaId = "waba-de-pruebas",
+            displayPhoneNumber = "+52 55 0000 0003"
+        }));
+
+    /// <returns>How many customers the quick promotion will reach.</returns>
+    private static async Task<int> SendPromotionAsync(HttpClient client, string message)
+        => (await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/marketing/promotions/send", new
+        {
+            message,
+            minimumCompletedOrders = 1
+        }))).GetProperty("sent").GetInt32();
+
+    /// <summary>The template every quick promotion of the business reuses.</summary>
+    private static async Task<JsonElement> QuickTemplateAsync(HttpClient client)
+    {
+        var templates = await client.GetFromJsonAsync<JsonElement>("/api/v1/messaging/templates");
+        return templates.EnumerateArray().Single(t => t.GetProperty("name").GetString() == "Promoción rápida");
     }
 
     private static async Task OptOutAsync(HttpClient client, string phone)

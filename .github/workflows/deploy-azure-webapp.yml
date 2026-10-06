@@ -38,10 +38,10 @@ jobs:
           exit 1
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: "npm"
@@ -57,7 +57,7 @@ jobs:
 
       # Framework-dependent publish: the App Service stack must be .NET 10.
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
 
@@ -94,7 +94,7 @@ jobs:
       # long-lived secret. Without them it keeps using the publish profile, as before.
       - name: Sign in to Azure (OIDC)
         if: vars.AZURE_CLIENT_ID != ''
-        uses: azure/login@v2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -104,7 +104,7 @@ jobs:
       - name: Deploy to Azure Web App (OIDC)
         id: deploy-oidc
         if: vars.AZURE_CLIENT_ID != ''
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3.0.8
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
           slot-name: ${{ vars.AZURE_WEBAPP_SLOT || 'production' }}
@@ -113,7 +113,7 @@ jobs:
       - name: Deploy to Azure Web App (publish profile)
         id: deploy-profile
         if: vars.AZURE_CLIENT_ID == ''
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3.0.8
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
@@ -144,12 +144,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           sparse-checkout: .github/scripts
 
       - name: Sign in to Azure (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

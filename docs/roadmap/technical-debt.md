@@ -1,19 +1,18 @@
 # Deuda técnica
 
-Actualizada el 2026-10-06 tras las Fases 0 a 11 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-06 tras las Fases 0 a 12 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
 1. Credenciales expuestas: cadenas de conexión de Azure SQL y el secreto JWT estuvieron versionados y siguen en el historial de git. El código ya no los contiene y la API rechaza el secreto publicado, pero hay que rotarlos, revisar el firewall de Azure SQL y verificar si la cuenta SUPER_ADMIN sembrada con la contraseña anterior existe en la base remota. Reescribir el historial es destructivo y requiere coordinación.
 2. Aislamiento (resuelto en la Fase 8 salvo lo indicado): toda entidad con `TenantId` implementa `ITenantScoped` y tiene el filtro del negocio (`ArchitectureTests` lo exige); desde la Fase 8 también `TenantSettings`, `WhatsAppConfig`, `OrderItem` y `OrderStatusHistory`, estas dos con el negocio de su orden (las que agrega la versión anterior mientras se publica la nueva se completan al arrancar, `OrderTenantBackfillService`). Los usos de `IgnoreQueryFilters()` están inventariados por archivo y motivo (`TenantFilterBypassAllowlistTests` rompe CI con uno nuevo) y los workers y el webhook trabajan en el alcance de cada negocio (`BackgroundScopes`, Fase 6). Resuelto en la Fase 10: el override `X-Tenant-Id` de `SUPER_ADMIN` queda en la actividad (`AuditLogs`) del negocio en el que actúa antes de ejecutar la petición; si no se puede registrar, responde 503 y no se ejecuta. Pendiente: cada uso de `IgnoreQueryFilters()` que queda depende de su predicado explícito, y el override no pide justificación ni tiene límites.
-3. Suite de aislamiento (Fases 8 a 11): la API completa corre contra SQL Server 2022 con dos negocios registrados por la API (`TwoBusinessesApi`, compartida por las cuatro clases).
-   - `CrossTenantHttpSqlServerTests`: uno no lee, cambia ni borra catálogo, clientes, proveedores, órdenes (estado y pagos), archivos privados, inventario (insumos, almacenes, movimientos y kárdex), compras, cajas ni citas del otro, ni con su encabezado `X-Tenant-Id`, su ruta de órdenes o el cambio de negocio, y las existencias del otro no se mueven.
+3. Suite de aislamiento (Fases 8 a 12): la API completa corre contra SQL Server 2022 con dos negocios registrados por la API (`TwoBusinessesApi`, compartida por las cuatro clases).
+   - `CrossTenantHttpSqlServerTests`: uno no lee, cambia ni borra catálogo, clientes, proveedores, órdenes (estado y pagos), archivos privados, inventario (insumos, almacenes, movimientos y kárdex), compras, cajas ni citas del otro, ni con su encabezado `X-Tenant-Id`, su ruta de órdenes o el cambio de negocio, y las existencias del otro no se mueven. Desde la Fase 12 tampoco reembolsa ni anula sus órdenes, ni arma una receta con sus productos, insumos o almacenes, y el rechazo no deja filas guardadas.
    - `CrossTenantRealtimeSqlServerTests` (SignalR por WebSockets): los eventos de pedidos y de chat llegan solo al negocio dueño, y una conexión se cierra cuando termina su sesión mientras la de otra sesión sigue. Cada entrega firmada del webhook de WhatsApp llega solo al negocio de su número; sin firma no se guarda, un número sin negocio no llega a ninguno y nadie reclama el número de otro.
-   - `CrossTenantManagementSqlServerTests` (Fase 10): mesas y cuentas abiertas (entre dos negocios de comida), sucursales, equipo (sin reenviar la invitación de otro), campañas (plantillas, campañas, bajas y audiencias, que nunca incluyen a los clientes del otro) y reportes (la venta de uno no mueve los del otro). Un admin de plataforma real deja en la actividad del negocio lo que hace en él (`CrossTenantHttpSqlServerTests`).
-
+   - `CrossTenantManagementSqlServerTests` (Fase 10): mesas y cuentas abiertas (entre dos negocios de comida), sucursales, equipo (sin reenviar la invitación de otro), campañas (plantillas, campañas, bajas y audiencias, que nunca incluyen a los clientes del otro) y reportes (la venta de uno no mueve los del otro); desde la Fase 12, la promoción rápida, que llega solo a los compradores del negocio y no toca la plantilla del otro. Un admin de plataforma real deja en la actividad del negocio lo que hace en él (`CrossTenantHttpSqlServerTests`).
    - `CrossTenantOperationsSqlServerTests` (Fase 11): Inicio (las métricas y "Requiere atención" de uno no cuentan nada del otro), cocina (entre dos negocios de comida), tablero de servicios y agentes de IA.
 
-   Pendiente: reembolsos, recetas y el envío de promociones se cubren con pruebas por caso de uso, todavía no en esta suite.
+   Cada controller con datos del negocio tiene al menos una prueba en la suite; quedan fuera, por diseño, la consola de plataforma, el menú público (por slug) y el 2FA de la cuenta. Pendiente: nada exige que un controller nuevo entre a la suite.
 4. Archivos: el contenido se valida por firma, las fotos se re-codifican y el borrado por URL está confinado a `{área}/{tenantId}` en almacenamiento local y Azure Blob (rechaza traversal, otros tenants/áreas y URLs ajenas al contenedor). Desde la Fase 8 los comprobantes de transferencia y las fotos de servicio son privados: fuera de `wwwroot` o en un contenedor sin lectura anónima, solo los entrega `GET /api/v1/files/{key}` a miembros del negocio con el permiso del área, `/uploads/orders` responde 404 y los archivos que eran públicos se mueven al almacenamiento privado al arrancar ([seguridad](../../SECURITY.md#archivos)). Desde la Fase 9 la subida valida carpeta y nombre en los dos providers. Los avatares van a la carpeta de la cuenta (`avatars/users/{cuenta}`), y los anteriores se borran de la carpeta del negocio donde se subieron (por las membresías de la cuenta) o de la de sesión sin negocio. Pendiente:
    - los PDF no pasan por un escaneo de malware;
    - correr en producción el [procedimiento para las fotos de producto con la dirección de otro negocio](../../database/production/data-repair/20261005_StorageUrlsOutsideTheirFolder/README.md) (creadas antes del 2026-10-01);
@@ -44,22 +43,22 @@ Actualizada el 2026-10-06 tras las Fases 0 a 11 del roadmap de producto (la audi
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
 - Cambios de estado, cancelaciones, reembolsos y rondas que consumen insumos toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
 - Las migraciones de producción se aplican a mano con el `apply.sql` de cada carpeta antes del merge (probadas en CI con `sqlcmd`); `/health/schema` detecta las que falten, pero ningún paso del despliegue las aplica con aprobación.
-- Listados pequeños aún materializan colecciones sin paginación (categorías, AI agents, ubicaciones, kitchen).
+- Categorías, almacenes y agentes de IA se listan completos porque cada negocio tiene un tope (300, 100 y 20, contando los archivados o inactivos; Fase 12). Archivar no libera lugar: al llegar al tope no se crean más. La cocina muestra los 200 pedidos y las 200 comandas más recientes, para que los viejos que nadie cerró no tapen los nuevos; con más pendientes, los más viejos no aparecen.
 - Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.
-- Consultas con varias colecciones incluidas no usan `AsSplitQuery`.
+- Desde la Fase 12 una consulta que incluye colecciones las lee en sentencias separadas (`SplitQuery` por defecto). Fuera de una transacción, esas sentencias pueden ver un cambio hecho entre una y otra; las escrituras se protegen con los tokens de concurrencia, no con lo leído.
 - `client/README.md` sigue siendo template genérico.
 - Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). La columna `TenantSettings.RequireOpenCashSession`, de la política que lo pedía solo para efectivo, quedó sin uso: retirarla con una migración.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
-- `Product.StockQuantity` y `LowStockThreshold` quedan sin uso: la existencia de un producto vive en el libro mayor de inventario desde la Fase 5A. Falta borrar las columnas cuando ya no se ofrezcan como existencia inicial.
+- `Product.StockQuantity` y `LowStockThreshold` (la existencia de un producto vive en el libro mayor de inventario desde la Fase 5A) y `CustomerProfile.LoyaltyPoints` y `LoyaltyTier` dejaron de mapearse en la Fase 12 (`StopMappingStockAndLoyaltyColumns`, sin cambio de esquema). Falta el segundo paso: borrar las columnas en la siguiente fase, cuando ya no corra una versión que las lea. Lo capturado solo queda en el respaldo de la base que se toma antes de aplicar su `apply.sql`.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
-- Las actions de los workflows se fijan por tag y no por SHA. Los workflows que solo existen en `master` no se revisaron en esta rama.
+- Las actions fijadas por SHA no se actualizan solas: no hay Dependabot, y el procedimiento está en [despliegue](../development/deploy-azure.md#columnas-sin-uso-listados-acotados-y-actions-por-sha-fase-12). Las imágenes de Docker siguen por etiqueta (en CI `azurite:3.37.0` y `mssql/server:2022-latest`, y las bases del `Dockerfile`); solo `oasdiff` va por digest.
 - Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
 - Las rondas de una cuenta de mesa no se revisan contra existencias; la cuenta consume al cerrarse y ahí no se rechaza.
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
 - Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
 - Las conversaciones partidas antes de la Fase 4 (`+52` y `+521` del mismo número) siguen como dos hilos; cada mensaje nuevo va al hilo con la misma forma del número.
-- No hay lealtad: es por negocio y queda fuera de alcance hasta tener reglas ([ADR 0009](../adr/0009-loyalty-per-business.md)). Las columnas `CustomerProfile.LoyaltyPoints` y `LoyaltyTier`, globales y sin uso, se borran en la próxima limpieza de columnas.
+- No hay lealtad: es por negocio y queda fuera de alcance hasta tener reglas ([ADR 0009](../adr/0009-loyalty-per-business.md)). Las columnas `CustomerProfile.LoyaltyPoints` y `LoyaltyTier`, globales y sin uso, ya no se mapean y se borran en la siguiente fase (ver arriba).
 
 ## Resuelto el 2026-10-01
 
@@ -251,6 +250,14 @@ Pendientes detectados en la Fase 3:
 - La recepción de compra con llave de idempotencia se registra una vez, también cuando dos copias llegan a la vez (pruebas contra SQL Server).
 - La suite entre negocios cubre Inicio (métricas y "Requiere atención"), cocina, tablero de servicios y agentes de IA.
 - Los controllers pasan el `CancellationToken`: las lecturas se detienen cuando el cliente se va y los cambios terminan; una lectura abandonada responde 499 y queda como Information en el log.
+
+## Resuelto el 2026-10-06 (Fase 12: suite por área, listados acotados, columnas sin uso y actions por SHA)
+
+- La suite entre negocios cubre reembolsos y anulaciones, recetas (sin productos, insumos ni almacenes del otro, y sin dejar filas al rechazar) y la promoción rápida (solo a sus compradores, sin tocar la plantilla del otro). Cada controller con datos del negocio tiene al menos una prueba en ella.
+- Categorías, almacenes y agentes de IA tienen un tope por negocio, así que sus listados completos se mantienen chicos; una plantilla de categorías se instala completa o no se instala. La cocina lee los 200 pedidos y las 200 comandas más recientes.
+- Las consultas que incluyen colecciones las leen en sentencias separadas, en lugar de un join que repite la fila principal por cada combinación.
+- `Product.StockQuantity`, `LowStockThreshold`, `CustomerProfile.LoyaltyPoints` y `LoyaltyTier` salen del modelo y del contrato; la tarjeta de existencias ya no propone lo capturado a mano. Es el primer paso: las columnas siguen en la base.
+- Cada action de los workflows se fija por el SHA de su versión y CI rechaza una etiqueta; `azure/login` pasa a v3.1.0, en Node 24.
 
 ## Decisiones humanas pendientes
 
