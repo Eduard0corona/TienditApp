@@ -73,10 +73,18 @@ El `apply.sql` de la Fase 9 no cambia el esquema: convierte a hash los refresh t
 
 El `apply.sql` de la Fase 10 borra `RefreshTokens.Token`, `ReplacedByToken` y su índice, y se aplica, como siempre, mientras corre la versión anterior: la Fase 9 no los usa y sigue funcionando, y volver a ella no necesita `rollback.sql`. Antes de aplicar, su `verify.sql` debe mostrar solo el índice `IX_RefreshTokens_Token`, ninguna estadística creada a mano ni objeto que use la tabla, y los valores en texto en 0. Volver a la Fase 8 sí exige primero el `rollback.sql` de esa carpeta, que crea otra vez las columnas vacías.
 
-- Los códigos que piden las pantallas sin sesión (recuperar la contraseña por SMS, reenviar la confirmación del teléfono) se envían después de responder, desde una cola en memoria de cada instancia (`VerificationCodeSender`, también con `BackgroundJobs__Enabled=false`). Un fallo del proveedor queda en el log como error, sin el teléfono ni el código; un código que no salió se pide otra vez pasado el minuto.
+- Los códigos que piden las pantallas sin sesión (recuperar la contraseña por SMS, reenviar la confirmación del teléfono) se envían después de responder. En la Fase 10 salían de una cola en memoria de cada instancia; desde la Fase 11 salen del outbox (sección siguiente).
 - Los rechazos esperados (validación, regla de negocio, sin acceso, no encontrado, cambio concurrente) quedan en el log como advertencia; solo los 500 son errores. La alerta de 5xx por negocio de [observabilidad](../architecture/observability.md) no cambia.
 - Una petición de un `SUPER_ADMIN` con `X-Tenant-Id` en otro negocio queda en la actividad de ese negocio (acción `SupportAccess`) antes de ejecutarse; si la base no la puede guardar, responde 503.
 - Los workflows usan `actions/checkout`, `actions/setup-dotnet` y `actions/setup-node` v5 y `actions/upload-artifact` v6, que corren en Node 24.
+
+## Códigos por el outbox, recepción idempotente y cancelación (Fase 11)
+
+La Fase 11 no tiene migración ni `apply.sql`, y volver a la Fase 10 no necesita nada.
+
+- Los códigos por SMS que piden las pantallas sin sesión salen del outbox (`VerificationCodeRequestedHandler`), así que necesitan los workers: con `BackgroundJobs__Enabled=false` (por ejemplo el slot de staging) se guardan y salen cuando una instancia con workers los atiende, si no pasaron 10 minutos. Ya no hay cola en memoria por instancia: un reinicio no los pierde.
+- Recibir una compra acepta `idempotencyKey`; el cliente nuevo la manda y un doble clic o un reintento se registra una vez. Un cliente anterior, sin llave, se comporta como antes.
+- Las lecturas (GET) se detienen cuando su cliente se va y los cambios terminan siempre (`RequestCancellation`); una lectura abandonada queda en el log como Information con 499, no como error.
 
 ## Slot de staging con swap y aprobación
 
