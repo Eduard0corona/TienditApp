@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Offcanvas } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { purchaseOrdersApi } from '../../api/purchaseOrdersApi';
@@ -13,6 +13,7 @@ import { getPurchaseOrderStatusBadge, getPurchaseOrderStatusLabel } from '../../
 import { formatMoney } from '../../utils/money';
 import { buildPurchaseOrderMessage } from '../../utils/purchaseOrderMessage';
 import { formatQuantity, roundQuantity } from '../../utils/units';
+import { newUuid } from '../../utils/uuid';
 import WhatsAppLink from '../common/WhatsAppLink';
 
 export type PurchaseOrderDetailMode = 'view' | 'receive';
@@ -45,6 +46,8 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
   // Only what the person changed: the rest of the lines receive their pending quantity at the ordered cost.
   const [reception, setReception] = useState<Record<string, ReceptionInput>>({});
   const [busy, setBusy] = useState(false);
+  // One key per reception: sending it again (a retry after an error or a lost answer) does not receive twice.
+  const receptionKey = useRef(newUuid());
 
   const orderQuery = useQuery({
     queryKey: ['purchase-orders', 'detail', orderId],
@@ -156,11 +159,12 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
     }
 
     const received = await run(
-      async () => (await purchaseOrdersApi.receive(order.id, { lines })).data,
+      async () => (await purchaseOrdersApi.receive(order.id, { lines, idempotencyKey: receptionKey.current })).data,
       'Recepción registrada: las existencias ya se actualizaron.',
       'No se pudo registrar la recepción.',
     );
     if (received) {
+      receptionKey.current = newUuid();
       setReception({});
       onModeChange('view');
     }

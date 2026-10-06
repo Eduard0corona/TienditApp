@@ -10167,6 +10167,8 @@ export interface components {
             /** Format: date-time */
             receivedAt?: string | null;
             lines: components["schemas"]["ReceivePurchaseOrderLineItemRequest"][];
+            /** Format: uuid */
+            idempotencyKey?: string | null;
         };
         RefundItemDto: {
             /** Format: uuid */

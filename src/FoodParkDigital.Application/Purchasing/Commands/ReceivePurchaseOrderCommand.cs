@@ -27,6 +27,11 @@ public record ReceivePurchaseOrderCommand : IRequest<Result<PurchaseOrderDto>>, 
     public Guid PurchaseOrderId { get; init; }
     public DateTimeOffset? ReceivedAt { get; init; }
     public List<ReceivePurchaseOrderLineRequest> Lines { get; init; } = [];
+    /// <summary>
+    /// Identifies this reception: the same key again (a double click, a retry after a timeout) answers with the
+    /// purchase order as it is, without receiving twice. The app sends a new one for each reception.
+    /// </summary>
+    public Guid? IdempotencyKey { get; init; }
 }
 
 public class ReceivePurchaseOrderCommandValidator : AbstractValidator<ReceivePurchaseOrderCommand>
@@ -34,6 +39,10 @@ public class ReceivePurchaseOrderCommandValidator : AbstractValidator<ReceivePur
     public ReceivePurchaseOrderCommandValidator()
     {
         RuleFor(x => x.PurchaseOrderId).NotEmpty();
+        RuleFor(x => x.IdempotencyKey)
+            .NotEqual(Guid.Empty)
+            .When(x => x.IdempotencyKey.HasValue)
+            .WithMessage("La clave de la recepción no es válida.");
         RuleFor(x => x.Lines).NotEmpty().WithMessage("Debes agregar al menos una línea recibida.");
         // A repeated line would add stock twice while the purchase order records only the last quantity.
         RuleFor(x => x.Lines)
@@ -70,6 +79,12 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
 
     public async Task<Result<PurchaseOrderDto>> Handle(ReceivePurchaseOrderCommand request, CancellationToken cancellationToken)
     {
+        // The movement of a reception with a key is found by it (IX_InventoryMovements_TenantId_ExternalReference is
+        // unique): the same reception again was already received.
+        var reference = request.IdempotencyKey is { } idempotencyKey ? ReceptionReference(request.PurchaseOrderId, idempotencyKey) : null;
+        if (reference is not null && await IsReceivedAsync(reference, cancellationToken))
+            return Result.Success(await PurchaseOrderReader.LoadAsync(_context, request.PurchaseOrderId, cancellationToken));
+
         var purchaseOrder = await _context.PurchaseOrders
             .Include(x => x.Lines)
             .Include(x => x.Supplier)
@@ -123,7 +138,7 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
             movementReason: InventoryMovementReason.Purchase,
             movementDate: receivedAt,
             referenceNumber: purchaseOrder.OrderNumber,
-            externalReference: $"PO:{purchaseOrder.Id:N}:RECV:{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+            externalReference: reference ?? $"PO:{purchaseOrder.Id:N}:RECV:{DateTime.UtcNow:yyyyMMddHHmmssfff}",
             counterpartyName: purchaseOrder.Supplier.Name,
             notes: $"Recepción de compra {purchaseOrder.OrderNumber}");
 
@@ -165,9 +180,29 @@ public class ReceivePurchaseOrderCommandHandler : IRequestHandler<ReceivePurchas
         movement.RecalculateTotalAmount();
         _context.InventoryMovements.Add(movement);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (reference is not null)
+        {
+            // The same reception arrived twice at once and the other request stored it first (its movement, or its
+            // change to the purchase order): this copy is undone whole, folio and stock included, and the purchase
+            // order as received is the answer.
+            await _context.DiscardUnitOfWorkAsync(cancellationToken);
+            if (await IsReceivedAsync(reference, cancellationToken))
+                return Result.Success(await PurchaseOrderReader.LoadAsync(_context, request.PurchaseOrderId, cancellationToken));
+            throw;
+        }
 
         var dto = await PurchaseOrderReader.LoadAsync(_context, purchaseOrder.Id, cancellationToken);
         return Result.Success(dto);
     }
+
+    /// <summary>The external reference of the movement of a reception, unique per business.</summary>
+    internal static string ReceptionReference(Guid purchaseOrderId, Guid idempotencyKey)
+        => $"PO:{purchaseOrderId:N}:RECV:{idempotencyKey:N}";
+
+    private Task<bool> IsReceivedAsync(string reference, CancellationToken cancellationToken)
+        => _context.InventoryMovements.AsNoTracking().AnyAsync(m => m.ExternalReference == reference, cancellationToken);
 }

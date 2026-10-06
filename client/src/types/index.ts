@@ -925,6 +925,8 @@ export interface ReceivePurchaseOrderLineRequest {
 export interface ReceivePurchaseOrderRequest {
   receivedAt?: string;
   lines: ReceivePurchaseOrderLineRequest[];
+  /** The same key again (a double click, a retry) answers with the order as it is, without receiving twice. */
+  idempotencyKey?: string;
 }
 
 // ==================== Cash ====================

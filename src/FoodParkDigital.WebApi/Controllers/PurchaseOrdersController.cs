@@ -68,6 +68,7 @@ public class PurchaseOrdersController : ControllerBase
         {
             PurchaseOrderId = id,
             ReceivedAt = request.ReceivedAt,
+            IdempotencyKey = request.IdempotencyKey,
             Lines = request.Lines.Select(x => new ReceivePurchaseOrderLineRequest
             {
                 PurchaseOrderLineId = x.PurchaseOrderLineId,
@@ -121,6 +122,11 @@ public class ReceivePurchaseOrderRequest
 {
     public DateTimeOffset? ReceivedAt { get; init; }
     public List<ReceivePurchaseOrderLineItemRequest> Lines { get; init; } = [];
+    /// <summary>
+    /// Identifies this reception: the same key again (a double click, a retry after a timeout) answers with the
+    /// purchase order as it is, without receiving twice.
+    /// </summary>
+    public Guid? IdempotencyKey { get; init; }
 }
 
 public class ReceivePurchaseOrderLineItemRequest
