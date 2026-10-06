@@ -21,77 +21,77 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<CategoryDto>>> GetAll([FromQuery] bool includeArchived = false)
+    public async Task<ActionResult<List<CategoryDto>>> GetAll([FromQuery] bool includeArchived = false, CancellationToken cancellationToken = default)
     {
-        var result = await _mediator.Send(new GetCategoriesQuery { IncludeArchived = includeArchived });
+        var result = await _mediator.Send(new GetCategoriesQuery { IncludeArchived = includeArchived }, cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("templates")]
-    public async Task<ActionResult<List<CategoryTemplateDto>>> GetTemplates()
+    public async Task<ActionResult<List<CategoryTemplateDto>>> GetTemplates(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetCategoryTemplatesQuery());
+        var result = await _mediator.Send(new GetCategoryTemplatesQuery(), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("templates/{templateId}/install")]
-    public async Task<ActionResult<InstallCategoryTemplateResultDto>> InstallTemplate(string templateId)
+    public async Task<ActionResult<InstallCategoryTemplateResultDto>> InstallTemplate(string templateId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new InstallCategoryTemplateCommand
         {
             TemplateId = templateId
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<CategoryDto>> GetById(Guid id)
+    public async Task<ActionResult<CategoryDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetCategoryByIdQuery(id));
+        var result = await _mediator.Send(new GetCategoryByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<ActionResult<CategoryDto>> Create([FromBody] CreateCategoryCommand command)
+    public async Task<ActionResult<CategoryDto>> Create([FromBody] CreateCategoryCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<CategoryDto>> Update(Guid id, [FromBody] UpdateCategoryCommand command)
+    public async Task<ActionResult<CategoryDto>> Update(Guid id, [FromBody] UpdateCategoryCommand command, CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new DeleteCategoryCommand(id));
+        var result = await _mediator.Send(new DeleteCategoryCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
     [HttpPatch("{id:guid}/active")]
-    public async Task<IActionResult> ToggleActive(Guid id, [FromBody] ToggleCategoryActiveRequest request)
+    public async Task<IActionResult> ToggleActive(Guid id, [FromBody] ToggleCategoryActiveRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ToggleCategoryActiveCommand
         {
             Id = id,
             IsActive = request.IsActive,
             MoveProductsToCategoryId = request.MoveProductsToCategoryId
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();

@@ -27,7 +27,8 @@ public class AuditController : ControllerBase
         [FromQuery] DateTimeOffset? to,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetAuditLogsQuery
         {
@@ -38,7 +39,7 @@ public class AuditController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 }

@@ -25,8 +25,8 @@ public class PlatformController : ControllerBase
     }
 
     [HttpGet("overview")]
-    public async Task<ActionResult<PlatformOverviewDto>> GetOverview()
-        => Ok(await _mediator.Send(new GetPlatformOverviewQuery()));
+    public async Task<ActionResult<PlatformOverviewDto>> GetOverview(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetPlatformOverviewQuery(), cancellationToken));
 
     [HttpGet("tenants")]
     public async Task<ActionResult<PaginatedList<PlatformTenantDto>>> GetTenants(
@@ -35,7 +35,8 @@ public class PlatformController : ControllerBase
         [FromQuery] bool withoutPlan = false,
         [FromQuery] Guid? planId = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
         => Ok(await _mediator.Send(new GetPlatformTenantsQuery
         {
             Search = search,
@@ -44,21 +45,21 @@ public class PlatformController : ControllerBase
             PlanId = planId,
             PageNumber = pageNumber,
             PageSize = pageSize
-        }));
+        }, cancellationToken));
 
     [HttpGet("tenants/{tenantId:guid}/subscription")]
-    public async Task<ActionResult<SubscriptionDetailDto>> GetTenantSubscription(Guid tenantId)
+    public async Task<ActionResult<SubscriptionDetailDto>> GetTenantSubscription(Guid tenantId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetTenantSubscriptionQuery { TenantId = tenantId });
+        var result = await _mediator.Send(new GetTenantSubscriptionQuery { TenantId = tenantId }, cancellationToken);
         return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPut("tenants/{tenantId:guid}/plan")]
-    public Task<IActionResult> AssignPlan(Guid tenantId, [FromBody] AssignPlanRequest request)
-        => SendAsync(new AssignPlanCommand { TenantId = tenantId, PlanId = request.PlanId, TrialDays = request.TrialDays });
+    public Task<IActionResult> AssignPlan(Guid tenantId, [FromBody] AssignPlanRequest request, CancellationToken cancellationToken)
+        => SendAsync(new AssignPlanCommand { TenantId = tenantId, PlanId = request.PlanId, TrialDays = request.TrialDays }, cancellationToken);
 
     [HttpPost("tenants/{tenantId:guid}/payments")]
-    public Task<IActionResult> RegisterPayment(Guid tenantId, [FromBody] RegisterSubscriptionPaymentRequest request)
+    public Task<IActionResult> RegisterPayment(Guid tenantId, [FromBody] RegisterSubscriptionPaymentRequest request, CancellationToken cancellationToken)
         => SendAsync(new RegisterSubscriptionPaymentCommand
         {
             TenantId = tenantId,
@@ -66,48 +67,48 @@ public class PlatformController : ControllerBase
             Amount = request.Amount,
             Method = request.Method,
             Reference = request.Reference
-        });
+        }, cancellationToken);
 
     [HttpPost("tenants/{tenantId:guid}/trial")]
-    public Task<IActionResult> ExtendTrial(Guid tenantId, [FromBody] ExtendTrialRequest request)
-        => SendAsync(new ExtendTrialCommand { TenantId = tenantId, Days = request.Days });
+    public Task<IActionResult> ExtendTrial(Guid tenantId, [FromBody] ExtendTrialRequest request, CancellationToken cancellationToken)
+        => SendAsync(new ExtendTrialCommand { TenantId = tenantId, Days = request.Days }, cancellationToken);
 
     [HttpPost("tenants/{tenantId:guid}/suspend")]
-    public Task<IActionResult> Suspend(Guid tenantId, [FromBody] PlatformReasonRequest request)
-        => SendAsync(new SuspendTenantCommand { TenantId = tenantId, Reason = request.Reason });
+    public Task<IActionResult> Suspend(Guid tenantId, [FromBody] PlatformReasonRequest request, CancellationToken cancellationToken)
+        => SendAsync(new SuspendTenantCommand { TenantId = tenantId, Reason = request.Reason }, cancellationToken);
 
     [HttpPost("tenants/{tenantId:guid}/reactivate")]
-    public Task<IActionResult> Reactivate(Guid tenantId)
-        => SendAsync(new ReactivateTenantCommand { TenantId = tenantId });
+    public Task<IActionResult> Reactivate(Guid tenantId, CancellationToken cancellationToken)
+        => SendAsync(new ReactivateTenantCommand { TenantId = tenantId }, cancellationToken);
 
     [HttpPost("tenants/{tenantId:guid}/cancel")]
-    public Task<IActionResult> Cancel(Guid tenantId, [FromBody] PlatformReasonRequest request)
-        => SendAsync(new CancelSubscriptionCommand { TenantId = tenantId, Reason = request.Reason });
+    public Task<IActionResult> Cancel(Guid tenantId, [FromBody] PlatformReasonRequest request, CancellationToken cancellationToken)
+        => SendAsync(new CancelSubscriptionCommand { TenantId = tenantId, Reason = request.Reason }, cancellationToken);
 
     [HttpGet("plans")]
-    public async Task<ActionResult<List<PlanDto>>> GetPlans()
-        => Ok(await _mediator.Send(new GetPlansQuery()));
+    public async Task<ActionResult<List<PlanDto>>> GetPlans(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetPlansQuery(), cancellationToken));
 
     [HttpPost("plans")]
-    public async Task<ActionResult<PlanDto>> CreatePlan([FromBody] CreatePlanCommand command)
+    public async Task<ActionResult<PlanDto>> CreatePlan([FromBody] CreatePlanCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
     [HttpPut("plans/{id:guid}")]
-    public async Task<ActionResult<PlanDto>> UpdatePlan(Guid id, [FromBody] UpdatePlanCommand command)
+    public async Task<ActionResult<PlanDto>> UpdatePlan(Guid id, [FromBody] UpdatePlanCommand command, CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);
     }
 
-    private async Task<IActionResult> SendAsync(IRequest<Result> command)
+    private async Task<IActionResult> SendAsync(IRequest<Result> command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : NoContent();
     }
 }

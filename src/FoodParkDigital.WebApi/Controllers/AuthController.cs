@@ -33,9 +33,9 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginCommand command)
+    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status401Unauthorized, result.Error);
 
@@ -52,13 +52,13 @@ public class AuthController : ControllerBase
 
     [HttpPost("refresh-token")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> RefreshToken()
+    public async Task<ActionResult<AuthResponse>> RefreshToken(CancellationToken cancellationToken)
     {
         var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
         if (string.IsNullOrEmpty(refreshToken))
             return this.ApiError(StatusCodes.Status401Unauthorized, "No hay una sesión que renovar. Inicia sesión de nuevo.");
 
-        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken));
+        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken), cancellationToken);
 
         if (result.IsFailure)
         {
@@ -79,10 +79,10 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [AllowAnonymous]
-    public async Task<ActionResult> Logout()
+    public async Task<ActionResult> Logout(CancellationToken cancellationToken)
     {
         var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
-        await _mediator.Send(new LogoutCommand(refreshToken));
+        await _mediator.Send(new LogoutCommand(refreshToken), cancellationToken);
         DeleteRefreshTokenCookie();
         return Ok(new { message = "Sesión cerrada exitosamente." });
     }
@@ -90,9 +90,9 @@ public class AuthController : ControllerBase
     [HttpPost("register/business")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command)
+    public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -106,9 +106,9 @@ public class AuthController : ControllerBase
     [HttpPost("register/customer")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> RegisterCustomer([FromBody] RegisterCustomerCommand command)
+    public async Task<ActionResult<AuthResponse>> RegisterCustomer([FromBody] RegisterCustomerCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -121,9 +121,9 @@ public class AuthController : ControllerBase
 
     [HttpPost("switch-tenant")]
     [Authorize]
-    public async Task<ActionResult<AuthResponse>> SwitchTenant([FromBody] SwitchTenantCommand command)
+    public async Task<ActionResult<AuthResponse>> SwitchTenant([FromBody] SwitchTenantCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command with { CurrentRefreshToken = Request.Cookies[RefreshTokenCookie.Name] });
+        var result = await _mediator.Send(command with { CurrentRefreshToken = Request.Cookies[RefreshTokenCookie.Name] }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -136,9 +136,9 @@ public class AuthController : ControllerBase
     [HttpGet("confirm-email")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
+    public async Task<ActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ConfirmEmailCommand(userId, token));
+        var result = await _mediator.Send(new ConfirmEmailCommand(userId, token), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Email confirmado exitosamente." });
@@ -147,18 +147,18 @@ public class AuthController : ControllerBase
     [HttpPost("resend-confirmation-email")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ResendConfirmationEmail([FromBody] ResendConfirmationEmailCommand command)
+    public async Task<ActionResult> ResendConfirmationEmail([FromBody] ResendConfirmationEmailCommand command, CancellationToken cancellationToken)
     {
-        await _mediator.Send(command);
+        await _mediator.Send(command, cancellationToken);
         return Ok(new { message = "Si el email existe, recibirás un correo de confirmación." });
     }
 
     [HttpPost("confirm-phone")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ConfirmPhone([FromBody] ConfirmPhoneCommand command)
+    public async Task<ActionResult> ConfirmPhone([FromBody] ConfirmPhoneCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Número de teléfono confirmado exitosamente." });
@@ -167,27 +167,27 @@ public class AuthController : ControllerBase
     [HttpPost("resend-phone-confirmation")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ResendPhoneConfirmation([FromBody] ResendPhoneConfirmationCommand command)
+    public async Task<ActionResult> ResendPhoneConfirmation([FromBody] ResendPhoneConfirmationCommand command, CancellationToken cancellationToken)
     {
-        await _mediator.Send(command);
+        await _mediator.Send(command, cancellationToken);
         return Ok(new { message = "Si el número existe, recibirás un SMS de confirmación." });
     }
 
     [HttpPost("forgot-password")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordCommand command)
+    public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordCommand command, CancellationToken cancellationToken)
     {
-        await _mediator.Send(command);
+        await _mediator.Send(command, cancellationToken);
         return Ok(new { message = "Si el email existe en nuestro sistema, recibirás un correo con instrucciones." });
     }
 
     [HttpPost("reset-password")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordCommand command)
+    public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Contraseña restablecida exitosamente." });
@@ -197,18 +197,18 @@ public class AuthController : ControllerBase
     [HttpPost("forgot-password/sms")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ForgotPasswordBySms([FromBody] ForgotPasswordBySmsCommand command)
+    public async Task<ActionResult> ForgotPasswordBySms([FromBody] ForgotPasswordBySmsCommand command, CancellationToken cancellationToken)
     {
-        await _mediator.Send(command);
+        await _mediator.Send(command, cancellationToken);
         return Ok(new { message = "Si tu cuenta tiene un teléfono confirmado, te enviamos un código por SMS." });
     }
 
     [HttpPost("reset-password/sms")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ResetPasswordWithSmsCode([FromBody] ResetPasswordWithSmsCodeCommand command)
+    public async Task<ActionResult> ResetPasswordWithSmsCode([FromBody] ResetPasswordWithSmsCodeCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Contraseña restablecida exitosamente." });
@@ -218,9 +218,9 @@ public class AuthController : ControllerBase
     [HttpPost("change-unconfirmed-phone")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult> ChangeUnconfirmedPhone([FromBody] ChangeUnconfirmedPhoneCommand command)
+    public async Task<ActionResult> ChangeUnconfirmedPhone([FromBody] ChangeUnconfirmedPhoneCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Te enviamos un código al número nuevo." });
@@ -230,9 +230,9 @@ public class AuthController : ControllerBase
     [HttpGet("invitation")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<InvitationDto>> GetInvitation([FromQuery] Guid userId, [FromQuery] string token)
+    public async Task<ActionResult<InvitationDto>> GetInvitation([FromQuery] Guid userId, [FromQuery] string token, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetInvitationQuery(userId, token));
+        var result = await _mediator.Send(new GetInvitationQuery(userId, token), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -242,9 +242,9 @@ public class AuthController : ControllerBase
     [HttpPost("accept-invitation")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> AcceptInvitation([FromBody] AcceptInvitationCommand command)
+    public async Task<ActionResult<AuthResponse>> AcceptInvitation([FromBody] AcceptInvitationCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -257,9 +257,9 @@ public class AuthController : ControllerBase
 
     [HttpGet("profile")]
     [Authorize]
-    public async Task<ActionResult<UserProfileDto>> GetProfile()
+    public async Task<ActionResult<UserProfileDto>> GetProfile(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetUserProfileQuery());
+        var result = await _mediator.Send(new GetUserProfileQuery(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
@@ -267,9 +267,9 @@ public class AuthController : ControllerBase
 
     [HttpPut("profile")]
     [Authorize]
-    public async Task<ActionResult<UserProfileDto>> UpdateProfile([FromBody] UpdateUserProfileCommand command)
+    public async Task<ActionResult<UserProfileDto>> UpdateProfile([FromBody] UpdateUserProfileCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -278,7 +278,7 @@ public class AuthController : ControllerBase
     [HttpPost("profile/avatar")]
     [Authorize]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<AvatarImageUrlsDto>> UploadAvatar(IFormFile file)
+    public async Task<ActionResult<AvatarImageUrlsDto>> UploadAvatar(IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
             return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
@@ -289,7 +289,7 @@ public class AuthController : ControllerBase
             FileName = file.FileName,
             ContentType = file.ContentType,
             FileSize = file.Length
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -297,9 +297,9 @@ public class AuthController : ControllerBase
 
     [HttpDelete("profile/avatar")]
     [Authorize]
-    public async Task<IActionResult> DeleteAvatar()
+    public async Task<IActionResult> DeleteAvatar(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new DeleteAvatarCommand());
+        var result = await _mediator.Send(new DeleteAvatarCommand(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
@@ -309,9 +309,9 @@ public class AuthController : ControllerBase
     [HttpPost("profile/phone")]
     [EnableRateLimiting("auth")]
     [Authorize]
-    public async Task<IActionResult> RequestPhoneChange([FromBody] RequestPhoneChangeCommand command)
+    public async Task<IActionResult> RequestPhoneChange([FromBody] RequestPhoneChangeCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Te enviamos un código al número nuevo." });
@@ -320,9 +320,9 @@ public class AuthController : ControllerBase
     [HttpPost("profile/phone/confirm")]
     [EnableRateLimiting("auth")]
     [Authorize]
-    public async Task<IActionResult> ConfirmPhoneChange([FromBody] ConfirmPhoneChangeCommand command)
+    public async Task<IActionResult> ConfirmPhoneChange([FromBody] ConfirmPhoneChangeCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Número de teléfono confirmado exitosamente." });
@@ -331,27 +331,27 @@ public class AuthController : ControllerBase
     [HttpPost("profile/change-password")]
     [EnableRateLimiting("auth")]
     [Authorize]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordCommand command)
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Contraseña actualizada exitosamente." });
     }
 
     [HttpGet("profile/whatsapp")]
-    public async Task<ActionResult<OwnerWhatsAppConfigDto>> GetOwnerWhatsAppConfig()
+    public async Task<ActionResult<OwnerWhatsAppConfigDto>> GetOwnerWhatsAppConfig(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetOwnerWhatsAppConfigQuery());
+        var result = await _mediator.Send(new GetOwnerWhatsAppConfigQuery(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPut("profile/whatsapp")]
-    public async Task<ActionResult<OwnerWhatsAppConfigDto>> UpdateOwnerWhatsAppConfig([FromBody] UpdateOwnerWhatsAppConfigCommand command)
+    public async Task<ActionResult<OwnerWhatsAppConfigDto>> UpdateOwnerWhatsAppConfig([FromBody] UpdateOwnerWhatsAppConfigCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -359,9 +359,9 @@ public class AuthController : ControllerBase
 
     [HttpGet("my-tenant")]
     [Authorize]
-    public async Task<ActionResult<TenantProfileDto>> GetMyTenant()
+    public async Task<ActionResult<TenantProfileDto>> GetMyTenant(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetMyTenantQuery());
+        var result = await _mediator.Send(new GetMyTenantQuery(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
@@ -369,9 +369,9 @@ public class AuthController : ControllerBase
 
     [HttpPut("my-tenant")]
     [Authorize]
-    public async Task<ActionResult<TenantProfileDto>> UpdateMyTenant([FromBody] UpdateMyTenantCommand command)
+    public async Task<ActionResult<TenantProfileDto>> UpdateMyTenant([FromBody] UpdateMyTenantCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -379,7 +379,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("my-tenant/logo")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantLogo(IFormFile file)
+    public async Task<ActionResult<LogoImageUrlsDto>> UploadTenantLogo(IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
             return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
@@ -390,43 +390,43 @@ public class AuthController : ControllerBase
             FileName = file.FileName,
             ContentType = file.ContentType,
             FileSize = file.Length
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpDelete("my-tenant/logo")]
-    public async Task<IActionResult> DeleteTenantLogo()
+    public async Task<IActionResult> DeleteTenantLogo(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new DeleteTenantLogoCommand());
+        var result = await _mediator.Send(new DeleteTenantLogoCommand(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
     [HttpGet("my-tenant/whatsapp")]
-    public async Task<ActionResult<WhatsAppConfigDto>> GetWhatsAppConfig()
+    public async Task<ActionResult<WhatsAppConfigDto>> GetWhatsAppConfig(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetWhatsAppConfigQuery());
+        var result = await _mediator.Send(new GetWhatsAppConfigQuery(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPut("my-tenant/whatsapp")]
-    public async Task<ActionResult<WhatsAppConfigDto>> UpdateWhatsAppConfig([FromBody] UpdateWhatsAppConfigCommand command)
+    public async Task<ActionResult<WhatsAppConfigDto>> UpdateWhatsAppConfig([FromBody] UpdateWhatsAppConfigCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPost("my-tenant/whatsapp/send")]
-    public async Task<IActionResult> SendWhatsAppMessage([FromBody] SendWhatsAppMessageCommand command)
+    public async Task<IActionResult> SendWhatsAppMessage([FromBody] SendWhatsAppMessageCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Mensaje enviado exitosamente." });

@@ -30,7 +30,8 @@ public class ServiceBoardController : ControllerBase
         [FromQuery] bool includeCancelled = false,
         [FromQuery] bool onlyMine = false,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetServiceBoardPiecesQuery
         {
@@ -41,18 +42,18 @@ public class ServiceBoardController : ControllerBase
             OnlyMine = onlyMine,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpPut("pieces/{pieceId:guid}/assign-to-me")]
-    public async Task<IActionResult> AssignToMe(Guid pieceId)
+    public async Task<IActionResult> AssignToMe(Guid pieceId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new AssignServiceOrderPieceToMeCommand
         {
             PieceId = pieceId
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -61,12 +62,12 @@ public class ServiceBoardController : ControllerBase
     }
 
     [HttpPut("pieces/{pieceId:guid}/release")]
-    public async Task<IActionResult> Release(Guid pieceId)
+    public async Task<IActionResult> Release(Guid pieceId, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ReleaseServiceOrderPieceAssignmentCommand
         {
             PieceId = pieceId
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);

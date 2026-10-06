@@ -137,7 +137,7 @@ public class TenantFilterBypassAllowlistTests
     /// The source without <c>//</c> and <c>/* */</c> comments. String and character literals are copied as they are,
     /// so a <c>//</c> inside a URL does not start a comment.
     /// </summary>
-    private static string WithoutComments(string source)
+    internal static string WithoutComments(string source)
     {
         var code = new System.Text.StringBuilder(source.Length);
         var index = 0;
@@ -198,7 +198,7 @@ public class TenantFilterBypassAllowlistTests
         return code.ToString();
     }
 
-    private static string FindRepositoryRoot()
+    internal static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {

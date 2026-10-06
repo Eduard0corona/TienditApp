@@ -24,13 +24,13 @@ public class TwoFactorController : ControllerBase
     }
 
     [HttpPost("enable")]
-    public async Task<ActionResult<Enable2FAResponse>> Enable2FA()
+    public async Task<ActionResult<Enable2FAResponse>> Enable2FA(CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
 
-        var result = await _mediator.Send(new Enable2FACommand(userId));
+        var result = await _mediator.Send(new Enable2FACommand(userId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -39,13 +39,13 @@ public class TwoFactorController : ControllerBase
 
     [HttpPost("verify")]
     [EnableRateLimiting("auth")]
-    public async Task<ActionResult<Verify2FAResponse>> Verify2FA([FromBody] VerifyRequest request)
+    public async Task<ActionResult<Verify2FAResponse>> Verify2FA([FromBody] VerifyRequest request, CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return this.ApiError(StatusCodes.Status401Unauthorized, "Usuario no autenticado.");
 
-        var result = await _mediator.Send(new Verify2FACommand(userId, request.Code));
+        var result = await _mediator.Send(new Verify2FACommand(userId, request.Code), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 

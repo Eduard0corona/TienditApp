@@ -24,26 +24,26 @@ public class MeController : ControllerBase
 
     /// <summary>Role, permissions and modules of the signed-in user in the current business, resolved by the server.</summary>
     [HttpGet("access")]
-    public async Task<ActionResult<MyAccessDto>> GetMyAccess()
-        => Ok(await _mediator.Send(new GetMyAccessQuery()));
+    public async Task<ActionResult<MyAccessDto>> GetMyAccess(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMyAccessQuery(), cancellationToken));
 
     [HttpGet("tenants")]
-    public async Task<ActionResult<IReadOnlyList<MyTenantDto>>> GetMyTenants()
+    public async Task<ActionResult<IReadOnlyList<MyTenantDto>>> GetMyTenants(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetMyTenantsQuery());
+        var result = await _mediator.Send(new GetMyTenantsQuery(), cancellationToken);
         return Ok(result);
     }
 
     /// <summary>The customer account's orders in every business, newest first.</summary>
     [HttpGet("orders")]
-    public async Task<ActionResult<PaginatedList<MyOrderDto>>> GetMyOrders([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
-        => Ok(await _mediator.Send(new GetMyOrdersQuery { PageNumber = pageNumber, PageSize = pageSize }));
+    public async Task<ActionResult<PaginatedList<MyOrderDto>>> GetMyOrders([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10, CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetMyOrdersQuery { PageNumber = pageNumber, PageSize = pageSize }, cancellationToken));
 
     /// <summary>Opens another business with this account, as its owner. Switch to it to finish its setup.</summary>
     [HttpPost("tenants")]
-    public async Task<ActionResult<MyTenantDto>> CreateBusiness([FromBody] CreateBusinessCommand command)
+    public async Task<ActionResult<MyTenantDto>> CreateBusiness([FromBody] CreateBusinessCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

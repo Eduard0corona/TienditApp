@@ -20,22 +20,22 @@ public class TablesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<DiningRoomDto>> GetDiningRoom([FromQuery] bool includeInactive = false)
-        => Ok(await _mediator.Send(new GetDiningRoomQuery(includeInactive)));
+    public async Task<ActionResult<DiningRoomDto>> GetDiningRoom([FromQuery] bool includeInactive = false, CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetDiningRoomQuery(includeInactive), cancellationToken));
 
     [HttpPost]
-    public async Task<ActionResult<DiningTableDto>> Create([FromBody] CreateDiningTableCommand command)
+    public async Task<ActionResult<DiningTableDto>> Create([FromBody] CreateDiningTableCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<DiningTableDto>> Update(Guid id, [FromBody] UpdateDiningTableCommand command)
+    public async Task<ActionResult<DiningTableDto>> Update(Guid id, [FromBody] UpdateDiningTableCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command with { Id = id });
+        var result = await _mediator.Send(command with { Id = id }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

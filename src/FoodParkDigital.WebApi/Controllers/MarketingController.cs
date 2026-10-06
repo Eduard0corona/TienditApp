@@ -19,9 +19,9 @@ public class MarketingController : ControllerBase
     }
 
     [HttpPost("promotions/send")]
-    public async Task<IActionResult> SendPromotion([FromBody] SendPromotionalMessageCommand command)
+    public async Task<IActionResult> SendPromotion([FromBody] SendPromotionalMessageCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { sent = result.Value });

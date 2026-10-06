@@ -8,6 +8,7 @@ using FoodParkDigital.WebApi.Controllers;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -154,6 +155,52 @@ public class ArchitectureTests
     }
 
     [Fact]
+    public void ControllerActions_ShouldReceiveTheRequestCancellation()
+    {
+        // Each action passes it to its use case (below); RequestCancellation decides what it is: the request's own for
+        // a read, none for a change.
+        var offending = WebApi.GetTypes()
+            .Where(type => typeof(ControllerBase).IsAssignableFrom(type) && !type.IsAbstract)
+            .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            .Where(method => method.GetCustomAttributes<HttpMethodAttribute>().Any())
+            .Where(method => method.GetParameters().All(parameter => parameter.ParameterType != typeof(CancellationToken)))
+            .Select(method => $"{method.DeclaringType!.Name}.{method.Name}")
+            .ToList();
+
+        Assert.True(offending.Count == 0, "Actions without a CancellationToken: " + string.Join(", ", offending));
+    }
+
+    [Fact]
+    public void Controllers_ShouldPassTheCancellationToTheUseCase()
+    {
+        var controllers = Path.Combine(TenantFilterBypassAllowlistTests.FindRepositoryRoot(), "src", "FoodParkDigital.WebApi", "Controllers");
+        var calls = Directory.EnumerateFiles(controllers, "*.cs")
+            .SelectMany(path => MediatorCalls(File.ReadAllText(path)).Select(arguments => (File: Path.GetFileName(path), Arguments: arguments)))
+            .ToList();
+
+        var offending = calls
+            .Where(call => call.Arguments.Count != 2 || call.Arguments[1] != "cancellationToken")
+            .Select(call => $"{call.File}: Send({string.Join(", ", call.Arguments)})")
+            .ToList();
+
+        Assert.NotEmpty(calls);
+        Assert.True(offending.Count == 0, "Calls to the mediator without the action's cancellationToken: " + string.Join("; ", offending));
+    }
+
+    [Theory]
+    [InlineData("await _mediator.Send(command, cancellationToken);", "command|cancellationToken")]
+    [InlineData("await _mediator.Send(command);", "command")]
+    [InlineData("_mediator.Send(new Query { Search = search, Page = Math.Max(1, page) }, cancellationToken)", "new Query { Search = search, Page = Math.Max(1, page) }|cancellationToken")]
+    [InlineData("_mediator.Send(new X { Lines = l.Select(x => new Y { A = x.A, B = x.B }).ToList() }, ct)", "new X { Lines = l.Select(x => new Y { A = x.A, B = x.B }).ToList() }|ct")]
+    [InlineData("_mediator.Send(new Note(\"a, b) c\", ','), CancellationToken.None)", "new Note(\"a, b) c\", ',')|CancellationToken.None")]
+    [InlineData("_mediator.Send(new Note(@\"a \"\", b\"), cancellationToken)", "new Note(@\"a \"\", b\")|cancellationToken")]
+    [InlineData("// _mediator.Send(command)\n_mediator.Send(other, cancellationToken)", "other|cancellationToken")]
+    public void MediatorCalls_ShouldSplitTheArgumentsAtTheTopLevel(string source, string expected)
+    {
+        Assert.Equal(expected, string.Join("|", Assert.Single(MediatorCalls(source))));
+    }
+
+    [Fact]
     public void EntitiesWithATenant_ShouldBeFilteredByIt()
     {
         using var context = NewContext();
@@ -222,6 +269,75 @@ public class ArchitectureTests
             new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options,
             new NoTenant(),
             new NoMediator());
+
+    /// <summary>The arguments, split at the top level, of every call to the mediator in the code (comments left out).</summary>
+    private static IEnumerable<IReadOnlyList<string>> MediatorCalls(string source)
+    {
+        const string call = "_mediator.Send(";
+        var code = TenantFilterBypassAllowlistTests.WithoutComments(source);
+        for (var index = code.IndexOf(call, StringComparison.Ordinal);
+             index >= 0;
+             index = code.IndexOf(call, index + call.Length, StringComparison.Ordinal))
+        {
+            yield return Arguments(code, index + call.Length);
+        }
+    }
+
+    /// <summary>Splits the arguments of the call whose list starts at <paramref name="start"/>, right after its parenthesis.</summary>
+    private static List<string> Arguments(string code, int start)
+    {
+        var arguments = new List<string>();
+        var depth = 0;
+        var from = start;
+        for (var index = start; index < code.Length; index++)
+        {
+            switch (code[index])
+            {
+                case '"' or '\'':
+                    index = EndOfLiteral(code, index);
+                    break;
+                case '(' or '[' or '{':
+                    depth++;
+                    break;
+                case ')' when depth == 0:
+                    arguments.Add(code[from..index].Trim());
+                    return arguments;
+                case ')' or ']' or '}':
+                    depth--;
+                    break;
+                case ',' when depth == 0:
+                    arguments.Add(code[from..index].Trim());
+                    from = index + 1;
+                    break;
+            }
+        }
+
+        throw new InvalidOperationException("A call to the mediator is not closed.");
+    }
+
+    /// <returns>Where the string or character literal that opens at <paramref name="start"/> closes.</returns>
+    private static int EndOfLiteral(string code, int start)
+    {
+        // Verbatim strings (@"...", $@"...") escape a quote by doubling it; the others with a backslash.
+        var quote = code[start];
+        var verbatim = quote == '"'
+            && ((start > 0 && code[start - 1] == '@') || (start > 1 && code[start - 2] == '@' && code[start - 1] == '$'));
+        for (var index = start + 1; index < code.Length; index++)
+        {
+            if (!verbatim && code[index] == '\\')
+            {
+                index++;
+            }
+            else if (code[index] == quote)
+            {
+                if (!verbatim || index + 1 >= code.Length || code[index + 1] != '"')
+                    return index;
+                index++;
+            }
+        }
+
+        throw new InvalidOperationException("A literal is not closed.");
+    }
 
     private sealed class NoTenant : ICurrentTenantService
     {

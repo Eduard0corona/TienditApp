@@ -29,18 +29,18 @@ public class TenantSetupController : ControllerBase
     }
 
     [HttpGet("setup")]
-    public async Task<ActionResult<TenantSetupDto>> GetSetup()
+    public async Task<ActionResult<TenantSetupDto>> GetSetup(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetTenantSetupQuery());
+        var result = await _mediator.Send(new GetTenantSetupQuery(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPost("setup/complete")]
-    public async Task<IActionResult> CompleteSetup()
+    public async Task<IActionResult> CompleteSetup(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new CompleteTenantSetupCommand());
+        var result = await _mediator.Send(new CompleteTenantSetupCommand(), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
@@ -48,18 +48,19 @@ public class TenantSetupController : ControllerBase
 
     [HttpPost("setup/starter-catalog")]
     public async Task<ActionResult<InstallStarterCatalogResultDto>> InstallStarterCatalog(
-        [FromBody] InstallStarterCatalogCommand command)
+        [FromBody] InstallStarterCatalogCommand command,
+        CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPut("sales-policy")]
-    public async Task<ActionResult<TenantSalesPolicyDto>> UpdateSalesPolicy([FromBody] UpdateSalesPolicyCommand command)
+    public async Task<ActionResult<TenantSalesPolicyDto>> UpdateSalesPolicy([FromBody] UpdateSalesPolicyCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -67,14 +68,14 @@ public class TenantSetupController : ControllerBase
 
     /// <summary>Plan, billing status, limits in use and payments of the business (owners and admins).</summary>
     [HttpGet("subscription")]
-    public async Task<ActionResult<SubscriptionDetailDto>> GetSubscription()
-        => Ok(await _mediator.Send(new GetMySubscriptionQuery()));
+    public async Task<ActionResult<SubscriptionDetailDto>> GetSubscription(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMySubscriptionQuery(), cancellationToken));
 
     /// <summary>Turns the public menu off, on, or on with orders.</summary>
     [HttpPut("online-menu")]
-    public async Task<ActionResult<OnlineMenuSettingsDto>> UpdateOnlineMenu([FromBody] UpdateOnlineMenuRequest request)
+    public async Task<ActionResult<OnlineMenuSettingsDto>> UpdateOnlineMenu([FromBody] UpdateOnlineMenuRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new UpdateOnlineMenuCommand(request.Mode));
+        var result = await _mediator.Send(new UpdateOnlineMenuCommand(request.Mode), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

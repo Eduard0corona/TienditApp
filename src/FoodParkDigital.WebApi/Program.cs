@@ -5,6 +5,7 @@ using FoodParkDigital.Infrastructure;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Persistence.Seeds;
+using FoodParkDigital.WebApi.Http;
 using FoodParkDigital.WebApi.Hubs;
 using FoodParkDigital.WebApi.Middleware;
 using FoodParkDigital.WebApi.Observability;
@@ -129,7 +130,12 @@ builder.Services.AddRateLimiter(options =>
 // Controllers. Every error leaves as ProblemDetails with a stable code (see ApiErrorCodes), also the ones the
 // framework writes: model binding, NotFound(), and empty 401/403/404 answers of /api (status code pages below).
 // Binding errors answer in Spanish and as ProblemDetails, like the rest; the JSON reader's own messages stay out.
-builder.Services.AddControllers(options => SpanishModelBinding.Apply(options.ModelBindingMessageProvider))
+// Reads stop when their client leaves; changes finish once they arrived (RequestCancellation).
+builder.Services.AddControllers(options =>
+    {
+        SpanishModelBinding.Apply(options.ModelBindingMessageProvider);
+        RequestCancellation.Apply(options);
+    })
     .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = SpanishModelBinding.InvalidModelStateResponse)
     .AddJsonOptions(options => options.AllowInputFormatterExceptionMessages = false);
 builder.Services.AddProblemDetails(options =>
