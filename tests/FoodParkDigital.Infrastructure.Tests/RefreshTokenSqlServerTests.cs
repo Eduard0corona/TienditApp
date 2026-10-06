@@ -20,7 +20,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
 /// Refresh tokens in SQL Server: a token renews its session once even when two requests present it together, and the
-/// migration that stops using plain values keeps the sessions of the tokens issued before the hashing.
+/// migrations that hash the plain values and then drop their columns keep the sessions of the tokens issued before the
+/// hashing.
 /// </summary>
 public class RefreshTokenSqlServerTests
 {
@@ -64,10 +65,10 @@ public class RefreshTokenSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Migration_ShouldHashThePlainValuesLeft_SoTheirSessionsKeepWorking_AndStoreNoValue()
+    public async Task Migrations_ShouldHashThePlainValuesLeft_ThenDropTheirColumns_WhileTheSessionsKeepWorking()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
-        await MigrateAsync(database, LastMigrationOfThePreviousVersion);
+        await MigrateAsync(database, LastMigrationOfPhase8);
         var userId = await SeedUserAsync(database);
         var now = DateTimeOffset.UtcNow;
         await using (var context = database.CreateContext())
@@ -78,7 +79,7 @@ public class RefreshTokenSqlServerTests
                          ("valor-activo", (string?)null, (DateTimeOffset?)null, (string?)null),
                          // Replaced before the hashing: presenting it again must still count as a copy.
                          ("valor-reemplazado", null, now, "valor-activo"),
-                         // Issued by the previous version: only its hash.
+                         // Issued by Phase 8: only its hash.
                          ("", RefreshToken.HashOf("valor-con-hash"), null, null),
                          // Left without its hash by a rollback: it opens nothing, and stays so.
                          ("", null, null, null)
@@ -91,8 +92,8 @@ public class RefreshTokenSqlServerTests
             }
         }
 
-        await MigrateAsync(database);
-
+        // Phase 9: the plain values get their hash and are emptied; the columns stay for Phase 8.
+        await MigrateAsync(database, HashingMigration);
         await using (var context = database.CreateContext())
         {
             // The hash computed in SQL is the one this version computes for the value presented.
@@ -104,24 +105,41 @@ public class RefreshTokenSqlServerTests
             Assert.Equal(1, await context.RefreshTokens.CountAsync(t => t.TokenHash == null));
             Assert.Equal(0, await PlainValuesAsync(context));
 
-            // This version stores no value at all: the column, still there for the previous version, stays null.
+            // A token issued meanwhile stores no value: the column, still there for Phase 8, stays null.
             context.RefreshTokens.Add(new RefreshToken(userId, Guid.NewGuid(), "valor-nuevo", now, now.AddDays(7)));
             await context.SaveChangesAsync();
             Assert.Equal(1, await NullValuesAsync(context));
         }
 
-        // A rollback (its Down changes nothing) and the script applied again: the same result.
-        await MigrateAsync(database, LastMigrationOfThePreviousVersion);
+        // Phase 10: the columns and their index go; the sessions stay.
         await MigrateAsync(database);
         await using (var context = database.CreateContext())
         {
+            Assert.Equal((0, 0), await PlainValueSchemaAsync(context));
             Assert.True((await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None))!.IsActive);
+            Assert.True((await UserSessions.FindAsync(context, "valor-reemplazado", CancellationToken.None))!.WasRotated);
+            Assert.NotNull(await UserSessions.FindAsync(context, "valor-nuevo", CancellationToken.None));
+        }
+
+        // Rolling both back gives the columns back, empty (Phase 8 reads a null Token as no plain value), and applying
+        // them again ends the same way.
+        await MigrateAsync(database, LastMigrationOfPhase8);
+        await using (var context = database.CreateContext())
+        {
+            Assert.Equal((2, 1), await PlainValueSchemaAsync(context));
             Assert.Equal(0, await PlainValuesAsync(context));
-            Assert.Equal(1, await NullValuesAsync(context));
+        }
+
+        await MigrateAsync(database);
+        await using (var context = database.CreateContext())
+        {
+            Assert.Equal((0, 0), await PlainValueSchemaAsync(context));
+            Assert.True((await UserSessions.FindAsync(context, "valor-activo", CancellationToken.None))!.IsActive);
         }
     }
 
-    private const string LastMigrationOfThePreviousVersion = "20261005095544_ScopeOrderLinesAndHistoryByTenant";
+    private const string LastMigrationOfPhase8 = "20261005095544_ScopeOrderLinesAndHistoryByTenant";
+    private const string HashingMigration = "20261005175643_StopUsingPlainRefreshTokenValues";
 
     /// <summary>Applies the migrations up to <paramref name="target"/> (all of them without one), as a deployment does.</summary>
     private static async Task MigrateAsync(SqlServerTestDatabase database, string? target = null)
@@ -130,7 +148,25 @@ public class RefreshTokenSqlServerTests
         await context.GetService<IMigrator>().MigrateAsync(target);
     }
 
-    /// <summary>Rows that keep the plain value of a token or of its replacement (columns this version no longer maps).</summary>
+    /// <summary>How many of the columns of the plain values RefreshTokens has, and whether it has their index.</summary>
+    private static async Task<(int Columns, int Index)> PlainValueSchemaAsync(ApplicationDbContext context)
+    {
+        var columns = await context.Database
+            .SqlQuery<int>($"""
+                SELECT COUNT(*) AS [Value] FROM sys.columns
+                WHERE [object_id] = OBJECT_ID(N'dbo.RefreshTokens') AND [name] IN (N'Token', N'ReplacedByToken')
+                """)
+            .SingleAsync();
+        var index = await context.Database
+            .SqlQuery<int>($"""
+                SELECT COUNT(*) AS [Value] FROM sys.indexes
+                WHERE [object_id] = OBJECT_ID(N'dbo.RefreshTokens') AND [name] = N'IX_RefreshTokens_Token'
+                """)
+            .SingleAsync();
+        return (columns, index);
+    }
+
+    /// <summary>Rows that keep the plain value of a token or of its replacement (columns the model no longer maps).</summary>
     private static Task<int> PlainValuesAsync(ApplicationDbContext context) =>
         context.Database
             .SqlQuery<int>($"SELECT COUNT(*) AS [Value] FROM RefreshTokens WHERE Token <> '' OR ReplacedByToken IS NOT NULL")
