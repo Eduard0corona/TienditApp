@@ -1,5 +1,7 @@
 using System.Data.Common;
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -151,31 +153,42 @@ internal sealed class RecordingEmailService : IEmailService
     }
 }
 
-/// <summary>Records the codes sent during the request and the ones queued to go out after the answer.</summary>
-internal sealed class RecordingSmsService : ISmsService, IVerificationCodeQueue
+internal sealed class RecordingSmsService : ISmsService
 {
     public List<string> VerificationRecipients { get; } = [];
     public List<(string Phone, string Code)> Codes { get; } = [];
-    /// <summary>The codes queued to go out after the answer (they are in <see cref="Codes"/> too).</summary>
-    public List<(string Phone, string Code)> Queued { get; } = [];
 
     public Task SendVerificationCodeAsync(string phoneNumber, string code)
     {
-        Record(phoneNumber, code);
+        VerificationRecipients.Add(phoneNumber);
+        Codes.Add((phoneNumber, code));
         return Task.CompletedTask;
     }
 
-    public void Enqueue(string phoneNumber, string code)
+    public Task SendSmsAsync(string phoneNumber, string message) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Records the events the requests add to the outbox (<see cref="Added"/>); <see cref="SqliteTestHost.DispatchAsync{TEvent, THandler}"/>
+/// runs a handler for the ones not dispatched yet, as the outbox dispatcher does after the commit.
+/// </summary>
+internal sealed class RecordingOutbox : IOutbox
+{
+    private readonly List<(DomainEvent Event, Guid? TenantId)> _pending = [];
+
+    public List<(DomainEvent Event, Guid? TenantId)> Added { get; } = [];
+
+    public void Add(DomainEvent domainEvent, Guid? tenantId)
     {
-        Queued.Add((phoneNumber, code));
-        Record(phoneNumber, code);
+        Added.Add((domainEvent, tenantId));
+        _pending.Add((domainEvent, tenantId));
     }
 
-    public Task SendSmsAsync(string phoneNumber, string message) => Task.CompletedTask;
-
-    private void Record(string phoneNumber, string code)
+    public List<(TEvent Event, Guid? TenantId)> TakePending<TEvent>()
+        where TEvent : DomainEvent
     {
-        VerificationRecipients.Add(phoneNumber);
-        Codes.Add((phoneNumber, code));
+        var taken = _pending.Where(p => p.Event is TEvent).Select(p => ((TEvent)p.Event, p.TenantId)).ToList();
+        _pending.RemoveAll(p => p.Event is TEvent);
+        return taken;
     }
 }

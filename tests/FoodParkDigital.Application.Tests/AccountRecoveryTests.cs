@@ -1,10 +1,13 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Application.Identity.Commands;
+using FoodParkDigital.Application.Identity.EventHandlers;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -36,12 +39,13 @@ public class AccountRecoveryTests
         });
 
         Assert.True((await ForgotBySmsAsync(host)).IsSuccess);
+        // Nothing is sent during the request: the code goes out after the answer, from the outbox.
+        Assert.Empty(host.Sms.Codes);
+        await SendRequestedCodesAsync(host);
         var (phone, code) = Assert.Single(host.Sms.Codes);
         var reset = await ResetBySmsAsync(host, code, "NuevaClave2");
 
         Assert.Equal(Phone, phone);
-        // Queued, not sent during the request: waiting for the provider would take longer only for real accounts.
-        Assert.Equal(host.Sms.Codes, host.Sms.Queued);
         Assert.True(reset.IsSuccess, reset.Error);
         Assert.True(await CheckPasswordAsync(host, userId, "NuevaClave2"));
         var sessions = await host.QueryAsync(db => db.RefreshTokens.ToListAsync());
@@ -57,11 +61,71 @@ public class AccountRecoveryTests
 
         var asked = await ForgotBySmsAsync(host);
         var unknown = await ForgotBySmsAsync(host, "nadie@demo.com");
+        await SendRequestedCodesAsync(host);
 
         // The same answer either way: nothing reveals whether the account or its phone exist.
         Assert.True(asked.IsSuccess);
         Assert.True(unknown.IsSuccess);
         Assert.Empty(host.Sms.Codes);
+    }
+
+    [Fact]
+    public async Task CodeRequests_ShouldDoTheSameWork_WhetherTheAccountExistsOrNot()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var userId = await SeedAccountAsync(host, phoneConfirmed: true);
+
+        var existing = await ForgotBySmsAsync(host);
+        var unknown = await ForgotBySmsAsync(host, "nadie@demo.com");
+
+        // Each request only leaves its event in the outbox: it neither reads nor changes the account, so it answers
+        // in the same time, and the account is found after the answer.
+        Assert.True(existing.IsSuccess);
+        Assert.True(unknown.IsSuccess);
+        Assert.Equal(
+            [(VerificationCodePurpose.PasswordReset, Email), (VerificationCodePurpose.PasswordReset, "nadie@demo.com")],
+            host.Outbox.Added.Select(added => (((VerificationCodeRequestedEvent)added.Event).Purpose, ((VerificationCodeRequestedEvent)added.Event).Email)));
+        Assert.All(host.Outbox.Added, added => Assert.Null(added.TenantId));
+        Assert.Null(await host.QueryAsync(db => db.Users.Where(u => u.Id == userId).Select(u => u.SmsCodeSentAt).SingleAsync()));
+        Assert.Empty(host.Sms.Codes);
+    }
+
+    [Fact]
+    public async Task LateCodeRequest_ShouldSendNothing()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        await SeedAccountAsync(host, phoneConfirmed: true);
+        var requested = new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: Email);
+
+        await host.InScopeAsync(async services =>
+        {
+            var now = services.GetRequiredService<IDateTimeProvider>().UtcNow;
+            await ActivatorUtilities.CreateInstance<VerificationCodeRequestedHandler>(services).HandleAsync(
+                requested,
+                new OutboxEventContext(requested.EventId, null, null, null, now - VerificationCodeRequestedHandler.MaxDelay - TimeSpan.FromSeconds(1), 3),
+                CancellationToken.None);
+        });
+
+        // The person has asked again or given up: a late code would only confuse them.
+        Assert.Empty(host.Sms.Codes);
+    }
+
+    [Fact]
+    public async Task ProviderFailure_ShouldGiveTheMinuteBack_SoTheRetrySendsTheCode()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        var userId = await SeedAccountAsync(host, phoneConfirmed: true);
+        var requested = new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: Email);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => RunHandlerAsync(host, requested, new FailingSmsService()));
+        var minuteAfterFailure = await host.QueryAsync(db => db.Users.Where(u => u.Id == userId).Select(u => u.SmsCodeSentAt).SingleAsync());
+        await RunHandlerAsync(host, requested, host.Sms);
+
+        // The outbox retries a handler that throws: with the minute given back, the retry sends a code.
+        Assert.Null(minuteAfterFailure);
+        var (phone, code) = Assert.Single(host.Sms.Codes);
+        Assert.Equal(Phone, phone);
+        Assert.True((await ResetBySmsAsync(host, code, "NuevaClave2")).IsSuccess);
     }
 
     [Fact]
@@ -72,6 +136,7 @@ public class AccountRecoveryTests
 
         await ForgotBySmsAsync(host);
         await ForgotBySmsAsync(host);
+        await SendRequestedCodesAsync(host);
 
         Assert.Single(host.Sms.Codes);
     }
@@ -82,6 +147,7 @@ public class AccountRecoveryTests
         await using var host = await SqliteTestHost.CreateAsync();
         var userId = await SeedAccountAsync(host, phoneConfirmed: true);
         await ForgotBySmsAsync(host);
+        await SendRequestedCodesAsync(host);
         var code = host.Sms.Codes.Single().Code;
         var wrong = code == "000000" ? "111111" : "000000";
 
@@ -103,6 +169,7 @@ public class AccountRecoveryTests
         await using var host = await SqliteTestHost.CreateAsync();
         await SeedAccountAsync(host, phoneConfirmed: true);
         await ForgotBySmsAsync(host);
+        await SendRequestedCodesAsync(host);
         var wrong = host.Sms.Codes.Single().Code == "000000" ? "111111" : "000000";
 
         var unknownAccount = await ResetBySmsAsync(host, wrong, "NuevaClave2", "nadie@demo.com");
@@ -218,6 +285,15 @@ public class AccountRecoveryTests
         => host.HandleAsync<ForgotPasswordBySmsCommandHandler, Result>(handler =>
             handler.Handle(new ForgotPasswordBySmsCommand { Email = email }, CancellationToken.None));
 
+    private static Task SendRequestedCodesAsync(SqliteTestHost host)
+        => host.DispatchAsync<VerificationCodeRequestedEvent, VerificationCodeRequestedHandler>();
+
+    private static Task RunHandlerAsync(SqliteTestHost host, VerificationCodeRequestedEvent requested, ISmsService sms)
+        => host.InScopeAsync(services => ActivatorUtilities.CreateInstance<VerificationCodeRequestedHandler>(services, sms).HandleAsync(
+            requested,
+            new OutboxEventContext(requested.EventId, null, null, null, services.GetRequiredService<IDateTimeProvider>().UtcNow, 1),
+            CancellationToken.None));
+
     private static Task<Result> ResetBySmsAsync(SqliteTestHost host, string code, string newPassword, string email = Email)
         => host.HandleAsync<ResetPasswordWithSmsCodeCommandHandler, Result>(handler =>
             handler.Handle(new ResetPasswordWithSmsCodeCommand { Email = email, Code = code, NewPassword = newPassword }, CancellationToken.None));
@@ -264,6 +340,14 @@ public class AccountRecoveryTests
             var user = await userManager.FindByIdAsync(userId.ToString());
             return await userManager.IsLockedOutAsync(user!);
         });
+
+    private sealed class FailingSmsService : ISmsService
+    {
+        public Task SendVerificationCodeAsync(string phoneNumber, string code)
+            => throw new HttpRequestException("The provider did not answer.");
+
+        public Task SendSmsAsync(string phoneNumber, string message) => Task.CompletedTask;
+    }
 
     private sealed class SignedIn(Guid userId) : ICurrentUserService
     {

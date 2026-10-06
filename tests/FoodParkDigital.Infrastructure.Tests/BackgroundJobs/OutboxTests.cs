@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FoodParkDigital.Application.Common.Events;
+using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -214,6 +215,32 @@ public class OutboxTests
     }
 
     [Fact]
+    public async Task EventAddedWithoutAnEntity_ShouldBeStoredWithoutABusiness_WakeTheDispatcher_AndReachItsHandler()
+    {
+        await using var host = OutboxTestHost.Create(configure: services =>
+        {
+            services.AddScoped<IOutbox, OutboxWriter>();
+            services.AddSingleton<ReceivedCodeRequests>();
+            services.AddScoped<IOutboxEventHandler<VerificationCodeRequestedEvent>, CodeRequestRecorder>();
+        });
+        var requested = new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: "ana@demo.com");
+
+        await host.InScopeAsync(async services =>
+        {
+            services.GetRequiredService<IOutbox>().Add(requested, tenantId: null);
+            return await services.GetRequiredService<ApplicationDbContext>().SaveChangesAsync();
+        });
+
+        var message = Assert.Single(await host.MessagesAsync());
+        Assert.Equal(requested.EventId, message.Id);
+        Assert.Null(message.TenantId);
+        // Committed outside a transaction: the dispatcher is woken at once instead of waiting for its poll.
+        Assert.True(await host.Get<OutboxSignal>().WaitAsync(TimeSpan.Zero, CancellationToken.None));
+        Assert.Equal(1, await host.Dispatcher.DispatchDueAsync(CancellationToken.None));
+        Assert.Equal([requested], host.Get<ReceivedCodeRequests>().Events);
+    }
+
+    [Fact]
     public void EveryDomainEvent_ShouldRoundTripThroughTheOutboxSerializer()
     {
         var events = new FoodParkDigital.Domain.Common.DomainEvent[]
@@ -225,7 +252,9 @@ public class OutboxTests
                 ServiceOrderPieceStatus.Accepted, ServiceOrderPieceStatus.InProgress),
             new OrderRefundedEvent(Guid.NewGuid(), TenantA, Guid.NewGuid(), 25.50m, OrderPaymentMethod.Cash, "Producto dañado"),
             new TabRoundSentEvent(Guid.NewGuid(), TenantA, 2),
-            new KitchenTicketChangedEvent(Guid.NewGuid(), TenantA, 2, KitchenTicketStatus.Ready)
+            new KitchenTicketChangedEvent(Guid.NewGuid(), TenantA, 2, KitchenTicketStatus.Ready),
+            new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: "ana@demo.com"),
+            new VerificationCodeRequestedEvent(VerificationCodePurpose.PhoneConfirmation, UserId: Guid.NewGuid())
         };
 
         foreach (var domainEvent in events)
@@ -237,7 +266,7 @@ public class OutboxTests
         }
 
         // A new event type must be added above, so its payload is proven to deserialize.
-        Assert.Equal(events.Length, OutboxEventSerializer.KnownEventTypes.Count);
+        Assert.Equal(events.Select(e => e.GetType()).Distinct().Count(), OutboxEventSerializer.KnownEventTypes.Count);
     }
 
     [Fact]
@@ -253,5 +282,19 @@ public class OutboxTests
 
         Assert.Equal(OrderStatus.Confirmed, restored.Status);
         Assert.Equal(current.OrderId, restored.OrderId);
+    }
+
+    private sealed class ReceivedCodeRequests
+    {
+        public List<VerificationCodeRequestedEvent> Events { get; } = [];
+    }
+
+    private sealed class CodeRequestRecorder(ReceivedCodeRequests received) : IOutboxEventHandler<VerificationCodeRequestedEvent>
+    {
+        public Task HandleAsync(VerificationCodeRequestedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+        {
+            received.Events.Add(domainEvent);
+            return Task.CompletedTask;
+        }
     }
 }

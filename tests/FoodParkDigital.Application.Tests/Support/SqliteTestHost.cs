@@ -1,6 +1,8 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
+using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Infrastructure.Identity;
@@ -78,7 +80,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IEmailService>(Email);
         services.AddSingleton<ISmsService>(Sms);
-        services.AddSingleton<IVerificationCodeQueue>(Sms);
+        services.AddSingleton<IOutbox>(Outbox);
         services.AddSingleton<IJwtTokenService>(Jwt);
 
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -89,6 +91,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
     public RecordingMediator Mediator { get; } = new();
     public FakeJwtTokenService Jwt { get; } = new();
     public RecordingSmsService Sms { get; } = new();
+    public RecordingOutbox Outbox { get; } = new();
     public BeforeSaveInterceptor BeforeSave { get; } = new();
     public CommandFaultInterceptor CommandFaults { get; } = new();
     public CommitFaultInterceptor CommitFaults { get; } = new();
@@ -132,6 +135,24 @@ internal sealed class SqliteTestHost : IAsyncDisposable
     /// <summary>Builds <typeparamref name="THandler"/> from DI in a fresh scope and runs it.</summary>
     public Task<TResult> HandleAsync<THandler, TResult>(Func<THandler, Task<TResult>> handle)
         => InScopeAsync(services => handle(ActivatorUtilities.CreateInstance<THandler>(services)));
+
+    /// <summary>
+    /// What the outbox dispatcher does after the commit: runs <typeparamref name="THandler"/> for each event of
+    /// <typeparamref name="TEvent"/> the requests added and no dispatch ran yet, each in its own scope.
+    /// </summary>
+    public async Task DispatchAsync<TEvent, THandler>()
+        where TEvent : DomainEvent
+        where THandler : IOutboxEventHandler<TEvent>
+    {
+        foreach (var (domainEvent, tenantId) in Outbox.TakePending<TEvent>())
+        {
+            await InScopeAsync(services => ActivatorUtilities.CreateInstance<THandler>(services).HandleAsync(
+                domainEvent,
+                new OutboxEventContext(
+                    domainEvent.EventId, tenantId, null, null, services.GetRequiredService<IDateTimeProvider>().UtcNow, 1),
+                CancellationToken.None));
+        }
+    }
 
     /// <summary>Reads committed data through a fresh context, never the handler's change tracker.</summary>
     public Task<TResult> QueryAsync<TResult>(Func<ApplicationDbContext, Task<TResult>> query)
