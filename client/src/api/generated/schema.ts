@@ -8890,6 +8890,10 @@ export interface components {
             /** Format: double */
             manualExpenseTotal: number;
             /** Format: double */
+            cashManualIncomeTotal: number;
+            /** Format: double */
+            cashManualExpenseTotal: number;
+            /** Format: double */
             netCashFlow: number;
             /** Format: double */
             netCashOnlyFlow: number;

@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Finance.DTOs;
+using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -169,22 +170,33 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             manualTransactions = manualTransactions.Where(x => x.CreatedBy == userNameFilter);
 
         var manualRows = await manualTransactions
-            .Select(x => x.Amount)
+            .Select(x => new { x.Amount, x.PaymentMethod })
             .ToListAsync(cancellationToken);
 
         var manualIncomeTotal = manualRows
-            .Where(x => x > 0)
-            .Sum();
+            .Where(x => x.Amount > 0)
+            .Sum(x => x.Amount);
         var manualExpenseTotal = manualRows
-            .Where(x => x < 0)
-            .Sum(x => Math.Abs(x));
+            .Where(x => x.Amount < 0)
+            .Sum(x => Math.Abs(x.Amount));
+        // Only cash movements change the drawers, by the same rule as CashSession: a card or transfer refund
+        // gives money back, but none of it leaves a drawer.
+        var cashManualRows = manualRows
+            .Where(x => CashSession.IsCashMovement(x.PaymentMethod))
+            .ToList();
+        var cashManualIncomeTotal = cashManualRows
+            .Where(x => x.Amount > 0)
+            .Sum(x => x.Amount);
+        var cashManualExpenseTotal = cashManualRows
+            .Where(x => x.Amount < 0)
+            .Sum(x => Math.Abs(x.Amount));
 
         var salesPaymentsTotal = paymentRows.Sum(x => x.Amount);
         // Tips are not sales, but they are money received: in the drawer when paid in cash.
         var tipsTotal = paymentRows.Sum(x => x.Tip);
         var cashTipsTotal = paymentRows.Where(x => x.Method == OrderPaymentMethod.Cash).Sum(x => x.Tip);
         var netCashFlow = salesPaymentsTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
-        var netCashOnlyFlow = cashTotal + cashTipsTotal + manualIncomeTotal - manualExpenseTotal;
+        var netCashOnlyFlow = cashTotal + cashTipsTotal + cashManualIncomeTotal - cashManualExpenseTotal;
 
         return new DailyCashCutDto
         {
@@ -200,6 +212,8 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             CashTipsTotal = cashTipsTotal,
             ManualIncomeTotal = manualIncomeTotal,
             ManualExpenseTotal = manualExpenseTotal,
+            CashManualIncomeTotal = cashManualIncomeTotal,
+            CashManualExpenseTotal = cashManualExpenseTotal,
             NetCashFlow = netCashFlow,
             NetCashOnlyFlow = netCashOnlyFlow,
             ByUser = byUser,

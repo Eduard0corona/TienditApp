@@ -16,6 +16,8 @@ const cut = (patch: Partial<DailyCashCutDto> = {}): DailyCashCutDto => ({
   otherTotal: 0.2,
   manualIncomeTotal: 0,
   manualExpenseTotal: 20,
+  cashManualIncomeTotal: 0,
+  cashManualExpenseTotal: 20,
   netCashFlow: 1230,
   netCashOnlyFlow: 780,
   tipsTotal: 0,
