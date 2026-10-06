@@ -40,6 +40,8 @@ public class AccountRecoveryTests
         var reset = await ResetBySmsAsync(host, code, "NuevaClave2");
 
         Assert.Equal(Phone, phone);
+        // Queued, not sent during the request: waiting for the provider would take longer only for real accounts.
+        Assert.Equal(host.Sms.Codes, host.Sms.Queued);
         Assert.True(reset.IsSuccess, reset.Error);
         Assert.True(await CheckPasswordAsync(host, userId, "NuevaClave2"));
         var sessions = await host.QueryAsync(db => db.RefreshTokens.ToListAsync());
@@ -88,10 +90,37 @@ public class AccountRecoveryTests
             attempts.Add(await ResetBySmsAsync(host, wrong, "NuevaClave2"));
         var rightCodeTooLate = await ResetBySmsAsync(host, code, "NuevaClave2");
 
-        Assert.All(attempts.Take(4), attempt => Assert.Equal(AccountSecurity.InvalidCodeMessage, attempt.Error));
-        Assert.Equal(AccountSecurity.LockedOutMessage, attempts[4].Error);
-        Assert.Equal(AccountSecurity.LockedOutMessage, rightCodeTooLate.Error);
+        // Anonymous: the lock is not told apart from a wrong code, or it would say the account exists.
+        Assert.All(attempts, attempt => Assert.Equal(AccountSecurity.SmsRecoveryFailedMessage, attempt.Error));
+        Assert.Equal(AccountSecurity.SmsRecoveryFailedMessage, rightCodeTooLate.Error);
+        Assert.True(await IsLockedOutAsync(host, userId));
         Assert.True(await CheckPasswordAsync(host, userId, Password));
+    }
+
+    [Fact]
+    public async Task SmsReset_ShouldAnswerTheSame_WhetherTheAccountExistsOrNot()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        await SeedAccountAsync(host, phoneConfirmed: true);
+        await ForgotBySmsAsync(host);
+        var wrong = host.Sms.Codes.Single().Code == "000000" ? "111111" : "000000";
+
+        var unknownAccount = await ResetBySmsAsync(host, wrong, "NuevaClave2", "nadie@demo.com");
+        var wrongCode = await ResetBySmsAsync(host, wrong, "NuevaClave2");
+
+        Assert.Equal(AccountSecurity.SmsRecoveryFailedMessage, unknownAccount.Error);
+        Assert.Equal(unknownAccount.Error, wrongCode.Error);
+    }
+
+    [Fact]
+    public async Task SmsReset_ShouldAnswerTheSame_ForAPhoneThePersonNeverConfirmed()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        await SeedAccountAsync(host, phoneConfirmed: false);
+
+        var result = await ResetBySmsAsync(host, "123456", "NuevaClave2");
+
+        Assert.Equal(AccountSecurity.SmsRecoveryFailedMessage, result.Error);
     }
 
     [Fact]
@@ -189,9 +218,9 @@ public class AccountRecoveryTests
         => host.HandleAsync<ForgotPasswordBySmsCommandHandler, Result>(handler =>
             handler.Handle(new ForgotPasswordBySmsCommand { Email = email }, CancellationToken.None));
 
-    private static Task<Result> ResetBySmsAsync(SqliteTestHost host, string code, string newPassword)
+    private static Task<Result> ResetBySmsAsync(SqliteTestHost host, string code, string newPassword, string email = Email)
         => host.HandleAsync<ResetPasswordWithSmsCodeCommandHandler, Result>(handler =>
-            handler.Handle(new ResetPasswordWithSmsCodeCommand { Email = Email, Code = code, NewPassword = newPassword }, CancellationToken.None));
+            handler.Handle(new ResetPasswordWithSmsCodeCommand { Email = email, Code = code, NewPassword = newPassword }, CancellationToken.None));
 
     private static Task<Result> RequestPhoneChangeAsync(SqliteTestHost host, ICurrentUserService me, string phone, string password)
         => host.InScopeAsync(services => ActivatorUtilities
@@ -226,6 +255,14 @@ public class AccountRecoveryTests
             var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
             var user = await userManager.FindByIdAsync(userId.ToString());
             return await userManager.CheckPasswordAsync(user!, password);
+        });
+
+    private static Task<bool> IsLockedOutAsync(SqliteTestHost host, Guid userId)
+        => host.InScopeAsync(async services =>
+        {
+            var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.FindByIdAsync(userId.ToString());
+            return await userManager.IsLockedOutAsync(user!);
         });
 
     private sealed class SignedIn(Guid userId) : ICurrentUserService

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Infrastructure.Tests.Support;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -121,6 +122,35 @@ public sealed class CrossTenantHttpSqlServerTests
         // Its own business, its own settings.
         var mine = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/auth/my-tenant");
         Assert.Equal(B.TenantId.ToString(), mine.GetProperty("id").GetString());
+    }
+
+    [SqlServerFact]
+    public async Task PlatformAdmin_InAnotherBusiness_ShouldBeRecordedInItsActivity()
+    {
+        var platform = await _api.SignUpAsync("plataforma");
+        using var admin = await _api.SignInAsPlatformAdminAsync(platform);
+
+        // A read (its search stays out of the record) and a change in A, by its header.
+        var products = await TwoBusinessesApi.ReadAsync(await admin.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/products?search=Agua&pageSize=5")));
+        Assert.Contains(products.GetProperty("items").EnumerateArray(), product => product.GetProperty("id").GetGuid() == A.ProductId);
+        using var newCategory = InBusiness(A.TenantId, HttpMethod.Post, "/api/v1/categories");
+        newCategory.Content = JsonContent.Create(new { name = "Puesta por soporte", sortOrder = 9 });
+        await TwoBusinessesApi.ReadAsync(await admin.SendAsync(newCategory));
+        // A business that does not exist: nothing runs.
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.SendAsync(InBusiness(Guid.NewGuid(), HttpMethod.Get, "/api/v1/products"))).StatusCode);
+
+        var activity = await A.Client.GetFromJsonAsync<JsonElement>($"/api/v1/audit/logs?action={SupportAccessAudit.Action}&pageSize=50");
+        var entries = activity.GetProperty("items").EnumerateArray()
+            .Where(entry => entry.GetProperty("performedBy").GetString() == platform.Email)
+            .Select(entry => JsonDocument.Parse(entry.GetProperty("metadata").GetString()!).RootElement.Clone())
+            .ToList();
+        Assert.Equal(2, entries.Count);
+        Assert.Contains(entries, entry => entry.GetProperty("Method").GetString() == "GET" && entry.GetProperty("Path").GetString() == "/api/v1/products");
+        Assert.Contains(entries, entry => entry.GetProperty("Method").GetString() == "POST" && entry.GetProperty("Path").GetString() == "/api/v1/categories");
+        Assert.All(entries, entry => Assert.Equal(platform.TenantId, entry.GetProperty("SessionTenantId").GetGuid()));
+        Assert.DoesNotContain("Agua", activity.GetRawText());
+        // Only in the business it acted on.
+        Assert.DoesNotContain(platform.Email, await B.Client.GetStringAsync($"/api/v1/audit/logs?action={SupportAccessAudit.Action}&pageSize=50"));
     }
 
     [SqlServerFact]
@@ -259,6 +289,13 @@ public sealed class CrossTenantHttpSqlServerTests
         Assert.Equal(before.GetProperty("startAt").GetDateTimeOffset(), stillThere.GetProperty("startAt").GetDateTimeOffset());
     }
 
+    private static HttpRequestMessage InBusiness(Guid tenantId, HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("X-Tenant-Id", tenantId.ToString());
+        return request;
+    }
+
     private static async Task<decimal> StockAsync(Business business)
     {
         var page = await business.Client.GetFromJsonAsync<JsonElement>(
@@ -274,7 +311,7 @@ public sealed class CrossTenantHttpSqlServerTests
         return page.GetProperty("totalCount").GetInt32();
     }
 
-    private static void AssertRefused(HttpResponseMessage response)
+    internal static void AssertRefused(HttpResponseMessage response)
     {
         // Not found, refused or invalid: never applied.
         Assert.False(response.IsSuccessStatusCode, $"{response.RequestMessage?.Method} {response.RequestMessage?.RequestUri} answered {(int)response.StatusCode}");

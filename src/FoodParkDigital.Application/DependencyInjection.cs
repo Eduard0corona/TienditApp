@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Reflection;
 using FoodParkDigital.Application.AiAgents;
 using FoodParkDigital.Application.Appointments;
+using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Application.Common.Behaviors;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Services;
@@ -46,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IOrderInventoryService, OrderInventoryService>();
         services.AddScoped<IOrderCashService, OrderCashService>();
         services.AddScoped<CurrentAccessContext>();
+        services.AddScoped<ISupportAccessAudit, SupportAccessAudit>();
 
         // Messaging: used by the use cases and by the messaging worker, in the business's scope.
         services.AddScoped<MessagingConsentService>();

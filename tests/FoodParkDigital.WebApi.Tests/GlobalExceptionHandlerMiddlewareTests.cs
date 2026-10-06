@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Exceptions;
 using FoodParkDigital.Application.Customers.Services;
 using System.Diagnostics;
 using System.Text;
@@ -6,6 +7,8 @@ using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Middleware;
+using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -124,6 +127,37 @@ public class GlobalExceptionHandlerMiddlewareTests
         Assert.Equal(failure.Message, error["Message"]);
         Assert.Equal(nameof(InvalidOperationException), error["ErrorType"]);
         Assert.Null(error["SqlErrorNumber"]);
+    }
+
+    public static TheoryData<Exception, int> ExpectedRejections => new()
+    {
+        { new ValidationException([new ValidationFailure("Email", "El correo no es válido.")]), StatusCodes.Status400BadRequest },
+        { new DomainException("La orden ya fue pagada."), StatusCodes.Status422UnprocessableEntity },
+        { new EntityNotFoundException("Order", Guid.NewGuid()), StatusCodes.Status404NotFound },
+        { new TenantMismatchException(), StatusCodes.Status403Forbidden },
+        { new ForbiddenAccessException("Sin permiso."), StatusCodes.Status403Forbidden },
+        { new DbUpdateConcurrencyException("Expected 1 row, affected 0."), StatusCodes.Status409Conflict },
+    };
+
+    [Theory]
+    [MemberData(nameof(ExpectedRejections))]
+    public async Task InvokeAsync_WhenTheRequestIsRejected_LogsAWarningWithoutTheStackTrace(Exception rejection, int statusCode)
+    {
+        using var activity = new Activity("request").Start();
+        var logger = new CapturingLogger<GlobalExceptionHandlerMiddleware>();
+        var context = NewHttpContext();
+        var middleware = CreateMiddleware(Environments.Production, logger, _ => throw rejection);
+
+        await middleware.InvokeAsync(context);
+
+        // An expected answer is not a failure of the app: it stays out of the error logs and their alerts.
+        Assert.Equal(statusCode, context.Response.StatusCode);
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Null(warning.Exception);
+        Assert.Equal(statusCode, warning["StatusCode"]);
+        Assert.Equal(rejection.GetType().Name, warning["ErrorType"]);
+        Assert.Equal(activity.Id, warning["TraceId"]);
     }
 
     [Fact]

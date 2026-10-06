@@ -151,17 +151,31 @@ internal sealed class RecordingEmailService : IEmailService
     }
 }
 
-internal sealed class RecordingSmsService : ISmsService
+/// <summary>Records the codes sent during the request and the ones queued to go out after the answer.</summary>
+internal sealed class RecordingSmsService : ISmsService, IVerificationCodeQueue
 {
     public List<string> VerificationRecipients { get; } = [];
     public List<(string Phone, string Code)> Codes { get; } = [];
+    /// <summary>The codes queued to go out after the answer (they are in <see cref="Codes"/> too).</summary>
+    public List<(string Phone, string Code)> Queued { get; } = [];
 
     public Task SendVerificationCodeAsync(string phoneNumber, string code)
     {
-        VerificationRecipients.Add(phoneNumber);
-        Codes.Add((phoneNumber, code));
+        Record(phoneNumber, code);
         return Task.CompletedTask;
     }
 
+    public void Enqueue(string phoneNumber, string code)
+    {
+        Queued.Add((phoneNumber, code));
+        Record(phoneNumber, code);
+    }
+
     public Task SendSmsAsync(string phoneNumber, string message) => Task.CompletedTask;
+
+    private void Record(string phoneNumber, string code)
+    {
+        VerificationRecipients.Add(phoneNumber);
+        Codes.Add((phoneNumber, code));
+    }
 }

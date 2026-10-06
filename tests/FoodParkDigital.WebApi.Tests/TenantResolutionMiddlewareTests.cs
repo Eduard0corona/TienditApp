@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.WebApi.Middleware;
@@ -146,36 +147,59 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Fact]
-    public async Task SuperAdminTenantOverride_ShouldBeAuditLogged()
+    public async Task SuperAdminTenantOverride_ShouldBeRecordedInTheBusiness_BeforeTheRequestRuns()
     {
         var otherTenantId = Guid.NewGuid();
         var logger = new RecordingLogger<TenantResolutionMiddleware>();
-        var nextCalled = false;
-        var middleware = new TenantResolutionMiddleware(_ =>
-        {
-            nextCalled = true;
-            return Task.CompletedTask;
-        }, logger);
-        var context = new DefaultHttpContext();
-        context.Request.Path = "/api/v1/orders";
-        context.Request.Method = "GET";
-        context.Request.Headers["X-Tenant-Id"] = otherTenantId.ToString();
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.NameIdentifier, UserId.ToString()),
-            new Claim(ClaimTypes.Role, "SUPER_ADMIN"),
-            new Claim("tenant_id", TenantId.ToString())
-        ], authenticationType: "Test"));
-        var tenantService = new FakeCurrentTenantService();
+        var audit = new FakeSupportAccessAudit();
 
-        await middleware.InvokeAsync(context, tenantService, new FakeTenantAccessService(active: true, permissions: []));
+        var result = await InvokeAsSuperAdminAsync("/api/v1/customers", otherTenantId, audit, logger, query: "?search=5512345678");
 
-        Assert.True(nextCalled);
-        Assert.Equal(otherTenantId, tenantService.TenantId);
+        Assert.True(result.NextCalled);
+        Assert.Equal(otherTenantId, result.TenantService.TenantId);
+        var recorded = Assert.Single(audit.Recorded);
+        Assert.Equal((otherTenantId, TenantId, "GET", "/api/v1/customers"), recorded);
+        Assert.True(audit.RecordedBeforeNext);
+        // The log line stays, for the request log.
         var entry = Assert.Single(logger.Messages);
         Assert.Contains("SuperAdminTenantOverride", entry);
         Assert.Contains(otherTenantId.ToString(), entry);
         Assert.Contains(UserId.ToString(), entry);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SuperAdminTenantOverride_ShouldNotRun_WhenItCannotBeRecorded(bool withAuditService)
+    {
+        var result = await InvokeAsSuperAdminAsync(
+            "/api/v1/orders", Guid.NewGuid(), withAuditService ? new FakeSupportAccessAudit(fails: true) : null);
+
+        Assert.False(result.NextCalled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, result.StatusCode);
+        Assert.Contains("\"code\":\"server_error\"", result.Body);
+    }
+
+    [Fact]
+    public async Task SuperAdminTenantOverride_ShouldNotRun_ForABusinessThatDoesNotExist()
+    {
+        var result = await InvokeAsSuperAdminAsync("/api/v1/orders", Guid.NewGuid(), new FakeSupportAccessAudit(exists: false));
+
+        Assert.False(result.NextCalled);
+        Assert.Equal(StatusCodes.Status404NotFound, result.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/v1/orders", true)]
+    [InlineData("/api/v1/me", false)]
+    public async Task SuperAdmin_ShouldNotBeRecorded_InTheirOwnBusinessOrOnAccountRoutes(string path, bool ownBusiness)
+    {
+        var audit = new FakeSupportAccessAudit();
+
+        var result = await InvokeAsSuperAdminAsync(path, ownBusiness ? TenantId : Guid.NewGuid(), audit);
+
+        Assert.True(result.NextCalled);
+        Assert.Empty(audit.Recorded);
     }
 
     [Fact]
@@ -237,6 +261,61 @@ public class TenantResolutionMiddlewareTests
     }
 
     private sealed record InvocationResult(bool NextCalled, int StatusCode, FakeCurrentTenantService TenantService);
+
+    private static async Task<SuperAdminResult> InvokeAsSuperAdminAsync(
+        string path,
+        Guid headerTenantId,
+        FakeSupportAccessAudit? audit,
+        ILogger<TenantResolutionMiddleware>? logger = null,
+        string query = "")
+    {
+        var nextCalled = false;
+        var middleware = new TenantResolutionMiddleware(_ =>
+        {
+            nextCalled = true;
+            if (audit is not null)
+                audit.RecordedBeforeNext = audit.Recorded.Count > 0;
+            return Task.CompletedTask;
+        }, logger);
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+        context.Request.QueryString = new QueryString(query);
+        context.Request.Method = "GET";
+        context.Request.Headers["X-Tenant-Id"] = headerTenantId.ToString();
+        context.Response.Body = new MemoryStream();
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, UserId.ToString()),
+            new Claim(ClaimTypes.Role, "SUPER_ADMIN"),
+            new Claim("tenant_id", TenantId.ToString())
+        ], authenticationType: "Test"));
+        var tenantService = new FakeCurrentTenantService();
+
+        await middleware.InvokeAsync(
+            context, tenantService, new FakeTenantAccessService(active: false, permissions: []), supportAccessAudit: audit);
+
+        var body = System.Text.Encoding.UTF8.GetString(((MemoryStream)context.Response.Body).ToArray());
+        return new SuperAdminResult(nextCalled, context.Response.StatusCode, tenantService, body);
+    }
+
+    private sealed record SuperAdminResult(bool NextCalled, int StatusCode, FakeCurrentTenantService TenantService, string Body);
+
+    private sealed class FakeSupportAccessAudit(bool exists = true, bool fails = false) : ISupportAccessAudit
+    {
+        public List<(Guid TenantId, Guid SessionTenantId, string Method, string Path)> Recorded { get; } = [];
+        public bool RecordedBeforeNext { get; set; }
+
+        public Task<bool> RecordAsync(Guid tenantId, Guid sessionTenantId, string method, string path, CancellationToken cancellationToken)
+        {
+            if (fails)
+                throw new InvalidOperationException("The database is not available.");
+            if (!exists)
+                return Task.FromResult(false);
+
+            Recorded.Add((tenantId, sessionTenantId, method, path));
+            return Task.FromResult(true);
+        }
+    }
 
     private sealed class RecordingLogger<T> : ILogger<T>
     {

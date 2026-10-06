@@ -22,6 +22,23 @@ public class ResendPhoneConfirmationCommandTests
         Assert.True(result.IsSuccess);
         // The phone is stored as typed at registration: a search by E.164 number would not find it.
         Assert.Equal([TypedPhone], host.Sms.VerificationRecipients);
+        // Queued, not sent during the request: waiting for the provider would take longer only for real accounts.
+        Assert.Equal(host.Sms.Codes, host.Sms.Queued);
+    }
+
+    [Fact]
+    public async Task Resend_ShouldSendOneCodePerMinute()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        var customer = await CustomerSeed.UnconfirmedCustomerAsync(host, "ana@demo.com", TypedPhone);
+
+        var first = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = customer.UserId });
+        var second = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = customer.UserId });
+
+        // The same answer for the second request, so it says nothing about the account either.
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Single(host.Sms.Codes);
     }
 
     [Fact]

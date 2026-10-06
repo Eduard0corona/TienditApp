@@ -62,12 +62,21 @@ Después del despliegue, cada cliente renueva su sesión una vez sin notarlo, po
 
 ## Cuentas, sesiones y archivos (Fase 9)
 
-El `apply.sql` de la Fase 9 no cambia el esquema: convierte a hash los refresh tokens que aún estén en texto (con la Fase 8 desplegada y sus jobs activos, normalmente ninguno) y se aplica, como siempre, mientras corre la versión anterior. Volver a la Fase 8 funciona sin `rollback.sql`: lee las filas con hash y trata como "sin valor en texto" el `Token` nulo que dejan los tokens nuevos. Las columnas `Token` y `ReplacedByToken` se borran en una fase posterior.
+El `apply.sql` de la Fase 9 no cambia el esquema: convierte a hash los refresh tokens que aún estén en texto (con la Fase 8 desplegada y sus jobs activos, normalmente ninguno) y se aplica, como siempre, mientras corre la versión anterior. Volver a la Fase 8 funciona sin `rollback.sql`: lee las filas con hash y trata como "sin valor en texto" el `Token` nulo que dejan los tokens nuevos. Las columnas `Token` y `ReplacedByToken` se borran en la Fase 10.
 
 - `Hubs__AccessCheckInterval` (por defecto `00:00:30`): cada cuánto se revisan las conexiones abiertas a los hubs. Una conexión cuya sesión terminó, o que perdió el acceso al negocio o el permiso del hub, se cierra en la siguiente revisión. Cada instancia revisa las conexiones que atiende.
 - Las contraseñas nuevas exigen 8 caracteres con mayúscula, minúscula y dígito, y no pueden ser comunes ni contener el correo o el nombre. Las actuales siguen valiendo hasta que se cambien.
 - Los avatares nuevos van a `avatars/users/{cuenta}` en el almacenamiento público; los anteriores se quedan donde están y se borran de ahí al cambiarlos.
 - Aparte, en cualquier momento: el [procedimiento para las fotos de producto con la dirección de otro negocio](../../database/production/data-repair/20261005_StorageUrlsOutsideTheirFolder/README.md).
+
+## Limpieza del token, códigos por SMS y soporte (Fase 10)
+
+El `apply.sql` de la Fase 10 borra `RefreshTokens.Token`, `ReplacedByToken` y su índice, y se aplica, como siempre, mientras corre la versión anterior: la Fase 9 no los usa y sigue funcionando, y volver a ella no necesita `rollback.sql`. Antes de aplicar, su `verify.sql` debe mostrar solo el índice `IX_RefreshTokens_Token`, ninguna estadística creada a mano ni objeto que use la tabla, y los valores en texto en 0. Volver a la Fase 8 sí exige primero el `rollback.sql` de esa carpeta, que crea otra vez las columnas vacías.
+
+- Los códigos que piden las pantallas sin sesión (recuperar la contraseña por SMS, reenviar la confirmación del teléfono) se envían después de responder, desde una cola en memoria de cada instancia (`VerificationCodeSender`, también con `BackgroundJobs__Enabled=false`). Un fallo del proveedor queda en el log como error, sin el teléfono ni el código; un código que no salió se pide otra vez pasado el minuto.
+- Los rechazos esperados (validación, regla de negocio, sin acceso, no encontrado, cambio concurrente) quedan en el log como advertencia; solo los 500 son errores. La alerta de 5xx por negocio de [observabilidad](../architecture/observability.md) no cambia.
+- Una petición de un `SUPER_ADMIN` con `X-Tenant-Id` en otro negocio queda en la actividad de ese negocio (acción `SupportAccess`) antes de ejecutarse; si la base no la puede guardar, responde 503.
+- Los workflows usan `actions/checkout`, `actions/setup-dotnet` y `actions/setup-node` v5 y `actions/upload-artifact` v6, que corren en Node 24.
 
 ## Slot de staging con swap y aprobación
 
