@@ -264,14 +264,14 @@ public sealed class CrossTenantManagementSqlServerTests
             || sample.GetProperty("phone").GetString() is { } phone
                 && (phone.EndsWith(CustomerOfC[^4..], StringComparison.Ordinal) || phone.EndsWith(BuyerOfC[^4..], StringComparison.Ordinal));
 
-    private static async Task<Guid> ProductAsync(HttpClient client, string name)
+    internal static async Task<Guid> ProductAsync(HttpClient client, string name)
     {
         var category = await TwoBusinessesApi.IdAsync(client, "/api/v1/categories", new { name = $"Categoría de {name}", sortOrder = 1 });
         return await TwoBusinessesApi.IdAsync(client, "/api/v1/products", NewProduct(category, name));
     }
 
     /// <returns>The total of the sale, paid in full by card (so it closes as delivered).</returns>
-    private static async Task<decimal> PaidSaleAsync(HttpClient client, Guid product, string? phone, string name)
+    internal static async Task<decimal> PaidSaleAsync(HttpClient client, Guid product, string? phone, string name)
     {
         var order = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/orders", new
         {
@@ -303,7 +303,7 @@ public sealed class CrossTenantManagementSqlServerTests
         payments = Array.Empty<object>()
     };
 
-    private static object Line(Guid product) => new { productId = product, quantity = 1, optionIds = Array.Empty<Guid>() };
+    internal static object Line(Guid product) => new { productId = product, quantity = 1, optionIds = Array.Empty<Guid>() };
 
     private static async Task<JsonElement> TableAsync(HttpClient client, Guid table)
     {
