@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Security.Claims;
+using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging.Abstractions;
+using FoodParkDigital.Infrastructure.Services;
 using FoodParkDigital.WebApi.Errors;
 
 namespace FoodParkDigital.WebApi.Middleware;
@@ -56,7 +58,8 @@ public class TenantResolutionMiddleware
         HttpContext context,
         ICurrentTenantService tenantService,
         ITenantAccessService tenantAccessService,
-        CurrentAccessContext? accessContext = null)
+        CurrentAccessContext? accessContext = null,
+        ISupportAccessAudit? supportAccessAudit = null)
     {
         // Skip for unauthenticated paths
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
@@ -90,6 +93,7 @@ public class TenantResolutionMiddleware
 
         // SUPER_ADMIN can override tenant via header
         var role = context.User.FindFirst(ClaimTypes.Role)?.Value;
+        Guid? sessionTenantId = null;
         if (role == "SUPER_ADMIN" &&
             context.Request.Headers.TryGetValue("X-Tenant-Id", out var headerTenantId) &&
             Guid.TryParse(headerTenantId, out var overrideTenantId))
@@ -97,6 +101,7 @@ public class TenantResolutionMiddleware
             // Cross-tenant access must be explicit, authorized and audited (AGENTS.md).
             if (overrideTenantId != tenantId)
             {
+                sessionTenantId = tenantId;
                 _logger.LogInformation(
                     "Audit SuperAdminTenantOverride: user {UserId} acting on tenant {TenantId} (token tenant {TokenTenantId}) {Method} {Path}",
                     context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
@@ -149,7 +154,48 @@ public class TenantResolutionMiddleware
 
         tenantService.SetTenant(tenantId);
         TagTelemetry(context, tenantId);
+
+        // On a business route, the request is recorded in the business it acts on before it runs, and does not run
+        // when it cannot be recorded.
+        if (sessionTenantId is { } fromTenant && tenantScopedPath
+            && !await RecordSupportAccessAsync(context, supportAccessAudit, tenantId, fromTenant))
+            return;
+
         await _next(context);
+    }
+
+    private async Task<bool> RecordSupportAccessAsync(
+        HttpContext context,
+        ISupportAccessAudit? supportAccessAudit,
+        Guid tenantId,
+        Guid sessionTenantId)
+    {
+        try
+        {
+            if (supportAccessAudit is not null)
+            {
+                if (await supportAccessAudit.RecordAsync(
+                        tenantId, sessionTenantId, context.Request.Method, context.Request.Path.Value ?? "", context.RequestAborted))
+                    return true;
+
+                await ApiProblem.WriteAsync(
+                    context, StatusCodes.Status404NotFound, "El negocio no existe.", ApiErrorCodes.NotFound, "Tenant not found");
+                return false;
+            }
+        }
+        catch (Exception ex) when (!context.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogError(
+                LogRedaction.RedactDatabaseMessages(ex),
+                "Support access to tenant {TenantId} could not be recorded; the request did not run.",
+                tenantId);
+        }
+
+        await ApiProblem.WriteAsync(
+            context, StatusCodes.Status503ServiceUnavailable,
+            "No se pudo registrar el acceso de soporte a este negocio. Intenta de nuevo.",
+            ApiErrorCodes.ServerError, "Support access not recorded");
+        return false;
     }
 
     /// <summary>

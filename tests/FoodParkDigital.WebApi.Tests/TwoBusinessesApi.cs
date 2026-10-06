@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Security;
@@ -43,8 +44,8 @@ public sealed record Business(
     Guid AppointmentId,
     string WhatsAppPhoneNumberId);
 
-/// <summary>An owner just signed up: the client, the access token and the cookie of the session.</summary>
-public sealed record SignedUp(Guid TenantId, HttpClient Client, string AccessToken, string RefreshCookie);
+/// <summary>An owner just signed up: the client, the access token and the cookie of the session, and the email.</summary>
+public sealed record SignedUp(Guid TenantId, HttpClient Client, string AccessToken, string RefreshCookie, string Email);
 
 /// <summary>
 /// The API in process on a throwaway SQL Server database, with two businesses registered through it. Hubs check their
@@ -54,6 +55,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
 {
     public const int FoodBusiness = 0;
     public const int ServicesBusiness = 2;
+    private const string Password = "Secreto1";
 
     private readonly string _privateFiles = Path.Combine(Path.GetTempPath(), "fpd-http-tests", Guid.NewGuid().ToString("N"));
     private SqlServerTestDatabase? _database;
@@ -114,16 +116,17 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
 
     /// <summary>
     /// Registers a business and signs its owner in. Of services by default: it sells, keeps stock and books
-    /// appointments (<see cref="FoodBusiness"/> also has tables and a kitchen).
+    /// appointments (a <see cref="FoodBusiness"/> sells with tables and a kitchen instead).
     /// </summary>
     public async Task<SignedUp> SignUpAsync(string name, int businessType = ServicesBusiness)
     {
         var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         var suffix = Guid.NewGuid().ToString("N")[..8];
+        var email = $"dueno-{name}-{suffix}@demo.com";
         var response = await client.PostAsJsonAsync("/api/v1/auth/register/business", new
         {
-            email = $"dueno-{name}-{suffix}@demo.com",
-            password = "Secreto1",
+            email,
+            password = Password,
             firstName = "Dueño",
             lastName = name.ToUpperInvariant(),
             phoneNumber = "+52155" + Random.Shared.Next(10000000, 99999999),
@@ -138,7 +141,29 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             .Select(header => header.Split(';')[0])
             .Single(cookie => cookie.StartsWith($"{RefreshTokenCookie.Name}=", StringComparison.Ordinal));
 
-        return new SignedUp(registered.GetProperty("user").GetProperty("tenantId").GetGuid(), client, accessToken, refreshCookie);
+        return new SignedUp(registered.GetProperty("user").GetProperty("tenantId").GetGuid(), client, accessToken, refreshCookie, email);
+    }
+
+    /// <summary>
+    /// Makes the account a platform admin (only the database can) with its email confirmed, as signing in requires,
+    /// and signs it in again: a client whose token carries that role and the business the account belongs to.
+    /// </summary>
+    public async Task<HttpClient> SignInAsPlatformAdminAsync(SignedUp account)
+    {
+        using (var scope = _factory!.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await users.FindByEmailAsync(account.Email);
+            user!.Role = UserRole.SuperAdmin;
+            user.EmailConfirmed = true;
+            var updated = await users.UpdateAsync(user);
+            Assert.True(updated.Succeeded, string.Join("; ", updated.Errors.Select(e => e.Description)));
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var signedIn = await ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email = account.Email, password = Password }));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", signedIn.GetProperty("accessToken").GetString());
+        return client;
     }
 
     /// <summary>Signs the session out, like the app does: with its refresh cookie.</summary>
