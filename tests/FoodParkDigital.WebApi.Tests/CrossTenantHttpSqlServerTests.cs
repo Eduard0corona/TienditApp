@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -288,6 +289,75 @@ public sealed class CrossTenantHttpSqlServerTests
         Assert.Equal("Cliente de A", stillThere.GetProperty("customerName").GetString());
         Assert.Equal(before.GetProperty("startAt").GetDateTimeOffset(), stillThere.GetProperty("startAt").GetDateTimeOffset());
     }
+
+    [SqlServerFact]
+    public async Task RefundsAndVoids_OfAnotherBusinessesOrder_ShouldBeRefused()
+    {
+        // Paid sales, so there is money to give back.
+        var mine = await _api.SignUpAsync("reembolsos-a");
+        var theirs = await _api.SignUpAsync("reembolsos-b");
+        var (order, _) = await PaidOrderAsync(mine.Client, await ProductAsync(mine.Client, "Corte de reembolsos A"), phone: null, name: "Mostrador");
+        var (theirOrder, _) = await PaidOrderAsync(theirs.Client, await ProductAsync(theirs.Client, "Corte de reembolsos B"), phone: null, name: "Mostrador");
+        var path = $"/api/v1/orders/{order}";
+        var before = await mine.Client.GetFromJsonAsync<JsonElement>(path);
+
+        AssertRefused(await theirs.Client.PostAsJsonAsync($"{path}/refunds", Refund(1m)));
+        AssertRefused(await theirs.Client.PostAsJsonAsync($"{path}/void", new { reason = "Anulada por B" }));
+
+        // Their own money goes back.
+        await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{theirOrder}/refunds", Refund(1m)));
+        await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{theirOrder}/void", new { reason = "Anulada por B" }));
+
+        var stillThere = await mine.Client.GetFromJsonAsync<JsonElement>(path);
+        Assert.Equal(before.GetRawText(), stillThere.GetRawText());
+    }
+
+    [SqlServerFact]
+    public async Task Recipes_ShouldNeverUseAnotherBusinesssProductsSuppliesOrWarehouses()
+    {
+        // Every sale consumes the supplies of its recipe: a recipe with another business's supply or warehouse would
+        // move that business's stock.
+        var mine = await RecipeKitAsync("recetas-a");
+        var theirs = await RecipeKitAsync("recetas-b");
+        var recipe = $"/api/v1/inventory/recipes/products/{mine.Product}";
+        var theirRecipe = $"/api/v1/inventory/recipes/products/{theirs.Product}";
+        await TwoBusinessesApi.ReadAsync(await mine.Client.PutAsJsonAsync(recipe, Recipe(mine.Supply, mine.Location)));
+        var before = await mine.Client.GetFromJsonAsync<JsonElement>(recipe);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync(recipe)).StatusCode);
+        AssertRefused(await theirs.Client.PutAsJsonAsync(recipe, Recipe(theirs.Supply, theirs.Location)));
+        // Their own product, with the other's supply or warehouse.
+        AssertRefused(await theirs.Client.PutAsJsonAsync(theirRecipe, Recipe(mine.Supply, theirs.Location)));
+        AssertRefused(await theirs.Client.PutAsJsonAsync(theirRecipe, Recipe(theirs.Supply, mine.Location)));
+        Assert.Empty((await theirs.Client.GetFromJsonAsync<JsonElement>(theirRecipe)).GetProperty("lines").EnumerateArray());
+
+        // Their own recipe, with their own supply and warehouse.
+        var saved = await TwoBusinessesApi.ReadAsync(await theirs.Client.PutAsJsonAsync(theirRecipe, Recipe(theirs.Supply, theirs.Location)));
+        Assert.Equal(theirs.Supply, Assert.Single(saved.GetProperty("lines").EnumerateArray()).GetProperty("supplyItemId").GetGuid());
+
+        var stillThere = await mine.Client.GetFromJsonAsync<JsonElement>(recipe);
+        Assert.Equal(before.GetRawText(), stillThere.GetRawText());
+    }
+
+    /// <summary>A business of its own with a product, a supply and its default warehouse.</summary>
+    private async Task<RecipeKit> RecipeKitAsync(string name)
+    {
+        var owner = await _api.SignUpAsync(name);
+        var product = await ProductAsync(owner.Client, $"Pastel de {name}");
+        var supply = await TwoBusinessesApi.IdAsync(owner.Client, "/api/v1/inventory/supplies", new { name = $"Harina de {name}", unit = 0, defaultCost = 10m });
+        var locations = await owner.Client.GetFromJsonAsync<JsonElement>("/api/v1/inventory/locations");
+        var location = locations.EnumerateArray().Single(l => l.GetProperty("isDefault").GetBoolean()).GetProperty("id").GetGuid();
+        return new RecipeKit(owner.Client, product, supply, location);
+    }
+
+    private sealed record RecipeKit(HttpClient Client, Guid Product, Guid Supply, Guid Location);
+
+    private static object Recipe(Guid supply, Guid location) => new
+    {
+        lines = new[] { new { supplyItemId = supply, inventoryLocationId = location, quantity = 1m, wastePercent = 0m } }
+    };
+
+    private static object Refund(decimal amount) => new { amount, method = 1, reason = "Devolución", restockItems = false };
 
     private static HttpRequestMessage InBusiness(Guid tenantId, HttpMethod method, string path)
     {
