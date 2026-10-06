@@ -5,6 +5,7 @@ using System.Text.Json;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
+using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Security;
 using FoodParkDigital.WebApi.Services;
@@ -220,6 +221,16 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
 
         using var client = _factory!.CreateClient();
         return await client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Reads the database as one business sees it (with its filter), for what the API never shows: rows a refused
+    /// request may have saved before failing.
+    /// </summary>
+    public async Task<T> QueryAsync<T>(Guid tenantId, Func<ApplicationDbContext, Task<T>> query)
+    {
+        await using var context = _database!.CreateContext(tenantId);
+        return await query(context);
     }
 
     /// <summary>What the inbox worker does on each pass: processes the stored deliveries that are due.</summary>

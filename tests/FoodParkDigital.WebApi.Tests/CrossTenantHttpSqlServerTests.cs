@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Application.Audit;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -326,6 +327,8 @@ public sealed class CrossTenantHttpSqlServerTests
 
         Assert.Equal(HttpStatusCode.NotFound, (await theirs.Client.GetAsync(recipe)).StatusCode);
         AssertRefused(await theirs.Client.PutAsJsonAsync(recipe, Recipe(theirs.Supply, theirs.Location)));
+        // Refused before saving: no line of theirs points at the other business's product.
+        Assert.False(await _api.QueryAsync(theirs.TenantId, db => db.ProductSupplyRequirements.AnyAsync(r => r.ProductId == mine.Product)));
         // Their own product, with the other's supply or warehouse.
         AssertRefused(await theirs.Client.PutAsJsonAsync(theirRecipe, Recipe(mine.Supply, theirs.Location)));
         AssertRefused(await theirs.Client.PutAsJsonAsync(theirRecipe, Recipe(theirs.Supply, mine.Location)));
@@ -347,10 +350,10 @@ public sealed class CrossTenantHttpSqlServerTests
         var supply = await TwoBusinessesApi.IdAsync(owner.Client, "/api/v1/inventory/supplies", new { name = $"Harina de {name}", unit = 0, defaultCost = 10m });
         var locations = await owner.Client.GetFromJsonAsync<JsonElement>("/api/v1/inventory/locations");
         var location = locations.EnumerateArray().Single(l => l.GetProperty("isDefault").GetBoolean()).GetProperty("id").GetGuid();
-        return new RecipeKit(owner.Client, product, supply, location);
+        return new RecipeKit(owner.TenantId, owner.Client, product, supply, location);
     }
 
-    private sealed record RecipeKit(HttpClient Client, Guid Product, Guid Supply, Guid Location);
+    private sealed record RecipeKit(Guid TenantId, HttpClient Client, Guid Product, Guid Supply, Guid Location);
 
     private static object Recipe(Guid supply, Guid location) => new
     {

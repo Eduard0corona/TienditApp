@@ -40,3 +40,7 @@ Falta la lealtad, y no hay reglas de negocio para ella: cómo se ganan los punto
   - eventos de venta, reembolso y anulación que muevan puntos (idempotentes, por el outbox);
   - una migración compatible y pruebas de aislamiento entre negocios.
 - Ningún documento ni pantalla debe presentar la lealtad como existente.
+
+## Seguimiento
+
+- 2026-10-06 (Fase 12): el modelo dejó de mapear `LoyaltyPoints` y `LoyaltyTier` (`StopMappingStockAndLoyaltyColumns`, sin cambio de esquema); las columnas se borran en la siguiente fase. La decisión no cambia.

@@ -33,7 +33,8 @@ ORDER BY [Tabla], [Columna];
 -- 3. Antes y después: lo capturado a mano en los productos. No cambia al aplicar ni al revertir.
 --    [CapturadaSinControl]: productos con existencia capturada que aún no controlan existencias
 --    en inventario; al empezar a controlarlas, la versión nueva ya no la propone como existencia
---    inicial. Anótalo: la siguiente fase respalda estos valores antes de borrar las columnas.
+--    inicial. Anótalo: la siguiente fase borra las columnas, y solo el respaldo de la base que se
+--    toma antes de su apply.sql conservará estos valores.
 IF COL_LENGTH(N'dbo.Products', N'StockQuantity') IS NOT NULL
     AND COL_LENGTH(N'dbo.Products', N'LowStockThreshold') IS NOT NULL
     EXEC(N'SELECT
