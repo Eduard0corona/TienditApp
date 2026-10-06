@@ -57,13 +57,27 @@ public class GlobalExceptionHandlerMiddleware
         // Also returned to the client, so support can find the entry of a reported error.
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
         var loggableException = LoggableException(exception);
-        _logger.LogError(
-            loggableException,
-            "Unhandled exception {ErrorType} (SQL error {SqlErrorNumber}, TraceId {TraceId}): {Message}",
-            exception.GetType().Name,
-            LogRedaction.GetSqlErrorNumber(exception),
-            traceId,
-            loggableException.Message);
+        if (statusCode >= StatusCodes.Status500InternalServerError)
+        {
+            _logger.LogError(
+                loggableException,
+                "Unhandled exception {ErrorType} (SQL error {SqlErrorNumber}, TraceId {TraceId}): {Message}",
+                exception.GetType().Name,
+                LogRedaction.GetSqlErrorNumber(exception),
+                traceId,
+                loggableException.Message);
+        }
+        else
+        {
+            // An expected answer (invalid data, a business rule, no access, a concurrent change): a warning without the
+            // stack trace, so it neither reads as a failure of the app nor counts towards its error alerts.
+            _logger.LogWarning(
+                "Request rejected with {StatusCode} {ErrorType} (TraceId {TraceId}): {Message}",
+                statusCode,
+                exception.GetType().Name,
+                traceId,
+                loggableException.Message);
+        }
 
         var problemDetails = new ProblemDetails
         {
