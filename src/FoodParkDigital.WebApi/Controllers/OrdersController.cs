@@ -30,7 +30,8 @@ public class OrdersController : ControllerBase
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetOrdersByBusinessQuery
         {
@@ -41,22 +42,22 @@ public class OrdersController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<OrderDto>> GetById(Guid id)
+    public async Task<ActionResult<OrderDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetOrderByIdQuery(id));
+        var result = await _mediator.Send(new GetOrderByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     /// <summary>Adds a round to an open tab and sends it to the kitchen.</summary>
     [HttpPost("{id:guid}/rounds")]
-    public async Task<ActionResult<OrderDto>> AddRound(Guid id, [FromBody] AddTabRoundRequest request)
+    public async Task<ActionResult<OrderDto>> AddRound(Guid id, [FromBody] AddTabRoundRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new AddTabRoundCommand { OrderId = id, Items = request.Items });
+        var result = await _mediator.Send(new AddTabRoundCommand { OrderId = id, Items = request.Items }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -64,9 +65,9 @@ public class OrdersController : ControllerBase
 
     /// <summary>Closes a paid tab and frees its table.</summary>
     [HttpPost("{id:guid}/close-tab")]
-    public async Task<ActionResult<OrderDto>> CloseTab(Guid id)
+    public async Task<ActionResult<OrderDto>> CloseTab(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new CloseTabCommand(id));
+        var result = await _mediator.Send(new CloseTabCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -74,9 +75,9 @@ public class OrdersController : ControllerBase
 
     /// <summary>Moves an open tab to another free table.</summary>
     [HttpPut("{id:guid}/table")]
-    public async Task<ActionResult<OrderDto>> MoveTab(Guid id, [FromBody] MoveTabRequest request)
+    public async Task<ActionResult<OrderDto>> MoveTab(Guid id, [FromBody] MoveTabRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new MoveTabCommand(id, request.DiningTableId));
+        var result = await _mediator.Send(new MoveTabCommand(id, request.DiningTableId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -84,9 +85,9 @@ public class OrdersController : ControllerBase
 
     /// <summary>The waiter took a ready round to the table.</summary>
     [HttpPut("kitchen-tickets/{ticketId:guid}/served")]
-    public async Task<IActionResult> MarkRoundServed(Guid ticketId)
+    public async Task<IActionResult> MarkRoundServed(Guid ticketId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new MarkRoundServedCommand(ticketId));
+        var result = await _mediator.Send(new MarkRoundServedCommand(ticketId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status409Conflict, result.Error);
         return NoContent();
@@ -103,7 +104,8 @@ public class OrdersController : ControllerBase
         [FromQuery] string? name,
         [FromQuery] string? postalCode,
         [FromQuery] string? fiscalRegime,
-        [FromQuery] string? cfdiUse)
+        [FromQuery] string? cfdiUse,
+        CancellationToken cancellationToken)
     {
         var hasReceiver = !string.IsNullOrWhiteSpace(rfc) || !string.IsNullOrWhiteSpace(name)
             || !string.IsNullOrWhiteSpace(postalCode) || !string.IsNullOrWhiteSpace(fiscalRegime)
@@ -121,16 +123,16 @@ public class OrdersController : ControllerBase
                     CfdiUse = cfdiUse
                 }
                 : null
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPost]
-    public async Task<ActionResult<OrderDto>> Create([FromBody] CreateOrderCommand command)
+    public async Task<ActionResult<OrderDto>> Create([FromBody] CreateOrderCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
@@ -138,13 +140,13 @@ public class OrdersController : ControllerBase
 
     // Whoever takes the orders; the kitchen moves food orders through KitchenController.
     [HttpPut("{id:guid}/status")]
-    public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusRequest request)
+    public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UpdateOrderStatusCommand
         {
             OrderId = id,
             NewStatus = request.NewStatus
-        });
+        }, cancellationToken);
         if (result.IsFailure)
         {
             if (result.Error!.Contains("otro proceso"))
@@ -155,20 +157,20 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/cancel")]
-    public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request)
+    public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new CancelOrderCommand
         {
             OrderId = id,
             Reason = request?.Reason
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
     [HttpPost("{id:guid}/payments")]
-    public async Task<ActionResult<OrderDto>> AddPayment(Guid id, [FromBody] AddOrderPaymentRequest request)
+    public async Task<ActionResult<OrderDto>> AddPayment(Guid id, [FromBody] AddOrderPaymentRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new AddOrderPaymentCommand
         {
@@ -179,7 +181,7 @@ public class OrdersController : ControllerBase
             EvidenceUrl = request.EvidenceUrl,
             Reference = request.Reference,
             Notes = request.Notes
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -189,7 +191,7 @@ public class OrdersController : ControllerBase
 
     /// <summary>Gives money back, optionally for returned units (owner, admin or ProcessRefunds).</summary>
     [HttpPost("{id:guid}/refunds")]
-    public async Task<ActionResult<OrderDto>> Refund(Guid id, [FromBody] RefundOrderRequest request)
+    public async Task<ActionResult<OrderDto>> Refund(Guid id, [FromBody] RefundOrderRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new RefundOrderCommand
         {
@@ -201,7 +203,7 @@ public class OrdersController : ControllerBase
             Items = request.Items,
             InventoryLocationId = request.InventoryLocationId,
             Reference = request.Reference
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -209,14 +211,14 @@ public class OrdersController : ControllerBase
 
     /// <summary>Refunds what is left of every payment, returns the units and cancels when the state allows it.</summary>
     [HttpPost("{id:guid}/void")]
-    public async Task<ActionResult<OrderDto>> Void(Guid id, [FromBody] VoidOrderRequest request)
+    public async Task<ActionResult<OrderDto>> Void(Guid id, [FromBody] VoidOrderRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new VoidOrderCommand
         {
             OrderId = id,
             Reason = request.Reason,
             RestockItems = request.RestockItems
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -226,14 +228,15 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> UpdateServicePieceStatus(
         Guid id,
         Guid pieceId,
-        [FromBody] UpdateServiceOrderPieceStatusRequest request)
+        [FromBody] UpdateServiceOrderPieceStatusRequest request,
+        CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UpdateServiceOrderPieceStatusCommand
         {
             OrderId = id,
             PieceId = pieceId,
             NewStatus = request.NewStatus
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -243,7 +246,7 @@ public class OrdersController : ControllerBase
 
     [HttpPost("uploads/service-photo")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<UploadedFileDto>> UploadServicePhoto(IFormFile file)
+    public async Task<ActionResult<UploadedFileDto>> UploadServicePhoto(IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
             return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
@@ -254,7 +257,7 @@ public class OrdersController : ControllerBase
             FileName = file.FileName,
             ContentType = file.ContentType,
             FileSize = file.Length
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -264,7 +267,7 @@ public class OrdersController : ControllerBase
 
     [HttpPost("uploads/payment-evidence")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<UploadedFileDto>> UploadPaymentEvidence(IFormFile file)
+    public async Task<ActionResult<UploadedFileDto>> UploadPaymentEvidence(IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
             return this.ApiError(StatusCodes.Status400BadRequest, "No se proporcionó un archivo.");
@@ -275,7 +278,7 @@ public class OrdersController : ControllerBase
             FileName = file.FileName,
             ContentType = file.ContentType,
             FileSize = file.Length
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);

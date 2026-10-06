@@ -1,9 +1,11 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Identity.Events;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -37,40 +39,21 @@ public class ForgotPasswordBySmsCommandValidator : AbstractValidator<ForgotPassw
 
 public class ForgotPasswordBySmsCommandHandler : IRequestHandler<ForgotPasswordBySmsCommand, Result>
 {
-    private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
-    private readonly IVerificationCodeQueue _codes;
-    private readonly IDateTimeProvider _clock;
+    private readonly IOutbox _outbox;
 
-    public ForgotPasswordBySmsCommandHandler(
-        UserManager<ApplicationUser> userManager,
-        IApplicationDbContext context,
-        IVerificationCodeQueue codes,
-        IDateTimeProvider clock)
+    public ForgotPasswordBySmsCommandHandler(IApplicationDbContext context, IOutbox outbox)
     {
-        _userManager = userManager;
         _context = context;
-        _codes = codes;
-        _clock = clock;
+        _outbox = outbox;
     }
 
     public async Task<Result> Handle(ForgotPasswordBySmsCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToUpperInvariant();
-        // IgnoreQueryFilters: there is no business in context before signing in; filtered by the account's email.
-        var user = await _context.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
-
-        // The same answer whether the account exists, has a confirmed phone or asked for a code a moment ago.
-        if (user is null || !user.IsActive || !user.PhoneNumberConfirmed || string.IsNullOrWhiteSpace(user.PhoneNumber))
-            return Result.Success();
-        if (!await AccountSecurity.TryReserveSmsCodeAsync(_userManager, user, _clock.UtcNow))
-            return Result.Success();
-
-        var code = await _userManager.GenerateUserTokenAsync(user, TokenOptions.DefaultPhoneProvider, SmsPasswordReset.TokenPurpose);
-        // Sent after the answer: waiting for the provider would take longer only for real accounts.
-        _codes.Enqueue(user.PhoneNumber, code);
+        // The same work and answer for every email: the account is found, and the code sent, after the answer
+        // (VerificationCodeRequestedHandler).
+        _outbox.Add(new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: request.Email.Trim()), tenantId: null);
+        await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }

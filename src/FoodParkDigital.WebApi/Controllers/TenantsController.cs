@@ -23,20 +23,21 @@ public class TenantsController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PaginatedList<TenantDto>>> GetAll(
-        [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
+        [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetAllTenantsQuery
         {
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<ActionResult<TenantDto>> Create([FromBody] CreateTenantCommand command)
+    public async Task<ActionResult<TenantDto>> Create([FromBody] CreateTenantCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetAll), new { id = result.Value.Id }, result.Value);

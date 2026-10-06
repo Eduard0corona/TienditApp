@@ -30,7 +30,7 @@ public class TenantOrdersControllerTests
             }
         };
 
-        var response = await controller.Create(routeTenant, new CreateTenantOrderRequest { Phone = "+525511112222" });
+        var response = await controller.Create(routeTenant, new CreateTenantOrderRequest { Phone = "+525511112222" }, CancellationToken.None);
 
         Assert.IsType<ForbidResult>(response.Result);
         Assert.Equal(0, mediator.Calls);

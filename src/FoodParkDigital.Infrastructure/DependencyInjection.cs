@@ -1,4 +1,5 @@
 using System.Text;
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Identity;
@@ -152,6 +153,8 @@ public static class DependencyInjection
         services.AddSingleton<OutboxSignal>();
         services.AddSingleton<InboxSignal>();
         services.AddSingleton<OutboxDispatcher>();
+        // Events a request adds without an entity, such as the codes asked for without a session.
+        services.AddScoped<IOutbox, OutboxWriter>();
         services.AddSingleton<InboxProcessor>();
         services.AddSingleton<MessagingSignal>();
         services.AddSingleton<IOutgoingMessageSignal>(sp => sp.GetRequiredService<MessagingSignal>());
@@ -161,10 +164,6 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundExecutionContext, BackgroundExecutionContext>();
         // Data the previous version left without a business while the migration was applied, completed at start.
         services.AddHostedService<OrderTenantBackfillService>();
-        // Codes asked for by anonymous requests go out after the answer, from the instance that queued them.
-        services.AddSingleton<VerificationCodeQueue>();
-        services.AddSingleton<IVerificationCodeQueue>(sp => sp.GetRequiredService<VerificationCodeQueue>());
-        services.AddHostedService<VerificationCodeSender>();
         if (configuration.GetValue($"{BackgroundJobOptions.SectionName}:Enabled", defaultValue: true))
         {
             services.AddHostedService<OutboxDispatcherService>();

@@ -25,14 +25,15 @@ public class WhatsAppChatController : ControllerBase
     public async Task<ActionResult<PaginatedList<ConversationDto>>> GetConversations(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetConversationsQuery
         {
             PageNumber = pageNumber,
             PageSize = pageSize,
             Search = search
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
@@ -40,14 +41,15 @@ public class WhatsAppChatController : ControllerBase
     public async Task<ActionResult<PaginatedList<ChatMessageDto>>> GetMessages(
         Guid id,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetConversationMessagesQuery
         {
             ConversationId = id,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);
@@ -56,18 +58,18 @@ public class WhatsAppChatController : ControllerBase
     }
 
     [HttpPost("send")]
-    public async Task<ActionResult<ChatMessageDto>> SendMessage([FromBody] SendChatMessageCommand command)
+    public async Task<ActionResult<ChatMessageDto>> SendMessage([FromBody] SendChatMessageCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPut("{id:guid}/read")]
-    public async Task<IActionResult> MarkAsRead(Guid id)
+    public async Task<IActionResult> MarkAsRead(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new MarkConversationReadCommand(id));
+        var result = await _mediator.Send(new MarkConversationReadCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(new { message = "Conversación marcada como leída." });
@@ -75,9 +77,9 @@ public class WhatsAppChatController : ControllerBase
 
     /// <summary>Pauses (for a day) or resumes the automatic replies of one conversation.</summary>
     [HttpPut("{id:guid}/auto-replies")]
-    public async Task<ActionResult<ConversationDto>> SetAutoReplies(Guid id, [FromBody] SetAutoRepliesRequest request)
+    public async Task<ActionResult<ConversationDto>> SetAutoReplies(Guid id, [FromBody] SetAutoRepliesRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new SetConversationAutoRepliesCommand(id, request.Paused));
+        var result = await _mediator.Send(new SetConversationAutoRepliesCommand(id, request.Paused), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

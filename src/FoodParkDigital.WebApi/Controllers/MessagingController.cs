@@ -31,43 +31,45 @@ public class MessagingController : ControllerBase
     [HttpGet("templates")]
     public async Task<ActionResult<List<MessageTemplateDto>>> GetTemplates(
         [FromQuery] MessagePurpose? purpose,
-        [FromQuery] bool includeInactive = true)
-        => Ok(await _mediator.Send(new GetMessageTemplatesQuery { Purpose = purpose, IncludeInactive = includeInactive }));
+        [FromQuery] bool includeInactive = true,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetMessageTemplatesQuery { Purpose = purpose, IncludeInactive = includeInactive }, cancellationToken));
 
     [HttpPost("templates")]
-    public async Task<ActionResult<MessageTemplateDto>> CreateTemplate([FromBody] CreateMessageTemplateCommand command)
-        => ToActionResult(await _mediator.Send(command));
+    public async Task<ActionResult<MessageTemplateDto>> CreateTemplate([FromBody] CreateMessageTemplateCommand command, CancellationToken cancellationToken)
+        => ToActionResult(await _mediator.Send(command, cancellationToken));
 
     [HttpPut("templates/{id:guid}")]
-    public async Task<ActionResult<MessageTemplateDto>> UpdateTemplate(Guid id, [FromBody] UpdateMessageTemplateCommand command)
-        => ToActionResult(await _mediator.Send(command with { Id = id }));
+    public async Task<ActionResult<MessageTemplateDto>> UpdateTemplate(Guid id, [FromBody] UpdateMessageTemplateCommand command, CancellationToken cancellationToken)
+        => ToActionResult(await _mediator.Send(command with { Id = id }, cancellationToken));
 
     [HttpGet("campaigns")]
     public async Task<ActionResult<PaginatedList<CampaignDto>>> GetCampaigns(
         [FromQuery] CampaignStatus? status,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
-        => Ok(await _mediator.Send(new GetCampaignsQuery { Status = status, PageNumber = pageNumber, PageSize = pageSize }));
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetCampaignsQuery { Status = status, PageNumber = pageNumber, PageSize = pageSize }, cancellationToken));
 
     [HttpGet("campaigns/{id:guid}")]
-    public async Task<ActionResult<CampaignDto>> GetCampaign(Guid id)
+    public async Task<ActionResult<CampaignDto>> GetCampaign(Guid id, CancellationToken cancellationToken)
     {
-        var campaign = await _mediator.Send(new GetCampaignQuery(id));
+        var campaign = await _mediator.Send(new GetCampaignQuery(id), cancellationToken);
         return campaign is null ? NotFound() : Ok(campaign);
     }
 
     /// <summary>How many customers a campaign would reach now, and what the first ones would read.</summary>
     [HttpPost("campaigns/preview")]
-    public async Task<ActionResult<CampaignPreviewDto>> PreviewCampaign([FromBody] PreviewCampaignQuery query)
-        => ToActionResult(await _mediator.Send(query));
+    public async Task<ActionResult<CampaignPreviewDto>> PreviewCampaign([FromBody] PreviewCampaignQuery query, CancellationToken cancellationToken)
+        => ToActionResult(await _mediator.Send(query, cancellationToken));
 
     [HttpPost("campaigns")]
-    public async Task<ActionResult<CampaignDto>> CreateCampaign([FromBody] CreateCampaignCommand command)
-        => ToActionResult(await _mediator.Send(command));
+    public async Task<ActionResult<CampaignDto>> CreateCampaign([FromBody] CreateCampaignCommand command, CancellationToken cancellationToken)
+        => ToActionResult(await _mediator.Send(command, cancellationToken));
 
     [HttpPost("campaigns/{id:guid}/cancel")]
-    public async Task<ActionResult<CampaignDto>> CancelCampaign(Guid id)
-        => ToActionResult(await _mediator.Send(new CancelCampaignCommand(id)));
+    public async Task<ActionResult<CampaignDto>> CancelCampaign(Guid id, CancellationToken cancellationToken)
+        => ToActionResult(await _mediator.Send(new CancelCampaignCommand(id), cancellationToken));
 
     /// <summary>Messages of a campaign or the appointment reminders, newest first.</summary>
     [HttpGet("messages")]
@@ -77,7 +79,8 @@ public class MessagingController : ControllerBase
         [FromQuery] OutgoingMessageStatus? status,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
         => Ok(await _mediator.Send(new GetOutgoingMessagesQuery
         {
             CampaignId = campaignId,
@@ -86,36 +89,37 @@ public class MessagingController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        }));
+        }, cancellationToken));
 
     [HttpGet("opt-outs")]
     public async Task<ActionResult<PaginatedList<MessagingOptOutDto>>> GetOptOuts(
         [FromQuery] string? search,
         [FromQuery] bool includeResubscribed = false,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
         => Ok(await _mediator.Send(new GetMessagingOptOutsQuery
         {
             Search = search,
             IncludeResubscribed = includeResubscribed,
             PageNumber = pageNumber,
             PageSize = pageSize
-        }));
+        }, cancellationToken));
 
     [HttpPost("opt-outs")]
-    public async Task<IActionResult> SetOptOut([FromBody] SetMessagingOptOutCommand command)
+    public async Task<IActionResult> SetOptOut([FromBody] SetMessagingOptOutCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         return result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : NoContent();
     }
 
     [HttpGet("settings")]
-    public async Task<ActionResult<MessagingSettingsDto>> GetSettings()
-        => Ok(await _mediator.Send(new GetMessagingSettingsQuery()));
+    public async Task<ActionResult<MessagingSettingsDto>> GetSettings(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetMessagingSettingsQuery(), cancellationToken));
 
     [HttpPut("settings/reminders")]
-    public async Task<ActionResult<MessagingSettingsDto>> UpdateReminders([FromBody] UpdateAppointmentRemindersCommand command)
-        => ToActionResult(await _mediator.Send(command));
+    public async Task<ActionResult<MessagingSettingsDto>> UpdateReminders([FromBody] UpdateAppointmentRemindersCommand command, CancellationToken cancellationToken)
+        => ToActionResult(await _mediator.Send(command, cancellationToken));
 
     private ActionResult<T> ToActionResult<T>(Result<T> result)
         => result.IsFailure ? this.ApiError(StatusCodes.Status400BadRequest, result.Error) : Ok(result.Value);

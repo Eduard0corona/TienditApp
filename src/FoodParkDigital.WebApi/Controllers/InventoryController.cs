@@ -28,7 +28,8 @@ public class InventoryController : ControllerBase
         [FromQuery] bool? isActive,
         [FromQuery] bool? lowStockOnly,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetSupplyItemsQuery
         {
@@ -37,22 +38,22 @@ public class InventoryController : ControllerBase
             LowStockOnly = lowStockOnly,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpGet("supplies/{id:guid}")]
-    public async Task<ActionResult<SupplyItemDto>> GetSupplyById(Guid id)
+    public async Task<ActionResult<SupplyItemDto>> GetSupplyById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetSupplyItemByIdQuery(id));
+        var result = await _mediator.Send(new GetSupplyItemByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("supplies")]
-    public async Task<ActionResult<SupplyItemDto>> CreateSupply([FromBody] CreateSupplyItemCommand command)
+    public async Task<ActionResult<SupplyItemDto>> CreateSupply([FromBody] CreateSupplyItemCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -60,12 +61,12 @@ public class InventoryController : ControllerBase
     }
 
     [HttpPut("supplies/{id:guid}")]
-    public async Task<ActionResult<SupplyItemDto>> UpdateSupply(Guid id, [FromBody] UpdateSupplyItemCommand command)
+    public async Task<ActionResult<SupplyItemDto>> UpdateSupply(Guid id, [FromBody] UpdateSupplyItemCommand command, CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -73,13 +74,13 @@ public class InventoryController : ControllerBase
     }
 
     [HttpPatch("supplies/{id:guid}/active")]
-    public async Task<IActionResult> SetSupplyActive(Guid id, [FromBody] SetEntityActiveRequest request)
+    public async Task<IActionResult> SetSupplyActive(Guid id, [FromBody] SetEntityActiveRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetSupplyItemActiveCommand
         {
             Id = id,
             IsActive = request.IsActive
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -88,16 +89,16 @@ public class InventoryController : ControllerBase
     }
 
     [HttpGet("locations")]
-    public async Task<ActionResult<List<InventoryLocationDto>>> GetLocations([FromQuery] bool? isActive)
+    public async Task<ActionResult<List<InventoryLocationDto>>> GetLocations([FromQuery] bool? isActive, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetInventoryLocationsQuery { IsActive = isActive });
+        var result = await _mediator.Send(new GetInventoryLocationsQuery { IsActive = isActive }, cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("locations")]
-    public async Task<ActionResult<InventoryLocationDto>> CreateLocation([FromBody] CreateInventoryLocationCommand command)
+    public async Task<ActionResult<InventoryLocationDto>> CreateLocation([FromBody] CreateInventoryLocationCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -105,12 +106,12 @@ public class InventoryController : ControllerBase
     }
 
     [HttpPut("locations/{id:guid}")]
-    public async Task<ActionResult<InventoryLocationDto>> UpdateLocation(Guid id, [FromBody] UpdateInventoryLocationCommand command)
+    public async Task<ActionResult<InventoryLocationDto>> UpdateLocation(Guid id, [FromBody] UpdateInventoryLocationCommand command, CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -118,13 +119,13 @@ public class InventoryController : ControllerBase
     }
 
     [HttpPatch("locations/{id:guid}/active")]
-    public async Task<IActionResult> SetLocationActive(Guid id, [FromBody] SetEntityActiveRequest request)
+    public async Task<IActionResult> SetLocationActive(Guid id, [FromBody] SetEntityActiveRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetInventoryLocationActiveCommand
         {
             Id = id,
             IsActive = request.IsActive
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -138,7 +139,8 @@ public class InventoryController : ControllerBase
         [FromQuery] Guid? inventoryLocationId,
         [FromQuery] bool? lowStockOnly,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetInventoryStocksQuery
         {
@@ -147,7 +149,7 @@ public class InventoryController : ControllerBase
             LowStockOnly = lowStockOnly,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
@@ -160,7 +162,8 @@ public class InventoryController : ControllerBase
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetInventoryMovementsQuery
         {
@@ -171,7 +174,7 @@ public class InventoryController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
@@ -184,7 +187,8 @@ public class InventoryController : ControllerBase
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 50)
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetInventoryKardexQuery
         {
@@ -195,29 +199,30 @@ public class InventoryController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpGet("alerts")]
-    public async Task<ActionResult<InventoryAlertsDto>> GetAlerts()
+    public async Task<ActionResult<InventoryAlertsDto>> GetAlerts(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetInventoryAlertsQuery());
+        var result = await _mediator.Send(new GetInventoryAlertsQuery(), cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("recipes/products/{productId:guid}")]
-    public async Task<ActionResult<ProductRecipeDto>> GetProductRecipe(Guid productId)
+    public async Task<ActionResult<ProductRecipeDto>> GetProductRecipe(Guid productId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetProductRecipeQuery(productId));
+        var result = await _mediator.Send(new GetProductRecipeQuery(productId), cancellationToken);
         return Ok(result);
     }
 
     [HttpPut("recipes/products/{productId:guid}")]
     public async Task<ActionResult<ProductRecipeDto>> UpsertProductRecipe(
         Guid productId,
-        [FromBody] UpsertProductRecipeRequest request)
+        [FromBody] UpsertProductRecipeRequest request,
+        CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UpsertProductRecipeCommand
         {
@@ -231,7 +236,7 @@ public class InventoryController : ControllerBase
                 WastePercent = line.WastePercent,
                 Notes = line.Notes
             }).ToList()
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -241,12 +246,12 @@ public class InventoryController : ControllerBase
 
     /// <summary>The stock of a product by location, when it controls it.</summary>
     [HttpGet("products/{productId:guid}/stock")]
-    public async Task<ActionResult<ProductStockDto>> GetProductStock(Guid productId)
-        => Ok(await _mediator.Send(new GetProductStockQuery(productId)));
+    public async Task<ActionResult<ProductStockDto>> GetProductStock(Guid productId, CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetProductStockQuery(productId), cancellationToken));
 
     /// <summary>The product starts controlling its stock, optionally with an opening balance.</summary>
     [HttpPost("products/{productId:guid}/stock")]
-    public async Task<ActionResult<ProductStockDto>> TrackProductStock(Guid productId, [FromBody] TrackProductStockRequest request)
+    public async Task<ActionResult<ProductStockDto>> TrackProductStock(Guid productId, [FromBody] TrackProductStockRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new TrackProductStockCommand
         {
@@ -256,7 +261,7 @@ public class InventoryController : ControllerBase
             InventoryLocationId = request.InventoryLocationId,
             UnitCost = request.UnitCost,
             ReorderPoint = request.ReorderPoint
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -265,9 +270,9 @@ public class InventoryController : ControllerBase
 
     /// <summary>The product stops controlling its stock; its item stays, with its history, as a supply.</summary>
     [HttpDelete("products/{productId:guid}/stock")]
-    public async Task<ActionResult<ProductStockDto>> StopTrackingProductStock(Guid productId)
+    public async Task<ActionResult<ProductStockDto>> StopTrackingProductStock(Guid productId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new StopTrackingProductStockCommand(productId));
+        var result = await _mediator.Send(new StopTrackingProductStockCommand(productId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -275,16 +280,16 @@ public class InventoryController : ControllerBase
     }
 
     [HttpGet("movements/{id:guid}")]
-    public async Task<ActionResult<InventoryMovementDto>> GetMovementById(Guid id)
+    public async Task<ActionResult<InventoryMovementDto>> GetMovementById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetInventoryMovementByIdQuery(id));
+        var result = await _mediator.Send(new GetInventoryMovementByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("movements")]
-    public async Task<ActionResult<InventoryMovementDto>> CreateMovement([FromBody] CreateInventoryMovementCommand command)
+    public async Task<ActionResult<InventoryMovementDto>> CreateMovement([FromBody] CreateInventoryMovementCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 

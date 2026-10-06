@@ -161,6 +161,47 @@ public class GlobalExceptionHandlerMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_WhenTheClientLeft_StopsWithoutAFailure()
+    {
+        using var activity = new Activity("request").Start();
+        using var client = new CancellationTokenSource();
+        var logger = new CapturingLogger<GlobalExceptionHandlerMiddleware>();
+        var context = NewHttpContext();
+        context.RequestAborted = client.Token;
+        var middleware = CreateMiddleware(Environments.Production, logger, async http =>
+        {
+            await client.CancelAsync();
+            await Task.Delay(Timeout.Infinite, http.RequestAborted);
+        });
+
+        await middleware.InvokeAsync(context);
+
+        // Nobody receives the answer and the app did not fail: no problem written, no error or warning logged.
+        Assert.Equal(StatusCodes.Status499ClientClosedRequest, context.Response.StatusCode);
+        Assert.Empty(ReadBody(context));
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, entry.Level);
+        Assert.Null(entry.Exception);
+        Assert.Equal(activity.Id, entry["TraceId"]);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenAProviderTimesOutWhileTheClientWaits_ReportsAFailure()
+    {
+        // HttpClient's timeout also cancels, but the client is still there: a provider that did not answer is a failure.
+        var logger = new CapturingLogger<GlobalExceptionHandlerMiddleware>();
+        var context = NewHttpContext();
+        var middleware = CreateMiddleware(Environments.Production, logger,
+            _ => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 30 seconds elapsing."));
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.Equal(LogLevel.Error, Assert.Single(logger.Entries).Level);
+        Assert.Equal("server_error", ReadProblem(context).GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task InvokeAsync_WhenDomainRuleFails_ReturnsTheTraceIdWithTheProblemDetails()
     {
         using var activity = new Activity("request").Start();

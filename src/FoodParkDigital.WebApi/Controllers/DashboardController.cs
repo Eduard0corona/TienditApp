@@ -22,13 +22,14 @@ public class DashboardController : ControllerBase
     [HttpGet("metrics")]
     public async Task<ActionResult<DashboardMetricsDto>> GetMetrics(
         [FromQuery] DateTimeOffset? from,
-        [FromQuery] DateTimeOffset? to)
+        [FromQuery] DateTimeOffset? to,
+        CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetDashboardMetricsQuery
         {
             FromDate = from,
             ToDate = to
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 

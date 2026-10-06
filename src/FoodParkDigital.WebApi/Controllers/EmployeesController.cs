@@ -28,7 +28,8 @@ public class EmployeesController : ControllerBase
         [FromQuery] string? tenantRole,
         [FromQuery] string? status,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetEmployeesQuery
         {
@@ -38,15 +39,15 @@ public class EmployeesController : ControllerBase
             Status = status,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpGet("{tenantUserId:guid}")]
-    public async Task<ActionResult<EmployeeDto>> GetById(Guid tenantUserId)
+    public async Task<ActionResult<EmployeeDto>> GetById(Guid tenantUserId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetEmployeeByIdQuery(tenantUserId));
+        var result = await _mediator.Send(new GetEmployeeByIdQuery(tenantUserId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status404NotFound, result.Error);
 
@@ -54,24 +55,24 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpGet("permission-options")]
-    public async Task<ActionResult<IReadOnlyList<EmployeePermissionOptionDto>>> GetPermissionOptions()
+    public async Task<ActionResult<IReadOnlyList<EmployeePermissionOptionDto>>> GetPermissionOptions(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetEmployeePermissionOptionsQuery());
+        var result = await _mediator.Send(new GetEmployeePermissionOptionsQuery(), cancellationToken);
         return Ok(result);
     }
 
     /// <summary>Named roles (Gerente, Cajero, Mesero, Cocina, Técnico) that fill the role and the permissions.</summary>
     [HttpGet("role-presets")]
-    public async Task<ActionResult<IReadOnlyList<EmployeeRolePresetDto>>> GetRolePresets()
+    public async Task<ActionResult<IReadOnlyList<EmployeeRolePresetDto>>> GetRolePresets(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetEmployeeRolePresetsQuery());
+        var result = await _mediator.Send(new GetEmployeeRolePresetsQuery(), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("{tenantUserId:guid}/resend-invitation")]
-    public async Task<ActionResult<EmployeeInvitationDto>> ResendInvitation(Guid tenantUserId)
+    public async Task<ActionResult<EmployeeInvitationDto>> ResendInvitation(Guid tenantUserId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ResendEmployeeInvitationCommand(tenantUserId));
+        var result = await _mediator.Send(new ResendEmployeeInvitationCommand(tenantUserId), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -79,9 +80,9 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<EmployeeDto>> Create([FromBody] CreateEmployeeCommand command)
+    public async Task<ActionResult<EmployeeDto>> Create([FromBody] CreateEmployeeCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -89,12 +90,12 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPut("{tenantUserId:guid}")]
-    public async Task<ActionResult<EmployeeDto>> Update(Guid tenantUserId, [FromBody] UpdateEmployeeCommand command)
+    public async Task<ActionResult<EmployeeDto>> Update(Guid tenantUserId, [FromBody] UpdateEmployeeCommand command, CancellationToken cancellationToken)
     {
         if (tenantUserId != command.TenantUserId)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -102,13 +103,13 @@ public class EmployeesController : ControllerBase
     }
 
     [HttpPatch("{tenantUserId:guid}/active")]
-    public async Task<IActionResult> SetActive(Guid tenantUserId, [FromBody] SetEmployeeActiveRequest request)
+    public async Task<IActionResult> SetActive(Guid tenantUserId, [FromBody] SetEmployeeActiveRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetEmployeeActiveCommand
         {
             TenantUserId = tenantUserId,
             IsActive = request.IsActive
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);

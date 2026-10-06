@@ -32,6 +32,16 @@ public class GlobalExceptionHandlerMiddleware
         {
             await _next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // The client left before the answer (closed the page, lost the connection) and its read stopped with it
+            // (RequestCancellation): nobody receives this answer, and it is not a failure of the app.
+            _logger.LogInformation(
+                "Request stopped: its client disconnected (TraceId {TraceId}).",
+                Activity.Current?.Id ?? context.TraceIdentifier);
+            if (!context.Response.HasStarted)
+                context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+        }
         catch (Exception ex)
         {
             await HandleExceptionAsync(context, ex);

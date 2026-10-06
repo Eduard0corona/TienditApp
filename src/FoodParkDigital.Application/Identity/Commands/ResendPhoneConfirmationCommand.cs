@@ -1,11 +1,10 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Events;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
@@ -38,39 +37,26 @@ public class ResendPhoneConfirmationCommandValidator : AbstractValidator<ResendP
 
 public class ResendPhoneConfirmationCommandHandler : IRequestHandler<ResendPhoneConfirmationCommand, Result>
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IVerificationCodeQueue _codes;
     private readonly IApplicationDbContext _context;
-    private readonly IDateTimeProvider _clock;
+    private readonly IOutbox _outbox;
 
-    public ResendPhoneConfirmationCommandHandler(
-        UserManager<ApplicationUser> userManager,
-        IVerificationCodeQueue codes,
-        IApplicationDbContext context,
-        IDateTimeProvider clock)
+    public ResendPhoneConfirmationCommandHandler(IApplicationDbContext context, IOutbox outbox)
     {
-        _userManager = userManager;
-        _codes = codes;
         _context = context;
-        _clock = clock;
+        _outbox = outbox;
     }
 
     public async Task<Result> Handle(ResendPhoneConfirmationCommand request, CancellationToken cancellationToken)
     {
-        var users = _context.Users.IgnoreQueryFilters();
-        var user = request.UserId.HasValue
-            ? await users.FirstOrDefaultAsync(u => u.Id == request.UserId.Value, cancellationToken)
-            : await users.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber, cancellationToken);
-
-        // The same answer whether the account exists, already confirmed its phone or asked for a code a moment ago.
-        if (user is null || user.PhoneNumberConfirmed || string.IsNullOrWhiteSpace(user.PhoneNumber))
-            return Result.Success();
-        if (!await AccountSecurity.TryReserveSmsCodeAsync(_userManager, user, _clock.UtcNow))
-            return Result.Success();
-
-        var code = await _userManager.GenerateChangePhoneNumberTokenAsync(user, user.PhoneNumber!);
-        // Sent after the answer: waiting for the provider would take longer only for real accounts.
-        _codes.Enqueue(user.PhoneNumber!, code);
+        // The same work and answer whether the account exists, already confirmed its phone or asked a moment ago:
+        // the account is found, and the code sent, after the answer (VerificationCodeRequestedHandler).
+        _outbox.Add(
+            new VerificationCodeRequestedEvent(
+                VerificationCodePurpose.PhoneConfirmation,
+                UserId: request.UserId,
+                PhoneNumber: request.UserId.HasValue ? null : request.PhoneNumber),
+            tenantId: null);
+        await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }

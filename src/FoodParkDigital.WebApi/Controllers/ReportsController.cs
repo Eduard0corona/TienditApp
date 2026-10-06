@@ -21,13 +21,14 @@ public class ReportsController : ControllerBase
     [HttpGet("operational-summary")]
     public async Task<ActionResult<OperationalReportDto>> GetOperationalSummary(
         [FromQuery] DateTimeOffset? fromDate,
-        [FromQuery] DateTimeOffset? toDate)
+        [FromQuery] DateTimeOffset? toDate,
+        CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetOperationalReportQuery
         {
             FromDate = fromDate,
             ToDate = toDate
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
@@ -36,14 +37,15 @@ public class ReportsController : ControllerBase
     public async Task<ActionResult<SalesByBranchReportDto>> GetSalesByBranch(
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
-        [FromQuery] Guid? branchId)
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetSalesByBranchQuery
         {
             From = from,
             To = to,
             BranchId = branchId
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 }

@@ -21,11 +21,11 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterBusinessCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterCustomerCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResendConfirmationEmailCommand.cs"] = 1,
-        ["src/FoodParkDigital.Application/Identity/Commands/ResendPhoneConfirmationCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResetPasswordCommand.cs"] = 1,
-        ["src/FoodParkDigital.Application/Identity/Commands/SmsPasswordResetCommands.cs"] = 2,
+        ["src/FoodParkDigital.Application/Identity/Commands/SmsPasswordResetCommands.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/SwitchTenantCommand.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Commands/UpdateOwnerWhatsAppConfigCommand.cs"] = 1,
+        ["src/FoodParkDigital.Application/Identity/EventHandlers/VerificationCodeRequestedHandler.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Queries/GetMyTenantsQuery.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Queries/GetOwnerWhatsAppConfigQuery.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Services/AuthSessionIssuer.cs"] = 2,
@@ -137,7 +137,7 @@ public class TenantFilterBypassAllowlistTests
     /// The source without <c>//</c> and <c>/* */</c> comments. String and character literals are copied as they are,
     /// so a <c>//</c> inside a URL does not start a comment.
     /// </summary>
-    private static string WithoutComments(string source)
+    internal static string WithoutComments(string source)
     {
         var code = new System.Text.StringBuilder(source.Length);
         var index = 0;
@@ -198,7 +198,7 @@ public class TenantFilterBypassAllowlistTests
         return code.ToString();
     }
 
-    private static string FindRepositoryRoot()
+    internal static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {

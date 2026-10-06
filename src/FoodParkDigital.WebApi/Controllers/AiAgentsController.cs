@@ -21,27 +21,27 @@ public class AiAgentsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<AiAgentDto>>> GetAll([FromQuery] bool? isActive)
+    public async Task<ActionResult<List<AiAgentDto>>> GetAll([FromQuery] bool? isActive, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetAiAgentsQuery
         {
             IsActive = isActive
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<AiAgentDto>> GetById(Guid id)
+    public async Task<ActionResult<AiAgentDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetAiAgentByIdQuery(id));
+        var result = await _mediator.Send(new GetAiAgentByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<ActionResult<AiAgentDto>> Create([FromBody] CreateAiAgentCommand command)
+    public async Task<ActionResult<AiAgentDto>> Create([FromBody] CreateAiAgentCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -49,12 +49,12 @@ public class AiAgentsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<AiAgentDto>> Update(Guid id, [FromBody] UpdateAiAgentCommand command)
+    public async Task<ActionResult<AiAgentDto>> Update(Guid id, [FromBody] UpdateAiAgentCommand command, CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -62,13 +62,13 @@ public class AiAgentsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/active")]
-    public async Task<IActionResult> SetActive(Guid id, [FromBody] SetAiAgentActiveRequest request)
+    public async Task<IActionResult> SetActive(Guid id, [FromBody] SetAiAgentActiveRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetAiAgentActiveCommand
         {
             Id = id,
             IsActive = request.IsActive
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -77,9 +77,9 @@ public class AiAgentsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new DeleteAiAgentCommand(id));
+        var result = await _mediator.Send(new DeleteAiAgentCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 

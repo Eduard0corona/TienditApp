@@ -30,7 +30,8 @@ public class PurchaseOrdersController : ControllerBase
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetPurchaseOrdersQuery
         {
@@ -41,40 +42,41 @@ public class PurchaseOrdersController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<PurchaseOrderDto>> GetById(Guid id)
+    public async Task<ActionResult<PurchaseOrderDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetPurchaseOrderByIdQuery(id));
+        var result = await _mediator.Send(new GetPurchaseOrderByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<ActionResult<PurchaseOrderDto>> Create([FromBody] CreatePurchaseOrderCommand command)
+    public async Task<ActionResult<PurchaseOrderDto>> Create([FromBody] CreatePurchaseOrderCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
     [HttpPost("{id:guid}/receive")]
-    public async Task<ActionResult<PurchaseOrderDto>> Receive(Guid id, [FromBody] ReceivePurchaseOrderRequest request)
+    public async Task<ActionResult<PurchaseOrderDto>> Receive(Guid id, [FromBody] ReceivePurchaseOrderRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ReceivePurchaseOrderCommand
         {
             PurchaseOrderId = id,
             ReceivedAt = request.ReceivedAt,
+            IdempotencyKey = request.IdempotencyKey,
             Lines = request.Lines.Select(x => new ReceivePurchaseOrderLineRequest
             {
                 PurchaseOrderLineId = x.PurchaseOrderLineId,
                 QuantityReceived = x.QuantityReceived,
                 UnitCost = x.UnitCost
             }).ToList()
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -83,9 +85,9 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/send")]
-    public async Task<ActionResult<PurchaseOrderDto>> Send(Guid id)
+    public async Task<ActionResult<PurchaseOrderDto>> Send(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new SendPurchaseOrderCommand(id));
+        var result = await _mediator.Send(new SendPurchaseOrderCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -93,18 +95,18 @@ public class PurchaseOrdersController : ControllerBase
 
     /// <summary>Part arrived and the rest will not: the order closes with what came in.</summary>
     [HttpPost("{id:guid}/close")]
-    public async Task<ActionResult<PurchaseOrderDto>> Close(Guid id, [FromBody] ClosePurchaseOrderRequest request)
+    public async Task<ActionResult<PurchaseOrderDto>> Close(Guid id, [FromBody] ClosePurchaseOrderRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new ClosePurchaseOrderCommand(id, request.Reason));
+        var result = await _mediator.Send(new ClosePurchaseOrderCommand(id, request.Reason), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPost("{id:guid}/cancel")]
-    public async Task<ActionResult<PurchaseOrderDto>> Cancel(Guid id)
+    public async Task<ActionResult<PurchaseOrderDto>> Cancel(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new CancelPurchaseOrderCommand(id));
+        var result = await _mediator.Send(new CancelPurchaseOrderCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -121,6 +123,11 @@ public class ReceivePurchaseOrderRequest
 {
     public DateTimeOffset? ReceivedAt { get; init; }
     public List<ReceivePurchaseOrderLineItemRequest> Lines { get; init; } = [];
+    /// <summary>
+    /// Identifies this reception: the same key again (a double click, a retry after a timeout) answers with the
+    /// purchase order as it is, without receiving twice.
+    /// </summary>
+    public Guid? IdempotencyKey { get; init; }
 }
 
 public class ReceivePurchaseOrderLineItemRequest

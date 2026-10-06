@@ -25,15 +25,15 @@ public class PublicMenuController : ControllerBase
 
     [HttpGet]
     [EnableRateLimiting("public-menu")]
-    public async Task<ActionResult<PublicMenuDto>> GetMenu(string slug)
+    public async Task<ActionResult<PublicMenuDto>> GetMenu(string slug, CancellationToken cancellationToken)
     {
-        var menu = await _mediator.Send(new GetPublicMenuQuery(slug));
+        var menu = await _mediator.Send(new GetPublicMenuQuery(slug), cancellationToken);
         return menu is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(menu);
     }
 
     [HttpPost("orders")]
     [EnableRateLimiting("public-order")]
-    public async Task<ActionResult<PublicOrderReceiptDto>> PlaceOrder(string slug, [FromBody] PlacePublicOrderRequest request)
+    public async Task<ActionResult<PublicOrderReceiptDto>> PlaceOrder(string slug, [FromBody] PlacePublicOrderRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new PlacePublicOrderCommand
         {
@@ -44,7 +44,7 @@ public class PublicMenuController : ControllerBase
             TableLabel = request.TableLabel,
             Items = request.Items,
             ExpectedTotal = request.ExpectedTotal
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

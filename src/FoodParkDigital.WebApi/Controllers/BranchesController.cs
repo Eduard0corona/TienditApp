@@ -20,20 +20,20 @@ public class BranchesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<List<BranchDto>>> GetBranches([FromQuery] bool? isActive)
+    public async Task<ActionResult<List<BranchDto>>> GetBranches([FromQuery] bool? isActive, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetBranchesQuery
         {
             IsActive = isActive
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpPost]
-    public async Task<ActionResult<BranchDto>> CreateBranch([FromBody] CreateBranchCommand command)
+    public async Task<ActionResult<BranchDto>> CreateBranch([FromBody] CreateBranchCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -41,12 +41,12 @@ public class BranchesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<BranchDto>> UpdateBranch(Guid id, [FromBody] UpdateBranchCommand command)
+    public async Task<ActionResult<BranchDto>> UpdateBranch(Guid id, [FromBody] UpdateBranchCommand command, CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
@@ -54,13 +54,13 @@ public class BranchesController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/active")]
-    public async Task<IActionResult> SetBranchActive(Guid id, [FromBody] SetBranchActiveRequest request)
+    public async Task<IActionResult> SetBranchActive(Guid id, [FromBody] SetBranchActiveRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new SetBranchActiveCommand
         {
             Id = id,
             IsActive = request.IsActive
-        });
+        }, cancellationToken);
 
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -69,9 +69,9 @@ public class BranchesController : ControllerBase
     }
 
     [HttpPost("{id:guid}/default")]
-    public async Task<IActionResult> SetDefaultBranch(Guid id)
+    public async Task<IActionResult> SetDefaultBranch(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new SetDefaultBranchCommand { Id = id });
+        var result = await _mediator.Send(new SetDefaultBranchCommand { Id = id }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 

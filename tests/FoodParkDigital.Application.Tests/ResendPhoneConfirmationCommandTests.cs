@@ -1,6 +1,8 @@
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
+using FoodParkDigital.Application.Identity.EventHandlers;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,12 +20,14 @@ public class ResendPhoneConfirmationCommandTests
         var customer = await CustomerSeed.UnconfirmedCustomerAsync(host, "ana@demo.com", TypedPhone);
 
         var result = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = customer.UserId });
+        // Nothing is sent during the request: the code goes out after the answer, from the outbox.
+        var sentDuringTheRequest = host.Sms.Codes.Count;
+        await SendRequestedCodesAsync(host);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal(0, sentDuringTheRequest);
         // The phone is stored as typed at registration: a search by E.164 number would not find it.
         Assert.Equal([TypedPhone], host.Sms.VerificationRecipients);
-        // Queued, not sent during the request: waiting for the provider would take longer only for real accounts.
-        Assert.Equal(host.Sms.Codes, host.Sms.Queued);
     }
 
     [Fact]
@@ -34,6 +38,7 @@ public class ResendPhoneConfirmationCommandTests
 
         var first = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = customer.UserId });
         var second = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = customer.UserId });
+        await SendRequestedCodesAsync(host);
 
         // The same answer for the second request, so it says nothing about the account either.
         Assert.True(first.IsSuccess);
@@ -55,6 +60,7 @@ public class ResendPhoneConfirmationCommandTests
         });
 
         var result = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = customer.UserId });
+        await SendRequestedCodesAsync(host);
 
         Assert.True(result.IsSuccess);
         Assert.Empty(host.Sms.VerificationRecipients);
@@ -66,6 +72,7 @@ public class ResendPhoneConfirmationCommandTests
         await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
 
         var result = await ResendAsync(host, new ResendPhoneConfirmationCommand { UserId = Guid.NewGuid() });
+        await SendRequestedCodesAsync(host);
 
         Assert.True(result.IsSuccess);
         Assert.Empty(host.Sms.VerificationRecipients);
@@ -81,6 +88,9 @@ public class ResendPhoneConfirmationCommandTests
         Assert.True(validator.Validate(new ResendPhoneConfirmationCommand { PhoneNumber = "+525512345678" }).IsValid);
         Assert.True(validator.Validate(new ResendPhoneConfirmationCommand { UserId = Guid.NewGuid() }).IsValid);
     }
+
+    private static Task SendRequestedCodesAsync(SqliteTestHost host)
+        => host.DispatchAsync<VerificationCodeRequestedEvent, VerificationCodeRequestedHandler>();
 
     private static Task<Result> ResendAsync(SqliteTestHost host, ResendPhoneConfirmationCommand command)
         => host.HandleAsync<ResendPhoneConfirmationCommandHandler, Result>(

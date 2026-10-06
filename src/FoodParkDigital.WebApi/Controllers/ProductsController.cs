@@ -30,7 +30,8 @@ public class ProductsController : ControllerBase
         [FromQuery] bool onlyAvailableNow = false,
         [FromQuery] string? search = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetProductsQuery
         {
@@ -41,21 +42,22 @@ public class ProductsController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ProductDto>> GetById(Guid id)
+    public async Task<ActionResult<ProductDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetProductByIdQuery(id));
+        var result = await _mediator.Send(new GetProductByIdQuery(id), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost]
     public async Task<ActionResult<ProductDto>> Create(
         [FromBody] CreateProductCommand command,
-        [FromQuery] ProductCatalogItemType? itemType)
+        [FromQuery] ProductCatalogItemType? itemType,
+        CancellationToken cancellationToken)
     {
         if (!IsItemTypeConsistent(itemType, command.Unit))
         {
@@ -64,7 +66,7 @@ public class ProductsController : ControllerBase
                 "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad.");
         }
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
@@ -74,7 +76,8 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<ProductDto>> Update(
         Guid id,
         [FromBody] UpdateProductCommand command,
-        [FromQuery] ProductCatalogItemType? itemType)
+        [FromQuery] ProductCatalogItemType? itemType,
+        CancellationToken cancellationToken)
     {
         if (id != command.Id)
             return this.ApiError(StatusCodes.Status400BadRequest, "El id de ruta no coincide con el cuerpo.");
@@ -86,29 +89,29 @@ public class ProductsController : ControllerBase
                 "itemType no coincide con la unidad enviada. Para servicios use Unit=Hour|Session|Service; para productos use otra unidad.");
         }
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new DeleteProductCommand(id));
+        var result = await _mediator.Send(new DeleteProductCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
     }
 
     [HttpPatch("{id:guid}/availability")]
-    public async Task<IActionResult> ToggleAvailability(Guid id, [FromBody] ToggleAvailabilityRequest request)
+    public async Task<IActionResult> ToggleAvailability(Guid id, [FromBody] ToggleAvailabilityRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new ToggleProductAvailabilityCommand
         {
             Id = id,
             IsAvailable = request.IsAvailable
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
@@ -116,9 +119,9 @@ public class ProductsController : ControllerBase
 
     /// <summary>Replaces the variants and extras of the product.</summary>
     [HttpPut("{id:guid}/option-groups")]
-    public async Task<ActionResult<ProductDto>> SetOptionGroups(Guid id, [FromBody] SetProductOptionGroupsRequest request)
+    public async Task<ActionResult<ProductDto>> SetOptionGroups(Guid id, [FromBody] SetProductOptionGroupsRequest request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new SetProductOptionGroupsCommand { ProductId = id, Groups = request.Groups });
+        var result = await _mediator.Send(new SetProductOptionGroupsCommand { ProductId = id, Groups = request.Groups }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -126,7 +129,7 @@ public class ProductsController : ControllerBase
 
     [HttpPost("{id:guid}/image")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<ProductImageUrlsDto>> UploadImage(Guid id, IFormFile file)
+    public async Task<ActionResult<ProductImageUrlsDto>> UploadImage(Guid id, IFormFile file, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new UploadProductImageCommand
         {
@@ -135,7 +138,7 @@ public class ProductsController : ControllerBase
             FileName = file.FileName,
             ContentType = file.ContentType,
             FileSize = file.Length
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

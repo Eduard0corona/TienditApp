@@ -23,7 +23,7 @@ public class TenantOrdersController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<OrderDto>> Create(Guid tenantId, [FromBody] CreateTenantOrderRequest request)
+    public async Task<ActionResult<OrderDto>> Create(Guid tenantId, [FromBody] CreateTenantOrderRequest request, CancellationToken cancellationToken)
     {
         // The middleware validated the membership in the request's business (the token's, or the platform admin's
         // override) and the request declares who may take orders: the route must name that same business.
@@ -41,7 +41,7 @@ public class TenantOrdersController : ControllerBase
             Items = request.Items
         };
 
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 

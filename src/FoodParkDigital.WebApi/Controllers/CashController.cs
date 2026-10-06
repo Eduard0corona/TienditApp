@@ -24,23 +24,23 @@ public class CashController : ControllerBase
     }
 
     [HttpGet("current-session")]
-    public async Task<ActionResult<CashSessionDto?>> GetCurrentSession()
+    public async Task<ActionResult<CashSessionDto?>> GetCurrentSession(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetCurrentCashSessionQuery());
+        var result = await _mediator.Send(new GetCurrentCashSessionQuery(), cancellationToken);
         return Ok(result);
     }
 
     [HttpPost("open")]
-    public async Task<ActionResult<CashSessionDto>> Open([FromBody] OpenCashSessionCommand command)
+    public async Task<ActionResult<CashSessionDto>> Open([FromBody] OpenCashSessionCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command);
+        var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
 
     [HttpPost("{id:guid}/close")]
-    public async Task<ActionResult<CashSessionDto>> Close(Guid id, [FromBody] CloseCashSessionRequest request)
+    public async Task<ActionResult<CashSessionDto>> Close(Guid id, [FromBody] CloseCashSessionRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new CloseCashSessionCommand
         {
@@ -48,7 +48,7 @@ public class CashController : ControllerBase
             ClosingAmount = request.ClosingAmount,
             Notes = request.Notes,
             CashCount = request.CashCount
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
@@ -64,7 +64,8 @@ public class CashController : ControllerBase
         [FromQuery] CashSessionStatus? status,
         [FromQuery] bool onlyWithDifference = false,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetCashSessionsQuery
         {
@@ -76,7 +77,7 @@ public class CashController : ControllerBase
             OnlyWithDifference = onlyWithDifference,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
@@ -88,7 +89,8 @@ public class CashController : ControllerBase
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetCashTransactionsQuery
         {
@@ -99,7 +101,7 @@ public class CashController : ControllerBase
             Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
-        });
+        }, cancellationToken);
         return Ok(result);
     }
 
@@ -108,7 +110,8 @@ public class CashController : ControllerBase
         [FromQuery] DateOnly? date,
         [FromQuery] Guid? inventoryLocationId,
         [FromQuery] Guid? branchId,
-        [FromQuery] string? userName)
+        [FromQuery] string? userName,
+        CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetDailyCashCutQuery
         {
@@ -116,13 +119,13 @@ public class CashController : ControllerBase
             InventoryLocationId = inventoryLocationId,
             BranchId = branchId,
             UserName = userName
-        });
+        }, cancellationToken);
 
         return Ok(result);
     }
 
     [HttpPost("transactions")]
-    public async Task<ActionResult<CashTransactionDto>> AddTransaction([FromBody] AddCashTransactionRequest request)
+    public async Task<ActionResult<CashTransactionDto>> AddTransaction([FromBody] AddCashTransactionRequest request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new AddCashTransactionCommand
         {
@@ -134,7 +137,7 @@ public class CashController : ControllerBase
             OrderId = request.OrderId,
             Reference = request.Reference,
             Notes = request.Notes
-        });
+        }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

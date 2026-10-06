@@ -63,6 +63,10 @@ public sealed class OutboxSaveChangesInterceptor : SaveChangesInterceptor
         if (context is null)
             return;
 
+        // Events added without an entity (IOutbox) wake the dispatcher like the ones copied below.
+        if (context.ChangeTracker.Entries<OutboxMessage>().Any(entry => entry.State == EntityState.Added))
+            _wroteMessages = true;
+
         var entries = context.ChangeTracker
             .Entries<BaseEntity>()
             .Where(entry => entry.Entity.DomainEvents.Count > 0)
