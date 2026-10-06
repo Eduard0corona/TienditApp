@@ -1830,7 +1830,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    branchId?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -10054,6 +10056,7 @@ export interface components {
             /** Format: double */
             defaultTaxRate: number;
             acceptsOrders: boolean;
+            ordersPaused: boolean;
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -10631,7 +10634,6 @@ export interface components {
             /** Format: double */
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
-            requireOpenCashSession: boolean;
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
             insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
@@ -10656,7 +10658,6 @@ export interface components {
             /** Format: double */
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
-            requireOpenCashSession: boolean;
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
             insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
         };
@@ -10959,7 +10960,6 @@ export interface components {
             /** Format: double */
             defaultTaxRate: number;
             autoCloseCounterSales: boolean;
-            requireOpenCashSession?: boolean | null;
             orderNotificationPolicy?: components["schemas"]["OrderNotificationPolicy"];
             insufficientStockPolicy?: components["schemas"]["InsufficientStockPolicy"];
         };

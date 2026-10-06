@@ -23,19 +23,19 @@ public sealed record OrderPaymentInput(
 /// <summary>
 /// Registers payments on an order and in the open cash session: validates the evidence and the branch,
 /// stamps the server time and leaves everything to the caller's SaveChanges, so an order and its
-/// payments are stored together or not at all.
+/// payments are stored together or not at all. Every charge enters a drawer, whatever its method: a
+/// payment no open drawer takes is refused, so none is left out of a cut.
 /// </summary>
 public sealed class OrderPaymentRegistrar
 {
     private readonly IApplicationDbContext _context;
     private readonly IOrderCashService _orderCashService;
     private readonly IDateTimeProvider _dateTimeProvider;
-    public const string NoOpenDrawerMessage = "Abre tu caja para cobrar en efectivo.";
+    public const string NoOpenDrawerMessage = "Abre tu caja para cobrar: todo cobro se registra en una caja.";
 
     private readonly Dictionary<Guid, Guid?> _stockLocationByBranch = [];
     private Guid? _defaultLocationId;
     private bool _defaultLocationLoaded;
-    private TenantSalesSettings? _salesSettings;
 
     public OrderPaymentRegistrar(
         IApplicationDbContext context,
@@ -93,16 +93,10 @@ public sealed class OrderPaymentRegistrar
             notes: input.Notes?.Trim(),
             tip: input.Tip,
             cashReceived: input.CashReceived);
-        var inDrawer = await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken);
-
-        // A business may refuse cash that no drawer would count. The order was changed in memory only: the
-        // caller does not save after a failure.
-        if (!inDrawer && input.Method == OrderPaymentMethod.Cash)
-        {
-            _salesSettings ??= await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
-            if (_salesSettings.RequireOpenCashSession)
-                return Result.Failure<OrderPayment>(NoOpenDrawerMessage);
-        }
+        // No drawer took it (none open, or several at the branch and none the cashier's). The order was changed in
+        // memory only: the caller does not save after a failure.
+        if (!await _orderCashService.RegisterOrderPaymentAsync(order, payment, cancellationToken))
+            return Result.Failure<OrderPayment>(NoOpenDrawerMessage);
 
         return Result.Success(payment);
     }

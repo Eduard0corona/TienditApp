@@ -20,11 +20,12 @@ public sealed record OrderRefundInput(
 
 /// <summary>
 /// Applies a refund to an order, the drawer and inventory, leaving everything to the caller's SaveChanges.
+/// Like a payment, every refund goes through a drawer, whatever its method: one no open drawer takes is refused.
 /// The requests that use it declare who may refund: <see cref="TenantPermission.ProcessRefunds"/>.
 /// </summary>
 public sealed class OrderRefundProcessor
 {
-    public const string NoOpenDrawerMessage = "Abre tu caja para devolver efectivo.";
+    public const string NoOpenDrawerMessage = "Abre tu caja para devolver: todo reembolso se registra en una caja.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
@@ -74,13 +75,9 @@ public sealed class OrderRefundProcessor
             return Result.Failure<OrderRefund>(ex.Message);
         }
 
-        var inDrawer = await _orderCashService.RegisterOrderRefundAsync(order, refund, cancellationToken);
-        if (!inDrawer && input.Method == OrderPaymentMethod.Cash)
-        {
-            var settings = await TenantSalesSettings.ReadAsync(_context, order.TenantId, cancellationToken);
-            if (settings.RequireOpenCashSession)
-                return Result.Failure<OrderRefund>(NoOpenDrawerMessage);
-        }
+        // The order was changed in memory only: the caller does not save after a failure.
+        if (!await _orderCashService.RegisterOrderRefundAsync(order, refund, cancellationToken))
+            return Result.Failure<OrderRefund>(NoOpenDrawerMessage);
 
         if (refund.RestockItems)
             await _orderInventoryService.ReturnItemsToInventoryAsync(order, refund, cancellationToken);

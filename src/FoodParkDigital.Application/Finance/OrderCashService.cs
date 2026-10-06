@@ -90,6 +90,21 @@ public class OrderCashService : IOrderCashService
             .FirstAsync(x => x.Id == sessionId.Value, cancellationToken);
     }
 
+    /// <summary>
+    /// Whether a branch has an open drawer to charge its orders in (a drawer from before branches counts for any
+    /// branch). The online menu takes orders only then, since every payment enters a drawer.
+    /// </summary>
+    public static Task<bool> HasOpenDrawerAtBranchAsync(
+        IApplicationDbContext context,
+        Guid tenantId,
+        Guid? branchId,
+        CancellationToken cancellationToken)
+        => context.CashSessions.AnyAsync(
+            x => x.TenantId == tenantId
+                && x.Status == CashSessionStatus.Open
+                && (branchId == null || x.BranchId == branchId || x.BranchId == null),
+            cancellationToken);
+
     internal sealed record DrawerCandidate(Guid Id, Guid? OpenedByUserId, Guid? BranchId, Guid? InventoryLocationId);
 
     /// <summary>

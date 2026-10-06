@@ -9,11 +9,16 @@ using Microsoft.EntityFrameworkCore;
 namespace FoodParkDigital.Application.Finance.Queries;
 
 /// <summary>
-/// The drawer the current user's cash payments enter: their own open session or, while it is the only one,
-/// a drawer opened before per-cashier sessions.
+/// The drawer the current user's payments enter, by the same rule as a payment (<see cref="OrderCashService.PickDrawer"/>):
+/// their own open session or, while it is the only one there, the open drawer of the branch where they sell.
+/// Null when a payment would be refused for lack of a drawer.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageCash)]
-public record GetCurrentCashSessionQuery : IRequest<CashSessionDto?>;
+public record GetCurrentCashSessionQuery : IRequest<CashSessionDto?>
+{
+    /// <summary>Branch where the user sells; without it, the only open drawer of the business stands in for theirs.</summary>
+    public Guid? BranchId { get; init; }
+}
 
 public class GetCurrentCashSessionQueryHandler : IRequestHandler<GetCurrentCashSessionQuery, CashSessionDto?>
 {
@@ -29,27 +34,20 @@ public class GetCurrentCashSessionQueryHandler : IRequestHandler<GetCurrentCashS
     public async Task<CashSessionDto?> Handle(GetCurrentCashSessionQuery request, CancellationToken cancellationToken)
     {
         var userId = CashSessionMapping.ParseUserId(_currentUserService?.UserId);
-        var open = _context.CashSessions
+        var openSessions = await _context.CashSessions
             .AsNoTracking()
-            .Where(x => x.Status == CashSessionStatus.Open);
+            .Where(x => x.Status == CashSessionStatus.Open)
+            .Select(x => new OrderCashService.DrawerCandidate(x.Id, x.OpenedByUserId, x.BranchId, x.InventoryLocationId))
+            .ToListAsync(cancellationToken);
+        var sessionId = OrderCashService.PickDrawer(openSessions, userId, request.BranchId, inventoryLocationId: null);
+        if (sessionId is null)
+            return null;
 
-        var row = userId is null
-            ? null
-            : await open.Where(x => x.OpenedByUserId == userId)
-                .Select(CashSessionProjection.ToRow(_context))
-                .FirstOrDefaultAsync(cancellationToken);
-
-        if (row is null)
-        {
-            // Same fallback as the cash service: a single open drawer takes everybody's cash.
-            var openRows = await open
-                .OrderByDescending(x => x.OpenedAt)
-                .Take(2)
-                .Select(CashSessionProjection.ToRow(_context))
-                .ToListAsync(cancellationToken);
-            row = openRows.Count == 1 ? openRows[0] : null;
-        }
-
+        var row = await _context.CashSessions
+            .AsNoTracking()
+            .Where(x => x.Id == sessionId.Value)
+            .Select(CashSessionProjection.ToRow(_context))
+            .FirstOrDefaultAsync(cancellationToken);
         return row is null ? null : CashSessionProjection.ToDto(row, userId);
     }
 }

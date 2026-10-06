@@ -219,6 +219,12 @@ export default function PublicMenuPage() {
         )}
       </header>
 
+      {data.ordersPaused && (
+        <div className="alert alert-warning mx-3 mt-3 mb-0" role="status">
+          Por ahora no estamos recibiendo pedidos en línea. Puedes ver el menú y volver más tarde.
+        </div>
+      )}
+
       <nav className="pm-chips" aria-label="Categorías">
         <button type="button" className={`btn btn-sm ${category === 'all' ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory('all')}>
           Todo

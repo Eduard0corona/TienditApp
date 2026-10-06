@@ -32,6 +32,7 @@ public class OnlineMenuTests
 
         Assert.NotNull(menu);
         Assert.False(menu.AcceptsOrders);
+        Assert.False(menu.OrdersPaused);
         Assert.Equal("Latte", Assert.Single(Assert.Single(menu.Categories).Products).Name);
     }
 
@@ -41,6 +42,7 @@ public class OnlineMenuTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food | TenantCapability.Service, slug: "cafe-luna");
         await SetModeAsync(fixture, tenant, OnlineMenuMode.Orders);
+        await fixture.OpenCashSessionAsync(tenant);
         await fixture.AddProductAsync(tenant, "Latte", 55m);
         var hidden = await fixture.AddProductAsync(tenant, "Pan de muerto", 45m);
         hidden.SetAvailability(false);
@@ -60,6 +62,7 @@ public class OnlineMenuTests
         var other = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "otro");
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true, slug: "cafe-luna");
         await SetModeAsync(fixture, tenant, OnlineMenuMode.Orders);
+        await fixture.OpenCashSessionAsync(tenant);
         var latte = await fixture.AddProductAsync(tenant, "Latte", 55m);
         latte.SetOptionGroups([new ProductOptionGroupDefinition(null, "Tamaño", 1, 1, [new ProductOptionDefinition(null, "Grande", 12m)])]);
         await fixture.Context.SaveChangesAsync();
@@ -90,11 +93,45 @@ public class OnlineMenuTests
     }
 
     [Fact]
+    public async Task Orders_ShouldPauseWhileNoDrawerIsOpenAtTheBranchTheyArriveAt()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var other = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "otro");
+        await fixture.OpenCashSessionAsync(other, (await fixture.DefaultBranchAsync()).Id);
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "cafe-luna");
+        await SetModeAsync(fixture, tenant, OnlineMenuMode.Orders);
+        var latte = await fixture.AddProductAsync(tenant, "Latte", 55m);
+        // Only another business and another branch of this one have a drawer open.
+        var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        await fixture.OpenCashSessionAsync(tenant, norte.Id);
+
+        var paused = await MenuHandler(fixture).Handle(new GetPublicMenuQuery("cafe-luna"), CancellationToken.None);
+        var refused = await OrderHandler(fixture).Handle(Order("cafe-luna", latte), CancellationToken.None);
+
+        Assert.False(paused!.AcceptsOrders);
+        Assert.True(paused.OrdersPaused);
+        Assert.Equal(PlacePublicOrderCommandHandler.OrdersPausedMessage, refused.Error);
+        Assert.Empty(await fixture.Context.Orders.ToListAsync());
+
+        // A drawer opens at the default branch, where online orders arrive: the menu takes them again.
+        fixture.TenantService.SetTenant(tenant.Id);
+        await fixture.OpenCashSessionAsync(tenant, (await fixture.DefaultBranchAsync()).Id);
+        var open = await MenuHandler(fixture).Handle(new GetPublicMenuQuery("cafe-luna"), CancellationToken.None);
+        var placed = await OrderHandler(fixture).Handle(Order("cafe-luna", latte), CancellationToken.None);
+
+        Assert.True(open!.AcceptsOrders);
+        Assert.False(open.OrdersPaused);
+        Assert.True(placed.IsSuccess, placed.Error);
+        Assert.Equal((await fixture.DefaultBranchAsync()).Id, (await fixture.Context.Orders.SingleAsync()).BranchId);
+    }
+
+    [Fact]
     public async Task Order_ShouldBeConfirmedWhenTheBusinessAcceptsAutomatically()
     {
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "cafe-luna");
         await SetModeAsync(fixture, tenant, OnlineMenuMode.Orders, autoAccept: true);
+        await fixture.OpenCashSessionAsync(tenant);
         var latte = await fixture.AddProductAsync(tenant, "Latte", 55m);
 
         var receipt = await OrderHandler(fixture).Handle(Order("cafe-luna", latte), CancellationToken.None);
@@ -124,6 +161,7 @@ public class OnlineMenuTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "cafe-luna");
         await SetModeAsync(fixture, tenant, OnlineMenuMode.Orders);
+        await fixture.OpenCashSessionAsync(tenant);
         var latte = await fixture.AddProductAsync(tenant, "Latte", 55m);
 
         for (var i = 0; i < PlacePublicOrderCommandHandler.MaxPendingPerPhone; i++)
@@ -143,6 +181,7 @@ public class OnlineMenuTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food | TenantCapability.Service, slug: "cafe-luna");
         await SetModeAsync(fixture, tenant, OnlineMenuMode.Orders);
+        await fixture.OpenCashSessionAsync(tenant);
         var latte = await fixture.AddProductAsync(tenant, "Latte", 55m);
         var workshop = await fixture.AddProductAsync(tenant, "Clase", 650m, unit: UnitType.Session);
 

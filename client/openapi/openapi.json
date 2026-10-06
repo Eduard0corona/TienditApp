@@ -1993,6 +1993,16 @@
         "tags": [
           "Cash"
         ],
+        "parameters": [
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -16837,6 +16847,7 @@
           "categories",
           "currency",
           "defaultTaxRate",
+          "ordersPaused",
           "pricesIncludeTax",
           "slug"
         ],
@@ -16867,6 +16878,9 @@
             "format": "double"
           },
           "acceptsOrders": {
+            "type": "boolean"
+          },
+          "ordersPaused": {
             "type": "boolean"
           },
           "categories": {
@@ -18801,7 +18815,6 @@
           "onlineMenuMode",
           "orderNotificationPolicy",
           "pricesIncludeTax",
-          "requireOpenCashSession",
           "slug",
           "status",
           "timeZone"
@@ -18853,9 +18866,6 @@
             "format": "double"
           },
           "autoCloseCounterSales": {
-            "type": "boolean"
-          },
-          "requireOpenCashSession": {
             "type": "boolean"
           },
           "orderNotificationPolicy": {
@@ -18932,8 +18942,7 @@
           "defaultTaxRate",
           "insufficientStockPolicy",
           "orderNotificationPolicy",
-          "pricesIncludeTax",
-          "requireOpenCashSession"
+          "pricesIncludeTax"
         ],
         "type": "object",
         "properties": {
@@ -18945,9 +18954,6 @@
             "format": "double"
           },
           "autoCloseCounterSales": {
-            "type": "boolean"
-          },
-          "requireOpenCashSession": {
             "type": "boolean"
           },
           "orderNotificationPolicy": {
@@ -20016,10 +20022,6 @@
           },
           "autoCloseCounterSales": {
             "type": "boolean"
-          },
-          "requireOpenCashSession": {
-            "type": "boolean",
-            "nullable": true
           },
           "orderNotificationPolicy": {
             "$ref": "#/components/schemas/OrderNotificationPolicy"

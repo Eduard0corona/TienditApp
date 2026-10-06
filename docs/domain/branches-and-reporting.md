@@ -16,7 +16,7 @@
 | Caja | `CashSession.BranchId` | La sucursal elegida al abrir (o la principal). `InventoryLocationId` guarda el almacén de esa sucursal para los cortes por ubicación. |
 | Ubicación de inventario | `InventoryLocation.BranchId` | Opcional: sin sucursal es un almacén general que surte a todas. Al crear una sucursal en un negocio con inventario se crea su almacén. |
 
-- El efectivo de una venta entra a la caja del cajero que cobra; si no tiene, a la única caja abierta de la sucursal de la venta. Nunca a una caja de otra sucursal; con varias cajas abiertas en la sucursal y ninguna del cajero no se adivina (ver `OrderCashService.PickDrawer`).
+- El cobro de una venta entra a la caja del cajero que cobra; si no tiene, a la única caja abierta de la sucursal de la venta. Nunca a una caja de otra sucursal; con varias cajas abiertas en la sucursal y ninguna del cajero no se adivina, y sin caja que lo tome el cobro se rechaza (ver `OrderCashService.PickDrawer`). Por eso cada sucursal que cobra necesita al menos una caja abierta, y el menú en línea recibe pedidos solo mientras la principal tiene una (`OrderCashService.HasOpenDrawerAtBranchAsync`).
 - El consumo de insumos de una venta sale del almacén de su sucursal (su ubicación principal o la primera activa; si no tiene, el almacén principal del negocio). Las devoluciones regresan los insumos a la ubicación de donde salieron.
 - En Vender, la venta se registra en la sucursal de la caja abierta del cajero; sin caja, en la sucursal elegida en el dispositivo (se recuerda por negocio en el navegador). El corte del día y el historial de turnos filtran por sucursal.
 

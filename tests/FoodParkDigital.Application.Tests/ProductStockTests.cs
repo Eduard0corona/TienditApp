@@ -36,6 +36,7 @@ public class ProductStockTests
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
 
         var started = await TrackAsync(fixture, new TrackProductStockCommand { ProductId = soda.Id, InitialQuantity = 10, UnitCost = 12m, ReorderPoint = 3 });
+        await fixture.OpenCashSessionAsync(tenant);
         var sale = await fixture.CreateOrderHandler(Inventory(fixture)).Handle(Sale(soda.Id, 3), CancellationToken.None);
 
         Assert.True(started.IsSuccess, started.Error);
@@ -60,6 +61,7 @@ public class ProductStockTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, RetailWithInventory);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
         await TrackAsync(fixture, new TrackProductStockCommand { ProductId = soda.Id, InitialQuantity = 10, ReorderPoint = 3 });
+        await fixture.OpenCashSessionAsync(tenant);
 
         await fixture.CreateOrderHandler(Inventory(fixture)).Handle(Sale(soda.Id, 8), CancellationToken.None);
 
@@ -75,12 +77,14 @@ public class ProductStockTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, RetailWithInventory);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
         await TrackAsync(fixture, new TrackProductStockCommand { ProductId = soda.Id, InitialQuantity = 10 });
+        await fixture.OpenCashSessionAsync(tenant);
 
         var stopped = await new StopTrackingProductStockCommandHandler(fixture.Context)
             .Handle(new StopTrackingProductStockCommand(soda.Id), CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
-        await fixture.CreateOrderHandler(Inventory(fixture)).Handle(Sale(soda.Id, 2), CancellationToken.None);
+        var sale = await fixture.CreateOrderHandler(Inventory(fixture)).Handle(Sale(soda.Id, 2), CancellationToken.None);
 
+        Assert.True(sale.IsSuccess, sale.Error);
         Assert.True(stopped.IsSuccess, stopped.Error);
         Assert.False(stopped.Value.TracksStock);
         var item = await fixture.Context.SupplyItems.SingleAsync();

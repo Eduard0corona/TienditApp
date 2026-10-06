@@ -23,10 +23,11 @@ public class CashController : ControllerBase
         _mediator = mediator;
     }
 
+    /// <summary>The drawer the user's payments enter at the branch where they sell; null when a payment would be refused.</summary>
     [HttpGet("current-session")]
-    public async Task<ActionResult<CashSessionDto?>> GetCurrentSession(CancellationToken cancellationToken)
+    public async Task<ActionResult<CashSessionDto?>> GetCurrentSession([FromQuery] Guid? branchId, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetCurrentCashSessionQuery(), cancellationToken);
+        var result = await _mediator.Send(new GetCurrentCashSessionQuery { BranchId = branchId }, cancellationToken);
         return Ok(result);
     }
 

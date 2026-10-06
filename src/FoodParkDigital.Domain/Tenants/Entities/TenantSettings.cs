@@ -46,8 +46,8 @@ public class TenantSettings : BaseEntity, ITenantScoped
     public bool AutoCloseCounterSales { get; private set; } = true;
 
     /// <summary>
-    /// When true a cash payment is refused unless the cashier has an open drawer, so no cash goes uncounted.
-    /// Off by default: card and transfer payments never need a drawer.
+    /// No longer read: every payment and refund now needs an open drawer, whatever the business chose. Kept until a
+    /// migration drops its column.
     /// </summary>
     public bool RequireOpenCashSession { get; private set; }
     /// <summary>When the owner finished or skipped the guided setup.</summary>
@@ -104,8 +104,6 @@ public class TenantSettings : BaseEntity, ITenantScoped
         PricesIncludeTax = pricesIncludeTax;
         AutoCloseCounterSales = autoCloseCounterSales;
     }
-
-    public void SetRequireOpenCashSession(bool required) => RequireOpenCashSession = required;
 
     public void SetOrderNotificationPolicy(OrderNotificationPolicy policy)
     {

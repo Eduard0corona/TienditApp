@@ -12,7 +12,11 @@ import { hasCapability } from '../../utils/tenantCapabilities';
 const MODES: Array<{ value: OnlineMenuMode; label: string; help: string }> = [
   { value: OnlineMenuMode.Off, label: 'Apagado', help: 'Nadie fuera del negocio ve tu catálogo.' },
   { value: OnlineMenuMode.MenuOnly, label: 'Solo menú', help: 'Quien tenga el enlace o el QR ve productos y precios.' },
-  { value: OnlineMenuMode.Orders, label: 'Menú con pedidos', help: 'Además piden en línea: llegan a Pedidos como "En línea" y tú los confirmas.' },
+  {
+    value: OnlineMenuMode.Orders,
+    label: 'Menú con pedidos',
+    help: 'Además piden en línea mientras haya una caja abierta en la sucursal principal: llegan a Pedidos como "En línea" y tú los confirmas.',
+  },
 ];
 
 function downloadQr(url: string, fileName: string) {

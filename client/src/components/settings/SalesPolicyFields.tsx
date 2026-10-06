@@ -142,27 +142,6 @@ export default function SalesPolicyFields({ value, onChange, disabled, idPrefix,
           <div className="form-text">
             La comida que pasa por la pantalla de cocina se cierra cuando está lista.
           </div>
-          {value.requireOpenCashSession !== undefined && (
-            <>
-              <div className="form-check form-switch mt-3">
-                <input
-                  id={`${idPrefix}-require-drawer`}
-                  type="checkbox"
-                  role="switch"
-                  className="form-check-input"
-                  checked={value.requireOpenCashSession}
-                  onChange={(event) => onChange({ ...value, requireOpenCashSession: event.target.checked })}
-                  disabled={disabled}
-                />
-                <label className="form-check-label" htmlFor={`${idPrefix}-require-drawer`}>
-                  Pedir caja abierta para cobrar en efectivo
-                </label>
-              </div>
-              <div className="form-text">
-                Así ningún efectivo queda fuera del corte de un cajero. Tarjeta y transferencia no lo necesitan.
-              </div>
-            </>
-          )}
         </div>
         {value.orderNotificationPolicy !== undefined && (
           <div className="col-md-6">

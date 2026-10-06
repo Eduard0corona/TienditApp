@@ -17,7 +17,6 @@ export default function SalesPolicyCard() {
     pricesIncludeTax: tenant?.pricesIncludeTax ?? false,
     defaultTaxRate: tenant?.defaultTaxRate ?? 16,
     autoCloseCounterSales: tenant?.autoCloseCounterSales ?? true,
-    requireOpenCashSession: tenant?.requireOpenCashSession ?? false,
     orderNotificationPolicy: tenant?.orderNotificationPolicy ?? OrderNotificationPolicy.RemoteAndServices,
     insufficientStockPolicy: tenant?.insufficientStockPolicy ?? InsufficientStockPolicy.Block,
   };
@@ -28,7 +27,6 @@ export default function SalesPolicyCard() {
   const changed = value.pricesIncludeTax !== saved.pricesIncludeTax
     || value.defaultTaxRate !== saved.defaultTaxRate
     || value.autoCloseCounterSales !== saved.autoCloseCounterSales
-    || value.requireOpenCashSession !== saved.requireOpenCashSession
     || value.orderNotificationPolicy !== saved.orderNotificationPolicy
     || value.insufficientStockPolicy !== saved.insufficientStockPolicy;
 

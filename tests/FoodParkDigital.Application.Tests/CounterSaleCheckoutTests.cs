@@ -149,6 +149,7 @@ public class CounterSaleCheckoutTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 29m);
+        await fixture.OpenCashSessionAsync(tenant);
 
         var result = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
@@ -170,6 +171,7 @@ public class CounterSaleCheckoutTests
         var tenant = await fixture.AddTenantAsync(
             BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true, autoCloseCounterSales: false);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 29m);
+        await fixture.OpenCashSessionAsync(tenant);
 
         var result = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
@@ -191,6 +193,7 @@ public class CounterSaleCheckoutTests
         var tenant = await fixture.AddTenantAsync(
             BusinessType.Food, TenantCapability.Food | TenantCapability.Kitchen, pricesIncludeTax: true);
         var taco = await fixture.AddProductAsync(tenant, "Taco de pastor", 22m);
+        await fixture.OpenCashSessionAsync(tenant);
 
         var result = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
@@ -222,6 +225,7 @@ public class CounterSaleCheckoutTests
         var tenant = await fixture.AddTenantAsync(
             BusinessType.Food, TenantCapability.Food | TenantCapability.Kitchen, pricesIncludeTax: true);
         var taco = await fixture.AddProductAsync(tenant, "Taco de pastor", 22m);
+        await fixture.OpenCashSessionAsync(tenant);
         var created = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand { Items = [new CreateOrderItemDto { ProductId = taco.Id, Quantity = 2 }] },
             CancellationToken.None);
@@ -247,6 +251,7 @@ public class CounterSaleCheckoutTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
         var coffee = await fixture.AddProductAsync(tenant, "Americano", 35m);
+        await fixture.OpenCashSessionAsync(tenant);
 
         var result = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
@@ -271,6 +276,7 @@ public class CounterSaleCheckoutTests
         fixture.Context.Categories.Add(category);
         fixture.Context.Products.AddRange(haircut, laundry);
         await fixture.Context.SaveChangesAsync();
+        await fixture.OpenCashSessionAsync(tenant);
 
         var haircutSale = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
@@ -302,6 +308,7 @@ public class CounterSaleCheckoutTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 29m);
+        await fixture.OpenCashSessionAsync(tenant);
         var created = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand { Items = [new CreateOrderItemDto { ProductId = soda.Id, Quantity = 2 }] },
             CancellationToken.None);

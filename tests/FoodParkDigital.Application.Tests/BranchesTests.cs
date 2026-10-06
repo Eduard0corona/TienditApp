@@ -105,6 +105,9 @@ public class BranchesTests
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
         var main = await fixture.DefaultBranchAsync();
         var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        // Other cashiers' drawers take the payments; only the seller's own drawer decides the branch of a sale.
+        await fixture.OpenCashSessionAsync(tenant, main.Id, Guid.NewGuid());
+        await fixture.OpenCashSessionAsync(tenant, norte.Id, Guid.NewGuid());
 
         var asked = await SellAsync(fixture, soda.Id, branchId: norte.Id);
         var atDefault = await SellAsync(fixture, soda.Id);
@@ -161,6 +164,7 @@ public class BranchesTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food | TenantCapability.Inventory, pricesIncludeTax: true);
         var taco = await fixture.AddProductAsync(tenant, "Taco", 25m);
         var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        await fixture.OpenCashSessionAsync(tenant, norte.Id);
         var tortilla = new SupplyItem(tenant.Id, "Tortilla", UnitType.Unit);
         fixture.Context.SupplyItems.Add(tortilla);
         foreach (var location in await fixture.Context.InventoryLocations.ToListAsync())
@@ -206,6 +210,8 @@ public class BranchesTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
         var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        await fixture.OpenCashSessionAsync(tenant, (await fixture.DefaultBranchAsync()).Id);
+        await fixture.OpenCashSessionAsync(tenant, norte.Id);
         await SellAsync(fixture, soda.Id, branchId: norte.Id);
         await SellAsync(fixture, soda.Id);
         var handler = new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock);
