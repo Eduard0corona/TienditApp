@@ -54,7 +54,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     public ApplicationDbContext CreateContext(Guid? tenantId = null)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlServer(_connectionString)
+            .UseSqlServer(_connectionString, sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
             .Options;
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
         if (tenantId is { } id)
@@ -70,7 +70,9 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     {
         var connection = new SqlConnectionStringBuilder(_connectionString) { MultipleActiveResultSets = true };
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseSqlServer(connection.ConnectionString, sql => sql.EnableRetryOnFailure(maxRetryCount: 3))
+            .UseSqlServer(connection.ConnectionString, sql => sql
+                .EnableRetryOnFailure(maxRetryCount: 3)
+                .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
             .AddInterceptors(interceptors)
             .Options;
         return new ApplicationDbContext(options, tenant, mediator);

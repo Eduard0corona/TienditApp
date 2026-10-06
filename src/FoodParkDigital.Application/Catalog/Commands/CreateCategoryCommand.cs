@@ -6,6 +6,7 @@ using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Catalog.Commands;
 
@@ -40,6 +41,9 @@ public class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryComman
 
     public async Task<Result<CategoryDto>> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
     {
+        if (await _context.Categories.CountAsync(cancellationToken) >= Category.MaxCategoriesPerTenant)
+            return Result.Failure<CategoryDto>(CategoryLimits.Reached);
+
         var category = new Category(
             _tenantService.TenantId,
             request.Name,
@@ -51,4 +55,10 @@ public class CreateCategoryCommandHandler : IRequestHandler<CreateCategoryComman
 
         return Result.Success(category.ToDto());
     }
+}
+
+internal static class CategoryLimits
+{
+    public static readonly string Reached =
+        $"Un negocio puede tener como máximo {Category.MaxCategoriesPerTenant} categorías (también cuentan las archivadas).";
 }

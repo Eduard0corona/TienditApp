@@ -14,6 +14,9 @@ public record GetKitchenOrdersQuery : IRequest<List<KitchenOrderDto>>;
 
 public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuery, List<KitchenOrderDto>>
 {
+    /// <summary>The board shows the newest ones: orders left unmoved for days do not hide today's.</summary>
+    public const int MaxOrders = 200;
+
     private readonly IApplicationDbContext _context;
 
     public GetKitchenOrdersQueryHandler(IApplicationDbContext context)
@@ -38,9 +41,13 @@ public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuer
                 || o.Status == OrderStatus.Accepted
                 || o.Status == OrderStatus.InPreparation
                 || o.Status == OrderStatus.InProgress)
-            .OrderBy(o => o.CreatedAt)
+            .OrderByDescending(o => o.CreatedAt)
+            .ThenByDescending(o => o.OrderNumber)
+            .Take(MaxOrders)
             .ToListAsync(cancellationToken);
 
+        // Oldest first, as the kitchen works them.
+        orders.Reverse();
         return orders.Select(o => o.ToKitchenDto()).ToList();
     }
 }

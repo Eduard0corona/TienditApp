@@ -86,6 +86,9 @@ public class CreateAiAgentCommandHandler : IRequestHandler<CreateAiAgentCommand,
             .AnyAsync(x => x.Name == name, cancellationToken);
         if (duplicatedName)
             return Result.Failure<AiAgentDto>("Ya existe un agente con ese nombre.");
+        if (await _context.AiAgents.CountAsync(cancellationToken) >= AiAgent.MaxAgentsPerTenant)
+            return Result.Failure<AiAgentDto>(
+                $"Un negocio puede tener como máximo {AiAgent.MaxAgentsPerTenant} agentes (también cuentan los inactivos).");
 
         var agent = new AiAgent(_tenantService.TenantId, name, request.Role.Trim());
         agent.UpdateGeneral(

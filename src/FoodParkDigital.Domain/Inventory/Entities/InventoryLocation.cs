@@ -4,6 +4,9 @@ namespace FoodParkDigital.Domain.Inventory.Entities;
 
 public class InventoryLocation : AuditableEntity, ITenantScoped
 {
+    /// <summary>Inactive ones and the ones of each branch included: the list of a business shows them all, without pages.</summary>
+    public const int MaxLocationsPerTenant = 100;
+
     private InventoryLocation() { }
 
     public InventoryLocation(

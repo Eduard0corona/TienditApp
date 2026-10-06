@@ -65,6 +65,11 @@ public static class DependencyInjection
                 {
                     sqlOptions.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
                     sqlOptions.EnableRetryOnFailure(maxRetryCount: 3);
+                    // A query that loads collections reads each one in its own statement: an order with its lines,
+                    // payments, refunds and history in a single join would repeat the order row once per combination.
+                    // A read may then see a change committed between two statements; what changes together (orders,
+                    // stock, purchase lines, drawers) is saved against its concurrency token, so a stale copy fails.
+                    sqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
                 });
 
             // The tenant interceptor validates rows before the outbox interceptor serializes their events.
