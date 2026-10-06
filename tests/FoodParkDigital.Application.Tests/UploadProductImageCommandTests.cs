@@ -46,8 +46,6 @@ public class UploadProductImageCommandTests
             taxRate: 16m,
             calories: 120,
             allergens: "lactosa",
-            stockQuantity: 40,
-            lowStockThreshold: 5,
             maxQuantityPerOrder: 4,
             unit: UnitType.Portion,
             availableFromTime: new TimeSpan(7, 0, 0),

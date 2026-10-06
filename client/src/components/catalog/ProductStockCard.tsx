@@ -48,8 +48,6 @@ export default function ProductStockCard({ product, canManage }: ProductStockCar
       setLocationId((selected) => selected || activeLocations.find((l) => l.isDefault)?.id || activeLocations[0]?.id || '');
       // An item the business already keeps for this product: same unit and not the stock of another product.
       setItems(supplies.items.filter((item) => !item.productId && item.unit === (product.unit ?? UnitType.Unit)));
-      setInitialQuantity((value) => value || (current.capturedStockQuantity != null ? String(current.capturedStockQuantity) : ''));
-      setReorderPoint((value) => value || (current.capturedLowStockThreshold != null ? String(current.capturedLowStockThreshold) : ''));
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'No se pudieron cargar las existencias.'));
     } finally {
@@ -202,9 +200,6 @@ export default function ProductStockCard({ product, canManage }: ProductStockCar
                     onChange={(e) => setInitialQuantity(e.target.value)}
                     placeholder="0"
                   />
-                  {stock?.capturedStockQuantity != null && (
-                    <div className="form-text">Antes se había capturado {stock.capturedStockQuantity}; confírmalo contando.</div>
-                  )}
                 </div>
                 <div className="col-sm-6 mb-3">
                   <label className="form-label" htmlFor="stock-location">Ubicación</label>

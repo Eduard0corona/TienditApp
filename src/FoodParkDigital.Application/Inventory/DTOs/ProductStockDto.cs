@@ -11,9 +11,6 @@ public class ProductStockDto
     public decimal ReorderPoint { get; set; }
     public bool IsLowStock { get; set; }
     public List<ProductStockLocationDto> Locations { get; set; } = [];
-    /// <summary>What was captured by hand before; offered as the opening balance when the control starts.</summary>
-    public int? CapturedStockQuantity { get; set; }
-    public int? CapturedLowStockThreshold { get; set; }
 }
 
 public class ProductStockLocationDto

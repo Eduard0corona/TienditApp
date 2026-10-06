@@ -43,11 +43,7 @@ public class ProductDto
     public int? Calories { get; set; }
     public string? Allergens { get; set; }
 
-    // Inventory
-    /// <summary>Quantity captured by hand before stock was controlled in the inventory ledger; it never moved.</summary>
-    public int? StockQuantity { get; set; }
-    /// <summary>Threshold captured by hand with <see cref="StockQuantity"/>.</summary>
-    public int? LowStockThreshold { get; set; }
+    // Retail
     public int? MaxQuantityPerOrder { get; set; }
     public TimeSpan? AvailableFromTime { get; set; }
     public TimeSpan? AvailableToTime { get; set; }

@@ -16,8 +16,6 @@ public class CustomerProfileConfiguration : IEntityTypeConfiguration<CustomerPro
         builder.Property(x => x.DisplayName).HasMaxLength(200);
         builder.Property(x => x.FirstName).HasMaxLength(100);
         builder.Property(x => x.LastName).HasMaxLength(100);
-        builder.Property(x => x.LoyaltyPoints).HasDefaultValue(0);
-        builder.Property(x => x.LoyaltyTier).HasMaxLength(50);
 
         builder.HasIndex(x => x.PhoneNormalized).IsUnique();
 

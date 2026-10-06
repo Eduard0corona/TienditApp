@@ -12206,16 +12206,6 @@
             "type": "string",
             "nullable": true
           },
-          "stockQuantity": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "lowStockThreshold": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
           "maxQuantityPerOrder": {
             "type": "integer",
             "format": "int32",
@@ -16394,16 +16384,6 @@
             "type": "string",
             "nullable": true
           },
-          "stockQuantity": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "lowStockThreshold": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
           "maxQuantityPerOrder": {
             "type": "integer",
             "format": "int32",
@@ -16770,16 +16750,6 @@
             "items": {
               "$ref": "#/components/schemas/ProductStockLocationDto"
             }
-          },
-          "capturedStockQuantity": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "capturedLowStockThreshold": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -19960,16 +19930,6 @@
           },
           "allergens": {
             "type": "string",
-            "nullable": true
-          },
-          "stockQuantity": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "lowStockThreshold": {
-            "type": "integer",
-            "format": "int32",
             "nullable": true
           },
           "maxQuantityPerOrder": {

@@ -8656,10 +8656,6 @@ export interface components {
             calories?: number | null;
             allergens?: string | null;
             /** Format: int32 */
-            stockQuantity?: number | null;
-            /** Format: int32 */
-            lowStockThreshold?: number | null;
-            /** Format: int32 */
             maxQuantityPerOrder?: number | null;
             unit?: components["schemas"]["UnitType"];
             /** Format: date-span */
@@ -9913,10 +9909,6 @@ export interface components {
             calories?: number | null;
             allergens?: string | null;
             /** Format: int32 */
-            stockQuantity?: number | null;
-            /** Format: int32 */
-            lowStockThreshold?: number | null;
-            /** Format: int32 */
             maxQuantityPerOrder?: number | null;
             /** Format: date-span */
             availableFromTime?: string | null;
@@ -10026,10 +10018,6 @@ export interface components {
             reorderPoint: number;
             isLowStock: boolean;
             locations: components["schemas"]["ProductStockLocationDto"][];
-            /** Format: int32 */
-            capturedStockQuantity?: number | null;
-            /** Format: int32 */
-            capturedLowStockThreshold?: number | null;
         };
         ProductStockLocationDto: {
             /** Format: uuid */
@@ -10940,10 +10928,6 @@ export interface components {
             /** Format: int32 */
             calories?: number | null;
             allergens?: string | null;
-            /** Format: int32 */
-            stockQuantity?: number | null;
-            /** Format: int32 */
-            lowStockThreshold?: number | null;
             /** Format: int32 */
             maxQuantityPerOrder?: number | null;
             unit?: components["schemas"]["UnitType"];

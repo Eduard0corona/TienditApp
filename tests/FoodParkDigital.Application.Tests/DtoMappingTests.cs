@@ -95,8 +95,6 @@ public class DtoMappingTests
         EntityFiller.Set(product, nameof(Product.ImageUrl), "/uploads/products/t1/cafe");
         EntityFiller.Set(product, nameof(Product.PriceAmount), 30m);
         EntityFiller.Set(product, nameof(Product.CompareAtPrice), 35m);
-        EntityFiller.Set(product, nameof(Product.StockQuantity), 2);
-        EntityFiller.Set(product, nameof(Product.LowStockThreshold), 5);
 
         var dto = Project(product, CatalogMappings.AsDto);
 

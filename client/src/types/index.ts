@@ -404,9 +404,6 @@ export interface ProductDto {
   preparationTimeMinutes?: number;
   calories?: number;
   allergens?: string;
-  /** Captured by hand before stock was controlled in inventory; it never moved. */
-  stockQuantity?: number;
-  lowStockThreshold?: number;
   maxQuantityPerOrder?: number;
   availableFromTime?: string;
   availableToTime?: string;
@@ -504,8 +501,6 @@ export interface CreateProductRequest {
   taxObject?: CfdiTaxObject;
   calories?: number;
   allergens?: string;
-  stockQuantity?: number;
-  lowStockThreshold?: number;
   maxQuantityPerOrder?: number;
   unit?: UnitType;
   preparationTimeMinutes?: number;
@@ -743,9 +738,6 @@ export interface ProductStockDto {
   reorderPoint: number;
   isLowStock: boolean;
   locations: ProductStockLocationDto[];
-  /** What was captured by hand before; offered as the opening balance. */
-  capturedStockQuantity?: number | null;
-  capturedLowStockThreshold?: number | null;
 }
 
 export interface ProductStockLocationDto {

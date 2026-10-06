@@ -154,7 +154,7 @@ public class DtoProjectionSqlServerTests
         context.TenantSettings.Add(new TenantSettings(tenant.Id, TenantCapability.Food));
         var category = new Category(tenant.Id, "Bebidas", null);
         var latte = new Product(tenant.Id, category.Id, "Latte", null, 45m, "MXN",
-            imageUrl: "/uploads/products/demo/latte", compareAtPrice: 50m, stockQuantity: 2, lowStockThreshold: 5);
+            imageUrl: "/uploads/products/demo/latte", compareAtPrice: 50m);
         latte.SetOptionGroups(
         [
             new ProductOptionGroupDefinition(null, "Tamaño", 1, 1, [new(null, "Chico", -5m), new(null, "Grande", 12m)]),
