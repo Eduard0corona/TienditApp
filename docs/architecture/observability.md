@@ -25,6 +25,8 @@ Se exporta solo si hay destino configurado:
 
 Sin ninguno de los dos no se registra OpenTelemetry. Los logs salen por Serilog a la consola (log stream de App Service) y, con destino, Serilog también se los entrega al proveedor de logs de OpenTelemetry (`writeToProviders`), así llegan junto con trazas y métricas (Fase 4). Los proveedores de logging predeterminados se quitan para no duplicar la consola.
 
+Nivel de los errores de las peticiones (Fase 10): `GlobalExceptionHandlerMiddleware` registra los rechazos esperados (400 de validación, 401, 403, 404, 409 de concurrencia y 422 de regla de negocio) como advertencia, sin la traza de pila ("Request rejected with {StatusCode} {ErrorType}"), y solo los 500 como error con la excepción ("Unhandled exception"). Una alerta sobre logs de nivel error mide entonces fallas de la app, no datos inválidos; la de 5xx por negocio de abajo usa `requests` y no cambia. El envío de códigos por SMS que piden las pantallas sin sesión corre después de la respuesta (`VerificationCodeSender`): su falla aparece como error "A verification code could not be sent", sin teléfono ni código.
+
 ### Etiqueta por negocio
 
 `TenantResolutionMiddleware` agrega `tenant.id` (GUID interno, no es dato personal):
