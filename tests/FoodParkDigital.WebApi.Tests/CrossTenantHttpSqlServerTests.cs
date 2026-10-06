@@ -274,7 +274,7 @@ public sealed class CrossTenantHttpSqlServerTests
         return page.GetProperty("totalCount").GetInt32();
     }
 
-    private static void AssertRefused(HttpResponseMessage response)
+    internal static void AssertRefused(HttpResponseMessage response)
     {
         // Not found, refused or invalid: never applied.
         Assert.False(response.IsSuccessStatusCode, $"{response.RequestMessage?.Method} {response.RequestMessage?.RequestUri} answered {(int)response.StatusCode}");

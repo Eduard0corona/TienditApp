@@ -52,6 +52,9 @@ public sealed record SignedUp(Guid TenantId, HttpClient Client, string AccessTok
 /// </summary>
 public sealed class TwoBusinessesApi : IAsyncLifetime
 {
+    public const int FoodBusiness = 0;
+    public const int ServicesBusiness = 2;
+
     private readonly string _privateFiles = Path.Combine(Path.GetTempPath(), "fpd-http-tests", Guid.NewGuid().ToString("N"));
     private SqlServerTestDatabase? _database;
     private WebApplicationFactory<Program>? _factory;
@@ -110,9 +113,10 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     }
 
     /// <summary>
-    /// Registers a business (of services: it sells, keeps stock and books appointments) and signs its owner in.
+    /// Registers a business and signs its owner in. Of services by default: it sells, keeps stock and books
+    /// appointments (<see cref="FoodBusiness"/> also has tables and a kitchen).
     /// </summary>
-    public async Task<SignedUp> SignUpAsync(string name)
+    public async Task<SignedUp> SignUpAsync(string name, int businessType = ServicesBusiness)
     {
         var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -124,7 +128,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             lastName = name.ToUpperInvariant(),
             phoneNumber = "+52155" + Random.Shared.Next(10000000, 99999999),
             businessName = $"Negocio {name.ToUpperInvariant()}",
-            businessType = 2
+            businessType
         });
         var registered = await ReadAsync(response);
         var accessToken = registered.GetProperty("accessToken").GetString()!;
