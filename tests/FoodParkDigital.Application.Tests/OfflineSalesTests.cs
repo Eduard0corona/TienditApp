@@ -37,6 +37,7 @@ public class OfflineSalesTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
 
         await fixture.CreateOrderHandler().Handle(Sale(soda.Id, Guid.NewGuid()), CancellationToken.None);
         await fixture.CreateOrderHandler().Handle(Sale(soda.Id, Guid.NewGuid()), CancellationToken.None);
@@ -50,6 +51,7 @@ public class OfflineSalesTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
         var capturedAt = SalesTestFixture.Now.AddHours(-3);
 
         var sale = await fixture.CreateOrderHandler().Handle(Sale(soda.Id, Guid.NewGuid()) with { CapturedOfflineAt = capturedAt }, CancellationToken.None);

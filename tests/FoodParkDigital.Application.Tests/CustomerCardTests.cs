@@ -21,6 +21,7 @@ public class CustomerCardTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         var coffee = await fixture.AddProductAsync(tenant, "Café", 30m);
         var bread = await fixture.AddProductAsync(tenant, "Concha", 15m);
+        await fixture.OpenCashSessionAsync(tenant);
         var handler = fixture.CreateOrderHandler();
 
         var paid = await handler.Handle(Sale("Ana López", "55 1234 5678", (coffee.Id, 2), (bread.Id, 1)) with

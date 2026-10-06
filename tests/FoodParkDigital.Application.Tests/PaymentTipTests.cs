@@ -78,6 +78,7 @@ public class PaymentTipTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
         var meal = await fixture.AddProductAsync(tenant, "Comida corrida", 29m);
+        await fixture.OpenCashSessionAsync(tenant);
         var created = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand { Items = [new CreateOrderItemDto { ProductId = meal.Id, Quantity = 2 }] },
             CancellationToken.None);

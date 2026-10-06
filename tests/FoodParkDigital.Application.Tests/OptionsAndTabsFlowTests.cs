@@ -184,6 +184,7 @@ public class OptionsAndTabsFlowTests
         var unpaid = await closeHandler.Handle(new CloseTabCommand(opened.Value.Id), CancellationToken.None);
         Assert.True(unpaid.IsFailure);
 
+        await fixture.OpenCashSessionAsync(tenant);
         var payment = await fixture.AddPaymentHandler().Handle(
             new AddOrderPaymentCommand { OrderId = opened.Value.Id, Amount = 165m, Method = OrderPaymentMethod.Cash },
             CancellationToken.None);

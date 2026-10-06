@@ -198,6 +198,8 @@ export default function SellPage() {
   const [cartOpenOnPhone, setCartOpenOnPhone] = useState(false);
   const [cashClosed, setCashClosed] = useState(false);
   const [showOpenDrawer, setShowOpenDrawer] = useState(false);
+  // Every charge enters a drawer: without one, Cobrar opens the cashier's drawer first and then the charge.
+  const [chargeAfterOpening, setChargeAfterOpening] = useState(false);
   const [drawerBranch, setDrawerBranch] = useState<{ id: string; name: string } | null>(null);
   const online = useOnlineStatus();
   const pendingSales = usePendingSales();
@@ -354,11 +356,13 @@ export default function SellPage() {
     if (searchParams.has('phone')) setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  const workingBranchId = workingBranch.branch?.id;
   useEffect(() => {
-    // Only people who manage the cash drawer can see it; for them a closed drawer is worth a warning.
+    // Only people who manage the cash drawer can see it; for them a closed drawer is worth a warning. It is the
+    // drawer that would take their payments at the branch this device sells at.
     if (!access.cash || !tenantId) return;
     let cancelled = false;
-    cashApi.getCurrentSession()
+    cashApi.getCurrentSession(workingBranchId)
       .then(({ data }) => {
         if (cancelled) return;
         setCashClosed(!data);
@@ -370,7 +374,7 @@ export default function SellPage() {
     return () => {
       cancelled = true;
     };
-  }, [access.cash, tenantId]);
+  }, [access.cash, tenantId, workingBranchId]);
 
   useEffect(() => {
     if (!tenantId || draftLoadedFor.current !== tenantId || tabTarget) return;
@@ -608,8 +612,14 @@ export default function SellPage() {
     if (cart.length === 0 || submitting || tabTarget || !canCharge) return;
     setSaleError('');
     setCartOpenOnPhone(false);
+    // Offline the sale waits on the device and its payments enter the drawer open when it is sent.
+    if (cashClosed && online) {
+      setChargeAfterOpening(true);
+      setShowOpenDrawer(true);
+      return;
+    }
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget, canCharge]);
+  }, [cart.length, submitting, tabTarget, canCharge, cashClosed, online]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1101,7 +1111,7 @@ export default function SellPage() {
         <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-0" role="status">
           <span>
             <i className="ri-safe-2-line me-1" aria-hidden="true"></i>
-            La caja está cerrada: los cobros se guardan, pero no entran al corte.
+            Tu caja está cerrada: ábrela para cobrar. Todo cobro se registra en una caja; sin ella solo puedes guardar pedidos.
           </span>
           <button type="button" className="btn btn-sm btn-warning" onClick={() => setShowOpenDrawer(true)}>
             Abrir caja
@@ -1111,7 +1121,10 @@ export default function SellPage() {
 
       <OpenDrawerModal
         show={showOpenDrawer}
-        onHide={() => setShowOpenDrawer(false)}
+        onHide={() => {
+          setShowOpenDrawer(false);
+          setChargeAfterOpening(false);
+        }}
         branches={workingBranch.branches}
         defaultBranchId={workingBranch.branch?.id}
         onOpened={(session) => {
@@ -1123,6 +1136,10 @@ export default function SellPage() {
             workingBranch.setBranch(session.branchId);
           }
           toast.success('Tu caja quedó abierta.');
+          if (chargeAfterOpening) {
+            setChargeAfterOpening(false);
+            setChargeOpen(true);
+          }
         }}
       />
 

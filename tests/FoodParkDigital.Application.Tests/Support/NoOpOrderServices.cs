@@ -32,7 +32,10 @@ internal sealed class NoOpOrderInventoryService : IOrderInventoryService
     public Task ReturnItemsToInventoryAsync(Order order, OrderRefund refund, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
-/// <summary>For tests that do not exercise the cash drawer: records no cash movement.</summary>
+/// <summary>
+/// For tests that do not exercise the cash drawer: as if an open drawer took every payment and refund (they are
+/// refused without one), without recording a cash movement.
+/// </summary>
 internal sealed class NoOpOrderCashService : IOrderCashService
 {
     public static readonly NoOpOrderCashService Instance = new();
@@ -40,8 +43,8 @@ internal sealed class NoOpOrderCashService : IOrderCashService
     private NoOpOrderCashService() { }
 
     public Task<bool> RegisterOrderPaymentAsync(Order order, OrderPayment payment, CancellationToken cancellationToken)
-        => Task.FromResult(false);
+        => Task.FromResult(true);
 
     public Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
-        => Task.FromResult(false);
+        => Task.FromResult(true);
 }

@@ -163,8 +163,6 @@ export interface TenantProfileDto {
   defaultTaxRate: number;
   /** Counter sales close by themselves once fully paid. */
   autoCloseCounterSales: boolean;
-  /** Cash payments are refused unless the cashier has an open drawer. */
-  requireOpenCashSession?: boolean;
   /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
   onlineMenuMode?: OnlineMenuMode;
   /** Which orders send the customer WhatsApp messages (paid templates). */
@@ -193,8 +191,6 @@ export interface TenantSalesPolicyDto {
   pricesIncludeTax: boolean;
   defaultTaxRate: number;
   autoCloseCounterSales: boolean;
-  /** Refuse cash payments when the cashier has no open drawer. Omitted keeps the current value. */
-  requireOpenCashSession?: boolean;
   /** Which orders send the customer WhatsApp messages. Omitted keeps the current value. */
   orderNotificationPolicy?: OrderNotificationPolicy;
   /** Refuse or warn when a sale's recipe supplies are short. Omitted keeps the current value. */

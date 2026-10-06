@@ -55,16 +55,15 @@ public class CashShiftTests
     }
 
     [Fact]
-    public async Task CashWithoutTheCashiersDrawer_ShouldBeRefused_WhenTheBusinessRequiresOne()
+    public async Task PaymentNoDrawerTakes_ShouldBeRefused_WhateverTheMethod()
     {
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
-        await RequireOpenDrawerAsync(fixture, tenant.Id);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
         await OpenAsync(fixture, Ana, 500m);
         await OpenAsync(fixture, Beto, 300m);
 
-        // A third cashier with no drawer: two are open, so the cash would land in someone else's count.
+        // A third cashier with no drawer: two are open, so the payment would land in someone else's count.
         fixture.CurrentUser.UserId = Guid.NewGuid().ToString();
         var cash = await fixture.CreateOrderHandler().Handle(CashSale(soda.Id, 1, 23.20m), CancellationToken.None);
         var card = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
@@ -75,8 +74,69 @@ public class CashShiftTests
 
         Assert.False(cash.IsSuccess);
         Assert.Equal(OrderPaymentRegistrar.NoOpenDrawerMessage, cash.Error);
-        Assert.True(card.IsSuccess, card.Error);
-        Assert.Equal(1, await fixture.Context.Orders.CountAsync());
+        Assert.False(card.IsSuccess);
+        Assert.Equal(OrderPaymentRegistrar.NoOpenDrawerMessage, card.Error);
+        Assert.Empty(await fixture.Context.Orders.ToListAsync());
+        Assert.Empty(await fixture.Context.CashTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task PaymentWithoutAnyOpenDrawer_ShouldBeRefused_ButAnUnpaidOrderIsSaved()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        fixture.CurrentUser.UserId = Ana;
+
+        var transfer = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            Items = [new CreateOrderItemDto { ProductId = soda.Id, Quantity = 1 }],
+            Payments = [new CreateOrderPaymentDto { Amount = 23.20m, Method = OrderPaymentMethod.Transfer }]
+        }, CancellationToken.None);
+        var unpaid = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            Items = [new CreateOrderItemDto { ProductId = soda.Id, Quantity = 1 }]
+        }, CancellationToken.None);
+        var charge = await fixture.AddPaymentHandler().Handle(new AddOrderPaymentCommand
+        {
+            OrderId = unpaid.Value.Id,
+            Amount = 23.20m,
+            Method = OrderPaymentMethod.Cash
+        }, CancellationToken.None);
+
+        Assert.Equal(OrderPaymentRegistrar.NoOpenDrawerMessage, transfer.Error);
+        // Saving an order without charging it needs no drawer; charging it later does.
+        Assert.True(unpaid.IsSuccess, unpaid.Error);
+        Assert.Equal(OrderPaymentRegistrar.NoOpenDrawerMessage, charge.Error);
+        fixture.Context.ChangeTracker.Clear();
+        Assert.Equal(23.20m, (await fixture.Context.Orders.SingleAsync()).Balance);
+        Assert.Empty(await fixture.Context.OrderPayments.ToListAsync());
+    }
+
+    [Fact]
+    public async Task UnpaidOrder_ShouldBeChargedIntoTheDrawerOpenWhenItIsCharged()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        fixture.CurrentUser.UserId = Ana;
+        var unpaid = await fixture.CreateOrderHandler().Handle(new CreateOrderCommand
+        {
+            Items = [new CreateOrderItemDto { ProductId = soda.Id, Quantity = 1 }]
+        }, CancellationToken.None);
+        var drawer = (await OpenAsync(fixture, Ana, 500m)).Value;
+
+        var charge = await fixture.AddPaymentHandler().Handle(new AddOrderPaymentCommand
+        {
+            OrderId = unpaid.Value.Id,
+            Amount = 23.20m,
+            Method = OrderPaymentMethod.Card
+        }, CancellationToken.None);
+
+        Assert.True(charge.IsSuccess, charge.Error);
+        var movement = Assert.Single(await MovementsAsync(fixture, drawer.Id));
+        Assert.Equal(23.20m, movement.Amount);
+        Assert.Equal(OrderPaymentMethod.Card, movement.PaymentMethod);
     }
 
     [Fact]
@@ -187,6 +247,40 @@ public class CashShiftTests
         Assert.Null(none);
     }
 
+    [Fact]
+    public async Task CurrentDrawer_AtABranch_ShouldBeTheOneThatWouldTakeTheUsersPayments()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        var main = await fixture.DefaultBranchAsync();
+        var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        fixture.CurrentUser.UserId = Beto;
+        var betoDrawer = (await new OpenCashSessionCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock)
+            .Handle(new OpenCashSessionCommand { OpeningAmount = 300m, BranchId = norte.Id }, CancellationToken.None)).Value;
+
+        // Ana has no drawer: at Matriz none takes her payments, at Norte Beto's does.
+        fixture.CurrentUser.UserId = Ana;
+        var atMain = await CurrentAsync(fixture, main.Id);
+        var atNorte = await CurrentAsync(fixture, norte.Id);
+        var anywhere = await CurrentAsync(fixture, branchId: null);
+        var saleAtMain = await fixture.CreateOrderHandler().Handle(CashSale(soda.Id, 1, 23.20m) with { BranchId = main.Id }, CancellationToken.None);
+        var saleAtNorte = await fixture.CreateOrderHandler().Handle(CashSale(soda.Id, 1, 23.20m) with { BranchId = norte.Id }, CancellationToken.None);
+
+        Assert.Null(atMain);
+        Assert.Equal(OrderPaymentRegistrar.NoOpenDrawerMessage, saleAtMain.Error);
+        Assert.Equal(betoDrawer.Id, atNorte?.Id);
+        Assert.False(atNorte!.IsMine);
+        Assert.True(saleAtNorte.IsSuccess, saleAtNorte.Error);
+        Assert.Single(await MovementsAsync(fixture, betoDrawer.Id));
+        // Without a branch, the only open drawer of the business stands in for hers.
+        Assert.Equal(betoDrawer.Id, anywhere?.Id);
+    }
+
+    private static Task<CashSessionDto?> CurrentAsync(SalesTestFixture fixture, Guid? branchId)
+        => new GetCurrentCashSessionQueryHandler(fixture.Context, fixture.CurrentUser)
+            .Handle(new GetCurrentCashSessionQuery { BranchId = branchId }, CancellationToken.None);
+
     private static async Task<Common.Models.Result<CashSessionDto>> OpenAsync(SalesTestFixture fixture, string userId, decimal amount)
     {
         fixture.CurrentUser.UserId = userId;
@@ -223,11 +317,4 @@ public class CashShiftTests
 
     private static Task<List<Domain.Finance.Entities.CashTransaction>> MovementsAsync(SalesTestFixture fixture, Guid sessionId)
         => fixture.Context.CashTransactions.AsNoTracking().Where(t => t.CashSessionId == sessionId).ToListAsync();
-
-    private static async Task RequireOpenDrawerAsync(SalesTestFixture fixture, Guid tenantId)
-    {
-        var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenantId);
-        settings.SetRequireOpenCashSession(true);
-        await fixture.Context.SaveChangesAsync();
-    }
 }

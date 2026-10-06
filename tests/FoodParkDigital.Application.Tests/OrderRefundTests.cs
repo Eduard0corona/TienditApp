@@ -81,6 +81,7 @@ public class OrderRefundTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
         var sale = await SellAsync(fixture, soda.Id, 1, (20m, OrderPaymentMethod.Cash));
 
         var first = await RefundHandler(fixture).Handle(Refund(sale.Id, 15m), CancellationToken.None);
@@ -90,6 +91,42 @@ public class OrderRefundTests
         Assert.True(first.IsSuccess, first.Error);
         Assert.False(second.IsSuccess);
         Assert.Contains("no puede ser mayor", second.Error);
+    }
+
+    [Fact]
+    public async Task Refund_WithoutAnOpenDrawer_ShouldBeRefused_WhateverTheMethod()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
+        var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        var drawer = await fixture.OpenCashSessionAsync(tenant);
+        var sale = await SellAsync(fixture, soda.Id, 2, (20m, OrderPaymentMethod.Cash), (20m, OrderPaymentMethod.Card));
+        var session = await fixture.Context.CashSessions.Include(s => s.Transactions).SingleAsync(s => s.Id == drawer.Id);
+        session.Close(SalesTestFixture.Now, "cajero", session.ExpectedBalance);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var cash = await RefundHandler(fixture).Handle(Refund(sale.Id, 10m), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var card = await RefundHandler(fixture).Handle(Refund(sale.Id, 10m, OrderPaymentMethod.Card), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var voided = await VoidHandler(fixture).Handle(new VoidOrderCommand { OrderId = sale.Id, Reason = "Cobro duplicado" }, CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+
+        Assert.Equal(OrderRefundProcessor.NoOpenDrawerMessage, cash.Error);
+        Assert.Equal(OrderRefundProcessor.NoOpenDrawerMessage, card.Error);
+        Assert.Equal(OrderRefundProcessor.NoOpenDrawerMessage, voided.Error);
+        Assert.Empty(await fixture.Context.OrderRefunds.ToListAsync());
+        Assert.Equal(40m, (await fixture.Context.Orders.SingleAsync()).NetPaidAmount);
+
+        // With a drawer open again the refund goes through, out of that drawer.
+        var reopened = await fixture.OpenCashSessionAsync(tenant);
+        var refunded = await RefundHandler(fixture).Handle(Refund(sale.Id, 10m, OrderPaymentMethod.Card), CancellationToken.None);
+
+        Assert.True(refunded.IsSuccess, refunded.Error);
+        var movement = Assert.Single(await fixture.Context.CashTransactions.Where(t => t.CashSessionId == reopened.Id).ToListAsync());
+        Assert.Equal(CashTransactionType.Refund, movement.TransactionType);
+        Assert.Equal(-10m, movement.Amount);
     }
 
     [Fact]
@@ -123,6 +160,7 @@ public class OrderRefundTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
         var sale = await SellAsync(fixture, soda.Id, 2, (40m, OrderPaymentMethod.Cash));
         Assert.Equal(OrderStatus.Delivered, sale.Status);
 
@@ -150,6 +188,7 @@ public class OrderRefundTests
         fixture.Context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(tenant.Id, taco.Id, tortilla.Id, 2m));
         await fixture.Context.SaveChangesAsync();
         var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context), NullLogger<OrderInventoryService>.Instance);
+        await fixture.OpenCashSessionAsync(tenant);
 
         var sale = await SellAsync(fixture, taco.Id, 5, inventory, (125m, OrderPaymentMethod.Cash));
         Assert.Equal(90m, await OnHandAsync(fixture, tortilla.Id));

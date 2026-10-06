@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Audit.Entities;
@@ -99,8 +100,13 @@ public class PublicMenuDto
     public string Currency { get; set; } = "MXN";
     public bool PricesIncludeTax { get; set; }
     public decimal DefaultTaxRate { get; set; }
-    /// <summary>The menu takes orders; otherwise it only shows the catalog.</summary>
+    /// <summary>The menu takes orders now; otherwise it only shows the catalog.</summary>
     public bool AcceptsOrders { get; set; }
+    /// <summary>
+    /// The business takes online orders, but not right now: the branch they arrive at has no open drawer to charge
+    /// them in.
+    /// </summary>
+    public bool OrdersPaused { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -180,6 +186,10 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             .Where(p => !OrderProductClassifier.IsServiceUnit(p.Unit))
             .GroupBy(p => p.CategoryId)
             .ToDictionary(g => g.Key, g => g.ToList());
+        // Online orders arrive at the default branch, and only while a drawer is open there (see PlacePublicOrderCommand).
+        var ordersOn = settings.OnlineMenuMode == OnlineMenuMode.Orders;
+        var drawerOpen = ordersOn && await OrderCashService.HasOpenDrawerAtBranchAsync(
+            _context, tenant.Id, await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken), cancellationToken);
 
         return new PublicMenuDto
         {
@@ -190,7 +200,8 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             Currency = settings.Currency,
             PricesIncludeTax = settings.PricesIncludeTax,
             DefaultTaxRate = settings.DefaultTaxRate,
-            AcceptsOrders = settings.OnlineMenuMode == OnlineMenuMode.Orders,
+            AcceptsOrders = drawerOpen,
+            OrdersPaused = ordersOn && !drawerOpen,
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto
@@ -282,6 +293,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
 {
     /// <summary>Orders a phone may leave waiting for the business to confirm them (spam guard).</summary>
     public const int MaxPendingPerPhone = 3;
+    public const string OrdersPausedMessage = "Por ahora este negocio no está recibiendo pedidos en línea. Intenta más tarde.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -320,6 +332,11 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
 
         // A public request has no tenant: everything below is scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
+        // Online orders arrive at the default branch of the business, and only while a drawer is open there.
+        var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
+        if (!await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken))
+            return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
+
         var now = _dateTimeProvider.UtcNow;
         // Until the business confirms or cancels them, a phone cannot keep piling up orders.
         var waiting = await _context.Orders.CountAsync(o => o.Channel == OrderChannel.Online
@@ -333,8 +350,6 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         var customer = await _customerLookupService.ResolveForOrderAsync(
             tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
-        // Online orders arrive at the default branch of the business.
-        var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
         var order = new Order(
             tenantId: tenant.Id,
             customerUserId: customer.CustomerUserId,

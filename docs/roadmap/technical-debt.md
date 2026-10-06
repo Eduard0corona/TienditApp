@@ -48,7 +48,7 @@ Actualizada el 2026-10-06 tras las Fases 0 a 11 del roadmap de producto (la audi
 - Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.
 - Consultas con varias colecciones incluidas no usan `AsSplitQuery`.
 - `client/README.md` sigue siendo template genérico.
-- Un pago puede guardarse sin movimiento de caja si el cajero no tiene caja abierta y hay varias o ninguna en la sucursal, salvo que el negocio active `RequireOpenCashSession`.
+- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). La columna `TenantSettings.RequireOpenCashSession`, de la política que lo pedía solo para efectivo, quedó sin uso: retirarla con una migración.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - `Product.StockQuantity` y `LowStockThreshold` quedan sin uso: la existencia de un producto vive en el libro mayor de inventario desde la Fase 5A. Falta borrar las columnas cuando ya no se ofrezcan como existencia inicial.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.

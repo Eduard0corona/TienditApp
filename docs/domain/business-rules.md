@@ -41,6 +41,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
 - Cada cajero tiene como máximo una caja abierta por negocio; solo él o un administrador la cierra o le registra gastos y retiros. Un cierre con diferencia exige notas.
+- Todo cobro y todo reembolso, de cualquier método, entra a una caja abierta: la del cajero o, si no tiene, la única abierta de la sucursal de la venta. Sin una que lo tome se rechaza; guardar un pedido sin cobrar no la necesita. El menú en línea solo recibe pedidos mientras haya una caja abierta en la sucursal principal, adonde llegan.
 - Solo las entradas modifican el costo promedio de un insumo.
 
 ## Mensajería

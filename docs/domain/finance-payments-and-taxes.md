@@ -12,7 +12,7 @@
   - Los movimientos manuales solo pueden ser depósito, gasto, retiro o reembolso; la orden referida debe existir.
   - `Inflows`/`Outflows` y el saldo esperado solo cuentan efectivo; tarjeta, transferencia y otros métodos se reportan aparte (`NonCashInflows`). El corte diario expone `NetCashOnlyFlow`.
   - Cada cajero tiene su propia caja abierta por sucursal (índice único filtrado por negocio y cajero, ver [caja por cajero](#caja-por-cajero-fase-2)) y `CashSession.Revision` es token de concurrencia: un pago concurrente con el cierre o dos cierres simultáneos fallan con 409 en lugar de sobrescribirse. El cierre exige un monto contado mayor o igual a cero.
-- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal de la venta (nunca a una de otra sucursal; las cajas de antes de las sucursales la toman si son la única abierta). Si hay varias abiertas y ninguna es suya, o no hay ninguna, el pago sigue registrado sin movimiento de caja, salvo que el negocio exija caja abierta para cobrar en efectivo.
+- Al registrar un pago, `OrderCashService` lo agrega a la caja del cajero que cobra; si no tiene, a la única abierta de la sucursal de la venta (nunca a una de otra sucursal; las cajas de antes de las sucursales la toman si son la única abierta). Todo cobro y todo reembolso, de cualquier método, entra a una caja: si hay varias abiertas y ninguna es suya, o no hay ninguna, se rechaza ("Abre tu caja para cobrar"), así ninguno queda fuera del corte de un turno. Guardar un pedido sin cobrar no necesita caja: su pago entra a la caja abierta cuando se cobra.
 - Compras aceptan `TaxPercent` por línea y calculan subtotales/impuesto.
 - `DigitalWallet` existe como método de pago y subtotal del corte, no como cuenta Wallet.
 
@@ -42,7 +42,7 @@
 
 ## Cobro en la venta y cierre automático
 
-- `POST /api/v1/orders` acepta `Payments` (hasta 10 por venta, por ejemplo efectivo más tarjeta). `OrderPaymentRegistrar` los registra en el mismo guardado que la venta, con las mismas reglas que `POST /api/v1/orders/{id}/payments`: importe positivo con dos decimales, sin sobrepago, evidencia del tenant y movimiento en la caja abierta si existe. Si un pago es inválido, la venta no se crea.
+- `POST /api/v1/orders` acepta `Payments` (hasta 10 por venta, por ejemplo efectivo más tarjeta). `OrderPaymentRegistrar` los registra en el mismo guardado que la venta, con las mismas reglas que `POST /api/v1/orders/{id}/payments`: importe positivo con dos decimales, sin sobrepago, evidencia del tenant y movimiento en una caja abierta. Si un pago es inválido o ninguna caja lo toma, la venta no se crea.
 - Desde la Fase 4F cada pago guarda el efectivo recibido y la propina (ver [Propina y efectivo recibido](#propina-y-efectivo-recibido-fase-4f)).
 - Con `AutoCloseCounterSales`, una venta de mostrador (`CreatedByBusiness`) sin saldo se cierra sola mediante `Order.CloseIfPaidCounterSale` y la máquina de estados:
   - una venta de tienda o de comida sin pantalla de cocina pasa a `Delivered`;
@@ -69,7 +69,8 @@
 - `GET /api/v1/cash/sessions` lista los turnos por fecha, sucursal y estado, con filtro de solo diferencias. Caja muestra Mi caja, Turnos (el administrador puede cerrar cajas ajenas) y Corte del día.
 - Desde la Fase 4 el detalle de un turno imprime su corte en formato de ticket de 72 mm (fondo, entradas y salidas de efectivo, esperado, contado, diferencia, conteo por denominación, movimientos y espacio para dos firmas), y Corte del día imprime el resumen del día. Vender abre la caja del cajero en un diálogo, sin salir de la venta.
 - Desde la Fase 5 el corte también sale por WhatsApp como texto (enlace `wa.me`, la persona elige el chat): el del turno desde su detalle en Turnos y desde Mi caja al cerrarla (con imprimir), y el del día desde Corte del día. Lleva las mismas cifras que el impreso, sin la lista de movimientos.
-- `TenantSettings.RequireOpenCashSession` (apagado por defecto) rechaza cobros y reembolsos en efectivo si el cajero no tiene caja abierta; tarjeta y transferencia no la necesitan.
+- Todo cobro y reembolso exige una caja abierta que lo tome, sea cual sea el método (antes era la política opcional `TenantSettings.RequireOpenCashSession`, solo para efectivo; su columna quedó sin uso). Una venta sin conexión que llega sin caja abierta queda en el dispositivo como "No aceptada" y se reintenta al abrirla.
+- `GET /api/v1/cash/current-session?branchId=` devuelve la caja que tomaría los cobros del usuario en esa sucursal, con la misma regla que el cobro (`OrderCashService.PickDrawer`), o nada si el cobro se rechazaría. Vender la consulta con la sucursal del dispositivo: avisa que hay que abrir la caja y, sin caja, Cobrar abre primero el diálogo para abrirla y luego el cobro.
 - Las cajas anteriores a la Fase 2 se completaron en la migración: sucursal predeterminada del negocio, cajero por el correo con que se abrió y, en las cerradas, esperado y diferencia calculados de sus movimientos.
 
 ## Reembolsos y anulaciones (Fase 2)

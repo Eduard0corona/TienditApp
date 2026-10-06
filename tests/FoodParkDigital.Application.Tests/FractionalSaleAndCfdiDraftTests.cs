@@ -24,6 +24,7 @@ public class FractionalSaleAndCfdiDraftTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, pricesIncludeTax: true);
         var ham = await fixture.AddProductAsync(tenant, "Jamón de pierna", 189.90m, unit: UnitType.Kg);
+        await fixture.OpenCashSessionAsync(tenant);
 
         var result = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
@@ -134,6 +135,7 @@ public class FractionalSaleAndCfdiDraftTests
         await SetFiscalProfileAsync(fixture, tenant);
         var coffee = await fixture.AddProductAsync(tenant, "Café", 100m);
         var tortilla = await fixture.AddProductAsync(tenant, "Tortilla", 25m, taxRate: 0m, unit: UnitType.Kg);
+        await fixture.OpenCashSessionAsync(tenant);
         var order = await fixture.CreateOrderHandler().Handle(
             new CreateOrderCommand
             {

@@ -26,7 +26,6 @@ public static class TenantMappings
         PricesIncludeTax = tenant.Settings?.PricesIncludeTax ?? false,
         DefaultTaxRate = tenant.Settings?.DefaultTaxRate ?? VatRate.GeneralPercent,
         AutoCloseCounterSales = tenant.Settings?.AutoCloseCounterSales ?? true,
-        RequireOpenCashSession = tenant.Settings?.RequireOpenCashSession ?? false,
         OrderNotificationPolicy = tenant.Settings?.OrderNotificationPolicy ?? OrderNotificationPolicy.RemoteAndServices,
         InsufficientStockPolicy = tenant.Settings?.InsufficientStockPolicy ?? InsufficientStockPolicy.Block,
         OnlineMenuMode = tenant.Settings?.OnlineMenuMode ?? OnlineMenuMode.Off,

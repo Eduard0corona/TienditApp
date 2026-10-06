@@ -273,6 +273,11 @@ public sealed class CrossTenantManagementSqlServerTests
     /// <returns>The total of the sale, paid in full by card (so it closes as delivered).</returns>
     internal static async Task<decimal> PaidSaleAsync(HttpClient client, Guid product, string? phone, string name)
     {
+        // Every payment enters a drawer: the seller opens theirs unless it is open already.
+        var drawer = await client.GetAsync("/api/v1/cash/current-session");
+        if (drawer.StatusCode == HttpStatusCode.NoContent)
+            await TwoBusinessesApi.IdAsync(client, "/api/v1/cash/open", new { openingAmount = 0m });
+
         var order = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/orders", new
         {
             orderType = 0,

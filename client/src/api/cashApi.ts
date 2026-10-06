@@ -10,8 +10,12 @@ import type {
 } from '../types';
 
 export const cashApi = {
-  getCurrentSession: () =>
-    api.get<CashSessionDto | null>('/cash/current-session'),
+  /**
+   * The drawer the user's payments enter when selling at a branch (their own, else the only one open there);
+   * empty when a payment would be refused for lack of a drawer.
+   */
+  getCurrentSession: (branchId?: string) =>
+    api.get<CashSessionDto | null>('/cash/current-session', { params: { branchId } }),
 
   openSession: (data: OpenCashSessionRequest) =>
     api.post<CashSessionDto>('/cash/open', data),

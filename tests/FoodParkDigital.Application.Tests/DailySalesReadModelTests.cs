@@ -24,6 +24,7 @@ public class DailySalesReadModelTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
         await SellAtAsync(fixture, soda, Today.AddDays(-2), PaymentAt(12));
         await SellAtAsync(fixture, soda, Today.AddDays(-1), PaymentAt(23, 50));
         await SellAtAsync(fixture, soda, Today, PaymentAt(10));
@@ -65,6 +66,7 @@ public class DailySalesReadModelTests
         await using var fixture = SalesTestFixture.Create();
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
         // 23:30 in Mexico City is 05:30 UTC of the next day: the day of the sale depends on the zone.
         await SellAtAsync(fixture, soda, Today.AddDays(-2), PaymentAt(23, 30));
         await MaterializeAsync(fixture, tenant, firstDay: Today.AddDays(-3));
@@ -87,6 +89,8 @@ public class DailySalesReadModelTests
         var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
         var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
         var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        await fixture.OpenCashSessionAsync(tenant, (await fixture.DefaultBranchAsync()).Id);
+        await fixture.OpenCashSessionAsync(tenant, norte.Id);
         await SellAtAsync(fixture, soda, Today.AddDays(-1), PaymentAt(12), branchId: norte.Id, quantity: 2);
         await SellAtAsync(fixture, soda, Today.AddDays(-1), PaymentAt(13));
         await SellAtAsync(fixture, soda, Today, PaymentAt(9), branchId: norte.Id);
