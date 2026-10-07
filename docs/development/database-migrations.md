@@ -110,7 +110,13 @@ Los de la Fase 12 se probaron igual (SQL Server 2022, Docker), desde una copia d
 - con la Fase 11 sobre esa base, como al volver a ella, `/health/schema` sano: leyó el producto de la versión nueva, siguió proponiendo lo capturado y creó productos;
 - el `rollback.sql` solo quitó la migración del historial y el `verify.sql` quedó como antes de aplicar; otra vez no hizo nada, y aplicar de nuevo dejó lo mismo.
 
-En CI lo prueba `UnmappedColumnsSqlServerTests`: migra, guarda filas sin las columnas (quedan en NULL y en 0), conserva lo capturado al editarlas y revierte sin tocar las tablas. La siguiente fase las borra.
+Los de la Fase 13 se probaron igual, desde una copia de esa base con la Fase 12 aplicada, como producción, y con estadísticas automáticas sobre `StockQuantity` y `LoyaltyTier`:
+- el `verify.sql` de `20261006201255_DropStockAndLoyaltyColumns` mostró como única dependencia la restricción del valor por omisión de `LoyaltyPoints`, las dos estadísticas automáticas y lo capturado que se iba a perder;
+- el `apply.sql`, con el `sqlcmd` clásico, borró las cuatro columnas, la restricción y las estadísticas sin cambiar productos ni perfiles; repetirlo con la caché de planes vacía no hizo nada;
+- la versión nueva y la Fase 12 corrieron sobre esa base con `/health/schema` sano: catálogo, tarjeta de existencias, editar y crear productos;
+- el `rollback.sql` creó otra vez las columnas vacías y la restricción, sin cambiar filas, y otra vez no hizo nada; aplicar de nuevo dejó lo mismo que la primera vez.
+
+En CI lo prueba `UnmappedColumnsSqlServerTests`: con la base en la Fase 12, las filas que guarda esta versión dejan las columnas en NULL y en 0 y lo capturado sobrevive a una edición; después la Fase 13 las borra sin afectar las filas, revertirla las devuelve vacías y aplicarla otra vez las borra de nuevo.
 
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación. Cuando basta un cambio de datos acotado, lleva además un `repair.sql` idempotente que lista lo que cambia, como `20261005_StorageUrlsOutsideTheirFolder`.
 

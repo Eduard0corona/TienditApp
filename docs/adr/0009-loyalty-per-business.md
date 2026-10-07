@@ -44,3 +44,4 @@ Falta la lealtad, y no hay reglas de negocio para ella: cómo se ganan los punto
 ## Seguimiento
 
 - 2026-10-06 (Fase 12): el modelo dejó de mapear `LoyaltyPoints` y `LoyaltyTier` (`StopMappingStockAndLoyaltyColumns`, sin cambio de esquema); las columnas se borran en la siguiente fase. La decisión no cambia.
+- 2026-10-06 (Fase 13): las columnas se borraron (`DropStockAndLoyaltyColumns`). La lealtad, cuando tenga reglas, empieza desde cero en su registro por negocio.

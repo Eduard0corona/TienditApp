@@ -95,6 +95,14 @@ El `apply.sql` de la Fase 12 no cambia el esquema ni los datos: solo registra `2
 - Cada action se fija por el SHA completo del commit de su versión, con la versión como comentario, y el job `Backend` de CI falla si una queda por etiqueta. `azure/login` pasa de v2 (Node 20) a v3.1.0 (Node 24) con las mismas entradas; solo corre con OIDC.
 - Para actualizar una action: `git ls-remote --tags https://github.com/<dueño>/<action>` da el commit de cada versión (en una etiqueta anotada, el de la línea que termina en `^{}`). Cambia el SHA y el comentario en cada `uses:` después de leer sus notas de versión; sin Dependabot, nadie lo propone solo.
 
+## Columnas borradas, imágenes por digest y cobertura de la suite (Fase 13)
+
+El `apply.sql` de la Fase 13 borra `Products.StockQuantity`, `LowStockThreshold` y `CustomerProfiles.LoyaltyPoints` (con su valor por omisión) y `LoyaltyTier`, y se aplica, como siempre, antes del merge y con la Fase 12 desplegada: no las mapea, así que sigue funcionando, y volver a ella no necesita `rollback.sql`. Antes de aplicar, su `verify.sql` debe mostrar como única dependencia la restricción del valor por omisión de `LoyaltyPoints`, ninguna estadística creada a mano ni objeto que use las tablas, y cuánto capturado se pierde (solo queda en el respaldo). Volver a la Fase 11 exige antes el `rollback.sql` de esa carpeta, que crea las columnas vacías.
+
+- Las imágenes de Docker van con su etiqueta exacta y su digest: en CI `azurite:3.37.0` y `mssql/server:2022-CU27-ubuntu-22.04` (lo que era `2022-latest`); en el `Dockerfile` `aspnet:10.0.12`, `sdk:10.0.401` y `node:24-alpine` (Node 24.21.0); en `docker-compose.yml` el mismo SQL Server de CI. El paso `Actions and images pinned` del job `Backend` corre `.github/scripts/check-pins.py`, que falla con una action sin SHA completo o una imagen sin digest.
+- Para actualizar una imagen: `docker buildx imagetools inspect <imagen>:<etiqueta>` da el digest que tiene hoy esa etiqueta (el de la lista de plataformas, no el de una sola). Cambia la etiqueta y el digest juntos y revisa las notas de versión; una imagen fijada no recibe los parches de su etiqueta hasta que cambies el digest.
+- Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

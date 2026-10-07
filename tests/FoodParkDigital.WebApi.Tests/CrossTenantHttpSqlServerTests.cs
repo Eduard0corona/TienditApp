@@ -94,10 +94,55 @@ public sealed class CrossTenantHttpSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task AccountRoutes_ShouldShowOnlyTheirOwnBusinessesAndPurchases()
+    {
+        // The account routes read across businesses on purpose (a person can belong to several and buy in any), so each
+        // depends on its own filter: their memberships, their access and their purchases, never the other business's.
+        var businesses = (await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/me/tenants"))
+            .EnumerateArray()
+            .Select(business => business.GetProperty("tenantId").GetGuid())
+            .ToList();
+        Assert.Contains(B.TenantId, businesses);
+        Assert.DoesNotContain(A.TenantId, businesses);
+
+        var access = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/me/access");
+        Assert.Equal(B.TenantId, access.GetProperty("tenantId").GetGuid());
+        Assert.False(access.GetProperty("isPlatformAdmin").GetBoolean());
+
+        // The other business has sales; this owner bought nothing anywhere.
+        Assert.True(await CountOrdersAsync(A) > 0);
+        var purchases = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/me/orders?pageSize=50");
+        Assert.Empty(purchases.GetProperty("items").EnumerateArray());
+    }
+
+    [SqlServerFact]
+    public async Task EveryBusinessesList_AndCreatingOne_ShouldBeOnlyForThePlatformAdmin()
+    {
+        // The list of every business and creating one belong to the platform console: an owner gets neither.
+        var list = await B.Client.GetAsync("/api/v1/tenants?pageSize=100");
+        Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
+        Assert.DoesNotContain(A.TenantId.ToString(), await list.Content.ReadAsStringAsync());
+
+        var slug = $"ajeno-{Guid.NewGuid():N}"[..16];
+        var created = await B.Client.PostAsJsonAsync("/api/v1/tenants", new
+        {
+            name = "Negocio ajeno",
+            slug,
+            businessType = 1,
+            contactEmail = $"{slug}@demo.com"
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, created.StatusCode);
+        Assert.False(await _api.QueryAsync(B.TenantId, db => db.Tenants.AnyAsync(tenant => tenant.Slug == slug)));
+    }
+
+    [SqlServerFact]
     public async Task PrivateFiles_OfAnotherBusiness_ShouldNotOpen()
     {
-        Assert.Equal(HttpStatusCode.OK, (await A.Client.GetAsync($"/api/v1{A.ReceiptPath}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await B.Client.GetAsync($"/api/v1{A.ReceiptPath}")).StatusCode);
+        // A private file is only served by the files endpoint, to the members of its business.
+        var receipt = $"/api/v1{A.ReceiptPath}";
+        Assert.StartsWith("/api/v1/files/", receipt);
+        Assert.Equal(HttpStatusCode.OK, (await A.Client.GetAsync(receipt)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await B.Client.GetAsync(receipt)).StatusCode);
     }
 
     [SqlServerFact]
