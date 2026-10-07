@@ -101,7 +101,16 @@ El `apply.sql` de la Fase 13 borra `Products.StockQuantity`, `LowStockThreshold`
 
 - Las imágenes de Docker van con su etiqueta exacta y su digest: en CI `azurite:3.37.0` y `mssql/server:2022-CU27-ubuntu-22.04` (lo que era `2022-latest`); en el `Dockerfile` `aspnet:10.0.12`, `sdk:10.0.401` y `node:24-alpine` (Node 24.21.0); en `docker-compose.yml` el mismo SQL Server de CI. El paso `Actions and images pinned` del job `Backend` corre `.github/scripts/check-pins.py`, que falla con una action sin SHA completo o una imagen sin digest.
 - Para actualizar una imagen: `docker buildx imagetools inspect <imagen>:<etiqueta>` da el digest que tiene hoy esa etiqueta (el de la lista de plataformas, no el de una sola). Cambia la etiqueta y el digest juntos y revisa las notas de versión; una imagen fijada no recibe los parches de su etiqueta hasta que cambies el digest.
-- Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas.
+- Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas (desde la Fase 14, las de sus acciones).
+
+## Inicio, AuthController y rondas (Fase 14)
+
+La Fase 14 no trae migraciones: no hay `apply.sql` que aplicar antes del merge, y el esquema de la base es el de la Fase 13.
+
+- Inicio cuenta en SQL y lee sus ingresos del resumen diario de los reportes. Las cifras son las de antes, salvo lo que se cobre en el último segundo del día, que ahora cuenta como en Reportes. Un periodo de más de 366 días responde 400 con el motivo.
+- `AuthController` se dividió en cinco controllers con las mismas rutas. El documento OpenAPI es el mismo al compararlo como JSON; `client/openapi/openapi.json` y `src/api/generated/schema.ts` solo cambian de orden.
+- Cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina. Las cuentas abiertas al desplegar se cierran bien: sus rondas de antes se descuentan al cerrarlas y las nuevas, al mandarse.
+- Volver a la Fase 13 con cuentas abiertas: esa versión descuenta al cerrar todas las rondas de la cuenta, también las que la Fase 14 ya descontó, y al cancelarla no devuelve lo de las rondas. Antes de regresar, cierra o cancela las cuentas abiertas; si alguna se cerró después, corrige sus existencias con un movimiento de entrada.
 
 ## Slot de staging con swap y aprobación
 
