@@ -64,6 +64,66 @@ public static class DailySalesReadModel
     }
 
     /// <summary>
+    /// What was charged minus what was given back in the local days from <paramref name="from"/> to
+    /// <paramref name="to"/>, for the kinds of order given: closed days from their snapshots, as the sales reports
+    /// read them, and the rest summed in the database. Unlike <see cref="ReadAsync"/>, no sale is read row by row.
+    /// </summary>
+    public static async Task<decimal> ReadNetSalesAsync(
+        IApplicationDbContext context,
+        Guid tenantId,
+        TimeZoneInfo zone,
+        DateOnly from,
+        DateOnly to,
+        bool retail,
+        bool service,
+        DateTimeOffset utcNow,
+        CancellationToken cancellationToken)
+    {
+        if (!retail && !service)
+            return 0m;
+
+        var snapshots = await context.DailySalesSnapshots
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId
+                && x.BusinessDate >= from
+                && x.BusinessDate <= to
+                && x.TimeZoneId == zone.Id)
+            .Select(x => new { x.BusinessDate, x.OrderType, x.PaymentsAmount, x.RefundsAmount })
+            .ToListAsync(cancellationToken);
+
+        var stored = snapshots
+            .Where(x => IsClosed(x.BusinessDate, zone, utcNow))
+            .ToList();
+        var storedDates = stored.Select(x => x.BusinessDate).ToHashSet();
+        var netSales = stored
+            .Where(x => (retail && x.OrderType == OrderType.Retail) || (service && x.OrderType == OrderType.Service))
+            .Sum(x => x.PaymentsAmount - x.RefundsAmount);
+
+        var liveDates = EachDay(from, to).Where(date => !storedDates.Contains(date)).ToList();
+        foreach (var (runStart, runEnd) in ContiguousRuns(liveDates))
+        {
+            var startUtc = StartUtc(runStart, zone);
+            var endUtc = EndUtc(runEnd, zone);
+
+            var charged = await context.OrderPayments
+                .AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.PaidAt >= startUtc && x.PaidAt <= endUtc)
+                .Where(x => (retail && x.Order.OrderType == OrderType.Retail) || (service && x.Order.OrderType == OrderType.Service))
+                .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+            var givenBack = await (
+                    from refund in context.OrderRefunds.AsNoTracking()
+                    join order in context.Orders.AsNoTracking() on refund.OrderId equals order.Id
+                    where refund.TenantId == tenantId && refund.RefundedAt >= startUtc && refund.RefundedAt <= endUtc
+                        && ((retail && order.OrderType == OrderType.Retail) || (service && order.OrderType == OrderType.Service))
+                    select (decimal?)refund.Amount)
+                .SumAsync(cancellationToken) ?? 0m;
+            netSales += charged - givenBack;
+        }
+
+        return netSales;
+    }
+
+    /// <summary>
     /// Figures of each local day from <paramref name="from"/> to <paramref name="to"/>, from the sales: payments
     /// and refunds by the day they were stamped, orders by the day they were created, all by the order's branch.
     /// Days without sales are left out.
@@ -153,7 +213,7 @@ public static class DailySalesReadModel
     internal static DateTimeOffset EndUtc(DateOnly date, TimeZoneInfo zone)
         => TenantDateTimeResolver.LocalDateBoundaryToUtc(date.ToDateTime(TimeOnly.MinValue), startOfDay: false, zone);
 
-    private static DateOnly LocalDate(DateTimeOffset at, TimeZoneInfo zone)
+    internal static DateOnly LocalDate(DateTimeOffset at, TimeZoneInfo zone)
         => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime);
 
     private sealed class FiguresBuilder

@@ -141,6 +141,41 @@ public class GetDashboardMetricsQueryTests
     }
 
     [Fact]
+    public void Period_ShouldGoForwardAndSpanAtMostTheDaysOfTheReports()
+    {
+        var validator = new GetDashboardMetricsQueryValidator();
+
+        Assert.True(validator.Validate(new GetDashboardMetricsQuery()).IsValid);
+        Assert.True(validator.Validate(new GetDashboardMetricsQuery { FromDate = OrderDate.AddDays(-365), ToDate = OrderDate }).IsValid);
+        var inverted = validator.Validate(new GetDashboardMetricsQuery { FromDate = OrderDate, ToDate = OrderDate.AddDays(-1) });
+        Assert.Contains(inverted.Errors, e => e.ErrorMessage == "La fecha inicial debe ser anterior a la final.");
+        var tooLong = validator.Validate(new GetDashboardMetricsQuery { FromDate = OrderDate.AddDays(-366), ToDate = OrderDate });
+        Assert.Contains(tooLong.Errors, e => e.ErrorMessage == "El periodo puede abarcar como máximo 366 días.");
+    }
+
+    [Fact]
+    public async Task Period_ShouldBeWholeDaysOfTheBusiness_AndAtMostAYearWithOnlyOneEnd()
+    {
+        await using var fixture = TestFixture.Create();
+        var tenant = await fixture.AddTenantAsync("tenant-a", TenantCapability.Retail);
+        fixture.TenantService.SetTenant(tenant.Id);
+        var handler = new GetDashboardMetricsQueryHandler(fixture.Context, fixture.TenantService, new TestDateTimeProvider());
+
+        // 18:00 UTC is 12:00 in Mexico City (UTC-6): each end stands for its whole local day.
+        var day = await handler.Handle(
+            new GetDashboardMetricsQuery { FromDate = OrderDate, ToDate = OrderDate },
+            CancellationToken.None);
+        var fromFarBack = await handler.Handle(
+            new GetDashboardMetricsQuery { FromDate = OrderDate.AddYears(-3) },
+            CancellationToken.None);
+
+        Assert.Equal(new DateTimeOffset(2026, 2, 17, 6, 0, 0, TimeSpan.Zero), day.RangeFrom);
+        Assert.Equal(new DateTimeOffset(2026, 2, 18, 6, 0, 0, TimeSpan.Zero).AddTicks(-1), day.RangeTo);
+        Assert.Equal(new DateTimeOffset(2025, 2, 17, 6, 0, 0, TimeSpan.Zero), fromFarBack.RangeFrom);
+        Assert.Equal(day.RangeTo, fromFarBack.RangeTo);
+    }
+
+    [Fact]
     public void TopSellingItemsQuery_ShouldFilterByTenantInSqlServerTranslation()
     {
         var tenantId = Guid.NewGuid();
