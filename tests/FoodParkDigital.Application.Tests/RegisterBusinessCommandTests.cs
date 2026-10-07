@@ -1,8 +1,6 @@
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
-using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tests.Support;
-using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -48,7 +46,7 @@ public class RegisterBusinessCommandTests
     }
 
     [Fact]
-    public async Task RegisterBusiness_ShouldCommitTenantOwnerAndSession_WithRetryingExecutionStrategy()
+    public async Task RegisterBusiness_ShouldCommitTenantAndOwnerWithoutSession_WithRetryingExecutionStrategy()
     {
         await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
 
@@ -71,8 +69,8 @@ public class RegisterBusinessCommandTests
         await AssertSingleRegistrationAsync(host, result.Value);
     }
 
-    private static Task<Result<AuthResponse>> RegisterAsync(SqliteTestHost host, RegisterBusinessCommand command)
-        => host.HandleAsync<RegisterBusinessCommandHandler, Result<AuthResponse>>(
+    private static Task<Result<Guid>> RegisterAsync(SqliteTestHost host, RegisterBusinessCommand command)
+        => host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(
             handler => handler.Handle(command, CancellationToken.None));
 
     private static RegisterBusinessCommand ValidCommand() => new()
@@ -105,7 +103,7 @@ public class RegisterBusinessCommandTests
             counts);
     }
 
-    private static async Task AssertSingleRegistrationAsync(SqliteTestHost host, AuthResponse response)
+    private static async Task AssertSingleRegistrationAsync(SqliteTestHost host, Guid userId)
     {
         var stored = await host.QueryAsync(async db => new
         {
@@ -137,8 +135,11 @@ public class RegisterBusinessCommandTests
         Assert.True(location.IsDefault);
 
         var owner = Assert.Single(stored.Users);
-        Assert.Equal(response.User!.Id, owner.Id);
+        Assert.Equal(userId, owner.Id);
         Assert.Equal(tenant.Id, owner.DefaultTenantId);
+        // The account is activated from the emailed link; until then it cannot sign in.
+        Assert.False(owner.EmailConfirmed);
+        Assert.False(owner.PhoneNumberConfirmed);
         Assert.Equal(new { UserId = owner.Id, Name = (string?)"TENANT_ADMIN" }, Assert.Single(stored.Roles));
 
         var membership = Assert.Single(stored.Memberships);
@@ -147,13 +148,11 @@ public class RegisterBusinessCommandTests
         Assert.Equal(TenantUserRole.Owner, membership.Role);
         Assert.Equal(TenantUserStatus.Active, membership.Status);
 
-        var session = Assert.Single(stored.RefreshTokens);
-        Assert.Equal(owner.Id, session.UserId);
-        Assert.Equal(RefreshToken.HashOf(response.RefreshToken!), session.TokenHash);
-        Assert.NotEqual(Guid.Empty, session.SessionId);
+        // Signing up opens no session: the owner signs in once the email is confirmed.
+        Assert.Empty(stored.RefreshTokens);
 
-        // Notifications go out once, after the commit, even when the transaction was retried.
+        // The confirmation link goes out once, after the commit, even when the transaction was retried; no SMS code.
         Assert.Equal("owner@demo.com", Assert.Single(host.Email.ConfirmationRecipients));
-        Assert.Equal("+525511112222", Assert.Single(host.Sms.VerificationRecipients));
+        Assert.Empty(host.Sms.VerificationRecipients);
     }
 }

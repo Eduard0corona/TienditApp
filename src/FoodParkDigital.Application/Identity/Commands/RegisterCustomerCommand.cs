@@ -2,7 +2,6 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
@@ -13,8 +12,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+/// <summary>
+/// Signs up a customer account and sends the link that confirms its email. It opens no session: the account is
+/// activated from that link and the customer then signs in with their credentials. Returns the id of the new account.
+/// </summary>
 [AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
-public record RegisterCustomerCommand : IRequest<Result<AuthResponse>>
+public record RegisterCustomerCommand : IRequest<Result<Guid>>
 {
     public string Email { get; init; } = null!;
     public string Password { get; init; } = null!;
@@ -35,32 +38,26 @@ public class RegisterCustomerCommandValidator : AbstractValidator<RegisterCustom
     }
 }
 
-public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCommand, Result<AuthResponse>>
+public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCommand, Result<Guid>>
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phoneNormalizationService;
     private readonly IEmailService _emailService;
-    private readonly ISmsService _smsService;
 
     public RegisterCustomerCommandHandler(
         UserManager<ApplicationUser> userManager,
-        IJwtTokenService jwtTokenService,
         IApplicationDbContext context,
         IPhoneNormalizationService phoneNormalizationService,
-        IEmailService emailService,
-        ISmsService smsService)
+        IEmailService emailService)
     {
         _userManager = userManager;
-        _jwtTokenService = jwtTokenService;
         _context = context;
         _phoneNormalizationService = phoneNormalizationService;
         _emailService = emailService;
-        _smsService = smsService;
     }
 
-    public async Task<Result<AuthResponse>> Handle(RegisterCustomerCommand request, CancellationToken cancellationToken)
+    public async Task<Result<Guid>> Handle(RegisterCustomerCommand request, CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email.ToUpperInvariant();
         var existingUser = await _context.Users
@@ -68,14 +65,14 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             .AnyAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
         if (existingUser)
-            return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electrónico.");
+            return Result.Failure<Guid>("Ya existe una cuenta con este correo electrónico.");
 
         if (!_phoneNormalizationService.TryNormalizeToE164(
                 request.PhoneNumber,
                 CustomerPhoneOwnershipRules.DefaultCountry,
                 out var phoneNormalized))
         {
-            return Result.Failure<AuthResponse>(PhoneNumberRules.InvalidPhoneMessage);
+            return Result.Failure<Guid>(PhoneNumberRules.InvalidPhoneMessage);
         }
 
         var phoneHolder = await CustomerPhoneOwnershipRules.FindHolderAsync(
@@ -87,7 +84,7 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         // Only a number its account confirmed by SMS is taken: an unverified profile must not let
         // whoever typed the number first lock its real owner out.
         if (phoneHolder is { IsVerified: true })
-            return Result.Failure<AuthResponse>("Ya existe una cuenta de cliente con este teléfono.");
+            return Result.Failure<Guid>("Ya existe una cuenta de cliente con este teléfono.");
 
         var user = new ApplicationUser
         {
@@ -105,21 +102,21 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         // Identity checks the password only inside CreateAsync; reject it before writing anything
         var passwordResult = await _userManager.ValidatePasswordPolicyAsync(user, request.Password);
         if (!passwordResult.Succeeded)
-            return Result.Failure<AuthResponse>(passwordResult.ToErrorMessage());
+            return Result.Failure<Guid>(passwordResult.ToErrorMessage());
 
-        // User, role, profile and session are committed together or not at all
+        // User, role and profile are committed together or not at all
         var registration = await _context.ExecuteInResilientTransactionAsync(async ct =>
         {
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
-                return Result.Failure<IssuedRefreshToken>(createResult.ToErrorMessage());
+                return Result.Failure(createResult.ToErrorMessage());
 
             var roleResult = await _userManager.AddToRoleAsync(user, "CUSTOMER");
             if (!roleResult.Succeeded)
-                return Result.Failure<IssuedRefreshToken>(roleResult.ToErrorMessage());
+                return Result.Failure(roleResult.ToErrorMessage());
 
-            // While an unverified profile holds the number this account starts without one;
-            // ConfirmPhoneCommand gives the number to whichever account proves it by SMS.
+            // While an unverified profile holds the number this account starts without one; confirming the
+            // phone by SMS (from the profile) gives the number to whichever account proves it.
             if (phoneHolder is null)
             {
                 _context.CustomerProfiles.Add(new CustomerProfile(
@@ -130,49 +127,19 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
                     request.LastName));
             }
 
-            // The first session of the account, started with its registration.
-            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id, Guid.NewGuid());
-            _context.RefreshTokens.Add(sessionToken.Token);
             await _context.SaveChangesAsync(ct);
 
-            return Result.Success(sessionToken);
+            return Result.Success();
         }, cancellationToken);
 
         if (registration.IsFailure)
-            return Result.Failure<AuthResponse>(registration.Error!);
+            return Result.Failure<Guid>(registration.Error!);
 
-        // Send confirmations only after the registration is committed. Guest orders placed with this
-        // phone are linked by ConfirmPhoneCommand once the phone is verified, not here.
+        // The link goes out only after the registration is committed. It activates the account (signing in needs a
+        // confirmed email or phone). Guest orders placed with this phone are linked once the phone is verified, not here.
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
 
-        var phoneCode = await _userManager.GenerateChangePhoneNumberTokenAsync(user, request.PhoneNumber);
-        await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
-
-        var refreshToken = registration.Value;
-        var accessToken = _jwtTokenService.GenerateAccessToken(user, refreshToken.Token.SessionId);
-
-        return Result.Success(new AuthResponse
-        {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken.Value,
-            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
-            RequiresTwoFactor = false,
-            UserId = user.Id.ToString(),
-            User = new UserDto
-            {
-                Id = user.Id,
-                Email = user.Email!,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                PhoneNumber = user.PhoneNumber,
-                PhoneNumberConfirmed = user.PhoneNumberConfirmed,
-                Role = user.Role.ToString(),
-                TenantId = user.DefaultTenantId,
-                IsActive = user.IsActive,
-                AvatarUrl = null,
-                AvatarImages = null
-            }
-        });
+        return Result.Success(user.Id);
     }
 }

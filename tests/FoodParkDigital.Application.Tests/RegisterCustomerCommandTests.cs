@@ -1,9 +1,7 @@
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity.Commands;
-using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Customers.Enums;
-using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
@@ -51,7 +49,7 @@ public class RegisterCustomerCommandTests
     }
 
     [Fact]
-    public async Task RegisterCustomer_ShouldCommitAccountWithoutClaimingGuestOrders_BeforePhoneIsVerified()
+    public async Task RegisterCustomer_ShouldCommitAccountWithoutSessionOrGuestOrders_UntilConfirmed()
     {
         await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
         var guest = await CustomerSeed.GuestOrderAsync(host, "tenant-uno", PhoneNormalized);
@@ -72,26 +70,29 @@ public class RegisterCustomerCommandTests
         });
 
         var user = Assert.Single(stored.Users);
-        Assert.Equal(result.Value.User!.Id, user.Id);
+        Assert.Equal(result.Value, user.Id);
+        Assert.False(user.EmailConfirmed);
         Assert.False(user.PhoneNumberConfirmed);
         Assert.Equal("CUSTOMER", Assert.Single(stored.Roles));
         var profile = Assert.Single(stored.Profiles);
         Assert.Equal(user.Id, profile.UserId);
         Assert.Equal(PhoneNormalized, profile.PhoneNormalized);
-        Assert.Equal(RefreshToken.HashOf(result.Value.RefreshToken!), Assert.Single(stored.RefreshTokens).TokenHash);
+        // Signing up opens no session: the customer signs in once the email is confirmed.
+        Assert.Empty(stored.RefreshTokens);
 
-        // Guest orders are linked by ConfirmPhone, only after the phone is proven to belong to the user.
+        // Guest orders are linked only after the phone is proven to belong to the user.
         Assert.Equal(TemporaryCustomerStatus.PendingInvited, stored.Temp.Status);
         Assert.Null(stored.Temp.ClaimedUserId);
         Assert.Equal(guest.TemporaryCustomerId, stored.Order.TemporaryCustomerId);
         Assert.Null(stored.Order.CustomerUserId);
 
+        // The confirmation link goes by email; the phone is verified later from the profile, so no SMS code.
         Assert.Equal("cliente@demo.com", Assert.Single(host.Email.ConfirmationRecipients));
-        Assert.Equal("55 1234 5678", Assert.Single(host.Sms.VerificationRecipients));
+        Assert.Empty(host.Sms.VerificationRecipients);
     }
 
-    private static Task<Result<AuthResponse>> RegisterAsync(SqliteTestHost host, RegisterCustomerCommand command)
-        => host.HandleAsync<RegisterCustomerCommandHandler, Result<AuthResponse>>(
+    private static Task<Result<Guid>> RegisterAsync(SqliteTestHost host, RegisterCustomerCommand command)
+        => host.HandleAsync<RegisterCustomerCommandHandler, Result<Guid>>(
             handler => handler.Handle(command, CancellationToken.None));
 
     private static RegisterCustomerCommand ValidCommand() => new()

@@ -32,7 +32,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
     /// <summary>Every refused attempt says this, so it also tells whoever got locked why.</summary>
     public const string InvalidCredentialsMessage =
         "Correo o contraseña incorrectos. Después de varios intentos la cuenta se bloquea unos minutos; puedes recuperar tu contraseña.";
-    public const string NotConfirmedMessage = "Debe confirmar su cuenta por email o SMS antes de iniciar sesión.";
+    public const string NotConfirmedMessage = "Activa tu cuenta con el enlace que te enviamos por correo antes de iniciar sesión.";
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISignInService _signInService;

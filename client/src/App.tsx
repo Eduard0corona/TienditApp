@@ -8,6 +8,7 @@ import AccessRoute from './components/common/AccessRoute';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
+const CheckEmail = lazy(() => import('./pages/auth/CheckEmail'));
 const ConfirmPhone = lazy(() => import('./pages/auth/ConfirmPhone'));
 const ConfirmEmail = lazy(() => import('./pages/auth/ConfirmEmail'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
@@ -65,6 +66,7 @@ export default function App() {
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/check-email" element={<CheckEmail />} />
             <Route path="/confirm-phone" element={<ConfirmPhone />} />
             <Route path="/confirm-email" element={<ConfirmEmail />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

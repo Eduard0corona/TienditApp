@@ -569,11 +569,7 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "text/plain": components["schemas"]["AuthResponse"];
-                        "application/json": components["schemas"]["AuthResponse"];
-                        "text/json": components["schemas"]["AuthResponse"];
-                    };
+                    content?: never;
                 };
             };
         };
@@ -612,11 +608,7 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "text/plain": components["schemas"]["AuthResponse"];
-                        "application/json": components["schemas"]["AuthResponse"];
-                        "text/json": components["schemas"]["AuthResponse"];
-                    };
+                    content?: never;
                 };
             };
         };

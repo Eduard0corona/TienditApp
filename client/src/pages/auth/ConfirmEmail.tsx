@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import { getApiErrorMessage } from '../../api/errors';
 import BrandLogo from '../../components/common/BrandLogo';
 
-type ConfirmationStatus = 'loading' | 'success' | 'error';
+type ConfirmationStatus = 'loading' | 'error';
 
 const INCOMPLETE_LINK_MESSAGE = 'El enlace está incompleto. Ábrelo de nuevo desde tu correo o pide uno nuevo.';
 
-// Landing page of the link in the confirmation email: it confirms through the API and explains the
-// result (the link used to open the API and show raw JSON).
+/** What the login receives after the link activated the account (router state, see Login). */
+export interface AccountActivatedState {
+  accountActivated: true;
+}
+
+// Landing page of the link in the confirmation email: it confirms through the API, which activates the account,
+// and sends the person to the login to enter their credentials. A link that fails explains why and offers a new one.
 export default function ConfirmEmail() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') ?? '';
   const token = searchParams.get('token') ?? '';
@@ -29,12 +35,16 @@ export default function ConfirmEmail() {
 
     authApi
       .confirmEmail(userId, token)
-      .then(() => setStatus('success'))
+      .then(() => {
+        const state: AccountActivatedState = { accountActivated: true };
+        // Replace: going back must not open the link again.
+        navigate('/login', { replace: true, state });
+      })
       .catch((err: unknown) => {
         setStatus('error');
         setMessage(getApiErrorMessage(err, 'No pudimos confirmar tu correo. Es posible que el enlace haya expirado.'));
       });
-  }, [hasLink, token, userId]);
+  }, [hasLink, navigate, token, userId]);
 
   const handleResend = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -83,17 +93,6 @@ export default function ConfirmEmail() {
                       <div className="spinner-border text-primary mb-2" aria-hidden="true"></div>
                       <p className="text-muted mb-0">Confirmando tu correo…</p>
                     </div>
-                  )}
-
-                  {status === 'success' && (
-                    <>
-                      <div className="alert alert-success mt-3" role="status">
-                        Tu correo quedó confirmado.
-                      </div>
-                      <Link to="/login" className="btn btn-primary">
-                        Iniciar sesión
-                      </Link>
-                    </>
                   )}
 
                   {status === 'error' && (
