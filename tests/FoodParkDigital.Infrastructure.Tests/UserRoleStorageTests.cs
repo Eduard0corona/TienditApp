@@ -29,7 +29,14 @@ public class UserRoleStorageTests
     {
         Assert.Throws<InvalidOperationException>(() => UserRoleStorage.ToStored(UserRole.None));
     }
+}
 
+/// <summary>
+/// The same in a SQL Server table (the Migrations job of CI): the platform admin is stored as the 0 the previous version
+/// wrote and reads, and saving an account without a role fails.
+/// </summary>
+public class UserRoleStorageSqlServerTests
+{
     [SqlServerFact]
     public async Task RowsOfThePreviousVersion_ShouldReadTheSame_AndANewAccountWithoutRoleShouldFail()
     {

@@ -1,3 +1,4 @@
+using System.Reflection;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Infrastructure.Persistence;
 using MediatR;
@@ -13,11 +14,31 @@ namespace FoodParkDigital.Infrastructure.Tests.Support;
 /// </summary>
 public sealed class SqlServerFactAttribute : FactAttribute
 {
+    /// <summary>
+    /// How the name of every class with these tests ends. Only the Migrations job of CI has a SQL Server, and it runs the
+    /// tests whose name contains this (<c>--filter "FullyQualifiedName~SqlServerTests"</c>): in a class named otherwise,
+    /// a test is skipped in every job.
+    /// </summary>
+    public const string ClassNameSuffix = "SqlServerTests";
+
     public SqlServerFactAttribute()
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(SqlServerTestDatabase.ConnectionVariable)))
             Skip = $"Define {SqlServerTestDatabase.ConnectionVariable} (a SQL Server connection without database) to run it.";
     }
+
+    /// <summary>
+    /// The tests of <paramref name="assembly"/> with this attribute, each with the class xUnit runs it in (an abstract
+    /// class only lends its tests to the classes that inherit them).
+    /// </summary>
+    public static List<(Type TestClass, MethodInfo Method)> TestsIn(Assembly assembly)
+        => assembly.GetTypes()
+            .Where(type => !type.IsAbstract || type.IsSealed)
+            .SelectMany(type => type
+                .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static)
+                .Where(method => method.IsDefined(typeof(SqlServerFactAttribute), inherit: true))
+                .Select(method => (type, method)))
+            .ToList();
 }
 
 /// <summary>A throwaway database with the model of the app, dropped at the end of the test.</summary>
