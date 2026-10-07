@@ -21,7 +21,9 @@ namespace FoodParkDigital.Application.Tests;
 /// <summary>The agenda books services of the catalog with people of the team, opens with today and moves appointments.</summary>
 public class AppointmentSchedulingTests
 {
-    private static readonly DateTimeOffset Tomorrow10 = SalesTestFixture.Now.AddDays(1).Date.AddHours(16);
+    // 00:00 UTC of the fixture's day, explicit: a DateTime such as Now.Date takes the machine's offset when it becomes a DateTimeOffset.
+    private static readonly DateTimeOffset Today = new(SalesTestFixture.Now.UtcDateTime.Date, TimeSpan.Zero);
+    private static readonly DateTimeOffset Tomorrow10 = Today.AddDays(1).AddHours(16);
 
     [Fact]
     public async Task Appointment_ShouldTakeTheNamesFromTheCatalogAndTheTeam()
@@ -197,7 +199,7 @@ public class AppointmentSchedulingTests
         await fixture.Context.SaveChangesAsync();
         var handler = new GetAppointmentsQueryHandler(fixture.Context);
 
-        var upcoming = await handler.Handle(new GetAppointmentsQuery { FromDate = now.Date }, CancellationToken.None);
+        var upcoming = await handler.Handle(new GetAppointmentsQuery { FromDate = Today }, CancellationToken.None);
         var history = await handler.Handle(new GetAppointmentsQuery { ToDate = now }, CancellationToken.None);
 
         Assert.Equal(["En una hora", "Mañana"], upcoming.Items.Select(a => a.CustomerName));
