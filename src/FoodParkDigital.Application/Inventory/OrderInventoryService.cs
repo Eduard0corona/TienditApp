@@ -689,9 +689,15 @@ public class OrderInventoryService : IOrderInventoryService
         if (references.Count == 0)
             return [];
 
-        var ticketIds = references
-            .Select(reference => Guid.ParseExact(reference.Substring(prefix.Length, 32), "N"))
-            .ToList();
+        var ticketIds = new List<Guid>();
+        foreach (var reference in references)
+        {
+            // ORDER:{order}:ROUND:{kitchen ticket}:CONSUMPTION
+            var ticket = reference.AsSpan(prefix.Length);
+            if (ticket.Length >= 32 && Guid.TryParseExact(ticket[..32], "N", out var ticketId))
+                ticketIds.Add(ticketId);
+        }
+
         var rounds = await _context.KitchenTickets
             .Where(x => x.OrderId == order.Id && ticketIds.Contains(x.Id))
             .Select(x => x.Round)
