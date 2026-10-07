@@ -21,6 +21,12 @@ internal sealed class NoOpOrderInventoryService : IOrderInventoryService
         CancellationToken cancellationToken,
         StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy) => Task.FromResult(NoShortages);
 
+    public Task<IReadOnlyList<StockShortage>> ApplyConsumptionForTabRoundAsync(
+        Order order,
+        int round,
+        CancellationToken cancellationToken,
+        StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy) => Task.FromResult(NoShortages);
+
     public Task<IReadOnlyList<StockShortage>> ApplyConsumptionForServicePieceAsync(
         Order order,
         ServiceOrderPiece piece,

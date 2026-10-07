@@ -49,7 +49,7 @@ import {
   hasOptions,
 } from '../../utils/productOptions';
 import './SellPage.css';
-import { STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
+import { ROUND_STOCK_WARNING_TITLE, STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
 
 // Same limits as the API (OrderLimits).
 const MAX_QUANTITY_PER_LINE = 10_000;
@@ -750,10 +750,9 @@ export default function SellPage() {
     setSaleError('');
     try {
       const request = buildOrderRequest();
-      if (tabTarget.kind === 'round') {
-        await ordersApi.addRound(tabTarget.orderId, request.items);
-      } else {
-        await ordersApi.create({
+      const { data: tab } = tabTarget.kind === 'round'
+        ? await ordersApi.addRound(tabTarget.orderId, request.items)
+        : await ordersApi.create({
           ...request,
           openTab: true,
           orderType: OrderType.Retail,
@@ -761,7 +760,9 @@ export default function SellPage() {
           // A tab without a table goes by its name.
           tableNumber: tabTarget.tableId ? undefined : tabTarget.label,
         });
-      }
+      // The round left the stock as it went to the kitchen: the business sells and warns when supplies run short.
+      const stockWarning = stockWarningMessage(tab.stockWarnings);
+      if (stockWarning) toast.warning(stockWarning, { title: ROUND_STOCK_WARNING_TITLE });
       clearSale();
       toast.success(tabTarget.kind === 'round' ? 'Ronda enviada a cocina.' : `Cuenta de ${tabTarget.label} abierta y enviada a cocina.`);
       navigate('/tables');

@@ -38,8 +38,8 @@ public class OrderInventoryService : IOrderInventoryService
         CancellationToken cancellationToken,
         StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy)
     {
-        // An open tab keeps getting rounds: it consumes once, when it closes, so no round is left out of the
-        // single consumption movement of the order.
+        // An open tab takes each round when it goes to the kitchen (ApplyConsumptionForTabRoundAsync); the order's own
+        // consumption waits for the tab to close.
         if (!ShouldConsumeInventory(order.Status) || order.IsOpenTab)
             return NoShortages;
 
@@ -53,13 +53,21 @@ public class OrderInventoryService : IOrderInventoryService
 
         var orderItems = await _context.OrderItems
             .Where(x => x.OrderId == order.Id)
-            .Select(x => new { x.ProductId, x.ProductName, x.Quantity })
+            .Select(x => new ConsumedItem(x.ProductId, x.ProductName, x.Quantity, x.Round))
             .ToListAsync(cancellationToken);
         if (orderItems.Count == 0 && order.Items.Count > 0)
         {
             orderItems = order.Items
-                .Select(x => new { x.ProductId, x.ProductName, x.Quantity })
+                .Select(x => new ConsumedItem(x.ProductId, x.ProductName, x.Quantity, x.Round))
                 .ToList();
+        }
+
+        if (order.IsTab)
+        {
+            // Each round left the stock when it went to the kitchen. Rounds without their own movement (a tab opened
+            // by an earlier version, which took them all when closing) are taken now, together.
+            var takenRounds = await TakenRoundsAsync(order, cancellationToken);
+            orderItems = orderItems.Where(x => !takenRounds.Contains(x.Round)).ToList();
         }
 
         if (order.OrderType == OrderType.Service)
@@ -83,6 +91,64 @@ public class OrderInventoryService : IOrderInventoryService
         if (orderItems.Count == 0)
             return NoShortages;
 
+        return await ConsumeAsync(
+            order,
+            orderItems,
+            consumptionExternalReference,
+            $"Salida automática por orden {order.OrderNumber}",
+            $"Consumo por orden {order.OrderNumber}",
+            shortageHandling,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StockShortage>> ApplyConsumptionForTabRoundAsync(
+        Order order,
+        int round,
+        CancellationToken cancellationToken,
+        StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy)
+    {
+        // A tab not accepted yet takes its rounds when it closes.
+        if (!order.IsOpenTab || !ShouldConsumeInventory(order.Status))
+            return NoShortages;
+
+        var ticket = order.KitchenTickets.FirstOrDefault(x => x.Round == round)
+            ?? throw new DomainException("La ronda indicada no pertenece a esta cuenta.");
+        var externalReference = BuildRoundConsumptionExternalReference(order.Id, ticket.Id);
+        var alreadyApplied = await _context.InventoryMovements
+            .AnyAsync(x => x.TenantId == order.TenantId && x.ExternalReference == externalReference, cancellationToken);
+        if (alreadyApplied)
+            return NoShortages;
+
+        var roundItems = order.Items
+            .Where(x => x.Round == round)
+            .Select(x => new ConsumedItem(x.ProductId, x.ProductName, x.Quantity, x.Round))
+            .ToList();
+        if (roundItems.Count == 0)
+            return NoShortages;
+
+        return await ConsumeAsync(
+            order,
+            roundItems,
+            externalReference,
+            $"Salida automática por la ronda {round} de la cuenta {order.OrderNumber}",
+            $"Consumo por la ronda {round} de la cuenta {order.OrderNumber}",
+            shortageHandling,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Takes the recipe supplies of <paramref name="orderItems"/> out of stock in one movement named by
+    /// <paramref name="externalReference"/>, refusing or warning per <paramref name="shortageHandling"/>.
+    /// </summary>
+    private async Task<IReadOnlyList<StockShortage>> ConsumeAsync(
+        Order order,
+        IReadOnlyList<ConsumedItem> orderItems,
+        string externalReference,
+        string notes,
+        string lineNotes,
+        StockShortageHandling shortageHandling,
+        CancellationToken cancellationToken)
+    {
         var productIds = orderItems.Select(x => x.ProductId).Distinct().ToList();
         var requirements = await _context.ProductSupplyRequirements
             .Where(x => x.TenantId == order.TenantId && x.IsActive && productIds.Contains(x.ProductId))
@@ -150,8 +216,8 @@ public class OrderInventoryService : IOrderInventoryService
             movementReason: InventoryMovementReason.Sale,
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
-            externalReference: consumptionExternalReference,
-            notes: $"Salida automática por orden {order.OrderNumber}");
+            externalReference: externalReference,
+            notes: notes);
 
         foreach (var entry in groupedConsumptions)
         {
@@ -180,7 +246,7 @@ public class OrderInventoryService : IOrderInventoryService
                 inventoryLocationId: locationId,
                 quantity: quantity,
                 unitCost: unitCost,
-                notes: $"Consumo por orden {order.OrderNumber}");
+                notes: lineNotes);
             line.SetBalances(quantityBefore, stock.OnHandQuantity);
         }
 
@@ -327,7 +393,6 @@ public class OrderInventoryService : IOrderInventoryService
 
     public async Task ReverseConsumptionForOrderAsync(Order order, string? reason, CancellationToken cancellationToken)
     {
-        var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
         var reversalExternalReference = BuildReversalExternalReference(order.Id);
 
         var alreadyReversed = await _context.InventoryMovements
@@ -337,12 +402,11 @@ public class OrderInventoryService : IOrderInventoryService
         if (alreadyReversed)
             return;
 
-        var consumptionMovement = await _context.InventoryMovements
-            .Include(x => x.Lines)
-            .FirstOrDefaultAsync(
-                x => x.TenantId == order.TenantId && x.ExternalReference == consumptionExternalReference,
-                cancellationToken);
-        if (consumptionMovement is null || !consumptionMovement.Lines.Any())
+        // The order's consumption, and for a tab the one of each round sent to the kitchen.
+        var consumedLines = (await ConsumptionMovementsAsync(order, cancellationToken))
+            .SelectMany(x => x.Lines)
+            .ToList();
+        if (consumedLines.Count == 0)
             return;
 
         // Units already returned with refunds were re-entered by their own movements: reverse only the rest.
@@ -355,7 +419,7 @@ public class OrderInventoryService : IOrderInventoryService
                 .ToListAsync(cancellationToken))
             .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
             .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
-        var linesToReverse = consumptionMovement.Lines
+        var linesToReverse = consumedLines
             .Select(line =>
             {
                 var key = (line.SupplyItemId, line.InventoryLocationId);
@@ -440,14 +504,12 @@ public class OrderInventoryService : IOrderInventoryService
         if (alreadyReturned)
             return;
 
-        // Only units whose recipe left inventory with the order come back (service pieces consume on their own).
-        var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
-        var consumption = await _context.InventoryMovements
-            .Include(x => x.Lines)
-            .FirstOrDefaultAsync(
-                x => x.TenantId == order.TenantId && x.ExternalReference == consumptionExternalReference,
-                cancellationToken);
-        if (consumption is null || consumption.Lines.Count == 0)
+        // Only units whose recipe left inventory with the order, or with a round of the tab, come back (service
+        // pieces consume on their own).
+        var consumedLines = (await ConsumptionMovementsAsync(order, cancellationToken))
+            .SelectMany(x => x.Lines)
+            .ToList();
+        if (consumedLines.Count == 0)
             return;
 
         var returnedProducts = refund.Lines
@@ -462,12 +524,12 @@ public class OrderInventoryService : IOrderInventoryService
 
         // Supplies come back where the order took them from (the branch's stock when it took none of them).
         var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
-        var consumedAt = consumption.Lines
+        var consumedAt = consumedLines
             .GroupBy(l => l.SupplyItemId)
             .ToDictionary(g => g.Key, g => g.First().InventoryLocationId);
 
         // The current recipe gives the supplies per unit; never re-enter more than the order consumed.
-        var consumedByKey = consumption.Lines
+        var consumedByKey = consumedLines
             .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
             .ToDictionary(g => g.Key, g => (Quantity: g.Sum(l => l.Quantity), UnitCost: g.First().UnitCost));
         var toReturn = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
@@ -603,7 +665,47 @@ public class OrderInventoryService : IOrderInventoryService
             OrderStatus.Delivered or
             OrderStatus.Completed;
 
+    /// <summary>The consumption movements of the order: its own and, for a tab, the one of each round.</summary>
+    private Task<List<InventoryMovement>> ConsumptionMovementsAsync(Order order, CancellationToken cancellationToken)
+    {
+        var own = BuildConsumptionExternalReference(order.Id);
+        var rounds = BuildRoundConsumptionExternalReferencePrefix(order.Id);
+        return _context.InventoryMovements
+            .Include(x => x.Lines)
+            .Where(x => x.TenantId == order.TenantId
+                && x.ExternalReference != null
+                && (x.ExternalReference == own || x.ExternalReference.StartsWith(rounds)))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>The rounds of a tab that already left the stock, each with its own movement.</summary>
+    private async Task<HashSet<int>> TakenRoundsAsync(Order order, CancellationToken cancellationToken)
+    {
+        var prefix = BuildRoundConsumptionExternalReferencePrefix(order.Id);
+        var references = await _context.InventoryMovements
+            .Where(x => x.TenantId == order.TenantId && x.ExternalReference != null && x.ExternalReference.StartsWith(prefix))
+            .Select(x => x.ExternalReference!)
+            .ToListAsync(cancellationToken);
+        if (references.Count == 0)
+            return [];
+
+        var ticketIds = references
+            .Select(reference => Guid.ParseExact(reference.Substring(prefix.Length, 32), "N"))
+            .ToList();
+        var rounds = await _context.KitchenTickets
+            .Where(x => x.OrderId == order.Id && ticketIds.Contains(x.Id))
+            .Select(x => x.Round)
+            .ToListAsync(cancellationToken);
+        return rounds.ToHashSet();
+    }
+
+    private sealed record ConsumedItem(Guid ProductId, string ProductName, decimal Quantity, int Round);
+
     private static string BuildConsumptionExternalReference(Guid orderId) => $"ORDER:{orderId:N}:CONSUMPTION";
+    // Named by the round's kitchen ticket: two devices sending a round at the same time conflict on the tab, not here.
+    private static string BuildRoundConsumptionExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:ROUND:";
+    private static string BuildRoundConsumptionExternalReference(Guid orderId, Guid kitchenTicketId)
+        => $"{BuildRoundConsumptionExternalReferencePrefix(orderId)}{kitchenTicketId:N}:CONSUMPTION";
     private static string BuildReversalExternalReference(Guid orderId) => $"ORDER:{orderId:N}:REVERSAL";
     private static string BuildReturnExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:RETURN:";
     private static string BuildServicePieceConsumptionExternalReference(Guid orderId, Guid pieceId)

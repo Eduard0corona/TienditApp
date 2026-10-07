@@ -16,10 +16,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Commands;
 
-/// <summary>Adds a round to an open tab and sends it to the kitchen.</summary>
+/// <summary>
+/// Adds a round to an open tab and sends it to the kitchen. Its supplies leave the stock now, as in a sale: when they
+/// are short the round is refused naming them, or goes with a warning if the business sells and warns. One
+/// transaction, like a sale: a refused round gives back the folio of its inventory movement.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 [RequiresCapability(TenantCapability.Food)]
-public record AddTabRoundCommand : IRequest<Result<OrderDto>>
+public record AddTabRoundCommand : IRequest<Result<OrderDto>>, ITransactionalRequest
 {
     public Guid OrderId { get; init; }
     public List<CreateOrderItemDto> Items { get; init; } = new();
@@ -44,17 +48,20 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IOrderInventoryService _orderInventoryService;
 
     public AddTabRoundCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IOrderInventoryService orderInventoryService)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
         _dateTimeProvider = dateTimeProvider;
+        _orderInventoryService = orderInventoryService;
     }
 
     public async Task<Result<OrderDto>> Handle(AddTabRoundCommand request, CancellationToken cancellationToken)
@@ -84,12 +91,19 @@ public class AddTabRoundCommandHandler : IRequestHandler<AddTabRoundCommand, Res
             lines.Add(built.Value.Line);
         }
 
-        order.AddRound(lines, _dateTimeProvider.UtcNow, _currentUserService.UserName);
-        return await TabLoader.SaveAsync(_context, order, cancellationToken);
+        var round = order.AddRound(lines, _dateTimeProvider.UtcNow, _currentUserService.UserName);
+        var shortages = await _orderInventoryService.ApplyConsumptionForTabRoundAsync(order, round.Round, cancellationToken);
+        var saved = await TabLoader.SaveAsync(_context, order, cancellationToken);
+        if (saved.IsSuccess)
+            saved.Value.StockWarnings = shortages.Select(s => s.WarningMessage()).ToList();
+        return saved;
     }
 }
 
-/// <summary>Closes a paid tab, frees its table and consumes the inventory of all its rounds.</summary>
+/// <summary>
+/// Closes a paid tab and frees its table. Its rounds left the stock when they went to the kitchen; the ones that did
+/// not (a tab opened by an earlier version) leave it now.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 [RequiresCapability(TenantCapability.Food)]
 public record CloseTabCommand(Guid OrderId) : IRequest<Result<OrderDto>>;

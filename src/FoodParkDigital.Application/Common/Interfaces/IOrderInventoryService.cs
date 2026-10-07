@@ -16,6 +16,17 @@ public interface IOrderInventoryService
         CancellationToken cancellationToken,
         StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy);
 
+    /// <summary>
+    /// The recipe supplies of one round of an open tab when it goes to the kitchen, with the same stock policy as a
+    /// sale. Each round leaves the stock once; closing the tab takes only the rounds that did not.
+    /// </summary>
+    /// <returns>The supplies that went below zero (empty when there was enough or nothing to consume).</returns>
+    Task<IReadOnlyList<StockShortage>> ApplyConsumptionForTabRoundAsync(
+        Order order,
+        int round,
+        CancellationToken cancellationToken,
+        StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy);
+
     /// <summary>The recipe supplies of a service piece once it is completed, with the same stock policy.</summary>
     Task<IReadOnlyList<StockShortage>> ApplyConsumptionForServicePieceAsync(
         Order order,
