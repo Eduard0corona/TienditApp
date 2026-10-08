@@ -45,11 +45,6 @@ public class TenantSettings : BaseEntity, ITenantScoped
     /// <summary>Counter sales close by themselves once fully paid (food with kitchen, once ready).</summary>
     public bool AutoCloseCounterSales { get; private set; } = true;
 
-    /// <summary>
-    /// No longer read: every payment and refund now needs an open drawer, whatever the business chose. Kept until a
-    /// migration drops its column.
-    /// </summary>
-    public bool RequireOpenCashSession { get; private set; }
     /// <summary>When the owner finished or skipped the guided setup.</summary>
     public DateTimeOffset? OnboardingCompletedAt { get; private set; }
 
