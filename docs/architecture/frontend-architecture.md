@@ -73,7 +73,8 @@ Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y
 
 ## Deuda actual
 
-- `SellPage.tsx`, `OrdersList.tsx`, `OrdersCart.tsx` y `types/index.ts` superan 1,000 líneas. Son candidatos a dividirse como Inventario (Fase 7D), al tocar cada pantalla y sin reescrituras incidentales.
+- `OrdersList.tsx`, `OrdersCart.tsx` y `types/index.ts` superan 1,000 líneas. Son candidatos a dividirse como Inventario (Fase 7D) y Vender (Fase 15), al tocar cada pantalla y sin reescrituras incidentales.
+- Vender (Fase 15): `SellPage.tsx` coordina la venta y lo demás vive junto a ella en `pages/sell`: el modelo (`sellModel.ts`), el catálogo con su respaldo sin conexión (`useSellCatalog`), las reglas del ticket (`useSellCart`) y los componentes (`SellHeader`, `CatalogPanel`, `CartPanel` con `CartLines` y `SaleDetailsForm`, `OptionsModal`, `MeasureModal` y `CompletedSaleModal`). `SellPage.test.tsx` fija el flujo de la pantalla: agregar y guardar, variantes y peso, ronda a cocina y el mesero que deja el cobro a la caja.
 - `AccessRoute` cubre las rutas del layout; los botones de acción dentro de cada pantalla todavía se condicionan caso por caso (por ahora, órdenes).
 - Vender carga hasta 500 productos y, si el catálogo es mayor, busca en el servidor; las recetas de Inventario cargan hasta 500 productos e insumos.
 - Accesibilidad: el lint exige etiquetas asociadas (Fase 6F), pero no nombres en los botones de solo icono; se les pone `aria-label` al tocar cada pantalla (Inventario ya los tiene).

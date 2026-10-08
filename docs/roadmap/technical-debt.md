@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-07 tras las Fases 0 a 14 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-08 tras las Fases 0 a 15 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -51,11 +51,12 @@ Actualizada el 2026-10-07 tras las Fases 0 a 14 del roadmap de producto (la audi
 - Resuelto en la Fase 14: Inicio ya no carga en memoria las órdenes y pagos del rango. Los ingresos salen del resumen diario de los reportes (`DailySalesSnapshot` para los días cerrados y sumas en la base para el resto) y lo demás de agregados en SQL; las cifras son las mismas que antes (`DashboardMetricsSqlServerTests` las compara con el cálculo anterior). El rango son días completos del negocio, así que el último segundo del día, que el filtro de la pantalla dejaba fuera, ahora cuenta; un periodo abarca hasta 366 días.
 - Desde la Fase 12 una consulta que incluye colecciones las lee en sentencias separadas (`SplitQuery` por defecto). Fuera de una transacción, esas sentencias pueden ver un cambio hecho entre una y otra; las escrituras se protegen con los tokens de concurrencia, no con lo leído.
 - `client/README.md` sigue siendo template genérico.
-- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). La columna `TenantSettings.RequireOpenCashSession`, de la política que lo pedía solo para efectivo, quedó sin uso: retirarla con una migración.
+- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). La columna `TenantSettings.RequireOpenCashSession`, de la política que lo pedía solo para efectivo, quedó sin uso. Desde la Fase 15 el modelo no la mapea (paso 1 de expand/contract, migración sin cambios en la base); pendiente: borrarla en una fase posterior, cuando ninguna versión desplegada la mapee.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions fijadas por SHA y las imágenes de Docker fijadas por digest no se actualizan solas: no hay Dependabot, y los procedimientos están en [despliegue](../development/deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13). Una imagen fijada no recibe los parches de seguridad de su etiqueta hasta que alguien cambia el digest.
 - Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
+- Resuelto en la Fase 15: un platillo de una ronda ya enviada se cancela desde la cuenta (`POST /orders/{id}/item-cancellations`): la cuenta deja de cobrarlo, el renglón conserva lo pedido y la cancelación queda con motivo, quién y cuándo; sus insumos regresan al inventario salvo que la cocina ya lo preparara, y la bitácora y la cocina se enteran. Solo se cancela lo que falta por cobrar: un platillo pagado se reembolsa. Pendiente: lo que la cocina ya preparó queda dentro de la salida por venta de su ronda, sin un movimiento de merma propio; volver a la Fase 14 con platillos cancelados en cuentas abiertas los cobra otra vez al recalcular la cuenta ([despliegue](../development/deploy-azure.md#platillos-cancelados-requireopencashsession-y-vender-fase-15)).
 - Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
@@ -157,7 +158,7 @@ Pendientes detectados en la Fase 2:
 Pendientes detectados en la Fase 3:
 
 - Timbrado con un PAC y certificados CSD, factura global, complementos de pago y notas de crédito.
-- Las opciones de un producto no consumen insumos propios; cancelar un platillo de una ronda enviada se compensa con un reembolso; falta dividir cuentas y unir mesas; las mesas son del negocio, no de la sucursal.
+- Las opciones de un producto no consumen insumos propios; falta dividir cuentas y unir mesas (cancelar un platillo de una ronda enviada se resolvió en la Fase 15); las mesas son del negocio, no de la sucursal.
 - Menú en línea sin pago en línea, entrega a domicilio ni aviso automático de confirmación.
 - Cada ubicación de inventario se volvió sucursal: las que solo eran almacén hay que desactivarlas a mano después de aplicar la migración.
 - Los pagos de planes los registra la plataforma a mano; falta el adaptador de un proveedor de pagos con verificación de firma.

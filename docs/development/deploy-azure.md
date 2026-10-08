@@ -112,6 +112,15 @@ La Fase 14 no trae migraciones: no hay `apply.sql` que aplicar antes del merge, 
 - Cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina. Las cuentas abiertas al desplegar se cierran bien: sus rondas de antes se descuentan al cerrarlas y las nuevas, al mandarse.
 - Volver a la Fase 13 con cuentas abiertas: esa versión descuenta al cerrar todas las rondas de la cuenta, también las que la Fase 14 ya descontó, y al cancelarla no devuelve lo de las rondas. Antes de regresar, cierra o cancela las cuentas abiertas; si alguna se cerró después, corrige sus existencias con un movimiento de entrada.
 
+## Platillos cancelados, RequireOpenCashSession y Vender (Fase 15)
+
+La Fase 15 trae dos migraciones en una sola carpeta, [`database/production/20261008074715_StopMappingRequireOpenCashSession`](../../database/production/20261008074715_StopMappingRequireOpenCashSession): su `apply.sql` se aplica, como siempre, antes del merge (respaldo, `verify.sql`, `apply.sql`, `verify.sql`).
+
+- `AddTabItemCancellations` solo agrega: `OrderItems.CancelledQuantity` y `CancelledAmount` (sin nulos, 0 por omisión) y la tabla `OrderItemCancellations`. La Fase 14 no los mapea, así que sigue funcionando mientras se publica la nueva y sus renglones toman 0 cancelado.
+- `StopMappingRequireOpenCashSession` no cambia la base: la versión nueva deja de mapear `TenantSettings.RequireOpenCashSession` (nadie la lee: todo cobro exige una caja abierta). La columna se queda con su valor por omisión, 0, que toman las filas nuevas; una fase posterior la borra cuando ninguna versión desplegada la mapee.
+- `GET /orders/{id}` ahora trae las rondas, las opciones, los reembolsos y las cancelaciones de la cuenta. El contrato solo agrega: la ruta `POST /orders/{id}/item-cancellations` y los campos `cancelledQuantity`, `chargedPrice` e `itemCancellations`.
+- Volver a la Fase 14 (con o sin `rollback.sql`) con platillos cancelados en cuentas abiertas: esa versión recalcula el total con todos los renglones al mandar una ronda y cobraría otra vez lo cancelado. Antes de regresar, cierra o cancela esas cuentas; la consulta 4 de `verify.sql` las cuenta. `rollback.sql` borra la tabla y las columnas de cancelaciones (la bitácora conserva cada cancelación con su motivo) y no toca `RequireOpenCashSession`.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
