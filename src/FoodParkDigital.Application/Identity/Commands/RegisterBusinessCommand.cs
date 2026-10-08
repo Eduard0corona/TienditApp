@@ -1,7 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -15,8 +14,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
+/// <summary>
+/// Signs up a business with its owner and sends the link that confirms the owner's email. It opens no session:
+/// the account is activated from that link and the owner then signs in with their credentials. Returns the id of
+/// the new account.
+/// </summary>
 [AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
-public record RegisterBusinessCommand : IRequest<Result<AuthResponse>>
+public record RegisterBusinessCommand : IRequest<Result<Guid>>
 {
     // Personal info
     public string Email { get; init; } = null!;
@@ -69,32 +73,26 @@ public class RegisterBusinessCommandValidator : AbstractValidator<RegisterBusine
     }
 }
 
-public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCommand, Result<AuthResponse>>
+public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCommand, Result<Guid>>
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IJwtTokenService _jwtTokenService;
     private readonly IApplicationDbContext _context;
     private readonly IEmailService _emailService;
-    private readonly ISmsService _smsService;
     private readonly IDateTimeProvider _clock;
 
     public RegisterBusinessCommandHandler(
         UserManager<ApplicationUser> userManager,
-        IJwtTokenService jwtTokenService,
         IApplicationDbContext context,
         IEmailService emailService,
-        ISmsService smsService,
         IDateTimeProvider clock)
     {
         _userManager = userManager;
-        _jwtTokenService = jwtTokenService;
         _context = context;
         _emailService = emailService;
-        _smsService = smsService;
         _clock = clock;
     }
 
-    public async Task<Result<AuthResponse>> Handle(RegisterBusinessCommand request, CancellationToken cancellationToken)
+    public async Task<Result<Guid>> Handle(RegisterBusinessCommand request, CancellationToken cancellationToken)
     {
         // Check for duplicate email
         var normalizedEmail = request.Email.ToUpperInvariant();
@@ -103,7 +101,7 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
             .AnyAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
 
         if (existingUser)
-            return Result.Failure<AuthResponse>("Ya existe una cuenta con este correo electrónico.");
+            return Result.Failure<Guid>("Ya existe una cuenta con este correo electrónico.");
 
         var slug = await BusinessProvisioning.UniqueSlugAsync(_context, request.BusinessName, cancellationToken);
 
@@ -156,9 +154,9 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         // Identity checks the password only inside CreateAsync; reject it before writing anything
         var passwordResult = await _userManager.ValidatePasswordPolicyAsync(user, request.Password);
         if (!passwordResult.Succeeded)
-            return Result.Failure<AuthResponse>(passwordResult.ToErrorMessage());
+            return Result.Failure<Guid>(passwordResult.ToErrorMessage());
 
-        // Tenant, owner, membership and session are committed together or not at all
+        // Tenant, owner and membership are committed together or not at all
         var registration = await _context.ExecuteInResilientTransactionAsync(async ct =>
         {
             await BusinessProvisioning.AddAsync(_context, tenant, _clock.UtcNow, ct);
@@ -166,65 +164,30 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
 
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
-                return Result.Failure<IssuedRefreshToken>(createResult.ToErrorMessage());
+                return Result.Failure(createResult.ToErrorMessage());
 
             var roleResult = await _userManager.AddToRoleAsync(user, "TENANT_ADMIN");
             if (!roleResult.Succeeded)
-                return Result.Failure<IssuedRefreshToken>(roleResult.ToErrorMessage());
+                return Result.Failure(roleResult.ToErrorMessage());
 
             _context.TenantUsers.Add(new TenantUser(
                 tenantId: tenant.Id,
                 userId: user.Id,
                 role: TenantUserRole.Owner,
                 status: TenantUserStatus.Active));
-
-            // The first session of the account, started with its registration.
-            var sessionToken = _jwtTokenService.GenerateRefreshToken(user.Id, Guid.NewGuid());
-            _context.RefreshTokens.Add(sessionToken.Token);
             await _context.SaveChangesAsync(ct);
 
-            return Result.Success(sessionToken);
+            return Result.Success();
         }, cancellationToken);
 
         if (registration.IsFailure)
-            return Result.Failure<AuthResponse>(registration.Error!);
+            return Result.Failure<Guid>(registration.Error!);
 
-        // Send confirmations only after the registration is committed
+        // The link goes out only after the registration is committed. It activates the account (signing in needs a
+        // confirmed email or phone); the phone is verified later from the profile.
         var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
 
-        var phoneCode = await _userManager.GenerateChangePhoneNumberTokenAsync(user, request.PhoneNumber);
-        await _smsService.SendVerificationCodeAsync(request.PhoneNumber, phoneCode);
-
-        // Auto-login: generate tokens
-        var refreshToken = registration.Value;
-        var accessToken = _jwtTokenService.GenerateAccessToken(
-            user,
-            refreshToken.Token.SessionId,
-            new TenantTokenContext(tenant.Id, TenantUserRole.Owner.ToString().ToUpperInvariant()));
-
-        return Result.Success(new AuthResponse
-        {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken.Value,
-            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(60),
-            RequiresTwoFactor = false,
-            UserId = user.Id.ToString(),
-            User = new UserDto
-            {
-                Id = user.Id,
-                Email = user.Email!,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                PhoneNumber = user.PhoneNumber,
-                PhoneNumberConfirmed = user.PhoneNumberConfirmed,
-                Role = user.Role.ToString(),
-                TenantId = user.DefaultTenantId,
-                IsActive = user.IsActive,
-                AvatarUrl = null,
-                AvatarImages = null
-            }
-        });
+        return Result.Success(user.Id);
     }
-
 }

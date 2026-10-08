@@ -133,10 +133,13 @@ internal sealed class CommitFaultInterceptor : DbTransactionInterceptor
 internal sealed class RecordingEmailService : IEmailService
 {
     public List<string> ConfirmationRecipients { get; } = [];
+    /// <summary>What the confirmation link carries, to open it as the person would.</summary>
+    public List<(string Email, string UserId, string Token)> Confirmations { get; } = [];
 
     public Task SendEmailConfirmationAsync(string email, string userId, string token)
     {
         ConfirmationRecipients.Add(email);
+        Confirmations.Add((email, userId, token));
         return Task.CompletedTask;
     }
 

@@ -89,7 +89,8 @@ public class LoginCommandTests
         Assert.Equal(IssuedSession.AccessToken, result.Value.AccessToken);
     }
 
-    private static Task<Result<AuthResponse>> LoginAsync(SqliteTestHost host, string email, string password) =>
+    /// <summary>The login over the host's Identity (no two-step verification); also signs in accounts created by the sign-up.</summary>
+    internal static Task<Result<AuthResponse>> LoginAsync(SqliteTestHost host, string email, string password) =>
         host.InScopeAsync(services =>
         {
             var users = services.GetRequiredService<UserManager<ApplicationUser>>();

@@ -12,8 +12,8 @@ namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
 /// Creating an account: registering a business or a customer, confirming the email and the phone, and accepting an
-/// invitation to a team. Anonymous and rate limited as credentials and codes; registering and accepting an invitation
-/// start the session.
+/// invitation to a team. Anonymous and rate limited as credentials and codes. Registering opens no session (the account
+/// is activated from the link in the email and then signs in); accepting an invitation starts it.
 /// </summary>
 [ApiController]
 [Route("api/v1/auth")]
@@ -31,24 +31,27 @@ public class RegistrationController : ControllerBase
         _env = env;
     }
 
+    // Signing up opens no session: the account is activated from the link in the email and then signs in.
+    private const string RegistrationEmailSentMessage = "Te enviamos un correo con un enlace para activar tu cuenta.";
+
     [HttpPost("register/business")]
-    public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command, CancellationToken cancellationToken)
+    public async Task<ActionResult> RegisterBusiness([FromBody] RegisterBusinessCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
-        return Ok(RefreshTokenCookie.Issue(HttpContext, _env, result.Value));
+        return Ok(new { message = RegistrationEmailSentMessage });
     }
 
     [HttpPost("register/customer")]
-    public async Task<ActionResult<AuthResponse>> RegisterCustomer([FromBody] RegisterCustomerCommand command, CancellationToken cancellationToken)
+    public async Task<ActionResult> RegisterCustomer([FromBody] RegisterCustomerCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
-        return Ok(RefreshTokenCookie.Issue(HttpContext, _env, result.Value));
+        return Ok(new { message = RegistrationEmailSentMessage });
     }
 
     [HttpGet("confirm-email")]

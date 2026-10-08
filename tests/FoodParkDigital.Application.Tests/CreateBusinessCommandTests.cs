@@ -20,7 +20,7 @@ public class CreateBusinessCommandTests
     public async Task Owner_ShouldOpenAnotherBusiness_WhileWorkingInTheFirstOne()
     {
         await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
-        var registration = await host.HandleAsync<RegisterBusinessCommandHandler, Result<AuthResponse>>(handler => handler.Handle(new RegisterBusinessCommand
+        var registration = await host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(handler => handler.Handle(new RegisterBusinessCommand
         {
             Email = "owner@demo.com",
             Password = "Secreto1",
@@ -31,8 +31,8 @@ public class CreateBusinessCommandTests
             BusinessType = BusinessType.Food
         }, CancellationToken.None));
         Assert.True(registration.IsSuccess, registration.Error);
-        var userId = registration.Value!.User!.Id;
-        var firstTenantId = registration.Value.User.TenantId!.Value;
+        var userId = registration.Value;
+        var firstTenantId = await host.QueryAsync(db => db.Users.Where(u => u.Id == userId).Select(u => u.DefaultTenantId!.Value).SingleAsync());
         // The request runs under the business the person is in.
         host.SetTenant(firstTenantId);
 

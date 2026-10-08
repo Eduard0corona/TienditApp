@@ -2,7 +2,6 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Identity;
 using FoodParkDigital.Application.Identity.Commands;
-using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Tests.Support;
@@ -256,10 +255,10 @@ public class CustomerPhoneOwnershipTests
         return result.Value;
     }
 
-    private static Task<Result<AuthResponse>> RegisterAsync(SqliteTestHost host, string email, string phoneNumber)
+    private static Task<Result<Guid>> RegisterAsync(SqliteTestHost host, string email, string phoneNumber)
     {
         host.SetTenant(Guid.Empty);
-        return host.HandleAsync<RegisterCustomerCommandHandler, Result<AuthResponse>>(handler => handler.Handle(
+        return host.HandleAsync<RegisterCustomerCommandHandler, Result<Guid>>(handler => handler.Handle(
             new RegisterCustomerCommand
             {
                 Email = email,
@@ -275,7 +274,7 @@ public class CustomerPhoneOwnershipTests
     {
         var result = await RegisterAsync(host, email, phoneNumber);
         Assert.True(result.IsSuccess, result.Error);
-        return result.Value.User!.Id;
+        return result.Value;
     }
 
     /// <summary>Confirms the account's current phone with the SMS code Identity sends to it.</summary>
