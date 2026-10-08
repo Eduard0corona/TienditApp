@@ -201,7 +201,7 @@ public class GetCustomerCardQueryHandler : IRequestHandler<GetCustomerCardQuery,
             {
                 ProductId = g.Key.ProductId,
                 ProductName = g.Key.ProductName,
-                Quantity = g.Sum(i => i.Quantity - i.ReturnedQuantity)
+                Quantity = g.Sum(i => i.Quantity - i.ReturnedQuantity - i.CancelledQuantity)
             })
             .Where(p => p.Quantity > 0)
             .OrderByDescending(p => p.Quantity)

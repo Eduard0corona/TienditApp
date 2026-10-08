@@ -341,5 +341,10 @@ public class OptionsAndTabsFlowTests
             FoodParkDigital.Domain.Orders.Entities.Order order,
             FoodParkDigital.Domain.Orders.Entities.OrderRefund refund,
             CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ReturnCancelledTabItemAsync(
+            FoodParkDigital.Domain.Orders.Entities.Order order,
+            FoodParkDigital.Domain.Orders.Entities.OrderItemCancellation cancellation,
+            CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

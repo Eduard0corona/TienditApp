@@ -41,6 +41,7 @@ public class UseCaseRulesTests
         { typeof(GetKitchenOrdersQuery), "Permission(ManageServiceBoard) Module(Kitchen)" },
         { typeof(GetKitchenTicketsQuery), "Permission(ManageServiceBoard) Module(Kitchen)" },
         { typeof(MarkRoundServedCommand), "Permission(ManageOrders) Module(Food)" },
+        { typeof(CancelTabItemCommand), "Permission(ManageOrders) Module(Food)" },
         { typeof(GetDiningRoomQuery), "Permission(ManageOrders) Module(Food)" },
         { typeof(CreateDiningTableCommand), "Permission(ManageCatalog) Module(Food)" },
         { typeof(GetServiceBoardPiecesQuery), "Permission(ManageServiceBoard) Module(Service)" },

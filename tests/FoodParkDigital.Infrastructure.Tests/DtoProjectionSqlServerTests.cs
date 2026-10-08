@@ -10,6 +10,9 @@ using FoodParkDigital.Application.WhatsApp.DTOs;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -54,6 +57,7 @@ public class DtoProjectionSqlServerTests
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)
             .Include(o => o.KitchenTickets)
+            .Include(o => o.ItemCancellations)
             .AsSplitQuery()
             .OrderBy(o => o.OrderNumber)
             .ToListAsync();
@@ -65,7 +69,14 @@ public class DtoProjectionSqlServerTests
         Assert.Equal(sale.Total - 100m, sale.Balance);
         Assert.Equal(200m - 100m - 5m, sale.Payments.Single().Change);
         Assert.Equal(2, sale.Items.Single(i => i.Options.Count > 0).Options.Count);
-        Assert.True(listed.Single(o => o.OrderNumber == "ORD-000003").IsOpenTab);
+        var tab = listed.Single(o => o.OrderNumber == "ORD-000003");
+        Assert.True(tab.IsOpenTab);
+        // What a line charges is computed by SQL Server from what was cancelled: 0.750 kg left at $389.90.
+        var steak = tab.Items.Single(i => i.ProductName == "Arrachera");
+        Assert.Equal((1.255m, 0.505m, 489.32m, 292.42m), (steak.Quantity, steak.CancelledQuantity, steak.TotalPrice, steak.ChargedPrice));
+        Assert.Equal(["Se equivocó el mesero", "Se pasó de cocción"], tab.ItemCancellations.Select(c => c.Reason));
+        // IVA added on top: $336.42 plus $53.83.
+        Assert.Equal((336.42m, 390.25m), (tab.SubTotal, tab.Total));
 
         // The list endpoint pages it.
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
@@ -136,11 +147,18 @@ public class DtoProjectionSqlServerTests
         service.SetServiceDetail(Now, Now.AddDays(1), 1, "Mancha", null, null, null, null);
         service.AddServicePiece("Saco", "Zara", null, "Negro", "M", null, null, "Lavado", null);
 
-        // An open tab with its first round in the kitchen.
+        // An open tab with two rounds in the kitchen and a dish of each cancelled, one of them weighed.
         var tab = NewOrder(tenant.Id, "ORD-000003", OrderType.Retail);
         tab.AddItem(Guid.NewGuid(), "Taco", 3, 22m);
         tab.OpenAsTab(null, "Mesa 4", Now, "mesero");
         tab.TransitionTo(OrderStatus.Confirmed, OrderStateMachineFactory.Create(BusinessType.Food, OrderType.Retail), "mesero");
+        tab.AddRound(
+            [new OrderLineRequest(Guid.NewGuid(), "Arrachera", 1.255m, 389.90m, null, VatRate.General,
+                new OrderLineFiscalData(UnitType.Kg, SatCatalog.GenericProductCode, "KGM", CfdiTaxObject.Subject), [])],
+            Now,
+            "mesero");
+        tab.CancelTabItem(tab.Items.Single(i => i.ProductName == "Taco").Id, 1, "Se equivocó el mesero", true, Now, "mesero");
+        tab.CancelTabItem(tab.Items.Single(i => i.ProductName == "Arrachera").Id, 0.505m, "Se pasó de cocción", false, Now.AddMinutes(1), "mesero");
 
         context.Orders.AddRange(sale, service, tab);
         await context.SaveChangesAsync();

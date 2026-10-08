@@ -49,8 +49,12 @@ public sealed class CrossTenantManagementSqlServerTests
         // A tab of theirs at the table: opened there or moved to it.
         AssertRefused(await theirs.Client.PostAsJsonAsync("/api/v1/orders", Tab(theirProduct, table, tabName: null)));
         AssertRefused(await theirs.Client.PutAsJsonAsync($"/api/v1/orders/{theirTab}/table", new { diningTableId = table }));
-        // The tab at the table: no round added, not closed.
+        // The tab at the table: no round added, no dish cancelled (from it, or through a tab of theirs), not closed.
+        var opened = await mine.Client.GetFromJsonAsync<JsonElement>($"/api/v1/orders/{tab}");
+        var dish = opened.GetProperty("items")[0].GetProperty("id").GetGuid();
         AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{tab}/rounds", new { items = new[] { Line(theirProduct) } }));
+        AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{tab}/item-cancellations", new { orderItemId = dish, quantity = 1, reason = "Cancelado por B" }));
+        AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{theirTab}/item-cancellations", new { orderItemId = dish, quantity = 1, reason = "Cancelado por B" }));
         AssertRefused(await theirs.Client.PostAsync($"/api/v1/orders/{tab}/close-tab", null));
         var theirRoom = await theirs.Client.GetStringAsync("/api/v1/tables?includeInactive=true");
         Assert.DoesNotContain(table.ToString(), theirRoom);
@@ -63,6 +67,10 @@ public sealed class CrossTenantManagementSqlServerTests
         Assert.Equal(
             before.GetProperty("openTab").GetProperty("rounds").GetInt32(),
             stillThere.GetProperty("openTab").GetProperty("rounds").GetInt32());
+        var untouched = await mine.Client.GetFromJsonAsync<JsonElement>($"/api/v1/orders/{tab}");
+        Assert.Equal(opened.GetProperty("total").GetDecimal(), untouched.GetProperty("total").GetDecimal());
+        Assert.Equal(0, untouched.GetProperty("itemCancellations").GetArrayLength());
+        Assert.Equal(0m, untouched.GetProperty("items")[0].GetProperty("cancelledQuantity").GetDecimal());
     }
 
     [SqlServerFact]

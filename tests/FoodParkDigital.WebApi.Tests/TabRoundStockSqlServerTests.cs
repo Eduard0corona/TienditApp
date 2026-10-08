@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FoodParkDigital.Domain.Inventory.Enums;
+using FoodParkDigital.Domain.Orders.Events;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using static FoodParkDigital.WebApi.Tests.CrossTenantManagementSqlServerTests;
@@ -11,7 +13,8 @@ namespace FoodParkDigital.WebApi.Tests;
 /// <summary>
 /// A round of a table's tab leaves the stock as it goes to the kitchen, through the API and SQL Server: refused as a sale
 /// is when the business blocks (leaving nothing behind, not even a folio), sent with the warning in the answer when it
-/// warns, a closing that takes nothing twice and a cancellation that gives everything back.
+/// warns, a closing that takes nothing twice and a cancellation that gives everything back. A dish cancelled from a
+/// round already sent lowers the tab and gives back what its round took.
 /// </summary>
 [Collection(TwoBusinessesCollection.Name)]
 public sealed class TabRoundStockSqlServerTests
@@ -88,6 +91,57 @@ public sealed class TabRoundStockSqlServerTests
 
         Assert.Equal(HttpStatusCode.NoContent, cancelled.StatusCode);
         Assert.Equal(5m, await OnHandAsync(client, taco));
+    }
+
+    [SqlServerFact]
+    public async Task CancellingADish_ShouldLowerTheTab_GiveBackItsSupplies_AndWaitForTheActivityLog()
+    {
+        var fonda = await _api.SignUpAsync("platillo", TwoBusinessesApi.FoodBusiness);
+        var client = fonda.Client;
+        var taco = await StockedProductAsync(client, "Taco", 5m);
+        var tab = (await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync("/api/v1/orders", Tab(taco, 3)))).GetProperty("id").GetGuid();
+        Assert.Equal(2m, await OnHandAsync(client, taco));
+
+        // The detail of the tab brings its round in the kitchen, which the tab panel shows.
+        var opened = await client.GetFromJsonAsync<JsonElement>($"/api/v1/orders/{tab}");
+        Assert.Equal(1, opened.GetProperty("kitchenTickets").GetArrayLength());
+        var dish = opened.GetProperty("items")[0];
+        var dishId = dish.GetProperty("id").GetGuid();
+        var lineTotal = dish.GetProperty("totalPrice").GetDecimal();
+
+        // Without a reason, or more than what is left: refused, and nothing changes.
+        var noReason = await client.PostAsJsonAsync($"/api/v1/orders/{tab}/item-cancellations", new { orderItemId = dishId, quantity = 1, reason = "" });
+        Assert.Equal(HttpStatusCode.BadRequest, noReason.StatusCode);
+        var tooMany = await client.PostAsJsonAsync($"/api/v1/orders/{tab}/item-cancellations", new { orderItemId = dishId, quantity = 4, reason = "Se equivocó el mesero" });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, tooMany.StatusCode);
+        Assert.Contains("solo quedan 3", await tooMany.Content.ReadAsStringAsync());
+
+        var cancelled = await TwoBusinessesApi.ReadAsync(await client.PostAsJsonAsync(
+            $"/api/v1/orders/{tab}/item-cancellations", new { orderItemId = dishId, quantity = 1, reason = "Se equivocó el mesero" }));
+
+        var item = cancelled.GetProperty("items")[0];
+        Assert.Equal(1m, item.GetProperty("cancelledQuantity").GetDecimal());
+        Assert.Equal(lineTotal / 3 * 2, item.GetProperty("chargedPrice").GetDecimal());
+        Assert.True(cancelled.GetProperty("total").GetDecimal() < opened.GetProperty("total").GetDecimal());
+        var record = cancelled.GetProperty("itemCancellations")[0];
+        Assert.Equal("Se equivocó el mesero", record.GetProperty("reason").GetString());
+        Assert.True(record.GetProperty("returnedToStock").GetBoolean());
+        Assert.Equal(3m, await OnHandAsync(client, taco));
+
+        // The activity log entry waits in the outbox, saved together with the cancellation.
+        var logged = await _api.QueryAsync(fonda.TenantId, db => db.Set<OutboxMessage>().AsNoTracking()
+            .Where(m => m.TenantId == fonda.TenantId && m.Type == typeof(TabItemCancelledEvent).FullName)
+            .Select(m => m.Payload)
+            .ToListAsync());
+        var payload = JsonDocument.Parse(Assert.Single(logged)).RootElement;
+        Assert.Equal("Se equivocó el mesero", payload.GetProperty("reason").GetString());
+        Assert.Equal(dishId, payload.GetProperty("orderItemId").GetGuid());
+
+        // Paid and closed: the cancelled taco does not leave the stock again, and a closed tab cancels nothing.
+        await PayAndCloseAsync(client, tab, cancelled.GetProperty("balance").GetDecimal());
+        Assert.Equal(3m, await OnHandAsync(client, taco));
+        var closed = await client.PostAsJsonAsync($"/api/v1/orders/{tab}/item-cancellations", new { orderItemId = dishId, quantity = 1, reason = "Se equivocó el mesero" });
+        Assert.Equal(HttpStatusCode.BadRequest, closed.StatusCode);
     }
 
     private static async Task<Guid> StockedProductAsync(HttpClient client, string name, decimal onHand)

@@ -41,4 +41,10 @@ public interface IOrderInventoryService
     /// consumed inventory. Idempotent per refund.
     /// </summary>
     Task ReturnItemsToInventoryAsync(Order order, OrderRefund refund, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Re-enters the recipe supplies of a dish cancelled from an open tab, when its round took them and the
+    /// cancellation returns them to stock (a dish already prepared is lost instead). Idempotent per cancellation.
+    /// </summary>
+    Task ReturnCancelledTabItemAsync(Order order, OrderItemCancellation cancellation, CancellationToken cancellationToken);
 }

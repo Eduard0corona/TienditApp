@@ -51,6 +51,8 @@ public class OrderDto
     public List<ServiceOrderPieceDto> ServicePieces { get; set; } = new();
     public List<OrderPaymentDto> Payments { get; set; } = new();
     public List<OrderRefundDto> Refunds { get; set; } = new();
+    /// <summary>Dishes of the tab cancelled after they went to the kitchen, with the reason and who cancelled them.</summary>
+    public List<OrderItemCancellationDto> ItemCancellations { get; set; } = new();
     /// <summary>The order is (or was) a tab: rounds added over time, charged when the table leaves.</summary>
     public bool IsTab { get; set; }
     /// <summary>A tab still taking rounds.</summary>
@@ -120,6 +122,22 @@ public class OrderRefundLineDto
     public decimal Quantity { get; set; }
 }
 
+/// <summary>Units of a dish of a tab cancelled after it went to the kitchen.</summary>
+public class OrderItemCancellationDto
+{
+    public Guid Id { get; set; }
+    public Guid OrderItemId { get; set; }
+    public int Round { get; set; }
+    public decimal Quantity { get; set; }
+    /// <summary>What the units took off the line, at its prices.</summary>
+    public decimal Amount { get; set; }
+    public string Reason { get; set; } = null!;
+    /// <summary>Its supplies went back to stock; otherwise they were lost.</summary>
+    public bool ReturnedToStock { get; set; }
+    public DateTimeOffset CancelledAt { get; set; }
+    public string CancelledBy { get; set; } = null!;
+}
+
 public class OrderItemDto
 {
     public Guid Id { get; set; }
@@ -129,8 +147,13 @@ public class OrderItemDto
     public decimal Quantity { get; set; }
     /// <summary>Quantity given back with refunds.</summary>
     public decimal ReturnedQuantity { get; set; }
+    /// <summary>Units of a tab's dish cancelled after it went to the kitchen: the order no longer charges them.</summary>
+    public decimal CancelledQuantity { get; set; }
     public decimal UnitPrice { get; set; }
+    /// <summary>The line as it was ordered: quantity by unit price.</summary>
     public decimal TotalPrice { get; set; }
+    /// <summary>What the line charges: its total less the units cancelled.</summary>
+    public decimal ChargedPrice { get; set; }
     public string? Notes { get; set; }
     public decimal TaxRate { get; set; }
     public bool IsTaxExempt { get; set; }

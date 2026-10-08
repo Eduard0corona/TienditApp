@@ -141,6 +141,26 @@ public class GetDashboardMetricsQueryTests
     }
 
     [Fact]
+    public async Task TopSellingItems_ShouldLeaveOutDishesCancelledFromATab()
+    {
+        await using var fixture = TestFixture.Create();
+        var tenant = await fixture.AddTenantAsync("tenant-a", TenantCapability.Retail);
+        var tacos = await fixture.AddProductAsync(tenant, "Tacos", UnitType.Unit, 50m);
+        var tab = fixture.NewOrder(tenant, tacos, quantity: 3);
+        tab.OpenAsTab(null, "Mesa 1", OrderDate, "mesero");
+        tab.CancelTabItem(tab.Items.Single().Id, 1, "Se equivocó el mesero", returnToStock: true, OrderDate, "mesero");
+        tab.RegisterPayment(tab.Total, OrderPaymentMethod.Cash, OrderDate, null, null, null, null);
+        fixture.Context.Orders.Add(tab);
+        await fixture.Context.SaveChangesAsync();
+
+        var metrics = await fixture.GetMetricsAsync(tenant);
+
+        var item = Assert.Single(metrics.TopSellingItems);
+        Assert.Equal(2, item.QuantitySold);
+        Assert.Equal(100m, item.TotalAmount);
+    }
+
+    [Fact]
     public void Period_ShouldGoForwardAndSpanAtMostTheDaysOfTheReports()
     {
         var validator = new GetDashboardMetricsQueryValidator();

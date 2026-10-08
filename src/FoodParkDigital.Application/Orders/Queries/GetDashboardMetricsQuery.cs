@@ -208,16 +208,17 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
                   && (
                       (canReadRetailOrders && o.OrderType == OrderType.Retail) ||
                       (canReadServiceOrders && o.OrderType == OrderType.Service))
-            // Units returned with refunds are not sold: they count neither in quantity nor in amount.
+            // Units returned with refunds, or cancelled from a tab, are not sold: they count neither in quantity nor
+            // in amount.
             group new { oi, p } by new { oi.ProductId, oi.ProductName, Unit = (UnitType?)p.Unit } into g
-            orderby g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity) descending
+            orderby g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity - x.oi.CancelledQuantity) descending
             select new TopSellingItemDto
             {
                 ProductId = g.Key.ProductId,
                 ProductName = g.Key.ProductName,
                 ItemType = g.Key.Unit.HasValue && ServiceUnits.Contains(g.Key.Unit.Value) ? "Service" : "Product",
-                QuantitySold = g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity),
-                TotalAmount = g.Sum(x => x.oi.TotalPrice - x.oi.TotalPrice * x.oi.ReturnedQuantity / x.oi.Quantity)
+                QuantitySold = g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity - x.oi.CancelledQuantity),
+                TotalAmount = g.Sum(x => x.oi.TotalPrice - x.oi.CancelledAmount - x.oi.TotalPrice * x.oi.ReturnedQuantity / x.oi.Quantity)
             })
             .Take(10);
     }

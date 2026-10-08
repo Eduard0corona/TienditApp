@@ -3,7 +3,7 @@ import { getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
 import { getVatLabel } from './orderTotals';
 import { describeItem } from './productOptions';
-import { allowsFractions, formatQuantity } from './units';
+import { allowsFractions, formatQuantity, roundQuantity } from './units';
 import { formatInBusinessZone } from './dates';
 
 export interface TicketExtras {
@@ -32,9 +32,39 @@ export function getTicketPaymentTotals(order: OrderDto): TicketPaymentTotals {
   };
 }
 
-/** "2 ×" for pieces, "1.255 kg" for what is weighed or measured. */
-export function formatTicketQuantity(item: OrderDto['items'][number]): string {
-  return allowsFractions(item.unit) ? formatQuantity(item.quantity, item.unit) : `${item.quantity} ×`;
+type OrderLine = OrderDto['items'][number];
+
+/** Units a line still charges: what was ordered less what was cancelled from a tab. */
+export function activeQuantity(item: OrderLine): number {
+  return roundQuantity(item.quantity - (item.cancelledQuantity ?? 0));
+}
+
+/** What a line charges, as the API computed it (the whole line when nothing of it was cancelled). */
+export function chargedPrice(item: OrderLine): number {
+  return item.chargedPrice ?? item.totalPrice;
+}
+
+/** Units of a line still charged and not given back: what can be cancelled from a tab. */
+export function cancellableQuantity(item: OrderLine): number {
+  return roundQuantity(item.quantity - (item.cancelledQuantity ?? 0) - (item.returnedQuantity ?? 0));
+}
+
+/** "1 cancelado", "2 cancelados", "0.25 kg cancelado". */
+export function formatCancelled(item: OrderLine): string {
+  const cancelled = item.cancelledQuantity ?? 0;
+  if (allowsFractions(item.unit)) return `${formatQuantity(cancelled, item.unit)} cancelado`;
+  return `${cancelled} cancelado${cancelled === 1 ? '' : 's'}`;
+}
+
+/** The lines a bill shows: a dish whose units were all cancelled is left out. */
+export function billedItems(order: OrderDto): OrderLine[] {
+  return order.items.filter((item) => activeQuantity(item) > 0);
+}
+
+/** "2 ×" for pieces, "1.255 kg" for what is weighed or measured: the units the line still charges. */
+export function formatTicketQuantity(item: OrderLine): string {
+  const quantity = activeQuantity(item);
+  return allowsFractions(item.unit) ? formatQuantity(quantity, item.unit) : `${quantity} ×`;
 }
 
 export function formatTicketDate(value: string): string {
@@ -54,9 +84,9 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
     `Ticket ${order.orderNumber} · ${formatTicketDate(order.createdAt)}`,
     ...(extras.provisional ? ['_Folio provisional: venta registrada sin conexión._'] : []),
     '',
-    ...order.items.map((item) => {
+    ...billedItems(order).map((item) => {
       const note = item.notes ? `\n   _${item.notes}_` : '';
-      return `${formatTicketQuantity(item)} ${describeItem(item)}  ${formatMoney(item.totalPrice)}${note}`;
+      return `${formatTicketQuantity(item)} ${describeItem(item)}  ${formatMoney(chargedPrice(item))}${note}`;
     }),
     '',
   ];

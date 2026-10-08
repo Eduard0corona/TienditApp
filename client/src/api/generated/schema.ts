@@ -5012,6 +5012,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/item-cancellations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelTabItemRequest"];
+                    "text/json": components["schemas"]["CancelTabItemRequest"];
+                    "application/*+json": components["schemas"]["CancelTabItemRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderDto"];
+                        "application/json": components["schemas"]["OrderDto"];
+                        "text/json": components["schemas"]["OrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/table": {
         parameters: {
             query?: never;
@@ -8142,6 +8187,14 @@ export interface components {
         CancelOrderRequest: {
             reason?: string | null;
         };
+        CancelTabItemRequest: {
+            /** Format: uuid */
+            orderItemId: string;
+            /** Format: double */
+            quantity: number;
+            reason: string;
+            returnToStock: boolean;
+        };
         CashCountLineDto: {
             /** Format: double */
             denomination: number;
@@ -9570,6 +9623,7 @@ export interface components {
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
+            itemCancellations: components["schemas"]["OrderItemCancellationDto"][];
             isTab: boolean;
             isOpenTab: boolean;
             /** Format: uuid */
@@ -9588,6 +9642,23 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        OrderItemCancellationDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderItemId: string;
+            /** Format: int32 */
+            round: number;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            amount: number;
+            reason: string;
+            returnedToStock: boolean;
+            /** Format: date-time */
+            cancelledAt: string;
+            cancelledBy: string;
+        };
         OrderItemDto: {
             /** Format: uuid */
             id: string;
@@ -9599,9 +9670,13 @@ export interface components {
             /** Format: double */
             returnedQuantity: number;
             /** Format: double */
+            cancelledQuantity: number;
+            /** Format: double */
             unitPrice: number;
             /** Format: double */
             totalPrice: number;
+            /** Format: double */
+            chargedPrice: number;
             notes?: string | null;
             /** Format: double */
             taxRate: number;

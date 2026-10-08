@@ -50,8 +50,11 @@ export default function RefundOrderModal(props: RefundModalProps) {
   const [reason, setReason] = useState('');
   const [restock, setRestock] = useState(true);
 
-  const returnable = order.items.filter((item) => roundQuantity(item.quantity - (item.returnedQuantity ?? 0)) > 0);
-  const linesTotalCents = order.items.reduce((sum, item) => sum + toCents(item.totalPrice), 0);
+  // Units cancelled from a tab were never charged: they are not returned.
+  const returnableOf = (item: OrderDto['items'][number]) =>
+    roundQuantity(item.quantity - (item.returnedQuantity ?? 0) - (item.cancelledQuantity ?? 0));
+  const returnable = order.items.filter((item) => returnableOf(item) > 0);
+  const linesTotalCents = order.items.reduce((sum, item) => sum + toCents(item.chargedPrice ?? item.totalPrice), 0);
   // The share of the order total of the units chosen (the total already has its IVA).
   const suggestedCents = Math.min(
     toCents(netPaid),
@@ -119,7 +122,7 @@ export default function RefundOrderModal(props: RefundModalProps) {
                   <div className="fw-semibold mb-1">Artículos devueltos (opcional)</div>
                   <ul className="list-unstyled mb-0">
                     {returnable.map((item) => {
-                      const max = roundQuantity(item.quantity - (item.returnedQuantity ?? 0));
+                      const max = returnableOf(item);
                       const value = quantities[item.id] ?? 0;
                       if (allowsFractions(item.unit)) {
                         const text = quantityTexts[item.id] ?? '';

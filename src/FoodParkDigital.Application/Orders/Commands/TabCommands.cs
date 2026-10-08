@@ -142,6 +142,78 @@ public class CloseTabCommandHandler : IRequestHandler<CloseTabCommand, Result<Or
     }
 }
 
+/// <summary>
+/// Cancels units of a dish of an open tab already sent to the kitchen: the tab stops charging them, the activity log
+/// records why and who, and the supplies its round took go back to stock unless the kitchen already prepared it. Only
+/// what is not paid yet: a paid dish is refunded instead. One transaction: the cancellation and its inventory movement
+/// are saved together or not at all.
+/// </summary>
+[RequiresPermission(TenantPermission.ManageOrders)]
+[RequiresCapability(TenantCapability.Food)]
+public record CancelTabItemCommand : IRequest<Result<OrderDto>>, ITransactionalRequest
+{
+    public Guid OrderId { get; init; }
+    public Guid OrderItemId { get; init; }
+    /// <summary>Up to three decimals for dishes sold by weight.</summary>
+    public decimal Quantity { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    /// <summary>The kitchen did not prepare it: its supplies go back to stock. Otherwise they were lost.</summary>
+    public bool ReturnToStock { get; init; } = true;
+}
+
+public class CancelTabItemCommandValidator : AbstractValidator<CancelTabItemCommand>
+{
+    public CancelTabItemCommandValidator()
+    {
+        RuleFor(x => x.OrderId).NotEmpty();
+        RuleFor(x => x.OrderItemId).NotEmpty();
+        RuleFor(x => x.Quantity)
+            .GreaterThan(0)
+            .LessThanOrEqualTo(OrderLimits.MaxQuantityPerLine)
+            .PrecisionScale(18, 3, ignoreTrailingZeros: true);
+        RuleFor(x => x.Reason)
+            .NotEmpty().WithMessage("Escribe por qué se cancela el platillo.")
+            .MaximumLength(OrderItemCancellation.MaxReasonLength);
+    }
+}
+
+public class CancelTabItemCommandHandler : IRequestHandler<CancelTabItemCommand, Result<OrderDto>>
+{
+    private readonly IApplicationDbContext _context;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IOrderInventoryService _orderInventoryService;
+
+    public CancelTabItemCommandHandler(
+        IApplicationDbContext context,
+        ICurrentUserService currentUserService,
+        IDateTimeProvider dateTimeProvider,
+        IOrderInventoryService orderInventoryService)
+    {
+        _context = context;
+        _currentUserService = currentUserService;
+        _dateTimeProvider = dateTimeProvider;
+        _orderInventoryService = orderInventoryService;
+    }
+
+    public async Task<Result<OrderDto>> Handle(CancelTabItemCommand request, CancellationToken cancellationToken)
+    {
+        var order = await TabLoader.LoadAsync(_context, request.OrderId, cancellationToken);
+        if (!order.IsOpenTab)
+            return Result.Failure<OrderDto>("La cuenta ya está cerrada.");
+
+        var cancellation = order.CancelTabItem(
+            request.OrderItemId,
+            request.Quantity,
+            request.Reason,
+            request.ReturnToStock,
+            _dateTimeProvider.UtcNow,
+            _currentUserService.UserName ?? "system");
+        await _orderInventoryService.ReturnCancelledTabItemAsync(order, cancellation, cancellationToken);
+        return await TabLoader.SaveAsync(_context, order, cancellationToken);
+    }
+}
+
 /// <summary>Moves an open tab to another free table.</summary>
 [RequiresPermission(TenantPermission.ManageOrders)]
 [RequiresCapability(TenantCapability.Food)]
@@ -256,6 +328,7 @@ internal static class TabLoader
             .Include(o => o.KitchenTickets)
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)
+            .Include(o => o.ItemCancellations)
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", orderId);
 

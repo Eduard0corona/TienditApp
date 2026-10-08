@@ -6080,6 +6080,65 @@
         }
       }
     },
+    "/api/v1/orders/{id}/item-cancellations": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelTabItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelTabItemRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelTabItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders/{id}/table": {
       "put": {
         "tags": [
@@ -10429,6 +10488,32 @@
           "reason": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CancelTabItemRequest": {
+        "required": [
+          "orderItemId",
+          "quantity",
+          "reason",
+          "returnToStock"
+        ],
+        "type": "object",
+        "properties": {
+          "orderItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "returnToStock": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -15104,6 +15189,7 @@
           "id",
           "isOpenTab",
           "isTab",
+          "itemCancellations",
           "items",
           "kitchenTickets",
           "netPaidAmount",
@@ -15279,6 +15365,12 @@
               "$ref": "#/components/schemas/OrderRefundDto"
             }
           },
+          "itemCancellations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItemCancellationDto"
+            }
+          },
           "isTab": {
             "type": "boolean"
           },
@@ -15347,8 +15439,60 @@
         },
         "additionalProperties": false
       },
+      "OrderItemCancellationDto": {
+        "required": [
+          "amount",
+          "cancelledAt",
+          "cancelledBy",
+          "id",
+          "orderItemId",
+          "quantity",
+          "reason",
+          "returnedToStock",
+          "round"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "round": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "returnedToStock": {
+            "type": "boolean"
+          },
+          "cancelledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancelledBy": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "OrderItemDto": {
         "required": [
+          "cancelledQuantity",
+          "chargedPrice",
           "id",
           "isTaxExempt",
           "options",
@@ -15386,11 +15530,19 @@
             "type": "number",
             "format": "double"
           },
+          "cancelledQuantity": {
+            "type": "number",
+            "format": "double"
+          },
           "unitPrice": {
             "type": "number",
             "format": "double"
           },
           "totalPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargedPrice": {
             "type": "number",
             "format": "double"
           },

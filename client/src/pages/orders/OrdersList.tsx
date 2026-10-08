@@ -32,7 +32,7 @@ import PrivatePhoto from '../../components/common/PrivatePhoto';
 import { getAccess } from '../../utils/access';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
-import { buildTicketText, buildWhatsAppTicketUrl, printTicket } from '../../utils/ticket';
+import { buildTicketText, buildWhatsAppTicketUrl, formatCancelled, printTicket } from '../../utils/ticket';
 import {
   ORDER_TYPE_LABELS,
   SERVICE_PIECE_STATUS_LABELS,
@@ -792,9 +792,10 @@ export default function OrdersList() {
                               {formatQuantity(item.returnedQuantity ?? 0, item.unit)} devuelto{allowsFractions(item.unit) || item.returnedQuantity === 1 ? '' : 's'}
                             </div>
                           )}
+                          {(item.cancelledQuantity ?? 0) > 0 && <div className="text-danger small">{formatCancelled(item)}</div>}
                         </td>
                         <td className="text-end">{formatMoney(item.unitPrice)}</td>
-                        <td className="text-end">{formatMoney(item.totalPrice)}</td>
+                        <td className="text-end">{formatMoney(item.chargedPrice ?? item.totalPrice)}</td>
                       </tr>
                     ))}
                   </tbody>
