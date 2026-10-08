@@ -4,6 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import type { LoginRequest } from '../../types';
 import TwoFactorLoginStep from './TwoFactorLoginStep';
+import type { AccountActivatedState } from './ConfirmEmail';
 import BrandLogo from '../../components/common/BrandLogo';
 import { getApiErrorMessage } from '../../api/errors';
 
@@ -18,6 +19,8 @@ export default function Login() {
 
   // Without a page to return to, '/' picks the start: the guided setup for a new business, or the screen of each role.
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  // Arriving from the link of the confirmation email, which just activated the account.
+  const accountActivated = Boolean((location.state as Partial<AccountActivatedState> | null)?.accountActivated);
 
   const {
     register,
@@ -81,10 +84,16 @@ export default function Login() {
                         </p>
                       </div>
 
-                      {error && (
+                      {error ? (
                         <div className="alert alert-danger" role="alert">
                           {error}
                         </div>
+                      ) : (
+                        accountActivated && (
+                          <div className="alert alert-success" role="status">
+                            Tu cuenta quedó activada. Inicia sesión con tu correo y tu contraseña.
+                          </div>
+                        )
                       )}
 
                       <form onSubmit={handleSubmit(onSubmit)}>
@@ -164,6 +173,11 @@ export default function Login() {
                     ¿No tienes una cuenta?{' '}
                     <Link to="/register" className="text-muted ms-1">
                       <b>Regístrate</b>
+                    </Link>
+                  </p>
+                  <p className="text-muted">
+                    <Link to="/check-email" className="text-muted">
+                      <small>¿No te llegó el correo para activar tu cuenta?</small>
                     </Link>
                   </p>
                 </div>

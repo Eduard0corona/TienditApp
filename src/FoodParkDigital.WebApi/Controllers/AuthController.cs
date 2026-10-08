@@ -87,36 +87,31 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Sesión cerrada exitosamente." });
     }
 
+    // Signing up opens no session: the account is activated from the link in the email and then signs in.
+    private const string RegistrationEmailSentMessage = "Te enviamos un correo con un enlace para activar tu cuenta.";
+
     [HttpPost("register/business")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> RegisterBusiness([FromBody] RegisterBusinessCommand command, CancellationToken cancellationToken)
+    public async Task<ActionResult> RegisterBusiness([FromBody] RegisterBusinessCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
-        var response = result.Value;
-        if (response.RefreshToken is not null)
-            SetRefreshTokenCookie(response.RefreshToken);
-
-        return Ok(response with { RefreshToken = null });
+        return Ok(new { message = RegistrationEmailSentMessage });
     }
 
     [HttpPost("register/customer")]
     [EnableRateLimiting("auth")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthResponse>> RegisterCustomer([FromBody] RegisterCustomerCommand command, CancellationToken cancellationToken)
+    public async Task<ActionResult> RegisterCustomer([FromBody] RegisterCustomerCommand command, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
 
-        var response = result.Value;
-        if (response.RefreshToken is not null)
-            SetRefreshTokenCookie(response.RefreshToken);
-
-        return Ok(response with { RefreshToken = null });
+        return Ok(new { message = RegistrationEmailSentMessage });
     }
 
     [HttpPost("switch-tenant")]

@@ -42,11 +42,13 @@ export const authApi = {
   resetPassword: (userId: string, token: string, newPassword: string) =>
     api.post<ApiMessage>('/auth/reset-password', { userId, token, newPassword }),
 
+  /** Creates the account and emails the link that activates it; it opens no session. */
   registerBusiness: (data: RegisterBusinessRequest) =>
-    api.post<AuthResponse>('/auth/register/business', data),
+    api.post<ApiMessage>('/auth/register/business', data),
 
+  /** Creates the account and emails the link that activates it; it opens no session. */
   registerCustomer: (data: RegisterCustomerRequest) =>
-    api.post<AuthResponse>('/auth/register/customer', data),
+    api.post<ApiMessage>('/auth/register/customer', data),
 
   getMyTenants: () =>
     api.get<MyTenantDto[]>('/me/tenants'),

@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
@@ -14,6 +16,7 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FoodParkDigital.WebApi.Tests;
@@ -45,7 +48,10 @@ public sealed record Business(
     Guid AppointmentId,
     string WhatsAppPhoneNumberId);
 
-/// <summary>An owner just signed up: the client, the access token and the cookie of the session, and the email.</summary>
+/// <summary>
+/// An owner who signed up, activated the account from the emailed link and signed in: the client, the access token
+/// and the cookie of the session, and the email.
+/// </summary>
 public sealed record SignedUp(Guid TenantId, HttpClient Client, string AccessToken, string RefreshCookie, string Email);
 
 /// <summary>
@@ -59,6 +65,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     private const string Password = "Secreto1";
 
     private readonly string _privateFiles = Path.Combine(Path.GetTempPath(), "fpd-http-tests", Guid.NewGuid().ToString("N"));
+    private readonly RecordedEmails _emails = new();
     private SqlServerTestDatabase? _database;
     private WebApplicationFactory<Program>? _factory;
 
@@ -81,10 +88,11 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             host.UseSetting("BackgroundJobs:Enabled", "false");
             host.UseSetting("FileStorage:Provider", "Local");
             host.UseSetting("FileStorage:Local:PrivateRootPath", _privateFiles);
-            // appsettings.json carries placeholder SMTP and SMS settings: without a host or an account, sign-up only
-            // logs what it would send.
+            // appsettings.json carries placeholder SMTP and SMS settings: without a host or an account, they only log
+            // what they would send. The emails are recorded instead: signing in needs the link of the sign-up email.
             host.UseSetting("EmailSettings:Smtp:Host", "");
             host.UseSetting("SmsSettings:AccountSid", "");
+            host.ConfigureTestServices(services => services.AddSingleton<IEmailService>(_emails));
             // A hub connection whose session ended closes within a second, not the default 30.
             host.UseSetting("Hubs:AccessCheckInterval", "00:00:01");
             host.UseSetting(WhatsAppWebhookSignatureVerifier.AppSecretSetting, WhatsAppWebhookTestSupport.AppSecret);
@@ -116,8 +124,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     }
 
     /// <summary>
-    /// Registers a business and signs its owner in. Of services by default: it sells, keeps stock and books
-    /// appointments (a <see cref="FoodBusiness"/> sells with tables and a kitchen instead).
+    /// Registers a business, activates its owner's account from the emailed link and signs the owner in. Of services
+    /// by default: it sells, keeps stock and books appointments (a <see cref="FoodBusiness"/> sells with tables and a
+    /// kitchen instead).
     /// </summary>
     public async Task<SignedUp> SignUpAsync(string name, int businessType = ServicesBusiness)
     {
@@ -135,19 +144,31 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             businessType
         });
         var registered = await ReadAsync(response);
-        var accessToken = registered.GetProperty("accessToken").GetString()!;
+        // Signing up opens no session: no tokens and no refresh cookie until the account is activated.
+        Assert.False(registered.TryGetProperty("accessToken", out _));
+        Assert.DoesNotContain(SetCookies(response), cookie => cookie.StartsWith($"{RefreshTokenCookie.Name}=", StringComparison.Ordinal));
+
+        // The owner opens the emailed link (the app's /confirm-email sends it to this endpoint) and then signs in.
+        var (userId, token) = _emails.ConfirmationTo(email);
+        await ReadAsync(await client.GetAsync(
+            $"/api/v1/auth/confirm-email?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}"));
+        var signIn = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = Password });
+        var signedIn = await ReadAsync(signIn);
+        var accessToken = signedIn.GetProperty("accessToken").GetString()!;
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        var refreshCookie = response.Headers.GetValues("Set-Cookie")
-            .Select(header => header.Split(';')[0])
+        var refreshCookie = SetCookies(signIn)
             .Single(cookie => cookie.StartsWith($"{RefreshTokenCookie.Name}=", StringComparison.Ordinal));
 
-        return new SignedUp(registered.GetProperty("user").GetProperty("tenantId").GetGuid(), client, accessToken, refreshCookie, email);
+        return new SignedUp(signedIn.GetProperty("user").GetProperty("tenantId").GetGuid(), client, accessToken, refreshCookie, email);
     }
 
+    private static IEnumerable<string> SetCookies(HttpResponseMessage response)
+        => response.Headers.TryGetValues("Set-Cookie", out var headers) ? headers.Select(header => header.Split(';')[0]) : [];
+
     /// <summary>
-    /// Makes the account a platform admin (only the database can) with its email confirmed, as signing in requires,
-    /// and signs it in again: a client whose token carries that role and the business the account belongs to.
+    /// Makes the account a platform admin (only the database can) and signs it in again: a client whose token carries
+    /// that role and the business the account belongs to.
     /// </summary>
     public async Task<HttpClient> SignInAsPlatformAdminAsync(SignedUp account)
     {
@@ -156,7 +177,6 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
             var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             var user = await users.FindByEmailAsync(account.Email);
             user!.Role = UserRole.SuperAdmin;
-            user.EmailConfirmed = true;
             var updated = await users.UpdateAsync(user);
             Assert.True(updated.Succeeded, string.Join("; ", updated.Errors.Select(e => e.Description)));
         }
@@ -362,4 +382,30 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     // A 1x1 PNG: the upload validates the real content and re-encodes it.
     private static readonly byte[] TinyPng = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    /// <summary>The emails the API sends, kept to open their links as the person would.</summary>
+    private sealed class RecordedEmails : IEmailService
+    {
+        private readonly ConcurrentQueue<(string Email, string UserId, string Token)> _confirmations = new();
+
+        /// <summary>What the link of the one confirmation email sent to <paramref name="email"/> carries.</summary>
+        public (string UserId, string Token) ConfirmationTo(string email)
+        {
+            var sent = _confirmations.Where(confirmation => confirmation.Email == email).ToList();
+            Assert.True(sent.Count == 1, $"Expected one confirmation email to {email}, got {sent.Count}.");
+            return (sent[0].UserId, sent[0].Token);
+        }
+
+        public Task SendEmailConfirmationAsync(string email, string userId, string token)
+        {
+            _confirmations.Enqueue((email, userId, token));
+            return Task.CompletedTask;
+        }
+
+        public Task SendPasswordResetEmailAsync(string email, string userId, string token) => Task.CompletedTask;
+
+        public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
+
+        public Task SendTeamInvitationAsync(string email, string businessName, string invitationPath) => Task.CompletedTask;
+    }
 }

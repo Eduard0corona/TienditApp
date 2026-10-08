@@ -33,6 +33,10 @@ Actualizada el 2026-10-06 tras las Fases 0 a 13 del roadmap de producto (la audi
 - Resuelto en la Fase 11: los controllers reciben el `CancellationToken` y lo pasan a su caso de uso; `RequestCancellation` decide su efecto: una lectura (GET) se detiene si el cliente se va y un cambio termina siempre, porque la mayoría de los casos de uso guarda en varios pasos fuera de una transacción. Pendiente: cancelar un cambio exigiría que cada caso de uso guarde de una vez o en una transacción.
 - Resuelto en la Fase 9: las contraseñas nuevas tienen al menos 8 caracteres con mayúscula, minúscula y dígito, y se rechazan las comunes y las que contienen el correo o el nombre. Pendiente: las actuales valen hasta que se cambien y no se consulta una lista de contraseñas filtradas.
 - Resuelto en la Fase 10: `GlobalExceptionHandlerMiddleware` registra los rechazos esperados (400, 401, 403, 404, 409 y 422) como advertencia, sin la traza de pila; solo los 500 quedan como error con la excepción.
+- Activación por correo (2026-10-06): el registro de negocio y de cliente ya no abre sesión ni manda código por SMS; la cuenta se activa con el enlace del correo y después inicia sesión ([identidad](../architecture/identity-permissions-capabilities.md)). Pendiente:
+   - sin un proveedor de correo configurado (`EmailSettings`) nadie que se registre puede activar su cuenta. Los valores de ejemplo de `appsettings.json` (`YOUR_SMTP_USERNAME`) no cuentan como vacíos: el servicio intenta enviar con ellos, falla y solo lo registra en el log;
+   - el registro todavía responde "Ya existe una cuenta con este correo", así que dice qué correos tienen cuenta;
+   - el envío del correo no pasa por el outbox: si el proveedor falla, la cuenta queda creada y la persona pide un enlace nuevo desde "Revisa tu correo".
 
 ## Media
 

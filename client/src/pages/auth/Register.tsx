@@ -65,17 +65,15 @@ export default function Register() {
   // Customer form
   const customerForm = useForm<RegisterCustomerRequest>();
 
-  // The account id goes in the URL so the confirmation screen survives a reload.
-  const goToPhoneConfirmation = (userId?: string) =>
-    navigate(userId ? `/confirm-phone?userId=${encodeURIComponent(userId)}` : '/confirm-phone', {
-      state: { userId },
-    });
+  // Signing up opens no session: the account is activated from the emailed link and then signs in. The email
+  // travels in router state (never the URL) only to prefill the form that asks for a new link.
+  const goToCheckEmail = (email: string) => navigate('/check-email', { state: { email } });
 
   const onSubmitBusiness = async (data: RegisterBusinessRequest) => {
     setError('');
     try {
-      const response = await authApi.registerBusiness(data);
-      goToPhoneConfirmation(response.data.userId);
+      await authApi.registerBusiness(data);
+      goToCheckEmail(data.email);
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, 'Error al registrar la empresa.');
       setError(msg);
@@ -85,8 +83,8 @@ export default function Register() {
   const onSubmitCustomer = async (data: RegisterCustomerRequest) => {
     setError('');
     try {
-      const response = await authApi.registerCustomer(data);
-      goToPhoneConfirmation(response.data.userId);
+      await authApi.registerCustomer(data);
+      goToCheckEmail(data.email);
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, 'Error al registrar la cuenta.');
       setError(msg);

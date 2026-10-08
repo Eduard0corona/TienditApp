@@ -39,7 +39,7 @@ En el cliente, `src/utils/access.ts` (`getAccess`) traduce la misma matriz (perm
 Cambiar de tenant rota el refresh token de la sesión (el anterior se revoca) sin cambiar de sesión.
 
 Sesiones (Fase 8, `UserSessions` y `AccessTokenSessionValidator`):
-- Cada inicio de sesión (login, 2FA, registro, invitación aceptada) abre una sesión, cuyo id viaja en el access token (`session_id`) junto con una huella del security stamp.
+- Cada inicio de sesión (login, 2FA, invitación aceptada) abre una sesión, cuyo id viaja en el access token (`session_id`) junto con una huella del security stamp. El registro no abre sesión: la cuenta inicia sesión después de activarla con el enlace del correo.
 - Renovar reemplaza el refresh token dentro de la misma sesión.
 - Un token ya reemplazado que vuelve termina la sesión (`ReuseDetected`), salvo en los 10 segundos posteriores a su reemplazo, en los que responde 409 sin tokens.
 - `logout` termina la sesión. Cambiar o recuperar la contraseña termina todas las de la cuenta.
@@ -49,10 +49,12 @@ Sesiones (Fase 8, `UserSessions` y `AccessTokenSessionValidator`):
 
 Cuentas (Fase 9):
 - `UserRole.None` (0) es el valor por defecto: no da permisos y no se puede guardar. `SuperAdmin` (9 en el código) se guarda como 0, así que las filas existentes no cambiaron (`UserRoleStorage`).
-- El login responde igual, y tarda lo mismo, para un correo sin cuenta, una cuenta inactiva o bloqueada y una contraseña incorrecta (`LoginTiming` verifica contra un hash ficticio); una cuenta bloqueada responde así aunque la contraseña sea correcta. "Debe confirmar su cuenta" solo sale después de la contraseña correcta.
+- El login responde igual, y tarda lo mismo, para un correo sin cuenta, una cuenta inactiva o bloqueada y una contraseña incorrecta (`LoginTiming` verifica contra un hash ficticio); una cuenta bloqueada responde así aunque la contraseña sea correcta. "Activa tu cuenta" (cuenta sin correo ni teléfono confirmado) solo sale después de la contraseña correcta.
 - Contraseñas nuevas: al menos 8 caracteres (`PasswordPolicy.MinimumLength`) con mayúscula, minúscula y dígito; `GuessablePasswordValidator`, registrado en Identity, rechaza las comunes y las que contienen la parte local del correo, el nombre o el apellido. El cliente muestra la regla (`utils/passwordRules.ts`).
 
-La verificación de teléfono identifica la cuenta por el `userId` que devuelve el registro: viaja en la URL de `/confirm-phone` (recargar ya no pierde el estado) y `POST /auth/resend-phone-confirmation` acepta `{ userId }` para reenviar el código (o un teléfono E.164), sin revelar si la cuenta existe y con el límite `auth`. El enlace del correo de confirmación abre la página `/confirm-email` de la app, que confirma contra `GET /auth/confirm-email` y, si el enlace venció o está incompleto, ofrece pedir uno nuevo.
+Activación por correo: `POST /auth/register/business` y `POST /auth/register/customer` crean la cuenta, envían el enlace de confirmación del correo y responden solo un mensaje (`{ message }`), sin tokens, sin cookie de sesión y sin código por SMS. La app muestra `/check-email` ("Revisa tu correo"), que no nombra la dirección y permite pedir un enlace nuevo con `POST /auth/resend-confirmation-email` (misma respuesta exista o no la cuenta). El enlace abre `/confirm-email`, que confirma contra `GET /auth/confirm-email` y manda al login con el aviso de cuenta activada; si el enlace venció (un día, el proveedor por defecto de Identity), está incompleto o no es válido, responde un solo mensaje (`ConfirmEmailCommandHandler.InvalidLinkMessage`) y ofrece pedir uno nuevo. Abrir otra vez un enlace ya usado responde éxito. El login exige el correo o el teléfono confirmado.
+
+El teléfono se verifica después desde el perfil (`POST /auth/profile/phone` y `/confirm`), que también vincula los pedidos de invitado de un cliente. La confirmación anónima de `/confirm-phone` sigue disponible para una cuenta sin nada confirmado: identifica la cuenta por su `userId` en la URL y `POST /auth/resend-phone-confirmation` acepta `{ userId }` para reenviar el código (o un teléfono E.164), sin revelar si la cuenta existe y con el límite `auth`; el registro ya no lleva a esa pantalla.
 
 ## Autorización v2 (Fase 2)
 
