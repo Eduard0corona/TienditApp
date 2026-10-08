@@ -1,0 +1,121 @@
+import type { OrderDto, ProductDto } from '../../types';
+import { UnitType } from '../../types';
+
+// Same limits as the API (OrderLimits).
+export const MAX_QUANTITY_PER_LINE = 10_000;
+export const MAX_LINES = 200;
+// The largest page the API serves; a bigger catalog is searched on the server.
+export const CATALOG_PAGE_SIZE = 500;
+// How often Vender tries to replace the catalog saved on the device while the server does not answer.
+export const CATALOG_RETRY_MS = 60_000;
+
+export interface CartLine {
+  /** Product plus its options: the same product with other options is another line. */
+  key: string;
+  productId: string;
+  optionIds: string[];
+  /** "Grande, Almendra". */
+  optionsLabel: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+  notes: string;
+  showNotes: boolean;
+  isService: boolean;
+  ratePercent: number;
+  isExempt: boolean;
+  unit?: UnitType;
+  /** Sold by weight, volume, length or time: the quantity admits three decimals. */
+  fractional: boolean;
+}
+
+/** A product with variants or extras waiting for the options and quantity. */
+export interface OptionsRequest {
+  product: ProductDto;
+  optionIds: string[];
+  quantityText: string;
+}
+
+/** Where the order goes when it is not a counter sale: a new tab or a round of an open one. */
+export type TabTarget =
+  | { kind: 'new'; tableId?: string; label: string }
+  | { kind: 'round'; orderId: string; label: string };
+
+export function readTabTarget(params: URLSearchParams): TabTarget | null {
+  const orderId = params.get('tab');
+  if (orderId) return { kind: 'round', orderId, label: params.get('label')?.trim() || 'la cuenta' };
+  const tableId = params.get('table') ?? undefined;
+  const label = params.get('label')?.trim();
+  if (tableId || label) return { kind: 'new', tableId, label: label || 'Mesa' };
+  return null;
+}
+
+/** A weighed or measured product waiting for its quantity. */
+export interface MeasureRequest {
+  product: ProductDto;
+  text: string;
+  /** The product is already in the ticket: the quantity replaces the one there. */
+  replacing: boolean;
+}
+
+/** Quick picks of the quantity dialog for each unit. */
+export function getQuickQuantities(unit?: UnitType): number[] {
+  switch (unit) {
+    case UnitType.G:
+    case UnitType.Ml:
+      return [100, 250, 500, 1000];
+    case UnitType.Hour:
+      return [0.5, 1, 1.5, 2];
+    default:
+      return [0.25, 0.5, 1, 2];
+  }
+}
+
+export interface CompletedSale {
+  order: OrderDto;
+  /** Saved without charging (a WhatsApp order paid on delivery). */
+  unpaid?: boolean;
+  /** Charged without connection: kept on the device until it reaches the server. */
+  offline?: boolean;
+}
+
+/** The chat a sale was started from (Vender opened with ?phone=&name=&conversation=). */
+export interface ChatOrigin {
+  phone: string;
+  name?: string;
+  conversationId?: string;
+}
+
+export function readChatOrigin(params: URLSearchParams): ChatOrigin | null {
+  const phone = params.get('phone')?.trim();
+  if (!phone) return null;
+  return {
+    phone,
+    name: params.get('name')?.trim() || undefined,
+    conversationId: params.get('conversation')?.trim() || undefined,
+  };
+}
+
+export type CategoryFilter = 'all' | 'featured' | string;
+
+/** Who the sale is for and where it goes: all optional. */
+export interface SaleDetails {
+  customerName: string;
+  customerPhone: string;
+  tableNumber: string;
+  orderNotes: string;
+}
+
+export const NO_SALE_DETAILS: SaleDetails = { customerName: '', customerPhone: '', tableNumber: '', orderNotes: '' };
+
+const SERVICE_UNITS: ReadonlyArray<number> = [UnitType.Hour, UnitType.Session, UnitType.Service];
+
+export function isServiceProduct(product: ProductDto): boolean {
+  return product.unit !== undefined && SERVICE_UNITS.includes(product.unit);
+}
+
+// Quick feedback only; the API normalizes and validates the number.
+export function isPlausiblePhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 8 && digits.length <= 15;
+}
