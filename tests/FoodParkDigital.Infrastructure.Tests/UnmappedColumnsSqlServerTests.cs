@@ -13,14 +13,15 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// Products.StockQuantity and LowStockThreshold and CustomerProfiles.LoyaltyPoints and LoyaltyTier go in two steps: the
-/// model stops mapping them while the previous version still reads them, and the next migration drops them. Rows saved
-/// by this version work on both sides, and rolling the drop back gives the columns back, empty, for the version that
-/// reads them.
+/// Columns the previous version still reads go in two steps: the model stops mapping them, and a later migration drops
+/// them. Products.StockQuantity and LowStockThreshold and CustomerProfiles.LoyaltyPoints and LoyaltyTier went both ways:
+/// rows saved by this version work on both sides, and rolling the drop back gives the columns back, empty, for the
+/// version that reads them. TenantSettings.RequireOpenCashSession is in the first step.
 /// </summary>
 public class UnmappedColumnsSqlServerTests
 {
     private const string StopMappingMigration = "20261006101452_StopMappingStockAndLoyaltyColumns";
+    private const string StopMappingRequireOpenCashSessionMigration = "20261009041644_StopMappingRequireOpenCashSession";
 
     [SqlServerFact]
     public async Task Columns_ShouldStayWhileUnmapped_ThenGo_AndComeBackEmptyOnRollback()
@@ -63,6 +64,46 @@ public class UnmappedColumnsSqlServerTests
         {
             Assert.Equal(0, await ColumnsAsync(context));
             Assert.Equal(3, await context.Products.CountAsync());
+        }
+    }
+
+    [SqlServerFact]
+    public async Task RequireOpenCashSession_ShouldStayWhileUnmapped_AndNewSettingsTakeItsDefault()
+    {
+        await using var database = SqlServerTestDatabase.CreateEmpty();
+        await MigrateAsync(database, StopMappingRequireOpenCashSessionMigration);
+        var slug = Guid.NewGuid().ToString("N")[..10];
+        var tenant = new Tenant("Tienda", slug, BusinessType.Retail, $"{slug}@demo.com");
+
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            context.Tenants.Add(tenant);
+            context.TenantSettings.Add(new TenantSettings(tenant.Id, TenantCapability.Retail));
+            await context.SaveChangesAsync();
+            // Saved by this version, without the column: the previous version reads its default, 0.
+            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 0"));
+
+            // Turned on by a previous version: editing the settings here leaves it as it was.
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantSettings SET RequireOpenCashSession = 1 WHERE TenantId = {tenant.Id}");
+            var settings = await context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
+            settings.UpdateSalesPolicy(pricesIncludeTax: true, defaultTaxRate: 16m, autoCloseCounterSales: false);
+            await context.SaveChangesAsync();
+            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 1 AND PricesIncludeTax = 1"));
+        }
+
+        // Back to the version that reads it: nothing to restore, the column and its value never left.
+        await MigrateAsync(database, "20261006201255_DropStockAndLoyaltyColumns");
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            Assert.Equal(1, await RequireOpenCashSessionColumnsAsync(context));
+            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 1"));
+        }
+
+        await MigrateAsync(database, StopMappingRequireOpenCashSessionMigration);
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            Assert.Equal(1, await RequireOpenCashSessionColumnsAsync(context));
+            Assert.True((await context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id)).PricesIncludeTax);
         }
     }
 
@@ -131,6 +172,10 @@ public class UnmappedColumnsSqlServerTests
             WHERE p.Id = {productId} AND p.StockQuantity IS NULL AND p.LowStockThreshold IS NULL
                 AND c.UserId = {userId} AND c.LoyaltyPoints = 0 AND c.LoyaltyTier IS NULL
             """);
+
+    /// <summary>1 while TenantSettings still has the column the model stopped mapping.</summary>
+    private static Task<int> RequireOpenCashSessionColumnsAsync(ApplicationDbContext context) =>
+        CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM sys.columns WHERE [object_id] = OBJECT_ID(N'dbo.TenantSettings') AND [name] = N'RequireOpenCashSession'");
 
     private static Task<int> CountAsync(ApplicationDbContext context, FormattableString sql) =>
         context.Database.SqlQuery<int>(sql).SingleAsync();

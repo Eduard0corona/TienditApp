@@ -103,6 +103,10 @@ El `apply.sql` de la Fase 13 borra `Products.StockQuantity`, `LowStockThreshold`
 - Para actualizar una imagen: `docker buildx imagetools inspect <imagen>:<etiqueta>` da el digest que tiene hoy esa etiqueta (el de la lista de plataformas, no el de una sola). Cambia la etiqueta y el digest juntos y revisa las notas de versión; una imagen fijada no recibe los parches de su etiqueta hasta que cambies el digest.
 - Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas.
 
+## Columna `RequireOpenCashSession` sin mapear
+
+El `apply.sql` de `20261009041644_StopMappingRequireOpenCashSession` no cambia el esquema ni los datos: solo registra la migración, y se aplica, como siempre, antes del merge. La versión nueva deja de leer y escribir `TenantSettings.RequireOpenCashSession`, que no tiene efecto desde que todo cobro exige caja: las configuraciones que guarda la dejan en su valor por omisión, 0, y la versión anterior sigue funcionando con ella, así que volver a ella no necesita `rollback.sql`. La siguiente entrega borra la columna y solo se aplica con esta versión desplegada.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

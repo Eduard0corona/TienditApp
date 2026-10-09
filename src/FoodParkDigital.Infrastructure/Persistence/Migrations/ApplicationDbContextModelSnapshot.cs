@@ -3302,9 +3302,6 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("RequireOpenCashSession")
-                        .HasColumnType("bit");
-
                     b.Property<string>("SettingsJson")
                         .HasColumnType("nvarchar(max)");
 
