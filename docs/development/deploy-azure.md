@@ -130,7 +130,7 @@ La Fase 16 trae una migración, [`database/production/20261009043433_AddBusiness
 - Sin cambios de datos, la app se ve distinta para todos los negocios:
   - los colores de estado (éxito, aviso, error, información) pasan WCAG AA;
   - el texto general es más oscuro;
-  - el modo oscuro ya tiene el fondo oscuro;
+  - el modo oscuro ya tiene el fondo oscuro, y en él el verde de Nopal es más claro;
   - Cobrar usa el color principal en todas las pantallas.
 - Volver a la Fase 15 funciona con o sin `rollback.sql`. El rollback borra la columna y con ella la elección de cada negocio (la bitácora conserva cada cambio, `BusinessThemeUpdated`); al aplicar de nuevo, todos vuelven a Nopal. Para volver a la Fase 14 aplica además el `rollback.sql` de la Fase 15 y revisa antes las cuentas abiertas con platillos cancelados (sección anterior).
 

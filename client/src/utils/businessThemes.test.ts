@@ -5,7 +5,6 @@ import { BUSINESS_THEMES, getBusinessTheme, themeCssVariables } from './business
 import { contrastRatio } from './contrast';
 
 const AA = 4.5;
-const UI = 3;
 // Hyper's surfaces in dark mode: the page, a card and a raised row (attention rows, hovered items).
 const DARK_SURFACES = ['#343a40', '#37404a', '#3d4854'];
 
@@ -39,6 +38,9 @@ describe('business themes', () => {
     '%s passes WCAG AA in light and dark',
     (_, { light: l, dark: d }) => {
       for (const background of [l.accent, l.accentHover, l.accentActive]) expect(contrastRatio(l.onAccent, background)).toBeGreaterThanOrEqual(AA);
+      // The accent is text too: outline buttons and text in the color of the business.
+      expect(contrastRatio(l.accent, '#ffffff')).toBeGreaterThanOrEqual(AA);
+      expect(contrastRatio(l.accent, l.pageBg)).toBeGreaterThanOrEqual(AA);
       expect(contrastRatio(l.link, '#ffffff')).toBeGreaterThanOrEqual(AA);
       expect(contrastRatio(l.link, l.pageBg)).toBeGreaterThanOrEqual(AA);
       expect(contrastRatio(l.linkHover, '#ffffff')).toBeGreaterThanOrEqual(AA);
@@ -49,7 +51,7 @@ describe('business themes', () => {
       for (const background of [d.accent, d.accentHover, d.accentActive]) expect(contrastRatio(d.onAccent, background)).toBeGreaterThanOrEqual(AA);
       for (const surface of DARK_SURFACES) {
         expect(contrastRatio(d.link, surface)).toBeGreaterThanOrEqual(AA);
-        expect(contrastRatio(d.accent, surface)).toBeGreaterThanOrEqual(UI);
+        expect(contrastRatio(d.accent, surface)).toBeGreaterThanOrEqual(AA);
       }
       expect(contrastRatio(d.accentText, d.accentSubtle)).toBeGreaterThanOrEqual(AA);
     },

@@ -291,9 +291,10 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
             </>
           ) : order.isOpenTab ? (
             <>
+              {/* Secondary: Cobrar (or Cerrar cuenta) is the main action of the tab. */}
               <button
                 type="button"
-                className="btn btn-primary btn-touch"
+                className="btn btn-outline-primary btn-touch"
                 onClick={() => navigate(`/sell?tab=${order.id}&label=${encodeURIComponent(order.tableNumber || order.customerName)}`)}
               >
                 <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar ronda

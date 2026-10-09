@@ -74,10 +74,11 @@ Temas y colores (Fase 16, [ADR 0010](../adr/0010-business-themes.md)):
   - los colores de estado de Hyper, por unos AA en los dos modos;
   - el texto general y los títulos, más oscuros;
   - las versiones oscuras de alertas, chips, la conversación de WhatsApp y las fichas claras;
-  - las tarjetas pintadas con el acento con texto blanco, que usan siempre el tono claro del tema.
+  - las tarjetas pintadas con el acento con texto blanco, que usan siempre el tono claro del tema;
+  - el acento oscuro de Nopal, más claro para leerse como texto en botones con contorno.
 - **Reglas de color:**
   - Un estado se pinta con `ta-chip-*` o con los colores de estado, nunca con el acento (`bg-primary`).
-  - La acción principal de una pantalla, incluido Cobrar, es `btn-primary`.
+  - La acción principal de una pantalla, incluido Cobrar, es `btn-primary`, y es una sola: en la cuenta de Mesas, Agregar ronda es `btn-outline-primary`.
   - Ningún componente fija colores; usa los tokens.
 - **Pruebas:**
   - `businessThemes.test.ts` revisa con `utils/contrast.ts` cada par que pinta cada tema. Lee `theme.css` para revisar los colores de estado en los dos modos, que el bloque oscuro defina lo mismo que el claro y que los valores por omisión sean los de Nopal.

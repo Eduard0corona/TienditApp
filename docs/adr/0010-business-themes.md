@@ -26,7 +26,9 @@ Un color libre que elige el dueño no garantiza nada de eso. Además tendría qu
    - los enlaces sobre las tarjetas y sobre la página;
    - el texto de lo elegido sobre su fondo;
    - el texto general sobre la página;
-   - en oscuro, los enlaces y el acento sobre las tres superficies de la app.
+   - el acento como texto (botones con contorno, textos en el color del negocio) sobre las tarjetas y la página en claro, y sobre las tres superficies de la app en oscuro, igual que los enlaces.
+
+   Nopal conserva los colores claros con los que salió TienditApp. En oscuro, su acento pasó de `#2fb386` al verde claro de sus enlaces (`#5fd0a8`): el anterior pasaba como borde (3:1) pero no como texto.
 2. **El negocio guarda cuál, el cliente sabe cómo se ve.**
    - **Backend:** `TenantSettings.Theme` es el enum `BusinessTheme`, guardado como número con Nopal (0) por omisión. Lo cambian dueños y administradores con `PUT /api/v1/auth/my-tenant/theme` (`[RequiresTenantManager]`), y cada cambio queda en la bitácora (`BusinessThemeUpdated`).
    - **Cliente:** los colores viven en `client/src/utils/businessThemes.ts`. Agregar un tema es un valor nuevo del enum más su paleta probada, sin migración.

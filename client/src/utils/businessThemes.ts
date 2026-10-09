@@ -30,7 +30,8 @@ export interface BusinessThemeDefinition {
  * The themes an owner can pick (Configuración > Negocio > Apariencia), in the order the picker shows them. The business
  * stores only which one (TenantSettings.Theme); the colors live here. A theme changes the accent and the tint of the
  * page, never the colors of states (ready, pending, cancelled), so nobody misreads a status after a change of theme.
- * Nopal keeps the values TienditApp shipped with.
+ * Nopal keeps the light values TienditApp shipped with; in dark mode its accent is the lighter green of its links, so
+ * it reads as text on every surface (outline buttons, text in the color of the business), like the other themes.
  */
 export const BUSINESS_THEMES: readonly BusinessThemeDefinition[] = [
   {
@@ -43,8 +44,8 @@ export const BUSINESS_THEMES: readonly BusinessThemeDefinition[] = [
       linkHover: '#0b6650', pageBg: '#f3f5f2',
     },
     dark: {
-      accent: '#2fb386', accentHover: '#4cc79c', accentActive: '#8fe0c2', onAccent: '#0b1f18',
-      accentSubtle: '#365555', accentBorder: '#1f6e55', accentText: '#8fe0c2', link: '#5fd0a8',
+      accent: '#5fd0a8', accentHover: '#70e0b8', accentActive: '#81f1c8', onAccent: '#0b1f18',
+      accentSubtle: '#3e5a5b', accentBorder: '#1f6e55', accentText: '#8fe0c2', link: '#5fd0a8',
       linkHover: '#8fe0c2',
     },
   },
