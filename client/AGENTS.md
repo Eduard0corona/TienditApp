@@ -7,6 +7,7 @@
 - Los enums del dominio salen del contrato: `npm run api:types` genera `src/api/generated/schema.ts` y `src/api/generated/enums.ts` (no se editan) y `src/types/index.ts` los reexporta. No copies un enum a mano.
 - Reutiliza componentes comunes, hooks y tipos; divide componentes grandes solo en refactors focalizados.
 - Colores solo con los tokens de `src/assets/css/theme.css` y la paleta del tema del negocio (`utils/businessThemes.ts`): un estado usa `ta-chip-*` o los colores de estado, nunca el acento (`bg-primary`), y la acción principal es `btn-primary`. Un tema nuevo entra con todos sus pares AA en `businessThemes.test.ts` (ADR 0010).
+- Textos con mayúscula solo al inicio y en nombres propios, "negocio" (no "empresa") y "correo" (no "email"). Una pantalla tiene una sola acción principal y no repite las de la barra superior o la de pestañas; las migas (`PageTitle` con `parent`) solo van en las pantallas de detalle.
 - Conserva estados loading, empty, error y success y accesibilidad básica de formularios/controles. El lint incluye `eslint-plugin-jsx-a11y`: cada etiqueta va con `htmlFor`/`id` (con el índice dentro de listas) o envuelve su control, y lo clicable es un `button` o un enlace real (`utils/a11y.ts` `asButton` solo para bloques que no caben en un botón).
 - No guardes access/refresh tokens o secretos de integración en almacenamiento accesible a JavaScript. El access token actual permanece en memoria.
 - Limpia conexiones SignalR y preserva aislamiento tenant.

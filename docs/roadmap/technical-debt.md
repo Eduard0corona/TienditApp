@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-09 tras las Fases 0 a 16 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -64,6 +64,15 @@ Actualizada el 2026-10-09 tras las Fases 0 a 16 del roadmap de producto (la audi
     - Hyper sigue cargado (436 KB de `app.min.css` y 60 KB de `vendor.min.css` sin uso), con colores compilados que `theme.css` cubre uno por uno.
     - No hay color libre de marca, solo los temas curados.
     - El logo del negocio todavía no sale en el ticket ni en la barra superior.
+- Resuelto en la Fase 17: las pantallas de trabajo ya no tienen estorbos.
+  - El aviso del plan vencido sale completo solo a dueños y administradores, en Inicio y Configuración; en las demás pantallas va en la campana.
+  - "Nueva venta" queda en la barra superior y en la pestaña Vender.
+  - El selector de negocio se lee completo en un teléfono de 390 px.
+  - Cocina muestra solo la siguiente acción.
+  - Las migas solo salen en los detalles.
+  - Toda la app usa mayúscula inicial, "negocio" y "correo".
+  - Inicio ya no tiene "Pedidos por estado".
+  - Pendiente: en la cocina, las rondas dicen "Preparando" y los pedidos "En preparación". `DashboardMetricsDto.OrdersByStatus` ya no se muestra en ninguna pantalla. En 360 px, un nombre largo de negocio todavía se recorta.
 - Resuelto en la Fase 15: un platillo de una ronda ya enviada se cancela desde la cuenta (`POST /orders/{id}/item-cancellations`): la cuenta deja de cobrarlo, el renglón conserva lo pedido y la cancelación queda con motivo, quién y cuándo; sus insumos regresan al inventario salvo que la cocina ya lo preparara, y la bitácora y la cocina se enteran. Solo se cancela lo que falta por cobrar: un platillo pagado se reembolsa. Pendiente: lo que la cocina ya preparó queda dentro de la salida por venta de su ronda, sin un movimiento de merma propio; volver a la Fase 14 con platillos cancelados en cuentas abiertas los cobra otra vez al recalcular la cuenta ([despliegue](../development/deploy-azure.md#platillos-cancelados-requireopencashsession-y-vender-fase-15)).
 - Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
