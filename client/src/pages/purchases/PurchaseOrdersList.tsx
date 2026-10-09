@@ -228,7 +228,7 @@ export default function PurchaseOrdersList() {
 
   return (
     <>
-      <PageTitle title="Compras" subtitle="Abastecimiento" />
+      <PageTitle title="Compras" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">

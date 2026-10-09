@@ -27,7 +27,7 @@ export default function CashManagement() {
 
   return (
     <>
-      <PageTitle title="Caja" subtitle="Operación diaria" />
+      <PageTitle title="Caja" />
 
       <ul className="nav nav-tabs mb-3" role="tablist">
         {TABS.map((item) => (

@@ -214,7 +214,7 @@ export default function AiAgentSettings() {
   if (loading) {
     return (
       <>
-        <PageTitle title="Respuestas automáticas" subtitle="Configuración" />
+        <PageTitle title="Respuestas automáticas" />
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Cargando...</span>
@@ -226,7 +226,7 @@ export default function AiAgentSettings() {
 
   return (
     <>
-      <PageTitle title="Respuestas automáticas" subtitle="Configuración" />
+      <PageTitle title="Respuestas automáticas" />
 
       {feedback && (
         <div className={`alert alert-${feedback.type} alert-dismissible fade show`}>
@@ -356,8 +356,8 @@ export default function AiAgentSettings() {
 
                     <h5 className="mb-3 mt-2">Información del negocio</h5>
                     <div className="mb-3">
-                      <label htmlFor="aiagentsettings-nombre-de-la-empresa" className="form-label">Nombre de la empresa</label>
-                      <input id="aiagentsettings-nombre-de-la-empresa"
+                      <label htmlFor="aiagentsettings-nombre-del-negocio" className="form-label">Nombre del negocio</label>
+                      <input id="aiagentsettings-nombre-del-negocio"
                         type="text"
                         className="form-control"
                         value={selectedAgent.businessName || ''}

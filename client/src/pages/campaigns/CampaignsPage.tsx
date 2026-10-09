@@ -25,7 +25,7 @@ export default function CampaignsPage() {
 
   return (
     <>
-      <PageTitle title="Campañas" subtitle="Gestión" />
+      <PageTitle title="Campañas" />
       <ul className="nav nav-tabs mb-3 flex-nowrap overflow-auto" role="tablist">
         {tabs.map((item) => (
           <li key={item.key} className="nav-item" role="presentation">

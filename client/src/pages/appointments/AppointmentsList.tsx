@@ -294,7 +294,7 @@ export default function AppointmentsList() {
 
   return (
     <>
-      <PageTitle title="Agenda" subtitle="Operación diaria" />
+      <PageTitle title="Agenda" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">

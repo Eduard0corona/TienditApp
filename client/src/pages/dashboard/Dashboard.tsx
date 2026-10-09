@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
@@ -12,12 +12,14 @@ import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { getAccess } from '../../utils/access';
 import { describeAttentionItems } from '../../utils/attention';
 import { formatMoney } from '../../utils/money';
-import { getCatalogItemTypeLabel, getOrderStatusLabel } from '../../utils/labels';
+import { getCatalogItemTypeLabel } from '../../utils/labels';
 import type { DashboardMetricsDto, TenantSetupDto, TenantSetupStepKey } from '../../types';
 import { businessDayEnd, businessDayStart, getBusinessToday } from '../../utils/dates';
 
 // Several events usually arrive together (sale + payment + close); one reload covers them.
 const EVENT_RELOAD_DELAY_MS = 600;
+
+const countOf = (amount: number, one: string, many: string) => `${amount} ${amount === 1 ? one : many}`;
 
 const SETUP_STEPS: Array<{ key: TenantSetupStepKey; label: string; path: string }> = [
   { key: 'salesPolicy', label: 'Define si tus precios incluyen IVA', path: '/setup' },
@@ -45,11 +47,6 @@ export default function Dashboard() {
   const attention = useAttention();
   const notices = describeAttentionItems(attention.data?.items ?? []);
   const isToday = fromDate === today && toDate === today;
-
-  const statusRows = useMemo(
-    () => Object.entries(metrics?.ordersByStatus ?? {}).sort((a, b) => b[1] - a[1]),
-    [metrics],
-  );
 
   const loadMetrics = useCallback(async () => {
     try {
@@ -105,10 +102,15 @@ export default function Dashboard() {
   const doneSetupSteps = SETUP_STEPS.length - pendingSetupSteps.length;
   const value = (amount: number | undefined) => (loading ? '—' : formatMoney(amount ?? 0));
   const count = (amount: number | undefined) => (loading ? '—' : String(amount ?? 0));
+  const topSellers = metrics?.topSellingItems ?? [];
+  // A column that says "Producto" on every row tells nothing: the type shows only when products and services mix.
+  const sellerTypes = new Set(topSellers.map((item) => item.itemType));
+  const mixedTypes = sellerTypes.size > 1;
+  const sellerHeader = mixedTypes ? 'Producto o servicio' : getCatalogItemTypeLabel(topSellers[0]?.itemType) || 'Producto';
 
   return (
     <>
-      <PageTitle title="Inicio" subtitle="Operación diaria" />
+      <PageTitle title="Inicio" />
 
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div>
@@ -145,11 +147,6 @@ export default function Dashboard() {
             >
               Hoy
             </button>
-          )}
-          {access.sell && (
-            <Link to="/sell" className="btn btn-sm btn-primary">
-              <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva venta
-            </Link>
           )}
         </div>
       </div>
@@ -248,78 +245,49 @@ export default function Dashboard() {
               <div className="text-muted small fw-semibold text-uppercase">Pedidos</div>
               <div className="fs-2 fw-bold">{count(metrics?.totalOrders)}</div>
               <div className="small text-muted">
-                {loading ? '' : `${metrics?.inProgressOrders ?? 0} en curso · ${metrics?.pendingOrders ?? 0} nuevos · ${metrics?.cancelledOrders ?? 0} cancelados`}
+                {loading ? '' : `${metrics?.inProgressOrders ?? 0} en curso · ${countOf(metrics?.pendingOrders ?? 0, 'nuevo', 'nuevos')} · ${countOf(metrics?.cancelledOrders ?? 0, 'cancelado', 'cancelados')}`}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="row g-3">
-        <div className="col-lg-6">
-          <div className="card h-100 mb-0">
-            <div className="card-body">
-              <h3 className="h5 mb-3">Más vendidos</h3>
-              {loading ? (
-                <p className="text-muted mb-0">Cargando…</p>
-              ) : (metrics?.topSellingItems.length ?? 0) === 0 ? (
-                <p className="text-muted mb-0">Aún no hay ventas cobradas en el periodo.</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-sm mb-0">
-                    <thead>
-                      <tr>
-                        <th>Producto</th>
-                        <th>Tipo</th>
-                        <th className="text-end">Cantidad</th>
-                        <th className="text-end">Importe</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metrics?.topSellingItems.map((item) => (
-                        <tr key={item.productId}>
-                          <td>{item.productName}</td>
-                          <td>{getCatalogItemTypeLabel(item.itemType)}</td>
-                          <td className="text-end">{item.quantitySold.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</td>
-                          <td className="text-end">{formatMoney(item.totalAmount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+      {/* The orders by status are already summed up in the cards above; what is left is what sells. */}
+      <div className="card mb-0">
+        <div className="card-body">
+          <h3 className="h5 mb-3">Más vendidos</h3>
+          {loading ? (
+            <p className="text-muted mb-0">Cargando…</p>
+          ) : topSellers.length === 0 ? (
+            <p className="text-muted mb-0">Aún no hay ventas cobradas en el periodo.</p>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-sm mb-0">
+                <thead>
+                  <tr>
+                    <th>{sellerHeader}</th>
+                    {mixedTypes && <th>Tipo</th>}
+                    <th className="text-end">Cantidad</th>
+                    <th className="text-end">Importe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topSellers.map((item) => (
+                    <tr key={item.productId}>
+                      <td>{item.productName}</td>
+                      {mixedTypes && <td>{getCatalogItemTypeLabel(item.itemType)}</td>}
+                      <td className="text-end">{item.quantitySold.toLocaleString('es-MX', { maximumFractionDigits: 3 })}</td>
+                      <td className="text-end">{formatMoney(item.totalAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </div>
-
-        <div className="col-lg-6">
-          <div className="card h-100 mb-0">
-            <div className="card-body">
-              <h3 className="h5 mb-3">Pedidos por estado</h3>
-              {loading ? (
-                <p className="text-muted mb-0">Cargando…</p>
-              ) : statusRows.length === 0 ? (
-                <p className="text-muted mb-0">Sin pedidos en el periodo.</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-sm mb-0">
-                    <tbody>
-                      {statusRows.map(([status, total]) => (
-                        <tr key={status}>
-                          <td>{getOrderStatusLabel(status)}</td>
-                          <td className="text-end fw-semibold">{total}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <p className="small text-muted mt-3 mb-0">
-                Activos en catálogo: {count(metrics?.activeProducts)} productos y {count(metrics?.activeServices)} servicios ·{' '}
-                {count(metrics?.uniqueCustomers)} clientes distintos.
-              </p>
-            </div>
-          </div>
+          )}
+          <p className="small text-muted mt-3 mb-0">
+            Activos en catálogo: {count(metrics?.activeProducts)} productos y {count(metrics?.activeServices)} servicios ·{' '}
+            {count(metrics?.uniqueCustomers)} clientes distintos.
+          </p>
         </div>
       </div>
     </>

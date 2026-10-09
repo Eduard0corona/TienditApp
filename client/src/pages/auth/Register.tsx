@@ -9,26 +9,9 @@ import BrandLogo from '../../components/common/BrandLogo';
 import { getApiErrorMessage } from '../../api/errors';
 import { asButton } from '../../utils/a11y';
 import { newPasswordPattern, PASSWORD_MIN_LENGTH } from '../../utils/passwordRules';
+import { INDUSTRY_OPTIONS } from '../../utils/industries';
 
 type AccountType = 'business' | 'customer' | null;
-
-const INDUSTRY_OPTIONS = [
-  'Alimentos y Bebidas',
-  'Abarrotes',
-  'Farmacia',
-  'Ropa y Accesorios',
-  'Electrónica',
-  'Ferretería',
-  'Papelería',
-  'Estética y Spa',
-  'Taller Mecánico',
-  'Consultorio',
-  'Servicios Profesionales',
-  'Educación',
-  'Gimnasio',
-  'Lavandería',
-  'Otro',
-];
 
 const TAX_REGIME_OPTIONS = [
   '601 - General de Ley Personas Morales',
@@ -75,7 +58,7 @@ export default function Register() {
       await authApi.registerBusiness(data);
       goToCheckEmail(data.email);
     } catch (err: unknown) {
-      const msg = getApiErrorMessage(err, 'Error al registrar la empresa.');
+      const msg = getApiErrorMessage(err, 'No se pudo registrar el negocio.');
       setError(msg);
     }
   };
@@ -122,7 +105,7 @@ export default function Register() {
                   {!accountType && (
                     <>
                       <div className="text-center w-75 m-auto">
-                        <h4 className="text-dark-50 text-center pb-0 fw-bold">Crear Cuenta</h4>
+                        <h4 className="text-dark-50 text-center pb-0 fw-bold">Crear cuenta</h4>
                         <p className="text-muted mb-4">
                           Selecciona el tipo de cuenta que deseas crear.
                         </p>
@@ -136,7 +119,7 @@ export default function Register() {
                           >
                             <div className="card-body text-center py-4">
                               <i className="ri-store-2-line text-primary" style={{ fontSize: '2.5rem' }}></i>
-                              <h5 className="mt-2 mb-1">Soy Empresa</h5>
+                              <h5 className="mt-2 mb-1">Tengo un negocio</h5>
                               <p className="text-muted mb-0 font-13">
                                 Registro para negocios que ofrecen productos o servicios.
                               </p>
@@ -150,7 +133,7 @@ export default function Register() {
                           >
                             <div className="card-body text-center py-4">
                               <i className="ri-user-line text-primary" style={{ fontSize: '2.5rem' }}></i>
-                              <h5 className="mt-2 mb-1">Soy Cliente</h5>
+                              <h5 className="mt-2 mb-1">Soy cliente</h5>
                               <p className="text-muted mb-0 font-13">
                                 Registro para personas que desean consumir productos o servicios.
                               </p>
@@ -165,7 +148,7 @@ export default function Register() {
                   {accountType === 'customer' && (
                     <>
                       <div className="text-center m-auto">
-                        <h4 className="text-dark-50 pb-0 fw-bold">Registro de Cliente</h4>
+                        <h4 className="text-dark-50 pb-0 fw-bold">Registro de cliente</h4>
                         <p className="text-muted mb-4">Ingresa tus datos para crear tu cuenta.</p>
                       </div>
 
@@ -200,12 +183,12 @@ export default function Register() {
                         </div>
 
                         <div className="mb-3">
-                          <label htmlFor="register-email" className="form-label">Email <span className="text-danger">*</span></label>
+                          <label htmlFor="register-email" className="form-label">Correo <span className="text-danger">*</span></label>
                           <input id="register-email"
                             type="email"
                             className={`form-control ${customerForm.formState.errors.email ? 'is-invalid' : ''}`}
-                            placeholder="tu@email.com"
-                            {...customerForm.register('email', { required: 'El email es requerido' })}
+                            placeholder="tu@correo.com"
+                            {...customerForm.register('email', { required: 'El correo es requerido' })}
                           />
                           {customerForm.formState.errors.email && (
                             <div className="invalid-feedback">{customerForm.formState.errors.email.message}</div>
@@ -269,7 +252,7 @@ export default function Register() {
                                 Registrando...
                               </>
                             ) : (
-                              'Crear Cuenta'
+                              'Crear cuenta'
                             )}
                           </button>
                         </div>
@@ -291,7 +274,7 @@ export default function Register() {
                   {accountType === 'business' && (
                     <>
                       <div className="text-center m-auto">
-                        <h4 className="text-dark-50 pb-0 fw-bold">Registro de Empresa</h4>
+                        <h4 className="text-dark-50 pb-0 fw-bold">Registro de negocio</h4>
                         <p className="text-muted mb-4">Ingresa los datos de tu negocio para comenzar.</p>
                       </div>
 
@@ -299,7 +282,7 @@ export default function Register() {
 
                       <form onSubmit={businessForm.handleSubmit(onSubmitBusiness)}>
                         {/* Personal Data Section */}
-                        <h5 className="header-title mb-3">Datos Personales</h5>
+                        <h5 className="header-title mb-3">Datos personales</h5>
 
                         <div className="row">
                           <div className="col-md-6 mb-3">
@@ -330,12 +313,12 @@ export default function Register() {
 
                         <div className="row">
                           <div className="col-md-4 mb-3">
-                            <label htmlFor="register-email-2" className="form-label">Email <span className="text-danger">*</span></label>
+                            <label htmlFor="register-email-2" className="form-label">Correo <span className="text-danger">*</span></label>
                             <input id="register-email-2"
                               type="email"
                               className={`form-control ${businessForm.formState.errors.email ? 'is-invalid' : ''}`}
-                              placeholder="tu@email.com"
-                              {...businessForm.register('email', { required: 'El email es requerido' })}
+                              placeholder="tu@correo.com"
+                              {...businessForm.register('email', { required: 'El correo es requerido' })}
                             />
                             {businessForm.formState.errors.email && (
                               <div className="invalid-feedback">{businessForm.formState.errors.email.message}</div>
@@ -389,7 +372,7 @@ export default function Register() {
                         <hr className="my-3" />
 
                         {/* Business Data Section */}
-                        <h5 className="header-title mb-3">Datos del Negocio</h5>
+                        <h5 className="header-title mb-3">Datos del negocio</h5>
 
                         <div className="row">
                           <div className="col-md-6 mb-3">
@@ -459,16 +442,16 @@ export default function Register() {
                                 )}
                               </div>
                               <div className="col-md-4 mb-3">
-                                <label htmlFor="register-razon-social" className="form-label">Razón Social</label>
+                                <label htmlFor="register-razon-social" className="form-label">Razón social</label>
                                 <input id="register-razon-social"
                                   type="text"
                                   className="form-control"
-                                  placeholder="Nombre legal de la empresa"
+                                  placeholder="Nombre legal del negocio"
                                   {...businessForm.register('legalName', { maxLength: 300 })}
                                 />
                               </div>
                               <div className="col-md-4 mb-3">
-                                <label htmlFor="register-regimen-fiscal" className="form-label">Régimen Fiscal</label>
+                                <label htmlFor="register-regimen-fiscal" className="form-label">Régimen fiscal</label>
                                 <select id="register-regimen-fiscal" className="form-select" {...businessForm.register('taxRegime')}>
                                   <option value="">Seleccionar...</option>
                                   {TAX_REGIME_OPTIONS.map((opt) => (
@@ -479,7 +462,7 @@ export default function Register() {
                             </div>
 
                             <div className="mb-3">
-                              <label htmlFor="register-telefono-del-negocio" className="form-label">Teléfono del Negocio</label>
+                              <label htmlFor="register-telefono-del-negocio" className="form-label">Teléfono del negocio</label>
                               <input id="register-telefono-del-negocio"
                                 type="tel"
                                 className="form-control"
@@ -491,7 +474,7 @@ export default function Register() {
                             <hr className="my-3" />
 
                             {/* Address Section */}
-                            <h5 className="header-title mb-3">Dirección del Negocio</h5>
+                            <h5 className="header-title mb-3">Dirección del negocio</h5>
 
                             <div className="row">
                               <div className="col-md-6 mb-3">
@@ -574,10 +557,10 @@ export default function Register() {
                             {businessForm.formState.isSubmitting ? (
                               <>
                                 <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                                Registrando empresa...
+                                Registrando negocio…
                               </>
                             ) : (
-                              'Registrar Empresa'
+                              'Registrar negocio'
                             )}
                           </button>
                         </div>
@@ -602,7 +585,7 @@ export default function Register() {
                   <p className="text-muted">
                     ¿Ya tienes una cuenta?{' '}
                     <Link to="/login" className="text-muted ms-1">
-                      <b>Iniciar Sesión</b>
+                      <b>Iniciar sesión</b>
                     </Link>
                   </p>
                 </div>

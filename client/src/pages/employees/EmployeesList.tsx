@@ -124,7 +124,7 @@ export default function EmployeesList() {
 
   return (
     <>
-      <PageTitle title="Equipo" subtitle="Quién entra al negocio y qué puede hacer" />
+      <PageTitle title="Equipo" />
 
       <div className="card">
         <div className="card-body">

@@ -109,7 +109,7 @@ export default function ProductsList() {
 
   return (
     <>
-      <PageTitle title="Productos" subtitle="Catálogo" />
+      <PageTitle title="Productos" />
 
       <div className="row">
         <div className="col-12">
@@ -119,7 +119,7 @@ export default function ProductsList() {
               <div className="row mb-2">
                 <div className="col-sm-4">
                   <Link to="/products/new" className="btn btn-primary mb-2">
-                    <i className="ri-add-line me-1"></i> Nuevo Producto
+                    <i className="ri-add-line me-1"></i> Nuevo producto
                   </Link>
                 </div>
                 <div className="col-sm-8">

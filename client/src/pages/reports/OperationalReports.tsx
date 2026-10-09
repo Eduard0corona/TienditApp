@@ -46,7 +46,7 @@ export default function OperationalReports() {
 
   return (
     <>
-      <PageTitle title="Reportes" subtitle="Resumen operativo" />
+      <PageTitle title="Reportes" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">

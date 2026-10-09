@@ -1,4 +1,6 @@
+import { SubscriptionStatusValue, type SubscriptionDetail } from '../api/platformApi';
 import type { Schemas } from '../api/typedClient';
+import { formatDate } from './dates';
 
 export type AttentionItem = Schemas['AttentionItemDto'];
 
@@ -53,4 +55,19 @@ export function describeAttentionItems(items: AttentionItem[]): AttentionNotice[
     .map(describeAttention)
     .filter((notice): notice is AttentionNotice => notice !== null)
     .sort((a, b) => order[a.tone] - order[b.tone]);
+}
+
+/**
+ * The plan past due, as one more line in the bell: only owners and admins read the plan, and on the screens where the
+ * team works the bell carries it instead of the full notice (Inicio and Configuración keep it).
+ */
+export function describePlanNotice(subscription: SubscriptionDetail | undefined): AttentionNotice | null {
+  if (!subscription?.hasPlan || subscription.status !== SubscriptionStatusValue.PastDue) return null;
+  return {
+    key: 'planPastDue',
+    text: `Pago del plan vencido: el servicio se suspende el ${formatDate(subscription.suspendsAt)}`,
+    path: '/settings/business',
+    icon: 'ri-error-warning-line',
+    tone: 'warning',
+  };
 }

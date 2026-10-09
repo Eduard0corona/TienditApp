@@ -468,7 +468,7 @@ export default function OrdersCart() {
         title="Subiendo imágenes"
         description={uploadingMessage}
       />
-      <PageTitle title="Orden detallada" subtitle="Pedidos" />
+      <PageTitle title="Orden detallada" parent={{ label: 'Vender', to: '/sell' }} />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">

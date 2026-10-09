@@ -13,7 +13,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 const COLUMNS = [
   { header: 'Nombre' },
   { header: 'Teléfono' },
-  { header: 'Email' },
+  { header: 'Correo' },
   { header: 'Tipo', className: 'text-center' },
   { header: 'Estado', className: 'text-center' },
   { header: 'Acciones', className: 'text-center' },
@@ -170,7 +170,7 @@ export default function CustomersList() {
 
   return (
     <>
-      <PageTitle title="Clientes" subtitle="Operación" />
+      <PageTitle title="Clientes" />
 
       <div className="row">
         <div className="col-12">
@@ -179,7 +179,7 @@ export default function CustomersList() {
               <div className="row mb-2">
                 <div className="col-sm-4">
                   <button className="btn btn-primary mb-2" onClick={openCreateModal}>
-                    <i className="ri-add-line me-1"></i> Nuevo Cliente
+                    <i className="ri-add-line me-1"></i> Nuevo cliente
                   </button>
                 </div>
                 <div className="col-sm-8">
@@ -292,7 +292,7 @@ export default function CustomersList() {
 
       <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}</Modal.Title>
+          <Modal.Title>{editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
@@ -355,7 +355,7 @@ export default function CustomersList() {
               Cancelar
             </button>
             <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Guardando...' : editingCustomer ? 'Guardar Cambios' : 'Crear Cliente'}
+              {isSubmitting ? 'Guardando...' : editingCustomer ? 'Guardar cambios' : 'Crear cliente'}
             </button>
           </Modal.Footer>
         </form>

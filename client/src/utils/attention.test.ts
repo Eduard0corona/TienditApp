@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { describeAttention, describeAttentionItems } from './attention';
+import { SubscriptionStatusValue, type SubscriptionDetail } from '../api/platformApi';
+import { describeAttention, describeAttentionItems, describePlanNotice } from './attention';
 
 describe('attention', () => {
   it('says what waits and where to handle it', () => {
@@ -27,5 +28,26 @@ describe('attention', () => {
     ]);
 
     expect(notices.map((notice) => notice.key)).toEqual(['failedMessages', 'unreadChats']);
+  });
+});
+
+describe('plan notice', () => {
+  const plan = (status: SubscriptionDetail['status'], hasPlan = true) =>
+    ({ hasPlan, status, suspendsAt: '2026-10-09T12:00:00Z' }) as SubscriptionDetail;
+
+  it('tells the owner the plan is past due and leads to it', () => {
+    expect(describePlanNotice(plan(SubscriptionStatusValue.PastDue))).toMatchObject({
+      key: 'planPastDue',
+      path: '/settings/business',
+      tone: 'warning',
+    });
+    expect(describePlanNotice(plan(SubscriptionStatusValue.PastDue))?.text).toMatch(/^Pago del plan vencido: el servicio se suspende el /);
+  });
+
+  it('says nothing for a plan in order, a business without one, or someone who does not read it', () => {
+    expect(describePlanNotice(plan(SubscriptionStatusValue.Active))).toBeNull();
+    expect(describePlanNotice(plan(SubscriptionStatusValue.Trial))).toBeNull();
+    expect(describePlanNotice(plan(SubscriptionStatusValue.PastDue, false))).toBeNull();
+    expect(describePlanNotice(undefined)).toBeNull();
   });
 });

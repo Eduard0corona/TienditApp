@@ -190,7 +190,7 @@ export default function KitchenBoard() {
 
   return (
     <>
-      <PageTitle title="Cocina" subtitle="Operación" />
+      <PageTitle title="Cocina" />
 
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted small" aria-live="polite">
@@ -292,24 +292,15 @@ export default function KitchenBoard() {
 
                     <KitchenItems items={order.items} />
 
-                    <div className="d-flex gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-primary flex-fill"
-                        onClick={() => void handleStart(order.id)}
-                        disabled={isProcessing || isPreparing}
-                      >
-                        {isPreparing ? 'Preparando' : 'Iniciar'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-success flex-fill"
-                        onClick={() => void handleReady(order.id)}
-                        disabled={isProcessing}
-                      >
-                        Lista
-                      </button>
-                    </div>
+                    {/* Only the next step, as in the rounds of a table: the chip above already says where it is. */}
+                    <button
+                      type="button"
+                      className={`btn w-100 ${isPreparing ? 'btn-success' : 'btn-primary'}`}
+                      onClick={() => void (isPreparing ? handleReady(order.id) : handleStart(order.id))}
+                      disabled={isProcessing}
+                    >
+                      {isPreparing ? 'Lista' : 'Iniciar'}
+                    </button>
                   </div>
                 </div>
               </div>

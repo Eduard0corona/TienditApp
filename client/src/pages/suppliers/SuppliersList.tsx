@@ -9,7 +9,7 @@ import { getApiErrorMessage } from '../../api/errors';
 const COLUMNS = [
   { header: 'Proveedor' },
   { header: 'Contacto' },
-  { header: 'Email / Teléfono' },
+  { header: 'Correo / Teléfono' },
   { header: 'Estado', className: 'text-center' },
   { header: 'Acciones', className: 'text-center' },
 ];
@@ -151,7 +151,7 @@ export default function SuppliersList() {
 
   return (
     <>
-      <PageTitle title="Proveedores" subtitle="Compras" />
+      <PageTitle title="Proveedores" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">

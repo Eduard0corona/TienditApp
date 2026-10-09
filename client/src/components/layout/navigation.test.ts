@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TenantCapability, type UserProfileDto } from '../../types';
 import { getAccess } from '../../utils/access';
-import { findNavSection, getAllowedNavGroups, getAllowedPages, getNavEntryPath, getSectionTabs, isNavSection } from './navigation';
+import { getAllowedNavGroups, getAllowedPages, getNavEntryPath, getSectionTabs, isNavSection, showsPlanNotice } from './navigation';
 
 const RESTAURANT = TenantCapability.Food | TenantCapability.Inventory | TenantCapability.Kitchen | TenantCapability.Retail;
 const EVERYTHING = RESTAURANT | TenantCapability.Service | TenantCapability.Appointments;
@@ -64,9 +64,11 @@ describe('navigation', () => {
   });
 
   it('tells the catalog of services from the workshop board', () => {
-    expect(findNavSection('/services')?.label).toBe('Catálogo');
-    expect(findNavSection('/services/board')).toBeNull();
-    expect(findNavSection('/products/42/edit')?.label).toBe('Catálogo');
+    const owner = getAccess(user('TENANT_ADMIN'), EVERYTHING);
+
+    expect(getSectionTabs('/services', owner, EVERYTHING)?.label).toBe('Catálogo');
+    expect(getSectionTabs('/services/board', owner, EVERYTHING)).toBeNull();
+    expect(getSectionTabs('/products/42/edit', owner, EVERYTHING)?.label).toBe('Catálogo');
   });
 
   it('lets the global search reach every page, inside sections too', () => {
@@ -75,5 +77,21 @@ describe('navigation', () => {
     expect(pages).toEqual(expect.arrayContaining(['/sell', '/purchases', '/suppliers', '/campaigns', '/settings/whatsapp', '/audit']));
     // Without the services module there is no services catalog to go to.
     expect(pages).not.toContain('/services');
+  });
+});
+
+describe('plan notice', () => {
+  it('shows in full where the owner looks after the business, not where the team works', () => {
+    expect(showsPlanNotice('/dashboard')).toBe(true);
+    // Every page of Configuración, whatever its path.
+    for (const settingsPage of ['/branches', '/employees', '/settings/whatsapp', '/ai-agent', '/audit', '/setup']) {
+      expect(showsPlanNotice(settingsPage)).toBe(true);
+    }
+    // Mi negocio says it in its plan card.
+    expect(showsPlanNotice('/settings/business')).toBe(false);
+    for (const workScreen of ['/sell', '/tables', '/kitchen', '/orders', '/cash', '/inventory', '/products', '/platform']) {
+      expect(showsPlanNotice(workScreen)).toBe(false);
+    }
+    expect(showsPlanNotice('/settings-old')).toBe(false);
   });
 });

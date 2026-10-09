@@ -187,7 +187,7 @@ export default function BranchesList() {
 
   return (
     <>
-      <PageTitle title="Sucursales" subtitle="Configuración" />
+      <PageTitle title="Sucursales" />
 
       <div className="card">
         <div className="card-body">
