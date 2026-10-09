@@ -29,13 +29,14 @@ const entryLabels = (role: string, permissions: string[], capabilities: number) 
     .flatMap((group) => group.entries.map((entry) => entry.label));
 
 describe('navigation', () => {
-  it('shows management as four entries and configuration as one', () => {
+  it('shows management in a few entries and configuration as one', () => {
     const owner = getAllowedNavGroups(getAccess(user('TENANT_ADMIN'), EVERYTHING), EVERYTHING);
     const management = owner.find((group) => group.title === 'Gestión')!;
 
-    expect(management.entries.map((entry) => entry.label)).toEqual(['Catálogo', 'Inventario', 'Clientes', 'Reportes', 'Configuración']);
-    // The diagnosis counted 22 entries: an owner with every module now has the work of the day plus five.
-    expect(owner.flatMap((group) => group.entries).length).toBeLessThanOrEqual(14);
+    expect(management.entries.map((entry) => entry.label)).toEqual(['Catálogo', 'Inventario', 'Compras', 'Clientes', 'Reportes', 'Configuración']);
+    // The diagnosis counted 22 entries: an owner with every module now has the work of the day plus six. Compras is
+    // its own entry since Phase 18, so Inventario keeps a single row of tabs.
+    expect(owner.flatMap((group) => group.entries).length).toBeLessThanOrEqual(15);
   });
 
   it('keeps only the pages a person can open in each section', () => {
@@ -58,7 +59,9 @@ describe('navigation', () => {
     const owner = getAccess(user('TENANT_ADMIN'), RESTAURANT);
     const campaignsOnly = getAccess(user('STAFF', ['ManageCampaigns']), RESTAURANT);
 
-    expect(getSectionTabs('/purchases', owner, RESTAURANT)?.pages.map((page) => page.label)).toEqual(['Existencias', 'Compras', 'Proveedores']);
+    expect(getSectionTabs('/purchases', owner, RESTAURANT)?.pages.map((page) => page.label)).toEqual(['Compras', 'Proveedores']);
+    // Inventario keeps a single row of tabs: its own.
+    expect(getSectionTabs('/inventory', owner, RESTAURANT)).toBeNull();
     expect(getSectionTabs('/campaigns', campaignsOnly, RESTAURANT)).toBeNull();
     expect(getSectionTabs('/sell', owner, RESTAURANT)).toBeNull();
   });

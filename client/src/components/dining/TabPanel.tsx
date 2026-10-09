@@ -34,7 +34,7 @@ interface TabPanelProps {
 
 const ROUND_STATUS: Record<number, { label: string; className: string }> = {
   [KitchenTicketStatus.Pending]: { label: 'En cocina', className: 'ta-chip-new' },
-  [KitchenTicketStatus.Preparing]: { label: 'Preparando', className: 'ta-chip-preparing' },
+  [KitchenTicketStatus.Preparing]: { label: 'En preparación', className: 'ta-chip-preparing' },
   [KitchenTicketStatus.Ready]: { label: 'Lista para llevar', className: 'ta-chip-ready' },
   [KitchenTicketStatus.Served]: { label: 'Servida', className: 'ta-chip-done' },
 };

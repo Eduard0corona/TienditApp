@@ -52,22 +52,22 @@ export default function LocationsTab({ locations, loading, onEdit, onToggleActiv
               {item.isActive ? 'Activa' : 'Inactiva'}
             </span>
           </td>
-          <td className="text-center">
+          <td className="text-center text-nowrap">
             <button
-              className="btn btn-sm btn-soft-primary me-1"
-              title="Editar"
+              type="button"
+              className="btn btn-sm btn-light me-1"
               aria-label={`Editar ${item.name}`}
               onClick={() => onEdit(item)}
             >
-              <i className="ri-pencil-line"></i>
+              Editar
             </button>
             <button
-              className={`btn btn-sm ${item.isActive ? 'btn-soft-warning' : 'btn-soft-success'}`}
-              title={item.isActive ? 'Desactivar' : 'Activar'}
+              type="button"
+              className="btn btn-sm btn-light"
               aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}
               onClick={() => onToggleActive(item)}
             >
-              <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
+              {item.isActive ? 'Desactivar' : 'Activar'}
             </button>
           </td>
         </>

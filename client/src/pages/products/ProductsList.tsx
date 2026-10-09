@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type { ProductDto, CategoryDto, PaginatedList } from '../../types';
@@ -115,48 +115,6 @@ export default function ProductsList() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              {/* Header: action button + filters */}
-              <div className="row mb-2">
-                <div className="col-sm-4">
-                  <Link to="/products/new" className="btn btn-primary mb-2">
-                    <i className="ri-add-line me-1"></i> Nuevo producto
-                  </Link>
-                </div>
-                <div className="col-sm-8">
-                  <div className="d-flex gap-2 justify-content-sm-end flex-wrap">
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterCategory}
-                      onChange={(e) => {
-                        setFilterCategory(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todas las categorías</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterAvailability}
-                      onChange={(e) => {
-                        setFilterAvailability(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todos los estados</option>
-                      <option value="true">Disponible</option>
-                      <option value="false">No disponible</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
               {error && (
                 <div className="alert alert-danger alert-dismissible fade show">
                   {error}
@@ -171,6 +129,48 @@ export default function ProductsList() {
                 loading={loading}
                 emptyMessage="No hay productos registrados."
                 searchPlaceholder="Nombre, SKU o código de barras"
+                filters={(
+                  <>
+                    <DataTableFilter label="Categoría" htmlFor="products-category">
+                      <select
+                        id="products-category"
+                        className="form-select form-select-sm"
+                        value={filterCategory}
+                        onChange={(e) => {
+                          setFilterCategory(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      >
+                        <option value="">Todas</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </DataTableFilter>
+                    <DataTableFilter label="Disponibilidad" htmlFor="products-availability">
+                      <select
+                        id="products-availability"
+                        className="form-select form-select-sm"
+                        value={filterAvailability}
+                        onChange={(e) => {
+                          setFilterAvailability(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      >
+                        <option value="">Todos</option>
+                        <option value="true">Disponible</option>
+                        <option value="false">No disponible</option>
+                      </select>
+                    </DataTableFilter>
+                  </>
+                )}
+                toolbarEnd={(
+                  <Link to="/products/new" className="btn btn-primary btn-sm">
+                    <i className="ri-add-line me-1" aria-hidden="true"></i>Nuevo producto
+                  </Link>
+                )}
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -245,20 +245,21 @@ export default function ProductsList() {
                         />
                       </div>
                     </td>
-                    <td className="text-center">
+                    <td className="text-center text-nowrap">
                       <Link
                         to={`/products/${product.id}/edit`}
-                        className="btn btn-sm btn-soft-primary me-1"
-                        title="Editar"
+                        className="btn btn-sm btn-light me-1"
+                        aria-label={`Editar ${product.name}`}
                       >
-                        <i className="ri-pencil-line"></i>
+                        Editar
                       </Link>
                       <button
-                        className="btn btn-sm btn-soft-danger"
-                        title="Eliminar"
+                        type="button"
+                        className="btn btn-sm btn-light text-danger"
+                        aria-label={`Eliminar ${product.name}`}
                         onClick={() => handleDelete(product.id)}
                       >
-                        <i className="ri-delete-bin-line"></i>
+                        Eliminar
                       </button>
                     </td>
                   </>

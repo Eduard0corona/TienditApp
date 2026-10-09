@@ -65,11 +65,12 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Categorías', path: '/categories', icon: 'ri-list-check-2', area: 'catalog' },
         ],
       },
+      // Inventario has one row of tabs (supplies, stock, movements…); buying from suppliers is its own section.
+      { label: 'Inventario', path: '/inventory', icon: 'ri-archive-drawer-line', area: 'inventory', keywords: 'existencias insumos stock entradas salidas historial kardex recetas ubicaciones alertas' },
       {
-        label: 'Inventario',
-        icon: 'ri-archive-drawer-line',
+        label: 'Compras',
+        icon: 'ri-shopping-cart-2-line',
         pages: [
-          { label: 'Existencias', path: '/inventory', icon: 'ri-archive-drawer-line', area: 'inventory', keywords: 'inventario insumos stock movimientos kardex' },
           { label: 'Compras', path: '/purchases', icon: 'ri-shopping-cart-2-line', area: 'inventory', keywords: 'órdenes de compra' },
           { label: 'Proveedores', path: '/suppliers', icon: 'ri-truck-line', area: 'inventory' },
         ],

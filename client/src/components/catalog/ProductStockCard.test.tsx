@@ -88,7 +88,7 @@ describe('ProductStockCard', () => {
       unitCost: null,
       reorderPoint: 3,
     });
-    expect(await screen.findByText('Punto de reorden: 3')).toBeInTheDocument();
+    expect(await screen.findByText('Pedir al llegar a: 3')).toBeInTheDocument();
   });
 
   it('refuses a fraction of a piece before calling the API', async () => {

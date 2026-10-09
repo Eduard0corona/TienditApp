@@ -183,32 +183,6 @@ export default function CategoriesList() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              <div className="row mb-2">
-                <div className="col-sm-5">
-                  <h4 className="header-title mt-0">Categorías</h4>
-                </div>
-                <div className="col-sm-7">
-                  <div className="text-sm-end d-flex flex-wrap align-items-center justify-content-sm-end gap-2">
-                    <div className="form-check form-switch mb-0 me-2">
-                      <input
-                        id="categories-show-archived"
-                        type="checkbox"
-                        className="form-check-input"
-                        checked={showArchived}
-                        onChange={(event) => setShowArchived(event.target.checked)}
-                      />
-                      <label className="form-check-label" htmlFor="categories-show-archived">Mostrar archivadas</label>
-                    </div>
-                    <button className="btn btn-soft-primary" onClick={openTemplatesModal}>
-                      <i className="ri-layout-grid-line me-1"></i> Instalar plantilla
-                    </button>
-                    <button className="btn btn-primary" onClick={openCreateModal}>
-                      <i className="ri-add-line me-1"></i> Nueva categoría
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {categoriesQuery.isError && (
                 <div className="alert alert-danger">Error al cargar las categorías.</div>
               )}
@@ -233,6 +207,30 @@ export default function CategoriesList() {
                 keyExtractor={(cat) => cat.id}
                 loading={categoriesQuery.isLoading}
                 emptyMessage={showArchived ? 'No hay categorías registradas.' : 'No hay categorías activas.'}
+                searchPlaceholder="Nombre o descripción"
+                filters={(
+                  <div className="form-check form-switch mb-1">
+                    <input
+                      id="categories-show-archived"
+                      type="checkbox"
+                      role="switch"
+                      className="form-check-input"
+                      checked={showArchived}
+                      onChange={(event) => setShowArchived(event.target.checked)}
+                    />
+                    <label className="form-check-label" htmlFor="categories-show-archived">Mostrar archivadas</label>
+                  </div>
+                )}
+                toolbarEnd={(
+                  <>
+                    <button type="button" className="btn btn-light btn-sm" onClick={openTemplatesModal}>
+                      <i className="ri-layout-grid-line me-1" aria-hidden="true"></i>Instalar plantilla
+                    </button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={openCreateModal}>
+                      <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva categoría
+                    </button>
+                  </>
+                )}
                 searchFilter={(cat, search) =>
                   cat.name.toLowerCase().includes(search) ||
                   (cat.description || '').toLowerCase().includes(search)
@@ -250,21 +248,21 @@ export default function CategoriesList() {
                     </td>
                     <td className="text-center text-nowrap">
                       <button
-                        className="btn btn-sm btn-soft-primary me-1"
-                        title="Editar"
+                        type="button"
+                        className="btn btn-sm btn-light me-1"
                         aria-label={`Editar ${cat.name}`}
                         onClick={() => openEditModal(cat)}
                       >
-                        <i className="ri-pencil-line"></i>
+                        Editar
                       </button>
                       {cat.isActive ? (
                         <button
-                          className="btn btn-sm btn-soft-warning"
-                          title="Archivar"
+                          type="button"
+                          className="btn btn-sm btn-light"
                           aria-label={`Archivar ${cat.name}`}
                           onClick={() => handleArchive(cat)}
                         >
-                          <i className="ri-archive-line"></i>
+                          Archivar
                         </button>
                       ) : (
                         <button

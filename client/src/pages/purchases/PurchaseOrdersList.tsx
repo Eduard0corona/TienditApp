@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { purchaseOrdersApi } from '../../api/purchaseOrdersApi';
 import { suppliersApi } from '../../api/suppliersApi';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -245,37 +245,37 @@ export default function PurchaseOrdersList() {
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <div className="d-flex align-items-center gap-2">
-              <label htmlFor="purchaseorderslist-estado" className="form-label mb-0">Estado</label>
-              <select id="purchaseorderslist-estado"
-                className="form-select form-select-sm"
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPageNumber(1);
-                }}
-              >
-                <option value="">Todos</option>
-                <option value={PurchaseOrderStatusConst.Draft}>Borrador</option>
-                <option value={PurchaseOrderStatusConst.Sent}>Enviada</option>
-                <option value={PurchaseOrderStatusConst.PartiallyReceived}>Recepción parcial</option>
-                <option value={PurchaseOrderStatusConst.Received}>Recibida</option>
-                <option value={PurchaseOrderStatusConst.Closed}>Cerrada sin el resto</option>
-                <option value={PurchaseOrderStatusConst.Cancelled}>Cancelada</option>
-              </select>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-              <i className="ri-add-line me-1"></i>Nueva compra
-            </button>
-          </div>
-
           <DataTable
             data={orders.items}
             columns={COLUMNS}
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay compras registradas."
+            filters={(
+              <DataTableFilter label="Estado" htmlFor="purchaseorderslist-estado">
+                <select id="purchaseorderslist-estado"
+                  className="form-select form-select-sm"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPageNumber(1);
+                  }}
+                >
+                  <option value="">Todos</option>
+                  <option value={PurchaseOrderStatusConst.Draft}>Borrador</option>
+                  <option value={PurchaseOrderStatusConst.Sent}>Enviada</option>
+                  <option value={PurchaseOrderStatusConst.PartiallyReceived}>Recepción parcial</option>
+                  <option value={PurchaseOrderStatusConst.Received}>Recibida</option>
+                  <option value={PurchaseOrderStatusConst.Closed}>Cerrada sin el resto</option>
+                  <option value={PurchaseOrderStatusConst.Cancelled}>Cancelada</option>
+                </select>
+              </DataTableFilter>
+            )}
+            toolbarEnd={(
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+                <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva compra
+              </button>
+            )}
             serverSide={{
               totalCount: orders.totalCount,
               page: pageNumber,
@@ -307,19 +307,22 @@ export default function PurchaseOrdersList() {
                 <td className="text-end">{formatMoney(item.total)}</td>
                 <td className="text-center text-nowrap">
                   <button
-                    className="btn btn-sm btn-soft-primary me-1"
+                    type="button"
+                    className="btn btn-sm btn-light me-1"
                     aria-label={`Ver ${item.orderNumber}`}
                     onClick={() => setDetail({ id: item.id, mode: 'view' })}
                   >
-                    <i className="ri-eye-line"></i>
+                    Ver
                   </button>
                   {(item.status === PurchaseOrderStatusConst.Sent ||
                     item.status === PurchaseOrderStatusConst.PartiallyReceived) && (
                     <button
+                      type="button"
                       className="btn btn-sm btn-soft-success"
+                      aria-label={`Recibir ${item.orderNumber}`}
                       onClick={() => setDetail({ id: item.id, mode: 'receive' })}
                     >
-                      <i className="ri-download-2-line me-1"></i>Recibir
+                      <i className="ri-download-2-line me-1" aria-hidden="true"></i>Recibir
                     </button>
                   )}
                 </td>

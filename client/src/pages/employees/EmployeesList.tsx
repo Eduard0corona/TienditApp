@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import PageTitle from '../../components/common/PageTitle';
 import EmployeeFormModal from '../../components/employees/EmployeeFormModal';
 import InvitationShare from '../../components/employees/InvitationShare';
@@ -128,26 +128,6 @@ export default function EmployeesList() {
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex flex-wrap justify-content-between gap-2 mb-2">
-            <button type="button" className="btn btn-primary" onClick={() => setEditing('new')} disabled={!presets.data}>
-              <i className="ri-user-add-line me-1" aria-hidden="true"></i>Invitar persona
-            </button>
-            <select
-              className="form-select form-select-sm w-auto"
-              aria-label="Estado"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Todos</option>
-              <option value="Active">Activos</option>
-              <option value="Invited">Invitación pendiente</option>
-              <option value="Disabled">Desactivados</option>
-            </select>
-          </div>
-
           {employees.isError && <div className="alert alert-danger">No se pudo cargar el equipo.</div>}
 
           <DataTable
@@ -157,6 +137,29 @@ export default function EmployeesList() {
             loading={employees.isLoading}
             emptyMessage="Nadie en el equipo con ese filtro."
             searchPlaceholder="Nombre, correo o teléfono"
+            filters={(
+              <DataTableFilter label="Estado" htmlFor="employees-status">
+                <select
+                  id="employees-status"
+                  className="form-select form-select-sm"
+                  value={status}
+                  onChange={(event) => {
+                    setStatus(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Todos</option>
+                  <option value="Active">Activos</option>
+                  <option value="Invited">Invitación pendiente</option>
+                  <option value="Disabled">Desactivados</option>
+                </select>
+              </DataTableFilter>
+            )}
+            toolbarEnd={(
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setEditing('new')} disabled={!presets.data}>
+                <i className="ri-user-add-line me-1" aria-hidden="true"></i>Invitar persona
+              </button>
+            )}
             serverSide={{
               totalCount: data?.totalCount ?? 0,
               page,
@@ -204,23 +207,22 @@ export default function EmployeesList() {
                     )}
                     <button
                       type="button"
-                      className="btn btn-sm btn-soft-primary me-1"
+                      className="btn btn-sm btn-light me-1"
                       aria-label={`Editar a ${employee.firstName} ${employee.lastName}`}
                       onClick={() => setEditing(employee)}
                       disabled={!presets.data}
                     >
-                      <i className="ri-pencil-line" aria-hidden="true"></i>
+                      Editar
                     </button>
                     {!isOwner && (
                       <button
                         type="button"
-                        className="btn btn-sm btn-soft-secondary"
+                        className="btn btn-sm btn-light"
                         disabled={busy}
-                        aria-label={`${employee.status === 'Disabled' ? 'Activar' : 'Quitar acceso a'} ${employee.firstName} ${employee.lastName}`}
-                        title={employee.status === 'Disabled' ? 'Activar' : employee.status === 'Invited' ? 'Cancelar invitación' : 'Desactivar'}
+                        aria-label={`${employee.status === 'Disabled' ? 'Activar a' : employee.status === 'Invited' ? 'Cancelar invitación de' : 'Desactivar a'} ${employee.firstName} ${employee.lastName}`}
                         onClick={() => void setActive(employee, employee.status === 'Disabled')}
                       >
-                        <i className={employee.status === 'Disabled' ? 'ri-play-line' : 'ri-pause-line'} aria-hidden="true"></i>
+                        {employee.status === 'Disabled' ? 'Activar' : employee.status === 'Invited' ? 'Cancelar invitación' : 'Desactivar'}
                       </button>
                     )}
                   </td>

@@ -420,9 +420,10 @@ export default function WhatsAppSettings() {
                     <button
                       className="btn btn-outline-secondary"
                       type="button"
+                      aria-label="Copiar la URL de devolución de llamada"
                       onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/v1/whatsapp/webhook`)}
                     >
-                      <i className="ri-clipboard-line"></i>
+                      <i className="ri-clipboard-line" aria-hidden="true"></i>
                     </button>
                   </div>
                   <small className="text-muted">
@@ -442,9 +443,10 @@ export default function WhatsAppSettings() {
                     <button
                       className="btn btn-outline-secondary"
                       type="button"
+                      aria-label="Copiar el token de verificación"
                       onClick={() => navigator.clipboard.writeText(config.verifyToken!)}
                     >
-                      <i className="ri-clipboard-line"></i>
+                      <i className="ri-clipboard-line" aria-hidden="true"></i>
                     </button>
                   </div>
                   <small className="text-muted">Token de verificación para el webhook de Meta</small>

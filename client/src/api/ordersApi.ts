@@ -4,6 +4,7 @@ import type {
   CancelTabItemRequest,
   CreateOrderItemRequest,
   CreateOrderRequest,
+  OrderChannel,
   OrderDto,
   OrderStatus,
   ServiceOrderPieceStatus,
@@ -18,6 +19,8 @@ export const ordersApi = {
   getAll: (params?: {
     orderType?: OrderType;
     status?: OrderStatus;
+    /** The counter, a WhatsApp conversation or the online menu. */
+    channel?: OrderChannel;
     fromDate?: string;
     toDate?: string;
     /** Folio, customer name or phone digits; searched on the server. */

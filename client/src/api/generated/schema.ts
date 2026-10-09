@@ -4829,6 +4829,7 @@ export interface paths {
                 query?: {
                     orderType?: components["schemas"]["OrderType"];
                     status?: components["schemas"]["OrderStatus"];
+                    channel?: components["schemas"]["OrderChannel"];
                     fromDate?: string;
                     toDate?: string;
                     search?: string;

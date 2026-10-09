@@ -26,6 +26,7 @@ public class OrdersController : ControllerBase
     public async Task<ActionResult<PaginatedList<OrderDto>>> GetAll(
         [FromQuery] OrderType? orderType,
         [FromQuery] OrderStatus? status,
+        [FromQuery] OrderChannel? channel,
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
@@ -37,6 +38,7 @@ public class OrdersController : ControllerBase
         {
             OrderTypeFilter = orderType,
             StatusFilter = status,
+            ChannelFilter = channel,
             FromDate = fromDate,
             ToDate = toDate,
             Search = search,

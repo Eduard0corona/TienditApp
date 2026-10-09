@@ -23,9 +23,9 @@ const TABS: Array<{ key: InventoryTab; label: string }> = [
   { key: 'supplies', label: 'Insumos' },
   { key: 'stocks', label: 'Existencias' },
   { key: 'movements', label: 'Entradas y salidas' },
-  { key: 'locations', label: 'Ubicaciones' },
+  { key: 'kardex', label: 'Historial por insumo' },
   { key: 'recipes', label: 'Recetas' },
-  { key: 'kardex', label: 'Kardex' },
+  { key: 'locations', label: 'Ubicaciones' },
   { key: 'alerts', label: 'Alertas' },
 ];
 
@@ -204,56 +204,56 @@ export default function InventoryManagement() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                <ul className="nav nav-tabs nav-bordered mb-0" role="tablist">
+              {/* The only row of tabs of Inventario, styled like a menu section's, with the action of the open tab beside it. */}
+              <div className="inventory-header">
+                <div className="section-tabs" role="tablist" aria-label="Partes del inventario">
                   {TABS.map((tab) => (
-                    <li key={tab.key} className="nav-item" role="presentation">
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeTab === tab.key}
-                        className={`nav-link ${activeTab === tab.key ? 'active' : ''}`}
-                        onClick={() => setActiveTab(tab.key)}
-                      >
-                        {tab.label}
-                      </button>
-                    </li>
+                    <button
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTab === tab.key}
+                      className={`section-tab${activeTab === tab.key ? ' active' : ''}`}
+                      onClick={() => setActiveTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
                   ))}
-                </ul>
+                </div>
 
                 {activeTab === 'supplies' && (
-                  <button className="btn btn-primary btn-sm" onClick={() => supplyDialog.show()}>
-                    <i className="ri-add-line me-1"></i>Nuevo insumo
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => supplyDialog.show()}>
+                    <i className="ri-add-line me-1" aria-hidden="true"></i>Nuevo insumo
                   </button>
                 )}
                 {activeTab === 'movements' && (
-                  <button className="btn btn-primary btn-sm" onClick={() => movementDialog.show()}>
-                    <i className="ri-exchange-funds-line me-1"></i>Registrar movimiento
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => movementDialog.show()}>
+                    <i className="ri-exchange-funds-line me-1" aria-hidden="true"></i>Registrar movimiento
                   </button>
                 )}
                 {activeTab === 'locations' && (
-                  <button className="btn btn-primary btn-sm" onClick={() => locationDialog.show()}>
-                    <i className="ri-add-line me-1"></i>Nueva ubicación
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => locationDialog.show()}>
+                    <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva ubicación
                   </button>
                 )}
                 {activeTab === 'recipes' && (
                   <div className="d-flex align-items-center gap-2">
-                    <button className="btn btn-light btn-sm" onClick={recipe.reload}>
-                      <i className="ri-refresh-line me-1"></i>Recargar
+                    <button type="button" className="btn btn-light btn-sm" onClick={recipe.reload}>
+                      <i className="ri-refresh-line me-1" aria-hidden="true"></i>Recargar
                     </button>
-                    <button className="btn btn-primary btn-sm" onClick={recipe.save} disabled={recipe.saving || recipe.loading}>
-                      <i className="ri-save-line me-1"></i>{recipe.saving ? 'Guardando...' : 'Guardar receta'}
+                    <button type="button" className="btn btn-primary btn-sm" onClick={recipe.save} disabled={recipe.saving || recipe.loading}>
+                      <i className="ri-save-line me-1" aria-hidden="true"></i>{recipe.saving ? 'Guardando…' : 'Guardar receta'}
                     </button>
                   </div>
                 )}
                 {activeTab === 'kardex' && (
-                  <button className="btn btn-light btn-sm" onClick={kardex.reload} disabled={kardex.loading}>
-                    <i className="ri-refresh-line me-1"></i>Actualizar
+                  <button type="button" className="btn btn-light btn-sm" onClick={kardex.reload} disabled={kardex.loading}>
+                    <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
                   </button>
                 )}
                 {activeTab === 'alerts' && (
-                  <button className="btn btn-light btn-sm" onClick={loadAlerts} disabled={alertsLoading}>
-                    <i className="ri-refresh-line me-1"></i>Actualizar
+                  <button type="button" className="btn btn-light btn-sm" onClick={loadAlerts} disabled={alertsLoading}>
+                    <i className="ri-refresh-line me-1" aria-hidden="true"></i>Actualizar
                   </button>
                 )}
               </div>

@@ -6,7 +6,7 @@ const COLUMNS = [
   { header: 'Insumo' },
   { header: 'Ubicación' },
   { header: 'Existencia', className: 'text-end' },
-  { header: 'Reorden', className: 'text-end' },
+  { header: 'Pedir al llegar a', className: 'text-end' },
   { header: 'Déficit', className: 'text-end' },
   { header: 'Estado', className: 'text-center' },
 ];
@@ -24,7 +24,7 @@ export default function AlertsTab({ alerts, loading }: AlertsTabProps) {
         <div className="col-md-3 mb-2">
           <div className="card border-danger h-100 mb-0">
             <div className="card-body py-2">
-              <div className="text-muted small">Sin stock</div>
+              <div className="text-muted small">Agotado</div>
               <div className="h3 mb-0">{alerts.outOfStockCount}</div>
             </div>
           </div>

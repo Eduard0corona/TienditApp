@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { auditApi } from '../../api/auditApi';
 import type { AuditLogDto, PaginatedList } from '../../types';
 import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
@@ -74,72 +74,6 @@ export default function AuditLogs() {
 
       <div className="card">
         <div className="card-body">
-          <div className="row g-2 mb-3">
-            <div className="col-md-3">
-              <label htmlFor="auditlogs-entidad" className="form-label">Entidad</label>
-              <input id="auditlogs-entidad"
-                type="text"
-                className="form-control form-control-sm"
-                value={entityName}
-                onChange={(e) => {
-                  setEntityName(e.target.value);
-                  setPageNumber(1);
-                }}
-              />
-            </div>
-            <div className="col-md-3">
-              <label htmlFor="auditlogs-accion" className="form-label">Acción</label>
-              <input id="auditlogs-accion"
-                type="text"
-                className="form-control form-control-sm"
-                value={action}
-                onChange={(e) => {
-                  setAction(e.target.value);
-                  setPageNumber(1);
-                }}
-              />
-            </div>
-            <div className="col-md-2">
-              <label htmlFor="auditlogs-desde" className="form-label">Desde</label>
-              <input id="auditlogs-desde"
-                type="date"
-                className="form-control form-control-sm"
-                value={fromDate}
-                onChange={(e) => {
-                  setFromDate(e.target.value);
-                  setPageNumber(1);
-                }}
-              />
-            </div>
-            <div className="col-md-2">
-              <label htmlFor="auditlogs-hasta" className="form-label">Hasta</label>
-              <input id="auditlogs-hasta"
-                type="date"
-                className="form-control form-control-sm"
-                value={toDate}
-                onChange={(e) => {
-                  setToDate(e.target.value);
-                  setPageNumber(1);
-                }}
-              />
-            </div>
-            <div className="col-md-2 d-flex align-items-end">
-              <button
-                type="button"
-                className="btn btn-light btn-sm w-100"
-                onClick={() => {
-                  setEntityName('');
-                  setAction('');
-                  setFromDate('');
-                  setToDate('');
-                  setPageNumber(1);
-                }}
-              >
-                Limpiar
-              </button>
-            </div>
-          </div>
-
           {error && (
             <div className="alert alert-danger alert-dismissible fade show">
               {error}
@@ -153,6 +87,71 @@ export default function AuditLogs() {
             keyExtractor={(item) => item.id}
             loading={loading}
             emptyMessage="No hay actividad registrada con estos filtros."
+            filters={(
+              <>
+                <DataTableFilter label="Entidad" htmlFor="auditlogs-entidad">
+                  <input
+                    id="auditlogs-entidad"
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={entityName}
+                    onChange={(e) => {
+                      setEntityName(e.target.value);
+                      setPageNumber(1);
+                    }}
+                  />
+                </DataTableFilter>
+                <DataTableFilter label="Acción" htmlFor="auditlogs-accion">
+                  <input
+                    id="auditlogs-accion"
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={action}
+                    onChange={(e) => {
+                      setAction(e.target.value);
+                      setPageNumber(1);
+                    }}
+                  />
+                </DataTableFilter>
+                <DataTableFilter label="Desde" htmlFor="auditlogs-desde">
+                  <input
+                    id="auditlogs-desde"
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={fromDate}
+                    onChange={(e) => {
+                      setFromDate(e.target.value);
+                      setPageNumber(1);
+                    }}
+                  />
+                </DataTableFilter>
+                <DataTableFilter label="Hasta" htmlFor="auditlogs-hasta">
+                  <input
+                    id="auditlogs-hasta"
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={toDate}
+                    onChange={(e) => {
+                      setToDate(e.target.value);
+                      setPageNumber(1);
+                    }}
+                  />
+                </DataTableFilter>
+                <button
+                  type="button"
+                  className="btn btn-light btn-sm"
+                  onClick={() => {
+                    setEntityName('');
+                    setAction('');
+                    setFromDate('');
+                    setToDate('');
+                    setPageNumber(1);
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              </>
+            )}
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,

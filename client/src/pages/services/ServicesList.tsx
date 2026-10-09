@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { productsApi } from '../../api/productsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import type {
@@ -294,47 +294,6 @@ export default function ServicesList() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              <div className="row mb-2">
-                <div className="col-sm-4">
-                  <button className="btn btn-primary mb-2" onClick={openCreateModal}>
-                    <i className="ri-add-line me-1"></i> Nuevo servicio
-                  </button>
-                </div>
-                <div className="col-sm-8">
-                  <div className="d-flex gap-2 justify-content-sm-end flex-wrap">
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterCategory}
-                      onChange={(e) => {
-                        setFilterCategory(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todas las categorías</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterAvailability}
-                      onChange={(e) => {
-                        setFilterAvailability(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todos los estados</option>
-                      <option value="true">Disponible</option>
-                      <option value="false">No disponible</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
               {error && (
                 <div className="alert alert-danger alert-dismissible fade show">
                   {error}
@@ -349,6 +308,48 @@ export default function ServicesList() {
                 loading={loading}
                 emptyMessage="No hay servicios registrados."
                 searchPlaceholder="Nombre del servicio"
+                filters={(
+                  <>
+                    <DataTableFilter label="Categoría" htmlFor="services-category">
+                      <select
+                        id="services-category"
+                        className="form-select form-select-sm"
+                        value={filterCategory}
+                        onChange={(e) => {
+                          setFilterCategory(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      >
+                        <option value="">Todas</option>
+                        {categories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </DataTableFilter>
+                    <DataTableFilter label="Disponibilidad" htmlFor="services-availability">
+                      <select
+                        id="services-availability"
+                        className="form-select form-select-sm"
+                        value={filterAvailability}
+                        onChange={(e) => {
+                          setFilterAvailability(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      >
+                        <option value="">Todos</option>
+                        <option value="true">Disponible</option>
+                        <option value="false">No disponible</option>
+                      </select>
+                    </DataTableFilter>
+                  </>
+                )}
+                toolbarEnd={(
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openCreateModal}>
+                    <i className="ri-add-line me-1" aria-hidden="true"></i>Nuevo servicio
+                  </button>
+                )}
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -397,20 +398,22 @@ export default function ServicesList() {
                         />
                       </div>
                     </td>
-                    <td className="text-center">
+                    <td className="text-center text-nowrap">
                       <button
-                        className="btn btn-sm btn-soft-primary me-1"
-                        title="Editar"
+                        type="button"
+                        className="btn btn-sm btn-light me-1"
+                        aria-label={`Editar ${service.name}`}
                         onClick={() => openEditModal(service)}
                       >
-                        <i className="ri-pencil-line"></i>
+                        Editar
                       </button>
                       <button
-                        className="btn btn-sm btn-soft-danger"
-                        title="Eliminar"
+                        type="button"
+                        className="btn btn-sm btn-light text-danger"
+                        aria-label={`Eliminar ${service.name}`}
                         onClick={() => handleDelete(service.id)}
                       >
-                        <i className="ri-delete-bin-line"></i>
+                        Eliminar
                       </button>
                     </td>
                   </>

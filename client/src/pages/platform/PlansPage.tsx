@@ -170,7 +170,7 @@ export default function PlansPage() {
                       <td className="text-end">
                         <button type="button" className="btn btn-sm btn-light" onClick={() => { setForm(toForm(plan)); setError(''); }}
                           aria-label={`Editar ${plan.name}`}>
-                          <i className="ri-pencil-line" aria-hidden="true"></i>
+                          Editar
                         </button>
                       </td>
                     </tr>

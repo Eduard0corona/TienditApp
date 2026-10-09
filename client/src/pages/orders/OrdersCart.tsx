@@ -736,10 +736,11 @@ export default function OrdersCart() {
                         <button
                           type="button"
                           className="btn btn-sm btn-soft-danger"
+                          aria-label={item.label ? `Quitar ${item.label}` : 'Quitar este punto'}
                           onClick={() => removeChecklistItem(item.id)}
                           disabled={serviceChecklist.length <= 1}
                         >
-                          <i className="ri-delete-bin-line"></i>
+                          <i className="ri-delete-bin-line" aria-hidden="true"></i>
                         </button>
                       </div>
                     ))}
@@ -940,10 +941,11 @@ export default function OrdersCart() {
                           <button
                             type="button"
                             className="btn btn-sm btn-soft-danger"
+                            aria-label={piece.itemName ? `Quitar ${piece.itemName}` : `Quitar la pieza ${index + 1}`}
                             onClick={() => removeServicePiece(index)}
                             disabled={servicePieces.length <= 1}
                           >
-                            <i className="ri-delete-bin-line"></i>
+                            <i className="ri-delete-bin-line" aria-hidden="true"></i>
                           </button>
                         </div>
                       </div>
@@ -1016,9 +1018,10 @@ export default function OrdersCart() {
                               <button
                                 type="button"
                                 className="btn btn-sm btn-soft-danger"
+                                aria-label={`Quitar ${line.productName}`}
                                 onClick={() => removeLine(line.productId)}
                               >
-                                <i className="ri-delete-bin-line"></i>
+                                <i className="ri-delete-bin-line" aria-hidden="true"></i>
                               </button>
                             </td>
                           </tr>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { branchesApi, type Branch } from '../../api/branchesApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -191,25 +191,6 @@ export default function BranchesList() {
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <div className="d-flex align-items-center gap-2">
-              <label className="form-label mb-0" htmlFor="branches-filter">Mostrar</label>
-              <select
-                id="branches-filter"
-                className="form-select form-select-sm"
-                value={activeFilter}
-                onChange={(event) => setActiveFilter(event.target.value as '' | 'true' | 'false')}
-              >
-                <option value="">Todas</option>
-                <option value="true">Activas</option>
-                <option value="false">Inactivas</option>
-              </select>
-            </div>
-            <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
-              <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva sucursal
-            </button>
-          </div>
-
           {branches.isError && (
             <div className="alert alert-danger">{getApiErrorMessage(branches.error, 'No se pudieron cargar las sucursales.')}</div>
           )}
@@ -220,6 +201,26 @@ export default function BranchesList() {
             keyExtractor={(item) => item.id}
             loading={branches.isLoading}
             emptyMessage="No hay sucursales."
+            searchPlaceholder="Nombre, clave o ciudad"
+            filters={(
+              <DataTableFilter label="Estado" htmlFor="branches-filter">
+                <select
+                  id="branches-filter"
+                  className="form-select form-select-sm"
+                  value={activeFilter}
+                  onChange={(event) => setActiveFilter(event.target.value as '' | 'true' | 'false')}
+                >
+                  <option value="">Todas</option>
+                  <option value="true">Activas</option>
+                  <option value="false">Inactivas</option>
+                </select>
+              </DataTableFilter>
+            )}
+            toolbarEnd={(
+              <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
+                <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva sucursal
+              </button>
+            )}
             searchFilter={(item, search) =>
               [item.name, item.code, item.city, item.state, item.contactName]
                 .some((value) => (value ?? '').toLowerCase().includes(search))
@@ -248,18 +249,19 @@ export default function BranchesList() {
                 </td>
                 <td className="text-end text-nowrap">
                   {!item.isDefault && item.isActive && (
-                    <button type="button" className="btn btn-sm btn-light me-1" onClick={() => void makeDefault(item)}>
+                    <button type="button" className="btn btn-sm btn-light me-1" onClick={() => void makeDefault(item)}
+                      aria-label={`Hacer principal ${item.name}`}>
                       Hacer principal
                     </button>
                   )}
                   <button type="button" className="btn btn-sm btn-light me-1" onClick={() => openEdit(item)}
                     aria-label={`Editar ${item.name}`}>
-                    <i className="ri-pencil-line" aria-hidden="true"></i>
+                    Editar
                   </button>
                   {!item.isDefault && (
                     <button type="button" className="btn btn-sm btn-light" onClick={() => void toggleActive(item)}
                       aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}>
-                      <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'} aria-hidden="true"></i>
+                      {item.isActive ? 'Desactivar' : 'Activar'}
                     </button>
                   )}
                 </td>
