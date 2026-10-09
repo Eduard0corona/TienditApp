@@ -15,7 +15,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// </summary>
 public class BusinessThemeSqlServerTests
 {
-    private const string BeforeTheme = "20261008074715_StopMappingRequireOpenCashSession";
+    // The migration right before AddBusinessTheme, where its rollback.sql takes the database.
+    private const string BeforeTheme = "20261009041644_StopMappingRequireOpenCashSession";
 
     [SqlServerFact]
     public async Task Theme_ShouldDefaultToNopal_AndRollBackWithoutTouchingTheRest()

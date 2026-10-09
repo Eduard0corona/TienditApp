@@ -1,27 +1,29 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
 -- Generado el 2026-10-09 con `dotnet ef migrations script 0 20261009043433_AddBusinessTheme --idempotent`
--- (EF Core 10.0.12) desde la rama claude/amazing-babbage-175ks9 (Fase 16). Debajo del bloque
--- SET, el contenido es el que genera EF, sin cambios.
+-- (EF Core 10.0.12) desde la rama claude/amazing-babbage-175ks9 (Fase 16, con master y la PR #47).
+-- Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
--- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base
--- con 20261006201255_DropStockAndLoyaltyColumns (producción desde la Fase 13; la Fase 14 no tuvo
--- migraciones) ejecuta las tres que faltan; si ya aplicaste el apply.sql de la Fase 15
--- (database/production/20261008074715_StopMappingRequireOpenCashSession), solo la última:
+-- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. Sobre la Fase 13
+-- (20261006201255_DropStockAndLoyaltyColumns) aplica las que falten de estas cuatro:
 --   * 20261008072542_AddTabItemCancellations (Fase 15): agrega a [OrderItems]
 --     [CancelledQuantity] y [CancelledAmount], sin nulos y con 0 por omisión, y crea
 --     [OrderItemCancellations]. Solo agrega.
---   * 20261008074715_StopMappingRequireOpenCashSession (Fase 15): no cambia el esquema ni los datos; la
---     versión nueva deja de mapear [TenantSettings].[RequireOpenCashSession].
+--   * 20261008074715_StopMappingRequireOpenCashSession (Fase 15) y
+--     20261009041644_StopMappingRequireOpenCashSession (PR #47, ya en master): no cambian el esquema ni los
+--     datos. Las dos dejan de mapear [TenantSettings].[RequireOpenCashSession]; quedan las dos
+--     porque una base puede tener registrada cualquiera.
 --   * 20261009043433_AddBusinessTheme (Fase 16): agrega [TenantSettings].[Theme] (int, sin nulos, 0 por
 --     omisión): el tema de colores que elige el dueño. 0 es Nopal, el verde de TienditApp, así que
 --     ningún negocio cambia de aspecto hasta que su dueño elija otro. Solo agrega.
+-- Si ya aplicaste el apply.sql de la PR #47, el de la Fase 15 o una versión anterior de este, solo
+-- aplica lo que falte; repetirlo no hace nada.
 --
--- Compatible con la versión desplegada (Fase 13 o 14): no mapea las columnas ni la tabla nuevas, así
--- que sigue funcionando mientras se publica la nueva, y sus filas nuevas toman los valores por
--- omisión. Volver a la Fase 14 con platillos cancelados en cuentas abiertas no es seguro: al
--- recalcular la cuenta los cobra otra vez; antes de regresar, cierra o cancela esas cuentas
--- (deploy-azure.md).
+-- Compatible con la versión desplegada (master: la Fase 13 con la PR #47): no mapea las columnas ni
+-- la tabla nuevas, así que sigue funcionando mientras se publica la nueva, y sus filas nuevas toman
+-- los valores por omisión. Volver a ella con cuentas de mesa abiertas no es seguro: al cerrarlas
+-- descontaría otra vez las rondas y cobraría los platillos cancelados; antes de regresar, cierra o
+-- cancela esas cuentas (deploy-azure.md).
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
@@ -31,9 +33,9 @@
 -- Orden: respaldo de la base -> verify.sql -> este script -> verify.sql -> fusionar la PR,
 -- cuyo merge a master despliega a producción. Por ejemplo:
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql
--- Esta carpeta reemplaza a la de la Fase 15 para el merge de las Fases 14, 15 y 16: su apply.sql
--- aplica todo lo que falte. Si la base no tiene la Fase 13, también aplica su migración: revisa
--- antes el verify.sql de database/production/20261006201255_DropStockAndLoyaltyColumns.
+-- Para el merge de las Fases 14, 15 y 16 basta esta carpeta: su apply.sql aplica todo lo que falte.
+-- Si la base no tiene la Fase 13, también aplica su migración: revisa antes el verify.sql de
+-- database/production/20261006201255_DropStockAndLoyaltyColumns.
 -- =====================================================================================
 SET ANSI_NULLS ON;
 SET ANSI_PADDING ON;
@@ -5383,6 +5385,19 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261008074715_StopMappingRequireOpenCashSession', N'10.0.12');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261009041644_StopMappingRequireOpenCashSession'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261009041644_StopMappingRequireOpenCashSession', N'10.0.12');
 END;
 
 COMMIT;

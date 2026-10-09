@@ -13,7 +13,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
     [Migration("20261008074715_StopMappingRequireOpenCashSession")]
-    partial class StopMappingRequireOpenCashSession
+    partial class StopMappingRequireOpenCashSessionPhase15
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

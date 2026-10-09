@@ -5,11 +5,12 @@
 -- =====================================================================================
 SET NOCOUNT ON;
 
--- 1. Antes: últimas migraciones aplicadas. La más reciente debe ser
---    20261006201255_DropStockAndLoyaltyColumns (Fase 13; la Fase 14 no tuvo migraciones) o, si ya
---    aplicaste el apply.sql de la Fase 15, 20261008074715_StopMappingRequireOpenCashSession. Si es
---    anterior, apply.sql también aplicará las que falten: revisa primero el verify.sql de cada
---    carpeta anterior.
+-- 1. Antes: últimas migraciones aplicadas. Con master desplegado (la Fase 13 con la PR #47), la más
+--    reciente es 20261009041644_StopMappingRequireOpenCashSession, o
+--    20261006201255_DropStockAndLoyaltyColumns si no se aplicó el apply.sql de la PR #47. Si ya
+--    aplicaste el de la Fase 15 o una versión anterior de este, verás también sus migraciones: apply.sql
+--    solo agrega las que falten. Si la más reciente es anterior a la Fase 13, revisa primero el
+--    verify.sql de cada carpeta anterior.
 SELECT TOP (8) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
@@ -76,9 +77,15 @@ FROM [TenantSettings]
 GROUP BY [Theme]
 ORDER BY [Theme];');
 
--- 5. Después, y antes de volver a la Fase 14 (con o sin rollback.sql): cuentas de mesa abiertas
---    con platillos cancelados. Deben ser 0 antes de regresar: ciérralas o cancélalas, porque la
---    Fase 14 cobra otra vez lo cancelado al recalcular la cuenta (una ronda nueva).
+-- 5. Después, y antes de volver a la versión anterior de master (con o sin rollback.sql): cuentas de
+--    mesa abiertas, todas y las que tienen platillos cancelados. Deben ser 0 antes de regresar:
+--    ciérralas o cancélalas, porque esa versión descuenta otra vez al cerrar las rondas que esta ya
+--    descontó y cobra otra vez lo cancelado al recalcular la cuenta.
+SELECT COUNT(*) AS [CuentasAbiertas]
+FROM [Orders]
+WHERE [IsTab] = 1
+    AND [Status] NOT IN (6, 7, 99);
+
 IF COL_LENGTH(N'dbo.OrderItems', N'CancelledQuantity') IS NOT NULL
     EXEC(N'SELECT
     COUNT(DISTINCT o.[Id]) AS [CuentasAbiertasConCancelados],
@@ -98,12 +105,13 @@ WHERE [CancelledQuantity] < 0
     OR [CancelledAmount] < 0
     OR [CancelledAmount] > [TotalPrice];');
 
--- 7. Después: las migraciones de las Fases 15 y 16 quedaron registradas. Después del rollback.sql
---    de esta carpeta falta solo 20261009043433_AddBusinessTheme.
+-- 7. Después: quedaron registradas las migraciones de las Fases 15 y 16 y la de la PR #47 (cuatro
+--    filas). Después del rollback.sql de esta carpeta falta solo 20261009043433_AddBusinessTheme.
 SELECT [MigrationId]
 FROM [__EFMigrationsHistory]
 WHERE [MigrationId] IN (
     N'20261008072542_AddTabItemCancellations',
     N'20261008074715_StopMappingRequireOpenCashSession',
+    N'20261009041644_StopMappingRequireOpenCashSession',
     N'20261009043433_AddBusinessTheme')
 ORDER BY [MigrationId];
