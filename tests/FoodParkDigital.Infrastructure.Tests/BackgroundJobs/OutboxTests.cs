@@ -253,6 +253,8 @@ public class OutboxTests
             new OrderRefundedEvent(Guid.NewGuid(), TenantA, Guid.NewGuid(), 25.50m, OrderPaymentMethod.Cash, "Producto dañado"),
             new TabRoundSentEvent(Guid.NewGuid(), TenantA, 2),
             new KitchenTicketChangedEvent(Guid.NewGuid(), TenantA, 2, KitchenTicketStatus.Ready),
+            new TabItemCancelledEvent(Guid.NewGuid(), TenantA, Guid.NewGuid(), Guid.NewGuid(), 2, "Arrachera (Término medio)", 0.255m, 99.42m,
+                "Se pasó de cocción", ReturnedToStock: false),
             new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: "ana@demo.com"),
             new VerificationCodeRequestedEvent(VerificationCodePurpose.PhoneConfirmation, UserId: Guid.NewGuid())
         };

@@ -2,7 +2,14 @@ import type { OrderDto } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
-import { formatTicketDate, formatTicketQuantity, getTicketPaymentTotals, type TicketExtras } from '../../utils/ticket';
+import {
+  billedItems,
+  chargedPrice,
+  formatTicketDate,
+  formatTicketQuantity,
+  getTicketPaymentTotals,
+  type TicketExtras,
+} from '../../utils/ticket';
 
 interface SaleTicketProps extends TicketExtras {
   order: OrderDto;
@@ -27,7 +34,7 @@ export default function SaleTicket({ order, businessName, provisional }: SaleTic
 
       <table className="ta-ticket-lines">
         <tbody>
-          {order.items.map((item) => (
+          {billedItems(order).map((item) => (
             <tr key={item.id}>
               <td className="pe-1 align-top text-nowrap">{formatTicketQuantity(item)}</td>
               <td className="w-100">
@@ -37,7 +44,7 @@ export default function SaleTicket({ order, businessName, provisional }: SaleTic
                 )}
                 {item.notes && <div className="ta-ticket-note">{item.notes}</div>}
               </td>
-              <td className="text-end align-top ta-money">{formatMoney(item.totalPrice)}</td>
+              <td className="text-end align-top ta-money">{formatMoney(chargedPrice(item))}</td>
             </tr>
           ))}
         </tbody>

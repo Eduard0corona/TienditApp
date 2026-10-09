@@ -137,7 +137,7 @@ export function getCatalogItemTypeLabel(type: string | null | undefined): string
 
 const PURCHASE_ORDER_STATUS: Record<PurchaseOrderStatus, { label: string; badge: string }> = {
   0: { label: 'Borrador', badge: 'bg-secondary' },
-  1: { label: 'Enviada', badge: 'bg-primary' },
+  1: { label: 'Enviada', badge: 'ta-chip-confirmed' },
   2: { label: 'Recepción parcial', badge: 'bg-info' },
   3: { label: 'Recibida', badge: 'bg-success' },
   4: { label: 'Cerrada sin el resto', badge: 'bg-dark' },

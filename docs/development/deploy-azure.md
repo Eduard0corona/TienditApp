@@ -101,11 +101,43 @@ El `apply.sql` de la Fase 13 borra `Products.StockQuantity`, `LowStockThreshold`
 
 - Las imágenes de Docker van con su etiqueta exacta y su digest: en CI `azurite:3.37.0` y `mssql/server:2022-CU27-ubuntu-22.04` (lo que era `2022-latest`); en el `Dockerfile` `aspnet:10.0.12`, `sdk:10.0.401` y `node:24-alpine` (Node 24.21.0); en `docker-compose.yml` el mismo SQL Server de CI. El paso `Actions and images pinned` del job `Backend` corre `.github/scripts/check-pins.py`, que falla con una action sin SHA completo o una imagen sin digest.
 - Para actualizar una imagen: `docker buildx imagetools inspect <imagen>:<etiqueta>` da el digest que tiene hoy esa etiqueta (el de la lista de plataformas, no el de una sola). Cambia la etiqueta y el digest juntos y revisa las notas de versión; una imagen fijada no recibe los parches de su etiqueta hasta que cambies el digest.
-- Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas.
+- Un controller nuevo con datos del negocio necesita una prueba en la suite entre negocios: `CrossTenantSuiteCoverageTests` falla hasta que una clase `CrossTenant*` llame sus rutas (desde la Fase 14, las de sus acciones).
 
 ## Columna `RequireOpenCashSession` sin mapear
 
-El `apply.sql` de `20261009041644_StopMappingRequireOpenCashSession` no cambia el esquema ni los datos: solo registra la migración, y se aplica, como siempre, antes del merge. La versión nueva deja de leer y escribir `TenantSettings.RequireOpenCashSession`, que no tiene efecto desde que todo cobro exige caja: las configuraciones que guarda la dejan en su valor por omisión, 0, y la versión anterior sigue funcionando con ella, así que volver a ella no necesita `rollback.sql`. La siguiente entrega borra la columna y solo se aplica con esta versión desplegada.
+El `apply.sql` de `20261009041644_StopMappingRequireOpenCashSession` no cambia el esquema ni los datos: solo registra la migración, y se aplica, como siempre, antes del merge. La versión nueva deja de leer y escribir `TenantSettings.RequireOpenCashSession`, que no tiene efecto desde que todo cobro exige caja: las configuraciones que guarda la dejan en su valor por omisión, 0, y la versión anterior sigue funcionando con ella, así que volver a ella no necesita `rollback.sql`. La siguiente entrega borra la columna y solo se aplica con esta versión desplegada. La Fase 15 hizo el mismo paso en su rama con `20261008074715_StopMappingRequireOpenCashSession`; al fusionarla quedan las dos migraciones, y ninguna cambia la base ([migraciones](database-migrations.md)).
+
+## Inicio, AuthController y rondas (Fase 14)
+
+La Fase 14 no trae migraciones: no hay `apply.sql` que aplicar antes del merge, y el esquema de la base es el de la Fase 13.
+
+- Inicio cuenta en SQL y lee sus ingresos del resumen diario de los reportes. Las cifras son las de antes, salvo lo que se cobre en el último segundo del día, que ahora cuenta como en Reportes. Un periodo de más de 366 días responde 400 con el motivo.
+- `AuthController` se dividió en cinco controllers con las mismas rutas. El documento OpenAPI es el mismo al compararlo como JSON; `client/openapi/openapi.json` y `src/api/generated/schema.ts` solo cambian de orden.
+- Cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina. Las cuentas abiertas al desplegar se cierran bien: sus rondas de antes se descuentan al cerrarlas y las nuevas, al mandarse.
+- Volver a la Fase 13 con cuentas abiertas: esa versión descuenta al cerrar todas las rondas de la cuenta, también las que la Fase 14 ya descontó, y al cancelarla no devuelve lo de las rondas. Antes de regresar, cierra o cancela las cuentas abiertas; si alguna se cerró después, corrige sus existencias con un movimiento de entrada.
+
+## Platillos cancelados, RequireOpenCashSession y Vender (Fase 15)
+
+La Fase 15 trae dos migraciones en una sola carpeta, [`database/production/20261008074715_StopMappingRequireOpenCashSession`](../../database/production/20261008074715_StopMappingRequireOpenCashSession): su `apply.sql` se aplica, como siempre, antes del merge (respaldo, `verify.sql`, `apply.sql`, `verify.sql`).
+
+- `AddTabItemCancellations` solo agrega: `OrderItems.CancelledQuantity` y `CancelledAmount` (sin nulos, 0 por omisión) y la tabla `OrderItemCancellations`. La Fase 14 no los mapea, así que sigue funcionando mientras se publica la nueva y sus renglones toman 0 cancelado.
+- `StopMappingRequireOpenCashSession` no cambia la base: la versión nueva deja de mapear `TenantSettings.RequireOpenCashSession` (nadie la lee: todo cobro exige una caja abierta). La columna se queda con su valor por omisión, 0, que toman las filas nuevas; una fase posterior la borra cuando ninguna versión desplegada la mapee. Es el mismo paso que hizo la PR #47 en master (sección anterior).
+- `GET /orders/{id}` ahora trae las rondas, las opciones, los reembolsos y las cancelaciones de la cuenta. El contrato solo agrega: la ruta `POST /orders/{id}/item-cancellations` y los campos `cancelledQuantity`, `chargedPrice` e `itemCancellations`.
+- Volver a la Fase 14 (con o sin `rollback.sql`) con platillos cancelados en cuentas abiertas: esa versión recalcula el total con todos los renglones al mandar una ronda y cobraría otra vez lo cancelado. Antes de regresar, cierra o cancela esas cuentas; la consulta 4 de `verify.sql` las cuenta. `rollback.sql` borra la tabla y las columnas de cancelaciones (la bitácora conserva cada cancelación con su motivo) y no toca `RequireOpenCashSession`.
+
+## Temas por negocio y colores accesibles (Fase 16)
+
+La Fase 16 trae una migración, [`database/production/20261009043433_AddBusinessTheme`](../../database/production/20261009043433_AddBusinessTheme). Su `apply.sql` es idempotente y también aplica las que falten: las dos de la Fase 15 y la de la PR #47. Para fusionar las Fases 14, 15 y 16 juntas basta esta carpeta: respaldo, `verify.sql`, `apply.sql`, `verify.sql` y luego el merge. Si ya aplicaste el `apply.sql` de la Fase 15, el de la PR #47 o una versión anterior de este, solo agrega lo que falte.
+
+- `AddBusinessTheme` solo agrega `TenantSettings.Theme` (int, sin nulos, 0 por omisión). 0 es Nopal, el verde de TienditApp: ningún negocio cambia de aspecto hasta que su dueño elige otro tema en Configuración › Negocio › Apariencia. La versión anterior no mapea la columna y sus filas nuevas toman el 0.
+- El contrato solo agrega: la ruta `PUT /api/v1/auth/my-tenant/theme`, el enum `BusinessTheme` y el campo `theme` en el perfil del negocio y en el menú en línea.
+- Sin cambios de datos, la app se ve distinta para todos los negocios:
+  - los colores de estado (éxito, aviso, error, información) pasan WCAG AA;
+  - el texto general es más oscuro;
+  - el modo oscuro ya tiene el fondo oscuro, y en él el verde de Nopal es más claro;
+  - Cobrar usa el color principal en todas las pantallas.
+- Volver a la versión anterior de `master` (la Fase 13 con la PR #47): antes, cierra o cancela las cuentas abiertas, porque esa versión descontaría otra vez las rondas al cerrarlas y cobraría lo cancelado (secciones de las Fases 14 y 15). El código anterior no mapea las columnas nuevas y no ve las migraciones que no conoce, así que funciona sin `rollback.sql`.
+- Para dejar también la base como estaba, aplica el `rollback.sql` de esta carpeta y después el de la Fase 15. El primero borra la columna del tema y con ella la elección de cada negocio (la bitácora conserva cada cambio, `BusinessThemeUpdated`); al aplicar de nuevo, todos vuelven a Nopal. El segundo borra las cancelaciones. La migración de la PR #47 queda registrada.
 
 ## Slot de staging con swap y aprobación
 

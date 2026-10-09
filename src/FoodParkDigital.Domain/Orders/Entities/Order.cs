@@ -18,6 +18,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     private readonly List<OrderRefund> _refunds = new();
     private readonly List<ServiceOrderPiece> _servicePieces = new();
     private readonly List<KitchenTicket> _kitchenTickets = new();
+    private readonly List<OrderItemCancellation> _itemCancellations = new();
 
     private Order() { }
 
@@ -120,6 +121,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public IReadOnlyCollection<ServiceOrderPiece> ServicePieces => _servicePieces.AsReadOnly();
     /// <summary>Rounds of an open tab sent to the kitchen.</summary>
     public IReadOnlyCollection<KitchenTicket> KitchenTickets => _kitchenTickets.AsReadOnly();
+    /// <summary>Dishes of the tab cancelled after they went to the kitchen (<see cref="CancelTabItem"/>).</summary>
+    public IReadOnlyCollection<OrderItemCancellation> ItemCancellations => _itemCancellations.AsReadOnly();
 
     /// <summary>The order is (or was) a tab: items are added in rounds and it is charged when the table leaves.</summary>
     public bool IsTab { get; private set; }
@@ -223,6 +226,46 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         // Marks the order row as changed so two cooks moving the same round conflict instead of overwriting.
         UpdatedAt = at;
         AddDomainEvent(new KitchenTicketChangedEvent(Id, TenantId, ticket.Round, status));
+    }
+
+    /// <summary>
+    /// Cancels units of a dish of an open tab that already went to the kitchen: the tab stops charging them. The line
+    /// keeps what was ordered and the cancellation is its own record, with the reason, who and when. Only what is not
+    /// paid yet can be cancelled: a dish already paid is refunded instead.
+    /// </summary>
+    /// <param name="returnToStock">Its supplies go back to stock (the kitchen did not prepare it); otherwise they were lost.</param>
+    public OrderItemCancellation CancelTabItem(
+        Guid orderItemId,
+        decimal quantity,
+        string reason,
+        bool returnToStock,
+        DateTimeOffset cancelledAt,
+        string cancelledBy)
+    {
+        if (!IsOpenTab)
+            throw new DomainException("La cuenta ya está cerrada.");
+        var item = _items.FirstOrDefault(i => i.Id == orderItemId)
+            ?? throw new DomainException("El platillo indicado no pertenece a esta cuenta.");
+
+        var amount = item.CancellationAmount(quantity);
+        var (subTotal, tax) = ComputeTotals(line => line == item ? line.ChargedPrice - amount : line.ChargedPrice);
+        if (subTotal + tax < PaidAmount)
+        {
+            throw new DomainException(
+                $"La cuenta ya tiene cobrados ${PaidAmount.ToString("N2", CultureInfo.InvariantCulture)} y sin ese platillo "
+                + $"quedaría en ${(subTotal + tax).ToString("N2", CultureInfo.InvariantCulture)}: reembólsalo en lugar de cancelarlo.");
+        }
+
+        var cancellation = new OrderItemCancellation(
+            TenantId, Id, item.Id, item.Round, quantity, amount, reason, returnToStock, cancelledAt, cancelledBy);
+        item.RegisterCancellation(quantity, amount);
+        _itemCancellations.Add(cancellation);
+        RecalculateTotals();
+        // Marks the order row as changed: two devices changing the tab at the same time conflict instead of overwriting.
+        UpdatedAt = cancelledAt;
+        AddDomainEvent(new TabItemCancelledEvent(
+            Id, TenantId, cancellation.Id, item.Id, item.Round, item.Describe(), quantity, amount, cancellation.Reason, returnToStock));
+        return cancellation;
     }
 
     /// <summary>Moves an open tab to another free table.</summary>
@@ -532,17 +575,28 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         return refund;
     }
 
-    /// <summary>IVA by rate, computed from the items and the policy the order was sold with.</summary>
-    public IReadOnlyList<OrderTaxLine> GetTaxBreakdown()
+    /// <summary>
+    /// IVA by rate, computed from what the items charge and the policy the order was sold with. A line whose units were
+    /// all cancelled charges nothing and is left out.
+    /// </summary>
+    public IReadOnlyList<OrderTaxLine> GetTaxBreakdown() => Breakdown(item => item.ChargedPrice);
+
+    private IReadOnlyList<OrderTaxLine> Breakdown(Func<OrderItem, decimal> chargedPrice)
         => OrderTaxCalculator.Calculate(
             PricesIncludeTax,
-            _items.Select(item => new TaxableAmount(item.TotalPrice, item.VatRate)));
+            _items
+                .Where(item => item.CancelledQuantity < item.Quantity)
+                .Select(item => new TaxableAmount(chargedPrice(item), item.VatRate)));
+
+    private (decimal SubTotal, decimal Tax) ComputeTotals(Func<OrderItem, decimal> chargedPrice)
+    {
+        var breakdown = Breakdown(chargedPrice);
+        return (breakdown.Sum(line => line.TaxableBase), breakdown.Sum(line => line.TaxAmount));
+    }
 
     private void RecalculateTotals()
     {
-        var breakdown = GetTaxBreakdown();
-        SubTotal = breakdown.Sum(line => line.TaxableBase);
-        Tax = breakdown.Sum(line => line.TaxAmount);
+        (SubTotal, Tax) = ComputeTotals(item => item.ChargedPrice);
         Total = SubTotal + Tax;
         if (PaidAmount > Total)
             PaidAmount = Total;

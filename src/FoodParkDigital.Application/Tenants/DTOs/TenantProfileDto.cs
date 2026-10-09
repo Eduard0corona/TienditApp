@@ -50,6 +50,8 @@ public class TenantProfileDto
     public InsufficientStockPolicy InsufficientStockPolicy { get; set; }
     /// <summary>The public menu (/m/{slug}): off, menu only, or menu that takes orders.</summary>
     public OnlineMenuMode OnlineMenuMode { get; set; }
+    /// <summary>The colors of the business in its team's app and its public menu.</summary>
+    public BusinessTheme Theme { get; set; }
     public DateTimeOffset? OnboardingCompletedAt { get; set; }
     /// <summary>IANA time zone of the business: dates show and days start as the business lives them.</summary>
     public string TimeZone { get; set; } = "America/Mexico_City";

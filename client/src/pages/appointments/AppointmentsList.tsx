@@ -100,7 +100,7 @@ const statusLabel = (status: AppointmentStatus) => {
 const statusBadge = (status: AppointmentStatus) => {
   switch (status) {
     case AppointmentStatusConst.Completed: return 'bg-success';
-    case AppointmentStatusConst.Confirmed: return 'bg-primary';
+    case AppointmentStatusConst.Confirmed: return 'ta-chip-confirmed';
     case AppointmentStatusConst.InService: return 'bg-info';
     case AppointmentStatusConst.NoShow: return 'bg-warning text-dark';
     case AppointmentStatusConst.Cancelled: return 'bg-danger';

@@ -21,11 +21,13 @@ public static class OrderDtoStateExtensions
         // Mirrors Order.Cancel: money still kept is refunded first (void does both in one step).
         order.CanCancel = stateMachine.CanCancel(order.Status) && order.NetPaidAmount <= 0;
 
-        // Same calculation as Order.GetTaxBreakdown, from the rate stored on each item.
+        // Same calculation as Order.GetTaxBreakdown, from what each item charges and the rate stored on it.
         order.TaxBreakdown = OrderTaxCalculator
             .Calculate(
                 order.PricesIncludeTax,
-                order.Items.Select(item => new TaxableAmount(item.TotalPrice, new VatRate(item.TaxRate, item.IsTaxExempt))))
+                order.Items
+                    .Where(item => item.CancelledQuantity < item.Quantity)
+                    .Select(item => new TaxableAmount(item.ChargedPrice, new VatRate(item.TaxRate, item.IsTaxExempt))))
             .Select(line => new OrderTaxLineDto
             {
                 RatePercent = line.RatePercent,

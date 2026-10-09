@@ -444,11 +444,14 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             CounterSaleClosing.TryClose(order, salesSettings, tenantCapabilities, _currentUserService.UserName);
 
         // A sale captured offline already happened, and a customer's own order is reviewed by the business: only a
-        // sale the team is making now can be refused for missing supplies.
-        var shortages = await _orderInventoryService.ApplyConsumptionForOrderAsync(
-            order,
-            cancellationToken,
-            request.CreatedByBusiness && request.CapturedOfflineAt is null ? StockShortageHandling.TenantPolicy : StockShortageHandling.Allow);
+        // sale the team is making now can be refused for missing supplies. A tab opens with its first round, which
+        // leaves the stock as it goes to the kitchen.
+        var shortageHandling = request.CreatedByBusiness && request.CapturedOfflineAt is null
+            ? StockShortageHandling.TenantPolicy
+            : StockShortageHandling.Allow;
+        var shortages = order.IsOpenTab
+            ? await _orderInventoryService.ApplyConsumptionForTabRoundAsync(order, 1, cancellationToken, shortageHandling)
+            : await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, shortageHandling);
 
         if (request.IdempotencyKey is { } requestKey)
             order.IdentifyClientRequest(requestKey, request.CapturedOfflineAt);

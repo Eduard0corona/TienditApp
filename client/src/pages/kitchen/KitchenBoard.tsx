@@ -8,24 +8,39 @@ import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { KitchenTicketStatus, OrderStatus } from '../../types';
 import type { KitchenOrderDto, KitchenTicketDto, OrderItemDto } from '../../types';
 import { getOrderStatusLabel } from '../../utils/labels';
-import { formatTicketQuantity } from '../../utils/ticket';
+import { activeQuantity, formatCancelled, formatTicketQuantity } from '../../utils/ticket';
 import { formatInBusinessZone } from '../../utils/dates';
+
+function KitchenItem({ item }: { item: OrderItemDto }) {
+  // A dish cancelled after the round was sent: the cook stops preparing it.
+  if (activeQuantity(item) <= 0) {
+    return (
+      <li className="py-1 text-muted">
+        <s className="fs-5">{item.productName}</s>
+        <span className="badge bg-danger ms-2">Cancelado</span>
+      </li>
+    );
+  }
+
+  return (
+    <li className="py-1">
+      <span className="fw-bold fs-5 me-1">{formatTicketQuantity(item)}</span>
+      <span className="fs-5">{item.productName}</span>
+      {(item.cancelledQuantity ?? 0) > 0 && <span className="badge bg-danger ms-2">{formatCancelled(item)}</span>}
+      {item.options && item.options.length > 0 && (
+        <div className="fw-semibold text-primary-emphasis">{item.options.map((option) => option.optionName).join(' · ')}</div>
+      )}
+      {item.notes && (
+        <div className="alert alert-warning py-1 px-2 mt-1 mb-0 small">{item.notes}</div>
+      )}
+    </li>
+  );
+}
 
 function KitchenItems({ items }: { items: OrderItemDto[] }) {
   return (
     <ul className="list-unstyled border rounded p-2 mb-3">
-      {items.map((item) => (
-        <li key={item.id} className="py-1">
-          <span className="fw-bold fs-5 me-1">{formatTicketQuantity(item)}</span>
-          <span className="fs-5">{item.productName}</span>
-          {item.options && item.options.length > 0 && (
-            <div className="fw-semibold text-primary-emphasis">{item.options.map((option) => option.optionName).join(' · ')}</div>
-          )}
-          {item.notes && (
-            <div className="alert alert-warning py-1 px-2 mt-1 mb-0 small">{item.notes}</div>
-          )}
-        </li>
-      ))}
+      {items.map((item) => <KitchenItem key={item.id} item={item} />)}
     </ul>
   );
 }
@@ -253,7 +268,7 @@ export default function KitchenBoard() {
                         <h4 className="mb-1">{order.orderNumber}</h4>
                         <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>
                       </div>
-                      <span className={`badge ${isPreparing ? 'bg-primary' : 'bg-warning text-dark'}`}>
+                      <span className={`badge ${isPreparing ? 'ta-chip-preparing' : 'ta-chip-new'}`}>
                         {getOrderStatusLabel(order.status)}
                       </span>
                     </div>
@@ -314,7 +329,7 @@ export default function KitchenBoard() {
                         <div className="small text-muted">Ronda {ticket.round} · {ticket.orderNumber}</div>
                         {!isReady && <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>}
                       </div>
-                      <span className={`badge ${isReady ? 'bg-success' : ticket.status === KitchenTicketStatus.Preparing ? 'bg-primary' : 'bg-warning text-dark'}`}>
+                      <span className={`badge ${isReady ? 'ta-chip-ready' : ticket.status === KitchenTicketStatus.Preparing ? 'ta-chip-preparing' : 'ta-chip-new'}`}>
                         {TICKET_STATUS_LABELS[ticket.status]}
                       </span>
                     </div>

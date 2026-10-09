@@ -190,6 +190,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderItemOption> OrderItemOptions => Set<OrderItemOption>();
     public DbSet<DiningTable> DiningTables => Set<DiningTable>();
     public DbSet<KitchenTicket> KitchenTickets => Set<KitchenTicket>();
+    public DbSet<OrderItemCancellation> OrderItemCancellations => Set<OrderItemCancellation>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<DailySalesSnapshot> DailySalesSnapshots => Set<DailySalesSnapshot>();
     public DbSet<Plan> Plans => Set<Plan>();

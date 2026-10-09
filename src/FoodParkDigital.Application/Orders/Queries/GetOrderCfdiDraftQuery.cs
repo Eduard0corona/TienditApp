@@ -89,10 +89,11 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .FirstOrDefaultAsync(t => t.Id == order.TenantId, cancellationToken)
             ?? throw new EntityNotFoundException("Tenant", order.TenantId);
 
-        var items = order.Items.ToList();
+        // What the sale charged: dishes cancelled from a tab are not invoiced.
+        var items = order.Items.Where(item => item.ActiveQuantity > 0).ToList();
         var amounts = CfdiAmountCalculator.Calculate(
             order.PricesIncludeTax,
-            items.Select(item => new CfdiLineInput(item.Id, item.Quantity, item.TotalPrice, item.VatRate, item.TaxObject)).ToList());
+            items.Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject)).ToList());
         var amountsByLine = amounts.Concepts.ToDictionary(concept => concept.LineId);
 
         var draft = new CfdiDraftDto

@@ -11,6 +11,18 @@ export const AppointmentStatus = {
 } as const;
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus];
 
+export const BusinessTheme = {
+  Nopal: 0,
+  Talavera: 1,
+  Jacaranda: 2,
+  RosaMexicano: 3,
+  Jamaica: 4,
+  Cempasuchil: 5,
+  CafeDeOlla: 6,
+  Grafito: 7,
+} as const;
+export type BusinessTheme = (typeof BusinessTheme)[keyof typeof BusinessTheme];
+
 export const BusinessType = {
   Food: 0,
   Retail: 1,

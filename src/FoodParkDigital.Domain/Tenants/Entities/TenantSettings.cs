@@ -141,6 +141,16 @@ public class TenantSettings : BaseEntity, ITenantScoped
         OnlineMenuMode = mode;
     }
 
+    /// <summary>The colors of the business in its team's app and its public menu: TienditApp's until the owner picks one.</summary>
+    public BusinessTheme Theme { get; private set; } = BusinessTheme.Nopal;
+
+    public void SetTheme(BusinessTheme theme)
+    {
+        if (!Enum.IsDefined(theme))
+            throw new DomainException("El tema no existe.");
+        Theme = theme;
+    }
+
     public bool HasCapability(TenantCapability capability)
         => (Capabilities & capability) == capability;
 }

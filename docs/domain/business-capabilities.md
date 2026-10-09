@@ -12,7 +12,7 @@ TienditApp soporta operación multi-tenant para negocios Food, Retail y Service.
 
 ## Capacidades observadas
 
-- Configurar tenant, datos fiscales básicos, logo y WhatsApp.
+- Configurar tenant, datos fiscales básicos, logo, WhatsApp y el tema de colores del negocio (Fase 16, [ADR 0010](../adr/0010-business-themes.md)): uno de ocho temas curados que ven su equipo y su menú en línea.
 - Autenticar usuarios, rotar refresh tokens, confirmar email/teléfono y usar 2FA.
 - Administrar membresías de empleados, roles y códigos de permiso.
 - Administrar ubicaciones de inventario por sucursal (las sucursales son entidad propia, ver [sucursales](branches-and-reporting.md)).

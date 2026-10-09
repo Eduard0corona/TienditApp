@@ -126,7 +126,7 @@ public class OptionsAndTabsFlowTests
         var table = await CreateTableAsync(fixture, "Mesa 4");
         var inventory = new RecordingInventoryService();
 
-        // Opening: the first round goes to the kitchen and nothing is consumed yet.
+        // Opening: the first round goes to the kitchen and leaves the stock now.
         var opened = await fixture.CreateOrderHandler(inventory).Handle(
             new CreateOrderCommand
             {
@@ -141,6 +141,7 @@ public class OptionsAndTabsFlowTests
         Assert.Equal("Mesa 4", opened.Value.TableNumber);
         Assert.Empty(opened.Value.AllowedTransitions);
         Assert.Single(opened.Value.KitchenTickets);
+        Assert.Equal([1], inventory.Rounds);
         Assert.Equal(0, inventory.Consumed);
 
         var secondTab = await fixture.CreateOrderHandler().Handle(
@@ -149,12 +150,13 @@ public class OptionsAndTabsFlowTests
         Assert.True(secondTab.IsFailure);
         Assert.Contains("ya tiene una cuenta abierta", secondTab.Error);
 
-        // A second round.
-        var round = await new AddTabRoundCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock)
+        // A second round, which leaves the stock as it goes to the kitchen too.
+        var round = await new AddTabRoundCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock, inventory)
             .Handle(new AddTabRoundCommand { OrderId = opened.Value.Id, Items = [new CreateOrderItemDto { ProductId = beer.Id, Quantity = 2 }] }, CancellationToken.None);
         Assert.True(round.IsSuccess, round.Error);
         Assert.Equal(165m, round.Value.Total);
         Assert.Equal([1, 2], round.Value.KitchenTickets.Select(t => t.Round));
+        Assert.Equal([1, 2], inventory.Rounds);
 
         // The kitchen sees each round with its own lines.
         var tickets = await new GetKitchenTicketsQueryHandler(fixture.Context)
@@ -179,7 +181,7 @@ public class OptionsAndTabsFlowTests
         Assert.Equal(165m, busy.OpenTab!.Balance);
         Assert.Equal(1, busy.OpenTab.RoundsInKitchen);
 
-        // Closing needs the bill paid; then the table is free and the inventory consumed once.
+        // Closing needs the bill paid; then the table is free and the order takes what no round took (TabRoundStockTests).
         var closeHandler = new CloseTabCommandHandler(fixture.Context, fixture.CurrentUser, inventory);
         var unpaid = await closeHandler.Handle(new CloseTabCommand(opened.Value.Id), CancellationToken.None);
         Assert.True(unpaid.IsFailure);
@@ -302,13 +304,24 @@ public class OptionsAndTabsFlowTests
     private sealed class RecordingInventoryService : FoodParkDigital.Application.Common.Interfaces.IOrderInventoryService
     {
         public int Consumed { get; private set; }
+        public List<int> Rounds { get; } = [];
+
+        public Task<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>> ApplyConsumptionForTabRoundAsync(
+            FoodParkDigital.Domain.Orders.Entities.Order order,
+            int round,
+            CancellationToken cancellationToken,
+            FoodParkDigital.Application.Common.Models.StockShortageHandling shortageHandling)
+        {
+            Rounds.Add(round);
+            return Task.FromResult<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>>([]);
+        }
 
         public Task<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>> ApplyConsumptionForOrderAsync(
             FoodParkDigital.Domain.Orders.Entities.Order order,
             CancellationToken cancellationToken,
             FoodParkDigital.Application.Common.Models.StockShortageHandling shortageHandling)
         {
-            // Mirrors OrderInventoryService: open tabs consume when they close.
+            // Mirrors OrderInventoryService: an open tab's own consumption waits for it to close.
             if (!order.IsOpenTab)
                 Consumed++;
             return Task.FromResult<IReadOnlyList<FoodParkDigital.Application.Common.Models.StockShortage>>([]);
@@ -327,6 +340,11 @@ public class OptionsAndTabsFlowTests
         public Task ReturnItemsToInventoryAsync(
             FoodParkDigital.Domain.Orders.Entities.Order order,
             FoodParkDigital.Domain.Orders.Entities.OrderRefund refund,
+            CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ReturnCancelledTabItemAsync(
+            FoodParkDigital.Domain.Orders.Entities.Order order,
+            FoodParkDigital.Domain.Orders.Entities.OrderItemCancellation cancellation,
             CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

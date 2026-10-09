@@ -16,7 +16,7 @@ const STATUS_COLUMNS: Array<{
   badgeClass: string;
 }> = [
   { status: ServiceOrderPieceStatusConst.Accepted, title: 'Aceptadas', badgeClass: 'bg-info' },
-  { status: ServiceOrderPieceStatusConst.InProgress, title: 'En progreso', badgeClass: 'bg-primary' },
+  { status: ServiceOrderPieceStatusConst.InProgress, title: 'En progreso', badgeClass: 'ta-chip-preparing' },
   { status: ServiceOrderPieceStatusConst.Completed, title: 'Completadas', badgeClass: 'bg-success' },
   { status: ServiceOrderPieceStatusConst.Cancelled, title: 'Canceladas', badgeClass: 'bg-danger' },
 ];

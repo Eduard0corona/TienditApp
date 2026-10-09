@@ -7,8 +7,40 @@
   cursor: pointer;
 }
 
+/* WhatsApp's own colors for the conversation, with a dark version instead of light bubbles on a dark page. */
+.wa-messages {
+  --wa-chat-bg: #e5ddd5;
+  --wa-bubble-in: #ffffff;
+  --wa-bubble-out: #dcf8c6;
+  --wa-bubble-text: #1d2939;
+  background-color: var(--wa-chat-bg);
+}
+
+[data-bs-theme='dark'] .wa-messages {
+  --wa-chat-bg: #222e35;
+  --wa-bubble-in: #2f3b43;
+  --wa-bubble-out: #144d37;
+  --wa-bubble-text: #e9edef;
+}
+
 .wa-message-bubble {
   max-width: 70%;
+  color: var(--wa-bubble-text);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+}
+
+.wa-message-bubble .text-muted {
+  color: inherit !important;
+  opacity: 0.75;
+}
+
+.wa-message-in,
+.wa-message-empty {
+  background-color: var(--wa-bubble-in);
+}
+
+.wa-message-out {
+  background-color: var(--wa-bubble-out);
 }
 
 @media (max-width: 1199.98px) {

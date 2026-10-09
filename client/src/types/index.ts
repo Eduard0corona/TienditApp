@@ -1,6 +1,7 @@
 // The enums are generated from the API contract and re-exported where each one belongs below.
 import type {
   AppointmentStatus,
+  BusinessTheme,
   BusinessType,
   CampaignAudienceKind,
   CampaignStatus,
@@ -165,6 +166,8 @@ export interface TenantProfileDto {
   autoCloseCounterSales: boolean;
   /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
   onlineMenuMode?: OnlineMenuMode;
+  /** The colors the owner picked for the team's app and the public menu (Nopal until then). */
+  theme?: BusinessTheme;
   /** Which orders send the customer WhatsApp messages (paid templates). */
   orderNotificationPolicy?: OrderNotificationPolicy;
   /** Refuse (default) or warn when a sale's recipe supplies are short. */
@@ -347,6 +350,9 @@ export { UnitType } from '../api/generated/enums';
 
 /** Same numbers as Domain.Tenants.Enums.OnlineMenuMode. */
 export { OnlineMenuMode } from '../api/generated/enums';
+
+/** Same numbers as Domain.Tenants.Enums.BusinessTheme; the palettes live in utils/businessThemes.ts. */
+export { BusinessTheme } from '../api/generated/enums';
 
 /**
  * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders
@@ -1308,13 +1314,18 @@ export interface OrderItemDto {
   quantity: number;
   /** Units given back with refunds; the sold quantity never changes. */
   returnedQuantity?: number;
+  /** Units of a tab's dish cancelled after it went to the kitchen: the order no longer charges them. */
+  cancelledQuantity?: number;
   /** Unit the line was sold in, with its CFDI codes at the time of the sale. */
   unit?: UnitType;
   satProductCode?: string;
   satUnitCode?: string;
   taxObject?: CfdiTaxObject;
   unitPrice: number;
+  /** The line as it was ordered: quantity by unit price. */
   totalPrice: number;
+  /** What the line charges: its total less the units cancelled from a tab. */
+  chargedPrice?: number;
   notes?: string;
   /** IVA rate in percent the line was sold with (0 when exempt). */
   taxRate: number;
@@ -1490,6 +1501,8 @@ export interface OrderDto {
   servicePieces: ServiceOrderPieceDto[];
   payments: OrderPaymentDto[];
   refunds?: OrderRefundDto[];
+  /** Dishes of the tab cancelled after they went to the kitchen, with the reason and who cancelled them. */
+  itemCancellations?: OrderItemCancellationDto[];
   /** The order is (or was) a tab: rounds added over time, charged when the table leaves. */
   isTab?: boolean;
   /** A tab still taking rounds. */
@@ -1512,6 +1525,30 @@ export interface OrderRefundDto {
   reference?: string;
   restockItems: boolean;
   lines: Array<{ orderItemId: string; quantity: number }>;
+}
+
+/** Units of a dish of a tab cancelled after it went to the kitchen. */
+export interface OrderItemCancellationDto {
+  id: string;
+  orderItemId: string;
+  round: number;
+  quantity: number;
+  /** What the units took off the line, at its prices. */
+  amount: number;
+  reason: string;
+  /** Its supplies went back to stock; otherwise they were lost. */
+  returnedToStock: boolean;
+  cancelledAt: string;
+  cancelledBy: string;
+}
+
+export interface CancelTabItemRequest {
+  orderItemId: string;
+  /** Up to three decimals for dishes sold by weight. */
+  quantity: number;
+  reason: string;
+  /** The kitchen did not prepare it: its supplies go back to stock. Otherwise they were lost. */
+  returnToStock: boolean;
 }
 
 export interface RefundOrderRequest {

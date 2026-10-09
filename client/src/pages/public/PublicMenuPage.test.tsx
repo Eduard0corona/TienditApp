@@ -3,6 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
+import { BusinessTheme } from '../../types';
+import { getBusinessTheme } from '../../utils/businessThemes';
+import { applyBusinessTheme } from '../../utils/theme';
 import PublicMenuPage from './PublicMenuPage';
 
 vi.mock('../../api/publicMenuApi', () => ({
@@ -66,6 +69,21 @@ function renderPage() {
 describe('PublicMenuPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('shows the menu in the colors of its business, and gives the browser back its own when leaving', async () => {
+    // Someone of another business is signed in on this browser.
+    applyBusinessTheme(BusinessTheme.Grafito);
+    api.getMenu.mockResolvedValue(menu({ theme: BusinessTheme.Jamaica }));
+    const accent = () => document.documentElement.style.getPropertyValue('--tt-accent');
+
+    const { unmount } = renderPage();
+    expect(await screen.findByRole('heading', { name: 'Café Luna' })).toBeInTheDocument();
+    expect(accent()).toBe(getBusinessTheme(BusinessTheme.Jamaica).light.accent);
+
+    unmount();
+    expect(accent()).toBe(getBusinessTheme(BusinessTheme.Grafito).light.accent);
+    applyBusinessTheme(null);
   });
 
   it('takes orders while the business receives them', async () => {

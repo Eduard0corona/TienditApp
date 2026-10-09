@@ -32,7 +32,7 @@ Shell y diseño (Fase 1):
 - Accesibilidad (Fase 6): el lint corre `eslint-plugin-jsx-a11y` (recomendado). Las 208 etiquetas que no estaban ligadas a su campo tienen `htmlFor` e `id`; los títulos de grupo son texto con `role="group"`; el menú de la cuenta, cerrar sesión y mostrar la contraseña son botones con nombre, y las tarjetas y filas clicables responden al teclado (`asButton`). `no-autofocus` está apagado a propósito: los diálogos de caja enfocan su campo principal. La configuración de WhatsApp dice "ID de la cuenta de WhatsApp Business" en lugar de "WABA ID".
 - Lo urgente te encuentra (Fase 6): `GET /api/v1/dashboard/attention` cuenta lo que necesita a alguien (pedidos en línea por confirmar, insumos por reabastecer, cajas abiertas desde otro día, mensajes sin enviar, conversaciones sin leer, servicios atrasados y citas de hoy sin confirmar), cada aviso solo para quien tiene el permiso y el módulo. La campana del encabezado (`AttentionBell`) y "Requiere atención" en Inicio lo leen con `useAttention` (cada minuto, y al cambiar pedidos o la caja); `utils/attention.ts` da el texto y el enlace de cada clave y deja fuera las que no conoce. El chip de caja (`CashStatusChip`, `useCurrentCashSession`) dice si la caja de la persona está abierta y cuánto debe tener; abrir, cerrar o mover dinero lo refresca (`useRefreshCashState`).
 - `Topbar` muestra el selector de negocio cuando la persona trabaja en más de uno, la búsqueda global (`GlobalSearch`, Ctrl K: pantallas más pedidos, clientes y productos buscados en el servidor según el acceso) y "Nueva venta" (F2).
-- `src/assets/css/theme.css` es el tema propio sobre Bootstrap 5.3: tokens `--ta-*`, remapeo de las variables `--ct-*` de Hyper, fuente Manrope, botones táctiles (`.btn-touch`), chips de estado y estilos de impresión del ticket. Se carga después de `app.min.css`; Hyper se retira pantalla por pantalla. Desde la Fase 4F hay un solo set de íconos (Remix): se quitó Material Design Icons y lo que Hyper dibujaba con su fuente (flechas de las migas, ojo de la contraseña) lo redibuja `overrides.css`; la hoja de Hyper ya no importa Nunito desde Google Fonts (ninguna fuente sale de un servidor externo). El CSS global bajó de 965 KB a 641 KB (91 KB con gzip).
+- `src/assets/css/theme.css` es el tema propio sobre Bootstrap 5.3 (desde la Fase 16, por capas y con el tema del negocio: ver abajo): tokens `--ta-*`, remapeo de las variables `--ct-*` de Hyper, fuente Manrope, botones táctiles (`.btn-touch`), chips de estado y estilos de impresión del ticket. Se carga después de `app.min.css`; Hyper se retira pantalla por pantalla. Desde la Fase 4F hay un solo set de íconos (Remix): se quitó Material Design Icons y lo que Hyper dibujaba con su fuente (flechas de las migas, ojo de la contraseña) lo redibuja `overrides.css`; la hoja de Hyper ya no importa Nunito desde Google Fonts (ninguna fuente sale de un servidor externo). El CSS global bajó de 965 KB a 641 KB (91 KB con gzip).
 - `ToastProvider`/`useToast` y `ConfirmProvider`/`useConfirm` reemplazan `alert`, `window.confirm` y `window.prompt` (`confirm` y `prompt` devuelven promesas).
 - `DataTable` busca en el servidor cuando la pantalla le pasa `serverSide.onSearchChange` (con espera de 300 ms) y acepta `initialSearch` para abrir una lista ya filtrada (`/orders?search=…`, `/customers?search=…`).
 - Vender (`/sell`) concentra la venta: catálogo táctil con categorías, favoritos y lector de código, ticket con notas por artículo guardado por negocio en `localStorage` (`tienditapp.sell.draft.v1.{tenantId}`), cobro con cambio y pago mixto (`ChargePanel`) y ticket imprimible o por WhatsApp (`SaleTicket`, `utils/ticket.ts`). Sin red (Fase 3), `src/offline/` guarda en IndexedDB el último catálogo del negocio y las ventas cobradas pendientes de enviar (por negocio y cajero); `PendingSalesSync` (montado en el layout) las envía al volver la conexión con su clave de idempotencia y `PendingSalesModal` muestra las pendientes y las no aceptadas. Ver [ventas sin conexión](../domain/order-lifecycles.md#ventas-sin-conexión-fase-3).
@@ -54,6 +54,37 @@ Fase 4:
 - Pedidos recarga en silencio (sin spinner ni perder el scroll) ante los eventos en vivo y al reconectar, y el detalle abierto sigue a su pedido.
 - "Abrir otro negocio" (menú de usuario y selector de negocio) crea un negocio con la misma cuenta y cambia a él, que abre el arranque guiado. `PrintButton` imprime documentos de ticket (corte de caja) sin abrir otra página.
 
+Temas y colores (Fase 16, [ADR 0010](../adr/0010-business-themes.md)):
+
+- **El dueño elige el tema** en Configuración › Negocio › Apariencia (`ThemeCard`). Hay ocho, en `utils/businessThemes.ts`: Nopal, Talavera, Jacaranda, Rosa mexicano, Jamaica, Cempasúchil, Café de olla y Grafito.
+  - Cada uno define su paleta clara y oscura: acento, acento al pasar el cursor y al presionar, texto sobre el acento, fondo y texto de lo elegido, enlaces y el tinte de la página.
+  - Tocar un tema lo muestra en toda la app antes de guardarlo. Guardar llama `PUT /api/v1/auth/my-tenant/theme` y recarga el negocio; Descartar, o salir de la página, regresa al guardado.
+  - El negocio solo guarda cuál (`TenantProfileDto.theme`, `PublicMenuDto.theme`).
+- **`utils/theme.ts` aplica los colores:**
+  - `applyBusinessTheme` pinta el tema del negocio con la sesión. Lo llama `TenantProvider` al cargar el negocio y al cerrar sesión (vuelve a Nopal). Recuerda el tema en `localStorage` (`tienditapp.businessTheme`), y `restoreBusinessTheme` lo pinta antes del primer render para que no parpadee el verde.
+  - `previewBusinessTheme` pone otro encima mientras una pantalla lo necesita: el menú en línea con el tema de su negocio, aunque haya una sesión de otro, y la vista previa de Apariencia.
+  - Los colores se escriben como variables `--tt-*` en `<html>`, junto con el color de la barra del navegador.
+- **`theme.css` va por capas:**
+  1. el tema (`--tt-*`, con Nopal por omisión);
+  2. los neutros y los colores de estado, iguales en todos los temas;
+  3. el mapeo a las variables y componentes de Hyper, un bloque por modo.
+
+  El bloque claro no aplica a una página oscura (`:root:not([data-bs-theme='dark'])`), y el oscuro define todas sus variables. Antes, el fondo de la página quedaba claro en modo oscuro.
+- **Lo que la Fase 16 corrigió en todos los temas:**
+  - los colores de estado de Hyper, por unos AA en los dos modos;
+  - el texto general y los títulos, más oscuros;
+  - las versiones oscuras de alertas, chips, la conversación de WhatsApp y las fichas claras;
+  - las tarjetas pintadas con el acento con texto blanco, que usan siempre el tono claro del tema;
+  - el acento oscuro de Nopal, más claro para leerse como texto en botones con contorno.
+- **Reglas de color:**
+  - Un estado se pinta con `ta-chip-*` o con los colores de estado, nunca con el acento (`bg-primary`).
+  - La acción principal de una pantalla, incluido Cobrar, es `btn-primary`, y es una sola: en la cuenta de Mesas, Agregar ronda es `btn-outline-primary`.
+  - Ningún componente fija colores; usa los tokens.
+- **Pruebas:**
+  - `businessThemes.test.ts` revisa con `utils/contrast.ts` cada par que pinta cada tema. Lee `theme.css` para revisar los colores de estado en los dos modos, que el bloque oscuro defina lo mismo que el claro y que los valores por omisión sean los de Nopal.
+  - `theme.test.ts` y `ThemeCard.test.tsx` cubren cómo se aplica, la vista previa y el guardado.
+  - En `vitest.config.ts`, `css.include` deja pasar solo `theme.css`.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.
@@ -70,12 +101,16 @@ Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y
 - SignalR debe reconectar, cancelar al desmontar, aislar tenant y manejar errores.
 - Cambios de contrato requieren actualizar DTO, regenerar `openapi.json` y `schema.ts`, y ajustar el tipo manual, el wrapper y los consumidores que aún no usan el cliente generado.
 - Un enum del dominio sale del contrato generado (`src/api/generated/enums.ts`); nunca se copia ni se renumera en el cliente.
+- Los colores salen de los tokens de `theme.css` y de la paleta del tema. Un tema nuevo entra a `utils/businessThemes.ts` con todos sus pares AA, y un color de estado no cambia con el tema ([ADR 0010](../adr/0010-business-themes.md)).
 
 ## Deuda actual
 
-- `SellPage.tsx`, `OrdersList.tsx`, `OrdersCart.tsx` y `types/index.ts` superan 1,000 líneas. Son candidatos a dividirse como Inventario (Fase 7D), al tocar cada pantalla y sin reescrituras incidentales.
+- `OrdersList.tsx`, `OrdersCart.tsx` y `types/index.ts` superan 1,000 líneas. Son candidatos a dividirse como Inventario (Fase 7D) y Vender (Fase 15), al tocar cada pantalla y sin reescrituras incidentales.
+- Vender (Fase 15): `SellPage.tsx` coordina la venta y lo demás vive junto a ella en `pages/sell`: el modelo (`sellModel.ts`), el catálogo con su respaldo sin conexión (`useSellCatalog`), las reglas del ticket (`useSellCart`) y los componentes (`SellHeader`, `CatalogPanel`, `CartPanel` con `CartLines` y `SaleDetailsForm`, `OptionsModal`, `MeasureModal` y `CompletedSaleModal`). `SellPage.test.tsx` fija el flujo de la pantalla: agregar y guardar, variantes y peso, ronda a cocina y el mesero que deja el cobro a la caja.
 - `AccessRoute` cubre las rutas del layout; los botones de acción dentro de cada pantalla todavía se condicionan caso por caso (por ahora, órdenes).
 - Vender carga hasta 500 productos y, si el catálogo es mayor, busca en el servidor; las recetas de Inventario cargan hasta 500 productos e insumos.
 - Accesibilidad: el lint exige etiquetas asociadas (Fase 6F), pero no nombres en los botones de solo icono; se les pone `aria-label` al tocar cada pantalla (Inventario ya los tiene).
+- Hyper sigue cargado debajo de `theme.css`: `app.min.css` pesa 436 KB y `vendor.min.css`, 60 KB de estilos que la app no usa (select2 y otros). El CSS global pesa 652 KB, 94 KB con gzip. Retirarlo deja Bootstrap 5.3 con los tokens propios y quita los colores que Hyper compila en sus componentes, que `theme.css` cubre uno por uno.
+- En el teléfono, el selector de negocio se recorta a la inicial ("C.."). "Nueva venta" aparece hasta tres veces (barra superior, encabezado e Inicio), y las migas repiten la página en las secciones de primer nivel ("Inicio › Operación diaria › Inicio").
 - `client/README.md` aún es el texto genérico del template Vite.
 - Los estilos minificados versionados hacen difícil rastrear y revisar cambios visuales.

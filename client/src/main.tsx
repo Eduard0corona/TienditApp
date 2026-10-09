@@ -8,7 +8,7 @@ import { TenantProvider } from './contexts/TenantContext';
 import ToastProvider from './components/feedback/ToastProvider';
 import ConfirmProvider from './components/feedback/ConfirmProvider';
 import App from './App';
-import { applyTheme, readStoredTheme } from './utils/theme';
+import { applyTheme, readStoredTheme, restoreBusinessTheme } from './utils/theme';
 import { reloadOnceForNewVersion } from './utils/chunkReload';
 
 // Bootstrap JS (dropdowns, collapses, tooltips, etc.)
@@ -29,9 +29,10 @@ window.addEventListener('vite:preloadError', (event) => {
   if (reloadOnceForNewVersion()) event.preventDefault();
 });
 
-// Before the first render, so a dark theme does not flash light on reload.
+// Before the first render, so a dark theme does not flash light on reload, nor the business colors flash green.
 const storedTheme = readStoredTheme();
 if (storedTheme) applyTheme(storedTheme);
+restoreBusinessTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

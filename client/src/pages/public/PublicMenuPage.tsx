@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ import {
   getPriceWithOptions,
   getSelectionError,
 } from '../../utils/productOptions';
+import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
 import './PublicMenuPage.css';
 
@@ -55,6 +56,13 @@ export default function PublicMenuPage() {
     staleTime: 60_000,
   });
   const data = menu.data;
+  const menuTheme = data?.theme;
+  useEffect(() => {
+    // The customer sees the menu in the colors its business picked, whoever is signed in on this browser.
+    if (menuTheme === undefined) return undefined;
+    previewBusinessTheme(menuTheme);
+    return () => previewBusinessTheme(undefined);
+  }, [menuTheme]);
   const [category, setCategory] = useState<string>('all');
   const [lines, setLines] = useState<MenuLine[]>([]);
   const [choosing, setChoosing] = useState<{ product: PublicMenuProduct; optionIds: string[] } | null>(null);

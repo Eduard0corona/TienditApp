@@ -1,164 +1,58 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
-import { categoriesApi } from '../../api/categoriesApi';
 import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
-import { chatApi } from '../../api/chatApi';
 import { getApiErrorMessage } from '../../api/errors';
-import BranchPicker from '../../components/branches/BranchPicker';
 import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
-import SaleTicket from '../../components/sales/SaleTicket';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { usePendingSales } from '../../hooks/usePendingSales';
 import { useWorkingBranch } from '../../hooks/useWorkingBranch';
-import { loadCatalogSnapshot, saveCatalogSnapshot } from '../../offline/catalogCache';
 import { buildOfflineTicketOrder } from '../../offline/offlineTicket';
 import { enqueueSale, isNetworkError } from '../../offline/saleQueue';
 import { newUuid } from '../../utils/uuid';
-import type { CategoryDto, CreateOrderRequest, OrderDto, ProductDto } from '../../types';
-import { BusinessType, OrderChannel, OrderType, TenantCapability, UnitType } from '../../types';
+import type { CreateOrderRequest, OrderDto, ProductDto } from '../../types';
+import { BusinessType, OrderChannel, OrderType, TenantCapability } from '../../types';
 import { getAccess } from '../../utils/access';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
-import { estimateOrderTotals, getVatLabel, resolveProductVat } from '../../utils/orderTotals';
+import { estimateOrderTotals } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
-import { buildTicketText, buildWhatsAppTicketUrl, getTicketPaymentTotals, printTicket } from '../../utils/ticket';
-import {
-  allowsFractions,
-  formatQuantity,
-  getQuantityStep,
-  getUnitShortLabel,
-  lineAmount,
-  parseQuantity,
-  roundQuantity,
-} from '../../utils/units';
+import { allowsFractions } from '../../utils/units';
+import { getSelectionError, hasOptions } from '../../utils/productOptions';
+import { ROUND_STOCK_WARNING_TITLE, STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
+import CartPanel from './CartPanel';
+import CatalogPanel from './CatalogPanel';
+import CompletedSaleModal from './CompletedSaleModal';
+import MeasureModal from './MeasureModal';
+import OptionsModal from './OptionsModal';
+import SellHeader from './SellHeader';
 import { readSellDraft, writeSellDraft } from './sellDraft';
 import {
-  getLineKey,
-  getOptionsLabel,
-  getPriceWithOptions,
-  getSelectionError,
-  hasOptions,
-} from '../../utils/productOptions';
+  isPlausiblePhone,
+  MAX_LINES,
+  MAX_QUANTITY_PER_LINE,
+  NO_SALE_DETAILS,
+  readChatOrigin,
+  readTabTarget,
+  type CategoryFilter,
+  type ChatOrigin,
+  type CompletedSale,
+  type MeasureRequest,
+  type OptionsRequest,
+  type SaleDetails,
+  type TabTarget,
+} from './sellModel';
+import { useSellCart } from './useSellCart';
+import { useSellCatalog } from './useSellCatalog';
 import './SellPage.css';
-import { STOCK_WARNING_TITLE, stockWarningMessage } from '../../utils/stockWarnings';
-
-// Same limits as the API (OrderLimits).
-const MAX_QUANTITY_PER_LINE = 10_000;
-const MAX_LINES = 200;
-// The largest page the API serves; a bigger catalog is searched on the server.
-const CATALOG_PAGE_SIZE = 500;
-// How often Vender tries to replace the catalog saved on the device while the server does not answer.
-const CATALOG_RETRY_MS = 60_000;
-
-interface CartLine {
-  /** Product plus its options: the same product with other options is another line. */
-  key: string;
-  productId: string;
-  optionIds: string[];
-  /** "Grande, Almendra". */
-  optionsLabel: string;
-  name: string;
-  unitPrice: number;
-  quantity: number;
-  notes: string;
-  showNotes: boolean;
-  isService: boolean;
-  ratePercent: number;
-  isExempt: boolean;
-  unit?: UnitType;
-  /** Sold by weight, volume, length or time: the quantity admits three decimals. */
-  fractional: boolean;
-}
-
-/** A product with variants or extras waiting for the options and quantity. */
-interface OptionsRequest {
-  product: ProductDto;
-  optionIds: string[];
-  quantityText: string;
-}
-
-/** Where the order goes when it is not a counter sale: a new tab or a round of an open one. */
-type TabTarget =
-  | { kind: 'new'; tableId?: string; label: string }
-  | { kind: 'round'; orderId: string; label: string };
-
-function readTabTarget(params: URLSearchParams): TabTarget | null {
-  const orderId = params.get('tab');
-  if (orderId) return { kind: 'round', orderId, label: params.get('label')?.trim() || 'la cuenta' };
-  const tableId = params.get('table') ?? undefined;
-  const label = params.get('label')?.trim();
-  if (tableId || label) return { kind: 'new', tableId, label: label || 'Mesa' };
-  return null;
-}
-
-/** A weighed or measured product waiting for its quantity. */
-interface MeasureRequest {
-  product: ProductDto;
-  text: string;
-  /** The product is already in the ticket: the quantity replaces the one there. */
-  replacing: boolean;
-}
-
-/** Quick picks of the quantity dialog for each unit. */
-function getQuickQuantities(unit?: UnitType): number[] {
-  switch (unit) {
-    case UnitType.G:
-    case UnitType.Ml:
-      return [100, 250, 500, 1000];
-    case UnitType.Hour:
-      return [0.5, 1, 1.5, 2];
-    default:
-      return [0.25, 0.5, 1, 2];
-  }
-}
-
-interface CompletedSale {
-  order: OrderDto;
-  /** Saved without charging (a WhatsApp order paid on delivery). */
-  unpaid?: boolean;
-  /** Charged without connection: kept on the device until it reaches the server. */
-  offline?: boolean;
-}
-
-/** The chat a sale was started from (Vender opened with ?phone=&name=&conversation=). */
-interface ChatOrigin {
-  phone: string;
-  name?: string;
-  conversationId?: string;
-}
-
-function readChatOrigin(params: URLSearchParams): ChatOrigin | null {
-  const phone = params.get('phone')?.trim();
-  if (!phone) return null;
-  return {
-    phone,
-    name: params.get('name')?.trim() || undefined,
-    conversationId: params.get('conversation')?.trim() || undefined,
-  };
-}
-
-type CategoryFilter = 'all' | 'featured' | string;
-
-const SERVICE_UNITS: ReadonlyArray<number> = [UnitType.Hour, UnitType.Session, UnitType.Service];
-
-function isServiceProduct(product: ProductDto): boolean {
-  return product.unit !== undefined && SERVICE_UNITS.includes(product.unit);
-}
-
-// Quick feedback only; the API normalizes and validates the number.
-function isPlausiblePhone(value: string): boolean {
-  const digits = value.replace(/\D/g, '');
-  return digits.length >= 8 && digits.length <= 15;
-}
 
 /**
  * Vender: touch catalog, ticket and charge in one screen. The cart survives a reload, F9 charges and
@@ -178,16 +72,21 @@ export default function SellPage() {
   const canReceiveServices = hasCapability(capabilities, TenantCapability.Service);
   const hasKitchen = hasCapability(capabilities, TenantCapability.Kitchen);
 
-  const [products, setProducts] = useState<ProductDto[]>([]);
-  const [categories, setCategories] = useState<CategoryDto[]>([]);
-  const [catalogTruncated, setCatalogTruncated] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [tableNumber, setTableNumber] = useState('');
-  const [orderNotes, setOrderNotes] = useState('');
+  const warnTooManyLines = useCallback(() => toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`), [toast]);
+  const {
+    cart,
+    setCart,
+    toCartLine,
+    addOne,
+    addChosen,
+    setMeasured,
+    changeQuantity,
+    quantityDrafts,
+    typeQuantity,
+    finishTypingQuantity,
+    updateLine,
+  } = useSellCart(defaultTaxRate, warnTooManyLines);
+  const [details, setDetails] = useState<SaleDetails>(NO_SALE_DETAILS);
   const [showDetails, setShowDetails] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -204,8 +103,6 @@ export default function SellPage() {
   const online = useOnlineStatus();
   const pendingSales = usePendingSales();
   const [showPendingSales, setShowPendingSales] = useState(false);
-  // When the catalog on screen is the one saved on the device (the connection dropped while loading).
-  const [offlineCatalogAt, setOfflineCatalogAt] = useState<string | null>(null);
   // Key of the sale being charged: kept across retries until it is recorded, so a retry never charges twice.
   const saleKey = useRef<string | null>(null);
   const workingBranch = useWorkingBranch();
@@ -220,103 +117,52 @@ export default function SellPage() {
   // Read once: the link fills the customer after the saved draft is restored.
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
-  const [sendingToChat, setSendingToChat] = useState(false);
   const [measure, setMeasure] = useState<MeasureRequest | null>(null);
-  // What the cashier is typing in a quantity box ("1." on the way to "1.5"), until the box loses focus.
-  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const draftLoadedFor = useRef('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const toCartLine = useCallback(
-    (product: ProductDto, quantity: number, notes = '', optionIds: string[] = []): CartLine => {
-      const vat = resolveProductVat(product, defaultTaxRate);
-      return {
-        key: getLineKey(product.id, optionIds),
-        productId: product.id,
-        optionIds,
-        optionsLabel: getOptionsLabel(product.optionGroups, optionIds),
-        name: product.name,
-        unitPrice: getPriceWithOptions(product.priceAmount, product.optionGroups, optionIds),
-        quantity,
-        notes,
-        showNotes: notes.length > 0,
-        isService: isServiceProduct(product),
-        ratePercent: vat.ratePercent,
-        isExempt: vat.isExempt,
-        unit: product.unit,
-        fractional: allowsFractions(product.unit),
-      };
-    },
-    [defaultTaxRate],
-  );
-
-  const loadCatalog = useCallback(async () => {
-    if (!tenantId) return;
-    try {
-      let loaded: ProductDto[];
-      try {
-        const [productsResponse, categoriesResponse] = await Promise.all([
-          productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, pageNumber: 1, pageSize: CATALOG_PAGE_SIZE }),
-          categoriesApi.getAll(),
-        ]);
-        loaded = productsResponse.data.items;
-        setCategories(categoriesResponse.data);
-        setCatalogTruncated(productsResponse.data.totalCount > loaded.length);
-        setOfflineCatalogAt(null);
-        void saveCatalogSnapshot(tenantId, loaded, categoriesResponse.data);
-      } catch (err: unknown) {
-        // Without connection, keep selling with the catalog this device saved the last time.
-        const snapshot = isNetworkError(err) ? await loadCatalogSnapshot(tenantId) : null;
-        if (!snapshot) throw err;
-        loaded = snapshot.products;
-        setCategories(snapshot.categories);
-        setCatalogTruncated(false);
-        setOfflineCatalogAt(snapshot.savedAt);
-      }
-      setProducts(loaded);
-      setLoadError('');
-
-      const byId = new Map(loaded.map((product) => [product.id, product]));
-      if (draftLoadedFor.current !== tenantId) {
-        // First load for this business: bring back the sale that was being built (a table's round starts empty).
-        draftLoadedFor.current = tenantId;
-        const draft = tabTarget ? null : readSellDraft(tenantId);
-        if (draft) {
-          setCart(draft.lines.flatMap((line) => {
-            const product = byId.get(line.productId);
-            const optionIds = line.optionIds ?? [];
-            // Options that changed since the draft was saved drop the line instead of selling something else.
-            if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
-            return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
-          }));
-          setCustomerName(draft.customerName);
-          setCustomerPhone(draft.customerPhone);
-          setTableNumber(draft.tableNumber);
-          setOrderNotes(draft.orderNotes);
-          setShowDetails(Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
-        }
-        const origin = pendingChatOrigin.current;
-        if (origin) {
-          pendingChatOrigin.current = null;
-          setCustomerPhone(origin.phone);
-          setCustomerName(origin.name ?? '');
-          setShowDetails(true);
-          setChatOrigin(origin);
-        }
-      } else {
-        // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
-        setCart((current) => current.flatMap((line) => {
+  /** Keeps the ticket in line with the catalog just loaded; the first load brings back the sale being built. */
+  const syncCart = useCallback((loaded: ProductDto[]) => {
+    const byId = new Map(loaded.map((product) => [product.id, product]));
+    if (draftLoadedFor.current !== tenantId) {
+      // First load for this business: bring back the sale that was being built (a table's round starts empty).
+      draftLoadedFor.current = tenantId;
+      const draft = tabTarget ? null : readSellDraft(tenantId);
+      if (draft) {
+        setCart(draft.lines.flatMap((line) => {
           const product = byId.get(line.productId);
-          if (!product || getSelectionError(product.optionGroups, line.optionIds)) return [];
-          return [{ ...toCartLine(product, line.quantity, line.notes, line.optionIds), showNotes: line.showNotes }];
+          const optionIds = line.optionIds ?? [];
+          // Options that changed since the draft was saved drop the line instead of selling something else.
+          if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
+          return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
         }));
+        setDetails({
+          customerName: draft.customerName,
+          customerPhone: draft.customerPhone,
+          tableNumber: draft.tableNumber,
+          orderNotes: draft.orderNotes,
+        });
+        setShowDetails(Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
       }
-    } catch (err: unknown) {
-      setLoadError(getApiErrorMessage(err, 'No se pudo cargar el catálogo. Revisa tu conexión e intenta de nuevo.'));
-    } finally {
-      setLoading(false);
+      const origin = pendingChatOrigin.current;
+      if (origin) {
+        pendingChatOrigin.current = null;
+        setDetails((current) => ({ ...current, customerPhone: origin.phone, customerName: origin.name ?? '' }));
+        setShowDetails(true);
+        setChatOrigin(origin);
+      }
+    } else {
+      // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
+      setCart((current) => current.flatMap((line) => {
+        const product = byId.get(line.productId);
+        if (!product || getSelectionError(product.optionGroups, line.optionIds)) return [];
+        return [{ ...toCartLine(product, line.quantity, line.notes, line.optionIds), showNotes: line.showNotes }];
+      }));
     }
-  }, [tabTarget, tenantId, toCartLine]);
+  }, [setCart, tabTarget, tenantId, toCartLine]);
+
+  const catalog = useSellCatalog(tenantId, syncCart);
+  const { products } = catalog;
 
   useEffect(() => {
     // A round goes to an open tab: show what it already has.
@@ -333,23 +179,6 @@ export default function SellPage() {
       cancelled = true;
     };
   }, [tabTarget]);
-
-  useEffect(() => {
-    void loadCatalog();
-  }, [loadCatalog]);
-
-  // With the saved catalog on screen, or after a failed load, bring the current one (prices may have changed) when
-  // the connection comes back; the browser does not notice when only the server was unreachable, so retry each minute.
-  useEffect(() => {
-    if (!offlineCatalogAt && !loadError) return;
-    const reload = () => void loadCatalog();
-    window.addEventListener('online', reload);
-    const timer = offlineCatalogAt ? window.setInterval(reload, CATALOG_RETRY_MS) : undefined;
-    return () => {
-      window.removeEventListener('online', reload);
-      window.clearInterval(timer);
-    };
-  }, [offlineCatalogAt, loadError, loadCatalog]);
 
   // The customer is already in the form: a reload must not fill it again.
   useEffect(() => {
@@ -380,12 +209,9 @@ export default function SellPage() {
     if (!tenantId || draftLoadedFor.current !== tenantId || tabTarget) return;
     writeSellDraft(tenantId, {
       lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
-      customerName,
-      customerPhone,
-      tableNumber,
-      orderNotes,
+      ...details,
     });
-  }, [cart, customerName, customerPhone, orderNotes, tableNumber, tabTarget, tenantId]);
+  }, [cart, details, tabTarget, tenantId]);
 
   const totals = useMemo(
     () => estimateOrderTotals(
@@ -402,16 +228,16 @@ export default function SellPage() {
   // A weighed product counts as one article, whatever it weighs.
   const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
-  const phoneError = customerPhone.trim() && !isPlausiblePhone(customerPhone)
+  const phoneError = details.customerPhone.trim() && !isPlausiblePhone(details.customerPhone)
     ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'
     : '';
 
   const categoriesWithProducts = useMemo(() => {
     const used = new Set(products.map((product) => product.categoryId));
-    return categories
+    return catalog.categories
       .filter((category) => used.has(category.id))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-  }, [categories, products]);
+  }, [catalog.categories, products]);
   const hasFeatured = products.some((product) => product.isFeatured);
 
   const visibleProducts = useMemo(() => {
@@ -444,117 +270,13 @@ export default function SellPage() {
       setMeasure({ product, text: existing ? String(existing.quantity) : '', replacing: Boolean(existing) });
       return;
     }
-    setCart((current) => {
-      const existing = current.find((line) => line.key === product.id);
-      if (existing) {
-        return current.map((line) => (line.key === product.id
-          ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_LINE) }
-          : line));
-      }
-      if (current.length >= MAX_LINES) {
-        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
-        return current;
-      }
-      return [...current, toCartLine(product, 1)];
-    });
-  }, [cart, toCartLine, toast]);
-
-  const chosenQuantity = choosing ? parseQuantity(choosing.quantityText, choosing.product.unit) : null;
-  const choiceError = choosing ? getSelectionError(choosing.product.optionGroups, choosing.optionIds) : null;
-
-  const toggleOption = (groupId: string, optionId: string) => {
-    if (!choosing) return;
-    const group = choosing.product.optionGroups?.find((item) => item.id === groupId);
-    if (!group) return;
-    const inGroup = new Set(group.options.map((option) => option.id));
-    const selected = choosing.optionIds.includes(optionId);
-    let optionIds: string[];
-    if (group.maxSelections === 1) {
-      // A single choice works like radio buttons (an optional one can be cleared by tapping it again).
-      const others = choosing.optionIds.filter((id) => !inGroup.has(id));
-      optionIds = selected && group.minSelections === 0 ? others : [...others, optionId];
-    } else if (selected) {
-      optionIds = choosing.optionIds.filter((id) => id !== optionId);
-    } else {
-      const pickedInGroup = choosing.optionIds.filter((id) => inGroup.has(id)).length;
-      if (pickedInGroup >= group.maxSelections) return;
-      optionIds = [...choosing.optionIds, optionId];
-    }
-    setChoosing({ ...choosing, optionIds });
-  };
-
-  const confirmChoice = () => {
-    if (!choosing || choiceError || chosenQuantity === null) return;
-    const { product, optionIds } = choosing;
-    const key = getLineKey(product.id, optionIds);
-    setCart((current) => {
-      if (current.some((line) => line.key === key)) {
-        return current.map((line) => (line.key === key
-          ? { ...line, quantity: Math.min(roundQuantity(line.quantity + chosenQuantity), MAX_QUANTITY_PER_LINE) }
-          : line));
-      }
-      if (current.length >= MAX_LINES) {
-        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
-        return current;
-      }
-      return [...current, toCartLine(product, Math.min(chosenQuantity, MAX_QUANTITY_PER_LINE), '', optionIds)];
-    });
-    setChoosing(null);
-  };
-
-  const measuredQuantity = measure ? parseQuantity(measure.text, measure.product.unit) : null;
-  const measureTooLarge = measuredQuantity !== null && measuredQuantity > MAX_QUANTITY_PER_LINE;
-
-  const confirmMeasure = () => {
-    if (!measure || measuredQuantity === null || measureTooLarge) return;
-    const { product } = measure;
-    setCart((current) => {
-      if (current.some((line) => line.key === product.id)) {
-        return current.map((line) => (line.key === product.id ? { ...line, quantity: measuredQuantity } : line));
-      }
-      if (current.length >= MAX_LINES) {
-        toast.warning(`Una venta admite hasta ${MAX_LINES} productos distintos.`);
-        return current;
-      }
-      return [...current, toCartLine(product, measuredQuantity)];
-    });
-    setMeasure(null);
-  };
-
-  const changeQuantity = (key: string, quantity: number) => {
-    const rounded = roundQuantity(quantity);
-    setCart((current) => (rounded <= 0
-      ? current.filter((line) => line.key !== key)
-      : current.map((line) => (line.key === key
-        ? { ...line, quantity: Math.min(rounded, MAX_QUANTITY_PER_LINE) }
-        : line))));
-  };
-
-  const typeQuantity = (line: CartLine, text: string) => {
-    setQuantityDrafts((current) => ({ ...current, [line.key]: text }));
-    const parsed = parseQuantity(text, line.unit);
-    if (parsed !== null) changeQuantity(line.key, parsed);
-  };
-
-  const finishTypingQuantity = (key: string) => {
-    setQuantityDrafts((current) => {
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-  };
-
-  const updateLine = (key: string, changes: Partial<CartLine>) => {
-    setCart((current) => current.map((line) => (line.key === key ? { ...line, ...changes } : line)));
-  };
+    addOne(product);
+  }, [addOne, cart]);
 
   const clearSale = () => {
     saleKey.current = null;
     setCart([]);
-    setCustomerName('');
-    setCustomerPhone('');
-    setTableNumber('');
-    setOrderNotes('');
+    setDetails(NO_SALE_DETAILS);
     setShowDetails(false);
     setSaleError('');
   };
@@ -576,14 +298,14 @@ export default function SellPage() {
       setSearch('');
       return;
     }
-    if (visibleProducts.length === 0 && catalogTruncated) {
+    if (visibleProducts.length === 0 && catalog.catalogTruncated) {
       try {
         const { data } = await productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, search: term, pageSize: 20 });
         if (data.items.length === 1) {
           addProduct(data.items[0]);
           setSearch('');
         } else if (data.items.length > 1) {
-          setProducts((current) => [...current, ...data.items.filter((item) => !current.some((p) => p.id === item.id))]);
+          catalog.setProducts((current) => [...current, ...data.items.filter((item) => !current.some((p) => p.id === item.id))]);
         } else {
           toast.info(`No hay productos que coincidan con “${term}”.`);
         }
@@ -633,10 +355,10 @@ export default function SellPage() {
   }, [openCharge]);
 
   const buildOrderRequest = (): CreateOrderRequest => ({
-    customerName: customerName.trim() || undefined,
-    customerPhone: customerPhone.trim() || undefined,
-    customerNotes: orderNotes.trim() || undefined,
-    tableNumber: isFood ? tableNumber.trim() || undefined : undefined,
+    customerName: details.customerName.trim() || undefined,
+    customerPhone: details.customerPhone.trim() || undefined,
+    customerNotes: details.orderNotes.trim() || undefined,
+    tableNumber: isFood ? details.tableNumber.trim() || undefined : undefined,
     // A service in the cart makes it a service order (pieces to track, if the service is trackable).
     orderType: hasServices ? OrderType.Service : OrderType.Retail,
     items: cart.map((line) => ({
@@ -738,7 +460,7 @@ export default function SellPage() {
       setSaleError(message);
       if (!charge) toast.error(message);
       // A price or availability may have changed: refresh the catalog and the cart prices.
-      void loadCatalog();
+      void catalog.reload();
     } finally {
       setSubmitting(false);
     }
@@ -750,10 +472,9 @@ export default function SellPage() {
     setSaleError('');
     try {
       const request = buildOrderRequest();
-      if (tabTarget.kind === 'round') {
-        await ordersApi.addRound(tabTarget.orderId, request.items);
-      } else {
-        await ordersApi.create({
+      const { data: tab } = tabTarget.kind === 'round'
+        ? await ordersApi.addRound(tabTarget.orderId, request.items)
+        : await ordersApi.create({
           ...request,
           openTab: true,
           orderType: OrderType.Retail,
@@ -761,13 +482,15 @@ export default function SellPage() {
           // A tab without a table goes by its name.
           tableNumber: tabTarget.tableId ? undefined : tabTarget.label,
         });
-      }
+      // The round left the stock as it went to the kitchen: the business sells and warns when supplies run short.
+      const stockWarning = stockWarningMessage(tab.stockWarnings);
+      if (stockWarning) toast.warning(stockWarning, { title: ROUND_STOCK_WARNING_TITLE });
       clearSale();
       toast.success(tabTarget.kind === 'round' ? 'Ronda enviada a cocina.' : `Cuenta de ${tabTarget.label} abierta y enviada a cocina.`);
       navigate('/tables');
     } catch (err: unknown) {
       setSaleError(getApiErrorMessage(err, 'No se pudo enviar a cocina.'));
-      void loadCatalog();
+      void catalog.reload();
     } finally {
       setSubmitting(false);
     }
@@ -779,330 +502,59 @@ export default function SellPage() {
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
-  const sendSummaryToChat = async () => {
-    if (!completedSale || !chatOrigin || sendingToChat) return;
-    setSendingToChat(true);
-    try {
-      await chatApi.sendMessage({
-        phoneNumber: completedSale.order.customerPhone ?? chatOrigin.phone,
-        message: ticketText,
-        conversationId: chatOrigin.conversationId,
-      });
-      toast.success('Resumen enviado al chat.');
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'No se pudo enviar el resumen al chat.'));
-    } finally {
-      setSendingToChat(false);
-    }
-  };
-
-  const businessName = tenant?.name ?? 'TienditApp';
-  const ticketText = completedSale ? buildTicketText(completedSale.order, {
-    businessName,
-    provisional: completedSale.offline,
-  }) : '';
-  const completedChange = completedSale ? getTicketPaymentTotals(completedSale.order).change : 0;
-
   const cartPanel = (
-    <div className="sell-cart-panel">
-      {tabTarget && (
-        <div className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
-          <span className="small">
-            <i className="ri-restaurant-line me-1" aria-hidden="true"></i>
-            <strong>{tabTarget.label}</strong>
-            {tabTarget.kind === 'round'
-              ? tabOrder
-                ? <> · ronda {(tabOrder.kitchenTickets?.length ?? 0) + 1} · llevan <span className="ta-money">{formatMoney(tabOrder.total)}</span></>
-                : ' · nueva ronda'
-              : ' · cuenta nueva'}
-          </span>
-          <Link to="/tables" className="btn btn-sm btn-light">Mesas</Link>
-        </div>
-      )}
-      {chatOrigin && (
-        <div className="alert alert-success d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
-          <span className="small">
-            <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>
-            Pedido por WhatsApp de <strong>{chatOrigin.name ?? chatOrigin.phone}</strong>
-          </span>
-          <button type="button" className="btn-close" aria-label="Ya no es un pedido por WhatsApp" onClick={() => setChatOrigin(null)}></button>
-        </div>
-      )}
-      <div className="d-flex align-items-center justify-content-between mb-2">
-        <h2 className="h5 mb-0">Ticket</h2>
-        {cart.length > 0 && (
-          <button type="button" className="btn btn-sm btn-link text-danger" onClick={clearSale} disabled={submitting}>
-            Vaciar
-          </button>
-        )}
-      </div>
-
-      {cart.length === 0 ? (
-        <div className="sell-empty text-muted">
-          <i className="ri-shopping-basket-2-line" aria-hidden="true"></i>
-          <p className="mb-0">Toca un producto para agregarlo.</p>
-        </div>
-      ) : (
-        <ul className="sell-lines list-unstyled mb-2">
-          {cart.map((line) => {
-            const step = getQuantityStep(line.unit);
-            const unitLabel = getUnitShortLabel(line.unit);
-            const removesLine = line.quantity - step <= 0;
-            const stepLabel = line.fractional ? `${formatQuantity(step, line.unit)} de` : 'uno de';
-            return (
-              <li key={line.key} className="sell-line">
-                <div className="d-flex justify-content-between gap-2">
-                  <div className="sell-line-name">
-                    {line.name}
-                    {line.optionsLabel && <div className="small sell-line-options">{line.optionsLabel}</div>}
-                    <div className="small text-muted">
-                      {line.fractional
-                        ? `${formatQuantity(line.quantity, line.unit)} × ${formatMoney(line.unitPrice)}/${unitLabel}`
-                        : `${formatMoney(line.unitPrice)} c/u`}
-                    </div>
-                  </div>
-                  <strong className="ta-money">{formatMoney(lineAmount(line.unitPrice, line.quantity))}</strong>
-                </div>
-                <div className="d-flex align-items-center justify-content-between gap-2 mt-1">
-                  <div className="sell-stepper" role="group" aria-label={`Cantidad de ${line.name}`}>
-                    <button
-                      type="button"
-                      className="btn btn-light"
-                      aria-label={removesLine ? `Quitar ${line.name}` : `Quitar ${stepLabel} ${line.name}`}
-                      onClick={() => changeQuantity(line.key, line.quantity - step)}
-                    >
-                      <i className={removesLine ? 'ri-delete-bin-line' : 'ri-subtract-line'} aria-hidden="true"></i>
-                    </button>
-                    <input
-                      className={`form-control text-center ta-money ${line.fractional ? 'sell-quantity-measured' : ''}`}
-                      inputMode={line.fractional ? 'decimal' : 'numeric'}
-                      aria-label={line.fractional ? `Cantidad de ${line.name} en ${unitLabel}` : `Cantidad de ${line.name}`}
-                      value={quantityDrafts[line.key] ?? String(line.quantity)}
-                      onChange={(event) => typeQuantity(line, event.target.value)}
-                      onBlur={() => finishTypingQuantity(line.key)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-light"
-                      aria-label={`Agregar ${stepLabel} ${line.name}`}
-                      onClick={() => changeQuantity(line.key, line.quantity + step)}
-                    >
-                      <i className="ri-add-line" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${line.showNotes ? 'btn-soft-warning' : 'btn-light'}`}
-                    onClick={() => updateLine(line.key, { showNotes: !line.showNotes })}
-                    aria-expanded={line.showNotes}
-                  >
-                    <i className="ri-sticky-note-line me-1" aria-hidden="true"></i>Nota
-                  </button>
-                </div>
-                {line.showNotes && (
-                  <input
-                    className="form-control form-control-sm mt-2"
-                    placeholder="Ej. sin cebolla, para llevar"
-                    aria-label={`Nota para ${line.name}`}
-                    maxLength={300}
-                    value={line.notes}
-                    onChange={(event) => updateLine(line.key, { notes: event.target.value })}
-                  />
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <button
-        type="button"
-        className="btn btn-link btn-sm px-0 mb-2"
-        onClick={() => setShowDetails((value) => !value)}
-        aria-expanded={showDetails}
-      >
-        <i className={`${showDetails ? 'ri-arrow-up-s-line' : 'ri-user-add-line'} me-1`} aria-hidden="true"></i>
-        {showDetails ? 'Ocultar datos del cliente' : 'Cliente, mesa y notas (opcional)'}
-      </button>
-      {showDetails && (
-        <div className="sell-details mb-2">
-          <div className="row g-2">
-            <div className="col-sm-6">
-              <label className="form-label small mb-1" htmlFor="sell-customer-name">Nombre</label>
-              <input
-                id="sell-customer-name"
-                className="form-control"
-                maxLength={200}
-                placeholder="Público en general"
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-              />
-            </div>
-            <div className="col-sm-6">
-              <label className="form-label small mb-1" htmlFor="sell-customer-phone">Teléfono</label>
-              <input
-                id="sell-customer-phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                className={`form-control ${phoneError ? 'is-invalid' : ''}`}
-                placeholder="55 1234 5678"
-                value={customerPhone}
-                onChange={(event) => setCustomerPhone(event.target.value)}
-                aria-describedby="sell-customer-phone-help"
-              />
-              <div id="sell-customer-phone-help" className={phoneError ? 'invalid-feedback d-block' : 'form-text'}>
-                {phoneError || 'Con teléfono la venta queda en su historial.'}
-              </div>
-            </div>
-            {isFood && (
-              <div className="col-sm-6">
-                <label className="form-label small mb-1" htmlFor="sell-table">Mesa o referencia</label>
-                <input
-                  id="sell-table"
-                  className="form-control"
-                  maxLength={50}
-                  value={tableNumber}
-                  onChange={(event) => setTableNumber(event.target.value)}
-                />
-              </div>
-            )}
-            <div className={isFood ? 'col-sm-6' : 'col-12'}>
-              <label className="form-label small mb-1" htmlFor="sell-notes">Notas del pedido</label>
-              <input
-                id="sell-notes"
-                className="form-control"
-                maxLength={1000}
-                value={orderNotes}
-                onChange={(event) => setOrderNotes(event.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="sell-totals">
-        {!pricesIncludeTax && (
-          <div className="d-flex justify-content-between">
-            <span>Subtotal</span>
-            <span className="ta-money">{formatMoney(totals.subtotal)}</span>
-          </div>
-        )}
-        {totals.breakdown.filter((line) => line.taxAmount > 0).map((line) => (
-          <div className="d-flex justify-content-between small text-muted" key={`${line.ratePercent}-${line.isExempt}`}>
-            <span>{pricesIncludeTax ? `Incluye ${getVatLabel(line)}` : getVatLabel(line)}</span>
-            <span className="ta-money">{formatMoney(line.taxAmount)}</span>
-          </div>
-        ))}
-        <div className="d-flex justify-content-between align-items-baseline sell-total">
-          <span>Total</span>
-          <span className="ta-money">{formatMoney(totals.total)}</span>
-        </div>
-      </div>
-
-      {saleError && !chargeOpen && <div className="alert alert-danger py-2 mt-2 mb-0">{saleError}</div>}
-
-      {tabTarget ? (
-        <div className="d-grid gap-2 mt-3">
-          <button
-            type="button"
-            className="btn btn-primary btn-touch btn-touch-lg"
-            onClick={() => void sendToKitchen()}
-            disabled={cart.length === 0 || submitting}
-          >
-            <i className="ri-restaurant-2-line me-1" aria-hidden="true"></i>
-            {submitting ? 'Enviando…' : `Enviar a cocina · ${formatMoney(totals.total)}`}
-          </button>
-          <Link to="/tables" className="btn btn-light btn-touch">Cancelar</Link>
-        </div>
-      ) : canCharge ? (
-        <div className="d-grid gap-2 mt-3">
-          <button
-            type="button"
-            className="btn btn-primary btn-touch btn-touch-lg"
-            onClick={openCharge}
-            disabled={cart.length === 0 || submitting}
-          >
-            Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
-          </button>
-          <button
-            type="button"
-            className="btn btn-light btn-touch"
-            onClick={() => void submitSale(null)}
-            disabled={cart.length === 0 || submitting}
-          >
-            Guardar sin cobrar
-          </button>
-        </div>
-      ) : (
-        <div className="d-grid gap-2 mt-3">
-          <button
-            type="button"
-            className="btn btn-primary btn-touch btn-touch-lg"
-            onClick={() => void submitSale(null)}
-            disabled={cart.length === 0 || submitting}
-          >
-            {submitting ? 'Guardando…' : `Guardar pedido · ${formatMoney(totals.total)}`}
-          </button>
-          <p className="small text-muted text-center mb-0">La caja lo cobra desde Pedidos.</p>
-        </div>
-      )}
-    </div>
+    <CartPanel
+      tabTarget={tabTarget}
+      tabOrder={tabOrder}
+      chatOrigin={chatOrigin}
+      onDismissChat={() => setChatOrigin(null)}
+      cart={cart}
+      quantityDrafts={quantityDrafts}
+      onChangeQuantity={changeQuantity}
+      onTypeQuantity={typeQuantity}
+      onFinishTypingQuantity={finishTypingQuantity}
+      onUpdateLine={updateLine}
+      onClear={clearSale}
+      details={details}
+      onDetailsChange={(changes) => setDetails((current) => ({ ...current, ...changes }))}
+      showDetails={showDetails}
+      onToggleDetails={() => setShowDetails((value) => !value)}
+      isFood={isFood}
+      phoneError={phoneError}
+      totals={totals}
+      pricesIncludeTax={pricesIncludeTax}
+      saleError={saleError}
+      chargeOpen={chargeOpen}
+      submitting={submitting}
+      canCharge={canCharge}
+      onSendToKitchen={() => void sendToKitchen()}
+      onOpenCharge={openCharge}
+      onSaveUnpaid={() => void submitSale(null)}
+    />
   );
 
   return (
     <div className="sell-page">
-      <div className="sell-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        {/* In focus mode the bar above says where you are. */}
-        {!focus.isFocused && <h1 className="h3 mb-0">Vender</h1>}
-        <div className="d-flex flex-wrap align-items-center gap-2 ms-auto">
-          {!online && (
-            <span className="badge text-bg-warning" role="status">
-              <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>Sin conexión
-            </span>
-          )}
-          {pendingSales.sales.length > 0 && (
-            <button type="button" className={`btn btn-sm ${pendingSales.failedCount > 0 ? 'btn-danger' : 'btn-warning'}`}
-              onClick={() => setShowPendingSales(true)}>
-              <i className="ri-upload-cloud-2-line me-1" aria-hidden="true"></i>
-              {pendingSales.sales.length} {pendingSales.sales.length === 1 ? 'venta sin enviar' : 'ventas sin enviar'}
-            </button>
-          )}
-          {workingBranch.hasSeveral && (drawerBranch ? (
-            <span className="badge text-bg-light border" title="Las ventas se registran en la sucursal de tu caja abierta">
-              <i className="ri-store-3-line me-1" aria-hidden="true"></i>{drawerBranch.name} · tu caja
-            </span>
-          ) : (
-            <BranchPicker
-              branches={workingBranch.branches}
-              value={workingBranch.branch?.id}
-              onChange={workingBranch.setBranch}
-              label="Sucursal donde vendes"
-            />
-          ))}
-          {canReceiveServices && access.sell && (
-            <Link to="/orders/cart" className="btn btn-sm btn-light">
-              <i className="ri-t-shirt-line me-1" aria-hidden="true"></i>Recibir servicio con piezas
-            </Link>
-          )}
-          {access.orders && (
-            <Link to="/orders" className="btn btn-sm btn-light">
-              <i className="ri-file-list-3-line me-1" aria-hidden="true"></i>Pedidos
-            </Link>
-          )}
-          {!focus.isFocused && (
-            <button type="button" className="btn btn-sm btn-light" onClick={focus.enter}
-              title="Vender a pantalla completa, sin el menú: para la tableta del mostrador">
-              <i className="ri-fullscreen-line me-1" aria-hidden="true"></i>Modo enfocado
-            </button>
-          )}
-        </div>
-      </div>
+      <SellHeader
+        focused={focus.isFocused}
+        onEnterFocus={focus.enter}
+        online={online}
+        pendingSales={pendingSales.sales.length}
+        failedPendingSales={pendingSales.failedCount}
+        onShowPendingSales={() => setShowPendingSales(true)}
+        branches={workingBranch.branches}
+        hasSeveralBranches={workingBranch.hasSeveral}
+        workingBranchId={workingBranch.branch?.id}
+        onWorkingBranchChange={workingBranch.setBranch}
+        drawerBranch={drawerBranch}
+        showServiceIntake={canReceiveServices && access.sell}
+        showOrders={access.orders}
+      />
 
-      {offlineCatalogAt && (
+      {catalog.offlineCatalogAt && (
         <div className="alert alert-warning mt-3 mb-0" role="status">
           <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
-          Sin conexión: vendes con el catálogo guardado ({formatDateTime(offlineCatalogAt)}). Las ventas cobradas se guardan
+          Sin conexión: vendes con el catálogo guardado ({formatDateTime(catalog.offlineCatalogAt)}). Las ventas cobradas se guardan
           en este dispositivo y se envían solas al volver la conexión.
         </div>
       )}
@@ -1144,122 +596,25 @@ export default function SellPage() {
       />
 
       <div className="sell-layout mt-3">
-        <section className="sell-catalog" aria-label="Catálogo">
-          <div className="sell-search">
-            <i className="ri-search-line" aria-hidden="true"></i>
-            <input
-              ref={searchInputRef}
-              type="search"
-              className="form-control form-control-lg"
-              placeholder="Buscar o escanear código"
-              aria-label="Buscar producto o escanear código de barras"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => void handleSearchKeyDown(event)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="sell-chips" role="tablist" aria-label="Categorías">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={categoryFilter === 'all'}
-              className={`btn btn-touch ${categoryFilter === 'all' ? 'btn-primary' : 'btn-light'}`}
-              onClick={() => setCategoryFilter('all')}
-            >
-              Todos
-            </button>
-            {hasFeatured && (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={categoryFilter === 'featured'}
-                className={`btn btn-touch ${categoryFilter === 'featured' ? 'btn-primary' : 'btn-light'}`}
-                onClick={() => setCategoryFilter('featured')}
-              >
-                <i className="ri-star-line me-1" aria-hidden="true"></i>Favoritos
-              </button>
-            )}
-            {categoriesWithProducts.map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                role="tab"
-                aria-selected={categoryFilter === category.id}
-                className={`btn btn-touch ${categoryFilter === category.id ? 'btn-primary' : 'btn-light'}`}
-                onClick={() => setCategoryFilter(category.id)}
-              >
-                {category.name}
-              </button>
-            ))}
-          </div>
-
-          {loadError && (
-            <div className="alert alert-danger d-flex justify-content-between align-items-center gap-2">
-              <span>{loadError}</span>
-              <button type="button" className="btn btn-sm btn-light" onClick={() => void loadCatalog()}>Reintentar</button>
-            </div>
-          )}
-          {catalogTruncated && (
-            <div className="alert alert-info py-2" role="status">
-              Tu catálogo tiene más de {CATALOG_PAGE_SIZE} productos: escribe el nombre o escanea el código y presiona Enter
-              para buscar en todo el catálogo.
-            </div>
-          )}
-
-          {loading ? (
-            <div className="sell-products" aria-busy="true">
-              {Array.from({ length: 8 }, (_, index) => <div key={index} className="sell-product sell-product-skeleton" />)}
-            </div>
-          ) : products.length === 0 && !loadError ? (
-            <div className="card">
-              <div className="card-body text-center py-5">
-                <i className="ri-store-2-line fs-1 text-muted" aria-hidden="true"></i>
-                <p className="mt-2 mb-3">Todavía no hay productos disponibles para vender.</p>
-                {access.catalog && <Link to="/products/new" className="btn btn-primary">Agregar producto</Link>}
-              </div>
-            </div>
-          ) : visibleProducts.length === 0 ? (
-            <p className="text-muted py-4 text-center">No hay productos que coincidan con la búsqueda.</p>
-          ) : (
-            <div className="sell-products">
-              {visibleProducts.map((product) => {
-                const inCart = roundQuantity(cart
-                  .filter((line) => line.productId === product.id)
-                  .reduce((sum, line) => sum + line.quantity, 0));
-                const unitLabel = allowsFractions(product.unit) ? getUnitShortLabel(product.unit) : '';
-                const price = unitLabel ? `${formatMoney(product.priceAmount)}/${unitLabel}` : formatMoney(product.priceAmount);
-                const inCartLabel = unitLabel ? formatQuantity(inCart, product.unit) : String(inCart);
-                // The badge shows the number only: the tile already says the unit.
-                const badge = inCart.toLocaleString('es-MX', { maximumFractionDigits: 3 });
-                return (
-                  <button
-                    key={product.id}
-                    type="button"
-                    className={`sell-product ${inCart > 0 ? 'in-cart' : ''} ${unitLabel ? 'measured' : ''}`}
-                    onClick={() => addProduct(product)}
-                    aria-label={`Agregar ${product.name}, ${price}${inCart > 0 ? `, ${inCartLabel} en el ticket` : ''}`}
-                  >
-                    {product.images?.thumbnail && (
-                      <img src={product.images.thumbnail} alt="" className="sell-product-image" loading="lazy" />
-                    )}
-                    <span className="sell-product-name">{product.name}</span>
-                    <span className="sell-product-price ta-money">{price}</span>
-                    {isServiceProduct(product) && <span className="sell-product-tag">Servicio</span>}
-                    {unitLabel && !isServiceProduct(product) && <span className="sell-product-tag">Por {unitLabel}</span>}
-                    {product.tracksStock && product.onHand != null && (product.onHand <= 0 || product.isLowStock) && (
-                      <span className={`sell-product-stock ${product.onHand <= 0 ? 'out' : 'low'}`}>
-                        {product.onHand <= 0 ? 'Agotado' : `Quedan ${formatQuantity(product.onHand, product.unit)}`}
-                      </span>
-                    )}
-                    {inCart > 0 && <span className="sell-product-count" aria-hidden="true">{badge}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        <CatalogPanel
+          searchInputRef={searchInputRef}
+          search={search}
+          onSearchChange={setSearch}
+          onSearchKeyDown={(event) => void handleSearchKeyDown(event)}
+          categoryFilter={categoryFilter}
+          onCategoryChange={setCategoryFilter}
+          hasFeatured={hasFeatured}
+          categories={categoriesWithProducts}
+          loadError={catalog.loadError}
+          onRetry={() => void catalog.reload()}
+          catalogTruncated={catalog.catalogTruncated}
+          loading={catalog.loading}
+          hasProducts={products.length > 0}
+          visibleProducts={visibleProducts}
+          cart={cart}
+          onAdd={addProduct}
+          canManageCatalog={access.catalog}
+        />
 
         <aside className="sell-cart card d-none d-lg-block" aria-label="Ticket de la venta">
           <div className="card-body">{cartPanel}</div>
@@ -1288,146 +643,25 @@ export default function SellPage() {
         <Offcanvas.Body>{cartPanel}</Offcanvas.Body>
       </Offcanvas>
 
-      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down">
-        {choosing && (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              confirmChoice();
-            }}
-          >
-            <Modal.Header closeButton>
-              <Modal.Title as="h2" className="h5">{choosing.product.name}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              {(choosing.product.optionGroups ?? []).map((group) => {
-                const single = group.maxSelections === 1;
-                const pickedInGroup = group.options.filter((option) => choosing.optionIds.includes(option.id)).length;
-                return (
-                  <fieldset key={group.id} className="mb-3">
-                    <legend className="fs-6 fw-semibold mb-1">
-                      {group.name}{' '}
-                      <span className="small text-muted fw-normal">
-                        {group.minSelections > 0
-                          ? single ? '· obligatorio' : `· elige ${group.minSelections} a ${group.maxSelections}`
-                          : single ? '· opcional' : `· hasta ${group.maxSelections}`}
-                      </span>
-                    </legend>
-                    <div className="sell-option-list">
-                      {group.options.map((option) => {
-                        const checked = choosing.optionIds.includes(option.id);
-                        const full = !single && !checked && pickedInGroup >= group.maxSelections;
-                        return (
-                          <label key={option.id} className={`sell-option ${checked ? 'active' : ''} ${!option.isAvailable || full ? 'disabled' : ''}`}>
-                            <input
-                              type={single ? 'radio' : 'checkbox'}
-                              className="form-check-input me-2"
-                              name={`option-${group.id}`}
-                              checked={checked}
-                              disabled={!option.isAvailable || full}
-                              onChange={() => toggleOption(group.id, option.id)}
-                              onClick={() => {
-                                // Tapping the chosen option of an optional single choice clears it.
-                                if (single && checked && group.minSelections === 0) toggleOption(group.id, option.id);
-                              }}
-                            />
-                            <span className="flex-grow-1">{option.name}{!option.isAvailable && ' (agotado)'}</span>
-                            {option.priceDelta !== 0 && (
-                              <span className="ta-money small">{option.priceDelta > 0 ? '+' : '−'}{formatMoney(Math.abs(option.priceDelta))}</span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                );
-              })}
-              <label className="form-label" htmlFor="sell-choice-quantity">
-                {allowsFractions(choosing.product.unit) ? `Cantidad (${getUnitShortLabel(choosing.product.unit)})` : 'Cantidad'}
-              </label>
-              <input
-                id="sell-choice-quantity"
-                className={`form-control ta-money ${choosing.quantityText && chosenQuantity === null ? 'is-invalid' : ''}`}
-                style={{ maxWidth: '8rem' }}
-                inputMode={allowsFractions(choosing.product.unit) ? 'decimal' : 'numeric'}
-                value={choosing.quantityText}
-                onChange={(event) => setChoosing({ ...choosing, quantityText: event.target.value })}
-              />
-              {choiceError && <div className="text-danger small mt-2" role="status">{choiceError}</div>}
-            </Modal.Body>
-            <Modal.Footer>
-              <button type="button" className="btn btn-light" onClick={() => setChoosing(null)}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={Boolean(choiceError) || chosenQuantity === null}>
-                Agregar · {formatMoney(lineAmount(
-                  getPriceWithOptions(choosing.product.priceAmount, choosing.product.optionGroups, choosing.optionIds),
-                  chosenQuantity ?? 0,
-                ))}
-              </button>
-            </Modal.Footer>
-          </form>
-        )}
-      </Modal>
+      <OptionsModal
+        request={choosing}
+        onChange={setChoosing}
+        onConfirm={(product, optionIds, quantity) => {
+          addChosen(product, optionIds, quantity);
+          setChoosing(null);
+        }}
+        onClose={() => setChoosing(null)}
+      />
 
-      <Modal show={!!measure} onHide={() => setMeasure(null)} centered>
-        {measure && (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              confirmMeasure();
-            }}
-          >
-            <Modal.Header closeButton>
-              <Modal.Title as="h2" className="h5">{measure.product.name}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <label className="form-label" htmlFor="sell-measure">
-                ¿Cuánto? <span className="text-muted">({formatMoney(measure.product.priceAmount)}/{getUnitShortLabel(measure.product.unit)})</span>
-              </label>
-              <div className="input-group input-group-lg">
-                <input
-                  id="sell-measure"
-                  className={`form-control ta-money ${measure.text && (measuredQuantity === null || measureTooLarge) ? 'is-invalid' : ''}`}
-                  inputMode="decimal"
-                  autoComplete="off"
-                  autoFocus
-                  placeholder="0.000"
-                  value={measure.text}
-                  onChange={(event) => setMeasure({ ...measure, text: event.target.value })}
-                  aria-describedby="sell-measure-help"
-                />
-                <span className="input-group-text">{getUnitShortLabel(measure.product.unit)}</span>
-              </div>
-              <div id="sell-measure-help" className={measure.text && (measuredQuantity === null || measureTooLarge) ? 'invalid-feedback d-block' : 'form-text'}>
-                {measureTooLarge
-                  ? `Máximo ${MAX_QUANTITY_PER_LINE.toLocaleString('es-MX')} por producto.`
-                  : measure.text && measuredQuantity === null
-                    ? 'Escribe una cantidad mayor a cero, con hasta 3 decimales.'
-                    : measuredQuantity !== null
-                      ? `Importe: ${formatMoney(lineAmount(measure.product.priceAmount, measuredQuantity))}`
-                      : 'Hasta 3 decimales.'}
-              </div>
-              <div className="sell-measure-picks mt-3" role="group" aria-label="Cantidades rápidas">
-                {getQuickQuantities(measure.product.unit).map((quantity) => (
-                  <button
-                    key={quantity}
-                    type="button"
-                    className="btn btn-light btn-touch"
-                    onClick={() => setMeasure({ ...measure, text: String(quantity) })}
-                  >
-                    {formatQuantity(quantity, measure.product.unit)}
-                  </button>
-                ))}
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <button type="button" className="btn btn-light" onClick={() => setMeasure(null)}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={measuredQuantity === null || measureTooLarge}>
-                {measure.replacing ? 'Cambiar cantidad' : 'Agregar'}
-              </button>
-            </Modal.Footer>
-          </form>
-        )}
-      </Modal>
+      <MeasureModal
+        request={measure}
+        onChange={setMeasure}
+        onConfirm={(product, quantity) => {
+          setMeasured(product, quantity);
+          setMeasure(null);
+        }}
+        onClose={() => setMeasure(null)}
+      />
 
       <Modal show={chargeOpen} onHide={() => !submitting && setChargeOpen(false)} centered size="lg" fullscreen="sm-down">
         <Modal.Header closeButton={!submitting}>
@@ -1452,73 +686,14 @@ export default function SellPage() {
 
       {showPendingSales && <PendingSalesModal onClose={() => setShowPendingSales(false)} />}
 
-      <Modal show={!!completedSale} onHide={startNewSale} centered fullscreen="sm-down">
-        <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">
-            <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
-            {completedSale?.offline
-              ? `Venta ${completedSale.order.orderNumber} guardada sin conexión`
-              : completedSale?.unpaid
-                ? `Pedido ${completedSale.order.orderNumber} guardado`
-                : `Venta ${completedSale?.order.orderNumber} cobrada`}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {completedSale && (
-            <>
-              {completedSale.offline && (
-                <div className="alert alert-warning small" role="status">
-                  <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
-                  Sin conexión: la venta quedó guardada en este dispositivo y se envía sola cuando vuelva. Su folio definitivo
-                  aparecerá en Pedidos.
-                  {hasKitchen && ' La cocina no la verá hasta que se envíe: avísale o entrégale el ticket impreso.'}
-                </div>
-              )}
-              {completedChange > 0 && (
-                <div className="charge-change has-change mb-3" aria-live="polite">
-                  <span>Cambio</span>
-                  <strong className="ta-money">{formatMoney(completedChange)}</strong>
-                </div>
-              )}
-              <SaleTicket
-                order={completedSale.order}
-                businessName={businessName}
-                provisional={completedSale.offline}
-              />
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer className="flex-wrap">
-          <button type="button" className="btn btn-light btn-touch" onClick={printTicket}>
-            <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
-          </button>
-          {chatOrigin && access.chat ? (
-            <>
-              <button type="button" className="btn btn-success btn-touch" onClick={() => void sendSummaryToChat()} disabled={sendingToChat}>
-                <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>{sendingToChat ? 'Enviando…' : 'Enviar resumen al chat'}
-              </button>
-              <Link
-                className="btn btn-light btn-touch"
-                to={chatOrigin.conversationId ? `/whatsapp/chat?conversation=${chatOrigin.conversationId}` : '/whatsapp/chat'}
-              >
-                Volver al chat
-              </Link>
-            </>
-          ) : (
-            <a
-              className="btn btn-light btn-touch"
-              href={buildWhatsAppTicketUrl(ticketText, completedSale?.order.customerPhone)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Enviar por WhatsApp
-            </a>
-          )}
-          <button type="button" className="btn btn-primary btn-touch flex-grow-1" onClick={startNewSale} autoFocus>
-            Nueva venta
-          </button>
-        </Modal.Footer>
-      </Modal>
+      <CompletedSaleModal
+        sale={completedSale}
+        businessName={tenant?.name ?? 'TienditApp'}
+        chatOrigin={chatOrigin}
+        canChat={access.chat}
+        hasKitchen={hasKitchen}
+        onNewSale={startNewSale}
+      />
     </div>
   );
 }

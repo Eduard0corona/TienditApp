@@ -46,6 +46,7 @@ public static class OrderMappings
         ServicePieces = order.ServicePieces.Select(ToDto).ToList(),
         Payments = order.Payments.Select(ToDto).ToList(),
         Refunds = order.Refunds.Select(ToDto).ToList(),
+        ItemCancellations = order.ItemCancellations.OrderBy(c => c.CancelledAt).Select(ToDto).ToList(),
         IsTab = order.IsTab,
         IsOpenTab = order.IsOpenTab,
         DiningTableId = order.DiningTableId,
@@ -71,8 +72,10 @@ public static class OrderMappings
         ProductName = item.ProductName,
         Quantity = item.Quantity,
         ReturnedQuantity = item.ReturnedQuantity,
+        CancelledQuantity = item.CancelledQuantity,
         UnitPrice = item.UnitPrice,
         TotalPrice = item.TotalPrice,
+        ChargedPrice = item.ChargedPrice,
         Notes = item.Notes,
         TaxRate = item.TaxRate,
         IsTaxExempt = item.IsTaxExempt,
@@ -165,6 +168,19 @@ public static class OrderMappings
         Lines = refund.Lines.Select(l => new OrderRefundLineDto { OrderItemId = l.OrderItemId, Quantity = l.Quantity }).ToList()
     };
 
+    public static OrderItemCancellationDto ToDto(this OrderItemCancellation cancellation) => new()
+    {
+        Id = cancellation.Id,
+        OrderItemId = cancellation.OrderItemId,
+        Round = cancellation.Round,
+        Quantity = cancellation.Quantity,
+        Amount = cancellation.Amount,
+        Reason = cancellation.Reason,
+        ReturnedToStock = cancellation.ReturnedToStock,
+        CancelledAt = cancellation.CancelledAt,
+        CancelledBy = cancellation.CancelledBy
+    };
+
     public static KitchenTicketSummaryDto ToSummaryDto(this KitchenTicket ticket) => new()
     {
         Id = ticket.Id,
@@ -216,8 +232,11 @@ public static class OrderMappings
             ProductName = item.ProductName,
             Quantity = item.Quantity,
             ReturnedQuantity = item.ReturnedQuantity,
+            CancelledQuantity = item.CancelledQuantity,
             UnitPrice = item.UnitPrice,
             TotalPrice = item.TotalPrice,
+            // Same as OrderItem.ChargedPrice.
+            ChargedPrice = item.TotalPrice - item.CancelledAmount,
             Notes = item.Notes,
             TaxRate = item.TaxRate,
             IsTaxExempt = item.IsTaxExempt,
@@ -303,6 +322,18 @@ public static class OrderMappings
             Reference = refund.Reference,
             RestockItems = refund.RestockItems,
             Lines = refund.Lines.Select(l => new OrderRefundLineDto { OrderItemId = l.OrderItemId, Quantity = l.Quantity }).ToList()
+        }).ToList(),
+        ItemCancellations = order.ItemCancellations.OrderBy(c => c.CancelledAt).Select(cancellation => new OrderItemCancellationDto
+        {
+            Id = cancellation.Id,
+            OrderItemId = cancellation.OrderItemId,
+            Round = cancellation.Round,
+            Quantity = cancellation.Quantity,
+            Amount = cancellation.Amount,
+            Reason = cancellation.Reason,
+            ReturnedToStock = cancellation.ReturnedToStock,
+            CancelledAt = cancellation.CancelledAt,
+            CancelledBy = cancellation.CancelledBy
         }).ToList(),
         IsTab = order.IsTab,
         // Same rule as Order.IsOpenTab.
