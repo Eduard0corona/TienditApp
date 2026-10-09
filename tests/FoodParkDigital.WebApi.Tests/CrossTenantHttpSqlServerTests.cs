@@ -180,6 +180,7 @@ public sealed class CrossTenantHttpSqlServerTests
         var pricesIncludeTax = !aBefore.GetProperty("pricesIncludeTax").GetBoolean();
         var stockPolicy = aBefore.GetProperty("insufficientStockPolicy").GetInt32() == 0 ? 1 : 0;
         var menuMode = aBefore.GetProperty("onlineMenuMode").GetInt32() == 0 ? 1 : 0;
+        var theme = aBefore.GetProperty("theme").GetInt32() == 0 ? 3 : 0;
         try
         {
             // The business override header is only for the platform admin: an owner's changes stay in their business.
@@ -189,14 +190,18 @@ public sealed class CrossTenantHttpSqlServerTests
             using var menu = InBusiness(A.TenantId, HttpMethod.Put, "/api/v1/auth/my-tenant/online-menu");
             menu.Content = JsonContent.Create(new { mode = menuMode });
             await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(menu));
+            using var colors = InBusiness(A.TenantId, HttpMethod.Put, "/api/v1/auth/my-tenant/theme");
+            colors.Content = JsonContent.Create(new { theme });
+            await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(colors));
 
             var aAfter = await A.Client.GetFromJsonAsync<JsonElement>("/api/v1/auth/my-tenant");
             var bAfter = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/auth/my-tenant");
-            foreach (var setting in new[] { "pricesIncludeTax", "insufficientStockPolicy", "onlineMenuMode" })
+            foreach (var setting in new[] { "pricesIncludeTax", "insufficientStockPolicy", "onlineMenuMode", "theme" })
                 Assert.Equal(aBefore.GetProperty(setting).GetRawText(), aAfter.GetProperty(setting).GetRawText());
             Assert.Equal(pricesIncludeTax, bAfter.GetProperty("pricesIncludeTax").GetBoolean());
             Assert.Equal(stockPolicy, bAfter.GetProperty("insufficientStockPolicy").GetInt32());
             Assert.Equal(menuMode, bAfter.GetProperty("onlineMenuMode").GetInt32());
+            Assert.Equal(theme, bAfter.GetProperty("theme").GetInt32());
 
             // The guided setup and the plan it shows are B's as well.
             var setup = await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/auth/my-tenant/setup")));
@@ -211,6 +216,8 @@ public sealed class CrossTenantHttpSqlServerTests
                 SalesPolicy(bBefore, bBefore.GetProperty("pricesIncludeTax").GetBoolean(), bBefore.GetProperty("insufficientStockPolicy").GetInt32())));
             await TwoBusinessesApi.ReadAsync(await B.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/online-menu",
                 new { mode = bBefore.GetProperty("onlineMenuMode").GetInt32() }));
+            await TwoBusinessesApi.ReadAsync(await B.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/theme",
+                new { theme = bBefore.GetProperty("theme").GetInt32() }));
         }
     }
 

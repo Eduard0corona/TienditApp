@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -19,6 +20,13 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
         builder.Property(s => s.OnlineMenuMode).HasConversion<int>().IsRequired();
         builder.Property(s => s.OrderNotificationPolicy).HasConversion<int>().IsRequired();
         builder.Property(s => s.InsufficientStockPolicy).HasConversion<int>().IsRequired();
+        // The database default only fills the rows the previous version saves while this one is published; EF always
+        // writes the value.
+        builder.Property(s => s.Theme)
+            .HasConversion<int>()
+            .HasDefaultValue(BusinessTheme.Nopal)
+            .ValueGeneratedNever()
+            .IsRequired();
 
         builder.HasIndex(s => s.TenantId).IsUnique();
     }

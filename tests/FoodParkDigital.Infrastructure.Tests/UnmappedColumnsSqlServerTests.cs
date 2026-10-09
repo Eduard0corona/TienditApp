@@ -71,13 +71,18 @@ public class UnmappedColumnsSqlServerTests
     public async Task RequireOpenCashSession_ShouldStayWithItsDefault_WhileUnmapped()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
-        await MigrateAsync(database, BeforeCashPolicyStopsMapping);
+        // Seeded with this model (it maps columns newer than the version that mapped this one), then taken back there.
+        await MigrateAsync(database);
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant("Tienda", slug, BusinessType.Retail, $"{slug}@demo.com");
         await using (var seed = database.CreateContext(tenant.Id))
         {
             seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail));
             await seed.SaveChangesAsync();
+        }
+        await MigrateAsync(database, BeforeCashPolicyStopsMapping);
+        await using (var seed = database.CreateContext(tenant.Id))
+        {
             // Turned on by a version that still mapped it.
             await seed.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantSettings SET RequireOpenCashSession = 1 WHERE TenantId = {tenant.Id}");
         }

@@ -59,6 +59,7 @@ public class UseCaseRulesTests
         // Configuration stays with owners and admins; every member reads where they work.
         { typeof(UpdateMyTenantCommand), "Manager" },
         { typeof(UpdateSalesPolicyCommand), "Manager" },
+        { typeof(UpdateBusinessThemeCommand), "Manager" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

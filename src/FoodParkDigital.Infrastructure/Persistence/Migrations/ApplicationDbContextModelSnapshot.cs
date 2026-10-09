@@ -3368,6 +3368,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("Theme")
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("TimeZone")
                         .IsRequired()
                         .HasMaxLength(50)
