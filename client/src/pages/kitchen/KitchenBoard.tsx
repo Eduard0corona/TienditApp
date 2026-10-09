@@ -268,7 +268,7 @@ export default function KitchenBoard() {
                         <h4 className="mb-1">{order.orderNumber}</h4>
                         <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>
                       </div>
-                      <span className={`badge ${isPreparing ? 'bg-primary' : 'bg-warning text-dark'}`}>
+                      <span className={`badge ${isPreparing ? 'ta-chip-preparing' : 'ta-chip-new'}`}>
                         {getOrderStatusLabel(order.status)}
                       </span>
                     </div>
@@ -329,7 +329,7 @@ export default function KitchenBoard() {
                         <div className="small text-muted">Ronda {ticket.round} · {ticket.orderNumber}</div>
                         {!isReady && <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>}
                       </div>
-                      <span className={`badge ${isReady ? 'bg-success' : ticket.status === KitchenTicketStatus.Preparing ? 'bg-primary' : 'bg-warning text-dark'}`}>
+                      <span className={`badge ${isReady ? 'ta-chip-ready' : ticket.status === KitchenTicketStatus.Preparing ? 'ta-chip-preparing' : 'ta-chip-new'}`}>
                         {TICKET_STATUS_LABELS[ticket.status]}
                       </span>
                     </div>

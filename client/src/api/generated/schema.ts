@@ -7489,6 +7489,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateBusinessThemeRequest"];
+                    "text/json": components["schemas"]["UpdateBusinessThemeRequest"];
+                    "application/*+json": components["schemas"]["UpdateBusinessThemeRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BusinessThemeDto"];
+                        "application/json": components["schemas"]["BusinessThemeDto"];
+                        "text/json": components["schemas"]["BusinessThemeDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/twofactor/enable": {
         parameters: {
             query?: never;
@@ -8095,6 +8138,14 @@ export interface components {
             branchId?: string | null;
             branchName: string;
             figures: components["schemas"]["SalesFiguresDto"];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        BusinessTheme: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+        BusinessThemeDto: {
+            theme: components["schemas"]["BusinessTheme"];
         };
         /**
          * Format: int32
@@ -10116,6 +10167,7 @@ export interface components {
             defaultTaxRate: number;
             acceptsOrders: boolean;
             ordersPaused: boolean;
+            theme: components["schemas"]["BusinessTheme"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -10696,6 +10748,7 @@ export interface components {
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
             insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
+            theme: components["schemas"]["BusinessTheme"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
             timeZone: string;
@@ -10849,6 +10902,9 @@ export interface components {
             contactPhone?: string | null;
             /** Format: uuid */
             id: string;
+        };
+        UpdateBusinessThemeRequest: {
+            theme: components["schemas"]["BusinessTheme"];
         };
         UpdateCategoryCommand: {
             /** Format: uuid */

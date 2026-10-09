@@ -149,7 +149,7 @@
   padding: 0 0.4rem;
   border-radius: 999px;
   background: var(--ct-primary);
-  color: #fff;
+  color: var(--ta-on-accent);
   font-weight: 800;
   font-size: 0.85rem;
   line-height: 1.6rem;
@@ -263,7 +263,7 @@
   padding: 0.5rem;
   border-radius: var(--ta-radius-lg);
   background: var(--ta-surface);
-  box-shadow: 0 8px 24px rgba(20, 32, 27, 0.2);
+  box-shadow: 0 8px 24px rgba(var(--ta-shadow-rgb), 0.2);
 }
 
 @media (max-width: 767.98px) {

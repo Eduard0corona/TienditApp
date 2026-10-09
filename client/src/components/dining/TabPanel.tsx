@@ -33,10 +33,10 @@ interface TabPanelProps {
 }
 
 const ROUND_STATUS: Record<number, { label: string; className: string }> = {
-  [KitchenTicketStatus.Pending]: { label: 'En cocina', className: 'bg-warning text-dark' },
-  [KitchenTicketStatus.Preparing]: { label: 'Preparando', className: 'bg-primary' },
-  [KitchenTicketStatus.Ready]: { label: 'Lista para llevar', className: 'bg-success' },
-  [KitchenTicketStatus.Served]: { label: 'Servida', className: 'bg-light text-dark' },
+  [KitchenTicketStatus.Pending]: { label: 'En cocina', className: 'ta-chip-new' },
+  [KitchenTicketStatus.Preparing]: { label: 'Preparando', className: 'ta-chip-preparing' },
+  [KitchenTicketStatus.Ready]: { label: 'Lista para llevar', className: 'ta-chip-ready' },
+  [KitchenTicketStatus.Served]: { label: 'Servida', className: 'ta-chip-done' },
 };
 
 /** An open tab: its rounds, what is paid and what is left, and the actions of the table. */
@@ -304,7 +304,7 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
               )}
               {order.balance > 0 ? (
                 canCharge ? (
-                  <button type="button" className="btn btn-success btn-touch ms-md-auto" onClick={() => setMode('charge')}>
+                  <button type="button" className="btn btn-primary btn-touch ms-md-auto" onClick={() => setMode('charge')}>
                     Cobrar {formatMoney(order.balance)}
                   </button>
                 ) : (
@@ -313,7 +313,7 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
                   </span>
                 )
               ) : (
-                <button type="button" className="btn btn-success btn-touch ms-md-auto" disabled={busy} onClick={() => void closeTab()}>
+                <button type="button" className="btn btn-primary btn-touch ms-md-auto" disabled={busy} onClick={() => void closeTab()}>
                   Cerrar cuenta
                 </button>
               )}

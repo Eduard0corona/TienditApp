@@ -1,6 +1,7 @@
 // The enums are generated from the API contract and re-exported where each one belongs below.
 import type {
   AppointmentStatus,
+  BusinessTheme,
   BusinessType,
   CampaignAudienceKind,
   CampaignStatus,
@@ -165,6 +166,8 @@ export interface TenantProfileDto {
   autoCloseCounterSales: boolean;
   /** The public menu (/m/{slug}): off, menu only, or menu that takes orders. */
   onlineMenuMode?: OnlineMenuMode;
+  /** The colors the owner picked for the team's app and the public menu (Nopal until then). */
+  theme?: BusinessTheme;
   /** Which orders send the customer WhatsApp messages (paid templates). */
   orderNotificationPolicy?: OrderNotificationPolicy;
   /** Refuse (default) or warn when a sale's recipe supplies are short. */
@@ -347,6 +350,9 @@ export { UnitType } from '../api/generated/enums';
 
 /** Same numbers as Domain.Tenants.Enums.OnlineMenuMode. */
 export { OnlineMenuMode } from '../api/generated/enums';
+
+/** Same numbers as Domain.Tenants.Enums.BusinessTheme; the palettes live in utils/businessThemes.ts. */
+export { BusinessTheme } from '../api/generated/enums';
 
 /**
  * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders

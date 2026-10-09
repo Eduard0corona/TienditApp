@@ -1,42 +1,57 @@
 /*
  * TienditApp theme: design tokens on top of Hyper (Bootstrap 5.3 with --ct- variables). Loaded after
  * app.min.css, so screens keep their markup while Hyper is retired one screen at a time.
- * Action: nopal green. Brand and notices: Mexican pink. Same tokens for light and dark themes.
+ *
+ * Three layers:
+ *   1. The business theme (--tt-*): the accent of the business and the tint of its page. utils/theme.ts sets them
+ *      on <html> from utils/businessThemes.ts (the owner picks one in Configuración > Negocio > Apariencia); the
+ *      values below are Nopal, TienditApp's green, until a business is loaded.
+ *   2. Neutrals and the colors of states (success, danger, warning, info, the status chips): the same for every
+ *      theme, so a status reads the same in every business. Every pair passes WCAG AA (businessThemes.test.ts).
+ *   3. Hyper's variables and the components it compiles colors into, mapped to layers 1 and 2 for each mode.
+ * The light block never applies to a dark page (:not), and the dark block sets every variable the light one does:
+ * a variable left out of the dark block used to keep its light value (the page stayed light in dark mode).
  */
 
+/* 1. Business theme: Nopal. */
 :root {
-  --ta-green: #0e7a5c;
-  --ta-green-rgb: 14, 122, 92;
-  --ta-green-hover: #0b6650;
-  --ta-green-active: #095443;
-  --ta-pink: #c81f64;
-  --ta-ink: #14201b;
-  --ta-bg: #f3f5f2;
-  --ta-surface: #ffffff;
-  --ta-warning-bg: #fcefd3;
-  --ta-warning-fg: #7a4f00;
-  --ta-danger-bg: #fde7e4;
-  --ta-danger-fg: #b42318;
+  --tt-accent: #0e7a5c;
+  --tt-accent-rgb: 14, 122, 92;
+  --tt-accent-hover: #0b6650;
+  --tt-accent-active: #095443;
+  --tt-on-accent: #ffffff;
+  --tt-accent-subtle: #e2f1eb;
+  --tt-accent-border: #a6d6c3;
+  --tt-accent-text: #085440;
+  --tt-link: #0e7a5c;
+  --tt-link-rgb: 14, 122, 92;
+  --tt-link-hover: #0b6650;
+  --tt-link-hover-rgb: 11, 102, 80;
+  --tt-page-bg: #f3f5f2;
+  --tt-dark-accent: #2fb386;
+  --tt-dark-accent-rgb: 47, 179, 134;
+  --tt-dark-accent-hover: #4cc79c;
+  --tt-dark-accent-active: #8fe0c2;
+  --tt-dark-on-accent: #0b1f18;
+  --tt-dark-accent-subtle: #365555;
+  --tt-dark-accent-border: #1f6e55;
+  --tt-dark-accent-text: #8fe0c2;
+  --tt-dark-link: #5fd0a8;
+  --tt-dark-link-rgb: 95, 208, 168;
+  --tt-dark-link-hover: #8fe0c2;
+  --tt-dark-link-hover-rgb: 143, 224, 194;
+}
+
+/* Tokens that do not change with the mode. */
+:root {
   --ta-radius-sm: 10px;
   --ta-radius: 12px;
   --ta-radius-lg: 16px;
   /* Smallest touch target for tablet and phone screens. */
   --ta-touch: 44px;
   --ta-font: 'Manrope Variable', 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-}
-
-:root,
-[data-bs-theme='light'] {
-  --ct-primary: #0e7a5c;
-  --ct-primary-rgb: 14, 122, 92;
-  --ct-primary-bg-subtle: #e2f1eb;
-  --ct-primary-border-subtle: #a6d6c3;
-  --ct-primary-text-emphasis: #085440;
-  --ct-link-color: #0e7a5c;
-  --ct-link-color-rgb: 14, 122, 92;
-  --ct-link-hover-color: #0b6650;
-  --ct-link-hover-color-rgb: 11, 102, 80;
-  --ct-body-bg: #f3f5f2;
+  /* Text on the warning fill (an amber badge or button): white on amber cannot be read. */
+  --ta-on-warning: #3d2c00;
   --ct-font-sans-serif: var(--ta-font);
   --ct-body-font-family: var(--ta-font);
   --ct-border-radius: 0.5rem;
@@ -44,34 +59,159 @@
   --ct-border-radius-lg: 0.75rem;
 }
 
-[data-bs-theme='dark'] {
-  --ta-surface: #313a46;
-  --ct-primary: #2fb386;
-  --ct-primary-rgb: 47, 179, 134;
-  --ct-primary-bg-subtle: rgba(47, 179, 134, 0.16);
-  --ct-primary-border-subtle: #1f6e55;
-  --ct-primary-text-emphasis: #8fe0c2;
-  --ct-link-color: #4cc79c;
-  --ct-link-color-rgb: 76, 199, 156;
-  --ct-link-hover-color: #8fe0c2;
-  --ct-link-hover-color-rgb: 143, 224, 194;
+/* 2 + 3, light mode. */
+:root:not([data-bs-theme='dark']),
+[data-bs-theme='light'] {
+  --ta-accent: var(--tt-accent);
+  --ta-accent-hover: var(--tt-accent-hover);
+  --ta-accent-active: var(--tt-accent-active);
+  --ta-on-accent: var(--tt-on-accent);
+  --ta-ink: #1d2939;
+  --ta-surface: #ffffff;
+  --ta-warning-bg: #fcefd3;
+  --ta-warning-fg: #7a4f00;
+  --ta-danger-bg: #fde7e4;
+  --ta-danger-fg: #b42318;
+  --ta-chip-new-bg: #fcefd3;
+  --ta-chip-new-fg: #7a4f00;
+  --ta-chip-confirmed-bg: #e0ecfb;
+  --ta-chip-confirmed-fg: #1d4f91;
+  --ta-chip-preparing-bg: #ece6fb;
+  --ta-chip-preparing-fg: #5b3aa8;
+  --ta-chip-ready-bg: #dcf3e8;
+  --ta-chip-ready-fg: #0b6650;
+  --ta-chip-done-bg: #eceeec;
+  --ta-chip-done-fg: #3c4842;
+  --ta-chip-cancelled-bg: #fde7e4;
+  --ta-chip-cancelled-fg: #b42318;
+  --ta-shadow-rgb: 20, 32, 27;
+
+  --ct-primary: var(--tt-accent);
+  --ct-primary-rgb: var(--tt-accent-rgb);
+  --ct-primary-bg-subtle: var(--tt-accent-subtle);
+  --ct-primary-border-subtle: var(--tt-accent-border);
+  --ct-primary-text-emphasis: var(--tt-accent-text);
+  --ct-link-color: var(--tt-link);
+  --ct-link-color-rgb: var(--tt-link-rgb);
+  --ct-link-hover-color: var(--tt-link-hover);
+  --ct-link-hover-color-rgb: var(--tt-link-hover-rgb);
+  --ct-body-bg: var(--tt-page-bg);
+  /* Hyper wrote the text in a gray that fell below 4.5:1 on the page: darker body text and real headings. */
+  --ct-body-color: #475467;
+  --ct-body-color-rgb: 71, 84, 103;
+  --ct-secondary-color: #5d6b7a;
+  --ct-emphasis-color: #1d2939;
+  --ct-emphasis-color-rgb: 29, 41, 57;
+  --ct-heading-color: #1d2939;
+
+  --ct-success: #15803d;
+  --ct-success-rgb: 21, 128, 61;
+  --ct-success-text-emphasis: #0f5a2b;
+  --ct-success-bg-subtle: #e3f4e8;
+  --ct-success-border-subtle: #a6d8b4;
+  --ct-danger: #b42318;
+  --ct-danger-rgb: 180, 35, 24;
+  --ct-danger-text-emphasis: #912018;
+  --ct-danger-bg-subtle: #fde7e4;
+  --ct-danger-border-subtle: #f4b4ab;
+  --ct-warning: #f2b007;
+  --ct-warning-rgb: 242, 176, 7;
+  --ct-warning-text-emphasis: #7a4f00;
+  --ct-warning-bg-subtle: #fcefd3;
+  --ct-warning-border-subtle: #f1d38b;
+  --ct-info: #0b6aa2;
+  --ct-info-rgb: 11, 106, 162;
+  --ct-info-text-emphasis: #0b4b74;
+  --ct-info-bg-subtle: #e1eef8;
+  --ct-info-border-subtle: #a9cbe8;
+
+  /* Menu and top bar: the accent for hover and the current page. */
+  --ct-menu-condensed-link-bg: var(--tt-accent);
+  --ct-topbar-search-bg: #eef1f3;
 }
 
-/* Light side menu and top bar with green for hover and the current page. */
-:root {
-  /* Condensed menu: the item under the pointer opens in green. */
-  --ct-menu-condensed-link-bg: var(--ta-green);
+/* 2 + 3, dark mode: also a dark section of a light page (the kitchen in focus mode). */
+[data-bs-theme='dark'] {
+  --ta-accent: var(--tt-dark-accent);
+  --ta-accent-hover: var(--tt-dark-accent-hover);
+  --ta-accent-active: var(--tt-dark-accent-active);
+  --ta-on-accent: var(--tt-dark-on-accent);
+  --ta-ink: #eef1f4;
+  --ta-surface: #313a46;
+  --ta-warning-bg: #4a4130;
+  --ta-warning-fg: #f5cb6e;
+  --ta-danger-bg: #4f3438;
+  --ta-danger-fg: #ffa39a;
+  --ta-chip-new-bg: #4a4130;
+  --ta-chip-new-fg: #f5cb6e;
+  --ta-chip-confirmed-bg: #2c3e57;
+  --ta-chip-confirmed-fg: #a8c8f5;
+  --ta-chip-preparing-bg: #3d3557;
+  --ta-chip-preparing-fg: #cdbbf8;
+  --ta-chip-ready-bg: #2c4a3c;
+  --ta-chip-ready-fg: #86dcb0;
+  --ta-chip-done-bg: #4a535e;
+  --ta-chip-done-fg: #d7dde3;
+  --ta-chip-cancelled-bg: #4f3438;
+  --ta-chip-cancelled-fg: #ffa39a;
+  --ta-shadow-rgb: 0, 0, 0;
+
+  --ct-primary: var(--tt-dark-accent);
+  --ct-primary-rgb: var(--tt-dark-accent-rgb);
+  --ct-primary-bg-subtle: var(--tt-dark-accent-subtle);
+  --ct-primary-border-subtle: var(--tt-dark-accent-border);
+  --ct-primary-text-emphasis: var(--tt-dark-accent-text);
+  --ct-link-color: var(--tt-dark-link);
+  --ct-link-color-rgb: var(--tt-dark-link-rgb);
+  --ct-link-hover-color: var(--tt-dark-link-hover);
+  --ct-link-hover-color-rgb: var(--tt-dark-link-hover-rgb);
+  --ct-body-bg: #343a40;
+  --ct-body-color: #aab8c5;
+  --ct-body-color-rgb: 170, 184, 197;
+  --ct-secondary-color: #a9b3be;
+  --ct-emphasis-color: #eef1f4;
+  --ct-emphasis-color-rgb: 238, 241, 244;
+  --ct-heading-color: #dee2e6;
+
+  /* The fills stay (white text on them passes on any surface); text uses the light emphasis colors. */
+  --ct-success: #15803d;
+  --ct-success-rgb: 21, 128, 61;
+  --ct-success-text-emphasis: #7ddba6;
+  --ct-success-bg-subtle: #2c4a3c;
+  --ct-success-border-subtle: #2f6b4a;
+  --ct-danger: #b42318;
+  --ct-danger-rgb: 180, 35, 24;
+  --ct-danger-text-emphasis: #ffa39a;
+  --ct-danger-bg-subtle: #4f3438;
+  --ct-danger-border-subtle: #7a2f2a;
+  --ct-warning: #f2b007;
+  --ct-warning-rgb: 242, 176, 7;
+  --ct-warning-text-emphasis: #f5cb6e;
+  --ct-warning-bg-subtle: #4a4130;
+  --ct-warning-border-subtle: #7a6125;
+  --ct-info: #0b6aa2;
+  --ct-info-rgb: 11, 106, 162;
+  --ct-info-text-emphasis: #93ccf2;
+  --ct-info-bg-subtle: #2c4152;
+  --ct-info-border-subtle: #2f5b7a;
+
+  --ct-menu-condensed-link-bg: var(--tt-dark-accent);
+  --ct-topbar-search-bg: #3d4854;
 }
 
 html[data-menu-color='light'] {
-  --ct-menu-item-hover-color: var(--ta-green);
-  --ct-menu-item-active-color: var(--ta-green);
-  --ct-help-box-bg: var(--ta-green);
+  --ct-menu-item-hover-color: var(--ta-accent);
+  --ct-menu-item-active-color: var(--ta-accent);
+  --ct-help-box-bg: var(--ta-accent);
 }
 
 html[data-bs-theme='dark'][data-menu-color='light'] {
-  --ct-menu-item-hover-color: #8fe0c2;
-  --ct-menu-item-active-color: #8fe0c2;
+  --ct-menu-item-hover-color: var(--ct-primary-text-emphasis);
+  --ct-menu-item-active-color: var(--ct-primary-text-emphasis);
+}
+
+html[data-topbar-color='light'] {
+  --ct-topbar-item-hover-color: var(--ta-accent);
 }
 
 /* Current page in the menu: a tinted pill, not only a color change. */
@@ -85,40 +225,30 @@ html[data-bs-theme='dark'][data-menu-color='light'] {
   margin-bottom: 0.25rem;
 }
 
-html[data-topbar-color='light'] {
-  --ct-topbar-item-hover-color: var(--ta-green);
-  --ct-topbar-search-bg: #eef2ee;
-}
-
-/* Hyper compiles its primary color into these components instead of reading --ct-primary. */
+/* Hyper compiles its colors into these components instead of reading the variables. */
 .btn-primary {
-  --ct-btn-bg: var(--ct-primary);
-  --ct-btn-border-color: var(--ct-primary);
-  --ct-btn-hover-bg: var(--ta-green-hover);
-  --ct-btn-hover-border-color: var(--ta-green-hover);
-  --ct-btn-active-bg: var(--ta-green-active);
-  --ct-btn-active-border-color: var(--ta-green-active);
-  --ct-btn-disabled-bg: var(--ct-primary);
-  --ct-btn-disabled-border-color: var(--ct-primary);
+  --ct-btn-color: var(--ta-on-accent);
+  --ct-btn-bg: var(--ta-accent);
+  --ct-btn-border-color: var(--ta-accent);
+  --ct-btn-hover-color: var(--ta-on-accent);
+  --ct-btn-hover-bg: var(--ta-accent-hover);
+  --ct-btn-hover-border-color: var(--ta-accent-hover);
+  --ct-btn-active-color: var(--ta-on-accent);
+  --ct-btn-active-bg: var(--ta-accent-active);
+  --ct-btn-active-border-color: var(--ta-accent-active);
+  --ct-btn-disabled-color: var(--ta-on-accent);
+  --ct-btn-disabled-bg: var(--ta-accent);
+  --ct-btn-disabled-border-color: var(--ta-accent);
   --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
-}
-
-[data-bs-theme='dark'] .btn-primary {
-  --ct-btn-color: #0b1f18;
-  --ct-btn-hover-color: #0b1f18;
-  --ct-btn-active-color: #0b1f18;
-  --ct-btn-disabled-color: #0b1f18;
-  --ct-btn-hover-bg: #4cc79c;
-  --ct-btn-hover-border-color: #4cc79c;
-  --ct-btn-active-bg: #8fe0c2;
-  --ct-btn-active-border-color: #8fe0c2;
 }
 
 .btn-outline-primary {
   --ct-btn-color: var(--ct-primary);
   --ct-btn-border-color: var(--ct-primary);
+  --ct-btn-hover-color: var(--ta-on-accent);
   --ct-btn-hover-bg: var(--ct-primary);
   --ct-btn-hover-border-color: var(--ct-primary);
+  --ct-btn-active-color: var(--ta-on-accent);
   --ct-btn-active-bg: var(--ct-primary);
   --ct-btn-active-border-color: var(--ct-primary);
   --ct-btn-disabled-color: var(--ct-primary);
@@ -126,8 +256,192 @@ html[data-topbar-color='light'] {
   --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
 }
 
+/* Soft buttons: the text of a selected thing on its tint (accentText on accentSubtle passes in every theme). */
 .btn-soft-primary {
+  --ct-btn-color: var(--ct-primary-text-emphasis);
+  --ct-btn-hover-color: var(--ta-on-accent);
+  --ct-btn-active-color: var(--ta-on-accent);
+  --ct-btn-disabled-color: var(--ct-primary-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-primary-bg-subtle);
   --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
+}
+
+.btn-success,
+.btn-danger,
+.btn-info {
+  --ct-btn-color: #fff;
+  --ct-btn-hover-color: #fff;
+  --ct-btn-active-color: #fff;
+  --ct-btn-disabled-color: #fff;
+}
+
+.btn-success {
+  --ct-btn-bg: var(--ct-success);
+  --ct-btn-border-color: var(--ct-success);
+  --ct-btn-hover-bg: #126b33;
+  --ct-btn-hover-border-color: #126b33;
+  --ct-btn-active-bg: #0f5a2b;
+  --ct-btn-active-border-color: #0f5a2b;
+  --ct-btn-disabled-bg: var(--ct-success);
+  --ct-btn-disabled-border-color: var(--ct-success);
+  --ct-btn-focus-shadow-rgb: var(--ct-success-rgb);
+}
+
+.btn-danger {
+  --ct-btn-bg: var(--ct-danger);
+  --ct-btn-border-color: var(--ct-danger);
+  --ct-btn-hover-bg: #9a1e14;
+  --ct-btn-hover-border-color: #9a1e14;
+  --ct-btn-active-bg: #831a11;
+  --ct-btn-active-border-color: #831a11;
+  --ct-btn-disabled-bg: var(--ct-danger);
+  --ct-btn-disabled-border-color: var(--ct-danger);
+  --ct-btn-focus-shadow-rgb: var(--ct-danger-rgb);
+}
+
+.btn-info {
+  --ct-btn-bg: var(--ct-info);
+  --ct-btn-border-color: var(--ct-info);
+  --ct-btn-hover-bg: #095a8a;
+  --ct-btn-hover-border-color: #095a8a;
+  --ct-btn-active-bg: #084c74;
+  --ct-btn-active-border-color: #084c74;
+  --ct-btn-disabled-bg: var(--ct-info);
+  --ct-btn-disabled-border-color: var(--ct-info);
+  --ct-btn-focus-shadow-rgb: var(--ct-info-rgb);
+}
+
+.btn-warning {
+  --ct-btn-color: var(--ta-on-warning);
+  --ct-btn-bg: var(--ct-warning);
+  --ct-btn-border-color: var(--ct-warning);
+  --ct-btn-hover-color: var(--ta-on-warning);
+  --ct-btn-hover-bg: #dfa100;
+  --ct-btn-hover-border-color: #dfa100;
+  --ct-btn-active-color: var(--ta-on-warning);
+  --ct-btn-active-bg: #cc9300;
+  --ct-btn-active-border-color: #cc9300;
+  --ct-btn-disabled-color: var(--ta-on-warning);
+  --ct-btn-disabled-bg: var(--ct-warning);
+  --ct-btn-disabled-border-color: var(--ct-warning);
+  --ct-btn-focus-shadow-rgb: var(--ct-warning-rgb);
+}
+
+.btn-outline-success,
+.btn-outline-danger,
+.btn-outline-warning,
+.btn-outline-info {
+  --ct-btn-hover-color: #fff;
+  --ct-btn-active-color: #fff;
+  --ct-btn-disabled-bg: transparent;
+}
+
+.btn-outline-success {
+  --ct-btn-color: var(--ct-success-text-emphasis);
+  --ct-btn-border-color: var(--ct-success);
+  --ct-btn-hover-bg: var(--ct-success);
+  --ct-btn-hover-border-color: var(--ct-success);
+  --ct-btn-active-bg: var(--ct-success);
+  --ct-btn-active-border-color: var(--ct-success);
+  --ct-btn-disabled-color: var(--ct-success-text-emphasis);
+  --ct-btn-disabled-border-color: var(--ct-success);
+  --ct-btn-focus-shadow-rgb: var(--ct-success-rgb);
+}
+
+.btn-outline-danger {
+  --ct-btn-color: var(--ct-danger-text-emphasis);
+  --ct-btn-border-color: var(--ct-danger);
+  --ct-btn-hover-bg: var(--ct-danger);
+  --ct-btn-hover-border-color: var(--ct-danger);
+  --ct-btn-active-bg: var(--ct-danger);
+  --ct-btn-active-border-color: var(--ct-danger);
+  --ct-btn-disabled-color: var(--ct-danger-text-emphasis);
+  --ct-btn-disabled-border-color: var(--ct-danger);
+  --ct-btn-focus-shadow-rgb: var(--ct-danger-rgb);
+}
+
+.btn-outline-warning {
+  --ct-btn-color: var(--ct-warning-text-emphasis);
+  --ct-btn-border-color: var(--ct-warning);
+  --ct-btn-hover-color: var(--ta-on-warning);
+  --ct-btn-hover-bg: var(--ct-warning);
+  --ct-btn-hover-border-color: var(--ct-warning);
+  --ct-btn-active-color: var(--ta-on-warning);
+  --ct-btn-active-bg: var(--ct-warning);
+  --ct-btn-active-border-color: var(--ct-warning);
+  --ct-btn-disabled-color: var(--ct-warning-text-emphasis);
+  --ct-btn-disabled-border-color: var(--ct-warning);
+  --ct-btn-focus-shadow-rgb: var(--ct-warning-rgb);
+}
+
+.btn-outline-info {
+  --ct-btn-color: var(--ct-info-text-emphasis);
+  --ct-btn-border-color: var(--ct-info);
+  --ct-btn-hover-bg: var(--ct-info);
+  --ct-btn-hover-border-color: var(--ct-info);
+  --ct-btn-active-bg: var(--ct-info);
+  --ct-btn-active-border-color: var(--ct-info);
+  --ct-btn-disabled-color: var(--ct-info-text-emphasis);
+  --ct-btn-disabled-border-color: var(--ct-info);
+  --ct-btn-focus-shadow-rgb: var(--ct-info-rgb);
+}
+
+/* Soft state buttons: the emphasis text on the tint; hovered, the fill with its own text color. */
+.btn-soft-success {
+  --ct-btn-color: var(--ct-success-text-emphasis);
+  --ct-btn-disabled-color: var(--ct-success-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-success-bg-subtle);
+}
+
+.btn-soft-danger {
+  --ct-btn-color: var(--ct-danger-text-emphasis);
+  --ct-btn-disabled-color: var(--ct-danger-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-danger-bg-subtle);
+}
+
+.btn-soft-info {
+  --ct-btn-color: var(--ct-info-text-emphasis);
+  --ct-btn-disabled-color: var(--ct-info-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-info-bg-subtle);
+}
+
+.btn-soft-warning {
+  --ct-btn-color: var(--ct-warning-text-emphasis);
+  --ct-btn-hover-color: var(--ta-on-warning);
+  --ct-btn-active-color: var(--ta-on-warning);
+  --ct-btn-disabled-color: var(--ct-warning-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-warning-bg-subtle);
+}
+
+/* Amber is a fill, never a text color on white: badges on it get dark text and the text utility the emphasis. */
+.badge.bg-warning {
+  --ct-badge-color: var(--ta-on-warning);
+}
+
+.text-bg-warning {
+  color: var(--ta-on-warning) !important;
+}
+
+.text-warning {
+  color: var(--ct-warning-text-emphasis) !important;
+}
+
+/* On a dark surface the state fills are too dark to read as text: the utilities use the light emphasis. */
+[data-bs-theme='dark'] .text-success {
+  color: var(--ct-success-text-emphasis) !important;
+}
+
+[data-bs-theme='dark'] .text-danger {
+  color: var(--ct-danger-text-emphasis) !important;
+}
+
+[data-bs-theme='dark'] .text-info {
+  color: var(--ct-info-text-emphasis) !important;
+}
+
+/* Hyper keeps black text on its light chip, which turns dark gray in dark mode. */
+[data-bs-theme='dark'] .text-bg-light {
+  color: var(--ct-emphasis-color) !important;
 }
 
 .form-check-input:checked,
@@ -157,6 +471,7 @@ input[data-switch='primary']:checked + label {
 
 .nav-pills {
   --ct-nav-pills-link-active-bg: var(--ct-primary);
+  --ct-nav-pills-link-active-color: var(--ta-on-accent);
 }
 
 .nav-link:focus-visible {
@@ -166,6 +481,7 @@ input[data-switch='primary']:checked + label {
 .pagination {
   --ct-pagination-active-bg: var(--ct-primary);
   --ct-pagination-active-border-color: var(--ct-primary);
+  --ct-pagination-active-color: var(--ta-on-accent);
   --ct-pagination-focus-box-shadow: 0 0 0 0.2rem rgba(var(--ct-primary-rgb), 0.25);
 }
 
@@ -177,11 +493,29 @@ input[data-switch='primary']:checked + label {
 .list-group {
   --ct-list-group-active-bg: var(--ct-primary);
   --ct-list-group-active-border-color: var(--ct-primary);
+  --ct-list-group-active-color: var(--ta-on-accent);
 }
 
 .card {
   --ct-card-border-radius: var(--ta-radius);
   --ct-card-inner-border-radius: calc(var(--ta-radius) - 1px);
+}
+
+/*
+ * Surfaces painted with the business color under white text and the white logo (Mi negocio, Perfil, the sign-in
+ * header) keep the light shade of the theme in both modes: white passes on it in every theme, and Hyper's 50% white
+ * did not.
+ */
+.card.bg-primary,
+.card-header.bg-primary {
+  background-color: var(--tt-accent) !important;
+  color: var(--tt-on-accent);
+}
+
+.card.bg-primary .text-white,
+.card.bg-primary .text-light,
+.card.bg-primary .text-white-50 {
+  color: var(--tt-on-accent) !important;
 }
 
 /* Amounts line up in columns and do not jump while they change. */
@@ -217,46 +551,33 @@ input[data-switch='primary']:checked + label {
 }
 
 .ta-chip-new {
-  background: var(--ta-warning-bg);
-  color: var(--ta-warning-fg);
+  background: var(--ta-chip-new-bg);
+  color: var(--ta-chip-new-fg);
 }
 
 .ta-chip-confirmed {
-  background: #e0ecfb;
-  color: #1d4f91;
+  background: var(--ta-chip-confirmed-bg);
+  color: var(--ta-chip-confirmed-fg);
 }
 
 .ta-chip-preparing {
-  background: #ece6fb;
-  color: #5b3aa8;
+  background: var(--ta-chip-preparing-bg);
+  color: var(--ta-chip-preparing-fg);
 }
 
 .ta-chip-ready {
-  background: #dcf3e8;
-  color: #0b6650;
+  background: var(--ta-chip-ready-bg);
+  color: var(--ta-chip-ready-fg);
 }
 
 .ta-chip-done {
-  background: #eceeec;
-  color: #3c4842;
+  background: var(--ta-chip-done-bg);
+  color: var(--ta-chip-done-fg);
 }
 
 .ta-chip-cancelled {
-  background: var(--ta-danger-bg);
-  color: var(--ta-danger-fg);
-}
-
-[data-bs-theme='dark'] .ta-chip-done {
-  background: rgba(255, 255, 255, 0.1);
-  color: #d7dde3;
-}
-
-[data-bs-theme='dark'] .ta-chip-new,
-[data-bs-theme='dark'] .ta-chip-confirmed,
-[data-bs-theme='dark'] .ta-chip-preparing,
-[data-bs-theme='dark'] .ta-chip-ready,
-[data-bs-theme='dark'] .ta-chip-cancelled {
-  filter: brightness(0.92) saturate(0.9);
+  background: var(--ta-chip-cancelled-bg);
+  color: var(--ta-chip-cancelled-fg);
 }
 
 /* Toasts (ToastProvider): bottom right on desktop, above the tab bar on phones. */
@@ -288,10 +609,10 @@ input[data-switch='primary']:checked + label {
   gap: 0.6rem;
   padding: 0.75rem 0.9rem;
   border-radius: var(--ta-radius);
-  border-left: 4px solid var(--ta-green);
+  border-left: 4px solid var(--ta-accent);
   background: var(--ta-surface);
   color: var(--ct-body-color);
-  box-shadow: 0 8px 24px rgba(20, 32, 27, 0.18);
+  box-shadow: 0 8px 24px rgba(var(--ta-shadow-rgb), 0.18);
   animation: ta-toast-in 0.18s ease-out;
 }
 
@@ -303,7 +624,7 @@ input[data-switch='primary']:checked + label {
 .ta-toast-icon {
   font-size: 1.25rem;
   line-height: 1.2;
-  color: var(--ta-green);
+  color: var(--ct-primary-text-emphasis);
 }
 
 .ta-toast-error {
@@ -315,19 +636,19 @@ input[data-switch='primary']:checked + label {
 }
 
 .ta-toast-warning {
-  border-left-color: #c98a00;
+  border-left-color: var(--ct-warning);
 }
 
 .ta-toast-warning .ta-toast-icon {
-  color: #c98a00;
+  color: var(--ta-warning-fg);
 }
 
 .ta-toast-info {
-  border-left-color: #1d6fd1;
+  border-left-color: var(--ct-info);
 }
 
 .ta-toast-info .ta-toast-icon {
-  color: #1d6fd1;
+  color: var(--ct-info-text-emphasis);
 }
 
 @keyframes ta-toast-in {
@@ -626,7 +947,7 @@ input[data-switch='primary']:checked + label {
   padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
   border-top: 1px solid var(--ct-border-color);
   background: var(--ta-surface);
-  box-shadow: 0 -4px 16px rgba(20, 32, 27, 0.08);
+  box-shadow: 0 -4px 16px rgba(var(--ta-shadow-rgb), 0.08);
 }
 
 .bottom-tab {
@@ -668,7 +989,7 @@ input[data-switch='primary']:checked + label {
   margin-top: -18px;
   border-radius: 50%;
   background: var(--ct-primary);
-  color: #fff;
+  color: var(--ta-on-accent);
   box-shadow: 0 6px 14px rgba(var(--ct-primary-rgb), 0.4);
 }
 
@@ -819,8 +1140,8 @@ input[data-switch='primary']:checked + label {
   height: 1.15rem;
   padding: 0 0.3rem;
   border-radius: 999px;
-  background: var(--ta-warning-fg);
-  color: #fff;
+  background: var(--ct-warning);
+  color: var(--ta-on-warning);
   font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.15rem;
@@ -828,7 +1149,8 @@ input[data-switch='primary']:checked + label {
 }
 
 .attention-badge-urgent {
-  background: var(--ta-danger-fg);
+  background: var(--ct-danger);
+  color: #fff;
 }
 
 .attention-menu {

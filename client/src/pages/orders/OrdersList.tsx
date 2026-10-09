@@ -604,7 +604,7 @@ export default function OrdersList() {
                         <div className="d-flex justify-content-center">
                           <button
                             type="button"
-                            className="btn btn-sm btn-soft-success"
+                            className="btn btn-sm btn-soft-primary"
                             onClick={() => openPaymentModal(order)}
                           >
                             Cobrar
@@ -693,7 +693,7 @@ export default function OrdersList() {
                     {canCharge && selectedOrder.balance > 0 && selectedOrder.status !== OrderStatusConst.Cancelled && (
                       <button
                         type="button"
-                        className="btn btn-sm btn-success"
+                        className="btn btn-sm btn-primary"
                         disabled={statusSubmitting}
                         onClick={() => openPaymentModal(selectedOrder)}
                       >
