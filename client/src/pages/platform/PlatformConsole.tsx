@@ -67,7 +67,7 @@ export default function PlatformConsole() {
 
   return (
     <>
-      <PageTitle title="Negocios" subtitle="Plataforma" />
+      <PageTitle title="Negocios" />
 
       {overview.isError && <div className="alert alert-danger">{getApiErrorMessage(overview.error, 'No se pudo cargar el resumen.')}</div>}
       <div className="row g-2 mb-3">

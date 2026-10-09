@@ -1,0 +1,101 @@
+import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { dashboardApi } from '../../api/dashboardApi';
+import { useAttention } from '../../api/queries';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
+import { TenantCapability, type DashboardMetricsDto, type TopSellingItemDto } from '../../types';
+import Dashboard from './Dashboard';
+
+vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
+vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
+vi.mock('../../api/queries', () => ({ useAttention: vi.fn(), queryKeys: { attention: ['attention'] } }));
+vi.mock('../../api/dashboardApi', () => ({ dashboardApi: { getMetrics: vi.fn() } }));
+vi.mock('../../hooks/useOrderSignalR', () => {
+  const subscribe = () => () => undefined;
+  return { useOrderSignalR: () => ({ onOrderCreated: subscribe, onOrderStatusChanged: subscribe, onOrderCancelled: subscribe }) };
+});
+
+const item = (productName: string, itemType: TopSellingItemDto['itemType']): TopSellingItemDto => ({
+  productId: productName, productName, itemType, quantitySold: 3, totalAmount: 150,
+});
+
+function metrics(overrides: Partial<DashboardMetricsDto> = {}): DashboardMetricsDto {
+  return {
+    rangeFrom: '2026-10-09T06:00:00Z', rangeTo: '2026-10-10T05:59:59Z',
+    totalOrders: 8, inProgressOrders: 6, pendingOrders: 1, completedOrders: 0, cancelledOrders: 1,
+    uniqueCustomers: 5, activeProducts: 24, activeServices: 0,
+    totalRevenue: 1250, averageOrderValue: 156.25, paidOrders: 8, outstandingBalance: 0, unpaidOrders: 0,
+    ordersByStatus: { Delivered: 4, InPreparation: 2, Pending: 1, Cancelled: 1 },
+    topSellingItems: [item('Café americano', 'Product'), item('Concha de vainilla', 'Product')],
+    ...overrides,
+  };
+}
+
+function renderDashboard() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Dashboard />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('Dashboard', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    // A cashier: sells and sees Inicio, without the first steps of whoever configures the business.
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'u1', firstName: 'Mariana', role: 'STAFF', permissions: ['ViewDashboard', 'CreateSales', 'ManageOrders'] },
+    } as unknown as ReturnType<typeof useAuth>);
+    vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Food | TenantCapability.Retail } as unknown as ReturnType<typeof useTenant>);
+    vi.mocked(useAttention).mockReturnValue({ data: { items: [] }, isLoading: false, isError: false, isSuccess: true } as unknown as ReturnType<typeof useAttention>);
+    vi.mocked(dashboardApi.getMetrics).mockResolvedValue({ data: metrics() } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
+  });
+
+  it('leaves starting a sale to the top bar and the tab bar, without a second "Nueva venta"', async () => {
+    renderDashboard();
+    await screen.findByText('Café americano');
+
+    expect(screen.queryByRole('link', { name: /Nueva venta/ })).not.toBeInTheDocument();
+  });
+
+  it('counts the orders of the day in singular when there is one', async () => {
+    renderDashboard();
+
+    expect(await screen.findByText('6 en curso · 1 nuevo · 1 cancelado')).toBeInTheDocument();
+  });
+
+  it('keeps the catalog line without the list of orders by status the cards above already sum up', async () => {
+    renderDashboard();
+    await screen.findByText('Café americano');
+
+    expect(screen.queryByRole('heading', { name: 'Pedidos por estado' })).not.toBeInTheDocument();
+    expect(screen.queryByText('En preparación')).not.toBeInTheDocument();
+    expect(screen.getByText(/Activos en catálogo: 24 productos y 0 servicios/)).toBeInTheDocument();
+  });
+
+  it('hides the type column when every best seller is of the same type', async () => {
+    renderDashboard();
+    await screen.findByText('Café americano');
+
+    expect(screen.getByRole('columnheader', { name: 'Producto' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Tipo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Producto' })).not.toBeInTheDocument();
+  });
+
+  it('names the type of each best seller when products and services mix', async () => {
+    vi.mocked(dashboardApi.getMetrics).mockResolvedValue({
+      data: metrics({ topSellingItems: [item('Corte de cabello', 'Service'), item('Shampoo', 'Product')] }),
+    } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
+    renderDashboard();
+    await screen.findByText('Corte de cabello');
+
+    expect(screen.getByRole('columnheader', { name: 'Tipo' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Servicio' })).toBeInTheDocument();
+  });
+});

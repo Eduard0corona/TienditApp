@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable from '../../components/common/DataTable';
 import StatusChip from '../../components/common/StatusChip';
@@ -412,7 +412,7 @@ export default function OrdersList() {
 
   return (
     <>
-      <PageTitle title="Pedidos" subtitle="Operación diaria" />
+      <PageTitle title="Pedidos" />
 
       <div className="row">
         <div className="col-12">
@@ -494,12 +494,6 @@ export default function OrdersList() {
                     >
                       Limpiar filtros
                     </button>
-                    {canSell && (
-                      <Link to="/sell" className="btn btn-primary btn-sm">
-                        <i className="ri-add-line me-1" aria-hidden="true"></i>
-                        Nueva venta
-                      </Link>
-                    )}
                   </div>
                 </div>
               </div>
@@ -565,7 +559,7 @@ export default function OrdersList() {
                       </button>
                       <div>
                         <span className={`badge mt-1 ${order.createdByBusiness ? 'bg-info' : 'bg-secondary'}`}>
-                          {order.createdByBusiness ? 'Creada por empresa' : 'Creada por cliente'}
+                          {order.createdByBusiness ? 'Creada por el negocio' : 'Creada por el cliente'}
                         </span>
                         {order.channel === OrderChannel.WhatsApp && (
                           <span className="badge mt-1 ms-1 bg-success-subtle text-success-emphasis">

@@ -181,7 +181,7 @@ export default function CustomerNotesAndAddresses({
         <div className="border rounded p-2">
           <input
             className="form-control form-control-sm mb-1"
-            placeholder="Nombre (Casa, Oficina…)"
+            placeholder="Nombre (casa, oficina…)"
             maxLength={60}
             aria-label="Nombre de la dirección"
             value={addressDraft.label}

@@ -1,31 +1,31 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import SectionTabs from '../layout/SectionTabs';
-import { findNavSection } from '../layout/navigation';
 
 interface PageTitleProps {
   title: string;
-  subtitle?: string;
+  /**
+   * The screen this one hangs from (Productos, for a product being edited). Only detail screens carry a trail:
+   * on a screen of the menu it would just repeat the title.
+   */
+  parent?: { label: string; to: string };
 }
 
-export default function PageTitle({ title, subtitle }: PageTitleProps) {
-  const { pathname } = useLocation();
-  // A page of a menu section is found under it (Inicio › Inventario › Compras), whatever the page calls it.
-  const crumb = findNavSection(pathname)?.label ?? subtitle;
-
+export default function PageTitle({ title, parent }: PageTitleProps) {
   return (
     <>
       <div className="row">
         <div className="col-12">
           <div className="page-title-box">
-            <div className="page-title-right">
-              <ol className="breadcrumb m-0">
-                <li className="breadcrumb-item">
-                  <Link to="/">Inicio</Link>
-                </li>
-                {crumb && crumb !== title && <li className="breadcrumb-item">{crumb}</li>}
-                <li className="breadcrumb-item active">{title}</li>
-              </ol>
-            </div>
+            {parent && (
+              <nav className="page-title-right" aria-label="Ruta de navegación">
+                <ol className="breadcrumb m-0">
+                  <li className="breadcrumb-item">
+                    <Link to={parent.to}>{parent.label}</Link>
+                  </li>
+                  <li className="breadcrumb-item active" aria-current="page">{title}</li>
+                </ol>
+              </nav>
+            )}
             <h4 className="page-title">{title}</h4>
           </div>
         </div>

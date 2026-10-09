@@ -78,9 +78,9 @@ export default function Login() {
                   ) : (
                     <>
                       <div className="text-center w-75 m-auto">
-                        <h4 className="text-dark-50 text-center pb-0 fw-bold">Iniciar Sesión</h4>
+                        <h4 className="text-dark-50 text-center pb-0 fw-bold">Iniciar sesión</h4>
                         <p className="text-muted mb-4">
-                          Ingresa tu email y contraseña para acceder al panel.
+                          Ingresa tu correo y tu contraseña para entrar.
                         </p>
                       </div>
 
@@ -99,14 +99,14 @@ export default function Login() {
                       <form onSubmit={handleSubmit(onSubmit)}>
                         <div className="mb-3">
                           <label htmlFor="emailaddress" className="form-label">
-                            Email
+                            Correo
                           </label>
                           <input
                             className={`form-control ${errors.email ? 'is-invalid' : ''}`}
                             type="email"
                             id="emailaddress"
-                            placeholder="Ingresa tu email"
-                            {...register('email', { required: 'El email es requerido' })}
+                            placeholder="Ingresa tu correo"
+                            {...register('email', { required: 'El correo es requerido' })}
                           />
                           {errors.email && (
                             <div className="invalid-feedback">{errors.email.message}</div>
@@ -157,7 +157,7 @@ export default function Login() {
                                 Ingresando...
                               </>
                             ) : (
-                              'Iniciar Sesión'
+                              'Iniciar sesión'
                             )}
                           </button>
                         </div>

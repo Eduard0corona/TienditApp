@@ -96,7 +96,7 @@ export default function TablesPage() {
 
   return (
     <>
-      <PageTitle title="Mesas" subtitle="Operación" />
+      <PageTitle title="Mesas" />
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted small">
           {tables.length > 0 && `${tables.length - freeTables.length} de ${tables.length} ocupadas`}

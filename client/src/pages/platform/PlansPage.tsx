@@ -109,7 +109,7 @@ export default function PlansPage() {
 
   return (
     <>
-      <PageTitle title="Planes" subtitle="Plataforma" />
+      <PageTitle title="Planes" />
 
       <div className="card">
         <div className="card-body">

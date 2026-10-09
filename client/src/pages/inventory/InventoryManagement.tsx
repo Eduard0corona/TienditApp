@@ -184,7 +184,7 @@ export default function InventoryManagement() {
 
   return (
     <>
-      <PageTitle title="Inventario" subtitle="Operación" />
+      <PageTitle title="Inventario" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">

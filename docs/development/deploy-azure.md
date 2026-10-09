@@ -143,6 +143,10 @@ La Fase 16 trae una migración, [`database/production/20261009043433_AddBusiness
 
 El `apply.sql` de [`20261009071957_DropRequireOpenCashSession`](../../database/production/20261009071957_DropRequireOpenCashSession) borra `TenantSettings.RequireOpenCashSession` con su valor por omisión, y se aplica, como siempre, antes del merge y con `master` desplegado desde la PR #47 (con o sin las Fases 14 a 16): ninguna de esas versiones la mapea, así que sigue funcionando, y volver a ellas no necesita `rollback.sql`. Si a la base le faltan las migraciones de las Fases 15 y 16, también las aplica: revisa antes el `verify.sql` de su carpeta. Antes de aplicar, el `verify.sql` de esta debe mostrar como única dependencia la restricción del valor por omisión, ninguna estadística creada a mano ni objeto que use la tabla, y cuántos negocios tenían activada la política (cuáles, solo queda en el respaldo). Volver a una versión anterior a la PR #47 exige antes el `rollback.sql` de esa carpeta, que crea la columna otra vez en 0; si también aplicas los `rollback.sql` de las Fases 16 y 15, este va primero.
 
+## Pantallas de trabajo sin estorbos (Fase 17)
+
+La Fase 17 solo cambia el cliente: no trae migraciones, scripts ni cambios de contrato, y se fusiona sin tocar la base. Si aún no aplicas el `apply.sql` de la sección anterior, aplícalo antes del merge: lo exige la versión que ya está en `master` (`/health/schema` responde 503 sin él) y también esta. Volver a la versión anterior no necesita nada en la base.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

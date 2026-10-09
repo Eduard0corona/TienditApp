@@ -19,6 +19,14 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `businessThemes.test.ts` mide con `utils/contrast.ts` cada par de colores de cada tema en claro y en oscuro. Lee `theme.css` (`css.include` en `vitest.config.ts`) para revisar los colores de estado y los chips en los dos modos, que el bloque oscuro defina todas las variables del claro y que los valores por omisión sean Nopal.
     - `theme.test.ts`, `ThemeCard.test.tsx` y `PublicMenuPage.test.tsx` cubren aplicar, previsualizar, guardar y descartar el tema, y el menú con los colores de su negocio.
     - De 11 mutaciones del cliente, las pruebas detectan las 11.
+- Fase 17, pantallas de trabajo (cliente):
+  - `navigation.test.ts`: dónde sale completo el aviso del plan.
+  - `attention.test.ts` y `AttentionBell.test.tsx`: el pago vencido en la campana, primero y contado.
+  - `KitchenBoard.test.tsx`: una sola acción por comanda y el paso que da.
+  - `PageTitle.test.tsx`: migas solo en los detalles.
+  - `Dashboard.test.tsx`: sin un segundo "Nueva venta", en singular cuando es uno, sin "Pedidos por estado" y con la columna Tipo solo cuando hace falta.
+  - `industries.test.ts`: los giros guardados con otras mayúsculas o sin acentos.
+  - Las de Cocina, migas e Inicio se escribieron antes del cambio y fallaron con el código anterior.
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15) y en el controller de sondeo de `RequestCancellationTests`; la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

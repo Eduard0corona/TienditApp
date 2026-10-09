@@ -15,25 +15,8 @@ import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
 import { COMMERCE_CAPABILITIES, hasAnyCapability } from '../../utils/tenantCapabilities';
 import { formatInBusinessZone, BUSINESS_TIME_ZONES, DEFAULT_TIME_ZONE } from '../../utils/dates';
+import { INDUSTRY_OPTIONS, matchIndustry } from '../../utils/industries';
 
-
-const INDUSTRY_OPTIONS = [
-  'Alimentos y Bebidas',
-  'Abarrotes',
-  'Farmacia',
-  'Ropa y Accesorios',
-  'Electrónica',
-  'Ferretería',
-  'Papelería',
-  'Estética y Spa',
-  'Taller Mecánico',
-  'Consultorio',
-  'Servicios Profesionales',
-  'Educación',
-  'Gimnasio',
-  'Lavandería',
-  'Otro',
-];
 
 const TAX_REGIME_OPTIONS = [
   '601 - General de Ley Personas Morales',
@@ -67,8 +50,8 @@ const CAPABILITY_OPTIONS = [
 const CAPABILITY_PRESETS = [
   {
     id: 'laundry',
-    label: 'Lavanderia',
-    industry: 'Lavanderia',
+    label: 'Lavandería',
+    industry: 'Lavandería',
     capabilities:
       TenantCapability.Service
       | TenantCapability.Retail
@@ -78,7 +61,7 @@ const CAPABILITY_PRESETS = [
   {
     id: 'food',
     label: 'Alimentos',
-    industry: 'Alimentos y Bebidas',
+    industry: 'Alimentos y bebidas',
     capabilities:
       TenantCapability.Food
       | TenantCapability.Retail
@@ -87,8 +70,8 @@ const CAPABILITY_PRESETS = [
   },
   {
     id: 'barber',
-    label: 'Barberia',
-    industry: 'Estetica y Spa',
+    label: 'Barbería',
+    industry: 'Estética y spa',
     capabilities:
       TenantCapability.Service
       | TenantCapability.Retail
@@ -128,7 +111,7 @@ export default function BusinessSettings() {
       capabilities: data.capabilities,
       rfc: data.rfc || '',
       legalName: data.legalName || '',
-      industry: data.industry || '',
+      industry: matchIndustry(data.industry),
       taxRegime: data.taxRegime || '',
       street: data.street || '',
       exteriorNumber: data.exteriorNumber || '',
@@ -149,7 +132,7 @@ export default function BusinessSettings() {
         setCapabilities(data.capabilities ?? 0);
         resetForm(data);
       } catch {
-        setMsg({ type: 'danger', text: 'Error al cargar los datos de la empresa.' });
+        setMsg({ type: 'danger', text: 'No se pudieron cargar los datos del negocio.' });
       } finally {
         setLoading(false);
       }
@@ -176,9 +159,9 @@ export default function BusinessSettings() {
       setCapabilities(updated.capabilities ?? capabilities);
       await refreshTenant();
       setEditMode(false);
-      setMsg({ type: 'success', text: 'Datos de la empresa actualizados correctamente.' });
+      setMsg({ type: 'success', text: 'Datos del negocio guardados.' });
     } catch (err: unknown) {
-      const errMsg = getApiErrorMessage(err, 'Error al actualizar los datos de la empresa.');
+      const errMsg = getApiErrorMessage(err, 'No se pudieron guardar los datos del negocio.');
       setMsg({ type: 'danger', text: errMsg });
     }
   };
@@ -220,6 +203,9 @@ export default function BusinessSettings() {
   };
 
   const logoSrc = tenant?.logoImages?.medium || tenant?.logoUrl || '/images/placeholders/store.svg';
+  // A giro written by hand stays among the options, so saving the form does not erase it.
+  const savedIndustry = matchIndustry(tenant?.industry);
+  const industryOptions = savedIndustry && !INDUSTRY_OPTIONS.includes(savedIndustry) ? [...INDUSTRY_OPTIONS, savedIndustry] : INDUSTRY_OPTIONS;
 
   const formatAddress = () => {
     const parts = [
@@ -238,7 +224,7 @@ export default function BusinessSettings() {
   if (loading) {
     return (
       <>
-        <PageTitle title="Mi negocio" subtitle="Configuración" />
+        <PageTitle title="Mi negocio" />
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Cargando...</span>
@@ -253,9 +239,9 @@ export default function BusinessSettings() {
       <UploadLoadingModal
         show={logoLoading || logoUploading}
         title="Subiendo logo"
-        description="Estamos actualizando el logo de tu empresa."
+        description="Estamos actualizando el logo de tu negocio."
       />
-      <PageTitle title="Mi negocio" subtitle="Configuración" />
+      <PageTitle title="Mi negocio" />
 
       {/* Business Header */}
       <div className="row">
@@ -279,12 +265,12 @@ export default function BusinessSettings() {
                       <div>
                         <h4 className="mt-1 mb-1 text-white">{tenant?.name}</h4>
                         <p className="font-13 text-white-50">
-                          {BUSINESS_TYPE_LABELS[tenant?.businessType ?? 0]} &middot; {tenant?.industry || 'Sin giro'}
+                          {BUSINESS_TYPE_LABELS[tenant?.businessType ?? 0]} &middot; {matchIndustry(tenant?.industry) || 'Sin giro'}
                         </p>
                         <ul className="mb-0 list-inline text-light">
                           <li className="list-inline-item me-3">
                             <h5 className="mb-1 text-white">{tenant?.contactEmail}</h5>
-                            <p className="mb-0 font-13 text-white-50">Email</p>
+                            <p className="mb-0 font-13 text-white-50">Correo</p>
                           </li>
                           {tenant?.contactPhone && (
                             <li className="list-inline-item">
@@ -311,7 +297,7 @@ export default function BusinessSettings() {
                       }}
                     >
                       <i className="ri-store-2-line me-1" aria-hidden="true"></i>
-                      {editMode ? 'Cancelar' : 'Editar Empresa'}
+                      {editMode ? 'Cancelar' : 'Editar negocio'}
                     </button>
                   </div>
                 </div>
@@ -339,13 +325,13 @@ export default function BusinessSettings() {
           {/* Business Info Card */}
           <div className="card">
             <div className="card-body">
-              <h4 className="header-title mt-0 mb-3">Información de la Empresa</h4>
+              <h4 className="header-title mt-0 mb-3">Información del negocio</h4>
 
               {editMode ? (
                 <form id="business-form" onSubmit={handleSubmit(onSubmit)}>
                   <div className="mb-3">
                     <label htmlFor="businesssettings-nombre-comercial" className="form-label">
-                      Nombre Comercial <span className="text-danger">*</span>
+                      Nombre comercial <span className="text-danger">*</span>
                     </label>
                     <input id="businesssettings-nombre-comercial"
                       className={`form-control ${errors.name ? 'is-invalid' : ''}`}
@@ -358,19 +344,19 @@ export default function BusinessSettings() {
                   </div>
                   <div className="mb-3">
                     <label htmlFor="businesssettings-email-de-contacto" className="form-label">
-                      Email de Contacto <span className="text-danger">*</span>
+                      Correo de contacto <span className="text-danger">*</span>
                     </label>
                     <input id="businesssettings-email-de-contacto"
                       className={`form-control ${errors.contactEmail ? 'is-invalid' : ''}`}
                       type="email"
-                      {...register('contactEmail', { required: 'El email es requerido' })}
+                      {...register('contactEmail', { required: 'El correo es requerido' })}
                     />
                     {errors.contactEmail && (
                       <div className="invalid-feedback">{errors.contactEmail.message}</div>
                     )}
                   </div>
                   <div className="mb-3">
-                    <label htmlFor="businesssettings-telefono-de-contacto" className="form-label">Teléfono de Contacto</label>
+                    <label htmlFor="businesssettings-telefono-de-contacto" className="form-label">Teléfono de contacto</label>
                     <input id="businesssettings-telefono-de-contacto" className="form-control" type="tel" {...register('contactPhone')} />
                   </div>
                   <div className="mb-3">
@@ -383,17 +369,18 @@ export default function BusinessSettings() {
                     <div className="form-text">Los días, cortes y reportes empiezan a la medianoche de esta zona, aunque abras la app desde otra.</div>
                   </div>
                   <div className="mb-3">
-                    <label htmlFor="businesssettings-giro-del-negocio" className="form-label">Giro del Negocio</label>
+                    <label htmlFor="businesssettings-giro-del-negocio" className="form-label">Giro del negocio</label>
                     <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}>
                       <option value="">Seleccionar...</option>
-                      {INDUSTRY_OPTIONS.map((opt) => (
+                      {industryOptions.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
                   </div>
                   <div className="mb-3">
                     <div className="form-label d-block">Módulos habilitados</div>
-                    <div className="d-flex flex-wrap gap-2 mb-2">
+                    <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                      <span className="small text-muted">Sugeridos por giro:</span>
                       {CAPABILITY_PRESETS.map((preset) => (
                         <button
                           key={preset.id}
@@ -404,7 +391,7 @@ export default function BusinessSettings() {
                             setValue('industry', preset.industry);
                           }}
                         >
-                          Preset: {preset.label}
+                          {preset.label}
                         </button>
                       ))}
                     </div>
@@ -435,17 +422,17 @@ export default function BusinessSettings() {
                     </div>
                   </div>
                   <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                    {isSubmitting ? 'Guardando...' : 'Guardar cambios'}
                   </button>
                 </form>
               ) : (
                 <div className="text-start">
                   <p className="text-muted">
-                    <strong>Nombre Comercial:</strong>{' '}
+                    <strong>Nombre comercial:</strong>{' '}
                     <span className="ms-2">{tenant?.name}</span>
                   </p>
                   <p className="text-muted">
-                    <strong>Email:</strong>{' '}
+                    <strong>Correo:</strong>{' '}
                     <span className="ms-2">{tenant?.contactEmail}</span>
                   </p>
                   <p className="text-muted">
@@ -458,10 +445,10 @@ export default function BusinessSettings() {
                   </p>
                   <p className="text-muted">
                     <strong>Giro:</strong>{' '}
-                    <span className="ms-2">{tenant?.industry || 'No especificado'}</span>
+                    <span className="ms-2">{matchIndustry(tenant?.industry) || 'No especificado'}</span>
                   </p>
                   <p className="text-muted">
-                    <strong>Modulos:</strong>{' '}
+                    <strong>Módulos:</strong>{' '}
                     <span className="ms-2">
                       {CAPABILITY_OPTIONS
                         .filter((option) => ((tenant?.capabilities ?? 0) & option.value) === option.value)
@@ -520,7 +507,7 @@ export default function BusinessSettings() {
                   disabled={logoLoading}
                 >
                   <i className="ri-upload-2-line me-1" aria-hidden="true"></i>
-                  Subir Logo
+                  Subir logo
                 </button>
                 {tenant?.logoUrl && (
                   <button
@@ -544,7 +531,7 @@ export default function BusinessSettings() {
             <div className="card-body">
               <h4 className="header-title mt-0 mb-3">
                 <i className="ri-file-list-3-line me-1"></i>
-                Datos Fiscales
+                Datos fiscales
               </h4>
 
               {editMode ? (
@@ -566,7 +553,7 @@ export default function BusinessSettings() {
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label htmlFor="businesssettings-razon-social" className="form-label">Razón Social</label>
+                        <label htmlFor="businesssettings-razon-social" className="form-label">Razón social</label>
                         <input id="businesssettings-razon-social"
                           className="form-control"
                           type="text"
@@ -577,7 +564,7 @@ export default function BusinessSettings() {
                     </div>
                   </div>
                   <div className="mb-3">
-                    <label htmlFor="businesssettings-regimen-fiscal" className="form-label">Régimen Fiscal</label>
+                    <label htmlFor="businesssettings-regimen-fiscal" className="form-label">Régimen fiscal</label>
                     <select id="businesssettings-regimen-fiscal" className="form-select" form="business-form" {...register('taxRegime')}>
                       <option value="">Seleccionar...</option>
                       {TAX_REGIME_OPTIONS.map((opt) => (
@@ -593,11 +580,11 @@ export default function BusinessSettings() {
                     <span className="ms-2">{tenant?.rfc || 'No registrado'}</span>
                   </p>
                   <p className="text-muted">
-                    <strong>Razón Social:</strong>{' '}
+                    <strong>Razón social:</strong>{' '}
                     <span className="ms-2">{tenant?.legalName || 'No registrada'}</span>
                   </p>
                   <p className="text-muted mb-0">
-                    <strong>Régimen Fiscal:</strong>{' '}
+                    <strong>Régimen fiscal:</strong>{' '}
                     <span className="ms-2">{tenant?.taxRegime || 'No especificado'}</span>
                   </p>
                 </div>
@@ -610,7 +597,7 @@ export default function BusinessSettings() {
             <div className="card-body">
               <h4 className="header-title mt-0 mb-3">
                 <i className="ri-map-pin-line me-1"></i>
-                Dirección Fiscal
+                Dirección fiscal
               </h4>
 
               {editMode ? (
@@ -627,7 +614,7 @@ export default function BusinessSettings() {
                   <div className="row">
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label htmlFor="businesssettings-numero-exterior" className="form-label">Número Exterior</label>
+                        <label htmlFor="businesssettings-numero-exterior" className="form-label">Número exterior</label>
                         <input id="businesssettings-numero-exterior"
                           className="form-control"
                           type="text"
@@ -638,7 +625,7 @@ export default function BusinessSettings() {
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label htmlFor="businesssettings-numero-interior" className="form-label">Número Interior</label>
+                        <label htmlFor="businesssettings-numero-interior" className="form-label">Número interior</label>
                         <input id="businesssettings-numero-interior"
                           className="form-control"
                           type="text"
@@ -660,7 +647,7 @@ export default function BusinessSettings() {
                   <div className="row">
                     <div className="col-md-4">
                       <div className="mb-3">
-                        <label htmlFor="businesssettings-codigo-postal" className="form-label">Código Postal</label>
+                        <label htmlFor="businesssettings-codigo-postal" className="form-label">Código postal</label>
                         <input id="businesssettings-codigo-postal"
                           className="form-control"
                           type="text"

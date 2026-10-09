@@ -154,8 +154,8 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
     <div className="navbar-custom">
       <div className="topbar container-fluid">
         <div className="topbar-start d-flex align-items-center gap-lg-2 gap-1">
-          {/* Topbar Brand Logo */}
-          <div className="logo-topbar">
+          {/* Topbar Brand Logo. On phones it gives its room to the business switcher, so the business reads whole. */}
+          <div className={`logo-topbar ${availableTenants.length > 1 ? 'logo-topbar-gives-way' : ''}`}>
             <Link to="/" className="logo-light">
               <span className="logo-lg">
                 {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="light" />}
@@ -196,7 +196,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                 disabled={loadingTenants || switchingTenant}
                 title={tenantError || 'Cambiar de negocio'}
               >
-                <i className="ri-store-2-line me-1" aria-hidden="true"></i>
+                <i className="ri-store-2-line me-1 topbar-business-icon" aria-hidden="true"></i>
                 <span className="visually-hidden">Negocio actual: </span>
                 <span className="text-truncate">{switchingTenant ? 'Cambiando…' : tenant?.name ?? 'Negocio'}</span>
               </button>
@@ -284,7 +284,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
           <li className="dropdown">
             <button
               type="button"
-              className="nav-link dropdown-toggle arrow-none nav-user px-2 border-0 bg-transparent"
+              className="nav-link dropdown-toggle arrow-none nav-user px-1 px-md-2 border-0 bg-transparent"
               data-bs-toggle="dropdown"
               aria-expanded="false"
               aria-label="Menú de tu cuenta"

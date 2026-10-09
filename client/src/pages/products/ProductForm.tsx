@@ -221,7 +221,7 @@ export default function ProductForm() {
   if (loading) {
     return (
       <>
-        <PageTitle title={isEditing ? 'Editar Producto' : 'Nuevo Producto'} subtitle="Catálogo" />
+        <PageTitle title={isEditing ? 'Editar producto' : 'Nuevo producto'} parent={{ label: 'Productos', to: '/products' }} />
         <div className="text-center py-4">
           <div className="spinner-border text-primary" role="status"></div>
         </div>
@@ -236,7 +236,7 @@ export default function ProductForm() {
         title="Subiendo imagen"
         description="Estamos procesando la imagen del producto."
       />
-      <PageTitle title={isEditing ? 'Editar Producto' : 'Nuevo Producto'} subtitle="Catálogo" />
+      <PageTitle title={isEditing ? 'Editar producto' : 'Nuevo producto'} parent={{ label: 'Productos', to: '/products' }} />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">
@@ -252,7 +252,7 @@ export default function ProductForm() {
             {/* General Info */}
             <div className="card">
               <div className="card-body">
-                <h5 className="header-title mb-3">Información General</h5>
+                <h5 className="header-title mb-3">Información general</h5>
 
                 <div className="row">
                   <div className="col-md-8 mb-3">
@@ -449,7 +449,7 @@ export default function ProductForm() {
             {/* Food Details */}
             <div className="card">
               <div className="card-body">
-                <h5 className="header-title mb-3">Detalles y Disponibilidad</h5>
+                <h5 className="header-title mb-3">Detalles y disponibilidad</h5>
 
                 <div className="row">
                   <div className="col-md-6 mb-3">
@@ -506,7 +506,7 @@ export default function ProductForm() {
             {/* Image */}
             <div className="card">
               <div className="card-body">
-                <h5 className="header-title mb-3">Imagen del Producto</h5>
+                <h5 className="header-title mb-3">Imagen del producto</h5>
 
                 {imagePreview && (
                   <div className="text-center mb-3">
@@ -532,7 +532,7 @@ export default function ProductForm() {
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <i className="ri-upload-2-line me-1"></i>
-                  {imagePreview ? 'Cambiar Imagen' : 'Subir Imagen'}
+                  {imagePreview ? 'Cambiar imagen' : 'Subir imagen'}
                 </button>
 
                 {imageFile && (
@@ -557,8 +557,8 @@ export default function ProductForm() {
                     {isSubmitting
                       ? 'Guardando...'
                       : isEditing
-                        ? 'Guardar Cambios'
-                        : 'Crear Producto'}
+                        ? 'Guardar cambios'
+                        : 'Crear producto'}
                   </button>
                   <Link to="/products" className="btn btn-light">
                     Cancelar

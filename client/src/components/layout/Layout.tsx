@@ -11,6 +11,7 @@ import SuspendedNotice from './SuspendedNotice';
 import PendingSalesSync from '../sales/PendingSalesSync';
 import FocusBar from './FocusBar';
 import { FocusModeContext, getFocusArea, readFocusedAreas, storeFocusedAreas, type FocusArea, type FocusMode } from './focusMode';
+import { showsPlanNotice } from './navigation';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { getAccess } from '../../utils/access';
@@ -176,8 +177,8 @@ export default function Layout() {
             <div className="container-fluid">
               {isSuspended ? <SuspendedNotice businessName={tenant?.name} /> : (
                 <>
-                  {/* Mi negocio shows it in the plan card; the platform console is not about this business. */}
-                  {!pathname.startsWith('/platform') && pathname !== '/settings/business' && <PastDueBanner />}
+                  {/* In full on Inicio and Configuración; on the screens the team works on, the bell carries it. */}
+                  {showsPlanNotice(pathname) && <PastDueBanner />}
                   {page}
                 </>
               )}

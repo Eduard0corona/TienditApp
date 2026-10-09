@@ -164,7 +164,7 @@ export default function Profile() {
         description="Estamos actualizando tu foto de perfil."
       />
 
-      <PageTitle title="Mi Perfil" subtitle="Cuenta" />
+      <PageTitle title="Mi perfil" />
 
       {/* Profile Header */}
       <div className="row">
@@ -178,7 +178,7 @@ export default function Profile() {
                       <div className="avatar-lg">
                         <img
                           src={avatarSrc}
-                          alt="avatar"
+                          alt="Tu foto de perfil"
                           className="rounded-circle img-thumbnail"
                         />
                       </div>
@@ -192,7 +192,7 @@ export default function Profile() {
                         <ul className="mb-0 list-inline text-light">
                           <li className="list-inline-item me-3">
                             <h5 className="mb-1 text-white">{user?.email}</h5>
-                            <p className="mb-0 font-13 text-white-50">Email</p>
+                            <p className="mb-0 font-13 text-white-50">Correo</p>
                           </li>
                           {user?.phoneNumber && (
                             <li className="list-inline-item">
@@ -220,7 +220,7 @@ export default function Profile() {
                       onClick={() => setEditMode(!editMode)}
                     >
                       <i className="ri-user-settings-line me-1" aria-hidden="true"></i>
-                      {editMode ? 'Cancelar' : 'Editar Perfil'}
+                      {editMode ? 'Cancelar' : 'Editar perfil'}
                     </button>
                   </div>
                 </div>
@@ -236,7 +236,7 @@ export default function Profile() {
           {/* Personal Information */}
           <div className="card">
             <div className="card-body">
-              <h4 className="header-title mt-0 mb-3">Información Personal</h4>
+              <h4 className="header-title mt-0 mb-3">Información personal</h4>
 
               {profileMsg && (
                 <div className={`alert alert-${profileMsg.type}`}>{profileMsg.text}</div>
@@ -265,17 +265,17 @@ export default function Profile() {
                     type="submit"
                     disabled={profileSubmitting}
                   >
-                    {profileSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                    {profileSubmitting ? 'Guardando...' : 'Guardar cambios'}
                   </button>
                 </form>
               ) : (
                 <div className="text-start">
                   <p className="text-muted">
-                    <strong>Nombre Completo:</strong>{' '}
+                    <strong>Nombre completo:</strong>{' '}
                     <span className="ms-2">{user?.fullName}</span>
                   </p>
                   <p className="text-muted">
-                    <strong>Email:</strong>{' '}
+                    <strong>Correo:</strong>{' '}
                     <span className="ms-2">{user?.email}</span>
                     {user?.emailConfirmed ? (
                       <span className="badge bg-success ms-1">Confirmado</span>
@@ -319,7 +319,7 @@ export default function Profile() {
           {/* Avatar Section */}
           <div className="card">
             <div className="card-body">
-              <h4 className="header-title mt-0 mb-3">Avatar</h4>
+              <h4 className="header-title mt-0 mb-3">Foto de perfil</h4>
 
               {avatarMsg && (
                 <div className={`alert alert-${avatarMsg.type}`}>{avatarMsg.text}</div>
@@ -328,7 +328,7 @@ export default function Profile() {
               <div className="text-center mb-3">
                 <img
                   src={avatarSrc}
-                  alt="avatar"
+                  alt="Tu foto de perfil"
                   className="rounded-circle img-thumbnail"
                   width="120"
                   height="120"
@@ -349,7 +349,7 @@ export default function Profile() {
                   disabled={avatarLoading}
                 >
                   <i className="ri-upload-2-line me-1" aria-hidden="true"></i>
-                  Subir Avatar
+                  Subir foto
                 </button>
                 {user?.avatarUrl && (
                   <button
@@ -371,7 +371,7 @@ export default function Profile() {
           {/* Change Password */}
           <div className="card">
             <div className="card-body">
-              <h4 className="header-title mt-0 mb-3">Cambiar Contraseña</h4>
+              <h4 className="header-title mt-0 mb-3">Cambiar contraseña</h4>
 
               {passwordMsg && (
                 <div className={`alert alert-${passwordMsg.type}`}>{passwordMsg.text}</div>
@@ -381,7 +381,7 @@ export default function Profile() {
                 <div className="row">
                   <div className="col-md-4">
                     <div className="mb-3">
-                      <label htmlFor="profile-contrasena-actual" className="form-label">Contraseña Actual</label>
+                      <label htmlFor="profile-contrasena-actual" className="form-label">Contraseña actual</label>
                       <input id="profile-contrasena-actual"
                         type="password"
                         className={`form-control ${passwordErrors.currentPassword ? 'is-invalid' : ''}`}
@@ -396,7 +396,7 @@ export default function Profile() {
                   </div>
                   <div className="col-md-4">
                     <div className="mb-3">
-                      <label htmlFor="profile-nueva-contrasena" className="form-label">Nueva Contraseña</label>
+                      <label htmlFor="profile-nueva-contrasena" className="form-label">Nueva contraseña</label>
                       <input id="profile-nueva-contrasena"
                         type="password"
                         className={`form-control ${passwordErrors.newPassword ? 'is-invalid' : ''}`}
@@ -419,7 +419,7 @@ export default function Profile() {
                         type="submit"
                         disabled={passwordSubmitting}
                       >
-                        {passwordSubmitting ? 'Cambiando...' : 'Cambiar Contraseña'}
+                        {passwordSubmitting ? 'Cambiando...' : 'Cambiar contraseña'}
                       </button>
                     </div>
                   </div>

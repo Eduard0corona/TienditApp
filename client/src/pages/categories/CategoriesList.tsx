@@ -177,7 +177,7 @@ export default function CategoriesList() {
 
   return (
     <>
-      <PageTitle title="Categorías" subtitle="Catálogo" />
+      <PageTitle title="Categorías" />
 
       <div className="row">
         <div className="col-12">
@@ -185,7 +185,7 @@ export default function CategoriesList() {
             <div className="card-body">
               <div className="row mb-2">
                 <div className="col-sm-5">
-                  <h4 className="header-title mt-0">Listado de Categorías</h4>
+                  <h4 className="header-title mt-0">Categorías</h4>
                 </div>
                 <div className="col-sm-7">
                   <div className="text-sm-end d-flex flex-wrap align-items-center justify-content-sm-end gap-2">
@@ -200,10 +200,10 @@ export default function CategoriesList() {
                       <label className="form-check-label" htmlFor="categories-show-archived">Mostrar archivadas</label>
                     </div>
                     <button className="btn btn-soft-primary" onClick={openTemplatesModal}>
-                      <i className="ri-layout-grid-line me-1"></i> Instalar Plantilla
+                      <i className="ri-layout-grid-line me-1"></i> Instalar plantilla
                     </button>
                     <button className="btn btn-primary" onClick={openCreateModal}>
-                      <i className="ri-add-line me-1"></i> Nueva Categoría
+                      <i className="ri-add-line me-1"></i> Nueva categoría
                     </button>
                   </div>
                 </div>
@@ -288,7 +288,7 @@ export default function CategoriesList() {
       {/* Create/Edit Modal */}
       <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}</Modal.Title>
+          <Modal.Title>{editingCategory ? 'Editar categoría' : 'Nueva categoría'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
@@ -323,7 +323,7 @@ export default function CategoriesList() {
               Cancelar
             </button>
             <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Guardando...' : editingCategory ? 'Guardar Cambios' : 'Crear Categoría'}
+              {isSubmitting ? 'Guardando...' : editingCategory ? 'Guardar cambios' : 'Crear categoría'}
             </button>
           </Modal.Footer>
         </form>
@@ -376,7 +376,7 @@ export default function CategoriesList() {
 
       <Modal show={showTemplatesModal} onHide={closeTemplatesModal} centered size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Instalar Plantilla de Categorías</Modal.Title>
+          <Modal.Title>Instalar plantilla de categorías</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {templatesLoading ? (

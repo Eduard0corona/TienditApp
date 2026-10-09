@@ -88,7 +88,7 @@ export default function WhatsAppSettings() {
   if (loading) {
     return (
       <>
-        <PageTitle title="WhatsApp" subtitle="Configuración" />
+        <PageTitle title="WhatsApp" />
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Cargando...</span>
@@ -100,7 +100,7 @@ export default function WhatsAppSettings() {
 
   return (
     <>
-      <PageTitle title="WhatsApp" subtitle="Configuración" />
+      <PageTitle title="WhatsApp" />
 
       {/* Header */}
       <div className="row">
@@ -216,7 +216,7 @@ export default function WhatsAppSettings() {
                 </div>
 
                 <div className="mb-3">
-                  <label htmlFor="whatsappsettings-numero-visible" className="form-label">Número Visible</label>
+                  <label htmlFor="whatsappsettings-numero-visible" className="form-label">Número visible</label>
                   <input id="whatsappsettings-numero-visible"
                     className="form-control"
                     type="text"
@@ -233,7 +233,7 @@ export default function WhatsAppSettings() {
                       Guardando...
                     </>
                   ) : (
-                    'Guardar Configuración'
+                    'Guardar configuración'
                   )}
                 </button>
               </form>
@@ -294,7 +294,7 @@ export default function WhatsAppSettings() {
                   className="btn btn-outline-secondary btn-sm"
                 >
                   <i className="ri-external-link-line me-1"></i>
-                  Administrar Templates en Meta
+                  Administrar plantillas en Meta
                 </a>
               </div>
             </div>
@@ -307,7 +307,7 @@ export default function WhatsAppSettings() {
             <div className="card-body">
               <h4 className="header-title mt-0 mb-3">
                 <i className="ri-send-plane-line me-1"></i>
-                Enviar Mensaje
+                Enviar mensaje
               </h4>
 
               {!config?.isEnabled && (
@@ -327,7 +327,7 @@ export default function WhatsAppSettings() {
               <form onSubmit={handleSendSubmit(onSendMessage)}>
                 <div className="mb-3">
                   <label htmlFor="whatsappsettings-numero-de-telefono" className="form-label">
-                    Número de Teléfono <span className="text-danger">*</span>
+                    Número de teléfono <span className="text-danger">*</span>
                   </label>
                   <input id="whatsappsettings-numero-de-telefono"
                     className={`form-control ${sendErrors.phoneNumber ? 'is-invalid' : ''}`}

@@ -22,7 +22,7 @@ export default function MyOrders() {
 
   return (
     <>
-      <PageTitle title="Mis pedidos" subtitle="Mi cuenta" />
+      <PageTitle title="Mis pedidos" />
 
       {ordersQuery.isLoading && (
         <div className="text-center py-5"><div className="spinner-border text-primary" role="status" /></div>

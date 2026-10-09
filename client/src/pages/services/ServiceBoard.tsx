@@ -224,7 +224,7 @@ export default function ServiceBoard() {
 
   return (
     <>
-      <PageTitle title="Tablero de Servicios" subtitle="Operación" />
+      <PageTitle title="Taller" />
 
       <div className="row mb-3">
         <div className="col-xl-2 col-md-6 mb-2">

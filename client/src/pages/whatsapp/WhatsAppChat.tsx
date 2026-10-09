@@ -289,7 +289,7 @@ export default function WhatsAppChat() {
 
   return (
     <>
-      <PageTitle title="Chat" subtitle="WhatsApp" />
+      <PageTitle title="Chat" />
 
       {error && (
         <div className="alert alert-danger alert-dismissible fade show">
@@ -304,7 +304,7 @@ export default function WhatsAppChat() {
           <div className="card-body">
             <h5 className="card-title mb-3">
               <i className="ri-chat-new-line me-1"></i>
-              Nueva Conversación
+              Nueva conversación
             </h5>
             <div className="row g-3">
               <div className="col-md-4">

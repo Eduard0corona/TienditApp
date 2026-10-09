@@ -288,7 +288,7 @@ export default function ServicesList() {
 
   return (
     <>
-      <PageTitle title="Servicios" subtitle="Catálogo" />
+      <PageTitle title="Servicios" />
 
       <div className="row">
         <div className="col-12">
@@ -297,7 +297,7 @@ export default function ServicesList() {
               <div className="row mb-2">
                 <div className="col-sm-4">
                   <button className="btn btn-primary mb-2" onClick={openCreateModal}>
-                    <i className="ri-add-line me-1"></i> Nuevo Servicio
+                    <i className="ri-add-line me-1"></i> Nuevo servicio
                   </button>
                 </div>
                 <div className="col-sm-8">
@@ -423,7 +423,7 @@ export default function ServicesList() {
 
       <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingService ? 'Editar Servicio' : 'Nuevo Servicio'}</Modal.Title>
+          <Modal.Title>{editingService ? 'Editar servicio' : 'Nuevo servicio'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
@@ -583,7 +583,7 @@ export default function ServicesList() {
               Cancelar
             </button>
             <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Guardando...' : editingService ? 'Guardar Cambios' : 'Crear Servicio'}
+              {isSubmitting ? 'Guardando...' : editingService ? 'Guardar cambios' : 'Crear servicio'}
             </button>
           </Modal.Footer>
         </form>

@@ -1,14 +1,19 @@
 import { Link } from 'react-router-dom';
 import { useAttention } from '../../api/queries';
-import { describeAttentionItems } from '../../utils/attention';
+import { useMySubscription } from '../../hooks/useMySubscription';
+import { describeAttentionItems, describePlanNotice } from '../../utils/attention';
 
 const BADGE_LIMIT = 9;
 
-/** The bell: what needs someone now, with a link to where it is handled. Nothing pending, no badge. */
+/**
+ * The bell: what needs someone now, with a link to where it is handled. Nothing pending, no badge. A plan past due
+ * goes first, for the owners and admins who read it.
+ */
 export default function AttentionBell() {
   const attention = useAttention();
-  const notices = describeAttentionItems(attention.data?.items ?? []);
-  const total = (attention.data?.items ?? []).reduce((sum, item) => sum + item.count, 0);
+  const plan = describePlanNotice(useMySubscription().data);
+  const notices = [...(plan ? [plan] : []), ...describeAttentionItems(attention.data?.items ?? [])];
+  const total = (attention.data?.items ?? []).reduce((sum, item) => sum + item.count, 0) + (plan ? 1 : 0);
   const urgent = notices.some((notice) => notice.tone === 'danger');
   const label = total === 0 ? 'Avisos: nada pendiente' : `Avisos: ${total} pendiente${total === 1 ? '' : 's'}`;
 

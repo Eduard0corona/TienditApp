@@ -143,16 +143,6 @@ export function isNavEntryActive(entry: NavEntry, pathname: string): boolean {
   return isNavSection(entry) ? entry.pages.some((page) => isNavItemActive(page, pathname)) : isNavItemActive(entry, pathname);
 }
 
-/** The section of the current page, whatever the access (the breadcrumb names it). */
-export function findNavSection(pathname: string): NavSection | null {
-  for (const group of NAV_GROUPS) {
-    for (const entry of group.entries) {
-      if (isNavSection(entry) && entry.pages.some((page) => isNavItemActive(page, pathname))) return entry;
-    }
-  }
-  return null;
-}
-
 /** The section of the current page with the pages the person can open, when there is more than one to switch to. */
 export function getSectionTabs(pathname: string, access: Access, capabilities: number | null): NavSection | null {
   for (const group of getAllowedNavGroups(access, capabilities)) {
@@ -166,4 +156,17 @@ export function getSectionTabs(pathname: string, access: Access, capabilities: n
 export function isNavItemActive(item: NavItem, pathname: string): boolean {
   if (item.exact) return pathname === item.path;
   return pathname === item.path || pathname.startsWith(`${item.path}/`);
+}
+
+/**
+ * Where the past-due notice of the plan shows in full: where the owner looks after the business (Inicio and the pages
+ * of Configuración, the section of Mi negocio), not the screens the team works on, where the bell carries it. Mi
+ * negocio says it in its plan card.
+ */
+export function showsPlanNotice(pathname: string): boolean {
+  if (pathname === '/dashboard') return true;
+  if (pathname === '/settings/business') return false;
+  const settings = NAV_GROUPS.flatMap((group) => group.entries)
+    .find((entry): entry is NavSection => isNavSection(entry) && entry.pages.some((page) => page.path === '/settings/business'));
+  return !!settings?.pages.some((page) => isNavItemActive(page, pathname));
 }

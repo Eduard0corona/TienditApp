@@ -518,6 +518,13 @@ input[data-switch='primary']:checked + label {
   color: var(--tt-on-accent) !important;
 }
 
+/* Card titles read as they are written, with a capital only at the start, like the rest of the app (Hyper capitalizes every letter). */
+.card .header-title {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 1rem;
+}
+
 /* Amounts line up in columns and do not jump while they change. */
 .ta-money,
 .table td.text-end,
@@ -825,6 +832,37 @@ input[data-switch='primary']:checked + label {
   max-width: 260px;
   font-weight: 700;
   color: var(--ct-emphasis-color);
+}
+
+/*
+ * Phones: someone with several businesses must see which one they are in. The logo gives its room to the switcher
+ * (Inicio is in the tab bar) and so does the store icon, so "Café La Esquina" reads whole instead of "C…".
+ */
+@media (max-width: 767.98px) {
+  /* Hyper shows the logo with rules as specific as html[data-sidenav-size=full] .navbar-custom .logo-topbar. */
+  .logo-topbar.logo-topbar-gives-way,
+  .topbar-business-icon {
+    display: none !important;
+  }
+
+  .topbar-business {
+    max-width: min(60vw, 260px);
+  }
+
+  .topbar-business-button {
+    padding-inline: 0.625rem;
+  }
+
+  /* Hyper gives the menu button 60px and lets it shrink; a steady 44px touch target leaves the rest to the switcher. */
+  .navbar-custom .button-toggle-menu {
+    flex-shrink: 0;
+    width: 44px;
+  }
+
+  /* Bootstrap indents every list by 2rem; in the bar most of that room is the switcher's. */
+  .navbar-custom .topbar-menu {
+    padding-left: 0.5rem;
+  }
 }
 
 .topbar-search-button {
