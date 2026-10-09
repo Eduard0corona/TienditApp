@@ -107,6 +107,10 @@ El `apply.sql` de la Fase 13 borra `Products.StockQuantity`, `LowStockThreshold`
 
 El `apply.sql` de `20261009041644_StopMappingRequireOpenCashSession` no cambia el esquema ni los datos: solo registra la migración, y se aplica, como siempre, antes del merge. La versión nueva deja de leer y escribir `TenantSettings.RequireOpenCashSession`, que no tiene efecto desde que todo cobro exige caja: las configuraciones que guarda la dejan en su valor por omisión, 0, y la versión anterior sigue funcionando con ella, así que volver a ella no necesita `rollback.sql`. La siguiente entrega borra la columna y solo se aplica con esta versión desplegada.
 
+## Columna `RequireOpenCashSession` borrada
+
+El `apply.sql` de `20261009064905_DropRequireOpenCashSession` borra `TenantSettings.RequireOpenCashSession` con su valor por omisión, y se aplica, como siempre, antes del merge y con la versión de `StopMappingRequireOpenCashSession` (PR #47) desplegada: no la mapea, así que sigue funcionando, y volver a ella no necesita `rollback.sql`. Antes de aplicar, su `verify.sql` debe mostrar como única dependencia la restricción del valor por omisión, ninguna estadística creada a mano ni objeto que use la tabla, y cuántos negocios tenían activada la política (cuáles, solo queda en el respaldo). Volver a una versión anterior al PR #47 exige antes el `rollback.sql` de esa carpeta, que crea la columna otra vez en 0.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

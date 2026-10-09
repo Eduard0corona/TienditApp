@@ -51,7 +51,7 @@ Actualizada el 2026-10-06 tras las Fases 0 a 13 del roadmap de producto (la audi
 - Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.
 - Desde la Fase 12 una consulta que incluye colecciones las lee en sentencias separadas (`SplitQuery` por defecto). Fuera de una transacción, esas sentencias pueden ver un cambio hecho entre una y otra; las escrituras se protegen con los tokens de concurrencia, no con lo leído.
 - `client/README.md` sigue siendo template genérico.
-- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). La columna `TenantSettings.RequireOpenCashSession`, de la política que lo pedía solo para efectivo, ya no se mapea (`20261009041644_StopMappingRequireOpenCashSession`): falta la migración que la borra, cuando esa versión esté desplegada.
+- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos).
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions fijadas por SHA y las imágenes de Docker fijadas por digest no se actualizan solas: no hay Dependabot, y los procedimientos están en [despliegue](../development/deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13). Una imagen fijada no recibe los parches de seguridad de su etiqueta hasta que alguien cambia el digest.
@@ -267,6 +267,10 @@ Pendientes detectados en la Fase 3:
 - `Products.StockQuantity`, `LowStockThreshold` y `CustomerProfiles.LoyaltyPoints` y `LoyaltyTier` borradas (`DropStockAndLoyaltyColumns`, escrita a mano); su rollback las crea otra vez, vacías, para poder volver a la Fase 11.
 - Las imágenes de Docker de CI, del `Dockerfile` y de `docker-compose` van con su etiqueta exacta y su digest, y CI rechaza una action o una imagen sin fijar (`.github/scripts/check-pins.py`).
 - `CrossTenantSuiteCoverageTests` exige que cada controller con datos del negocio entre a la suite entre negocios; las rutas de la cuenta y la lista de negocios ya están en ella.
+
+## Resuelto el 2026-10-09 (columna `RequireOpenCashSession`)
+
+- `TenantSettings.RequireOpenCashSession`, de la política que pedía caja solo para cobrar en efectivo, se borró en dos entregas: `StopMappingRequireOpenCashSession` dejó de mapearla y `DropRequireOpenCashSession` (escrita a mano) la borra. Su rollback la crea otra vez en 0 para volver a una versión anterior; los negocios que la tenían activada solo quedan en el respaldo.
 
 ## Decisiones humanas pendientes
 
