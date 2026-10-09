@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-06 tras las Fases 0 a 13 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-09 tras las Fases 0 a 16 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -12,7 +12,7 @@ Actualizada el 2026-10-06 tras las Fases 0 a 13 del roadmap de producto (la audi
    - `CrossTenantManagementSqlServerTests` (Fase 10): mesas y cuentas abiertas (entre dos negocios de comida), sucursales, equipo (sin reenviar la invitación de otro), campañas (plantillas, campañas, bajas y audiencias, que nunca incluyen a los clientes del otro) y reportes (la venta de uno no mueve los del otro); desde la Fase 12, la promoción rápida, que llega solo a los compradores del negocio y no toca la plantilla del otro. Un admin de plataforma real deja en la actividad del negocio lo que hace en él (`CrossTenantHttpSqlServerTests`).
    - `CrossTenantOperationsSqlServerTests` (Fase 11): Inicio (las métricas y "Requiere atención" de uno no cuentan nada del otro), cocina (entre dos negocios de comida), tablero de servicios y agentes de IA.
 
-   Desde la Fase 13 `CrossTenantSuiteCoverageTests` exige que cada controller con datos del negocio aparezca en la suite; quedan fuera, con su motivo, la consola de plataforma, el menú público (por slug) y el 2FA de la cuenta. Al escribirla encontró dos que la Fase 12 daba por cubiertos por coincidir solo en el prefijo de la ruta: `/api/v1/me` y `/api/v1/tenants`. Pendiente: la prueba exige que la suite llame las rutas de cada controller, no que pruebe cada acción.
+   Desde la Fase 13 `CrossTenantSuiteCoverageTests` exige que cada controller con datos del negocio aparezca en la suite; quedan fuera, con su motivo, la consola de plataforma, el menú público (por slug), el 2FA de la cuenta y, desde la Fase 14, la recuperación de contraseña y el perfil, que son de la cuenta. Al escribirla encontró dos que la Fase 12 daba por cubiertos por coincidir solo en el prefijo de la ruta: `/api/v1/me` y `/api/v1/tenants`. Desde la Fase 14 cuenta cada URL por la ruta de cada acción, porque varios controllers comparten `/api/v1/auth` y `/api/v1/auth/my-tenant`, y así apareció un tercero: la configuración del negocio (`TenantSetupController`: asistente, plan, política de venta y menú en línea) solo contaba por compartir el prefijo de rutas que respondía `AuthController`; ahora `CrossTenantHttpSqlServerTests` prueba que con el encabezado de otro negocio un dueño solo lee y cambia su propia configuración. Pendiente: la prueba exige que la suite llame las rutas de cada controller, no que pruebe cada acción.
 4. Archivos: el contenido se valida por firma, las fotos se re-codifican y el borrado por URL está confinado a `{área}/{tenantId}` en almacenamiento local y Azure Blob (rechaza traversal, otros tenants/áreas y URLs ajenas al contenedor). Desde la Fase 8 los comprobantes de transferencia y las fotos de servicio son privados: fuera de `wwwroot` o en un contenedor sin lectura anónima, solo los entrega `GET /api/v1/files/{key}` a miembros del negocio con el permiso del área, `/uploads/orders` responde 404 y los archivos que eran públicos se mueven al almacenamiento privado al arrancar ([seguridad](../../SECURITY.md#archivos)). Desde la Fase 9 la subida valida carpeta y nombre en los dos providers. Los avatares van a la carpeta de la cuenta (`avatars/users/{cuenta}`), y los anteriores se borran de la carpeta del negocio donde se subieron (por las membresías de la cuenta) o de la de sesión sin negocio. Pendiente:
    - los PDF no pasan por un escaneo de malware;
    - correr en producción el [procedimiento para las fotos de producto con la dirección de otro negocio](../../database/production/data-repair/20261005_StorageUrlsOutsideTheirFolder/README.md) (creadas antes del 2026-10-01);
@@ -40,15 +40,15 @@ Actualizada el 2026-10-06 tras las Fases 0 a 13 del roadmap de producto (la audi
 
 ## Media
 
-- `AuthController` (447 líneas) concentra registro, sesión, perfil y negocio. El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
+- Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.
 - Las pruebas del cliente (Vitest y Testing Library, desde la Fase 5) cubren utilidades de dinero, unidades, acceso, errores, IVA, mensajes de WhatsApp y componentes con existencias; faltan pruebas de pantallas completas y de extremo a extremo. (Desde la Fase 4F hay pruebas contra SQL Server 2022 en CI para folios y proyecciones.)
 - El slot de staging con swap y aprobación está listo en el workflow, pero sin activar (Fase 7, [despliegue](../development/deploy-azure.md)): requiere plan Standard o superior, OIDC, crear el slot, la credencial federada del environment `production` y sus revisores. Mientras tanto cada push a `master` despliega directo a producción; la prueba de humo confirma la versión nueva y que la base tenga sus migraciones (`/health/schema`).
 - `PendingModelChangesWarning` se ignora en ejecución; el CI lo valida con `has-pending-model-changes`.
-- Cambios de estado, cancelaciones, reembolsos y rondas que consumen insumos toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
+- Cambios de estado, cancelaciones, reembolsos y el cierre de una cuenta abierta antes de la Fase 14 (que descuenta sus rondas de entonces) toman su folio `INV` fuera de una transacción: si fallan después, dejan un hueco. Desde la Fase 14 cada ronda de una cuenta corre en una transacción, como la venta. Hacerlos transaccionales exige quitar sus reintentos internos ante `DbUpdateConcurrencyException` (con MARS, SQL Server no usa savepoints y el reintento repetiría lo ya ejecutado) o desactivar MARS tras revisar que nada lo necesite. Mientras tanto, regresar a una versión anterior a la Fase 4 (que numeraba `INV` contando los movimientos del día) puede chocar con esos huecos hasta que cambie el día UTC.
 - Las migraciones de producción se aplican a mano con el `apply.sql` de cada carpeta antes del merge (probadas en CI con `sqlcmd`); `/health/schema` detecta las que falten, pero ningún paso del despliegue las aplica con aprobación.
 - Categorías, almacenes y agentes de IA se listan completos porque cada negocio tiene un tope (300, 100 y 20, contando los archivados o inactivos; Fase 12). Archivar no libera lugar: al llegar al tope no se crean más. La cocina muestra los 200 pedidos y las 200 comandas más recientes, para que los viejos que nadie cerró no tapen los nuevos; con más pendientes, los más viejos no aparecen.
-- Inicio carga en memoria las órdenes y pagos del rango. Las ventas por sucursal ya leen el modelo de lectura diario (`DailySalesSnapshot`); Inicio puede usarlo cuando el volumen lo pida.
+- Resuelto en la Fase 14: Inicio ya no carga en memoria las órdenes y pagos del rango. Los ingresos salen del resumen diario de los reportes (`DailySalesSnapshot` para los días cerrados y sumas en la base para el resto) y lo demás de agregados en SQL; las cifras son las mismas que antes (`DashboardMetricsSqlServerTests` las compara con el cálculo anterior). El rango son días completos del negocio, así que el último segundo del día, que el filtro de la pantalla dejaba fuera, ahora cuenta; un periodo abarca hasta 366 días.
 - Desde la Fase 12 una consulta que incluye colecciones las lee en sentencias separadas (`SplitQuery` por defecto). Fuera de una transacción, esas sentencias pueden ver un cambio hecho entre una y otra; las escrituras se protegen con los tokens de concurrencia, no con lo leído.
 - `client/README.md` sigue siendo template genérico.
 - Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos).
@@ -56,7 +56,16 @@ Actualizada el 2026-10-06 tras las Fases 0 a 13 del roadmap de producto (la audi
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions fijadas por SHA y las imágenes de Docker fijadas por digest no se actualizan solas: no hay Dependabot, y los procedimientos están en [despliegue](../development/deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13). Una imagen fijada no recibe los parches de seguridad de su etiqueta hasta que alguien cambia el digest.
 - Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
-- Las rondas de una cuenta de mesa no se revisan contra existencias; la cuenta consume al cerrarse y ahí no se rechaza.
+- Resuelto en la Fase 16: los dueños eligen el tema de su negocio entre ocho paletas curadas (Configuración › Negocio › Apariencia, [ADR 0010](../adr/0010-business-themes.md)). Su equipo ve la app con esos colores y sus clientes, el menú en línea; cada par de colores pasa WCAG AA en claro y en oscuro, y una prueba lo exige.
+  - Paleta: los colores de estado de Hyper (verde 2.0:1, rojo 3.0:1, amarillo 1.6:1, azul 2.5:1 con texto blanco) se cambiaron por unos AA en los dos modos; el texto general sube de 4.28:1 a 7:1 sobre la página.
+  - Modo oscuro: tiene fondo oscuro (antes la página se quedaba clara detrás de tarjetas oscuras), con alertas, chips, chat de WhatsApp y fichas en versión oscura.
+  - Consistencia: Cobrar usa el color principal en Vender, Mesas y Pedidos, y ningún estado se pinta con el acento.
+  - Pendiente:
+    - Hyper sigue cargado (436 KB de `app.min.css` y 60 KB de `vendor.min.css` sin uso), con colores compilados que `theme.css` cubre uno por uno.
+    - No hay color libre de marca, solo los temas curados.
+    - El logo del negocio todavía no sale en el ticket ni en la barra superior.
+- Resuelto en la Fase 15: un platillo de una ronda ya enviada se cancela desde la cuenta (`POST /orders/{id}/item-cancellations`): la cuenta deja de cobrarlo, el renglón conserva lo pedido y la cancelación queda con motivo, quién y cuándo; sus insumos regresan al inventario salvo que la cocina ya lo preparara, y la bitácora y la cocina se enteran. Solo se cancela lo que falta por cobrar: un platillo pagado se reembolsa. Pendiente: lo que la cocina ya preparó queda dentro de la salida por venta de su ronda, sin un movimiento de merma propio; volver a la Fase 14 con platillos cancelados en cuentas abiertas los cobra otra vez al recalcular la cuenta ([despliegue](../development/deploy-azure.md#platillos-cancelados-requireopencashsession-y-vender-fase-15)).
+- Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
 - Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
@@ -102,7 +111,7 @@ Pendientes detectados en la Fase 0:
 
 - El emisor que ven las apps autenticadoras sale del `JwtSettings:Issuer` ("FoodParkDigital"); cambiarlo exige separar el nombre visible del emisor del JWT.
 - La confirmación de teléfono no permite corregir el número capturado.
-- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio).
+- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio; desde la Fase 16, `theme.css` por capas con el tema de cada negocio encima de Hyper, que sigue pendiente de retirar).
 
 ## Resuelto el 2026-10-04 (Fase 1: plataforma)
 
@@ -157,7 +166,7 @@ Pendientes detectados en la Fase 2:
 Pendientes detectados en la Fase 3:
 
 - Timbrado con un PAC y certificados CSD, factura global, complementos de pago y notas de crédito.
-- Las opciones de un producto no consumen insumos propios; cancelar un platillo de una ronda enviada se compensa con un reembolso; falta dividir cuentas y unir mesas; las mesas son del negocio, no de la sucursal.
+- Las opciones de un producto no consumen insumos propios; falta dividir cuentas y unir mesas (cancelar un platillo de una ronda enviada se resolvió en la Fase 15); las mesas son del negocio, no de la sucursal.
 - Menú en línea sin pago en línea, entrega a domicilio ni aviso automático de confirmación.
 - Cada ubicación de inventario se volvió sucursal: las que solo eran almacén hay que desactivarlas a mano después de aplicar la migración.
 - Los pagos de planes los registra la plataforma a mano; falta el adaptador de un proveedor de pagos con verificación de firma.
@@ -270,7 +279,7 @@ Pendientes detectados en la Fase 3:
 
 ## Resuelto el 2026-10-09 (columna `RequireOpenCashSession`)
 
-- `TenantSettings.RequireOpenCashSession`, de la política que pedía caja solo para cobrar en efectivo, se borró en dos entregas: `StopMappingRequireOpenCashSession` dejó de mapearla y `DropRequireOpenCashSession` (escrita a mano) la borra. Su rollback la crea otra vez en 0 para volver a una versión anterior; los negocios que la tenían activada solo quedan en el respaldo.
+- `TenantSettings.RequireOpenCashSession`, de la política que pedía caja solo para cobrar en efectivo, se borró en dos pasos: la PR #47 y la Fase 15 dejaron de mapearla (las dos `StopMappingRequireOpenCashSession`) y `DropRequireOpenCashSession` (escrita a mano) la borra. Su rollback la crea otra vez en 0 para volver a una versión anterior; los negocios que la tenían activada solo quedan en el respaldo.
 
 ## Decisiones humanas pendientes
 

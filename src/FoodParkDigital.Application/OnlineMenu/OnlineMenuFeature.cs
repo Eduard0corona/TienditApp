@@ -107,6 +107,8 @@ public class PublicMenuDto
     /// them in.
     /// </summary>
     public bool OrdersPaused { get; set; }
+    /// <summary>The colors the business picked: its customers see the menu with them.</summary>
+    public BusinessTheme Theme { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
@@ -202,6 +204,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             DefaultTaxRate = settings.DefaultTaxRate,
             AcceptsOrders = drawerOpen,
             OrdersPaused = ordersOn && !drawerOpen,
+            Theme = settings.Theme,
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto

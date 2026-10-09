@@ -6,10 +6,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 {
     /// <summary>
     /// Drops TenantSettings.RequireOpenCashSession with its default: the model stopped mapping it in
-    /// StopMappingRequireOpenCashSession, so the version running while this is applied (the one with that migration) no
-    /// longer reads it. Written by hand, because the model has no such column. Down creates it again with its default,
-    /// 0, for the version before that migration, which maps it; the values do not come back. That version ignores them:
-    /// every payment and refund needs an open drawer.
+    /// StopMappingRequireOpenCashSession (PR #47) and StopMappingRequireOpenCashSessionPhase15, so the version running
+    /// while this is applied (one with those migrations) no longer reads it. Written by hand, because the model has no
+    /// such column. Down creates it again with its default, 0, for a version before them, which maps it; the values do
+    /// not come back. Since PR #40 no version uses them: every payment and refund needs an open drawer.
     /// </summary>
     public partial class DropRequireOpenCashSession : Migration
     {

@@ -48,7 +48,7 @@
 .setup-stepper li.current .setup-step-number,
 .setup-stepper li.done .setup-step-number {
   background: var(--ct-primary);
-  color: #fff;
+  color: var(--ta-on-accent);
 }
 
 .setup-step-label {

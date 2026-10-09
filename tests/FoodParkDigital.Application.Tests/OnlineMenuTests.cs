@@ -37,6 +37,21 @@ public class OnlineMenuTests
     }
 
     [Fact]
+    public async Task Menu_ShouldCarryTheThemeOfTheBusiness()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "cafe-luna");
+        await SetModeAsync(fixture, tenant, OnlineMenuMode.MenuOnly);
+        Assert.Equal(BusinessTheme.Nopal, (await MenuHandler(fixture).Handle(new GetPublicMenuQuery("cafe-luna"), CancellationToken.None))!.Theme);
+
+        var settings = await fixture.Context.TenantSettings.IgnoreQueryFilters().SingleAsync(s => s.TenantId == tenant.Id);
+        settings.SetTheme(BusinessTheme.Jacaranda);
+        await fixture.Context.SaveChangesAsync();
+
+        Assert.Equal(BusinessTheme.Jacaranda, (await MenuHandler(fixture).Handle(new GetPublicMenuQuery("cafe-luna"), CancellationToken.None))!.Theme);
+    }
+
+    [Fact]
     public async Task Menu_ShouldListOnlyAvailableProductsAndNoServices()
     {
         await using var fixture = SalesTestFixture.Create();

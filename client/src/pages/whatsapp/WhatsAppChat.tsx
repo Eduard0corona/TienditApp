@@ -511,14 +511,14 @@ export default function WhatsAppChat() {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-grow-1 overflow-auto p-3" style={{ backgroundColor: '#e5ddd5' }}>
+                <div className="wa-messages flex-grow-1 overflow-auto p-3">
                   {loadingMsgs ? (
                     <div className="text-center py-5">
                       <div className="spinner-border spinner-border-sm text-primary" />
                     </div>
                   ) : messages.length === 0 ? (
                     <div className="text-center py-5">
-                      <p className="text-muted bg-white rounded p-2 d-inline-block">
+                      <p className="wa-message-empty text-muted rounded p-2 d-inline-block">
                         No hay mensajes en esta conversación
                       </p>
                     </div>
@@ -530,13 +530,7 @@ export default function WhatsAppChat() {
                           key={msg.id}
                           className={`d-flex mb-2 ${isOutbound ? 'justify-content-end' : 'justify-content-start'}`}
                         >
-                          <div
-                            className="wa-message-bubble rounded p-2 position-relative"
-                            style={{
-                              backgroundColor: isOutbound ? '#dcf8c6' : '#ffffff',
-                              boxShadow: '0 1px 1px rgba(0,0,0,.1)',
-                            }}
-                          >
+                          <div className={`wa-message-bubble ${isOutbound ? 'wa-message-out' : 'wa-message-in'} rounded p-2 position-relative`}>
                             <p className="mb-1" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                               {msg.body}
                             </p>

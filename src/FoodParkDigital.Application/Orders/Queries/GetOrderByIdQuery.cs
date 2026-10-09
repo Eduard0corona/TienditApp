@@ -25,11 +25,14 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
     {
         var order = await _context.Orders
             .AsNoTracking()
-            .Include(o => o.Items)
+            .Include(o => o.Items).ThenInclude(i => i.Options)
             .Include(o => o.StatusHistory)
             .Include(o => o.ServiceDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
+            .Include(o => o.Refunds).ThenInclude(r => r.Lines)
+            .Include(o => o.KitchenTickets)
+            .Include(o => o.ItemCancellations)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)
             ?? throw new EntityNotFoundException("Order", request.OrderId);
 

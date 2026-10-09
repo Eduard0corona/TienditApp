@@ -7,10 +7,18 @@ import { getApiErrorMessage } from '../../api/errors';
 import type { DiningTable } from '../../api/tablesApi';
 import ChargePanel, { type ChargeResult } from '../sales/ChargePanel';
 import SaleTicket from '../sales/SaleTicket';
-import { KitchenTicketStatus, type OrderDto } from '../../types';
+import CancelTabItemForm from './CancelTabItemForm';
+import { KitchenTicketStatus, type CancelTabItemRequest, type OrderDto, type OrderItemDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import { describeItem } from '../../utils/productOptions';
-import { formatTicketQuantity, printTicket } from '../../utils/ticket';
+import {
+  activeQuantity,
+  cancellableQuantity,
+  chargedPrice,
+  formatCancelled,
+  formatTicketQuantity,
+  printTicket,
+} from '../../utils/ticket';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -25,10 +33,10 @@ interface TabPanelProps {
 }
 
 const ROUND_STATUS: Record<number, { label: string; className: string }> = {
-  [KitchenTicketStatus.Pending]: { label: 'En cocina', className: 'bg-warning text-dark' },
-  [KitchenTicketStatus.Preparing]: { label: 'Preparando', className: 'bg-primary' },
-  [KitchenTicketStatus.Ready]: { label: 'Lista para llevar', className: 'bg-success' },
-  [KitchenTicketStatus.Served]: { label: 'Servida', className: 'bg-light text-dark' },
+  [KitchenTicketStatus.Pending]: { label: 'En cocina', className: 'ta-chip-new' },
+  [KitchenTicketStatus.Preparing]: { label: 'Preparando', className: 'ta-chip-preparing' },
+  [KitchenTicketStatus.Ready]: { label: 'Lista para llevar', className: 'ta-chip-ready' },
+  [KitchenTicketStatus.Served]: { label: 'Servida', className: 'ta-chip-done' },
 };
 
 /** An open tab: its rounds, what is paid and what is left, and the actions of the table. */
@@ -38,9 +46,11 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { capabilities } = useTenant();
-  // A waiter takes the rounds; the cashier charges the table.
-  const canCharge = getAccess(user, capabilities).charge;
-  const [mode, setMode] = useState<'detail' | 'charge' | 'move' | 'bill'>('detail');
+  // A waiter takes the rounds and cancels what the table no longer wants; the cashier charges the table.
+  const access = getAccess(user, capabilities);
+  const canCharge = access.charge;
+  const [mode, setMode] = useState<'detail' | 'charge' | 'move' | 'bill' | 'cancel-item'>('detail');
+  const [cancelling, setCancelling] = useState<OrderItemDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const tab = useQuery({
@@ -90,6 +100,19 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
     if (ok) setMode('detail');
   };
 
+  const cancelItem = async (item: OrderItemDto, request: Omit<CancelTabItemRequest, 'orderItemId'>) => {
+    let updated: OrderDto | undefined;
+    const ok = await run(async () => {
+      updated = (await ordersApi.cancelTabItem(orderId, { orderItemId: item.id, ...request })).data;
+      return updated;
+    });
+    if (ok && updated) {
+      toast.success(`Platillo cancelado. La cuenta quedó en ${formatMoney(updated.total)}.`);
+      setCancelling(null);
+      setMode('detail');
+    }
+  };
+
   const closeTab = async () => {
     const ok = await run(async () => (await ordersApi.closeTab(orderId)).data, 'Cuenta cerrada. La mesa quedó libre.');
     if (ok) onClose();
@@ -99,6 +122,7 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
     ? [...new Set(order.items.map((item) => item.round ?? 1))].sort((a, b) => a - b)
     : [];
   const ticketOf = (round: number) => order?.kitchenTickets?.find((ticket) => ticket.round === round);
+  const cancellationsOf = (item: OrderItemDto) => order?.itemCancellations?.filter((c) => c.orderItemId === item.id) ?? [];
 
   return (
     <Modal show onHide={onClose} centered size="lg" fullscreen="md-down" scrollable>
@@ -136,16 +160,49 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
                     </div>
                   </div>
                   <ul className="list-unstyled border rounded p-2 mb-0">
-                    {order.items.filter((item) => (item.round ?? 1) === round).map((item) => (
-                      <li key={item.id} className="d-flex justify-content-between gap-2 py-1">
-                        <span>
-                          <span className="fw-semibold me-1">{formatTicketQuantity(item)}</span>
-                          {describeItem(item)}
-                          {item.notes && <span className="d-block small text-muted">{item.notes}</span>}
-                        </span>
-                        <span className="ta-money">{formatMoney(item.totalPrice)}</span>
-                      </li>
-                    ))}
+                    {order.items.filter((item) => (item.round ?? 1) === round).map((item) => {
+                      const cancelled = item.cancelledQuantity ?? 0;
+                      const allCancelled = activeQuantity(item) <= 0;
+                      return (
+                        <li key={item.id} className="d-flex justify-content-between align-items-start gap-2 py-1">
+                          <span className={allCancelled ? 'text-muted' : undefined}>
+                            {allCancelled ? (
+                              <s>{describeItem(item)}</s>
+                            ) : (
+                              <>
+                                <span className="fw-semibold me-1">{formatTicketQuantity(item)}</span>
+                                {describeItem(item)}
+                              </>
+                            )}
+                            {item.notes && <span className="d-block small text-muted">{item.notes}</span>}
+                            {cancelled > 0 && (
+                              <span className="d-block small text-danger">
+                                {allCancelled ? 'Cancelado' : formatCancelled(item)}
+                                {': '}
+                                {cancellationsOf(item).map((c) => c.reason).join(' · ')}
+                              </span>
+                            )}
+                          </span>
+                          <span className="d-flex align-items-center gap-2">
+                            {!allCancelled && <span className="ta-money">{formatMoney(chargedPrice(item))}</span>}
+                            {order.isOpenTab && access.sell && cancellableQuantity(item) > 0 && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-link text-danger p-0"
+                                aria-label={`Cancelar ${describeItem(item)}`}
+                                onClick={() => {
+                                  setError('');
+                                  setCancelling(item);
+                                  setMode('cancel-item');
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               );
@@ -207,8 +264,21 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
         {order && mode === 'bill' && (
           <SaleTicket order={order} businessName={businessName} />
         )}
+
+        {order && mode === 'cancel-item' && cancelling && (
+          <CancelTabItemForm
+            item={cancelling}
+            roundStatus={ticketOf(cancelling.round ?? 1)?.status}
+            submitting={busy}
+            onSubmit={(request) => void cancelItem(cancelling, request)}
+            onBack={() => {
+              setCancelling(null);
+              setMode('detail');
+            }}
+          />
+        )}
       </Modal.Body>
-      {order && mode !== 'charge' && (
+      {order && mode !== 'charge' && mode !== 'cancel-item' && (
         <Modal.Footer className="flex-wrap">
           {mode !== 'detail' ? (
             <>
@@ -221,9 +291,10 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
             </>
           ) : order.isOpenTab ? (
             <>
+              {/* Secondary: Cobrar (or Cerrar cuenta) is the main action of the tab. */}
               <button
                 type="button"
-                className="btn btn-primary btn-touch"
+                className="btn btn-outline-primary btn-touch"
                 onClick={() => navigate(`/sell?tab=${order.id}&label=${encodeURIComponent(order.tableNumber || order.customerName)}`)}
               >
                 <i className="ri-add-line me-1" aria-hidden="true"></i>Agregar ronda
@@ -234,7 +305,7 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
               )}
               {order.balance > 0 ? (
                 canCharge ? (
-                  <button type="button" className="btn btn-success btn-touch ms-md-auto" onClick={() => setMode('charge')}>
+                  <button type="button" className="btn btn-primary btn-touch ms-md-auto" onClick={() => setMode('charge')}>
                     Cobrar {formatMoney(order.balance)}
                   </button>
                 ) : (
@@ -243,7 +314,7 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
                   </span>
                 )
               ) : (
-                <button type="button" className="btn btn-success btn-touch ms-md-auto" disabled={busy} onClick={() => void closeTab()}>
+                <button type="button" className="btn btn-primary btn-touch ms-md-auto" disabled={busy} onClick={() => void closeTab()}>
                   Cerrar cuenta
                 </button>
               )}

@@ -13,7 +13,7 @@ using FoodParkDigital.WebApi.Errors;
 namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
-/// Guided setup and sales policy of the signed-in user's business. Under /auth/my-tenant, so the
+/// Guided setup, sales policy, public menu and theme of the signed-in user's business. Under /auth/my-tenant, so the
 /// middleware checks the membership; the requests allow changes only to owners and admins.
 /// </summary>
 [ApiController]
@@ -80,6 +80,18 @@ public class TenantSetupController : ControllerBase
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
+
+    /// <summary>The colors of the business for its team's app and its public menu.</summary>
+    [HttpPut("theme")]
+    public async Task<ActionResult<BusinessThemeDto>> UpdateTheme([FromBody] UpdateBusinessThemeRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateBusinessThemeCommand(request.Theme), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
 }
 
 public record UpdateOnlineMenuRequest(OnlineMenuMode Mode);
+
+public record UpdateBusinessThemeRequest(BusinessTheme Theme);

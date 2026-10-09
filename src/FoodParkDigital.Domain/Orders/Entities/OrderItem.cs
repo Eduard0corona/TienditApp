@@ -70,7 +70,22 @@ public class OrderItem : BaseEntity, ITenantScoped
     /// <summary>Quantity given back with refunds; the sold quantity is never edited.</summary>
     public decimal ReturnedQuantity { get; private set; }
 
-    public decimal ReturnableQuantity => Quantity - ReturnedQuantity;
+    /// <summary>
+    /// Units of a dish of an open tab cancelled after it went to the kitchen (see <see cref="OrderItemCancellation"/>):
+    /// the tab no longer charges them, and what was ordered stays as it was.
+    /// </summary>
+    public decimal CancelledQuantity { get; private set; }
+
+    /// <summary>What the cancelled units took off the line, at the line's prices (before IVA is added, as <see cref="TotalPrice"/>).</summary>
+    public decimal CancelledAmount { get; private set; }
+
+    /// <summary>Units the order still charges and that left with the customer.</summary>
+    public decimal ActiveQuantity => Quantity - CancelledQuantity;
+
+    /// <summary>What the line charges: <see cref="TotalPrice"/> less its cancelled units.</summary>
+    public decimal ChargedPrice => TotalPrice - CancelledAmount;
+
+    public decimal ReturnableQuantity => Quantity - ReturnedQuantity - CancelledQuantity;
     public decimal UnitPrice { get; private set; }
     public decimal TotalPrice { get; private set; }
     public string? Notes { get; private set; }
@@ -109,5 +124,29 @@ public class OrderItem : BaseEntity, ITenantScoped
             throw new DomainException($"De '{ProductName}' solo quedan {ReturnableQuantity:0.###} por devolver.");
 
         ReturnedQuantity += quantity;
+    }
+
+    /// <summary>
+    /// What cancelling <paramref name="quantity"/> more units takes off the line: the line then charges the units left,
+    /// rounded once to cents as when it was sold, and all of them cancelled leave it at zero.
+    /// </summary>
+    internal decimal CancellationAmount(decimal quantity)
+    {
+        if (quantity <= 0)
+            throw new DomainException("La cantidad a cancelar debe ser mayor a cero.");
+        if (!UnitTypeRules.IsValidQuantity(quantity, Unit))
+            throw new DomainException($"La cantidad a cancelar de '{ProductName}' no es válida para su unidad.");
+        if (quantity > ReturnableQuantity)
+            throw new DomainException($"De '{ProductName}' solo quedan {ReturnableQuantity:0.###} por cancelar.");
+
+        var left = ActiveQuantity - quantity;
+        var charged = left == 0 ? 0m : decimal.Round(left * UnitPrice, 2, MidpointRounding.ToEven);
+        return ChargedPrice - charged;
+    }
+
+    internal void RegisterCancellation(decimal quantity, decimal amount)
+    {
+        CancelledQuantity += quantity;
+        CancelledAmount += amount;
     }
 }

@@ -10,7 +10,8 @@ export default mergeConfig(
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
-      css: false,
+      // CSS stays out of the tests, except theme.css: businessThemes.test.ts reads its colors to check them.
+      css: { include: [/assets\/css\/theme\.css/] },
       restoreMocks: true,
     },
   }),

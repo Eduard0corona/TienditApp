@@ -1,29 +1,25 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
--- Generado el 2026-10-09 con `dotnet ef migrations script 0 20261009064905_DropRequireOpenCashSession --idempotent`
--- (EF Core 10.0.12) desde la rama claude/wonderful-goodall-0yhjp7. Debajo del bloque SET, el
--- contenido es el que genera EF, sin cambios.
+-- Generado el 2026-10-08 con `dotnet ef migrations script 0 20261008074715_StopMappingRequireOpenCashSession --idempotent`
+-- (EF Core 10.0.12) desde la rama claude/amazing-babbage-175ks9 (Fase 15). Debajo del bloque
+-- SET, el contenido es el que genera EF, sin cambios.
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base
--- que ya tiene 20261009041644_StopMappingRequireOpenCashSession (producción, desde el PR #47),
--- solo ejecuta 20261009064905_DropRequireOpenCashSession: borra [TenantSettings].[RequireOpenCashSession]
--- con su valor por omisión. Era la política opcional que pedía caja abierta para cobrar en
--- efectivo: desde el PR #40 todo cobro y reembolso exige caja, y desde el PR #47 nada la lee ni
--- la escribe, así que en pantalla nada cambia.
+-- que ya tiene 20261006201255_DropStockAndLoyaltyColumns (producción, desde la Fase 13; la Fase
+-- 14 no tuvo migraciones), ejecuta dos:
+--   * 20261008072542_AddTabItemCancellations: agrega a [OrderItems] [CancelledQuantity]
+--     (decimal(18,3)) y [CancelledAmount] (decimal(18,2)), sin nulos y con 0 por omisión, y crea
+--     [OrderItemCancellations] (los platillos cancelados de una cuenta de mesa, con su motivo).
+--     Solo agrega: no cambia ni borra datos, y las filas que ya existen quedan con 0 cancelado.
+--   * 20261008074715_StopMappingRequireOpenCashSession: no cambia el esquema ni los datos. La versión nueva
+--     deja de leer y escribir [TenantSettings].[RequireOpenCashSession] (la política que nadie lee:
+--     todo cobro exige una caja abierta). La columna se queda con sus valores y las filas nuevas
+--     toman su valor por omisión, 0; una fase posterior la borra.
 --
--- Compatible con la versión desplegada (PR #47): no mapea la columna, así que sigue funcionando
--- mientras se publica la nueva, y volver a ella (redespliegue, o swap si el slot de staging está
--- activo) también funciona sin tocar la base. Volver a una versión anterior al PR #47, que sí la
--- lee, exige antes el rollback.sql de esta carpeta (la crea otra vez, en 0). Por lo mismo, este
--- script solo se aplica con el PR #47 desplegado: si corre una versión anterior, despliega
--- primero la del PR #47 (y su apply.sql, en database/production/20261009041644_StopMappingRequireOpenCashSession).
---
--- Lo que se pierde: qué negocios tenían activada la política, que ya no cambia nada. La consulta
--- 3 de verify.sql dice cuántos; cuáles, solo queda en el respaldo de la base que tomes antes de
--- este script. Antes de aplicar, la consulta 2 debe mostrar que nada más depende de la columna:
--- solo la restricción de su valor por omisión (este script la borra), ningún índice, ninguna
--- estadística creada a mano (bloquearía el borrado; las automáticas se borran con la columna) y
--- ninguna vista ni función.
+-- Compatible con la versión desplegada (Fase 14): no mapea las columnas ni la tabla nuevas, así
+-- que sigue funcionando mientras se publica la nueva, y sus filas toman 0 cancelado. Volver a ella
+-- con platillos cancelados en cuentas abiertas no es seguro: al recalcular la cuenta (una ronda
+-- nueva) los cobra otra vez. Antes de regresar, cierra o cancela esas cuentas (deploy-azure.md).
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la
 -- transacción ante cualquier error; las migraciones ya confirmadas se saltan si vuelves a
@@ -33,6 +29,9 @@
 -- Orden: respaldo de la base -> verify.sql -> este script -> verify.sql -> fusionar la PR,
 -- cuyo merge a master despliega a producción. Por ejemplo:
 --     sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql
+-- Esta carpeta es la única de la Fase 15: su apply.sql aplica todo lo que falte. Si la base no
+-- tiene la Fase 13, también aplica su migración: revisa antes el verify.sql de
+-- database/production/20261006201255_DropStockAndLoyaltyColumns.
 -- =====================================================================================
 SET ANSI_NULLS ON;
 SET ANSI_PADDING ON;
@@ -5293,11 +5292,82 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261009041644_StopMappingRequireOpenCashSession'
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    ALTER TABLE [OrderItems] ADD [CancelledAmount] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    ALTER TABLE [OrderItems] ADD [CancelledQuantity] decimal(18,3) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    CREATE TABLE [OrderItemCancellations] (
+        [Id] uniqueidentifier NOT NULL,
+        [TenantId] uniqueidentifier NOT NULL,
+        [OrderId] uniqueidentifier NOT NULL,
+        [OrderItemId] uniqueidentifier NOT NULL,
+        [Round] int NOT NULL,
+        [Quantity] decimal(18,3) NOT NULL,
+        [Amount] decimal(18,2) NOT NULL,
+        [Reason] nvarchar(500) NOT NULL,
+        [ReturnedToStock] bit NOT NULL,
+        [CancelledAt] datetimeoffset NOT NULL,
+        [CancelledBy] nvarchar(256) NOT NULL,
+        CONSTRAINT [PK_OrderItemCancellations] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_OrderItemCancellations_OrderItems_OrderItemId] FOREIGN KEY ([OrderItemId]) REFERENCES [OrderItems] ([Id]),
+        CONSTRAINT [FK_OrderItemCancellations_Orders_OrderId] FOREIGN KEY ([OrderId]) REFERENCES [Orders] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    CREATE INDEX [IX_OrderItemCancellations_OrderId] ON [OrderItemCancellations] ([OrderId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    CREATE INDEX [IX_OrderItemCancellations_OrderItemId] ON [OrderItemCancellations] ([OrderItemId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    CREATE INDEX [IX_OrderItemCancellations_TenantId_CancelledAt] ON [OrderItemCancellations] ([TenantId], [CancelledAt]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
+)
+BEGIN
+    CREATE INDEX [IX_OrderItemCancellations_TenantId_OrderId] ON [OrderItemCancellations] ([TenantId], [OrderId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261008072542_AddTabItemCancellations'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261009041644_StopMappingRequireOpenCashSession', N'10.0.12');
+    VALUES (N'20261008072542_AddTabItemCancellations', N'10.0.12');
 END;
 
 COMMIT;
@@ -5306,25 +5376,11 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261009064905_DropRequireOpenCashSession'
-)
-BEGIN
-    DECLARE @var13 nvarchar(max);
-    SELECT @var13 = QUOTENAME([d].[name])
-    FROM [sys].[default_constraints] [d]
-    INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
-    WHERE ([d].[parent_object_id] = OBJECT_ID(N'[TenantSettings]') AND [c].[name] = N'RequireOpenCashSession');
-    IF @var13 IS NOT NULL EXEC(N'ALTER TABLE [TenantSettings] DROP CONSTRAINT ' + @var13 + ';');
-    ALTER TABLE [TenantSettings] DROP COLUMN [RequireOpenCashSession];
-END;
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261009064905_DropRequireOpenCashSession'
+    WHERE [MigrationId] = N'20261008074715_StopMappingRequireOpenCashSession'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261009064905_DropRequireOpenCashSession', N'10.0.12');
+    VALUES (N'20261008074715_StopMappingRequireOpenCashSession', N'10.0.12');
 END;
 
 COMMIT;

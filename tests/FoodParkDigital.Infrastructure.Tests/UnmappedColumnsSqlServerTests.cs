@@ -21,7 +21,11 @@ namespace FoodParkDigital.Infrastructure.Tests;
 public class UnmappedColumnsSqlServerTests
 {
     private const string StopMappingMigration = "20261006101452_StopMappingStockAndLoyaltyColumns";
-    private const string StopMappingRequireOpenCashSessionMigration = "20261009041644_StopMappingRequireOpenCashSession";
+    // The last migration whose model maps TenantSettings.RequireOpenCashSession. Two migrations stop mapping it after
+    // it, Fase 15's (20261008074715) and PR #47's (20261009041644), and neither changes the database.
+    private const string LastMappingRequireOpenCashSession = "20261008072542_AddTabItemCancellations";
+    // The migration before the one that drops it: the column is still there, and nothing maps it.
+    private const string BeforeDroppingRequireOpenCashSession = "20261009043433_AddBusinessTheme";
 
     [SqlServerFact]
     public async Task Columns_ShouldStayWhileUnmapped_ThenGo_AndComeBackEmptyOnRollback()
@@ -71,33 +75,58 @@ public class UnmappedColumnsSqlServerTests
     public async Task RequireOpenCashSession_ShouldStayWhileUnmapped_ThenGo_AndComeBackAtItsDefaultOnRollback()
     {
         await using var database = SqlServerTestDatabase.CreateEmpty();
-        await MigrateAsync(database, StopMappingRequireOpenCashSessionMigration);
-        var tenant = NewTenant();
-
-        await using (var context = database.CreateContext(tenant.Id))
+        // Seeded with this model (it maps columns newer than the versions that mapped this one), then taken back there.
+        await MigrateAsync(database);
+        var slug = Guid.NewGuid().ToString("N")[..10];
+        var tenant = new Tenant("Tienda", slug, BusinessType.Retail, $"{slug}@demo.com");
+        await using (var seed = database.CreateContext(tenant.Id))
         {
-            context.Tenants.Add(tenant);
-            context.TenantSettings.Add(new TenantSettings(tenant.Id, TenantCapability.Retail));
-            await context.SaveChangesAsync();
-            // Saved by this version, without the column: the previous version reads its default, 0.
-            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 0"));
-
-            // Turned on by a previous version: editing the settings here leaves it as it was.
-            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantSettings SET RequireOpenCashSession = 1 WHERE TenantId = {tenant.Id}");
-            var settings = await context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
-            settings.UpdateSalesPolicy(pricesIncludeTax: true, defaultTaxRate: 16m, autoCloseCounterSales: false);
-            await context.SaveChangesAsync();
-            Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 1 AND PricesIncludeTax = 1"));
+            seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Retail));
+            await seed.SaveChangesAsync();
+        }
+        await MigrateAsync(database, LastMappingRequireOpenCashSession);
+        await using (var seed = database.CreateContext(tenant.Id))
+        {
+            // Saved by this version, without the column: the version that reads it gets its default, 0.
+            Assert.Equal(1, await CountAsync(seed, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 0"));
+            // Turned on by a version that still mapped it.
+            await seed.Database.ExecuteSqlInterpolatedAsync($"UPDATE TenantSettings SET RequireOpenCashSession = 1 WHERE TenantId = {tenant.Id}");
         }
 
-        // Back to the version that reads it: nothing to restore, the column and its value never left.
-        await MigrateAsync(database, "20261006201255_DropStockAndLoyaltyColumns");
+        await MigrateAsync(database, BeforeDroppingRequireOpenCashSession);
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            // Nothing changed in the database: the column keeps its values and the default new rows take.
+            Assert.Equal(1, await CountAsync(context, $"""
+                SELECT COUNT(*) AS [Value] FROM sys.columns c
+                INNER JOIN sys.default_constraints d ON d.[object_id] = c.[default_object_id]
+                WHERE c.[object_id] = OBJECT_ID(N'dbo.TenantSettings') AND c.[name] = N'RequireOpenCashSession'
+                    AND c.[is_nullable] = 0 AND d.[definition] = N'(CONVERT([bit],(0)))'
+                """));
+
+            // This version changes the settings without touching it, and saves new ones with the default.
+            var settings = await context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
+            settings.UpdateSalesPolicy(pricesIncludeTax: true, defaultTaxRate: 16m, autoCloseCounterSales: false);
+            settings.SetInsufficientStockPolicy(InsufficientStockPolicy.Warn);
+            var other = new Tenant("Otra", slug + "b", BusinessType.Retail, $"{slug}b@demo.com");
+            context.AddRange(other, new TenantSettings(other.Id, TenantCapability.Retail));
+            await context.SaveChangesAsync();
+
+            Assert.Equal(1, await CountAsync(context,
+                $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 1 AND PricesIncludeTax = 1 AND InsufficientStockPolicy = 1"));
+            Assert.Equal(1, await CountAsync(context,
+                $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {other.Id} AND RequireOpenCashSession = 0"));
+        }
+
+        // Back to the version that reads it: nothing to restore, the column and its values never left.
+        await MigrateAsync(database, LastMappingRequireOpenCashSession);
         await using (var context = database.CreateContext(tenant.Id))
         {
             Assert.Equal(1, await RequireOpenCashSessionColumnsAsync(context));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND RequireOpenCashSession = 1"));
         }
 
+        // Then the drop: this version reads and changes the settings as it left them.
         await MigrateAsync(database);
         await using (var context = database.CreateContext(tenant.Id))
         {
@@ -110,16 +139,15 @@ public class UnmappedColumnsSqlServerTests
 
         // Rolled back for the version that reads it: the column returns at its default, 0, and so do the settings this
         // version saves meanwhile. The policy turned on before is lost.
-        await MigrateAsync(database, StopMappingRequireOpenCashSessionMigration);
-        var later = NewTenant();
+        await MigrateAsync(database, BeforeDroppingRequireOpenCashSession);
+        var later = new Tenant("Después", slug + "c", BusinessType.Retail, $"{slug}c@demo.com");
         await using (var context = database.CreateContext(later.Id))
         {
-            context.Tenants.Add(later);
-            context.TenantSettings.Add(new TenantSettings(later.Id, TenantCapability.Retail));
+            context.AddRange(later, new TenantSettings(later.Id, TenantCapability.Retail));
             await context.SaveChangesAsync();
 
             Assert.Equal(1, await RequireOpenCashSessionColumnsAsync(context));
-            Assert.Equal(2, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE RequireOpenCashSession = 0"));
+            Assert.Equal(3, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE RequireOpenCashSession = 0"));
             Assert.Equal(1, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM TenantSettings WHERE TenantId = {tenant.Id} AND PricesIncludeTax = 0 AND DefaultTaxRate = 8"));
         }
 
@@ -129,12 +157,6 @@ public class UnmappedColumnsSqlServerTests
             Assert.Equal(0, await RequireOpenCashSessionColumnsAsync(context));
             Assert.False((await context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id)).PricesIncludeTax);
         }
-    }
-
-    private static Tenant NewTenant()
-    {
-        var slug = Guid.NewGuid().ToString("N")[..10];
-        return new Tenant("Tienda", slug, BusinessType.Retail, $"{slug}@demo.com");
     }
 
     /// <summary>Applies the migrations up to <paramref name="target"/> (all of them without one), as a deployment does.</summary>

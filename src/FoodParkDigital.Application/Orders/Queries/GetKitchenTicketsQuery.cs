@@ -8,7 +8,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
-/// <summary>Rounds of open tabs the kitchen still has to prepare or hand over, oldest first.</summary>
+/// <summary>
+/// Rounds of open tabs the kitchen still has to prepare or hand over, oldest first. A dish cancelled after the round was
+/// sent stays on it with its cancelled units, so the cook stops preparing it; a round with all its dishes cancelled
+/// leaves the board.
+/// </summary>
 [RequiresPermission(TenantPermission.ManageServiceBoard)]
 [RequiresCapability(TenantCapability.Kitchen)]
 public record GetKitchenTicketsQuery : IRequest<List<KitchenTicketDto>>;
@@ -79,6 +83,8 @@ public class GetKitchenTicketsQueryHandler : IRequestHandler<GetKitchenTicketsQu
                 .Where(i => i.OrderId == x.Ticket.OrderId && i.Round == x.Ticket.Round)
                 .Select(i => i.ToDto())
                 .ToList()
-        }).ToList();
+        })
+            .Where(ticket => ticket.Items.Any(item => item.CancelledQuantity < item.Quantity))
+            .ToList();
     }
 }

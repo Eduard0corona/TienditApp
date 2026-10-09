@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261009064905_DropRequireOpenCashSession")]
-    partial class DropRequireOpenCashSession
+    [Migration("20261008072542_AddTabItemCancellations")]
+    partial class AddTabItemCancellations
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2422,6 +2422,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal>("CancelledAmount")
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("CancelledQuantity")
+                        .HasColumnType("decimal(18,3)")
+                        .HasDefaultValue(0m);
+
                     b.Property<bool>("IsTaxExempt")
                         .HasColumnType("bit");
 
@@ -2491,6 +2499,58 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "OrderId");
 
                     b.ToTable("OrderItems", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItemCancellation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("CancelledAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CancelledBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("OrderItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("ReturnedToStock")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Round")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderItemId");
+
+                    b.HasIndex("TenantId", "CancelledAt");
+
+                    b.HasIndex("TenantId", "OrderId");
+
+                    b.ToTable("OrderItemCancellations", (string)null);
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItemOption", b =>
@@ -3305,6 +3365,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<bool>("PricesIncludeTax")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("RequireOpenCashSession")
+                        .HasColumnType("bit");
+
                     b.Property<string>("SettingsJson")
                         .HasColumnType("nvarchar(max)");
 
@@ -4067,6 +4130,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItemCancellation", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany("ItemCancellations")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.OrderItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItemOption", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.OrderItem", null)
@@ -4410,6 +4488,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.Order", b =>
                 {
+                    b.Navigation("ItemCancellations");
+
                     b.Navigation("Items");
 
                     b.Navigation("KitchenTickets");

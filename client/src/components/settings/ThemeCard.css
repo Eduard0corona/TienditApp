@@ -1,0 +1,91 @@
+/* Apariencia (ThemeCard): one card per theme, with a small preview of its colors. */
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius);
+  background: var(--ta-surface);
+  cursor: pointer;
+}
+
+.theme-option:hover {
+  border-color: rgba(var(--ct-primary-rgb), 0.5);
+}
+
+.theme-option.selected {
+  border-color: var(--ct-primary);
+  box-shadow: 0 0 0 2px rgba(var(--ct-primary-rgb), 0.35);
+}
+
+.theme-option:focus-within {
+  outline: 3px solid rgba(var(--ct-primary-rgb), 0.45);
+  outline-offset: 2px;
+}
+
+fieldset:disabled .theme-option {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+/* The preview: the page tint, a primary button, a selected chip and the accent of the dark mode. */
+.theme-swatch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 3.25rem;
+  padding: 0.5rem;
+  padding-right: 2.25rem;
+  overflow: hidden;
+  border-radius: var(--ta-radius-sm);
+  background: var(--swatch-page);
+}
+
+.theme-swatch-button,
+.theme-swatch-chip {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.theme-swatch-button {
+  background: var(--swatch-accent);
+  color: var(--swatch-on-accent);
+}
+
+.theme-swatch-chip {
+  background: var(--swatch-subtle);
+  color: var(--swatch-text);
+}
+
+.theme-swatch-dark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1.75rem;
+  background: linear-gradient(135deg, #343a40 50%, var(--swatch-dark-accent) 50%);
+}
+
+.theme-option-name {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  color: var(--ct-emphasis-color);
+}
+
+.theme-option-description {
+  font-size: 0.8rem;
+  color: var(--ct-secondary-color);
+}

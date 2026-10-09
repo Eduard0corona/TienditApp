@@ -540,84 +540,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/register/business": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["RegisterBusinessCommand"];
-                    "text/json": components["schemas"]["RegisterBusinessCommand"];
-                    "application/*+json": components["schemas"]["RegisterBusinessCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/register/customer": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["RegisterCustomerCommand"];
-                    "text/json": components["schemas"]["RegisterCustomerCommand"];
-                    "application/*+json": components["schemas"]["RegisterCustomerCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/auth/switch-tenant": {
         parameters: {
             query?: never;
@@ -661,7 +583,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/confirm-email": {
+    "/api/v1/auth/my-tenant": {
         parameters: {
             query?: never;
             header?: never;
@@ -670,10 +592,102 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: {
-                    userId?: string;
-                    token?: string;
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantProfileDto"];
+                        "application/json": components["schemas"]["TenantProfileDto"];
+                        "text/json": components["schemas"]["TenantProfileDto"];
+                    };
                 };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateMyTenantCommand"];
+                    "text/json": components["schemas"]["UpdateMyTenantCommand"];
+                    "application/*+json": components["schemas"]["UpdateMyTenantCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["TenantProfileDto"];
+                        "application/json": components["schemas"]["TenantProfileDto"];
+                        "text/json": components["schemas"]["TenantProfileDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/my-tenant/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        file?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["LogoImageUrlsDto"];
+                        "application/json": components["schemas"]["LogoImageUrlsDto"];
+                        "text/json": components["schemas"]["LogoImageUrlsDto"];
+                    };
+                };
+            };
+        };
+        delete: {
+            parameters: {
+                query?: never;
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -689,7 +703,68 @@ export interface paths {
                 };
             };
         };
-        put?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/my-tenant/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["WhatsAppConfigDto"];
+                        "application/json": components["schemas"]["WhatsAppConfigDto"];
+                        "text/json": components["schemas"]["WhatsAppConfigDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateWhatsAppConfigCommand"];
+                    "text/json": components["schemas"]["UpdateWhatsAppConfigCommand"];
+                    "application/*+json": components["schemas"]["UpdateWhatsAppConfigCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["WhatsAppConfigDto"];
+                        "application/json": components["schemas"]["WhatsAppConfigDto"];
+                        "text/json": components["schemas"]["WhatsAppConfigDto"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -697,7 +772,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/resend-confirmation-email": {
+    "/api/v1/auth/my-tenant/whatsapp/send": {
         parameters: {
             query?: never;
             header?: never;
@@ -715,87 +790,9 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["ResendConfirmationEmailCommand"];
-                    "text/json": components["schemas"]["ResendConfirmationEmailCommand"];
-                    "application/*+json": components["schemas"]["ResendConfirmationEmailCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/confirm-phone": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["ConfirmPhoneCommand"];
-                    "text/json": components["schemas"]["ConfirmPhoneCommand"];
-                    "application/*+json": components["schemas"]["ConfirmPhoneCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/resend-phone-confirmation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["ResendPhoneConfirmationCommand"];
-                    "text/json": components["schemas"]["ResendPhoneConfirmationCommand"];
-                    "application/*+json": components["schemas"]["ResendPhoneConfirmationCommand"];
+                    "application/json": components["schemas"]["SendWhatsAppMessageCommand"];
+                    "text/json": components["schemas"]["SendWhatsAppMessageCommand"];
+                    "application/*+json": components["schemas"]["SendWhatsAppMessageCommand"];
                 };
             };
             responses: {
@@ -961,128 +958,6 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/change-unconfirmed-phone": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
-                    "text/json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
-                    "application/*+json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/invitation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: {
-                    userId?: string;
-                    token?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["InvitationDto"];
-                        "application/json": components["schemas"]["InvitationDto"];
-                        "text/json": components["schemas"]["InvitationDto"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/accept-invitation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["AcceptInvitationCommand"];
-                    "text/json": components["schemas"]["AcceptInvitationCommand"];
-                    "application/*+json": components["schemas"]["AcceptInvitationCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["AuthResponse"];
-                        "application/json": components["schemas"]["AuthResponse"];
-                        "text/json": components["schemas"]["AuthResponse"];
-                    };
                 };
             };
         };
@@ -1398,71 +1273,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/my-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["TenantProfileDto"];
-                        "application/json": components["schemas"]["TenantProfileDto"];
-                        "text/json": components["schemas"]["TenantProfileDto"];
-                    };
-                };
-            };
-        };
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["UpdateMyTenantCommand"];
-                    "text/json": components["schemas"]["UpdateMyTenantCommand"];
-                    "application/*+json": components["schemas"]["UpdateMyTenantCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["TenantProfileDto"];
-                        "application/json": components["schemas"]["TenantProfileDto"];
-                        "text/json": components["schemas"]["TenantProfileDto"];
-                    };
-                };
-            };
-        };
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/my-tenant/logo": {
+    "/api/v1/auth/register/business": {
         parameters: {
             query?: never;
             header?: never;
@@ -1480,34 +1291,11 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "multipart/form-data": {
-                        /** Format: binary */
-                        file?: string;
-                    };
+                    "application/json": components["schemas"]["RegisterBusinessCommand"];
+                    "text/json": components["schemas"]["RegisterBusinessCommand"];
+                    "application/*+json": components["schemas"]["RegisterBusinessCommand"];
                 };
             };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["LogoImageUrlsDto"];
-                        "application/json": components["schemas"]["LogoImageUrlsDto"];
-                        "text/json": components["schemas"]["LogoImageUrlsDto"];
-                    };
-                };
-            };
-        };
-        delete: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
             responses: {
                 /** @description OK */
                 200: {
@@ -1518,76 +1306,13 @@ export interface paths {
                 };
             };
         };
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/my-tenant/whatsapp": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["WhatsAppConfigDto"];
-                        "application/json": components["schemas"]["WhatsAppConfigDto"];
-                        "text/json": components["schemas"]["WhatsAppConfigDto"];
-                    };
-                };
-            };
-        };
-        put: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["UpdateWhatsAppConfigCommand"];
-                    "text/json": components["schemas"]["UpdateWhatsAppConfigCommand"];
-                    "application/*+json": components["schemas"]["UpdateWhatsAppConfigCommand"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "text/plain": components["schemas"]["WhatsAppConfigDto"];
-                        "application/json": components["schemas"]["WhatsAppConfigDto"];
-                        "text/json": components["schemas"]["WhatsAppConfigDto"];
-                    };
-                };
-            };
-        };
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/my-tenant/whatsapp/send": {
+    "/api/v1/auth/register/customer": {
         parameters: {
             query?: never;
             header?: never;
@@ -1605,9 +1330,9 @@ export interface paths {
             };
             requestBody?: {
                 content: {
-                    "application/json": components["schemas"]["SendWhatsAppMessageCommand"];
-                    "text/json": components["schemas"]["SendWhatsAppMessageCommand"];
-                    "application/*+json": components["schemas"]["SendWhatsAppMessageCommand"];
+                    "application/json": components["schemas"]["RegisterCustomerCommand"];
+                    "text/json": components["schemas"]["RegisterCustomerCommand"];
+                    "application/*+json": components["schemas"]["RegisterCustomerCommand"];
                 };
             };
             responses: {
@@ -1617,6 +1342,281 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/confirm-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    userId?: string;
+                    token?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/resend-confirmation-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ResendConfirmationEmailCommand"];
+                    "text/json": components["schemas"]["ResendConfirmationEmailCommand"];
+                    "application/*+json": components["schemas"]["ResendConfirmationEmailCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/confirm-phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConfirmPhoneCommand"];
+                    "text/json": components["schemas"]["ConfirmPhoneCommand"];
+                    "application/*+json": components["schemas"]["ConfirmPhoneCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/resend-phone-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ResendPhoneConfirmationCommand"];
+                    "text/json": components["schemas"]["ResendPhoneConfirmationCommand"];
+                    "application/*+json": components["schemas"]["ResendPhoneConfirmationCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/change-unconfirmed-phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
+                    "text/json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
+                    "application/*+json": components["schemas"]["ChangeUnconfirmedPhoneCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    userId?: string;
+                    token?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["InvitationDto"];
+                        "application/json": components["schemas"]["InvitationDto"];
+                        "text/json": components["schemas"]["InvitationDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/accept-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AcceptInvitationCommand"];
+                    "text/json": components["schemas"]["AcceptInvitationCommand"];
+                    "application/*+json": components["schemas"]["AcceptInvitationCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AuthResponse"];
+                        "application/json": components["schemas"]["AuthResponse"];
+                        "text/json": components["schemas"]["AuthResponse"];
+                    };
                 };
             };
         };
@@ -5012,6 +5012,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/item-cancellations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelTabItemRequest"];
+                    "text/json": components["schemas"]["CancelTabItemRequest"];
+                    "application/*+json": components["schemas"]["CancelTabItemRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OrderDto"];
+                        "application/json": components["schemas"]["OrderDto"];
+                        "text/json": components["schemas"]["OrderDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/table": {
         parameters: {
             query?: never;
@@ -7444,6 +7489,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateBusinessThemeRequest"];
+                    "text/json": components["schemas"]["UpdateBusinessThemeRequest"];
+                    "application/*+json": components["schemas"]["UpdateBusinessThemeRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["BusinessThemeDto"];
+                        "application/json": components["schemas"]["BusinessThemeDto"];
+                        "text/json": components["schemas"]["BusinessThemeDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/twofactor/enable": {
         parameters: {
             query?: never;
@@ -8055,6 +8143,14 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
+        BusinessTheme: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+        BusinessThemeDto: {
+            theme: components["schemas"]["BusinessTheme"];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
         BusinessType: 0 | 1 | 2;
         /**
          * Format: int32
@@ -8141,6 +8237,14 @@ export interface components {
         CampaignStatus: 0 | 1 | 2 | 3;
         CancelOrderRequest: {
             reason?: string | null;
+        };
+        CancelTabItemRequest: {
+            /** Format: uuid */
+            orderItemId: string;
+            /** Format: double */
+            quantity: number;
+            reason: string;
+            returnToStock: boolean;
         };
         CashCountLineDto: {
             /** Format: double */
@@ -9570,6 +9674,7 @@ export interface components {
             servicePieces: components["schemas"]["ServiceOrderPieceDto"][];
             payments: components["schemas"]["OrderPaymentDto"][];
             refunds: components["schemas"]["OrderRefundDto"][];
+            itemCancellations: components["schemas"]["OrderItemCancellationDto"][];
             isTab: boolean;
             isOpenTab: boolean;
             /** Format: uuid */
@@ -9588,6 +9693,23 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        OrderItemCancellationDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            orderItemId: string;
+            /** Format: int32 */
+            round: number;
+            /** Format: double */
+            quantity: number;
+            /** Format: double */
+            amount: number;
+            reason: string;
+            returnedToStock: boolean;
+            /** Format: date-time */
+            cancelledAt: string;
+            cancelledBy: string;
+        };
         OrderItemDto: {
             /** Format: uuid */
             id: string;
@@ -9599,9 +9721,13 @@ export interface components {
             /** Format: double */
             returnedQuantity: number;
             /** Format: double */
+            cancelledQuantity: number;
+            /** Format: double */
             unitPrice: number;
             /** Format: double */
             totalPrice: number;
+            /** Format: double */
+            chargedPrice: number;
             notes?: string | null;
             /** Format: double */
             taxRate: number;
@@ -10041,6 +10167,7 @@ export interface components {
             defaultTaxRate: number;
             acceptsOrders: boolean;
             ordersPaused: boolean;
+            theme: components["schemas"]["BusinessTheme"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -10621,6 +10748,7 @@ export interface components {
             orderNotificationPolicy: components["schemas"]["OrderNotificationPolicy"];
             insufficientStockPolicy: components["schemas"]["InsufficientStockPolicy"];
             onlineMenuMode: components["schemas"]["OnlineMenuMode"];
+            theme: components["schemas"]["BusinessTheme"];
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
             timeZone: string;
@@ -10774,6 +10902,9 @@ export interface components {
             contactPhone?: string | null;
             /** Format: uuid */
             id: string;
+        };
+        UpdateBusinessThemeRequest: {
+            theme: components["schemas"]["BusinessTheme"];
         };
         UpdateCategoryCommand: {
             /** Format: uuid */

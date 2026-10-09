@@ -3,14 +3,20 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Orders.DTOs;
+using FoodParkDigital.Application.Reports.ReadModels;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Orders.Queries;
 
+/// <summary>
+/// Inicio: what was charged, what came in and what is still owed in whole days of the business (today when the range
+/// is omitted). Each end of the range stands for the day it falls on, as the screen sends them (00:00:00 and 23:59:59).
+/// </summary>
 [RequiresPermission(TenantPermission.ViewReports)]
 public record GetDashboardMetricsQuery : IRequest<DashboardMetricsDto>
 {
@@ -18,8 +24,22 @@ public record GetDashboardMetricsQuery : IRequest<DashboardMetricsDto>
     public DateTimeOffset? ToDate { get; init; }
 }
 
+public class GetDashboardMetricsQueryValidator : AbstractValidator<GetDashboardMetricsQuery>
+{
+    public GetDashboardMetricsQueryValidator()
+    {
+        RuleFor(x => x)
+            .Must(x => x.FromDate is null || x.ToDate is null || x.FromDate <= x.ToDate)
+            .WithMessage("La fecha inicial debe ser anterior a la final.")
+            .Must(x => x.FromDate is null || x.ToDate is null || x.ToDate.Value - x.FromDate.Value < TimeSpan.FromDays(DailySalesReadModel.MaxRangeDays))
+            .WithMessage($"El periodo puede abarcar como máximo {DailySalesReadModel.MaxRangeDays} días.");
+    }
+}
+
 public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetricsQuery, DashboardMetricsDto>
 {
+    private static readonly OrderStatus[] InProgressStatuses =
+        [OrderStatus.Confirmed, OrderStatus.Accepted, OrderStatus.InPreparation, OrderStatus.InProgress, OrderStatus.Ready];
     private static readonly OrderStatus[] CompletedStatuses = [OrderStatus.Delivered, OrderStatus.Completed];
     private static readonly UnitType[] ServiceUnits = [UnitType.Hour, UnitType.Session, UnitType.Service];
 
@@ -39,87 +59,80 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
 
     public async Task<DashboardMetricsDto> Handle(GetDashboardMetricsQuery request, CancellationToken cancellationToken)
     {
+        var tenantId = _tenantService.TenantId;
+        var utcNow = _dateTimeProvider.UtcNow;
         var tenantCapabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(
             _context,
-            _tenantService.TenantId,
+            tenantId,
             cancellationToken);
         var canReadRetailOrders = TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, OrderType.Retail);
         var canReadServiceOrders = TenantCapabilityRules.CanCreateOrderType(tenantCapabilities, OrderType.Service);
 
         var timeZoneId = await _context.TenantSettings
             .AsNoTracking()
-            .Where(x => x.TenantId == _tenantService.TenantId)
+            .Where(x => x.TenantId == tenantId)
             .Select(x => x.TimeZone)
             .FirstOrDefaultAsync(cancellationToken);
-
         var tenantZone = TenantDateTimeResolver.Resolve(timeZoneId);
-        var tenantNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, tenantZone);
 
-        var rangeFromUtc = request.FromDate
-            ?? TenantDateTimeResolver.LocalDateBoundaryToUtc(tenantNow.Date, true, tenantZone);
-        var rangeToUtc = request.ToDate
-            ?? TenantDateTimeResolver.LocalDateBoundaryToUtc(tenantNow.Date, false, tenantZone);
+        var today = DailySalesReadModel.LocalToday(tenantZone, utcNow);
+        var fromDay = request.FromDate is { } from ? DailySalesReadModel.LocalDate(from, tenantZone) : today;
+        var toDay = request.ToDate is { } to ? DailySalesReadModel.LocalDate(to, tenantZone) : today;
+        // With only one end given, the other is today: the period still spans at most the days the reports allow.
+        if (toDay.DayNumber - fromDay.DayNumber >= DailySalesReadModel.MaxRangeDays)
+            fromDay = toDay.AddDays(-(DailySalesReadModel.MaxRangeDays - 1));
+        var rangeFromUtc = DailySalesReadModel.StartUtc(fromDay, tenantZone);
+        var rangeToUtc = DailySalesReadModel.EndUtc(toDay, tenantZone);
 
-        var query = _context.Orders
+        // Orders received in the range, counted in the database by their current status, with what each still owes.
+        var orders = _context.Orders
             .AsNoTracking()
-            .Where(o => o.CreatedAt >= rangeFromUtc && o.CreatedAt <= rangeToUtc);
-
-        if (canReadRetailOrders && !canReadServiceOrders)
-            query = query.Where(o => o.OrderType == OrderType.Retail);
-        else if (!canReadRetailOrders && canReadServiceOrders)
-            query = query.Where(o => o.OrderType == OrderType.Service);
-        else if (!canReadRetailOrders && !canReadServiceOrders)
-            query = query.Where(_ => false);
-
-        var orders = await query
-            .Select(o => new
+            .Where(o => o.CreatedAt >= rangeFromUtc && o.CreatedAt <= rangeToUtc)
+            .Where(o => (canReadRetailOrders && o.OrderType == OrderType.Retail)
+                || (canReadServiceOrders && o.OrderType == OrderType.Service));
+        var byStatus = await orders
+            .GroupBy(o => o.Status)
+            .Select(g => new
             {
-                o.Id,
-                o.Status,
-                o.Total,
-                o.PaidAmount,
-                o.CustomerUserId,
-                o.TemporaryCustomerId,
-                o.CustomerPhone
+                Status = g.Key,
+                Count = g.Count(),
+                Unpaid = g.Count(o => o.Total - o.PaidAmount > 0),
+                Owed = g.Where(o => o.Total - o.PaidAmount > 0).Sum(o => (decimal?)(o.Total - o.PaidAmount)) ?? 0m
             })
             .ToListAsync(cancellationToken);
+        var uniqueCustomers = await orders
+            .Select(o => o.CustomerUserId != null
+                ? o.CustomerUserId.Value.ToString()
+                : o.TemporaryCustomerId != null
+                    ? o.TemporaryCustomerId.Value.ToString()
+                    : o.CustomerPhone)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .CountAsync(cancellationToken);
 
-        var inProgressStatuses = new[] { OrderStatus.Confirmed, OrderStatus.Accepted, OrderStatus.InPreparation, OrderStatus.InProgress, OrderStatus.Ready };
-
-        // Revenue is what was charged: payments registered in the range, whatever the status of their
-        // orders. A counter sale paid today counts today even if it is delivered tomorrow, and an unpaid
-        // order counts nothing until it is paid.
-        var paymentsQuery = _context.OrderPayments
+        // Revenue is what was charged: payments registered in the range, whatever the status of their orders, minus
+        // the refunds given back in it (they never edit the payments). A counter sale paid today counts today even if
+        // it is delivered tomorrow, and an unpaid order counts nothing until it is paid. Closed days come from the
+        // daily summary of the sales reports; today, and days not stored yet, are summed in the database.
+        var revenue = await DailySalesReadModel.ReadNetSalesAsync(
+            _context,
+            tenantId,
+            tenantZone,
+            fromDay,
+            toDay,
+            canReadRetailOrders,
+            canReadServiceOrders,
+            utcNow,
+            cancellationToken);
+        // Each order once, even if it was paid on several days of the range: the average ticket is per order.
+        var paidOrders = await _context.OrderPayments
             .AsNoTracking()
-            .Where(p => p.PaidAt >= rangeFromUtc && p.PaidAt <= rangeToUtc);
-        if (canReadRetailOrders && !canReadServiceOrders)
-            paymentsQuery = paymentsQuery.Where(p => p.Order.OrderType == OrderType.Retail);
-        else if (!canReadRetailOrders && canReadServiceOrders)
-            paymentsQuery = paymentsQuery.Where(p => p.Order.OrderType == OrderType.Service);
-        else if (!canReadRetailOrders && !canReadServiceOrders)
-            paymentsQuery = paymentsQuery.Where(_ => false);
-
-        var payments = await paymentsQuery
-            .Select(p => new { p.OrderId, p.Amount })
-            .ToListAsync(cancellationToken);
-
-        // Refunds given back in the range lower what was charged (they never edit the payments).
-        var refundsQuery = _context.OrderRefunds
-            .AsNoTracking()
-            .Where(r => r.RefundedAt >= rangeFromUtc && r.RefundedAt <= rangeToUtc);
-        if (canReadRetailOrders && !canReadServiceOrders)
-            refundsQuery = refundsQuery.Where(r => _context.Orders.Any(o => o.Id == r.OrderId && o.OrderType == OrderType.Retail));
-        else if (!canReadRetailOrders && canReadServiceOrders)
-            refundsQuery = refundsQuery.Where(r => _context.Orders.Any(o => o.Id == r.OrderId && o.OrderType == OrderType.Service));
-        else if (!canReadRetailOrders && !canReadServiceOrders)
-            refundsQuery = refundsQuery.Where(_ => false);
-        var refunded = await refundsQuery.SumAsync(r => (decimal?)r.Amount, cancellationToken) ?? 0m;
-
-        var revenue = payments.Sum(p => p.Amount) - refunded;
-        var paidOrders = payments.Select(p => p.OrderId).Distinct().Count();
-        var openOrders = orders
-            .Where(o => o.Status != OrderStatus.Cancelled && o.Total - o.PaidAmount > 0)
-            .ToList();
+            .Where(p => p.PaidAt >= rangeFromUtc && p.PaidAt <= rangeToUtc)
+            .Where(p => (canReadRetailOrders && p.Order.OrderType == OrderType.Retail)
+                || (canReadServiceOrders && p.Order.OrderType == OrderType.Service))
+            .Select(p => p.OrderId)
+            .Distinct()
+            .CountAsync(cancellationToken);
 
         var activeProducts = canReadRetailOrders
             ? await _context.Products
@@ -148,30 +161,27 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
                 .ToListAsync(cancellationToken);
         }
 
+        int CountOf(params OrderStatus[] statuses) => byStatus.Where(x => statuses.Contains(x.Status)).Sum(x => x.Count);
+        var notCancelled = byStatus.Where(x => x.Status != OrderStatus.Cancelled).ToList();
+
         return new DashboardMetricsDto
         {
             RangeFrom = rangeFromUtc,
             RangeTo = rangeToUtc,
-            TotalOrders = orders.Count,
-            InProgressOrders = orders.Count(o => inProgressStatuses.Contains(o.Status)),
-            PendingOrders = orders.Count(o => o.Status == OrderStatus.Pending),
-            CompletedOrders = orders.Count(o => CompletedStatuses.Contains(o.Status)),
-            CancelledOrders = orders.Count(o => o.Status == OrderStatus.Cancelled),
-            UniqueCustomers = orders
-                .Select(o => o.CustomerUserId?.ToString() ?? o.TemporaryCustomerId?.ToString() ?? o.CustomerPhone)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Distinct()
-                .Count(),
+            TotalOrders = byStatus.Sum(x => x.Count),
+            InProgressOrders = CountOf(InProgressStatuses),
+            PendingOrders = CountOf(OrderStatus.Pending),
+            CompletedOrders = CountOf(CompletedStatuses),
+            CancelledOrders = CountOf(OrderStatus.Cancelled),
+            UniqueCustomers = uniqueCustomers,
             ActiveProducts = activeProducts,
             ActiveServices = activeServices,
             TotalRevenue = revenue,
             PaidOrders = paidOrders,
             AverageOrderValue = paidOrders > 0 ? Math.Round(revenue / paidOrders, 2) : 0,
-            OutstandingBalance = openOrders.Sum(o => o.Total - o.PaidAmount),
-            UnpaidOrders = openOrders.Count,
-            OrdersByStatus = orders
-                .GroupBy(o => o.Status.ToString())
-                .ToDictionary(g => g.Key, g => g.Count()),
+            OutstandingBalance = notCancelled.Sum(x => x.Owed),
+            UnpaidOrders = notCancelled.Sum(x => x.Unpaid),
+            OrdersByStatus = byStatus.ToDictionary(x => x.Status.ToString(), x => x.Count),
             TopSellingItems = topSellingItems
         };
     }
@@ -198,16 +208,17 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
                   && (
                       (canReadRetailOrders && o.OrderType == OrderType.Retail) ||
                       (canReadServiceOrders && o.OrderType == OrderType.Service))
-            // Units returned with refunds are not sold: they count neither in quantity nor in amount.
+            // Units returned with refunds, or cancelled from a tab, are not sold: they count neither in quantity nor
+            // in amount.
             group new { oi, p } by new { oi.ProductId, oi.ProductName, Unit = (UnitType?)p.Unit } into g
-            orderby g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity) descending
+            orderby g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity - x.oi.CancelledQuantity) descending
             select new TopSellingItemDto
             {
                 ProductId = g.Key.ProductId,
                 ProductName = g.Key.ProductName,
                 ItemType = g.Key.Unit.HasValue && ServiceUnits.Contains(g.Key.Unit.Value) ? "Service" : "Product",
-                QuantitySold = g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity),
-                TotalAmount = g.Sum(x => x.oi.TotalPrice - x.oi.TotalPrice * x.oi.ReturnedQuantity / x.oi.Quantity)
+                QuantitySold = g.Sum(x => x.oi.Quantity - x.oi.ReturnedQuantity - x.oi.CancelledQuantity),
+                TotalAmount = g.Sum(x => x.oi.TotalPrice - x.oi.CancelledAmount - x.oi.TotalPrice * x.oi.ReturnedQuantity / x.oi.Quantity)
             })
             .Take(10);
     }

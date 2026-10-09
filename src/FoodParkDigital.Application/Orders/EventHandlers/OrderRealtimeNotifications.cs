@@ -17,7 +17,8 @@ public sealed class OrderRealtimeNotifications :
     INotificationHandler<OrderCancelledEvent>,
     INotificationHandler<ServiceOrderPieceStatusChangedEvent>,
     INotificationHandler<TabRoundSentEvent>,
-    INotificationHandler<KitchenTicketChangedEvent>
+    INotificationHandler<KitchenTicketChangedEvent>,
+    INotificationHandler<TabItemCancelledEvent>
 {
     private readonly IApplicationDbContext _context;
     private readonly IOrderNotificationService _notificationService;
@@ -63,6 +64,13 @@ public sealed class OrderRealtimeNotifications :
             notification.Round));
 
     public Task Handle(KitchenTicketChangedEvent notification, CancellationToken cancellationToken)
+        => NotifyAsync(notification, () => _notificationService.NotifyKitchenTicketsChanged(
+            notification.TenantId,
+            notification.OrderId,
+            notification.Round));
+
+    // The kitchen stops preparing what was cancelled.
+    public Task Handle(TabItemCancelledEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, () => _notificationService.NotifyKitchenTicketsChanged(
             notification.TenantId,
             notification.OrderId,

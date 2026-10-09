@@ -38,8 +38,8 @@ public class OrderInventoryService : IOrderInventoryService
         CancellationToken cancellationToken,
         StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy)
     {
-        // An open tab keeps getting rounds: it consumes once, when it closes, so no round is left out of the
-        // single consumption movement of the order.
+        // An open tab takes each round when it goes to the kitchen (ApplyConsumptionForTabRoundAsync); the order's own
+        // consumption waits for the tab to close.
         if (!ShouldConsumeInventory(order.Status) || order.IsOpenTab)
             return NoShortages;
 
@@ -51,15 +51,25 @@ public class OrderInventoryService : IOrderInventoryService
         if (alreadyApplied)
             return NoShortages;
 
+        // Units cancelled from a tab before it took them never leave the stock.
         var orderItems = await _context.OrderItems
             .Where(x => x.OrderId == order.Id)
-            .Select(x => new { x.ProductId, x.ProductName, x.Quantity })
+            .Select(x => new ConsumedItem(x.ProductId, x.ProductName, x.Quantity - x.CancelledQuantity, x.Round))
             .ToListAsync(cancellationToken);
         if (orderItems.Count == 0 && order.Items.Count > 0)
         {
             orderItems = order.Items
-                .Select(x => new { x.ProductId, x.ProductName, x.Quantity })
+                .Select(x => new ConsumedItem(x.ProductId, x.ProductName, x.ActiveQuantity, x.Round))
                 .ToList();
+        }
+        orderItems = orderItems.Where(x => x.Quantity > 0).ToList();
+
+        if (order.IsTab)
+        {
+            // Each round left the stock when it went to the kitchen. Rounds without their own movement (a tab opened
+            // by an earlier version, which took them all when closing) are taken now, together.
+            var takenRounds = await TakenRoundsAsync(order, cancellationToken);
+            orderItems = orderItems.Where(x => !takenRounds.Contains(x.Round)).ToList();
         }
 
         if (order.OrderType == OrderType.Service)
@@ -83,6 +93,64 @@ public class OrderInventoryService : IOrderInventoryService
         if (orderItems.Count == 0)
             return NoShortages;
 
+        return await ConsumeAsync(
+            order,
+            orderItems,
+            consumptionExternalReference,
+            $"Salida automática por orden {order.OrderNumber}",
+            $"Consumo por orden {order.OrderNumber}",
+            shortageHandling,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StockShortage>> ApplyConsumptionForTabRoundAsync(
+        Order order,
+        int round,
+        CancellationToken cancellationToken,
+        StockShortageHandling shortageHandling = StockShortageHandling.TenantPolicy)
+    {
+        // A tab not accepted yet takes its rounds when it closes.
+        if (!order.IsOpenTab || !ShouldConsumeInventory(order.Status))
+            return NoShortages;
+
+        var ticket = order.KitchenTickets.FirstOrDefault(x => x.Round == round)
+            ?? throw new DomainException("La ronda indicada no pertenece a esta cuenta.");
+        var externalReference = BuildRoundConsumptionExternalReference(order.Id, ticket.Id);
+        var alreadyApplied = await _context.InventoryMovements
+            .AnyAsync(x => x.TenantId == order.TenantId && x.ExternalReference == externalReference, cancellationToken);
+        if (alreadyApplied)
+            return NoShortages;
+
+        var roundItems = order.Items
+            .Where(x => x.Round == round && x.ActiveQuantity > 0)
+            .Select(x => new ConsumedItem(x.ProductId, x.ProductName, x.ActiveQuantity, x.Round))
+            .ToList();
+        if (roundItems.Count == 0)
+            return NoShortages;
+
+        return await ConsumeAsync(
+            order,
+            roundItems,
+            externalReference,
+            $"Salida automática por la ronda {round} de la cuenta {order.OrderNumber}",
+            $"Consumo por la ronda {round} de la cuenta {order.OrderNumber}",
+            shortageHandling,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Takes the recipe supplies of <paramref name="orderItems"/> out of stock in one movement named by
+    /// <paramref name="externalReference"/>, refusing or warning per <paramref name="shortageHandling"/>.
+    /// </summary>
+    private async Task<IReadOnlyList<StockShortage>> ConsumeAsync(
+        Order order,
+        IReadOnlyList<ConsumedItem> orderItems,
+        string externalReference,
+        string notes,
+        string lineNotes,
+        StockShortageHandling shortageHandling,
+        CancellationToken cancellationToken)
+    {
         var productIds = orderItems.Select(x => x.ProductId).Distinct().ToList();
         var requirements = await _context.ProductSupplyRequirements
             .Where(x => x.TenantId == order.TenantId && x.IsActive && productIds.Contains(x.ProductId))
@@ -150,8 +218,8 @@ public class OrderInventoryService : IOrderInventoryService
             movementReason: InventoryMovementReason.Sale,
             movementDate: movementDate,
             referenceNumber: order.OrderNumber,
-            externalReference: consumptionExternalReference,
-            notes: $"Salida automática por orden {order.OrderNumber}");
+            externalReference: externalReference,
+            notes: notes);
 
         foreach (var entry in groupedConsumptions)
         {
@@ -180,7 +248,7 @@ public class OrderInventoryService : IOrderInventoryService
                 inventoryLocationId: locationId,
                 quantity: quantity,
                 unitCost: unitCost,
-                notes: $"Consumo por orden {order.OrderNumber}");
+                notes: lineNotes);
             line.SetBalances(quantityBefore, stock.OnHandQuantity);
         }
 
@@ -327,7 +395,6 @@ public class OrderInventoryService : IOrderInventoryService
 
     public async Task ReverseConsumptionForOrderAsync(Order order, string? reason, CancellationToken cancellationToken)
     {
-        var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
         var reversalExternalReference = BuildReversalExternalReference(order.Id);
 
         var alreadyReversed = await _context.InventoryMovements
@@ -337,25 +404,17 @@ public class OrderInventoryService : IOrderInventoryService
         if (alreadyReversed)
             return;
 
-        var consumptionMovement = await _context.InventoryMovements
-            .Include(x => x.Lines)
-            .FirstOrDefaultAsync(
-                x => x.TenantId == order.TenantId && x.ExternalReference == consumptionExternalReference,
-                cancellationToken);
-        if (consumptionMovement is null || !consumptionMovement.Lines.Any())
+        // The order's consumption, and for a tab the one of each round sent to the kitchen.
+        var consumedLines = (await ConsumptionMovementsAsync(order, cancellationToken))
+            .SelectMany(x => x.Lines)
+            .ToList();
+        if (consumedLines.Count == 0)
             return;
 
-        // Units already returned with refunds were re-entered by their own movements: reverse only the rest.
-        var returnPrefix = BuildReturnExternalReferencePrefix(order.Id);
-        var alreadyReturned = (await _context.InventoryMovements
-                .Where(x => x.TenantId == order.TenantId && x.ExternalReference != null
-                    && x.ExternalReference.StartsWith(returnPrefix))
-                .SelectMany(x => x.Lines)
-                .Select(l => new { l.SupplyItemId, l.InventoryLocationId, l.Quantity })
-                .ToListAsync(cancellationToken))
-            .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
-            .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
-        var linesToReverse = consumptionMovement.Lines
+        // Units already returned with refunds, or cancelled from a tab, were re-entered by their own movements:
+        // reverse only the rest.
+        var alreadyReturned = await ReturnedAsync(order, cancellationToken);
+        var linesToReverse = consumedLines
             .Select(line =>
             {
                 var key = (line.SupplyItemId, line.InventoryLocationId);
@@ -440,14 +499,12 @@ public class OrderInventoryService : IOrderInventoryService
         if (alreadyReturned)
             return;
 
-        // Only units whose recipe left inventory with the order come back (service pieces consume on their own).
-        var consumptionExternalReference = BuildConsumptionExternalReference(order.Id);
-        var consumption = await _context.InventoryMovements
-            .Include(x => x.Lines)
-            .FirstOrDefaultAsync(
-                x => x.TenantId == order.TenantId && x.ExternalReference == consumptionExternalReference,
-                cancellationToken);
-        if (consumption is null || consumption.Lines.Count == 0)
+        // Only units whose recipe left inventory with the order, or with a round of the tab, come back (service
+        // pieces consume on their own).
+        var consumedLines = (await ConsumptionMovementsAsync(order, cancellationToken))
+            .SelectMany(x => x.Lines)
+            .ToList();
+        if (consumedLines.Count == 0)
             return;
 
         var returnedProducts = refund.Lines
@@ -462,12 +519,12 @@ public class OrderInventoryService : IOrderInventoryService
 
         // Supplies come back where the order took them from (the branch's stock when it took none of them).
         var defaultLocationId = await BranchRules.StockLocationIdAsync(_context, order.TenantId, order.BranchId, cancellationToken);
-        var consumedAt = consumption.Lines
+        var consumedAt = consumedLines
             .GroupBy(l => l.SupplyItemId)
             .ToDictionary(g => g.Key, g => g.First().InventoryLocationId);
 
         // The current recipe gives the supplies per unit; never re-enter more than the order consumed.
-        var consumedByKey = consumption.Lines
+        var consumedByKey = consumedLines
             .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
             .ToDictionary(g => g.Key, g => (Quantity: g.Sum(l => l.Quantity), UnitCost: g.First().UnitCost));
         var toReturn = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
@@ -548,6 +605,136 @@ public class OrderInventoryService : IOrderInventoryService
             movement.MovementNumber);
     }
 
+    public async Task ReturnCancelledTabItemAsync(Order order, OrderItemCancellation cancellation, CancellationToken cancellationToken)
+    {
+        if (!cancellation.ReturnedToStock)
+            return;
+
+        var returnExternalReference = $"{BuildReturnExternalReferencePrefix(order.Id)}{cancellation.Id:N}";
+        var alreadyReturned = await _context.InventoryMovements
+            .AnyAsync(x => x.TenantId == order.TenantId && x.ExternalReference == returnExternalReference, cancellationToken);
+        if (alreadyReturned)
+            return;
+
+        var item = order.Items.FirstOrDefault(x => x.Id == cancellation.OrderItemId)
+            ?? throw new DomainException("El platillo cancelado no pertenece a esta cuenta.");
+        var ticket = order.KitchenTickets.FirstOrDefault(x => x.Round == item.Round);
+        if (ticket is null)
+            return;
+
+        // Only what the dish's round took comes back. A round without its own movement (a tab opened by an earlier
+        // version, or not accepted yet) never left the stock: closing the tab takes only what was not cancelled.
+        var roundExternalReference = BuildRoundConsumptionExternalReference(order.Id, ticket.Id);
+        var roundLines = await _context.InventoryMovements
+            .Where(x => x.TenantId == order.TenantId && x.ExternalReference == roundExternalReference)
+            .SelectMany(x => x.Lines)
+            .ToListAsync(cancellationToken);
+        if (roundLines.Count == 0)
+            return;
+
+        var requirements = await _context.ProductSupplyRequirements
+            .Where(x => x.TenantId == order.TenantId && x.IsActive && x.ProductId == item.ProductId)
+            .ToListAsync(cancellationToken);
+        if (requirements.Count == 0)
+            return;
+
+        var takenByRound = roundLines
+            .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
+            .ToDictionary(g => g.Key, g => (Quantity: g.Sum(l => l.Quantity), UnitCost: g.First().UnitCost));
+        var takenAt = roundLines
+            .GroupBy(l => l.SupplyItemId)
+            .ToDictionary(g => g.Key, g => g.First().InventoryLocationId);
+
+        // The current recipe gives the supplies per unit, back where the round took them from.
+        var requested = new Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>();
+        foreach (var requirement in requirements)
+        {
+            var locationId = requirement.InventoryLocationId
+                ?? (takenAt.TryGetValue(requirement.SupplyItemId, out var takenLocationId) ? takenLocationId : null);
+            if (locationId is null)
+                continue;
+
+            var key = (requirement.SupplyItemId, locationId.Value);
+            var perUnit = requirement.Quantity * (1 + (requirement.WastePercent / 100m));
+            requested[key] = (requested.TryGetValue(key, out var current) ? current : 0m) + perUnit * cancellation.Quantity;
+        }
+
+        // Never more than the round took, nor than the tab took and has not got back yet (returns and other
+        // cancellations): a recipe changed since the round was sent cannot inflate the stock.
+        var consumed = (await ConsumptionMovementsAsync(order, cancellationToken))
+            .SelectMany(x => x.Lines)
+            .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
+            .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
+        var returned = await ReturnedAsync(order, cancellationToken);
+        var toReturn = new List<(Guid SupplyItemId, Guid InventoryLocationId, decimal Quantity, decimal? UnitCost)>();
+        foreach (var ((supplyItemId, locationId), quantity) in requested)
+        {
+            if (!takenByRound.TryGetValue((supplyItemId, locationId), out var taken))
+                continue;
+
+            var netTaken = (consumed.TryGetValue((supplyItemId, locationId), out var all) ? all : 0m)
+                - (returned.TryGetValue((supplyItemId, locationId), out var back) ? back : 0m);
+            var quantityToReturn = Math.Min(quantity, Math.Min(taken.Quantity, netTaken));
+            if (quantityToReturn > 0)
+                toReturn.Add((supplyItemId, locationId, quantityToReturn, taken.UnitCost));
+        }
+
+        // The folio is taken only when something comes back, so the business's movements stay in a row.
+        if (toReturn.Count == 0)
+            return;
+
+        var movementDate = _dateTimeProvider.UtcNow;
+        var movement = new InventoryMovement(
+            tenantId: order.TenantId,
+            movementNumber: await _folios.NextInventoryMovementNumberAsync(order.TenantId, movementDate, cancellationToken),
+            movementType: InventoryMovementType.Entry,
+            movementReason: InventoryMovementReason.Return,
+            movementDate: movementDate,
+            referenceNumber: order.OrderNumber,
+            externalReference: returnExternalReference,
+            notes: $"Platillo cancelado de la cuenta {order.OrderNumber} ({item.Describe()}): {cancellation.Reason}");
+
+        var supplyIds = toReturn.Select(x => x.SupplyItemId).Distinct().ToList();
+        var locationIds = toReturn.Select(x => x.InventoryLocationId).Distinct().ToList();
+        var stockByKey = (await _context.InventoryStocks
+                .Where(x => x.TenantId == order.TenantId && supplyIds.Contains(x.SupplyItemId) && locationIds.Contains(x.InventoryLocationId))
+                .ToListAsync(cancellationToken))
+            .ToDictionary(x => (x.SupplyItemId, x.InventoryLocationId), x => x);
+
+        foreach (var (supplyItemId, locationId, quantity, unitCost) in toReturn)
+        {
+            if (!stockByKey.TryGetValue((supplyItemId, locationId), out var stock))
+            {
+                stock = new InventoryStock(order.TenantId, supplyItemId, locationId);
+                _context.InventoryStocks.Add(stock);
+                stockByKey[(supplyItemId, locationId)] = stock;
+            }
+
+            var quantityBefore = stock.OnHandQuantity;
+            stock.ApplyMovement(quantity, unitCost, movementDate, allowNegative: true);
+            var line = movement.AddLine(
+                tenantId: order.TenantId,
+                supplyItemId: supplyItemId,
+                inventoryLocationId: locationId,
+                quantity: quantity,
+                unitCost: unitCost,
+                lotNumber: null,
+                expirationDate: null,
+                notes: $"Platillo cancelado de la cuenta {order.OrderNumber}");
+            line.SetBalances(quantityBefore, stock.OnHandQuantity);
+        }
+
+        movement.RecalculateTotalAmount();
+        _context.InventoryMovements.Add(movement);
+
+        _logger.LogInformation(
+            "TabItemReturnedToInventory: tenant {TenantId}, order {OrderId}, cancellation {CancellationId}, movement {MovementNumber}.",
+            order.TenantId,
+            order.Id,
+            cancellation.Id,
+            movement.MovementNumber);
+    }
+
     /// <summary>
     /// The supplies the consumption would take below zero. A sale the team makes now is refused when the business
     /// blocks such sales (the default); otherwise the shortages go back to the caller to warn the cashier.
@@ -603,8 +790,71 @@ public class OrderInventoryService : IOrderInventoryService
             OrderStatus.Delivered or
             OrderStatus.Completed;
 
+    /// <summary>The consumption movements of the order: its own and, for a tab, the one of each round.</summary>
+    private Task<List<InventoryMovement>> ConsumptionMovementsAsync(Order order, CancellationToken cancellationToken)
+    {
+        var own = BuildConsumptionExternalReference(order.Id);
+        var rounds = BuildRoundConsumptionExternalReferencePrefix(order.Id);
+        return _context.InventoryMovements
+            .Include(x => x.Lines)
+            .Where(x => x.TenantId == order.TenantId
+                && x.ExternalReference != null
+                && (x.ExternalReference == own || x.ExternalReference.StartsWith(rounds)))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>What came back to stock from the order, by supply and location: refunds and dishes cancelled from a tab.</summary>
+    private async Task<Dictionary<(Guid SupplyItemId, Guid InventoryLocationId), decimal>> ReturnedAsync(
+        Order order,
+        CancellationToken cancellationToken)
+    {
+        var returnPrefix = BuildReturnExternalReferencePrefix(order.Id);
+        return (await _context.InventoryMovements
+                .Where(x => x.TenantId == order.TenantId && x.ExternalReference != null
+                    && x.ExternalReference.StartsWith(returnPrefix))
+                .SelectMany(x => x.Lines)
+                .Select(l => new { l.SupplyItemId, l.InventoryLocationId, l.Quantity })
+                .ToListAsync(cancellationToken))
+            .GroupBy(l => (l.SupplyItemId, l.InventoryLocationId))
+            .ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity));
+    }
+
+    /// <summary>The rounds of a tab that already left the stock, each with its own movement.</summary>
+    private async Task<HashSet<int>> TakenRoundsAsync(Order order, CancellationToken cancellationToken)
+    {
+        var prefix = BuildRoundConsumptionExternalReferencePrefix(order.Id);
+        var references = await _context.InventoryMovements
+            .Where(x => x.TenantId == order.TenantId && x.ExternalReference != null && x.ExternalReference.StartsWith(prefix))
+            .Select(x => x.ExternalReference!)
+            .ToListAsync(cancellationToken);
+        if (references.Count == 0)
+            return [];
+
+        var ticketIds = new List<Guid>();
+        foreach (var reference in references)
+        {
+            // ORDER:{order}:ROUND:{kitchen ticket}:CONSUMPTION
+            var ticket = reference.AsSpan(prefix.Length);
+            if (ticket.Length >= 32 && Guid.TryParseExact(ticket[..32], "N", out var ticketId))
+                ticketIds.Add(ticketId);
+        }
+
+        var rounds = await _context.KitchenTickets
+            .Where(x => x.OrderId == order.Id && ticketIds.Contains(x.Id))
+            .Select(x => x.Round)
+            .ToListAsync(cancellationToken);
+        return rounds.ToHashSet();
+    }
+
+    private sealed record ConsumedItem(Guid ProductId, string ProductName, decimal Quantity, int Round);
+
     private static string BuildConsumptionExternalReference(Guid orderId) => $"ORDER:{orderId:N}:CONSUMPTION";
+    // Named by the round's kitchen ticket: two devices sending a round at the same time conflict on the tab, not here.
+    private static string BuildRoundConsumptionExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:ROUND:";
+    private static string BuildRoundConsumptionExternalReference(Guid orderId, Guid kitchenTicketId)
+        => $"{BuildRoundConsumptionExternalReferencePrefix(orderId)}{kitchenTicketId:N}:CONSUMPTION";
     private static string BuildReversalExternalReference(Guid orderId) => $"ORDER:{orderId:N}:REVERSAL";
+    // A refund's returned units or a dish cancelled from a tab: ORDER:{order}:RETURN:{refund or cancellation}.
     private static string BuildReturnExternalReferencePrefix(Guid orderId) => $"ORDER:{orderId:N}:RETURN:";
     private static string BuildServicePieceConsumptionExternalReference(Guid orderId, Guid pieceId)
         => $"ORDER:{orderId:N}:PIECE:{pieceId:N}:CONSUMPTION";

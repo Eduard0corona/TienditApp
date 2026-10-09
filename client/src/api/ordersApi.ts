@@ -1,6 +1,7 @@
 import api from './axios';
 import type {
   AddOrderPaymentRequest,
+  CancelTabItemRequest,
   CreateOrderItemRequest,
   CreateOrderRequest,
   OrderDto,
@@ -78,6 +79,10 @@ export const ordersApi = {
 
   moveTab: (orderId: string, diningTableId: string) =>
     api.put<OrderDto>(`/orders/${orderId}/table`, { diningTableId }),
+
+  /** Cancels units of a dish already sent to the kitchen: the tab stops charging them. */
+  cancelTabItem: (orderId: string, request: CancelTabItemRequest) =>
+    api.post<OrderDto>(`/orders/${orderId}/item-cancellations`, request),
 
   /** The waiter took a ready round to the table. */
   markRoundServed: (ticketId: string) =>

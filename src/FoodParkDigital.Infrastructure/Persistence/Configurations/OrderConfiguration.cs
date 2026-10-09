@@ -102,6 +102,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey(t => t.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(o => o.KitchenTickets).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.HasMany(o => o.ItemCancellations)
+            .WithOne()
+            .HasForeignKey(c => c.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.ItemCancellations).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Backing fields for encapsulated collections
         builder.Navigation(o => o.Items).UsePropertyAccessMode(PropertyAccessMode.Field);

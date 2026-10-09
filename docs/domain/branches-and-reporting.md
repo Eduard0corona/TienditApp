@@ -36,8 +36,8 @@
 - Si el negocio cambia de zona horaria, los días guardados con otra zona se ignoran y se vuelven a calcular.
 - `GET /api/v1/reports/sales-by-branch?from&to&branchId` (`ViewReports`) lee los días guardados y calcula al momento hoy y los días que falten. Periodo máximo de 366 días; por omisión el mes en curso. Respeta los módulos del negocio (ventas retail y servicios). En Reportes se muestra como "Ventas por sucursal".
 - "Tickets cobrados" suma los pedidos con pago de cada día: un pedido pagado en dos días distintos cuenta en ambos.
+- Desde la Fase 14 Inicio (`GET /api/v1/dashboard/metrics`) lee del mismo modelo sus ingresos (cobrado menos reembolsado): los días cerrados guardados y, para hoy y los que falten, una suma en la base, sin leer venta por venta (`DailySalesReadModel.ReadNetSalesAsync`). Los conteos por estado, los clientes únicos, el saldo por cobrar y los pedidos pagados salen de agregados en SQL; un pedido pagado en dos días del periodo cuenta una vez, porque el ticket promedio es por pedido. El periodo son días completos del negocio (cada extremo vale por el día en que cae) y abarca hasta 366 días.
 
 ## Pendiente
 
 - Mesas por sucursal (hoy las mesas son del negocio).
-- Inicio sigue calculando sus indicadores en vivo; puede leer del modelo de lectura cuando el volumen lo pida.

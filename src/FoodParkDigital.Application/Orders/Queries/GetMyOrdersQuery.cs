@@ -84,7 +84,11 @@ public class GetMyOrdersQueryHandler : IRequestHandler<GetMyOrdersQuery, Paginat
                 Total = order.Total,
                 PaidAmount = order.PaidAmount,
                 CreatedAt = order.CreatedAt,
-                Items = order.Items.Select(i => new MyOrderItemDto { ProductName = i.ProductName, Quantity = i.Quantity }).ToList()
+                // Dishes cancelled from a tab were never served.
+                Items = order.Items
+                    .Where(i => i.CancelledQuantity < i.Quantity)
+                    .Select(i => new MyOrderItemDto { ProductName = i.ProductName, Quantity = i.Quantity - i.CancelledQuantity })
+                    .ToList()
             };
 
         return await PaginatedList<MyOrderDto>.CreateAsync(query, request.PageNumber, request.PageSize, cancellationToken);

@@ -73,6 +73,26 @@ public class OrdersController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>
+    /// Cancels units of a dish of an open tab already sent to the kitchen, with the reason: the tab stops charging them
+    /// and their supplies go back to stock unless the kitchen prepared it. Only what is not paid yet.
+    /// </summary>
+    [HttpPost("{id:guid}/item-cancellations")]
+    public async Task<ActionResult<OrderDto>> CancelTabItem(Guid id, [FromBody] CancelTabItemRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelTabItemCommand
+        {
+            OrderId = id,
+            OrderItemId = request.OrderItemId,
+            Quantity = request.Quantity,
+            Reason = request.Reason,
+            ReturnToStock = request.ReturnToStock
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     /// <summary>Moves an open tab to another free table.</summary>
     [HttpPut("{id:guid}/table")]
     public async Task<ActionResult<OrderDto>> MoveTab(Guid id, [FromBody] MoveTabRequest request, CancellationToken cancellationToken)
@@ -337,4 +357,14 @@ public class AddTabRoundRequest
 public class MoveTabRequest
 {
     public Guid DiningTableId { get; init; }
+}
+
+public class CancelTabItemRequest
+{
+    public Guid OrderItemId { get; init; }
+    /// <summary>Up to three decimals for dishes sold by weight.</summary>
+    public decimal Quantity { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    /// <summary>The kitchen did not prepare it: its supplies go back to stock. Otherwise they were lost.</summary>
+    public bool ReturnToStock { get; init; } = true;
 }

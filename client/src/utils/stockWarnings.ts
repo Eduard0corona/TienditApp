@@ -8,3 +8,5 @@ export function stockWarningMessage(warnings: string[] | undefined): string | nu
 }
 
 export const STOCK_WARNING_TITLE = 'Vendido sin existencias suficientes';
+
+export const ROUND_STOCK_WARNING_TITLE = 'Enviado a cocina sin existencias suficientes';

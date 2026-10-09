@@ -6,8 +6,10 @@
 SET NOCOUNT ON;
 
 -- 1. Antes: últimas migraciones aplicadas. La más reciente debe ser
---    20261009041644_StopMappingRequireOpenCashSession (PR #47). Si es anterior, no apliques
---    apply.sql mientras corra esa versión, que lee la columna: despliega antes el PR #47.
+--    20261009043433_AddBusinessTheme (Fase 16). Si es 20261009041644_StopMappingRequireOpenCashSession
+--    (PR #47), apply.sql también aplica las Fases 15 y 16: revisa antes el verify.sql de
+--    database/production/20261009043433_AddBusinessTheme. Si es anterior al PR #47, no apliques
+--    apply.sql mientras corra esa versión, que lee la columna: despliega antes master.
 SELECT TOP (8) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
@@ -45,10 +47,10 @@ WHERE d.[referenced_id] = OBJECT_ID(N'dbo.TenantSettings')
     AND OBJECTPROPERTY(d.[referencing_id], N'IsTable') = 0;
 
 -- 3. Antes: cuántos negocios tenían activada la política, lo que se pierde al aplicar (cuáles,
---    solo queda en el respaldo). [ConPoliticaActivada] debe coincidir con la consulta 3 del
---    verify.sql del PR #47: desde el PR #40 nada la cambia, y su valor ya no cambia nada (todo
---    cobro y reembolso exige caja). Después de aplicar no sale: la columna ya no existe. Después
---    de rollback.sql: [ConPoliticaActivada] en 0.
+--    solo queda en el respaldo). [ConPoliticaActivada] debe coincidir con [Encendida] en el
+--    verify.sql de la Fase 16 y con la consulta 3 del verify.sql del PR #47: desde el PR #40 nada
+--    la cambia, y su valor ya no cambia nada (todo cobro y reembolso exige caja). Después de aplicar
+--    no sale: la columna ya no existe. Después de rollback.sql: [ConPoliticaActivada] en 0.
 IF COL_LENGTH(N'dbo.TenantSettings', N'RequireOpenCashSession') IS NOT NULL
     EXEC(N'SELECT
     COUNT(*) AS [Negocios],
@@ -74,4 +76,4 @@ SELECT COUNT(*) AS [Configuraciones] FROM [TenantSettings];
 -- 6. Después: la migración quedó registrada (vacío antes de aplicar y después de rollback.sql).
 SELECT [MigrationId]
 FROM [__EFMigrationsHistory]
-WHERE [MigrationId] = N'20261009064905_DropRequireOpenCashSession';
+WHERE [MigrationId] = N'20261009071957_DropRequireOpenCashSession';

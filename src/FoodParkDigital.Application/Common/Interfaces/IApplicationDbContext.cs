@@ -69,6 +69,7 @@ public interface IApplicationDbContext
     DbSet<OrderItemOption> OrderItemOptions { get; }
     DbSet<DiningTable> DiningTables { get; }
     DbSet<KitchenTicket> KitchenTickets { get; }
+    DbSet<OrderItemCancellation> OrderItemCancellations { get; }
     DbSet<Branch> Branches { get; }
     DbSet<DailySalesSnapshot> DailySalesSnapshots { get; }
     DbSet<Plan> Plans { get; }

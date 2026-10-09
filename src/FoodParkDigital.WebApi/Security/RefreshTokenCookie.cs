@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Identity.DTOs;
+
 namespace FoodParkDigital.WebApi.Security;
 
 /// <summary>
@@ -6,6 +8,17 @@ namespace FoodParkDigital.WebApi.Security;
 public static class RefreshTokenCookie
 {
     public const string Name = "refresh_token";
+
+    /// <summary>
+    /// La respuesta de un endpoint que inicia o renueva la sesión: el refresh token va solo en la cookie, nunca en el
+    /// cuerpo que lee JavaScript.
+    /// </summary>
+    public static AuthResponse Issue(HttpContext httpContext, IWebHostEnvironment environment, AuthResponse response)
+    {
+        if (response.RefreshToken is not null)
+            Append(httpContext, environment, response.RefreshToken);
+        return response with { RefreshToken = null };
+    }
 
     public static void Append(HttpContext httpContext, IWebHostEnvironment environment, string refreshToken)
     {
