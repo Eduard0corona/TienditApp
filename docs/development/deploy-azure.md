@@ -121,6 +121,19 @@ La Fase 15 trae dos migraciones en una sola carpeta, [`database/production/20261
 - `GET /orders/{id}` ahora trae las rondas, las opciones, los reembolsos y las cancelaciones de la cuenta. El contrato solo agrega: la ruta `POST /orders/{id}/item-cancellations` y los campos `cancelledQuantity`, `chargedPrice` e `itemCancellations`.
 - Volver a la Fase 14 (con o sin `rollback.sql`) con platillos cancelados en cuentas abiertas: esa versión recalcula el total con todos los renglones al mandar una ronda y cobraría otra vez lo cancelado. Antes de regresar, cierra o cancela esas cuentas; la consulta 4 de `verify.sql` las cuenta. `rollback.sql` borra la tabla y las columnas de cancelaciones (la bitácora conserva cada cancelación con su motivo) y no toca `RequireOpenCashSession`.
 
+## Temas por negocio y colores accesibles (Fase 16)
+
+La Fase 16 trae una migración, [`database/production/20261009043433_AddBusinessTheme`](../../database/production/20261009043433_AddBusinessTheme). Su `apply.sql` es idempotente y también aplica las dos migraciones de la Fase 15 si faltan, así que para fusionar las Fases 14, 15 y 16 juntas basta esta carpeta: respaldo, `verify.sql`, `apply.sql`, `verify.sql` y luego el merge. Si ya aplicaste el `apply.sql` de la Fase 15, este solo agrega la última.
+
+- `AddBusinessTheme` solo agrega `TenantSettings.Theme` (int, sin nulos, 0 por omisión). 0 es Nopal, el verde de TienditApp: ningún negocio cambia de aspecto hasta que su dueño elige otro tema en Configuración › Negocio › Apariencia. La versión anterior no mapea la columna y sus filas nuevas toman el 0.
+- El contrato solo agrega: la ruta `PUT /api/v1/auth/my-tenant/theme`, el enum `BusinessTheme` y el campo `theme` en el perfil del negocio y en el menú en línea.
+- Sin cambios de datos, la app se ve distinta para todos los negocios:
+  - los colores de estado (éxito, aviso, error, información) pasan WCAG AA;
+  - el texto general es más oscuro;
+  - el modo oscuro ya tiene el fondo oscuro;
+  - Cobrar usa el color principal en todas las pantallas.
+- Volver a la Fase 15 funciona con o sin `rollback.sql`. El rollback borra la columna y con ella la elección de cada negocio (la bitácora conserva cada cambio, `BusinessThemeUpdated`); al aplicar de nuevo, todos vuelven a Nopal. Para volver a la Fase 14 aplica además el `rollback.sql` de la Fase 15 y revisa antes las cuentas abiertas con platillos cancelados (sección anterior).
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

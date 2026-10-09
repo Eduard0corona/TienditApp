@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-08 tras las Fases 0 a 15 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-09 tras las Fases 0 a 16 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -56,6 +56,14 @@ Actualizada el 2026-10-08 tras las Fases 0 a 15 del roadmap de producto (la audi
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions fijadas por SHA y las imágenes de Docker fijadas por digest no se actualizan solas: no hay Dependabot, y los procedimientos están en [despliegue](../development/deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13). Una imagen fijada no recibe los parches de seguridad de su etiqueta hasta que alguien cambia el digest.
 - Cocina por producto: un negocio que no es de comida y activa el módulo de cocina no ve comandas, porque la cocina toma los pedidos por giro y no por producto.
+- Resuelto en la Fase 16: los dueños eligen el tema de su negocio entre ocho paletas curadas (Configuración › Negocio › Apariencia, [ADR 0010](../adr/0010-business-themes.md)). Su equipo ve la app con esos colores y sus clientes, el menú en línea; cada par de colores pasa WCAG AA en claro y en oscuro, y una prueba lo exige.
+  - Paleta: los colores de estado de Hyper (verde 2.0:1, rojo 3.0:1, amarillo 1.6:1, azul 2.5:1 con texto blanco) se cambiaron por unos AA en los dos modos; el texto general sube de 4.28:1 a 7:1 sobre la página.
+  - Modo oscuro: tiene fondo oscuro (antes la página se quedaba clara detrás de tarjetas oscuras), con alertas, chips, chat de WhatsApp y fichas en versión oscura.
+  - Consistencia: Cobrar usa el color principal en Vender, Mesas y Pedidos, y ningún estado se pinta con el acento.
+  - Pendiente:
+    - Hyper sigue cargado (436 KB de `app.min.css` y 60 KB de `vendor.min.css` sin uso), con colores compilados que `theme.css` cubre uno por uno.
+    - No hay color libre de marca, solo los temas curados.
+    - El logo del negocio todavía no sale en el ticket ni en la barra superior.
 - Resuelto en la Fase 15: un platillo de una ronda ya enviada se cancela desde la cuenta (`POST /orders/{id}/item-cancellations`): la cuenta deja de cobrarlo, el renglón conserva lo pedido y la cancelación queda con motivo, quién y cuándo; sus insumos regresan al inventario salvo que la cocina ya lo preparara, y la bitácora y la cocina se enteran. Solo se cancela lo que falta por cobrar: un platillo pagado se reembolsa. Pendiente: lo que la cocina ya preparó queda dentro de la salida por venta de su ronda, sin un movimiento de merma propio; volver a la Fase 14 con platillos cancelados en cuentas abiertas los cobra otra vez al recalcular la cuenta ([despliegue](../development/deploy-azure.md#platillos-cancelados-requireopencashsession-y-vender-fase-15)).
 - Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
@@ -103,7 +111,7 @@ Pendientes detectados en la Fase 0:
 
 - El emisor que ven las apps autenticadoras sale del `JwtSettings:Issuer` ("FoodParkDigital"); cambiarlo exige separar el nombre visible del emisor del JWT.
 - La confirmación de teléfono no permite corregir el número capturado.
-- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio).
+- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio; desde la Fase 16, `theme.css` por capas con el tema de cada negocio encima de Hyper, que sigue pendiente de retirar).
 
 ## Resuelto el 2026-10-04 (Fase 1: plataforma)
 
