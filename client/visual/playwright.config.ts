@@ -28,7 +28,12 @@ export default defineConfig({
     timezoneId: 'America/Mexico_City',
     colorScheme: 'light',
     viewport: { width: 1440, height: 900 },
-    launchOptions: process.env.VISUAL_CHROMIUM ? { executablePath: process.env.VISUAL_CHROMIUM } : {},
+    launchOptions: {
+      ...(process.env.VISUAL_CHROMIUM ? { executablePath: process.env.VISUAL_CHROMIUM } : {}),
+      // Whole tiles are repainted: after a change Chromium repaints only its part of a tile, and on a busy machine the
+      // edges of that part (an opened menu, a field in a dialog) came out a shade apart from one shot to the next.
+      args: ['--disable-partial-raster'],
+    },
   },
   webServer: {
     // From client/: VISUAL_DIST is relative to it or absolute.
