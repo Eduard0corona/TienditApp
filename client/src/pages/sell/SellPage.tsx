@@ -689,6 +689,7 @@ export default function SellPage() {
       <CompletedSaleModal
         sale={completedSale}
         businessName={tenant?.name ?? 'TienditApp'}
+        logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
         chatOrigin={chatOrigin}
         canChat={access.chat}
         hasKitchen={hasKitchen}

@@ -1123,7 +1123,11 @@ export default function OrdersList() {
                   <strong className="ta-money">{formatMoney(paidReceipt.change)}</strong>
                 </div>
               )}
-              <SaleTicket order={paidReceipt.order} businessName={tenant?.name ?? 'TienditApp'} />
+              <SaleTicket
+                order={paidReceipt.order}
+                businessName={tenant?.name ?? 'TienditApp'}
+                logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
+              />
             </>
           )}
         </Modal.Body>

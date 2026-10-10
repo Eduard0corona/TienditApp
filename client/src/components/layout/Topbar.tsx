@@ -6,11 +6,12 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { usePendingSales } from '../../hooks/usePendingSales';
 import { useTenant } from '../../hooks/useTenant';
 import type { MyTenantDto } from '../../types';
-import { getRoleLabel, getUserRoleLabel } from '../../utils/labels';
+import { getUserRoleLabel } from '../../utils/labels';
 import { getAccess } from '../../utils/access';
 import { getApiErrorMessage } from '../../api/errors';
 import BrandLogo from '../common/BrandLogo';
 import AttentionBell from './AttentionBell';
+import BusinessSwitcher from './BusinessSwitcher';
 import CashStatusChip from './CashStatusChip';
 import CreateBusinessModal from '../business/CreateBusinessModal';
 import { applyTheme, storeTheme } from '../../utils/theme';
@@ -187,47 +188,19 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
 
           {/* Business switcher: visible at every size when the person works for more than one business. */}
           {availableTenants.length > 1 ? (
-            <div className="dropdown topbar-business">
-              <button
-                type="button"
-                className="btn btn-light btn-sm dropdown-toggle topbar-business-button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-                disabled={loadingTenants || switchingTenant}
-                title={tenantError || 'Cambiar de negocio'}
-              >
-                <i className="ri-store-2-line me-1 topbar-business-icon" aria-hidden="true"></i>
-                <span className="visually-hidden">Negocio actual: </span>
-                <span className="text-truncate">{switchingTenant ? 'Cambiando…' : tenant?.name ?? 'Negocio'}</span>
-              </button>
-              <div className="dropdown-menu">
-                <h6 className="dropdown-header">Cambiar de negocio</h6>
-                {availableTenants.map((entry) => (
-                  <button
-                    key={entry.tenantId}
-                    type="button"
-                    className={`dropdown-item d-flex align-items-center gap-2 ${entry.tenantId === selectedTenantId ? 'active' : ''}`}
-                    aria-current={entry.tenantId === selectedTenantId ? 'true' : undefined}
-                    onClick={() => void handleSwitchTenant(entry.tenantId)}
-                  >
-                    <span className="flex-grow-1">
-                      {entry.name}
-                      <small className="d-block opacity-75">{getRoleLabel(entry.role)}</small>
-                    </span>
-                    {entry.tenantId === selectedTenantId && <i className="ri-check-line" aria-hidden="true"></i>}
-                  </button>
-                ))}
-                {tenantError && <div className="dropdown-item-text text-danger small">{tenantError}</div>}
-                {canOpenBusiness && (
-                  <>
-                    <div className="dropdown-divider"></div>
-                    <button type="button" className="dropdown-item" onClick={() => setCreatingBusiness(true)}>
-                      <i className="ri-add-line me-1" aria-hidden="true"></i>Abrir otro negocio
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+            <BusinessSwitcher
+              businesses={availableTenants}
+              currentId={selectedTenantId}
+              currentName={tenant?.name}
+              currentLogoUrl={tenant?.logoImages?.thumbnail
+                ?? availableTenants.find((entry) => entry.tenantId === selectedTenantId)?.logoUrl}
+              disabled={loadingTenants || switchingTenant}
+              switching={switchingTenant}
+              error={tenantError}
+              canOpenBusiness={canOpenBusiness}
+              onSwitch={(tenantId) => void handleSwitchTenant(tenantId)}
+              onOpenBusiness={() => setCreatingBusiness(true)}
+            />
           ) : (
             tenant?.name && <span className="topbar-business-name d-none d-md-inline text-truncate">{tenant.name}</span>
           )}

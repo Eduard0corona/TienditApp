@@ -184,6 +184,7 @@ export default function TablesPage() {
           orderId={openTabId}
           freeTables={freeTables}
           businessName={tenant?.name ?? 'TienditApp'}
+          logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
           onClose={() => setOpenTabId(null)}
         />
       )}
