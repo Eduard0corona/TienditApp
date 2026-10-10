@@ -51,5 +51,5 @@ Un color libre que elige el dueño no garantiza nada de eso. Además tendría qu
 
 - **Lo que logra:** los dueños personalizan su app y su menú en un clic, con vista previa en toda la app antes de guardar, sin poder elegir una combinación ilegible. Los colores de estado y el modo oscuro quedaron accesibles para todos los negocios, también para quien no cambie de tema.
 - **Lo que limita:** un negocio con un color de marca exacto (un Pantone propio) no puede usarlo todavía. Si se pide, el siguiente paso es un color libre que el servidor y el cliente validen generando la paleta como lo hace hoy el script de la Fase 16, rechazando los que no alcancen AA en los dos modos.
-- **Lo que queda pendiente:** Hyper sigue cargado debajo (`app.min.css`, 436 KB) y algunos componentes compilan sus colores. `theme.css` los cubre uno por uno; retirarlo es la siguiente limpieza de UI.
+- **Lo que queda pendiente:** Hyper sigue cargado debajo (`app.min.css`, 436 KB; `vendor.min.css` salió en la Fase 20B) y algunos componentes compilan sus colores. `theme.css` los cubre uno por uno; retirarlo es la siguiente limpieza de UI.
 - **Reversibilidad:** quitar la columna `TenantSettings.Theme` (`rollback.sql`) solo pierde la elección; todos vuelven a Nopal.

@@ -19,7 +19,6 @@ import 'remixicon/fonts/remixicon.css';
 import '@fontsource-variable/manrope';
 
 // Hyper CSS, then the TienditApp theme and fixes on top of it
-import './assets/css/vendor.min.css';
 import './assets/css/app.min.css';
 import './assets/css/theme.css';
 import './assets/css/overrides.css';
