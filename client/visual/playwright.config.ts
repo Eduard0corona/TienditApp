@@ -32,7 +32,9 @@ export default defineConfig({
       ...(process.env.VISUAL_CHROMIUM ? { executablePath: process.env.VISUAL_CHROMIUM } : {}),
       // Whole tiles are repainted: after a change Chromium repaints only its part of a tile, and on a busy machine the
       // edges of that part (an opened menu, a field in a dialog) came out a shade apart from one shot to the next.
-      args: ['--disable-partial-raster'],
+      // Text is smoothed in gray, never with color subpixels: Chromium picks one or the other by the layer the text lands
+      // on, and the layers change with markup that draws nothing (a wrapper more or less), not with the design.
+      args: ['--disable-partial-raster', '--disable-lcd-text'],
     },
   },
   webServer: {

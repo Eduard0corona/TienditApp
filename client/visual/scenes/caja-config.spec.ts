@@ -81,7 +81,8 @@ for (const look of LOOKS) {
     test(`whatsapp ${look.suffix}`, async ({ page }) => {
       await open(page, '/settings/whatsapp');
       await expect(page.getByText('WhatsApp Business').first()).toBeVisible();
-      await snap(page, `whatsapp-${look.suffix}`);
+      // The callback URL carries the address the scenes are served from (its port changes with VISUAL_PORT).
+      await snap(page, `whatsapp-${look.suffix}`, { mask: [page.getByLabel('URL de devolución de llamada (Callback URL)')] });
     });
 
     test(`sucursales ${look.suffix}`, async ({ page }) => {
