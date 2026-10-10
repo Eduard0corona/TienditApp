@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import themeCss from '../assets/css/theme.css?raw';
+import themeCssSource from '../assets/css/theme.css?raw';
 import { BusinessTheme } from '../types';
 import { BUSINESS_THEMES, getBusinessTheme, themeCssVariables } from './businessThemes';
 import { contrastRatio } from './contrast';
@@ -7,6 +7,8 @@ import { contrastRatio } from './contrast';
 const AA = 4.5;
 // Hyper's surfaces in dark mode: the page, a card and a raised row (attention rows, hovered items).
 const DARK_SURFACES = ['#343a40', '#37404a', '#3d4854'];
+// A Windows checkout with core.autocrlf has theme.css in CRLF; the rules below are found by their line breaks.
+const themeCss = themeCssSource.replace(/\r\n/g, '\n');
 
 /** The custom properties of the first top-level rule whose selector starts with `selector`. */
 function block(selector: string): Record<string, string> {
