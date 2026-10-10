@@ -27,6 +27,15 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - `Dashboard.test.tsx`: sin un segundo "Nueva venta", en singular cuando es uno, sin "Pedidos por estado" y con la columna Tipo solo cuando hace falta.
   - `industries.test.ts`: los giros guardados con otras mayúsculas o sin acentos.
   - Las de Cocina, migas e Inicio se escribieron antes del cambio y fallaron con el código anterior.
+- Fase 18, listas e Inventario:
+  - **Backend:** `OrderSearchTests` (Application) filtra la lista de pedidos por canal (mostrador, WhatsApp y menú en línea) y rechaza un canal que no existe.
+  - **Cliente:**
+    - `DataTable.test.tsx`: búsqueda, filtros y acción en una sola barra; abajo, el tamaño de página solo cuando hace falta y los botones de página con nombre; la búsqueda local vuelve a la primera página.
+    - `OrdersList.test.tsx`: el filtro Canal y "Limpiar filtros"; la etiqueta del canal en lugar de "Creada por…"; "Tipo" solo cuando el negocio vende y da servicios, y los estados del tipo elegido.
+    - `navigation.test.ts`: Compras como sección e Inventario sin segunda fila de pestañas.
+    - `KitchenBoard.test.tsx` y `TabPanel.test.tsx`: las rondas dicen "En preparación".
+    - `inventoryForms.test.ts` y `ProductStockCard.test.tsx`: los textos nuevos de existencias.
+  - Las de Pedidos y de las rondas se escribieron antes del cambio y fallaron con el código anterior.
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15) y en el controller de sondeo de `RequestCancellationTests`; la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

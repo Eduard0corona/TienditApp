@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { customersApi } from '../../api/customersApi';
 import type { CreateCustomerRequest, CustomerDto, PaginatedList } from '../../types';
@@ -176,31 +176,6 @@ export default function CustomersList() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              <div className="row mb-2">
-                <div className="col-sm-4">
-                  <button className="btn btn-primary mb-2" onClick={openCreateModal}>
-                    <i className="ri-add-line me-1"></i> Nuevo cliente
-                  </button>
-                </div>
-                <div className="col-sm-8">
-                  <div className="d-flex justify-content-sm-end">
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 'auto' }}
-                      value={filterActive}
-                      onChange={(e) => {
-                        setFilterActive(e.target.value);
-                        setPageNumber(1);
-                      }}
-                    >
-                      <option value="">Todos</option>
-                      <option value="true">Activos</option>
-                      <option value="false">Inactivos</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
               {error && (
                 <div className="alert alert-danger alert-dismissible fade show">
                   {error}
@@ -215,6 +190,28 @@ export default function CustomersList() {
                 loading={loading}
                 emptyMessage="No hay clientes registrados."
                 searchPlaceholder="Nombre, teléfono o correo"
+                filters={(
+                  <DataTableFilter label="Estado" htmlFor="customers-status">
+                    <select
+                      id="customers-status"
+                      className="form-select form-select-sm"
+                      value={filterActive}
+                      onChange={(e) => {
+                        setFilterActive(e.target.value);
+                        setPageNumber(1);
+                      }}
+                    >
+                      <option value="">Todos</option>
+                      <option value="true">Activos</option>
+                      <option value="false">Inactivos</option>
+                    </select>
+                  </DataTableFilter>
+                )}
+                toolbarEnd={(
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openCreateModal}>
+                    <i className="ri-add-line me-1" aria-hidden="true"></i>Nuevo cliente
+                  </button>
+                )}
                 initialSearch={initialSearch}
                 serverSide={{
                   totalCount: data.totalCount,
@@ -233,7 +230,7 @@ export default function CustomersList() {
                 renderRow={(customer) => (
                   <>
                     <td className="fw-semibold">{customer.name}</td>
-                    <td>{customer.phone || '-'}</td>
+                    <td className="text-nowrap">{customer.phone || '-'}</td>
                     <td>{customer.email || '-'}</td>
                     <td className="text-center">
                       {customer.isPublicGeneral ? (
@@ -247,39 +244,43 @@ export default function CustomersList() {
                         {customer.isActive ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
-                    <td className="text-center">
+                    <td className="text-center text-nowrap">
                       <button
-                        className="btn btn-sm btn-soft-info me-1"
+                        type="button"
+                        className="btn btn-sm btn-light me-1"
                         title="Ficha: pedidos, saldo y citas"
                         aria-label={`Ficha de ${customer.name}`}
                         onClick={() => setCardCustomer(customer)}
                         disabled={customer.isPublicGeneral}
                       >
-                        <i className="ri-profile-line"></i>
+                        Ficha
                       </button>
                       <button
-                        className="btn btn-sm btn-soft-secondary me-1"
-                        title={customer.isActive ? 'Desactivar' : 'Activar'}
-                        onClick={() => toggleActive(customer)}
-                        disabled={customer.isPublicGeneral}
-                      >
-                        <i className={customer.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
-                      </button>
-                      <button
-                        className="btn btn-sm btn-soft-primary me-1"
-                        title="Editar"
+                        type="button"
+                        className="btn btn-sm btn-light me-1"
+                        aria-label={`Editar ${customer.name}`}
                         onClick={() => openEditModal(customer)}
                         disabled={customer.isPublicGeneral}
                       >
-                        <i className="ri-pencil-line"></i>
+                        Editar
                       </button>
                       <button
-                        className="btn btn-sm btn-soft-danger"
-                        title="Eliminar"
+                        type="button"
+                        className="btn btn-sm btn-light me-1"
+                        aria-label={`${customer.isActive ? 'Desactivar' : 'Activar'} ${customer.name}`}
+                        onClick={() => toggleActive(customer)}
+                        disabled={customer.isPublicGeneral}
+                      >
+                        {customer.isActive ? 'Desactivar' : 'Activar'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light text-danger"
+                        aria-label={`Eliminar ${customer.name}`}
                         onClick={() => handleDelete(customer)}
                         disabled={customer.isPublicGeneral}
                       >
-                        <i className="ri-delete-bin-line"></i>
+                        Eliminar
                       </button>
                     </td>
                   </>

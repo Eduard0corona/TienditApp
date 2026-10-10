@@ -55,6 +55,36 @@ public class OrderSearchTests
         Assert.True(validator.Validate(new GetOrdersByBusinessQuery { Search = "ORD-000001" }).IsValid);
     }
 
+    [Theory]
+    [InlineData(OrderChannel.Counter, "ORD-000001")]
+    [InlineData(OrderChannel.WhatsApp, "ORD-000002")]
+    [InlineData(OrderChannel.Online, "ORD-000003")]
+    public async Task ListOrders_ShouldFilterByChannel(OrderChannel channel, string expectedFolio)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        await AddOrderAsync(fixture, tenant, "ORD-000001", "Mostrador", null);
+        await AddOrderAsync(fixture, tenant, "ORD-000002", "Chat", null, OrderChannel.WhatsApp);
+        // A customer's own order always has its customer (here a temporary one, from the phone).
+        await AddOrderAsync(fixture, tenant, "ORD-000003", "Menú en línea", "+525533334444", OrderChannel.Online, createdByBusiness: false);
+
+        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService);
+        var filtered = await handler.Handle(new GetOrdersByBusinessQuery { ChannelFilter = channel }, CancellationToken.None);
+        var all = await handler.Handle(new GetOrdersByBusinessQuery(), CancellationToken.None);
+
+        Assert.Equal(expectedFolio, Assert.Single(filtered.Items).OrderNumber);
+        Assert.Equal(3, all.TotalCount);
+    }
+
+    [Fact]
+    public void ListOrders_ShouldRejectAnUnknownChannel()
+    {
+        var validator = new GetOrdersByBusinessQueryValidator();
+
+        Assert.False(validator.Validate(new GetOrdersByBusinessQuery { ChannelFilter = (OrderChannel)9 }).IsValid);
+        Assert.True(validator.Validate(new GetOrdersByBusinessQuery { ChannelFilter = OrderChannel.Online }).IsValid);
+    }
+
     [Fact]
     public async Task SearchProducts_ShouldMatchNameSkuOrExactBarcode()
     {
@@ -83,20 +113,23 @@ public class OrderSearchTests
         Tenant tenant,
         string orderNumber,
         string customerName,
-        string? phone)
+        string? phone,
+        OrderChannel channel = OrderChannel.Counter,
+        bool createdByBusiness = true)
     {
         var order = new Order(
             tenantId: tenant.Id,
             customerUserId: null,
             temporaryCustomerId: phone is null ? null : Guid.NewGuid(),
-            createdByBusiness: true,
+            createdByBusiness: createdByBusiness,
             orderNumber: orderNumber,
             businessType: tenant.BusinessType,
             orderType: OrderType.Retail,
             customerName: customerName,
             customerPhone: phone,
             customerNotes: null,
-            tableNumber: null);
+            tableNumber: null,
+            channel: channel);
         order.AddItem(Guid.NewGuid(), "Producto", 1, 10m);
         fixture.Context.Orders.Add(order);
         await fixture.Context.SaveChangesAsync();

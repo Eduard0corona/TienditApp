@@ -42,7 +42,7 @@ describe('inventory forms', () => {
 
     expect(toSupplyRequest({ ...form, defaultCost: '-1' }).error).toBe('Costo por defecto inválido.');
     expect(toSupplyRequest({ ...form, minStock: '5', maxStock: '4' }).error)
-      .toBe('El stock máximo debe ser mayor o igual al stock mínimo.');
+      .toBe('La existencia máxima debe ser mayor o igual a la mínima.');
     expect(toSupplyRequest({ ...form, taxRate: '101' }).error).toBe('La tasa de impuesto debe estar entre 0 y 100.');
   });
 

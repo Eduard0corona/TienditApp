@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import PrintButton from '../../components/common/PrintButton';
 import WhatsAppLink from '../../components/common/WhatsAppLink';
 import type { Branch } from '../../api/branchesApi';
@@ -130,38 +130,6 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
   return (
     <div className="card">
       <div className="card-body">
-        <div className="row g-2 align-items-end mb-3">
-          <div className="col-sm-6 col-lg-2">
-            <label className="form-label" htmlFor="shifts-from">Desde</label>
-            <input id="shifts-from" type="date" className="form-control" value={fromDate} max={toDate || undefined}
-              onChange={(event) => { setFromDate(event.target.value); resetPage(); }} />
-          </div>
-          <div className="col-sm-6 col-lg-2">
-            <label className="form-label" htmlFor="shifts-to">Hasta</label>
-            <input id="shifts-to" type="date" className="form-control" value={toDate} min={fromDate || undefined}
-              onChange={(event) => { setToDate(event.target.value); resetPage(); }} />
-          </div>
-          {branches.length > 1 && (
-            <div className="col-sm-6 col-lg-3">
-              <label className="form-label" htmlFor="shifts-branch">Sucursal</label>
-              <select id="shifts-branch" className="form-select" value={branchId}
-                onChange={(event) => { setBranchId(event.target.value); resetPage(); }}>
-                <option value="">Todas</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="col-sm-6 col-lg-3">
-            <div className="form-check form-switch mb-2">
-              <input id="shifts-difference" type="checkbox" role="switch" className="form-check-input" checked={onlyWithDifference}
-                onChange={(event) => { setOnlyWithDifference(event.target.checked); resetPage(); }} />
-              <label className="form-check-label" htmlFor="shifts-difference">Solo con faltante o sobrante</label>
-            </div>
-          </div>
-        </div>
-
         {error && (
           <div className="alert alert-danger d-flex justify-content-between align-items-center">
             <span>{error}</span>
@@ -175,6 +143,34 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
           keyExtractor={(session) => session.id}
           loading={loading}
           emptyMessage="No hay turnos con estos filtros."
+          filters={(
+            <>
+              <DataTableFilter label="Desde" htmlFor="shifts-from">
+                <input id="shifts-from" type="date" className="form-control form-control-sm" value={fromDate} max={toDate || undefined}
+                  onChange={(event) => { setFromDate(event.target.value); resetPage(); }} />
+              </DataTableFilter>
+              <DataTableFilter label="Hasta" htmlFor="shifts-to">
+                <input id="shifts-to" type="date" className="form-control form-control-sm" value={toDate} min={fromDate || undefined}
+                  onChange={(event) => { setToDate(event.target.value); resetPage(); }} />
+              </DataTableFilter>
+              {branches.length > 1 && (
+                <DataTableFilter label="Sucursal" htmlFor="shifts-branch">
+                  <select id="shifts-branch" className="form-select form-select-sm" value={branchId}
+                    onChange={(event) => { setBranchId(event.target.value); resetPage(); }}>
+                    <option value="">Todas</option>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>{branch.name}</option>
+                    ))}
+                  </select>
+                </DataTableFilter>
+              )}
+              <div className="form-check form-switch mb-1">
+                <input id="shifts-difference" type="checkbox" role="switch" className="form-check-input" checked={onlyWithDifference}
+                  onChange={(event) => { setOnlyWithDifference(event.target.checked); resetPage(); }} />
+                <label className="form-check-label" htmlFor="shifts-difference">Solo con faltante o sobrante</label>
+              </div>
+            </>
+          )}
           serverSide={{
             totalCount: data.totalCount,
             page: pageNumber,

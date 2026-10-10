@@ -298,7 +298,7 @@ export default function ProductForm() {
                     </select>
                   </div>
                   <div className="col-md-4 mb-3">
-                    <label htmlFor="productform-tags" className="form-label">Tags</label>
+                    <label htmlFor="productform-tags" className="form-label">Etiquetas</label>
                     <input id="productform-tags"
                       type="text"
                       className="form-control"

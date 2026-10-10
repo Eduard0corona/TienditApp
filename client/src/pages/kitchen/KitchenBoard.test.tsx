@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { kitchenApi } from '../../api/kitchenApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
-import { OrderStatus, TenantCapability, UnitType, type KitchenOrderDto } from '../../types';
+import { KitchenTicketStatus, OrderStatus, TenantCapability, UnitType, type KitchenOrderDto } from '../../types';
 import KitchenBoard from './KitchenBoard';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
@@ -75,5 +75,20 @@ describe('KitchenBoard', () => {
 
     await user.click(within(card('ORD-000102')).getByRole('button', { name: 'Lista' }));
     expect(kitchenApi.markReady).toHaveBeenCalledWith('o2');
+  });
+
+  it('names a round being cooked like an order: "En preparación"', async () => {
+    vi.mocked(kitchenApi.getTickets).mockResolvedValue({
+      data: [{
+        id: 't1', orderId: 'o9', orderNumber: 'ORD-000109', customerName: 'Público en general', tableNumber: 'Mesa 4',
+        round: 2, status: KitchenTicketStatus.Preparing, sentAt: '2026-10-09T15:00:00Z',
+        items: order('o9', 'ORD-000109', OrderStatus.InPreparation).items,
+      }],
+    } as unknown as Awaited<ReturnType<typeof kitchenApi.getTickets>>);
+    renderBoard();
+
+    await screen.findByRole('heading', { name: 'Mesa 4' });
+    expect(within(card('Mesa 4')).getByText('En preparación')).toBeInTheDocument();
+    expect(screen.queryByText('Preparando')).not.toBeInTheDocument();
   });
 });

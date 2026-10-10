@@ -149,7 +149,7 @@ export default function SupplyModal({ show, supply, onHide, onSaved }: SupplyMod
             />
           </div>
           <div className="col-md-4 mb-2">
-            <label htmlFor="inventorymanagement-stock-minimo" className="form-label">Stock mínimo</label>
+            <label htmlFor="inventorymanagement-stock-minimo" className="form-label">Existencia mínima</label>
             <input id="inventorymanagement-stock-minimo"
               type="number"
               step="0.01"
@@ -159,7 +159,7 @@ export default function SupplyModal({ show, supply, onHide, onSaved }: SupplyMod
             />
           </div>
           <div className="col-md-4 mb-2">
-            <label htmlFor="inventorymanagement-stock-maximo" className="form-label">Stock máximo</label>
+            <label htmlFor="inventorymanagement-stock-maximo" className="form-label">Existencia máxima</label>
             <input id="inventorymanagement-stock-maximo"
               type="number"
               step="0.01"
@@ -169,7 +169,7 @@ export default function SupplyModal({ show, supply, onHide, onSaved }: SupplyMod
             />
           </div>
           <div className="col-md-4 mb-2">
-            <label htmlFor="inventorymanagement-punto-de-reorden" className="form-label">Punto de reorden</label>
+            <label htmlFor="inventorymanagement-punto-de-reorden" className="form-label">Pedir al llegar a</label>
             <input id="inventorymanagement-punto-de-reorden"
               type="number"
               step="0.01"

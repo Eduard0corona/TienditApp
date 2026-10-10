@@ -148,7 +148,7 @@ export default function ProductStockCard({ product, canManage }: ProductStockCar
                     ))}
                   </ul>
                 )}
-                <p className="small text-muted mb-3">Punto de reorden: {formatQuantity(stock.reorderPoint, product.unit)}</p>
+                <p className="small text-muted mb-3">Pedir al llegar a: {formatQuantity(stock.reorderPoint, product.unit)}</p>
                 <div className="d-flex flex-wrap gap-2">
                   <Link to="/inventory" className="btn btn-outline-primary btn-sm">Registrar entrada o ajuste</Link>
                   <button type="button" className="btn btn-outline-danger btn-sm" onClick={stop} disabled={saving}>

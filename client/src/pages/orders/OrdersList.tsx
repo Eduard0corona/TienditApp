@@ -3,7 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import StatusChip from '../../components/common/StatusChip';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
@@ -25,11 +25,13 @@ import {
   OrderChannel,
   OrderStatus as OrderStatusConst,
   OrderType as OrderTypeConst,
+  TenantCapability,
 } from '../../types';
 import { toPrivateFilePath } from '../../utils/privateFiles';
 import PrivateFileLink from '../../components/common/PrivateFileLink';
 import PrivatePhoto from '../../components/common/PrivatePhoto';
 import { getAccess } from '../../utils/access';
+import { hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
 import { buildTicketText, buildWhatsAppTicketUrl, formatCancelled, printTicket } from '../../utils/ticket';
@@ -53,6 +55,22 @@ const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; l
   [OrderTypeConst.Retail]: toStatusOptions([0, 1, 2, 3, 6, 99]),
   [OrderTypeConst.Service]: toStatusOptions([0, 4, 5, 7, 99]),
 };
+
+// Where the order came from; the counter is the usual one and carries no badge in the list.
+const CHANNEL_OPTIONS = [
+  { value: OrderChannel.Counter, label: 'Mostrador' },
+  { value: OrderChannel.WhatsApp, label: 'WhatsApp' },
+  { value: OrderChannel.Online, label: 'En línea' },
+];
+
+/** The kinds of order of the business, by the rule the server lists them with: sales (products or food), services or both (both while unknown). */
+function getOrderTypes(capabilities: number | null): OrderType[] {
+  const sells = hasAnyCapability(capabilities, TenantCapability.Retail | TenantCapability.Food);
+  const serves = hasCapability(capabilities, TenantCapability.Service);
+  if (sells && !serves) return [OrderTypeConst.Retail];
+  if (serves && !sells) return [OrderTypeConst.Service];
+  return [OrderTypeConst.Retail, OrderTypeConst.Service];
+}
 
 const SERVICE_PIECE_STATUS_OPTIONS = ([0, 1, 2, 99] as const).map((value) => ({
   value,
@@ -104,6 +122,7 @@ export default function OrdersList() {
   const [error, setError] = useState('');
   const [selectedOrderType, setSelectedOrderType] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState('');
   const [fromDate, setFromDate] = useState(initialSearch ? '' : today);
   const [toDate, setToDate] = useState(initialSearch ? '' : today);
   const [search, setSearch] = useState(initialSearch);
@@ -145,6 +164,19 @@ export default function OrdersList() {
   const canSell = access.sell;
   const canCharge = access.charge;
   const canRefund = access.refunds;
+  // The kind of each order says something only while the list mixes sales and services.
+  const orderTypes = getOrderTypes(capabilities);
+  const mixesOrderTypes = orderTypes.length > 1;
+  const showTypeColumn = mixesOrderTypes && selectedOrderType === '';
+  const columns = useMemo(
+    () => (showTypeColumn ? COLUMNS : COLUMNS.filter((column) => column.header !== 'Tipo')),
+    [showTypeColumn],
+  );
+  // The states of the kind picked, or of the only kind the business has.
+  const statusOrderType = selectedOrderType !== ''
+    ? Number(selectedOrderType) as OrderType
+    : (mixesOrderTypes ? null : orderTypes[0]);
+  const statusOptions = statusOrderType === null ? STATUS_OPTIONS : ORDER_TYPE_STATUS_OPTIONS[statusOrderType];
 
   // Transitions come from the server's state machine; cancellation has its own action (it needs a reason
   // and is blocked while the order has payments).
@@ -182,21 +214,14 @@ export default function OrdersList() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const params: {
-        orderType?: OrderType;
-        status?: OrderStatus;
-        fromDate?: string;
-        toDate?: string;
-        search?: string;
-        pageNumber: number;
-        pageSize: number;
-      } = {
+      const params: NonNullable<Parameters<typeof ordersApi.getAll>[0]> = {
         pageNumber,
         pageSize,
       };
 
       if (selectedOrderType !== '') params.orderType = Number(selectedOrderType) as OrderType;
       if (selectedStatus !== '') params.status = Number(selectedStatus) as OrderStatus;
+      if (selectedChannel !== '') params.channel = Number(selectedChannel) as OrderChannel;
       if (fromDate) params.fromDate = businessDayStart(fromDate);
       if (toDate) params.toDate = businessDayEnd(toDate);
       if (search) params.search = search;
@@ -211,7 +236,7 @@ export default function OrdersList() {
     } finally {
       if (requestId === latestRequestRef.current) setLoading(false);
     }
-  }, [fromDate, pageNumber, pageSize, search, selectedOrderType, selectedStatus, toDate]);
+  }, [fromDate, pageNumber, pageSize, search, selectedChannel, selectedOrderType, selectedStatus, toDate]);
 
   const refreshSelectedOrder = useCallback(async (orderId: string) => {
     const { data: order } = await ordersApi.getById(orderId);
@@ -418,105 +443,12 @@ export default function OrdersList() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              <div className="row mb-3">
-                <div className="col-md-2 mb-2">
-                  <label htmlFor="orderslist-tipo" className="form-label">Tipo</label>
-                  <select id="orderslist-tipo"
-                    className="form-select form-select-sm"
-                    value={selectedOrderType}
-                    onChange={(e) => {
-                      setSelectedOrderType(e.target.value);
-                      setSelectedStatus('');
-                      setPageNumber(1);
-                    }}
-                  >
-                    <option value="">Todos</option>
-                    <option value={OrderTypeConst.Retail}>{ORDER_TYPE_LABELS[OrderTypeConst.Retail]}</option>
-                    <option value={OrderTypeConst.Service}>{ORDER_TYPE_LABELS[OrderTypeConst.Service]}</option>
-                  </select>
-                </div>
-                <div className="col-md-2 mb-2">
-                  <label htmlFor="orderslist-estado" className="form-label">Estado</label>
-                  <select id="orderslist-estado"
-                    className="form-select form-select-sm"
-                    value={selectedStatus}
-                    onChange={(e) => {
-                      setSelectedStatus(e.target.value);
-                      setPageNumber(1);
-                    }}
-                  >
-                    <option value="">Todos</option>
-                    {(selectedOrderType === ''
-                      ? STATUS_OPTIONS
-                      : ORDER_TYPE_STATUS_OPTIONS[Number(selectedOrderType) as OrderType]).map((status) => (
-                        <option key={status.value} value={status.value}>
-                          {status.label}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div className="col-md-2 mb-2">
-                  <label htmlFor="orderslist-desde" className="form-label">Desde</label>
-                  <input id="orderslist-desde"
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={fromDate}
-                    onChange={(e) => {
-                      setFromDate(e.target.value);
-                      setPageNumber(1);
-                    }}
-                  />
-                </div>
-                <div className="col-md-2 mb-2">
-                  <label htmlFor="orderslist-hasta" className="form-label">Hasta</label>
-                  <input id="orderslist-hasta"
-                    type="date"
-                    className="form-control form-control-sm"
-                    value={toDate}
-                    onChange={(e) => {
-                      setToDate(e.target.value);
-                      setPageNumber(1);
-                    }}
-                  />
-                </div>
-                <div className="col-md-4 mb-2 d-flex align-items-end">
-                  <div className="d-flex gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-light btn-sm"
-                      onClick={() => {
-                        setSelectedOrderType('');
-                        setSelectedStatus('');
-                        setFromDate(today);
-                        setToDate(today);
-                        setPageNumber(1);
-                      }}
-                    >
-                      Limpiar filtros
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {error && (
                 <div className="alert alert-danger alert-dismissible fade show">
                   {error}
                   <button type="button" className="btn-close" onClick={() => setError('')}></button>
                 </div>
               )}
-
-              <div className="d-flex justify-content-end mb-2">
-                <button
-                  type="button"
-                  className={`btn btn-sm ${chime.enabled ? 'btn-primary' : 'btn-light'}`}
-                  onClick={chime.toggle}
-                  aria-pressed={chime.enabled}
-                  title="Suena cuando llega un pedido en línea por confirmar"
-                >
-                  <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
-                  {chime.enabled ? 'Sonido activado' : 'Sonido para pedidos en línea'}
-                </button>
-              </div>
 
               {realtimeMessage && (
                 <div className="alert alert-info alert-dismissible fade show" role="status">
@@ -527,12 +459,116 @@ export default function OrdersList() {
 
               <DataTable
                 data={data.items}
-                columns={COLUMNS}
+                columns={columns}
                 keyExtractor={(order) => order.id}
                 loading={loading}
                 emptyMessage={search ? 'No hay pedidos que coincidan con la búsqueda.' : 'No hay pedidos en estas fechas.'}
                 searchPlaceholder="Folio, cliente o teléfono"
                 initialSearch={initialSearch}
+                filters={(
+                  <>
+                    {mixesOrderTypes && (
+                      <DataTableFilter label="Tipo" htmlFor="orderslist-tipo">
+                        <select id="orderslist-tipo"
+                          className="form-select form-select-sm"
+                          value={selectedOrderType}
+                          onChange={(e) => {
+                            setSelectedOrderType(e.target.value);
+                            setSelectedStatus('');
+                            setPageNumber(1);
+                          }}
+                        >
+                          <option value="">Todos</option>
+                          {orderTypes.map((type) => (
+                            <option key={type} value={type}>{ORDER_TYPE_LABELS[type]}</option>
+                          ))}
+                        </select>
+                      </DataTableFilter>
+                    )}
+                    <DataTableFilter label="Estado" htmlFor="orderslist-estado">
+                      <select id="orderslist-estado"
+                        className="form-select form-select-sm"
+                        value={selectedStatus}
+                        onChange={(e) => {
+                          setSelectedStatus(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      >
+                        <option value="">Todos</option>
+                        {statusOptions.map((status) => (
+                          <option key={status.value} value={status.value}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                    </DataTableFilter>
+                    <DataTableFilter label="Canal" htmlFor="orderslist-canal">
+                      <select id="orderslist-canal"
+                        className="form-select form-select-sm"
+                        value={selectedChannel}
+                        onChange={(e) => {
+                          setSelectedChannel(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      >
+                        <option value="">Todos</option>
+                        {CHANNEL_OPTIONS.map((channel) => (
+                          <option key={channel.value} value={channel.value}>
+                            {channel.label}
+                          </option>
+                        ))}
+                      </select>
+                    </DataTableFilter>
+                    <DataTableFilter label="Desde" htmlFor="orderslist-desde">
+                      <input id="orderslist-desde"
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={fromDate}
+                        onChange={(e) => {
+                          setFromDate(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      />
+                    </DataTableFilter>
+                    <DataTableFilter label="Hasta" htmlFor="orderslist-hasta">
+                      <input id="orderslist-hasta"
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={toDate}
+                        onChange={(e) => {
+                          setToDate(e.target.value);
+                          setPageNumber(1);
+                        }}
+                      />
+                    </DataTableFilter>
+                    <button
+                      type="button"
+                      className="btn btn-light btn-sm"
+                      onClick={() => {
+                        setSelectedOrderType('');
+                        setSelectedStatus('');
+                        setSelectedChannel('');
+                        setFromDate(today);
+                        setToDate(today);
+                        setPageNumber(1);
+                      }}
+                    >
+                      Limpiar filtros
+                    </button>
+                  </>
+                )}
+                toolbarEnd={(
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${chime.enabled ? 'btn-primary' : 'btn-light'}`}
+                    onClick={chime.toggle}
+                    aria-pressed={chime.enabled}
+                    title="Suena cuando llega un pedido en línea por confirmar"
+                  >
+                    <i className={`${chime.enabled ? 'ri-volume-up-line' : 'ri-volume-mute-line'} me-1`} aria-hidden="true"></i>
+                    {chime.enabled ? 'Sonido activado' : 'Sonido para pedidos en línea'}
+                  </button>
+                )}
                 serverSide={{
                   totalCount: data.totalCount,
                   page: pageNumber,
@@ -552,30 +588,31 @@ export default function OrdersList() {
                     <td>
                       <button
                         type="button"
-                        className="btn btn-link p-0 fw-semibold text-decoration-none"
+                        className="btn btn-link p-0 fw-semibold text-decoration-none text-nowrap"
                         onClick={() => setSelectedOrder(order)}
                       >
                         {order.orderNumber}
                       </button>
-                      <div>
-                        <span className={`badge mt-1 ${order.createdByBusiness ? 'bg-info' : 'bg-secondary'}`}>
-                          {order.createdByBusiness ? 'Creada por el negocio' : 'Creada por el cliente'}
-                        </span>
-                        {order.channel === OrderChannel.WhatsApp && (
-                          <span className="badge mt-1 ms-1 bg-success-subtle text-success-emphasis">
+                      {order.channel === OrderChannel.WhatsApp && (
+                        <div>
+                          <span className="badge mt-1 bg-success-subtle text-success-emphasis">
                             <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>WhatsApp
                           </span>
-                        )}
-                        {order.channel === OrderChannel.Online && (
-                          <span className="badge mt-1 ms-1 bg-primary-subtle text-primary-emphasis">En línea</span>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                      {order.channel === OrderChannel.Online && (
+                        <div>
+                          <span className="badge mt-1 bg-primary-subtle text-primary-emphasis">En línea</span>
+                        </div>
+                      )}
                     </td>
-                    <td className="text-center">
-                      <span className={`badge ${order.orderType === OrderTypeConst.Service ? 'bg-info' : 'bg-secondary'}`}>
-                        {ORDER_TYPE_LABELS[order.orderType]}
-                      </span>
-                    </td>
+                    {showTypeColumn && (
+                      <td className="text-center">
+                        <span className={`badge ${order.orderType === OrderTypeConst.Service ? 'bg-info' : 'bg-secondary'}`}>
+                          {ORDER_TYPE_LABELS[order.orderType]}
+                        </span>
+                      </td>
+                    )}
                     <td>
                       <div>{order.customerName}</div>
                       {order.customerPhone && <small className="text-muted">{order.customerPhone}</small>}

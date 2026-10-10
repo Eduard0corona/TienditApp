@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import './DataTable.css';
 
 export interface DataTableColumn {
@@ -36,6 +36,20 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   /** Text already in the search box: a search that came in the link, or the one the page kept while another tab was open. */
   initialSearch?: string;
+  /** The screen's own filters, in the same bar as the search box (each one a `DataTableFilter`). */
+  filters?: ReactNode;
+  /** The action of the list (Nuevo producto) or a control of the screen, at the end of that bar. */
+  toolbarEnd?: ReactNode;
+}
+
+/** A filter of the list with its label above, so every control of the bar lines up. */
+export function DataTableFilter({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="datatable-filter">
+      <label className="form-label" htmlFor={htmlFor}>{label}</label>
+      {children}
+    </div>
+  );
 }
 
 const DEFAULT_PAGE_SIZES = [10, 25, 50, 100];
@@ -48,10 +62,12 @@ export default function DataTable<T>({
   searchFilter,
   serverSide,
   loading = false,
-  emptyMessage = 'No hay registros.',
+  emptyMessage = 'Todavía no hay nada aquí.',
   pageSizeOptions = DEFAULT_PAGE_SIZES,
-  searchPlaceholder = 'Buscar...',
+  searchPlaceholder = 'Buscar…',
   initialSearch = '',
+  filters,
+  toolbarEnd,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState(initialSearch);
   const [clientPage, setClientPage] = useState(1);
@@ -100,6 +116,8 @@ export default function DataTable<T>({
 
   const startEntry = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const endEntry = Math.min(page * pageSize, totalCount);
+  // The page size only matters once there is more than one page of the smallest size.
+  const showsPageSize = totalCount > pageSizeOptions[0] || pageSize !== pageSizeOptions[0];
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
@@ -143,32 +161,23 @@ export default function DataTable<T>({
 
   return (
     <>
-      {/* Top controls: entries selector + search */}
-      <div className="datatable-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div className="d-flex align-items-center gap-2 flex-wrap">
-          <span>Mostrar</span>
-          <select
-            className="form-select form-select-sm"
-            style={{ width: 'auto' }}
-            value={pageSize}
-            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-          >
-            {pageSizeOptions.map((size) => (
-              <option key={size} value={size}>{size}</option>
-            ))}
-          </select>
-          <span>registros</span>
+      {/* One bar: the search, the screen's filters and, at the end, the action of the list. */}
+      <div className="datatable-toolbar">
+        <div className="datatable-search-area" role="search">
+          <div className="datatable-search">
+            <i className="ri-search-line" aria-hidden="true"></i>
+            <input
+              type="search"
+              className="form-control form-control-sm"
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+            />
+          </div>
+          {filters}
         </div>
-        <div className="datatable-search-wrapper">
-          <input
-            type="search"
-            className="form-control form-control-sm w-100"
-            placeholder={searchPlaceholder}
-            aria-label={searchPlaceholder}
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-          />
-        </div>
+        {toolbarEnd && <div className="datatable-toolbar-end">{toolbarEnd}</div>}
       </div>
 
       {/* Table with fixed/sticky header */}
@@ -182,7 +191,7 @@ export default function DataTable<T>({
         </div>
       ) : (
         <div className="table-responsive" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-          <table className="table table-striped table-centered nowrap w-100 mb-0">
+          <table className="datatable-table table table-striped table-centered nowrap w-100 mb-0">
             <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
               <tr>
                 {columns.map((col, idx) => (
@@ -207,32 +216,53 @@ export default function DataTable<T>({
         </div>
       )}
 
-      {/* Bottom: info text + pagination */}
+      {/* Bottom: what is shown, how many per page and the pages. */}
       {!loading && totalCount > 0 && (
-        <div className="datatable-footer d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
-          <span className="text-muted font-13">
-            Mostrando {startEntry} a {endEntry} de {totalCount} registros
-          </span>
+        <div className="datatable-footer">
+          <div className="datatable-count">
+            <span className="text-muted">{startEntry}–{endEntry} de {totalCount}</span>
+            {showsPageSize && (
+              <label className="datatable-page-size">
+                Por página
+                <select
+                  className="form-select form-select-sm"
+                  value={pageSize}
+                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                >
+                  {pageSizeOptions.map((size) => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
           {totalPages > 1 && (
-            <nav>
+            <nav aria-label="Páginas">
               <ul className="pagination pagination-rounded mb-0">
                 <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
                   <button
+                    type="button"
                     className="page-link"
                     onClick={() => handlePageChange(page - 1)}
                     disabled={page <= 1}
+                    aria-label="Página anterior"
                   >
-                    <i className="ri-arrow-left-s-line"></i>
+                    <i className="ri-arrow-left-s-line" aria-hidden="true"></i>
                   </button>
                 </li>
                 {getPageNumbers().map((p, idx) =>
                   p === 'dots' ? (
-                    <li key={`dots-${idx}`} className="page-item disabled">
+                    <li key={`dots-${idx}`} className="page-item disabled" aria-hidden="true">
                       <span className="page-link">&hellip;</span>
                     </li>
                   ) : (
                     <li key={p} className={`page-item ${p === page ? 'active' : ''}`}>
-                      <button className="page-link" onClick={() => handlePageChange(p)}>
+                      <button
+                        type="button"
+                        className="page-link"
+                        onClick={() => handlePageChange(p)}
+                        aria-current={p === page ? 'page' : undefined}
+                      >
                         {p}
                       </button>
                     </li>
@@ -240,11 +270,13 @@ export default function DataTable<T>({
                 )}
                 <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
                   <button
+                    type="button"
                     className="page-link"
                     onClick={() => handlePageChange(page + 1)}
                     disabled={page >= totalPages}
+                    aria-label="Página siguiente"
                   >
-                    <i className="ri-arrow-right-s-line"></i>
+                    <i className="ri-arrow-right-s-line" aria-hidden="true"></i>
                   </button>
                 </li>
               </ul>

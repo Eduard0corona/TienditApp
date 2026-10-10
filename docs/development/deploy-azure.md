@@ -147,6 +147,10 @@ El `apply.sql` de [`20261009071957_DropRequireOpenCashSession`](../../database/p
 
 La Fase 17 solo cambia el cliente: no trae migraciones, scripts ni cambios de contrato, y se fusiona sin tocar la base. Si aún no aplicas el `apply.sql` de la sección anterior, aplícalo antes del merge: lo exige la versión que ya está en `master` (`/health/schema` responde 503 sin él) y también esta. Volver a la versión anterior no necesita nada en la base.
 
+## Listas e Inventario (Fase 18)
+
+La Fase 18 no trae migraciones ni scripts y se fusiona sin tocar la base. El contrato solo agrega el parámetro opcional `channel` a `GET /api/v1/orders` (el enum `OrderChannel`: 0 mostrador, 1 WhatsApp, 2 menú en línea); quien no lo manda recibe la lista de siempre, y un valor que no existe responde 400. Volver a la versión anterior no necesita nada en la base.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

@@ -106,4 +106,14 @@ describe('TabPanel', () => {
     expect(await screen.findByText(/Cancelado: Se capturó por error/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Cancelar Tacos al pastor' })).not.toBeInTheDocument();
   });
+
+  it('names a round being cooked like the kitchen and the orders: "En preparación"', async () => {
+    vi.mocked(ordersApi.getById).mockResolvedValue({
+      data: tab({ kitchenTickets: [{ id: 'k1', round: 1, status: KitchenTicketStatus.Preparing, sentAt: '2026-10-08T20:00:00Z' }] }),
+    } as never);
+    renderPanel();
+
+    expect(await screen.findByText('En preparación')).toBeInTheDocument();
+    expect(screen.queryByText('Preparando')).not.toBeInTheDocument();
+  });
 });

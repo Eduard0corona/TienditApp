@@ -16,6 +16,8 @@ public record GetOrdersByBusinessQuery : IRequest<PaginatedList<OrderDto>>
 {
     public OrderType? OrderTypeFilter { get; init; }
     public OrderStatus? StatusFilter { get; init; }
+    /// <summary>Where the order came from: the counter, a WhatsApp conversation or the online menu.</summary>
+    public OrderChannel? ChannelFilter { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
     /// <summary>Folio, customer name or phone digits.</summary>
@@ -29,6 +31,7 @@ public class GetOrdersByBusinessQueryValidator : AbstractValidator<GetOrdersByBu
     public GetOrdersByBusinessQueryValidator()
     {
         RuleFor(x => x.Search).MaximumLength(100);
+        RuleFor(x => x.ChannelFilter).IsInEnum();
     }
 }
 
@@ -62,6 +65,9 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
 
         if (request.StatusFilter.HasValue)
             query = query.Where(o => o.Status == request.StatusFilter.Value);
+
+        if (request.ChannelFilter.HasValue)
+            query = query.Where(o => o.Channel == request.ChannelFilter.Value);
 
         if (request.OrderTypeFilter.HasValue)
         {

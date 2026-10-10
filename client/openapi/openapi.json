@@ -5830,6 +5830,13 @@
             }
           },
           {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
             "name": "fromDate",
             "in": "query",
             "schema": {

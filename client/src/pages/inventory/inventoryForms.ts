@@ -143,10 +143,10 @@ export function toSupplyRequest(form: SupplyFormState): FormResult<CreateSupplyI
   const taxRate = form.taxRate === '' ? undefined : Number(form.taxRate);
 
   if (Number.isNaN(defaultCost) || defaultCost < 0) return { error: 'Costo por defecto inválido.' };
-  if (Number.isNaN(minStock) || minStock < 0) return { error: 'Stock mínimo inválido.' };
+  if (Number.isNaN(minStock) || minStock < 0) return { error: 'La existencia mínima no es válida.' };
   if (Number.isNaN(reorderPoint) || reorderPoint < 0) return { error: 'Punto de reorden inválido.' };
   if (maxStock !== undefined && (Number.isNaN(maxStock) || maxStock < minStock))
-    return { error: 'El stock máximo debe ser mayor o igual al stock mínimo.' };
+    return { error: 'La existencia máxima debe ser mayor o igual a la mínima.' };
   if (taxRate !== undefined && (Number.isNaN(taxRate) || taxRate < 0 || taxRate > 100))
     return { error: 'La tasa de impuesto debe estar entre 0 y 100.' };
 

@@ -1165,6 +1165,34 @@ input[data-switch='primary']:checked + label {
   border-bottom-color: var(--ct-link-color);
 }
 
+/* The same tabs as buttons, for the parts of one screen (Inventario). */
+button.section-tab {
+  background: transparent;
+  border-width: 0 0 2px;
+  border-style: solid;
+  border-color: transparent;
+}
+
+button.section-tab.active {
+  border-bottom-color: var(--ct-link-color);
+}
+
+/* Inventario: its tabs and, beside them, the action of the open tab. */
+.inventory-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.inventory-header .section-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
 /* The bell in the top bar: a count of what needs someone, red when something cannot wait. */
 .attention-bell {
   padding: 0.35rem 0.5rem;

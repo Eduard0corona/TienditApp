@@ -47,7 +47,7 @@ function KitchenItems({ items }: { items: OrderItemDto[] }) {
 
 const TICKET_STATUS_LABELS: Record<number, string> = {
   [KitchenTicketStatus.Pending]: 'Nueva',
-  [KitchenTicketStatus.Preparing]: 'Preparando',
+  [KitchenTicketStatus.Preparing]: 'En preparación',
   [KitchenTicketStatus.Ready]: 'Lista',
 };
 

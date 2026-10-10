@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { employeesApi } from '../../api/employeesApi';
 import { productsApi } from '../../api/productsApi';
@@ -305,50 +305,6 @@ export default function AppointmentsList() {
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-            <div className="d-flex flex-wrap align-items-center gap-2">
-              <div className="btn-group btn-group-sm" role="group" aria-label="Qué citas ver">
-                <button
-                  type="button"
-                  className={`btn ${view === 'upcoming' ? 'btn-primary' : 'btn-light'}`}
-                  aria-pressed={view === 'upcoming'}
-                  onClick={() => { setView('upcoming'); setPageNumber(1); }}
-                >
-                  Próximas
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${view === 'history' ? 'btn-primary' : 'btn-light'}`}
-                  aria-pressed={view === 'history'}
-                  onClick={() => { setView('history'); setPageNumber(1); }}
-                >
-                  Anteriores
-                </button>
-              </div>
-              <label className="form-label mb-0" htmlFor="appointments-status">Estado</label>
-              <select
-                id="appointments-status"
-                className="form-select form-select-sm w-auto"
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPageNumber(1);
-                }}
-              >
-                <option value="">Todos</option>
-                <option value={AppointmentStatusConst.Scheduled}>Programada</option>
-                <option value={AppointmentStatusConst.Confirmed}>Confirmada</option>
-                <option value={AppointmentStatusConst.InService}>En servicio</option>
-                <option value={AppointmentStatusConst.Completed}>Completada</option>
-                <option value={AppointmentStatusConst.NoShow}>No asistió</option>
-                <option value={AppointmentStatusConst.Cancelled}>Cancelada</option>
-              </select>
-            </div>
-            <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
-              <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
-            </button>
-          </div>
-
           <DataTable
             data={data.items}
             columns={COLUMNS}
@@ -356,6 +312,52 @@ export default function AppointmentsList() {
             loading={loading}
             emptyMessage={view === 'upcoming' ? 'No hay citas de hoy en adelante.' : 'No hay citas anteriores.'}
             searchPlaceholder="Cliente, teléfono, servicio o persona"
+            filters={(
+              <>
+                <div className="btn-group btn-group-sm" role="group" aria-label="Qué citas ver">
+                  <button
+                    type="button"
+                    className={`btn ${view === 'upcoming' ? 'btn-primary' : 'btn-light'}`}
+                    aria-pressed={view === 'upcoming'}
+                    onClick={() => { setView('upcoming'); setPageNumber(1); }}
+                  >
+                    Próximas
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${view === 'history' ? 'btn-primary' : 'btn-light'}`}
+                    aria-pressed={view === 'history'}
+                    onClick={() => { setView('history'); setPageNumber(1); }}
+                  >
+                    Anteriores
+                  </button>
+                </div>
+                <DataTableFilter label="Estado" htmlFor="appointments-status">
+                  <select
+                    id="appointments-status"
+                    className="form-select form-select-sm"
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      setPageNumber(1);
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    <option value={AppointmentStatusConst.Scheduled}>Programada</option>
+                    <option value={AppointmentStatusConst.Confirmed}>Confirmada</option>
+                    <option value={AppointmentStatusConst.InService}>En servicio</option>
+                    <option value={AppointmentStatusConst.Completed}>Completada</option>
+                    <option value={AppointmentStatusConst.NoShow}>No asistió</option>
+                    <option value={AppointmentStatusConst.Cancelled}>Cancelada</option>
+                  </select>
+                </DataTableFilter>
+              </>
+            )}
+            toolbarEnd={(
+              <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
+                <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
+              </button>
+            )}
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,
@@ -409,7 +411,7 @@ export default function AppointmentsList() {
                         aria-label={`Editar o reprogramar la cita de ${item.customerName}`}
                         title="Editar o reprogramar"
                       >
-                        <i className="ri-calendar-event-line" aria-hidden="true"></i>
+                        Editar
                       </button>
                     </div>
                   )}

@@ -333,8 +333,8 @@ export default function WhatsAppChat() {
                 >
                   {startingChat ? <span className="spinner-border spinner-border-sm" /> : 'Enviar'}
                 </button>
-                <button className="btn btn-light" onClick={() => setShowNewChat(false)}>
-                  <i className="ri-close-line"></i>
+                <button type="button" className="btn btn-light" aria-label="Cerrar" onClick={() => setShowNewChat(false)}>
+                  <i className="ri-close-line" aria-hidden="true"></i>
                 </button>
               </div>
             </div>

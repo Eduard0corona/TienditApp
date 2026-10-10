@@ -1,19 +1,123 @@
-.datatable-search-wrapper {
-  width: 220px;
-  max-width: 100%;
+/* One bar above the list: the search box first, then the screen's filters, and the action of the list at the end. */
+.datatable-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.datatable-search-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.datatable-search {
+  position: relative;
+  flex: 0 1 280px;
+  min-width: 200px;
+}
+
+.datatable-search i {
+  position: absolute;
+  top: 50%;
+  left: 0.625rem;
+  transform: translateY(-50%);
+  color: var(--ct-secondary-color);
+  pointer-events: none;
+}
+
+.datatable-search input {
+  padding-left: 2rem;
+}
+
+/* Filters keep their label above, so they line up with the search box at the bottom. */
+.datatable-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.datatable-filter .form-label {
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+  color: var(--ct-secondary-color);
+}
+
+.datatable-filter .form-select,
+.datatable-filter .form-control {
+  width: auto;
+}
+
+.datatable-toolbar-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* Below the list: how many are shown and per page, then the pages. */
+.datatable-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+}
+
+.datatable-count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.datatable-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--ct-secondary-color);
+}
+
+.datatable-page-size .form-select {
+  width: auto;
+}
+
+/* From a tablet up, the action keeps its place at the right of the bar and the filters wrap beside it. */
+@media (min-width: 768px) {
+  .datatable-toolbar {
+    flex-wrap: nowrap;
+  }
+
+  .datatable-search-area {
+    flex: 1 1 0;
+  }
+
+  .datatable-toolbar-end {
+    flex: 0 0 auto;
+  }
 }
 
 @media (max-width: 767.98px) {
-  .datatable-toolbar {
-    align-items: stretch !important;
+  .datatable-search {
+    flex-basis: 100%;
   }
 
-  .datatable-search-wrapper {
-    width: 100%;
+  /* The table scrolls sideways on a phone: headers in one line keep the rows short. */
+  .datatable-table th {
+    white-space: nowrap;
   }
 
-  .datatable-footer {
-    flex-direction: column;
-    align-items: flex-start !important;
+  .datatable-toolbar-end {
+    margin-left: 0;
   }
 }

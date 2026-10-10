@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
-import DataTable from '../../components/common/DataTable';
+import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { suppliersApi } from '../../api/suppliersApi';
 import type { CreateSupplierRequest, PaginatedList, SupplierDto, UpdateSupplierRequest } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
@@ -168,27 +168,6 @@ export default function SuppliersList() {
 
       <div className="card">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <div className="d-flex align-items-center gap-2">
-              <label htmlFor="supplierslist-estado" className="form-label mb-0">Estado</label>
-              <select id="supplierslist-estado"
-                className="form-select form-select-sm"
-                value={activeFilter}
-                onChange={(e) => {
-                  setActiveFilter(e.target.value);
-                  setPageNumber(1);
-                }}
-              >
-                <option value="">Todos</option>
-                <option value="true">Activos</option>
-                <option value="false">Inactivos</option>
-              </select>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={openCreate}>
-              <i className="ri-add-line me-1"></i>Nuevo proveedor
-            </button>
-          </div>
-
           <DataTable
             data={data.items}
             columns={COLUMNS}
@@ -196,6 +175,27 @@ export default function SuppliersList() {
             loading={loading}
             emptyMessage="No hay proveedores registrados."
             searchPlaceholder="Nombre, contacto, teléfono o correo"
+            filters={(
+              <DataTableFilter label="Estado" htmlFor="supplierslist-estado">
+                <select id="supplierslist-estado"
+                  className="form-select form-select-sm"
+                  value={activeFilter}
+                  onChange={(e) => {
+                    setActiveFilter(e.target.value);
+                    setPageNumber(1);
+                  }}
+                >
+                  <option value="">Todos</option>
+                  <option value="true">Activos</option>
+                  <option value="false">Inactivos</option>
+                </select>
+              </DataTableFilter>
+            )}
+            toolbarEnd={(
+              <button type="button" className="btn btn-primary btn-sm" onClick={openCreate}>
+                <i className="ri-add-line me-1" aria-hidden="true"></i>Nuevo proveedor
+              </button>
+            )}
             serverSide={{
               totalCount: data.totalCount,
               page: pageNumber,
@@ -229,15 +229,17 @@ export default function SuppliersList() {
                     {item.isActive ? 'Activo' : 'Inactivo'}
                   </span>
                 </td>
-                <td className="text-center">
-                  <button className="btn btn-sm btn-soft-primary me-1" onClick={() => openEdit(item)}>
-                    <i className="ri-pencil-line"></i>
+                <td className="text-center text-nowrap">
+                  <button type="button" className="btn btn-sm btn-light me-1" aria-label={`Editar ${item.name}`} onClick={() => openEdit(item)}>
+                    Editar
                   </button>
                   <button
-                    className={`btn btn-sm ${item.isActive ? 'btn-soft-warning' : 'btn-soft-success'}`}
+                    type="button"
+                    className="btn btn-sm btn-light"
+                    aria-label={`${item.isActive ? 'Desactivar' : 'Activar'} ${item.name}`}
                     onClick={() => toggleActive(item)}
                   >
-                    <i className={item.isActive ? 'ri-pause-line' : 'ri-play-line'}></i>
+                    {item.isActive ? 'Desactivar' : 'Activar'}
                   </button>
                 </td>
               </>
