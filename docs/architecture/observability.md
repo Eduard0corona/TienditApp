@@ -10,7 +10,7 @@
 | `GET /health/ready` | Conexión a la base (`database`) y colas en segundo plano (`background-queues`). | Health check de App Service, balanceador y alertas. |
 | `GET /health/schema` | Que la base tenga todas las migraciones de esta versión (`database-schema`). | Prueba de humo del despliegue (Fase 7). |
 
-- Los tres son anónimos y solo devuelven estados (`{"status":"Healthy","checks":{...}}`), sin mensajes de error ni datos.
+- Los tres son anónimos y solo devuelven estados y el commit de la versión que responde (`{"status":"Healthy","checks":{...},"commit":"<sha>"}`), sin mensajes de error ni datos. El commit sale de la versión del ensamblado (`BuildInfo`): el SDK le agrega el de git, y el despliegue fija el que publica. La prueba de humo lo compara para saber qué versión contestó; un build sin commit responde `null`.
 - `database-schema` queda **Unhealthy** (503) cuando falta en la base una migración de esta versión: producción no migra al arrancar y alguien publicó antes de aplicar su `apply.sql`. El log nombra la migración que falta. No forma parte de `/health/ready` a propósito: un esquema atrasado hace fallar el despliegue (o detiene el swap del slot), no saca de rotación a todas las instancias.
 - `background-queues` queda **Degraded** (sigue respondiendo 200) cuando el outbox o la bandeja del webhook apartaron trabajo en las últimas 24 horas, o cuando hay trabajo pendiente con más de 15 minutos de retraso (workers detenidos o atorados).
 - Sin base de datos, `/health/ready` responde 503.

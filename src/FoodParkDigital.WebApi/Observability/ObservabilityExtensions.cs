@@ -68,7 +68,8 @@ public static class ObservabilityExtensions
     /// <c>/health/ready</c> checks the database and the background queues, for the load balancer and alerts;
     /// a degraded queue still answers 200. <c>/health/schema</c> answers 503 while the database lacks a migration of
     /// this version, for the deployment: it stays out of readiness so a missing <c>apply.sql</c> fails the deployment
-    /// instead of taking every instance out of rotation. All three are anonymous and show only statuses.
+    /// instead of taking every instance out of rotation. All three are anonymous and show only statuses and the commit
+    /// of this build (<see cref="BuildInfo"/>), which the smoke test compares with the one it deployed.
     /// </summary>
     public static WebApplication MapHealthEndpoints(this WebApplication app)
     {
@@ -99,7 +100,8 @@ public static class ObservabilityExtensions
         var body = new
         {
             status = report.Status.ToString(),
-            checks = report.Entries.ToDictionary(entry => entry.Key, entry => entry.Value.Status.ToString())
+            checks = report.Entries.ToDictionary(entry => entry.Key, entry => entry.Value.Status.ToString()),
+            commit = BuildInfo.Commit
         };
         return context.Response.WriteAsync(JsonSerializer.Serialize(body));
     }

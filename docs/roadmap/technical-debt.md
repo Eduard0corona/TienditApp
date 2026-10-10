@@ -315,6 +315,10 @@ Pendientes detectados en la Fase 3:
 
 - `TenantSettings.RequireOpenCashSession`, de la política que pedía caja solo para cobrar en efectivo, se borró en dos pasos: la PR #47 y la Fase 15 dejaron de mapearla (las dos `StopMappingRequireOpenCashSession`) y `DropRequireOpenCashSession` (escrita a mano) la borra. Su rollback la crea otra vez en 0 para volver a una versión anterior; los negocios que la tenían activada solo quedan en el respaldo.
 
+## Resuelto el 2026-10-10 (prueba de humo por commit)
+
+- La prueba de humo reconocía la versión nueva solo por el nombre del script del cliente, así que un despliegue que solo cambiaba el backend (como el de la PR #48) la podía pasar con la instancia anterior, incluso sin aplicar su `apply.sql`. Ahora los health checks nombran el commit de la versión (`BuildInfo`), el publish lo fija y la prueba exige el desplegado en `/health/ready` y `/health/schema`.
+
 ## Decisiones humanas pendientes
 
 - Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.

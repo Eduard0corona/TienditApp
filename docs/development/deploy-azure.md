@@ -6,12 +6,13 @@ Cada push a `master` corre el workflow `Deploy WebApp (API + SPA)` (`.github/wor
 
 Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 veces, cada 20 segundos:
 
+- las respuestas de `GET /health/ready` y `GET /health/schema` deben nombrar el commit desplegado (`"commit"`). El publish lo sella en la versión del ensamblado (`-p:SourceRevisionId=${{ github.sha }}`, que queda como `1.0.0+<sha>`) y la API lo reporta en sus health checks. Así no pasa una instancia de la versión anterior, ni siquiera cuando el cliente no cambió y su script conserva el nombre: cada chequeo de abajo lo contesta la versión nueva;
 - `GET /health/ready` debe responder 200 (la API arrancó y llega a la base de datos);
 - `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
-- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build, así que una instancia vieja no pasa);
+- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build del cliente, que solo cambia si cambió el cliente);
 - desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
 
-Si en 10 minutos no se cumplen las cuatro, el workflow falla con el último estado de cada consulta. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
+Si en 10 minutos no se cumplen las cinco, el workflow falla con el último estado de cada consulta y el commit que respondió. Si respondió otro commit, la versión nueva no arrancó; el aviso de migraciones faltantes solo sale cuando lo dice la versión nueva, porque la anterior no conoce sus migraciones. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
 
 ## Entrega del cliente comprimida y en caché
 
