@@ -8,6 +8,7 @@ import type {
   CashSessionStatus,
   CashTransactionType,
   CfdiTaxObject,
+  DayOfWeek,
   InsufficientStockPolicy,
   InventoryMovementReason,
   InventoryMovementType,
@@ -100,6 +101,8 @@ export interface MyTenantDto {
   slug: string;
   role: string;
   status: string;
+  /** The business's logo in small (128 px) for the business switcher; null while it has none. */
+  logoUrl?: string | null;
 }
 
 export interface LoginRequest {
@@ -176,6 +179,8 @@ export interface TenantProfileDto {
   onboardingCompletedAt?: string | null;
   /** IANA time zone of the business: dates show and days start as the business lives them. */
   timeZone?: string;
+  /** The hours of the business in its time zone; null or missing while it has none (never shows as closed). */
+  openingHours?: OpeningIntervalDto[] | null;
   rfc?: string;
   legalName?: string;
   industry?: string;
@@ -188,6 +193,16 @@ export interface TenantProfileDto {
   city?: string;
   state?: string;
   country?: string;
+}
+
+/**
+ * One opening of a day, in the business's time: "09:00" to "14:00". A closing at or before the opening ends the
+ * next day ("18:00" to "02:00"); the same time on both is open the whole day. Up to two openings a day.
+ */
+export interface OpeningIntervalDto {
+  day: DayOfWeek;
+  opens: string;
+  closes: string;
 }
 
 export interface TenantSalesPolicyDto {
@@ -353,6 +368,9 @@ export { OnlineMenuMode } from '../api/generated/enums';
 
 /** Same numbers as Domain.Tenants.Enums.BusinessTheme; the palettes live in utils/businessThemes.ts. */
 export { BusinessTheme } from '../api/generated/enums';
+
+/** Same numbers as .NET's System.DayOfWeek: Sunday is 0. The hours of a business use it. */
+export { DayOfWeek } from '../api/generated/enums';
 
 /**
  * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders

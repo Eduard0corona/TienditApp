@@ -55,6 +55,8 @@ public class TenantProfileDto
     public DateTimeOffset? OnboardingCompletedAt { get; set; }
     /// <summary>IANA time zone of the business: dates show and days start as the business lives them.</summary>
     public string TimeZone { get; set; } = "America/Mexico_City";
+    /// <summary>When the business attends, in its time zone; null while it has no hours.</summary>
+    public List<OpeningIntervalDto>? OpeningHours { get; set; }
 
     // MX Business fields
     public string? Rfc { get; set; }

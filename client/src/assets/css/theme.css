@@ -544,6 +544,22 @@ input[data-switch='primary']:checked + label {
   font-weight: 700;
 }
 
+/* A row that scrolls sideways (useScrollFade): the edge that hides more chips fades, so it shows there is more. */
+.ta-scroll-fade.fade-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+
+.ta-scroll-fade.fade-start {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+
+.ta-scroll-fade.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+}
+
 /* Status chips: always with text, one color per state across the app. */
 .ta-chip {
   display: inline-flex;
@@ -736,6 +752,15 @@ input[data-switch='primary']:checked + label {
   font-weight: 800;
 }
 
+/* The business's logo, whole whatever its shape, small enough for a 58 mm roll. */
+.ta-ticket-logo {
+  display: block;
+  max-width: 10rem;
+  max-height: 4rem;
+  margin: 0 auto 0.35rem;
+  object-fit: contain;
+}
+
 .ta-ticket-lines {
   width: 100%;
   margin-bottom: 0.5rem;
@@ -826,6 +851,28 @@ input[data-switch='primary']:checked + label {
 
 .topbar-business-button .text-truncate {
   min-width: 0;
+}
+
+/* The logo of the business it is in, and each business's logo (or initial) in the list. */
+.topbar-business-logo,
+.topbar-business-avatar {
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.topbar-business-logo {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.topbar-business-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.topbar-business-avatar.photo-initial {
+  font-size: 0.85rem;
 }
 
 .topbar-business-name {

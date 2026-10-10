@@ -4,8 +4,11 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
+import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import type { ProductOptionGroupDto } from '../../types';
 import { formatMoney } from '../../utils/money';
+import { WEEK, dayLabel, describeDay, describeOpeningStatus } from '../../utils/openingHours';
 import { estimateOrderTotals, resolveProductVat } from '../../utils/orderTotals';
 import {
   getLineKey,
@@ -37,6 +40,11 @@ function whatsAppUrl(phone: string | null | undefined, text: string): string | n
   return `https://wa.me/${target}?text=${encodeURIComponent(text)}`;
 }
 
+/** A map search of the address: opens the maps app on a phone. */
+function mapsUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
 function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
   return (product.optionGroups ?? []) as ProductOptionGroupDto[];
 }
@@ -44,14 +52,17 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
 /**
  * The public menu of a business (/m/:slug), without signing in: the catalog the business published and, when
  * it takes orders, a cart that sends the order with the customer's name and phone. A table QR adds ?mesa=.
+ * Its header says whether the business is open now (the API works it out in the business's time), its hours of
+ * the week and its address with a map.
  */
 export default function PublicMenuPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
   const tableLabel = searchParams.get('mesa')?.trim().slice(0, 50) || '';
+  const atTable = tableLabel !== '';
   const menu = useQuery({
-    queryKey: ['public-menu', slug],
-    queryFn: () => publicMenuApi.getMenu(slug),
+    queryKey: ['public-menu', slug, tableLabel],
+    queryFn: () => publicMenuApi.getMenu(slug, tableLabel || undefined),
     retry: false,
     staleTime: 60_000,
   });
@@ -85,6 +96,7 @@ export default function PublicMenuPage() {
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const categories = data?.categories ?? [];
   const visible = category === 'all' ? categories : categories.filter((item) => item.id === category);
+  const { ref: chipsRef, fadeClass: chipsFade } = useScrollFade<HTMLDivElement>(categories.length);
 
   const add = (product: PublicMenuProduct, optionIds: string[]) => {
     const key = getLineKey(product.id, optionIds);
@@ -183,6 +195,12 @@ export default function PublicMenuPage() {
   }
 
   const contact = whatsAppUrl(data.contactPhone, `Hola ${data.businessName}, vi su menú en línea.`);
+  const hours = data.openingHours;
+  const status = hours ? describeOpeningStatus(hours) : null;
+  // Paused while it is closed: its hours say when to come back (at one of its tables the API takes the order anyway).
+  const closedByHours = data.ordersPaused && status?.isOpen === false;
+  // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
+  const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
 
   if (receipt) {
     const followUp = whatsAppUrl(receipt.contactPhone, `Hola, hice el pedido ${receipt.orderNumber} en su menú en línea.`);
@@ -213,12 +231,20 @@ export default function PublicMenuPage() {
   return (
     <div className="pm-page">
       <header className="pm-header">
-        {data.logoUrl && <img src={data.logoUrl} alt="" className="pm-logo" />}
-        <div className="flex-grow-1">
+        <PhotoOrInitial src={data.logoUrl} name={data.businessName} className="pm-logo" loading="eager" />
+        <div className="pm-header-text">
           <h1 className="h5 mb-0">{data.businessName}</h1>
-          <div className="small text-muted">
-            {tableLabel ? `Pedido para ${tableLabel}` : data.acceptsOrders ? 'Pide en línea' : 'Menú'}
-          </div>
+          {status && (
+            <div className="pm-status small">
+              <span className={`ta-chip ${status.isOpen ? 'ta-chip-ready' : 'ta-chip-done'}`}>{status.label}</span>
+              {status.detail && <span className="text-muted">{status.detail}</span>}
+            </div>
+          )}
+          {(atTable || !status) && (
+            <div className="small text-muted">
+              {atTable ? `Pedido para ${tableLabel}` : data.acceptsOrders ? 'Pide en línea' : 'Menú'}
+            </div>
+          )}
         </div>
         {contact && (
           <a className="btn btn-sm btn-success" href={contact} target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">
@@ -227,21 +253,57 @@ export default function PublicMenuPage() {
         )}
       </header>
 
-      {data.ordersPaused && (
+      {(hours || data.address) && (
+        <section className="pm-info" aria-label="Horario y ubicación">
+          {hours && (
+            <details className="pm-hours">
+              <summary>
+                <i className="ri-time-line" aria-hidden="true"></i>
+                <span className="flex-grow-1">Hoy: {describeDay(hours.intervals, hours.today)}</span>
+                <i className="ri-arrow-down-s-line pm-hours-toggle" aria-hidden="true"></i>
+              </summary>
+              <ul className="pm-week list-unstyled" aria-label="Horario de la semana">
+                {WEEK.map((day) => (
+                  <li key={day} aria-current={day === hours.today ? 'date' : undefined}>
+                    <span>{dayLabel(day)}</span>
+                    <span>{describeDay(hours.intervals, day)}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {data.address && (
+            <p className="pm-address">
+              <i className="ri-map-pin-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">{data.address}</span>
+              <a className="text-nowrap" href={mapsUrl(data.address)} target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+            </p>
+          )}
+        </section>
+      )}
+
+      {closedByHours ? (
+        <div className="alert alert-info mx-3 mt-3 mb-0" role="status">
+          Fuera de horario no recibimos pedidos en línea{status?.when ? `: vuelve ${status.when}` : ''}. Mientras, puedes ver
+          el menú.
+        </div>
+      ) : data.ordersPaused && (
         <div className="alert alert-warning mx-3 mt-3 mb-0" role="status">
           Por ahora no estamos recibiendo pedidos en línea. Puedes ver el menú y volver más tarde.
         </div>
       )}
 
       <nav className="pm-chips" aria-label="Categorías">
-        <button type="button" className={`btn btn-sm ${category === 'all' ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory('all')}>
-          Todo
-        </button>
-        {categories.map((item) => (
-          <button key={item.id} type="button" className={`btn btn-sm ${category === item.id ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory(item.id)}>
-            {item.name}
+        <div ref={chipsRef} className={`pm-chips-row ta-scroll-fade ${chipsFade}`}>
+          <button type="button" className={`btn btn-sm ${category === 'all' ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory('all')}>
+            Todo
           </button>
-        ))}
+          {categories.map((item) => (
+            <button key={item.id} type="button" className={`btn btn-sm ${category === item.id ? 'btn-primary' : 'btn-light'}`} onClick={() => setCategory(item.id)}>
+              {item.name}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <main className="pm-list">
@@ -252,7 +314,7 @@ export default function PublicMenuPage() {
               const inCart = lines.filter((line) => line.product.id === product.id).reduce((sum, line) => sum + line.quantity, 0);
               return (
                 <article key={product.id} className={`pm-product ${product.availableNow ? '' : 'unavailable'}`}>
-                  {product.imageUrl && <img src={product.imageUrl} alt="" className="pm-product-image" loading="lazy" />}
+                  {withPhotos && <PhotoOrInitial src={product.imageUrl} name={product.name} className="pm-product-image" />}
                   <div className="flex-grow-1 min-w-0">
                     <h3 className="pm-product-name">{product.name}</h3>
                     {product.description && <p className="pm-product-description">{product.description}</p>}

@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Identity.DTOs;
+using FoodParkDigital.Application.Tenants.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,21 +26,24 @@ public class GetMyTenantsQueryHandler : IRequestHandler<GetMyTenantsQuery, IRead
         if (!Guid.TryParse(_currentUserService.UserId, out var userId))
             return [];
 
-        var result = await (
+        var memberships = await (
             from tu in _context.TenantUsers.IgnoreQueryFilters()
             join t in _context.Tenants.IgnoreQueryFilters() on tu.TenantId equals t.Id
             where tu.UserId == userId
-            select new MyTenantDto
-            {
-                TenantId = t.Id,
-                Name = t.Name,
-                Slug = t.Slug,
-                Role = tu.Role.ToString(),
-                Status = tu.Status.ToString()
-            })
-            .OrderBy(x => x.Name)
+            orderby t.Name
+            select new { t.Id, t.Name, t.Slug, tu.Role, tu.Status, t.LogoUrl })
             .ToListAsync(cancellationToken);
 
-        return result;
+        return memberships
+            .Select(m => new MyTenantDto
+            {
+                TenantId = m.Id,
+                Name = m.Name,
+                Slug = m.Slug,
+                Role = m.Role.ToString(),
+                Status = m.Status.ToString(),
+                LogoUrl = LogoImageUrlsDto.FromBaseUrl(m.LogoUrl)?.Thumbnail
+            })
+            .ToList();
     }
 }

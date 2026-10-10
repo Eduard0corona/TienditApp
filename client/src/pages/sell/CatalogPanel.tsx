@@ -1,5 +1,7 @@
 import type { KeyboardEvent, RefObject } from 'react';
 import { Link } from 'react-router-dom';
+import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import type { CategoryDto, ProductDto } from '../../types';
 import { formatMoney } from '../../utils/money';
 import { allowsFractions, formatQuantity, getUnitShortLabel, roundQuantity } from '../../utils/units';
@@ -48,6 +50,9 @@ export default function CatalogPanel({
   onAdd,
   canManageCatalog,
 }: CatalogPanelProps) {
+  // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
+  const withPhotos = visibleProducts.some((product) => product.images?.thumbnail);
+  const { ref: chipsRef, fadeClass: chipsFade } = useScrollFade<HTMLDivElement>(`${categories.length}-${hasFeatured}`);
 
   return (
     <section className="sell-catalog" aria-label="Catálogo">
@@ -66,7 +71,7 @@ export default function CatalogPanel({
         />
       </div>
 
-      <div className="sell-chips" role="tablist" aria-label="Categorías">
+      <div ref={chipsRef} className={`sell-chips ta-scroll-fade ${chipsFade}`} role="tablist" aria-label="Categorías">
         <button
           type="button"
           role="tab"
@@ -147,8 +152,8 @@ export default function CatalogPanel({
                 onClick={() => onAdd(product)}
                 aria-label={`Agregar ${product.name}, ${price}${inCart > 0 ? `, ${inCartLabel} en el ticket` : ''}`}
               >
-                {product.images?.thumbnail && (
-                  <img src={product.images.thumbnail} alt="" className="sell-product-image" loading="lazy" />
+                {withPhotos && (
+                  <PhotoOrInitial src={product.images?.thumbnail} name={product.name} className="sell-product-image" />
                 )}
                 <span className="sell-product-name">{product.name}</span>
                 <span className="sell-product-price ta-money">{price}</span>

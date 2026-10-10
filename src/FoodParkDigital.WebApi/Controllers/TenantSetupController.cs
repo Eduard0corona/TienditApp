@@ -81,6 +81,16 @@ public class TenantSetupController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>When the business attends: the public menu says whether it is open and when it opens or closes.</summary>
+    [HttpPut("opening-hours")]
+    public async Task<ActionResult<OpeningHoursDto>> UpdateOpeningHours([FromBody] UpdateOpeningHoursRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new UpdateOpeningHoursCommand(request.Intervals), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     /// <summary>The colors of the business for its team's app and its public menu.</summary>
     [HttpPut("theme")]
     public async Task<ActionResult<BusinessThemeDto>> UpdateTheme([FromBody] UpdateBusinessThemeRequest request, CancellationToken cancellationToken)
@@ -95,3 +105,6 @@ public class TenantSetupController : ControllerBase
 public record UpdateOnlineMenuRequest(OnlineMenuMode Mode);
 
 public record UpdateBusinessThemeRequest(BusinessTheme Theme);
+
+/// <summary>The openings of the week; empty or null removes the hours.</summary>
+public record UpdateOpeningHoursRequest(List<OpeningIntervalDto>? Intervals);

@@ -6,34 +6,105 @@
   background: var(--ct-body-bg);
 }
 
+/* The header scrolls away with the hours and the address; the categories stay on top while browsing. */
 .pm-header {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
   background: var(--ct-secondary-bg);
-  border-bottom: 1px solid var(--ct-border-color);
 }
 
 .pm-logo {
+  flex: 0 0 auto;
   width: 3rem;
   height: 3rem;
   border-radius: 50%;
   object-fit: cover;
 }
 
+.pm-header-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Without a logo, the initial of the business in its colors (PhotoOrInitial). */
+.pm-logo.photo-initial {
+  font-size: 1.35rem;
+}
+
+.pm-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.pm-info {
+  padding: 0 1rem 0.35rem;
+  background: var(--ct-secondary-bg);
+  border-bottom: 1px solid var(--ct-border-color);
+  font-size: 0.9rem;
+}
+
+.pm-hours summary,
+.pm-address {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--ta-touch);
+  margin: 0;
+}
+
+.pm-hours summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.pm-hours summary::-webkit-details-marker {
+  display: none;
+}
+
+.pm-hours[open] .pm-hours-toggle {
+  transform: rotate(180deg);
+}
+
+.pm-week {
+  margin: 0 0 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.pm-week li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+}
+
+.pm-week li[aria-current='date'] {
+  font-weight: 700;
+}
+
+.pm-address + .pm-hours,
+.pm-hours + .pm-address {
+  border-top: 1px solid var(--ct-border-color);
+}
+
+/* The bar keeps its background while the row of chips inside scrolls and fades at the edge with more. */
 .pm-chips {
   position: sticky;
-  top: 4.7rem;
+  top: 0;
   z-index: 2;
+  background: var(--ct-body-bg);
+}
+
+.pm-chips-row {
   display: flex;
   gap: 0.5rem;
   padding: 0.6rem 1rem;
   overflow-x: auto;
-  background: var(--ct-body-bg);
   scrollbar-width: none;
 }
 
@@ -75,6 +146,10 @@
   border-radius: var(--ta-radius-sm);
   object-fit: cover;
   flex: 0 0 auto;
+}
+
+.pm-product-image.photo-initial {
+  font-size: 1.75rem;
 }
 
 .pm-product-name {

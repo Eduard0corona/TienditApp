@@ -114,6 +114,32 @@ Listas e Inventario (Fase 18):
 - **Acciones de fila con texto:** 24 acciones que eran solo un ícono dicen lo que hacen ("Editar", "Desactivar", "Eliminar") y van en una sola línea. Su nombre accesible empieza con ese texto y nombra el registro ("Editar Café molido"), como pide WCAG 2.5.3. Seis botones de solo ícono que no tenían nombre accesible (quitar un renglón en el carrito de Pedidos, cerrar la conversación nueva en Mensajes y copiar la URL o el token en WhatsApp) ya lo tienen.
 - **Lo que quedaba de la Fase 17:** las rondas de una cuenta dicen "En preparación", como los pedidos, en Cocina y en Mesas, y el producto tiene "Etiquetas" en lugar de "Tags".
 
+Menú en línea que vende (Fase 19):
+
+- **Horario en Mi negocio (`OpeningHoursCard`):**
+  - Muestra la semana desde el lunes, con un interruptor por día y hasta dos horarios por día ("Agregar horario").
+  - Un día que se enciende toma el horario del día abierto anterior, o 9:00 a 20:00 si no hay ninguno.
+  - Avisa lo que no es obvio: "Cierra al día siguiente", "Cierra a medianoche" y "Abierto las 24 horas".
+  - Antes de guardar pide las horas que faltan. Un encimado lo explica el servidor ("Los horarios del lunes se enciman."), y la tarjeta muestra el mensaje sin cerrar el formulario.
+  - "Quitar horario" pide confirmación y deja el menú como si no hubiera horario.
+  - `utils/openingHours.ts` pone el horario en palabras y en el formulario; si el negocio está abierto lo decide la API (ADR 0011).
+- **Encabezado del menú en línea:**
+  - El logo, o la inicial del negocio en su color, y si está abierto con un chip de estado (`ta-chip-ready` o `ta-chip-done`, nunca el acento): "Abierto · cierra a las 20:00", "Cerrado · abre mañana a las 9:00".
+  - "Hoy: 9:00 a 20:00" abre el horario de la semana (`<details>`, con el día de hoy en `aria-current="date"`).
+  - La dirección, con "Cómo llegar" (una búsqueda en Google Maps), y WhatsApp.
+  - El encabezado se va al bajar y las categorías se quedan arriba. Antes las dos barras eran fijas y las categorías dependían de la altura del encabezado (`top: 4.7rem`).
+- **Fuera de horario:**
+  - El menú dice "Fuera de horario no recibimos pedidos en línea: vuelve mañana a las 9:00. Mientras, puedes ver el menú." y no muestra los botones para agregar.
+  - Desde el QR de una mesa pide el menú con esa mesa (`publicMenuApi.getMenu(slug, table)`, `?table=`). La API recibe el pedido fuera de horario solo si es una mesa del negocio en uso.
+- **Fotos (`PhotoOrInitial`):**
+  - Muestra la foto, o la inicial del nombre sobre el tinte del tema.
+  - En cuanto un producto de la lista tiene foto, los demás muestran su inicial (menú en línea y Vender), y así los nombres quedan alineados. Sin ninguna foto, la lista es solo texto.
+  - Una foto que no carga (sin conexión, borrada) también deja la inicial.
+- **Logo del negocio:**
+  - El selector de negocio (`BusinessSwitcher`, que salió de `Topbar`) muestra el logo del negocio en que estás y el de cada negocio de la lista, o su inicial (`MyTenantDto.logoUrl`, de 128 px).
+  - El ticket imprime el logo arriba del nombre (`TicketExtras.logoUrl`, de 256 px). Si no carga, por ejemplo en una venta sin conexión, sale solo el nombre.
+- **Categorías que avisan cuando hay más:** `useScrollFade` mide la fila y `.ta-scroll-fade` desvanece el borde que esconde más categorías, en Vender y en el menú en línea. La fila se vuelve a medir al deslizarla, al cambiar el tamaño de la ventana y al llegar categorías nuevas.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

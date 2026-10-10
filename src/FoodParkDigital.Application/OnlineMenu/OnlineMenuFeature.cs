@@ -9,10 +9,13 @@ using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -103,13 +106,43 @@ public class PublicMenuDto
     /// <summary>The menu takes orders now; otherwise it only shows the catalog.</summary>
     public bool AcceptsOrders { get; set; }
     /// <summary>
-    /// The business takes online orders, but not right now: the branch they arrive at has no open drawer to charge
-    /// them in.
+    /// The business takes online orders, but not right now: it is outside its hours (<see cref="OpeningHours"/> says
+    /// when it opens) or the branch they arrive at has no open drawer to charge them in.
     /// </summary>
     public bool OrdersPaused { get; set; }
     /// <summary>The colors the business picked: its customers see the menu with them.</summary>
     public BusinessTheme Theme { get; set; }
+    /// <summary>The address in one line, to show it and open it in a map; null without one.</summary>
+    public string? Address { get; set; }
+    /// <summary>Its hours and whether it is open now; null while the business has no hours.</summary>
+    public PublicOpeningHoursDto? OpeningHours { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
+}
+
+/// <summary>The hours of the business on its public menu, worked out in its own time zone.</summary>
+public class PublicOpeningHoursDto
+{
+    public List<OpeningIntervalDto> Intervals { get; set; } = new();
+    /// <summary>Today in the business, for "Hoy" in the hours.</summary>
+    public DayOfWeek Today { get; set; }
+    public bool IsOpen { get; set; }
+    /// <summary>While open: when it closes ("20:00") and in how many days (0 today); null while it never closes.</summary>
+    public string? ClosesAt { get; set; }
+    public int? ClosesInDays { get; set; }
+    /// <summary>While closed: when it opens next ("09:00") and in how many days (0 today, 1 tomorrow).</summary>
+    public string? OpensAt { get; set; }
+    public int? OpensInDays { get; set; }
+
+    public static PublicOpeningHoursDto From(OpeningHours hours, OpeningStatus status, DateTime localNow) => new()
+    {
+        Intervals = hours.ToDtos(),
+        Today = localNow.DayOfWeek,
+        IsOpen = status.IsOpen,
+        ClosesAt = status.ClosesAt?.ToString(OpeningHoursMappings.TimeFormat, System.Globalization.CultureInfo.InvariantCulture),
+        ClosesInDays = status.ClosesAt is { } closes ? (closes.Date - localNow.Date).Days : null,
+        OpensAt = status.OpensAt?.ToString(OpeningHoursMappings.TimeFormat, System.Globalization.CultureInfo.InvariantCulture),
+        OpensInDays = status.OpensAt is { } opens ? (opens.Date - localNow.Date).Days : null
+    };
 }
 
 public class PublicMenuCategoryDto
@@ -141,8 +174,12 @@ public class PublicMenuProductDto
 /// The public menu of a business, by its slug. Only what the business published: available products of
 /// active categories (services are not ordered online). Null when the business has no public menu.
 /// </summary>
+/// <param name="Table">
+/// The table of the QR the customer opened it from. At a table of the business the customer is already seated, and
+/// orders arrive outside the hours.
+/// </param>
 [AllowAnonymousRequest("Menú público del negocio: solo el catálogo que el negocio decidió publicar.")]
-public record GetPublicMenuQuery(string Slug) : IRequest<PublicMenuDto?>;
+public record GetPublicMenuQuery(string Slug, string? Table = null) : IRequest<PublicMenuDto?>;
 
 public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, PublicMenuDto?>
 {
@@ -168,7 +205,10 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
         // A public request has no tenant: the catalog queries below are scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
         var settings = tenant.Settings;
-        var localTime = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(settings.TimeZone));
+        var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(settings.TimeZone)).DateTime;
+        var localTime = localNow.TimeOfDay;
+        var openingStatus = settings.OpeningHours?.StatusAt(localNow);
+        var closedByHours = openingStatus is { IsOpen: false };
 
         var categories = await _context.Categories
             .AsNoTracking()
@@ -192,6 +232,9 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
         var ordersOn = settings.OnlineMenuMode == OnlineMenuMode.Orders;
         var drawerOpen = ordersOn && await OrderCashService.HasOpenDrawerAtBranchAsync(
             _context, tenant.Id, await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken), cancellationToken);
+        // Closed by its hours, it takes no pickup or delivery orders; a customer at one of its tables still orders.
+        var acceptsOrders = drawerOpen
+            && (!closedByHours || await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken));
 
         return new PublicMenuDto
         {
@@ -202,9 +245,11 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             Currency = settings.Currency,
             PricesIncludeTax = settings.PricesIncludeTax,
             DefaultTaxRate = settings.DefaultTaxRate,
-            AcceptsOrders = drawerOpen,
-            OrdersPaused = ordersOn && !drawerOpen,
+            AcceptsOrders = acceptsOrders,
+            OrdersPaused = ordersOn && !acceptsOrders,
             Theme = settings.Theme,
+            Address = AddressText.OneLine(tenant.Address),
+            OpeningHours = settings.OpeningHours is null ? null : PublicOpeningHoursDto.From(settings.OpeningHours, openingStatus!, localNow),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto
@@ -335,6 +380,16 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
 
         // A public request has no tenant: everything below is scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
+
+        // Outside its hours the business takes no pickup or delivery orders; a customer at one of its tables is already there.
+        if (tenant.Settings.OpeningHours is { } hours)
+        {
+            var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(tenant.Settings.TimeZone)).DateTime;
+            var status = hours.StatusAt(localNow);
+            if (!status.IsOpen && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
+                return Result.Failure<PublicOrderReceiptDto>(OpeningHoursText.ClosedMessage(status, localNow));
+        }
+
         // Online orders arrive at the default branch of the business, and only while a drawer is open there.
         var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
         if (!await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken))
@@ -416,6 +471,25 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             BusinessName = tenant.Name,
             ContactPhone = tenant.ContactPhone
         });
+    }
+}
+
+/// <summary>
+/// The tables a customer orders from with the QR of the table (<c>?mesa=</c>). Anyone can type a table into the link,
+/// so only a table of the business that is in use counts as a customer already seated.
+/// </summary>
+internal static class PublicMenuTables
+{
+    public static async Task<bool> IsSeatedAsync(
+        IApplicationDbContext context,
+        Guid tenantId,
+        string? table,
+        CancellationToken cancellationToken)
+    {
+        var name = table?.Trim();
+        if (string.IsNullOrEmpty(name) || name.Length > DiningTable.MaxNameLength)
+            return false;
+        return await context.DiningTables.AnyAsync(t => t.TenantId == tenantId && t.IsActive && t.Name == name, cancellationToken);
     }
 }
 

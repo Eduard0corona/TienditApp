@@ -100,6 +100,10 @@
   border-radius: var(--ta-radius-sm);
 }
 
+.sell-product-image.photo-initial {
+  font-size: 1.75rem;
+}
+
 .sell-product-name {
   font-weight: 700;
   line-height: 1.25;

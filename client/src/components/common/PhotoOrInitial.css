@@ -1,0 +1,14 @@
+/* PhotoOrInitial without a photo: the initial on the tint of the business's theme, the size of the photo. */
+.photo-initial {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--ct-primary-bg-subtle);
+  color: var(--ct-primary-text-emphasis);
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}

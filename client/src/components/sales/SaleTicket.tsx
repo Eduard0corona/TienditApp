@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { OrderDto } from '../../types';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
@@ -16,14 +17,19 @@ interface SaleTicketProps extends TicketExtras {
 }
 
 /** Customer ticket: what was bought, the IVA breakdown computed by the server and how it was paid. */
-export default function SaleTicket({ order, businessName, provisional }: SaleTicketProps) {
+export default function SaleTicket({ order, businessName, logoUrl, provisional }: SaleTicketProps) {
   const taxLines = order.taxBreakdown.filter((line) => line.taxAmount > 0);
   const { tip, cashReceived, change } = getTicketPaymentTotals(order);
   const showCustomer = order.customerName && order.customerName !== 'Público en general';
+  // Without connection the logo may not load: the ticket goes on with the name only.
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
 
   return (
     <div className="ta-ticket ta-print-area" aria-label={`Ticket ${order.orderNumber}`}>
       <div className="text-center mb-2">
+        {logoUrl && logoUrl !== failedLogo && (
+          <img src={logoUrl} alt="" className="ta-ticket-logo" onError={() => setFailedLogo(logoUrl)} />
+        )}
         <div className="ta-ticket-business">{businessName}</div>
         <div className="small">Ticket {order.orderNumber}</div>
         {provisional && <div className="small">Folio provisional: venta registrada sin conexión</div>}

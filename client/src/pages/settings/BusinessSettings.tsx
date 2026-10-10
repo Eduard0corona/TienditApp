@@ -4,6 +4,7 @@ import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
+import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
 import ThemeCard from '../../components/settings/ThemeCard';
 import SubscriptionCard from '../../components/settings/SubscriptionCard';
 import { useMySubscription } from '../../hooks/useMySubscription';
@@ -317,6 +318,7 @@ export default function BusinessSettings() {
       <SubscriptionCard />
       <SalesPolicyCard />
       <OnlineMenuCard />
+      <OpeningHoursCard />
       <ThemeCard />
 
       <div className="row">

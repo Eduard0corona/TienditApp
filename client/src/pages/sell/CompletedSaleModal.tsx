@@ -12,6 +12,8 @@ import type { ChatOrigin, CompletedSale } from './sellModel';
 interface CompletedSaleModalProps {
   sale: CompletedSale | null;
   businessName: string;
+  /** Printed above the name on the ticket. */
+  logoUrl?: string | null;
   /** The chat the sale was started from: the summary goes back to it. */
   chatOrigin: ChatOrigin | null;
   canChat: boolean;
@@ -20,7 +22,7 @@ interface CompletedSaleModalProps {
 }
 
 /** The sale just recorded: the change to hand over, the ticket and how to send it (print, WhatsApp or the chat). */
-export default function CompletedSaleModal({ sale, businessName, chatOrigin, canChat, hasKitchen, onNewSale }: CompletedSaleModalProps) {
+export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOrigin, canChat, hasKitchen, onNewSale }: CompletedSaleModalProps) {
   const toast = useToast();
   const [sendingToChat, setSendingToChat] = useState(false);
   const ticketText = sale ? buildTicketText(sale.order, { businessName, provisional: sale.offline }) : '';
@@ -72,7 +74,7 @@ export default function CompletedSaleModal({ sale, businessName, chatOrigin, can
                 <strong className="ta-money">{formatMoney(change)}</strong>
               </div>
             )}
-            <SaleTicket order={sale.order} businessName={businessName} provisional={sale.offline} />
+            <SaleTicket order={sale.order} businessName={businessName} logoUrl={logoUrl} provisional={sale.offline} />
           </>
         )}
       </Modal.Body>

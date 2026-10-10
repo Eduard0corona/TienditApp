@@ -60,6 +60,7 @@ public class UseCaseRulesTests
         { typeof(UpdateMyTenantCommand), "Manager" },
         { typeof(UpdateSalesPolicyCommand), "Manager" },
         { typeof(UpdateBusinessThemeCommand), "Manager" },
+        { typeof(UpdateOpeningHoursCommand), "Manager" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

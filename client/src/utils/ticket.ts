@@ -8,6 +8,8 @@ import { formatInBusinessZone } from './dates';
 
 export interface TicketExtras {
   businessName: string;
+  /** The business's logo, printed above its name; only the name while it has none. */
+  logoUrl?: string | null;
   /** Charged without connection: the folio is the device's until the server gives the real one. */
   provisional?: boolean;
 }

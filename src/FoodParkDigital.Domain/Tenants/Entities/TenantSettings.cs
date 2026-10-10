@@ -151,6 +151,18 @@ public class TenantSettings : BaseEntity, ITenantScoped
         Theme = theme;
     }
 
+    /// <summary>
+    /// When the business attends, in its time zone; null until the owner sets it. With hours, the public menu says
+    /// whether it is open and takes orders for pickup or delivery only while it is.
+    /// </summary>
+    public OpeningHours? OpeningHours { get; private set; }
+
+    /// <summary>Replaces the hours; null removes them (the business never shows as closed).</summary>
+    public void SetOpeningHours(OpeningHours? hours)
+    {
+        OpeningHours = hours;
+    }
+
     public bool HasCapability(TenantCapability capability)
         => (Capabilities & capability) == capability;
 }

@@ -29,6 +29,8 @@ interface TabPanelProps {
   /** Free tables the tab can move to. */
   freeTables: DiningTable[];
   businessName: string;
+  /** Printed above the name on the ticket. */
+  logoUrl?: string | null;
   onClose: () => void;
 }
 
@@ -40,7 +42,7 @@ const ROUND_STATUS: Record<number, { label: string; className: string }> = {
 };
 
 /** An open tab: its rounds, what is paid and what is left, and the actions of the table. */
-export default function TabPanel({ orderId, freeTables, businessName, onClose }: TabPanelProps) {
+export default function TabPanel({ orderId, freeTables, businessName, logoUrl, onClose }: TabPanelProps) {
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -262,7 +264,7 @@ export default function TabPanel({ orderId, freeTables, businessName, onClose }:
         )}
 
         {order && mode === 'bill' && (
-          <SaleTicket order={order} businessName={businessName} />
+          <SaleTicket order={order} businessName={businessName} logoUrl={logoUrl} />
         )}
 
         {order && mode === 'cancel-item' && cancelling && (
