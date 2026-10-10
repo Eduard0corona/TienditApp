@@ -244,21 +244,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors(CorsPolicyName);
 app.UseMiddleware<PrivateUploadsGuardMiddleware>();
-app.UseDefaultFiles();
-app.UseStaticFiles(new StaticFileOptions
-{
-    OnPrepareResponse = context =>
-    {
-        // User uploads are served from the API origin: they must never run as active content.
-        if (!context.Context.Request.Path.StartsWithSegments("/uploads"))
-            return;
-
-        var headers = context.Context.Response.Headers;
-        headers.ContentSecurityPolicy = "sandbox";
-        if (context.File.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
-            headers.ContentDisposition = "attachment";
-    }
-});
+app.UseClientFiles();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -270,33 +256,7 @@ app.MapControllers();
 // tenant membership and permissions.
 app.MapHub<OrderHub>("/hubs/orders", options => options.CloseOnAuthenticationExpiration = true);
 app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
-app.MapFallback(async context =>
-{
-    var path = context.Request.Path;
-    if (path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs"))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        return;
-    }
-
-    var webRootPath = app.Environment.WebRootPath;
-    if (string.IsNullOrWhiteSpace(webRootPath))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        return;
-    }
-
-    var indexPath = Path.Combine(webRootPath, "index.html");
-    if (!File.Exists(indexPath))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        await context.Response.WriteAsync("Frontend artifact no encontrado. Asegura que client/dist se publique en wwwroot.");
-        return;
-    }
-
-    context.Response.ContentType = "text/html; charset=utf-8";
-    await context.Response.SendFileAsync(indexPath);
-});
+app.MapClientFallback();
 
 if (usesEphemeralJwtSecret)
 {

@@ -64,9 +64,14 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
     - Hyper sigue cargado (436 KB de `app.min.css` y 60 KB de `vendor.min.css` sin uso), con colores compilados que `theme.css` cubre uno por uno.
     - No hay color libre de marca, solo los temas curados.
     - El logo del negocio todavía no salía en el ticket ni en el selector de negocio; se resolvió en la Fase 19.
+- En curso, Fase 20: retirar Hyper, empezando por la entrega del cliente (un PR por subfase).
+  - Resuelto en la 20A: la API manda los scripts y estilos con las copias Brotli y gzip que deja el publish, los guarda en caché un año (`immutable`, porque su nombre lleva el hash) y revisa el `index.html` en cada visita (`no-cache`). La primera visita al menú en línea bajó de 1,274,580 B a 272,273 B. La prueba de humo del despliegue lo exige ([entrega del cliente](../development/deploy-azure.md#entrega-del-cliente-comprimida-y-en-caché)).
+  - Resuelto en la 20A: una página abierta antes de un despliegue avisa "Hay una versión nueva de TienditApp" (al volver a la pestaña y cada 10 minutos); antes seguía con la versión con que se abrió hasta que alguien recargaba.
+  - Resuelto en la 20A: el menú en línea publicaba la dirección fiscal del negocio; ahora publica la de la sucursal principal, y Configuración dice cuál se ve ([ADR 0011](../adr/0011-opening-hours.md), punto 7).
+  - Pendiente (20B a 20F): el arnés de capturas dentro del repo, un layout propio, las clases que hoy solo da Hyper, Bootstrap 5.3.8 compilado con los valores actuales en lugar de `app.min.css` y los arreglos visibles (foco del teclado, contraste del modo oscuro, campos de 16 px en el teléfono).
 - Resuelto en la Fase 19: el menú en línea vende ([ADR 0011](../adr/0011-opening-hours.md)).
   - El negocio captura su horario (hasta dos por día) y el menú dice si está abierto, en la hora del negocio. Fuera de horario no recibe pedidos para recoger o a domicilio, y el servidor también los rechaza; los de una mesa sí llegan.
-  - El encabezado del menú tiene logo o inicial, el horario de la semana, la dirección con "Cómo llegar" y WhatsApp.
+  - El encabezado del menú tiene logo o inicial, el horario de la semana, la dirección de la sucursal principal (nunca la fiscal) con "Cómo llegar" y WhatsApp.
   - Los productos sin foto muestran su inicial cuando otros tienen foto, en el menú y en Vender.
   - El logo del negocio sale en el selector de negocio y en el ticket.
   - Las filas de categorías se desvanecen en el borde que esconde más.

@@ -8,9 +8,21 @@ Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 
 
 - `GET /health/ready` debe responder 200 (la API arrancó y llega a la base de datos);
 - `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
-- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build, así que una instancia vieja no pasa).
+- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build, así que una instancia vieja no pasa);
+- desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
 
-Si en 10 minutos no se cumplen las tres, el workflow falla con el último estado de cada consulta. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
+Si en 10 minutos no se cumplen las cuatro, el workflow falla con el último estado de cada consulta. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
+
+## Entrega del cliente comprimida y en caché
+
+Desde la Fase 20 la API entrega el cliente así (`src/FoodParkDigital.WebApi/Http/ClientDelivery.cs`, probado en `ClientDeliveryTests`):
+
+- **Copias comprimidas del publish.** Al publicar, el SDK de .NET deja junto a cada script y estilo de `client/dist` una copia Brotli (`.br`, a su máxima calidad) y una gzip (`.gz`): es la compresión de static web assets, que el csproj deja encendida (`CompressionEnabled`). La API manda la copia que el navegador acepta (Brotli primero) como el archivo que codifica, con `Content-Encoding` y `Vary: Accept-Encoding`; no comprime nada en cada petición, así que no gasta CPU. Una copia pedida por su nombre responde 404.
+- **Solo `/assets` se comprime.** Las respuestas de la API llevan datos de una sesión y nunca se comprimen: su tamaño no sirve para adivinarlos (BREACH).
+- **Caché.** Los archivos de `/assets` llevan el hash de su contenido en el nombre, así que una versión nueva nunca reusa un nombre: van con `Cache-Control: public, max-age=31536000, immutable` y el navegador no vuelve a preguntar por ellos. `index.html`, que sirve cualquier ruta de la app, va con `no-cache`: el navegador lo revisa en cada visita y un despliegue se ve de inmediato.
+- **Archivos que ya no existen.** Un archivo de `/assets` que no está responde 404, nunca el `index.html`: una página abierta antes del despliegue lo nota y carga la versión nueva (`utils/chunkReload.ts`). Las páginas abiertas que no piden nada nuevo ven el aviso "Hay una versión nueva de TienditApp" (`NewVersionNotice`), que revisa el `index.html` al volver a la pestaña y cada 10 minutos.
+
+Medido en Chromium con tamaño de teléfono sobre el menú en línea (sin fotos): la primera visita bajó de 1,274,580 B a 272,273 B; el CSS global, de 655 KB a 72 KB, y React, de 286 KB a 81 KB. La fuente de iconos (`woff2`, 189 KB) ya viene comprimida y queda igual.
 
 ## Credenciales: del publish profile a OIDC
 

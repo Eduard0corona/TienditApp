@@ -9,6 +9,7 @@ import GlobalSearch from './GlobalSearch';
 import PastDueBanner from './PastDueBanner';
 import SuspendedNotice from './SuspendedNotice';
 import PendingSalesSync from '../sales/PendingSalesSync';
+import NewVersionNotice from '../feedback/NewVersionNotice';
 import FocusBar from './FocusBar';
 import { FocusModeContext, getFocusArea, readFocusedAreas, storeFocusedAreas, type FocusArea, type FocusMode } from './focusMode';
 import { showsPlanNotice } from './navigation';
@@ -161,6 +162,7 @@ export default function Layout() {
           <main className="focus-content">{page}</main>
           <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
           {canSell && <PendingSalesSync />}
+          <NewVersionNotice />
         </div>
       </FocusModeContext.Provider>
     );
@@ -190,6 +192,8 @@ export default function Layout() {
         <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
         {/* Sales charged without connection are sent from any screen once it comes back. */}
         {canSell && !isSuspended && <PendingSalesSync />}
+        {/* A till stays open all day: it hears about a deploy without anyone reloading it. */}
+        <NewVersionNotice />
       </div>
     </FocusModeContext.Provider>
   );
