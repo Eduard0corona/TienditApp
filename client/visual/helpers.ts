@@ -35,9 +35,9 @@ export async function open(page: Page, route: string) {
   await settle(page);
 }
 
-/** Waits for a dialog (modal or side panel) to finish opening. */
-export async function dialog(page: Page, name?: string | RegExp): Promise<Locator> {
-  const found = name ? page.getByRole('dialog', { name }) : page.getByRole('dialog').last();
+/** Waits for a dialog (modal or side panel) to finish opening. It is found by its name: the text of its title. */
+export async function dialog(page: Page, name: string | RegExp): Promise<Locator> {
+  const found = page.getByRole('dialog', { name });
   await found.waitFor({ state: 'visible' });
   await settle(page);
   return found;

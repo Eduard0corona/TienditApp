@@ -40,7 +40,7 @@ npx playwright show-report visual/.work/report   # las diferencias, con la image
   - `open` abre una ruta y espera a que termine de dibujarse;
   - `snap` compara la página completa;
   - `snapElement` compara un elemento;
-  - `dialog` espera a que un diálogo termine de abrir.
+  - `dialog` busca un diálogo por su nombre (el texto de su título) y espera a que termine de abrir.
 - **Respuestas que faltan:**
   - Las respuestas que solo necesita un grupo van en su archivo `scenes/<grupo>.mocks.ts`, con `test.use({ extraRoutes, prepareData })`.
   - Lo que comparten todos va en `mocks/`.
