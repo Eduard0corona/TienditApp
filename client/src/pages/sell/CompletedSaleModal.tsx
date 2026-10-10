@@ -87,10 +87,7 @@ export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOr
             <button type="button" className="btn btn-success btn-touch" onClick={() => void sendSummaryToChat()} disabled={sendingToChat}>
               <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>{sendingToChat ? 'Enviando…' : 'Enviar resumen al chat'}
             </button>
-            <Link
-              className="btn btn-light btn-touch"
-              to={chatOrigin.conversationId ? `/whatsapp/chat?conversation=${chatOrigin.conversationId}` : '/whatsapp/chat'}
-            >
+            <Link className="btn btn-light btn-touch" to={`/whatsapp/chat?conversation=${chatOrigin.conversationId}`}>
               Volver al chat
             </Link>
           </>

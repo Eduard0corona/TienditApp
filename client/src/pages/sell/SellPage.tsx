@@ -41,10 +41,12 @@ import {
   MAX_QUANTITY_PER_LINE,
   NO_SALE_DETAILS,
   readChatOrigin,
+  readCustomerPrefill,
   readTabTarget,
   type CategoryFilter,
   type ChatOrigin,
   type CompletedSale,
+  type CustomerPrefill,
   type MeasureRequest,
   type OptionsRequest,
   type SaleDetails,
@@ -114,7 +116,9 @@ export default function SellPage() {
   const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
   const [tabOrder, setTabOrder] = useState<OrderDto | null>(null);
   const [choosing, setChoosing] = useState<OptionsRequest | null>(null);
-  // Read once: the link fills the customer after the saved draft is restored.
+  // Read once: the link fills the customer after the saved draft is restored. Only a link from a chat (with its
+  // conversation) makes it a WhatsApp order; the customer card just fills the customer in.
+  const pendingCustomer = useRef<CustomerPrefill | null>(readCustomerPrefill(searchParams));
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [measure, setMeasure] = useState<MeasureRequest | null>(null);
@@ -144,12 +148,15 @@ export default function SellPage() {
         });
         setShowDetails(Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
       }
-      const origin = pendingChatOrigin.current;
-      if (origin) {
-        pendingChatOrigin.current = null;
-        setDetails((current) => ({ ...current, customerPhone: origin.phone, customerName: origin.name ?? '' }));
+      const customer = pendingCustomer.current;
+      if (customer) {
+        pendingCustomer.current = null;
+        setDetails((current) => ({ ...current, customerPhone: customer.phone, customerName: customer.name ?? '' }));
         setShowDetails(true);
-        setChatOrigin(origin);
+      }
+      if (pendingChatOrigin.current) {
+        setChatOrigin(pendingChatOrigin.current);
+        pendingChatOrigin.current = null;
       }
     } else {
       // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
