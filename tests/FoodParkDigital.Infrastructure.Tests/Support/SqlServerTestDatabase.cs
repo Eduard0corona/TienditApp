@@ -73,6 +73,16 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
     /// <param name="tenantId">The business in context: its rows pass the tenant filter (none without one).</param>
     public ApplicationDbContext CreateContext(Guid? tenantId = null)
+        => CreateContext(tenantId, (options, tenant, mediator) => new ApplicationDbContext(options, tenant, mediator));
+
+    /// <summary>
+    /// A context of an earlier version of the app: a subclass of <see cref="ApplicationDbContext"/> that maps less, for
+    /// a test that takes the database back to the migrations that version ran on.
+    /// </summary>
+    public TContext CreateContext<TContext>(
+        Guid? tenantId,
+        Func<DbContextOptions<ApplicationDbContext>, ICurrentTenantService, IMediator, TContext> create)
+        where TContext : ApplicationDbContext
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlServer(_connectionString, sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery))
@@ -80,7 +90,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
         if (tenantId is { } id)
             tenant.SetTenant(id);
-        return new ApplicationDbContext(options, tenant, new InMemoryApplicationDbContext.NullMediator());
+        return create(options, tenant, new InMemoryApplicationDbContext.NullMediator());
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -6,6 +7,7 @@ using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -94,7 +96,8 @@ public class UnmappedColumnsSqlServerTests
         }
 
         await MigrateAsync(database, BeforeDroppingRequireOpenCashSession);
-        await using (var context = database.CreateContext(tenant.Id))
+        // The version that ran there no longer mapped the column, and did not map the hours of Fase 19 yet.
+        await using (var context = CreateVersionBeforeOpeningHours(database, tenant.Id))
         {
             // Nothing changed in the database: the column keeps its values and the default new rows take.
             Assert.Equal(1, await CountAsync(context, $"""
@@ -141,7 +144,7 @@ public class UnmappedColumnsSqlServerTests
         // version saves meanwhile. The policy turned on before is lost.
         await MigrateAsync(database, BeforeDroppingRequireOpenCashSession);
         var later = new Tenant("Después", slug + "c", BusinessType.Retail, $"{slug}c@demo.com");
-        await using (var context = database.CreateContext(later.Id))
+        await using (var context = CreateVersionBeforeOpeningHours(database, later.Id))
         {
             context.AddRange(later, new TenantSettings(later.Id, TenantCapability.Retail));
             await context.SaveChangesAsync();
@@ -156,6 +159,25 @@ public class UnmappedColumnsSqlServerTests
         {
             Assert.Equal(0, await RequireOpenCashSessionColumnsAsync(context));
             Assert.False((await context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id)).PricesIncludeTax);
+        }
+    }
+
+    private static VersionBeforeOpeningHoursContext CreateVersionBeforeOpeningHours(SqlServerTestDatabase database, Guid tenantId)
+        => database.CreateContext(tenantId, (options, tenant, mediator) => new VersionBeforeOpeningHoursContext(options, tenant, mediator));
+
+    /// <summary>
+    /// The app as deployed before Fase 19, which saved settings without TenantSettings.OpeningHours: it ran on the
+    /// migrations before AddOpeningHours, where that column does not exist.
+    /// </summary>
+    private sealed class VersionBeforeOpeningHoursContext(
+        DbContextOptions<ApplicationDbContext> options,
+        ICurrentTenantService tenantService,
+        IMediator mediator) : ApplicationDbContext(options, tenantService, mediator)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<TenantSettings>().Ignore(settings => settings.OpeningHours);
         }
     }
 

@@ -32,6 +32,7 @@ public static class TenantMappings
         Theme = tenant.Settings?.Theme ?? BusinessTheme.Nopal,
         OnboardingCompletedAt = tenant.Settings?.OnboardingCompletedAt,
         TimeZone = tenant.Settings?.TimeZone ?? BusinessTimeZones.Default,
+        OpeningHours = tenant.Settings?.OpeningHours?.ToDtos(),
         Rfc = tenant.Rfc,
         LegalName = tenant.LegalName,
         Industry = tenant.Industry,

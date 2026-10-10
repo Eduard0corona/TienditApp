@@ -193,15 +193,20 @@ public sealed class CrossTenantHttpSqlServerTests
             using var colors = InBusiness(A.TenantId, HttpMethod.Put, "/api/v1/auth/my-tenant/theme");
             colors.Content = JsonContent.Create(new { theme });
             await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(colors));
+            using var hours = InBusiness(A.TenantId, HttpMethod.Put, "/api/v1/auth/my-tenant/opening-hours");
+            hours.Content = JsonContent.Create(new { intervals = new[] { new { day = 1, opens = "09:00", closes = "20:00" } } });
+            await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(hours));
 
             var aAfter = await A.Client.GetFromJsonAsync<JsonElement>("/api/v1/auth/my-tenant");
             var bAfter = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/auth/my-tenant");
-            foreach (var setting in new[] { "pricesIncludeTax", "insufficientStockPolicy", "onlineMenuMode", "theme" })
+            foreach (var setting in new[] { "pricesIncludeTax", "insufficientStockPolicy", "onlineMenuMode", "theme", "openingHours" })
                 Assert.Equal(aBefore.GetProperty(setting).GetRawText(), aAfter.GetProperty(setting).GetRawText());
             Assert.Equal(pricesIncludeTax, bAfter.GetProperty("pricesIncludeTax").GetBoolean());
             Assert.Equal(stockPolicy, bAfter.GetProperty("insufficientStockPolicy").GetInt32());
             Assert.Equal(menuMode, bAfter.GetProperty("onlineMenuMode").GetInt32());
             Assert.Equal(theme, bAfter.GetProperty("theme").GetInt32());
+            var bHours = Assert.Single(bAfter.GetProperty("openingHours").EnumerateArray());
+            Assert.Equal("09:00", bHours.GetProperty("opens").GetString());
 
             // The guided setup and the plan it shows are B's as well.
             var setup = await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, "/api/v1/auth/my-tenant/setup")));
@@ -218,6 +223,8 @@ public sealed class CrossTenantHttpSqlServerTests
                 new { mode = bBefore.GetProperty("onlineMenuMode").GetInt32() }));
             await TwoBusinessesApi.ReadAsync(await B.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/theme",
                 new { theme = bBefore.GetProperty("theme").GetInt32() }));
+            await TwoBusinessesApi.ReadAsync(await B.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/opening-hours",
+                new { intervals = bBefore.GetProperty("openingHours").ValueKind == JsonValueKind.Array ? bBefore.GetProperty("openingHours") : default(JsonElement?) }));
         }
     }
 

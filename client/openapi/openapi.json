@@ -7677,6 +7677,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "table",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9120,6 +9127,54 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OnlineMenuSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/my-tenant/opening-hours": {
+      "put": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOpeningHoursRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOpeningHoursRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOpeningHoursRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningHoursDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningHoursDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpeningHoursDto"
                 }
               }
             }
@@ -13311,6 +13366,28 @@
         },
         "additionalProperties": false
       },
+      "DayOfWeek": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday"
+        ]
+      },
       "DiningRoomDto": {
         "required": [
           "tables",
@@ -15049,6 +15126,10 @@
           },
           "status": {
             "type": "string"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -15161,6 +15242,41 @@
           "roundsReady": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OpeningHoursDto": {
+        "required": [
+          "intervals"
+        ],
+        "type": "object",
+        "properties": {
+          "intervals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningIntervalDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "OpeningIntervalDto": {
+        "required": [
+          "closes",
+          "day",
+          "opens"
+        ],
+        "type": "object",
+        "properties": {
+          "day": {
+            "$ref": "#/components/schemas/DayOfWeek"
+          },
+          "opens": {
+            "type": "string"
+          },
+          "closes": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -17076,6 +17192,13 @@
           "theme": {
             "$ref": "#/components/schemas/BusinessTheme"
           },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "openingHours": {
+            "$ref": "#/components/schemas/PublicOpeningHoursDto"
+          },
           "categories": {
             "type": "array",
             "items": {
@@ -17147,6 +17270,47 @@
             "items": {
               "$ref": "#/components/schemas/ProductOptionGroupDto"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicOpeningHoursDto": {
+        "required": [
+          "intervals",
+          "isOpen",
+          "today"
+        ],
+        "type": "object",
+        "properties": {
+          "intervals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningIntervalDto"
+            }
+          },
+          "today": {
+            "$ref": "#/components/schemas/DayOfWeek"
+          },
+          "isOpen": {
+            "type": "boolean"
+          },
+          "closesAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "closesInDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "opensAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "opensInDays": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -19082,6 +19246,13 @@
           "timeZone": {
             "type": "string"
           },
+          "openingHours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningIntervalDto"
+            },
+            "nullable": true
+          },
           "rfc": {
             "type": "string",
             "nullable": true
@@ -19964,6 +20135,19 @@
         "properties": {
           "mode": {
             "$ref": "#/components/schemas/OnlineMenuMode"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateOpeningHoursRequest": {
+        "type": "object",
+        "properties": {
+          "intervals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpeningIntervalDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false

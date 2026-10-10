@@ -27,6 +27,10 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .HasDefaultValue(BusinessTheme.Nopal)
             .ValueGeneratedNever()
             .IsRequired();
+        // Null until the owner sets the hours: the version this one replaces does not map it.
+        builder.Property(s => s.OpeningHours)
+            .HasConversion(OpeningHoursStorage.Converter)
+            .HasMaxLength(OpeningHoursStorage.MaxLength);
 
         builder.HasIndex(s => s.TenantId).IsUnique();
     }

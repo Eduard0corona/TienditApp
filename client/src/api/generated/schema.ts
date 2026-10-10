@@ -6303,7 +6303,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    table?: string;
+                };
                 header?: never;
                 path: {
                     slug: string;
@@ -7479,6 +7481,49 @@ export interface paths {
                         "text/plain": components["schemas"]["OnlineMenuSettingsDto"];
                         "application/json": components["schemas"]["OnlineMenuSettingsDto"];
                         "text/json": components["schemas"]["OnlineMenuSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/my-tenant/opening-hours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOpeningHoursRequest"];
+                    "text/json": components["schemas"]["UpdateOpeningHoursRequest"];
+                    "application/*+json": components["schemas"]["UpdateOpeningHoursRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OpeningHoursDto"];
+                        "application/json": components["schemas"]["OpeningHoursDto"];
+                        "text/json": components["schemas"]["OpeningHoursDto"];
                     };
                 };
             };
@@ -9048,6 +9093,11 @@ export interface components {
             };
             topSellingItems: components["schemas"]["TopSellingItemDto"][];
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        DayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
         DiningRoomDto: {
             tables: components["schemas"]["DiningTableDto"][];
             tabsWithoutTable: components["schemas"]["OpenTabSummaryDto"][];
@@ -9546,6 +9596,7 @@ export interface components {
             slug: string;
             role: string;
             status: string;
+            logoUrl?: string | null;
         };
         /**
          * Format: int32
@@ -9583,6 +9634,14 @@ export interface components {
             roundsInKitchen: number;
             /** Format: int32 */
             roundsReady: number;
+        };
+        OpeningHoursDto: {
+            intervals: components["schemas"]["OpeningIntervalDto"][];
+        };
+        OpeningIntervalDto: {
+            day: components["schemas"]["DayOfWeek"];
+            opens: string;
+            closes: string;
         };
         OperationalReportDto: {
             /** Format: date-time */
@@ -10169,6 +10228,8 @@ export interface components {
             acceptsOrders: boolean;
             ordersPaused: boolean;
             theme: components["schemas"]["BusinessTheme"];
+            address?: string | null;
+            openingHours?: components["schemas"]["PublicOpeningHoursDto"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -10189,6 +10250,17 @@ export interface components {
             availableNow: boolean;
             allergens?: string | null;
             optionGroups: components["schemas"]["ProductOptionGroupDto"][];
+        };
+        PublicOpeningHoursDto: {
+            intervals: components["schemas"]["OpeningIntervalDto"][];
+            today: components["schemas"]["DayOfWeek"];
+            isOpen: boolean;
+            closesAt?: string | null;
+            /** Format: int32 */
+            closesInDays?: number | null;
+            opensAt?: string | null;
+            /** Format: int32 */
+            opensInDays?: number | null;
         };
         PublicOrderReceiptDto: {
             orderNumber: string;
@@ -10753,6 +10825,7 @@ export interface components {
             /** Format: date-time */
             onboardingCompletedAt?: string | null;
             timeZone: string;
+            openingHours?: components["schemas"]["OpeningIntervalDto"][] | null;
             rfc?: string | null;
             legalName?: string | null;
             industry?: string | null;
@@ -10994,6 +11067,9 @@ export interface components {
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];
+        };
+        UpdateOpeningHoursRequest: {
+            intervals?: components["schemas"]["OpeningIntervalDto"][] | null;
         };
         UpdateOrderStatusRequest: {
             newStatus: components["schemas"]["OrderStatus"];

@@ -23,11 +23,14 @@ public class PublicMenuController : ControllerBase
         _mediator = mediator;
     }
 
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="table">The table of the QR it was opened from: at a table of the business, orders arrive outside the hours.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
     [HttpGet]
     [EnableRateLimiting("public-menu")]
-    public async Task<ActionResult<PublicMenuDto>> GetMenu(string slug, CancellationToken cancellationToken)
+    public async Task<ActionResult<PublicMenuDto>> GetMenu(string slug, [FromQuery] string? table, CancellationToken cancellationToken)
     {
-        var menu = await _mediator.Send(new GetPublicMenuQuery(slug), cancellationToken);
+        var menu = await _mediator.Send(new GetPublicMenuQuery(slug, table), cancellationToken);
         return menu is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(menu);
     }
 

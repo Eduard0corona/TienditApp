@@ -3356,6 +3356,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("OnlineMenuMode")
                         .HasColumnType("int");
 
+                    b.Property<string>("OpeningHours")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<int>("OrderNotificationPolicy")
                         .HasColumnType("int");
 
