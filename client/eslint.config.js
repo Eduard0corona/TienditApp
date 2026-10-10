@@ -8,6 +8,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   globalIgnores(['dist']),
+  globalIgnores(['visual/.work', 'visual/.snapshots']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -28,5 +29,11 @@ export default defineConfig([
       // Dialogs focus their main field on purpose: at the counter the cashier types the amount right away.
       'jsx-a11y/no-autofocus': 'off',
     },
+  },
+  // The visual scenes run in Node through Playwright: they read files and the process, and have no React.
+  {
+    files: ['visual/**/*.ts'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
   },
 ])

@@ -45,3 +45,7 @@ src/FoodParkDigital.WebApi/Properties/ServiceDependencies/
 ## Archivos que suben los negocios al probar en local (públicos y privados)
 src/FoodParkDigital.WebApi/wwwroot/uploads/
 src/FoodParkDigital.WebApi/App_Data/
+
+# Visual scenes of the client (client/visual/README.md): baselines, builds and reports stay local.
+client/visual/.snapshots/
+client/visual/.work/

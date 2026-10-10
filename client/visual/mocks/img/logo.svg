@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<rect width="400" height="400" fill="#5b3a29"/>
+<circle cx="200" cy="200" r="150" fill="none" stroke="#f1dcc2" stroke-width="10"/>
+<path d="M150 150 q50 -60 100 0 q-50 30 -100 0 z" fill="#f1dcc2"/>
+<text x="200" y="250" text-anchor="middle" font-family="Georgia, 'DejaVu Serif', serif" font-size="92" font-weight="700" fill="#f1dcc2">CE</text>
+</svg>

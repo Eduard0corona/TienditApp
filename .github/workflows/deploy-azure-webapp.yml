@@ -54,6 +54,7 @@ jobs:
           npm run lint
           npm test
           npm run build
+          node scripts/check-bundle.mjs
 
       # Framework-dependent publish: the App Service stack must be .NET 10.
       - name: Setup .NET

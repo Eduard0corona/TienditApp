@@ -344,5 +344,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # What a first visit downloads before the first screen, against client/bundle-budget.json.
+      - name: Check the first-visit budget
+        run: node scripts/check-bundle.mjs
+
+      # The visual scenes (client/visual) run locally, but they must keep compiling against the client's types.
+      - name: Typecheck the visual scenes
+        run: npm run visual:typecheck
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
