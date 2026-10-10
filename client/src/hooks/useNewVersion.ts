@@ -9,7 +9,7 @@ export const MIN_GAP_MS = 60_000;
 /**
  * True once a newer version of the app is deployed than the one this page runs. It asks when the page comes back
  * into view or online, and every few minutes while it stays in view; never right after loading, which got the
- * current one.
+ * current one. The layout holds it, so switching between focus mode and the full app keeps what it found.
  */
 export function useNewVersion(): boolean {
   const [available, setAvailable] = useState(false);

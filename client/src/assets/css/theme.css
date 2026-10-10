@@ -689,11 +689,12 @@ input[data-switch='primary']:checked + label {
 
 /*
  * A newer version is deployed (NewVersionNotice): centered under the top bar, where pages leave room between the
- * title and their actions, clear of the toasts, the tab bar and the cart at the bottom.
+ * title and their actions, clear of the toasts, the tab bar and the cart at the bottom. Above the bars (1005, 1020)
+ * and below the menu drawer, panels and dialogs (1040 and up): it never covers Cobrar while a charge is sent.
  */
 .ta-new-version {
   position: fixed;
-  z-index: 1085;
+  z-index: 1035;
   top: calc(var(--ct-topbar-height, 70px) + 0.75rem);
   left: 0;
   right: 0;

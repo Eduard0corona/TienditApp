@@ -3,6 +3,8 @@ using System.Net;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -27,6 +29,10 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
     [InlineData("gzip, deflate, br", "br")]
     [InlineData("gzip", "gzip")]
     [InlineData("br;q=0, gzip", "gzip")]
+    [InlineData("*", "br")]
+    [InlineData("br;q=0, *", "gzip")]
+    // The server picks Brotli while the browser takes it at all, as browsers rank them alike.
+    [InlineData("br;q=0.1, gzip;q=1", "br")]
     public async Task AnAssetOfTheBuild_ShouldGoPrecompressedToABrowserThatAcceptsIt(string acceptEncoding, string expected)
     {
         using var response = await GetAsync("/assets/index-abc123.js", acceptEncoding);
@@ -49,6 +55,38 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
         Assert.Contains("Accept-Encoding", response.Headers.Vary);
         Assert.Equal(Immutable, response.Headers.CacheControl?.ToString());
         Assert.Equal(BuiltClient.Script, Encoding.UTF8.GetString(await response.Content.ReadAsByteArrayAsync()));
+    }
+
+    [Fact]
+    public async Task AHeadRequest_ShouldDescribeTheSameCopyAsTheGet()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Head, "/assets/index-abc123.js");
+        request.Headers.TryAddWithoutValidation("Accept-Encoding", "br, gzip");
+        using var response = await _client.Http.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["br"], response.Content.Headers.ContentEncoding);
+        Assert.Equal(_client.BrotliScriptLength, response.Content.Headers.ContentLength);
+        Assert.Equal(Immutable, response.Headers.CacheControl?.ToString());
+    }
+
+    [Theory]
+    [InlineData("If-Match", "\"otra\"")]
+    [InlineData("If-Unmodified-Since", "Mon, 01 Jan 2001 00:00:00 GMT")]
+    [InlineData("Range", "bytes=999999-")]
+    public async Task AFailedPreconditionOrRange_ShouldNotBeKeptByAnyCache(string header, string value)
+    {
+        // A 412 or a 416 marked as cacheable for a year could be kept by a shared cache under the file's address and
+        // served to everyone instead of the script.
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/assets/index-abc123.js");
+        request.Headers.TryAddWithoutValidation("Accept-Encoding", "br, gzip");
+        request.Headers.TryAddWithoutValidation(header, value);
+        using var response = await _client.Http.SendAsync(request);
+
+        Assert.True(response.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.RequestedRangeNotSatisfiable,
+            $"{header} answered {(int)response.StatusCode}");
+        Assert.Null(response.Headers.CacheControl);
+        Assert.Empty(response.Content.Headers.ContentEncoding);
     }
 
     [Fact]
@@ -84,6 +122,10 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
     [InlineData("/assets/index-old999.js")]
     [InlineData("/assets/index-abc123.js.br")]
     [InlineData("/assets/index-abc123.js.gz")]
+    // The publish also compresses index.html and the images at the root: their copies are not served either.
+    [InlineData("/index.html.gz")]
+    [InlineData("/index.html.br")]
+    [InlineData("/favicon.svg.gz")]
     public async Task AFileTheBuildDoesNotServe_ShouldNotBeFound(string path)
     {
         // An open page of an older version asks for a file the deploy replaced: a 404 (not the app's page) makes it
@@ -91,6 +133,15 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
         using var response = await GetAsync(path, "br, gzip");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public void TheWebRootOfTheseTests_ShouldBeOnlyTheirFolder()
+    {
+        // With client/dist built, Development would also serve its files and these tests would pass for other reasons.
+        Assert.Equal(
+            ["assets", "favicon.svg", "favicon.svg.br", "favicon.svg.gz", "index.html", "index.html.br", "index.html.gz", "uploads"],
+            _client.WebRootFiles.GetDirectoryContents("/").Select(file => file.Name).Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -143,9 +194,12 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
         public BuiltClient()
         {
             var assets = Directory.CreateDirectory(Path.Combine(_webRoot, "assets")).FullName;
-            File.WriteAllText(Path.Combine(_webRoot, "index.html"),
-                "<!doctype html><html><head><script type=\"module\" src=\"/assets/index-abc123.js\"></script></head></html>");
+            // As the publish lays it out: copies next to the files of /assets and next to index.html and the images.
+            WriteWithCopies(Path.Combine(_webRoot, "index.html"),
+                "<!doctype html><html><head><script type=\"module\" src=\"/assets/index-abc123.js\"></script></head></html>", brotli: true);
+            WriteWithCopies(Path.Combine(_webRoot, "favicon.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>", brotli: true);
             WriteWithCopies(Path.Combine(assets, "index-abc123.js"), Script, brotli: true);
+            BrotliScriptLength = new FileInfo(Path.Combine(assets, "index-abc123.js.br")).Length;
             WriteWithCopies(Path.Combine(assets, "index-abc123.css"), string.Concat(Enumerable.Repeat(".card{padding:1.5rem}", 100)), brotli: false);
             File.WriteAllBytes(Path.Combine(assets, "remixicon-abc123.woff2"), [0x77, 0x4F, 0x46, 0x32, 1, 2, 3, 4]);
             var photo = Directory.CreateDirectory(Path.Combine(_webRoot, "uploads", "products", "p1")).FullName;
@@ -155,6 +209,9 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
             {
                 host.UseEnvironment("Development");
                 host.UseWebRoot(_webRoot);
+                // Development would add the build's static web assets (client/dist, if it was built, and its copies)
+                // to the web root: without a manifest the web root is only this folder.
+                host.UseSetting(WebHostDefaults.StaticWebAssetsKey, Path.Combine(_webRoot, "sin-manifiesto.json"));
                 host.UseSetting("ConnectionStrings:DefaultConnection", "Server=127.0.0.1,1;Database=SinBase;Encrypt=False");
                 host.UseSetting("Database:AutoMigrateOnStartup", "false");
                 host.UseSetting("Database:SeedOnStartup", "false");
@@ -164,6 +221,11 @@ public sealed class ClientDeliveryTests : IClassFixture<ClientDeliveryTests.Buil
         }
 
         public HttpClient Http { get; }
+
+        public long BrotliScriptLength { get; }
+
+        /// <summary>The web root the API serves from: only the folder above, whatever the machine built.</summary>
+        public IFileProvider WebRootFiles => _factory.Services.GetRequiredService<IWebHostEnvironment>().WebRootFileProvider;
 
         public void Dispose()
         {

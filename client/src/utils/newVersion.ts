@@ -1,3 +1,5 @@
+import { appVersionApi } from '../api/appVersionApi';
+
 /**
  * Whether the server has a newer build than the page running: index.html loads one script whose name carries the
  * hash of the build (`/assets/index-<hash>.js`), so a deploy changes it. The API serves index.html checked again on
@@ -20,10 +22,12 @@ export function runningEntryScript(doc: Document = document): string | null {
   return null;
 }
 
-/** Asks for index.html and tells whether it loads another build than `running`. False when it cannot tell. */
+/**
+ * Asks for index.html and tells whether it loads another build than `running`. False when it cannot tell: an error
+ * page, or a page without the app's script (a proxy or Wi-Fi login page, the host's page during a restart).
+ */
 export async function isNewVersionDeployed(running: string): Promise<boolean> {
-  const response = await fetch('/', { cache: 'no-store', headers: { Accept: 'text/html' } });
-  if (!response.ok) return false;
-  const deployed = entryScriptOf(await response.text());
+  const page = await appVersionApi.getDeployedPage();
+  const deployed = page === null ? null : entryScriptOf(page);
   return deployed !== null && deployed !== running;
 }

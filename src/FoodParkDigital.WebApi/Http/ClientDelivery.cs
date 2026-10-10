@@ -7,9 +7,10 @@ namespace FoodParkDigital.WebApi.Http;
 /// How the API hands the React client (client/dist, published into wwwroot) to the browser.
 /// <list type="bullet">
 /// <item>The build names every file in /assets after its content, so a new version never reuses a name: they are
-/// cached for a year. When it publishes, the .NET SDK leaves a Brotli and a gzip copy next to each script and style
-/// (static web assets compression, kept on in the csproj). The browser gets the copy it accepts, as the file it
-/// encodes; nothing is compressed on each request.</item>
+/// cached for a year. When it publishes, the .NET SDK leaves a Brotli and a gzip copy next to each file that
+/// compresses (static web assets compression, kept on in the csproj): scripts and styles, and also index.html and
+/// the images. The browser gets the copy of a file in /assets it accepts, as the file it encodes; nothing is
+/// compressed on each request, and no copy is served by its own name.</item>
 /// <item>index.html, which every route of the app serves, is checked again on each visit: a deploy shows at once.</item>
 /// <item>Only /assets is compressed. The API's responses carry a session's data and are never compressed, so their
 /// size cannot be used to guess it (BREACH).</item>
@@ -21,6 +22,9 @@ public static class ClientDelivery
     public const string PageCacheControl = "no-cache";
 
     private static readonly PathString Assets = new("/assets");
+
+    // The encoding of the copy a request in /assets was pointed at, written as a header only if the file goes out.
+    private const string CopyEncodingKey = "ClientDelivery.CopyEncoding";
 
     // In order of preference: Brotli is smaller.
     private static readonly (string Encoding, string Extension)[] Copies = [("br", ".br"), ("gzip", ".gz")];
@@ -36,10 +40,18 @@ public static class ClientDelivery
             OnPrepareResponse = context =>
             {
                 var request = context.Context.Request;
-                var headers = context.Context.Response.Headers;
+                var response = context.Context.Response;
+                var headers = response.Headers;
                 if (request.Path.StartsWithSegments(Assets))
                 {
+                    // Only a file that goes out (200, 206) or is confirmed (304) is encoded and kept a year. A failed
+                    // precondition or range (412, 416) kept by a shared cache would stand in for the script.
+                    if (response.StatusCode >= StatusCodes.Status400BadRequest)
+                        return;
+
                     headers.CacheControl = AssetsCacheControl;
+                    if (context.Context.Items[CopyEncodingKey] is string encoding)
+                        headers.ContentEncoding = encoding;
                     return;
                 }
 
@@ -98,20 +110,25 @@ public static class ClientDelivery
 
     /// <summary>
     /// Points a request for a file in /assets at its compressed copy when the browser accepts it and the build left
-    /// one. A request for a copy itself is not found: a copy only goes out as the file it encodes.
+    /// one. A request for a copy itself is not found, in /assets or anywhere else the publish left them (index.html,
+    /// the images): a copy only goes out as the file it encodes.
     /// </summary>
     private static Task ServePrecompressedAsset(HttpContext context, Func<Task> next)
     {
         var request = context.Request;
-        if (!request.Path.StartsWithSegments(Assets) || !(HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method)))
+        if (!(HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method))
+            || request.Path.StartsWithSegments("/api") || request.Path.StartsWithSegments("/hubs"))
             return next();
 
-        var path = request.Path.Value!;
+        var path = request.Path.Value ?? string.Empty;
         if (Copies.Any(copy => path.EndsWith(copy.Extension, StringComparison.OrdinalIgnoreCase)))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return Task.CompletedTask;
         }
+
+        if (!request.Path.StartsWithSegments(Assets))
+            return next();
 
         // The same address answers differently by Accept-Encoding: caches must keep them apart.
         context.Response.Headers.Append(HeaderNames.Vary, HeaderNames.AcceptEncoding);
@@ -122,7 +139,7 @@ public static class ClientDelivery
                 continue;
 
             request.Path = new PathString(path + extension);
-            context.Response.Headers.ContentEncoding = encoding;
+            context.Items[CopyEncodingKey] = encoding;
             break;
         }
 

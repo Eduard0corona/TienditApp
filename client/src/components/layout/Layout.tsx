@@ -10,6 +10,7 @@ import PastDueBanner from './PastDueBanner';
 import SuspendedNotice from './SuspendedNotice';
 import PendingSalesSync from '../sales/PendingSalesSync';
 import NewVersionNotice from '../feedback/NewVersionNotice';
+import { useNewVersion } from '../../hooks/useNewVersion';
 import FocusBar from './FocusBar';
 import { FocusModeContext, getFocusArea, readFocusedAreas, storeFocusedAreas, type FocusArea, type FocusMode } from './focusMode';
 import { showsPlanNotice } from './navigation';
@@ -144,6 +145,14 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [canSell, navigate]);
 
+  // Here and not in the notice: focus mode and the full app render different trees, and the notice must survive
+  // switching between them (shown stays shown, closed stays closed).
+  const newVersionDeployed = useNewVersion();
+  const [newVersionClosed, setNewVersionClosed] = useState(false);
+  const newVersionNotice = newVersionDeployed && !newVersionClosed
+    ? <NewVersionNotice onClose={() => setNewVersionClosed(true)} />
+    : null;
+
   const page: ReactNode = (
     // The menu stays while a screen loads or if it fails; another screen clears the error.
     <AppErrorBoundary resetKey={pathname}>
@@ -162,7 +171,7 @@ export default function Layout() {
           <main className="focus-content">{page}</main>
           <GlobalSearch show={searchOpen} onClose={() => setSearchOpen(false)} />
           {canSell && <PendingSalesSync />}
-          <NewVersionNotice />
+          {newVersionNotice}
         </div>
       </FocusModeContext.Provider>
     );
@@ -193,7 +202,7 @@ export default function Layout() {
         {/* Sales charged without connection are sent from any screen once it comes back. */}
         {canSell && !isSuspended && <PendingSalesSync />}
         {/* A till stays open all day: it hears about a deploy without anyone reloading it. */}
-        <NewVersionNotice />
+        {newVersionNotice}
       </div>
     </FocusModeContext.Provider>
   );

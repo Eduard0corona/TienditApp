@@ -35,7 +35,7 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
    - El menú muestra dónde vende el negocio, con "Cómo llegar": la sucursal principal (`Branch.IsDefault`), la misma que recibe los pedidos en línea.
    - La dirección fiscal (`Tenant.Address`) se queda en las facturas. En un negocio chico suele ser la casa del dueño, y el menú es una página pública con un enlace al mapa.
    - Sin calle no se publica: una ciudad sola no le dice a nadie cómo llegar.
-   - La primera versión de la Fase 19 publicaba la dirección fiscal; se cambió el mismo día, antes de que algún negocio la capturara para eso. Configuración avisa en las dos pantallas cuál se publica.
+   - La Fase 19 publicaba la dirección fiscal: desde su despliegue (2026-10-10) hasta la Fase 20A, el menú encendido de cada negocio que la capturó al registrarse o en Configuración › Negocio la mostró con el enlace al mapa. No se revisó en la base cuántos fueron. Configuración avisa ahora en las dos pantallas cuál se publica.
 
 ## Consecuencias
 

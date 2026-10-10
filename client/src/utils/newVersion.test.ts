@@ -25,12 +25,24 @@ describe('newVersion', () => {
   it('asks the server for index.html without the cache and compares builds', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response('<script type="module" src="/assets/index-new222.js"></script>'))
-      .mockResolvedValueOnce(new Response('<script type="module" src="/assets/index-old111.js"></script>'))
-      .mockResolvedValueOnce(new Response('Mantenimiento', { status: 503 }));
+      .mockResolvedValueOnce(new Response('<script type="module" src="/assets/index-old111.js"></script>'));
 
     await expect(isNewVersionDeployed('/assets/index-old111.js')).resolves.toBe(true);
     await expect(isNewVersionDeployed('/assets/index-old111.js')).resolves.toBe(false);
-    await expect(isNewVersionDeployed('/assets/index-old111.js')).resolves.toBe(false);
     expect(fetchMock).toHaveBeenCalledWith('/', expect.objectContaining({ cache: 'no-store' }));
+  });
+
+  it('takes no page without the app for a new version: a Wi-Fi login or the host restarting', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('<html><body>Inicia sesión en la red</body></html>'));
+
+    await expect(isNewVersionDeployed('/assets/index-old111.js')).resolves.toBe(false);
+  });
+
+  it('takes no error page for a new version, even one that names another build', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('<script type="module" src="/assets/index-new222.js"></script>', { status: 503 }),
+    );
+
+    await expect(isNewVersionDeployed('/assets/index-old111.js')).resolves.toBe(false);
   });
 });
