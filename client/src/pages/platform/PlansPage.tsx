@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
@@ -59,6 +59,7 @@ function toForm(plan: Plan): PlanForm {
  * without a plan are not limited; the plan marked for new businesses gives the trial of those that sign up.
  */
 export default function PlansPage() {
+  const titleId = useId();
   const toast = useToast();
   const queryClient = useQueryClient();
   const plans = useQuery({ queryKey: ['platform', 'plans'], queryFn: platformApi.getPlans });
@@ -182,11 +183,11 @@ export default function PlansPage() {
         </div>
       </div>
 
-      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered>
+      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void save(event)}>
             <Modal.Header closeButton>
-              <Modal.Title>{form.id ? `Editar ${form.name}` : 'Nuevo plan'}</Modal.Title>
+              <Modal.Title id={titleId}>{form.id ? `Editar ${form.name}` : 'Nuevo plan'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <div className="row g-2">

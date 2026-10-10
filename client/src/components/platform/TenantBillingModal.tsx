@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
@@ -25,6 +25,7 @@ interface TenantBillingModalProps {
 
 /** Billing of one business: its plan, payments, trial and access, with every action audited by the API. */
 export default function TenantBillingModal({ tenant, plans, onClose }: TenantBillingModalProps) {
+  const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
   const queryClient = useQueryClient();
@@ -108,9 +109,9 @@ export default function TenantBillingModal({ tenant, plans, onClose }: TenantBil
   };
 
   return (
-    <Modal show onHide={onClose} size="lg" centered scrollable>
+    <Modal show onHide={onClose} size="lg" centered scrollable aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title>{tenant.name}</Modal.Title>
+        <Modal.Title id={titleId}>{tenant.name}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {detail.isLoading && <div className="text-center py-4"><div className="spinner-border text-primary" role="status"></div></div>}

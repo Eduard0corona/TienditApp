@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -16,6 +16,7 @@ interface LocationModalProps {
 
 /** A warehouse, the branch it serves and its contact. */
 export default function LocationModal({ show, location, onHide, onSaved }: LocationModalProps) {
+  const titleId = useId();
   const branches = useActiveBranches();
   const [form, setForm] = useState<LocationFormState>(() => (location ? toLocationForm(location) : buildEmptyLocationForm()));
   const [saving, setSaving] = useState(false);
@@ -52,9 +53,9 @@ export default function LocationModal({ show, location, onHide, onSaved }: Locat
   };
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="lg" centered aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title>{location ? 'Editar ubicación' : 'Nueva ubicación'}</Modal.Title>
+        <Modal.Title id={titleId}>{location ? 'Editar ubicación' : 'Nueva ubicación'}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}

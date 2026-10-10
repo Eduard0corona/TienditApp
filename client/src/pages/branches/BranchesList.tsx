@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
@@ -82,6 +82,7 @@ const blankToNull = (value: string) => value.trim() || null;
  * inventory, its own stock. The default branch takes what names no branch and cannot be turned off.
  */
 export default function BranchesList() {
+  const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
   const queryClient = useQueryClient();
@@ -271,11 +272,11 @@ export default function BranchesList() {
         </div>
       </div>
 
-      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered>
+      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void save(event)}>
             <Modal.Header closeButton>
-              <Modal.Title>{editing ? `Editar ${editing.name}` : 'Nueva sucursal'}</Modal.Title>
+              <Modal.Title id={titleId}>{editing ? `Editar ${editing.name}` : 'Nueva sucursal'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <div className="row g-2">

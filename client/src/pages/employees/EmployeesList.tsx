@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -35,6 +35,7 @@ interface ShareTarget {
 
 /** Equipo: who enters the business, with which role, and their pending invitations. */
 export default function EmployeesList() {
+  const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
   const { tenant } = useTenant();
@@ -244,9 +245,9 @@ export default function EmployeesList() {
         />
       )}
 
-      <Modal show={!!share} onHide={() => setShare(null)} centered>
+      <Modal show={!!share} onHide={() => setShare(null)} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">Invitación lista</Modal.Title>
+          <Modal.Title id={titleId} as="h2" className="h5">Invitación lista</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {share && (

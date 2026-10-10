@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { useCfdiDraft, type CfdiReceiver } from '../../api/queries';
@@ -54,6 +54,7 @@ function formatTransfer(transfer: Transfer | null | undefined): string {
  * missing to stamp it. Nothing is sent to the SAT.
  */
 export default function CfdiDraftModal({ orderId, orderNumber, onClose }: CfdiDraftModalProps) {
+  const titleId = useId();
   const [form, setForm] = useState<CfdiReceiver>(EMPTY_RECEIVER);
   const [receiver, setReceiver] = useState<CfdiReceiver | undefined>(undefined);
   const [showReceiver, setShowReceiver] = useState(false);
@@ -75,9 +76,9 @@ export default function CfdiDraftModal({ orderId, orderNumber, onClose }: CfdiDr
   };
 
   return (
-    <Modal show onHide={onClose} size="xl" centered fullscreen="md-down">
+    <Modal show onHide={onClose} size="xl" centered fullscreen="md-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">Factura de {orderNumber} (vista previa)</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">Factura de {orderNumber} (vista previa)</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <p className="text-muted small">

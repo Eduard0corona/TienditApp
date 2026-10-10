@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -126,6 +126,7 @@ function formatSlot(item: AppointmentDto): string {
 }
 
 export default function AppointmentsList() {
+  const titleId = useId();
   const toast = useToast();
   const [data, setData] = useState<PaginatedList<AppointmentDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
@@ -422,9 +423,9 @@ export default function AppointmentsList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={() => !saving && setShowModal(false)} centered>
+      <Modal show={showModal} onHide={() => !saving && setShowModal(false)} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">{editing ? 'Editar o reprogramar la cita' : 'Nueva cita'}</Modal.Title>
+          <Modal.Title id={titleId} as="h2" className="h5">{editing ? 'Editar o reprogramar la cita' : 'Nueva cita'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row">

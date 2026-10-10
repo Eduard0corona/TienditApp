@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { chatApi } from '../../api/chatApi';
@@ -23,6 +23,7 @@ interface CompletedSaleModalProps {
 
 /** The sale just recorded: the change to hand over, the ticket and how to send it (print, WhatsApp or the chat). */
 export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOrigin, canChat, hasKitchen, onNewSale }: CompletedSaleModalProps) {
+  const titleId = useId();
   const toast = useToast();
   const [sendingToChat, setSendingToChat] = useState(false);
   const ticketText = sale ? buildTicketText(sale.order, { businessName, provisional: sale.offline }) : '';
@@ -46,9 +47,9 @@ export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOr
   };
 
   return (
-    <Modal show={!!sale} onHide={onNewSale} centered fullscreen="sm-down">
+    <Modal show={!!sale} onHide={onNewSale} centered fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">
+        <Modal.Title id={titleId} as="h2" className="h5">
           <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
           {sale?.offline
             ? `Venta ${sale.order.orderNumber} guardada sin conexión`

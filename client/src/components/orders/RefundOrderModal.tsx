@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import type { OrderDto, OrderPaymentMethod, RefundOrderRequest, VoidOrderRequest } from '../../types';
 import { OrderPaymentMethod as PaymentMethod } from '../../types';
@@ -39,6 +39,7 @@ function remainingByMethod(order: OrderDto): Array<{ method: OrderPaymentMethod;
  * Refunds never edit the sale: they are recorded apart with their reason.
  */
 export default function RefundOrderModal(props: RefundModalProps) {
+  const titleId = useId();
   const { order, submitting, error, onClose } = props;
   const netPaid = order.netPaidAmount ?? order.paidAmount;
   const remaining = useMemo(() => remainingByMethod(order), [order]);
@@ -91,10 +92,10 @@ export default function RefundOrderModal(props: RefundModalProps) {
   };
 
   return (
-    <Modal show onHide={onClose} centered size="lg">
+    <Modal show onHide={onClose} centered size="lg" aria-labelledby={titleId}>
       <form onSubmit={submit}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">
+          <Modal.Title id={titleId} as="h2" className="h5">
             {props.mode === 'void' ? `Anular la venta ${order.orderNumber}` : `Reembolsar ${order.orderNumber}`}
           </Modal.Title>
         </Modal.Header>

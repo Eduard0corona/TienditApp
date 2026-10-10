@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -44,6 +44,7 @@ const buildEmptyForm = (): SupplierFormState => ({
 });
 
 export default function SuppliersList() {
+  const titleId = useId();
   const [data, setData] = useState<PaginatedList<SupplierDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
   const [pageNumber, setPageNumber] = useState(1);
@@ -248,9 +249,9 @@ export default function SuppliersList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
-          <Modal.Title>{editing ? 'Editar proveedor' : 'Nuevo proveedor'}</Modal.Title>
+          <Modal.Title id={titleId}>{editing ? 'Editar proveedor' : 'Nuevo proveedor'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row">

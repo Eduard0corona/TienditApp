@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { getApiErrorMessage } from '../../api/errors';
@@ -30,6 +30,7 @@ const DEFAULT_PRESET = 'cashier';
  * the invitation link.
  */
 export default function EmployeeFormModal({ employee, presets, permissionOptions, onClose, onSaved }: EmployeeFormModalProps) {
+  const titleId = useId();
   const editingOwner = employee?.tenantRole === 'Owner';
   const initialAppRole = employee ? appRoleFromName(employee.appRole) : AppRole.Staff;
   const initialPreset = employee
@@ -112,9 +113,9 @@ export default function EmployeeFormModal({ employee, presets, permissionOptions
   };
 
   return (
-    <Modal show onHide={() => !saving && onClose()} centered size="lg" scrollable fullscreen="sm-down">
+    <Modal show onHide={() => !saving && onClose()} centered size="lg" scrollable fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">{employee ? `${employee.firstName} ${employee.lastName}` : 'Invitar persona'}</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">{employee ? `${employee.firstName} ${employee.lastName}` : 'Invitar persona'}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <div className="alert alert-danger py-2" role="alert">{error}</div>}

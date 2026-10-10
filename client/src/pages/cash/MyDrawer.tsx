@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable from '../../components/common/DataTable';
@@ -60,6 +60,7 @@ interface MyDrawerProps {
 
 /** The cashier's own drawer: open it, see what it should hold, record expenses and close it with a count. */
 export default function MyDrawer({ branches, workingBranchId, onBranchChosen, onChanged }: MyDrawerProps) {
+  const titleId = useId();
   const toast = useToast();
   const { tenant } = useTenant();
   const refreshCashState = useRefreshCashState();
@@ -400,10 +401,10 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
         />
       )}
 
-      <Modal show={showMovement} onHide={() => setShowMovement(false)} centered>
+      <Modal show={showMovement} onHide={() => setShowMovement(false)} centered aria-labelledby={titleId}>
         <form onSubmit={(event) => void addMovement(event)}>
           <Modal.Header closeButton>
-            <Modal.Title as="h2" className="h5">Registrar movimiento</Modal.Title>
+            <Modal.Title id={titleId} as="h2" className="h5">Registrar movimiento</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             <div className="mb-3" role="radiogroup" aria-label="Tipo de movimiento">

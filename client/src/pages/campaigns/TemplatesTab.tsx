@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -42,6 +42,7 @@ function parameterOrder(body: string): string[] {
 }
 
 export default function TemplatesTab() {
+  const titleId = useId();
   const toast = useToast();
   const [templates, setTemplates] = useState<MessageTemplateDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,10 +186,10 @@ export default function TemplatesTab() {
       </div>
 
       {draft && (
-        <Modal show onHide={() => !saving && setDraft(null)} centered size="lg" fullscreen="sm-down">
+        <Modal show onHide={() => !saving && setDraft(null)} centered size="lg" fullscreen="sm-down" aria-labelledby={titleId}>
           <form onSubmit={(event) => void save(event)}>
             <Modal.Header closeButton={!saving}>
-              <Modal.Title as="h2" className="h5">{draft.id ? 'Editar plantilla' : 'Nueva plantilla'}</Modal.Title>
+              <Modal.Title id={titleId} as="h2" className="h5">{draft.id ? 'Editar plantilla' : 'Nueva plantilla'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <div className="row g-2 mb-3">

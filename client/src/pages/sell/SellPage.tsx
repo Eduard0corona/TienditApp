@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
@@ -59,6 +59,8 @@ import './SellPage.css';
  * the server computes the final total (the sale is rejected if a price changed since it was shown).
  */
 export default function SellPage() {
+  const ticketTitleId = useId();
+  const chargeTitleId = useId();
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
   const toast = useToast();
@@ -636,9 +638,9 @@ export default function SellPage() {
           {tabTarget ? 'Enviar' : canCharge ? 'Cobrar' : 'Guardar'}
         </button>
       </div>
-      <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet">
+      <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet" aria-labelledby={ticketTitleId}>
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title as="span" className="visually-hidden">Ticket</Offcanvas.Title>
+          <Offcanvas.Title id={ticketTitleId} as="span" className="visually-hidden">Ticket</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>{cartPanel}</Offcanvas.Body>
       </Offcanvas>
@@ -663,9 +665,9 @@ export default function SellPage() {
         onClose={() => setMeasure(null)}
       />
 
-      <Modal show={chargeOpen} onHide={() => !submitting && setChargeOpen(false)} centered size="lg" fullscreen="sm-down">
+      <Modal show={chargeOpen} onHide={() => !submitting && setChargeOpen(false)} centered size="lg" fullscreen="sm-down" aria-labelledby={chargeTitleId}>
         <Modal.Header closeButton={!submitting}>
-          <Modal.Title as="h2" className="h5">Cobrar</Modal.Title>
+          <Modal.Title id={chargeTitleId} as="h2" className="h5">Cobrar</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {chargeOpen && (

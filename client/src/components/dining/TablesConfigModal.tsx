@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
@@ -22,6 +22,7 @@ const EMPTY: TableForm = { name: '', area: '', seats: '4', sortOrder: 0, isActiv
 
 /** Adds, renames and deactivates the tables of the dining room. */
 export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
+  const titleId = useId();
   const toast = useToast();
   const queryClient = useQueryClient();
   const tables = useQuery({
@@ -67,9 +68,9 @@ export default function TablesConfigModal({ onClose }: TablesConfigModalProps) {
   };
 
   return (
-    <Modal show onHide={onClose} centered size="lg" scrollable>
+    <Modal show onHide={onClose} centered size="lg" scrollable aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">Configurar mesas</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">Configurar mesas</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <div className="alert alert-danger">{error}</div>}

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Modal } from 'react-bootstrap';
 import type { InventoryMovementDto } from '../../types';
 import { formatMoney, formatUnitCost } from '../../utils/money';
@@ -13,10 +14,11 @@ interface MovementDetailModalProps {
 
 /** A movement with what each line left before and after. */
 export default function MovementDetailModal({ show, loading, movement, onHide }: MovementDetailModalProps) {
+  const titleId = useId();
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="lg" centered aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title>Detalle de movimiento</Modal.Title>
+        <Modal.Title id={titleId}>Detalle de movimiento</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {loading ? (
