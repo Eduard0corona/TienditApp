@@ -10,10 +10,12 @@ import { productsApi } from '../../api/productsApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { enqueueSale } from '../../offline/saleQueue';
 import {
   BusinessType,
   CfdiTaxObject,
   KitchenTicketStatus,
+  OrderChannel,
   OrderType,
   TenantCapability,
   UnitType,
@@ -32,6 +34,11 @@ vi.mock('../../hooks/useWorkingBranch', () => ({
   useWorkingBranch: () => ({ hasSeveral: false, branches: [], branch: undefined, setBranch: vi.fn() }),
 }));
 vi.mock('../../offline/catalogCache', () => ({ loadCatalogSnapshot: vi.fn(), saveCatalogSnapshot: vi.fn() }));
+// jsdom has no IndexedDB: the queue of sales charged offline is replaced, the rest of the module is the real one.
+vi.mock('../../offline/saleQueue', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../offline/saleQueue')>(),
+  enqueueSale: vi.fn(),
+}));
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
 vi.mock('../../api/categoriesApi', () => ({ categoriesApi: { getAll: vi.fn() } }));
 vi.mock('../../api/cashApi', () => ({ cashApi: { getCurrentSession: vi.fn() } }));
@@ -210,5 +217,65 @@ describe('SellPage', () => {
     expect(ticket().queryByRole('button', { name: /Cobrar/ })).not.toBeInTheDocument();
     await userEvent.click(ticket().getByRole('button', { name: 'Guardar pedido · $25.00' }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Pedido ORD-000002 guardado: la caja lo cobra desde Pedidos.'));
+  });
+
+  it('fills in the customer from the customer card as a counter sale that can be charged offline', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(enqueueSale).mockImplementation(async (sale) => ({ ...sale, folio: 'SC-0001', status: 'pending', attempts: 0 }));
+    renderAt('/sell?phone=5512345678&name=Ana');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    expect(ticket().getByLabelText('Nombre')).toHaveValue('Ana');
+    expect(ticket().getByLabelText('Teléfono')).toHaveValue('5512345678');
+    expect(ticket().queryByRole('button', { name: 'Ya no es un pedido por WhatsApp' })).not.toBeInTheDocument();
+
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    await userEvent.click(ticket().getByRole('button', { name: /Cobrar \$25\.00/ }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cobrar $25.00' }));
+
+    expect(ordersApi.create).not.toHaveBeenCalled();
+    const queued = vi.mocked(enqueueSale).mock.calls[0][0].request;
+    expect(queued).toMatchObject({ customerName: 'Ana', customerPhone: '5512345678', payments: [expect.objectContaining({ amount: 25 })] });
+    // Without a channel the API records a counter sale.
+    expect(queued.channel).toBeUndefined();
+    expect(await screen.findByText('Venta SC-0001 guardada sin conexión')).toBeInTheDocument();
+  });
+
+  it('records a sale started from a WhatsApp conversation as a WhatsApp order that can be saved unpaid', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageWhatsApp']);
+    vi.mocked(ordersApi.create).mockResolvedValue({
+      data: {
+        orderNumber: 'ORD-000003',
+        createdAt: '2026-10-10T18:00:00Z',
+        customerName: 'Ana',
+        customerPhone: '5512345678',
+        items: [],
+        taxBreakdown: [],
+        payments: [],
+        pricesIncludeTax: true,
+        subTotal: 21.55,
+        total: 25,
+        balance: 25,
+        stockWarnings: [],
+      },
+    } as never);
+    renderAt('/sell?phone=5512345678&name=Ana&conversation=c1');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    expect(ticket().getByRole('button', { name: 'Ya no es un pedido por WhatsApp' })).toBeInTheDocument();
+    expect(ticket().getByLabelText('Teléfono')).toHaveValue('5512345678');
+
+    await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      customerName: 'Ana',
+      customerPhone: '5512345678',
+      channel: OrderChannel.WhatsApp,
+      payments: undefined,
+    }));
+    // The summary goes back to the chat, paid or not.
+    expect(await screen.findByText('Pedido ORD-000003 guardado')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Volver al chat' })).toHaveAttribute('href', '/whatsapp/chat?conversation=c1');
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
