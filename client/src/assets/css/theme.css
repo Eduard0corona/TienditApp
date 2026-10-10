@@ -124,10 +124,6 @@
   --ct-info-text-emphasis: #0b4b74;
   --ct-info-bg-subtle: #e1eef8;
   --ct-info-border-subtle: #a9cbe8;
-
-  /* Menu and top bar: the accent for hover and the current page. */
-  --ct-menu-condensed-link-bg: var(--tt-accent);
-  --ct-topbar-search-bg: #eef1f3;
 }
 
 /* 2 + 3, dark mode: also a dark section of a light page (the kitchen in focus mode). */
@@ -194,34 +190,6 @@
   --ct-info-text-emphasis: #93ccf2;
   --ct-info-bg-subtle: #2c4152;
   --ct-info-border-subtle: #2f5b7a;
-
-  --ct-menu-condensed-link-bg: var(--tt-dark-accent);
-  --ct-topbar-search-bg: #3d4854;
-}
-
-html[data-menu-color='light'] {
-  --ct-menu-item-hover-color: var(--ta-accent);
-  --ct-menu-item-active-color: var(--ta-accent);
-}
-
-html[data-bs-theme='dark'][data-menu-color='light'] {
-  --ct-menu-item-hover-color: var(--ct-primary-text-emphasis);
-  --ct-menu-item-active-color: var(--ct-primary-text-emphasis);
-}
-
-html[data-topbar-color='light'] {
-  --ct-topbar-item-hover-color: var(--ta-accent);
-}
-
-/* Current page in the menu: a tinted pill, not only a color change. */
-.leftside-menu .side-nav .side-nav-link.active {
-  background: var(--ct-primary-bg-subtle);
-  border-radius: var(--ta-radius-sm);
-  font-weight: 700;
-}
-
-.leftside-menu .side-nav-group > .list-unstyled {
-  margin-bottom: 0.25rem;
 }
 
 /* Hyper compiles its colors into these components instead of reading the variables. */
@@ -645,7 +613,7 @@ html[data-topbar-color='light'] {
 .ta-new-version {
   position: fixed;
   z-index: 1035;
-  top: calc(var(--ct-topbar-height, 70px) + 0.75rem);
+  top: calc(var(--ta-topbar-height) + 0.75rem);
   left: 0;
   right: 0;
   width: min(420px, calc(100vw - 2rem));
@@ -788,114 +756,7 @@ html[data-topbar-color='light'] {
   }
 }
 
-/* Top bar: business switcher, search trigger and Nueva venta. */
-/* The left group shrinks (truncating the business name) so the topbar never overflows a phone. */
-.navbar-custom .topbar-start {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.navbar-custom .topbar-menu {
-  flex: 0 0 auto;
-}
-
-.topbar-business {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: min(42vw, 260px);
-}
-
-.topbar-business-button {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  min-width: 0;
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.topbar-business-button .text-truncate {
-  min-width: 0;
-}
-
-/* The logo of the business it is in, and each business's logo (or initial) in the list. */
-.topbar-business-logo,
-.topbar-business-avatar {
-  flex: 0 0 auto;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.topbar-business-logo {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.topbar-business-avatar {
-  width: 1.75rem;
-  height: 1.75rem;
-}
-
-.topbar-business-avatar.photo-initial {
-  font-size: 0.85rem;
-}
-
-.topbar-business-name {
-  max-width: 260px;
-  font-weight: 700;
-  color: var(--ct-emphasis-color);
-}
-
-/*
- * Phones: someone with several businesses must see which one they are in. The logo gives its room to the switcher
- * (Inicio is in the tab bar) and so does the store icon, so "Café La Esquina" reads whole instead of "C…".
- */
-@media (max-width: 767.98px) {
-  /* Hyper shows the logo with rules as specific as html[data-sidenav-size=full] .navbar-custom .logo-topbar. */
-  .logo-topbar.logo-topbar-gives-way,
-  .topbar-business-icon {
-    display: none !important;
-  }
-
-  .topbar-business {
-    max-width: min(60vw, 260px);
-  }
-
-  .topbar-business-button {
-    padding-inline: 0.625rem;
-  }
-
-  /* Hyper gives the menu button 60px and lets it shrink; a steady 44px touch target leaves the rest to the switcher. */
-  .navbar-custom .button-toggle-menu {
-    flex-shrink: 0;
-    width: 44px;
-  }
-
-  /* Bootstrap indents every list by 2rem; in the bar most of that room is the switcher's. */
-  .navbar-custom .topbar-menu {
-    padding-left: 0.5rem;
-  }
-}
-
-.topbar-search-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 38px;
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--ct-border-color);
-  border-radius: 999px;
-  background: var(--ct-topbar-search-bg);
-  color: var(--ct-secondary-color);
-  font-size: 0.9rem;
-}
-
-.topbar-search-button i {
-  font-size: 1.15rem;
-}
-
-.topbar-search-button kbd,
-.topbar-sell-button kbd,
+/* Global search (Ctrl K). */
 .global-search kbd {
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
@@ -905,19 +766,6 @@ html[data-topbar-color='light'] {
   font-family: inherit;
 }
 
-.topbar-sell-button kbd {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.topbar-sell-button {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  font-weight: 700;
-  padding-inline: 0.9rem;
-}
-
-/* Global search (Ctrl K). */
 .global-search .modal-content {
   border-radius: var(--ta-radius-lg);
   overflow: hidden;
@@ -984,72 +832,6 @@ html[data-topbar-color='light'] {
   color: var(--ct-secondary-color);
 }
 
-/* Bottom tab bar on phones, with Vender in the middle. */
-.bottom-tab-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1005;
-  display: flex;
-  align-items: stretch;
-  justify-content: space-around;
-  padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--ct-border-color);
-  background: var(--ta-surface);
-  box-shadow: 0 -4px 16px rgba(var(--ta-shadow-rgb), 0.08);
-}
-
-.bottom-tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.1rem;
-  min-height: 56px;
-  border: 0;
-  border-radius: var(--ta-radius-sm);
-  background: transparent;
-  color: var(--ct-secondary-color);
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.bottom-tab i {
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
-.bottom-tab.active {
-  color: var(--ct-primary);
-}
-
-.bottom-tab-primary {
-  flex: 1.2;
-}
-
-.bottom-tab-primary i {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  margin-top: -18px;
-  border-radius: 50%;
-  background: var(--ct-primary);
-  color: var(--ta-on-accent);
-  box-shadow: 0 6px 14px rgba(var(--ct-primary-rgb), 0.4);
-}
-
-@media (max-width: 767.98px) {
-  /* Room for the tab bar under the content. */
-  .content-page {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
-  }
-}
-
 /* IVA policy choices (SalesPolicyFields). */
 .policy-option {
   display: flex;
@@ -1070,74 +852,6 @@ html[data-topbar-color='light'] {
 .policy-option.selected {
   border-color: var(--ct-primary);
   background: var(--ct-primary-bg-subtle);
-}
-
-/* Focus mode (Vender and Cocina alone, full screen): no menu, a slim bar, 44 px touch targets. */
-.focus-shell {
-  /* The sticky ticket of Vender sits under this bar instead of the top bar. */
-  --ct-topbar-height: 60px;
-  min-height: 100vh;
-  background: var(--ct-body-bg);
-  color: var(--ct-body-color);
-}
-
-.focus-bar {
-  position: sticky;
-  top: 0;
-  z-index: 1020;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-height: var(--ct-topbar-height);
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid var(--ct-border-color);
-  background: var(--ct-secondary-bg);
-}
-
-.focus-bar-title {
-  font-size: 1.15rem;
-}
-
-.focus-bar-clock {
-  font-size: 1.15rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-.focus-content {
-  padding: 1rem;
-}
-
-/* The bar above says where you are. */
-.focus-shell .page-title-box {
-  display: none;
-}
-
-.focus-shell .btn,
-.focus-shell .btn-sm,
-.focus-shell .form-control,
-.focus-shell .form-select {
-  min-height: var(--ta-touch);
-}
-
-.focus-shell .btn-sm {
-  padding-inline: 0.9rem;
-}
-
-/* Without the tab bar the phone ticket goes back to the bottom edge. */
-.focus-shell .sell-phone-bar {
-  bottom: calc(0.75rem + env(safe-area-inset-bottom));
-}
-
-/* Kitchen boards are read from a distance. */
-.focus-shell[data-area='kitchen'] .focus-content {
-  font-size: 1.1rem;
-}
-
-.focus-shell[data-area='kitchen'] .btn {
-  min-height: 52px;
-  font-size: 1.05rem;
 }
 
 /* Pages of a menu section (Catálogo, Inventario, Clientes, Configuración): tabs under the page title. */

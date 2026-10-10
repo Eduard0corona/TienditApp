@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './api/queryClient';
-import SimpleBar from 'simplebar';
 import { AuthProvider } from './contexts/AuthContext';
 import { TenantProvider } from './contexts/TenantContext';
 import ToastProvider from './components/feedback/ToastProvider';
@@ -18,9 +17,10 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'remixicon/fonts/remixicon.css';
 import '@fontsource-variable/manrope';
 
-// Hyper CSS, then the TienditApp theme and fixes on top of it
+// Hyper CSS, then the TienditApp theme, the frame of the app and fixes on top of them
 import './assets/css/app.min.css';
 import './assets/css/theme.css';
+import './assets/css/shell.css';
 import './assets/css/overrides.css';
 
 // After a deploy, an open page asks for files that no longer exist: load the new version instead of failing.
@@ -48,5 +48,3 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 );
-
-SimpleBar.initHtmlApi();
