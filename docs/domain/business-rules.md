@@ -42,6 +42,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
 - Cada cajero tiene como máximo una caja abierta por negocio; solo él o un administrador la cierra o le registra gastos y retiros. Un cierre con diferencia exige notas.
 - Todo cobro y todo reembolso, de cualquier método, entra a una caja abierta: la del cajero o, si no tiene, la única abierta de la sucursal de la venta. Sin una que lo tome se rechaza; guardar un pedido sin cobrar no la necesita. El menú en línea solo recibe pedidos mientras haya una caja abierta en la sucursal principal, adonde llegan.
+- El horario del negocio (`OpeningHours`) tiene hasta dos horarios por día. Un cierre igual o anterior a la apertura termina al día siguiente, y la misma hora en los dos es abierto las 24 horas. Solo el último horario de un día pasa de la medianoche, sin terminar después de que abre el día siguiente. Con horario, el menú en línea no recibe pedidos para recoger fuera de él; los de una mesa del negocio en uso, sí ([ADR 0011](../adr/0011-opening-hours.md)).
 - Solo las entradas modifican el costo promedio de un insumo.
 
 ## Mensajería

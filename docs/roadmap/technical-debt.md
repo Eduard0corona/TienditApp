@@ -63,13 +63,24 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - Pendiente:
     - Hyper sigue cargado (436 KB de `app.min.css` y 60 KB de `vendor.min.css` sin uso), con colores compilados que `theme.css` cubre uno por uno.
     - No hay color libre de marca, solo los temas curados.
-    - El logo del negocio todavía no sale en el ticket ni en la barra superior.
+    - El logo del negocio todavía no salía en el ticket ni en el selector de negocio; se resolvió en la Fase 19.
+- Resuelto en la Fase 19: el menú en línea vende ([ADR 0011](../adr/0011-opening-hours.md)).
+  - El negocio captura su horario (hasta dos por día) y el menú dice si está abierto, en la hora del negocio. Fuera de horario no recibe pedidos para recoger o a domicilio, y el servidor también los rechaza; los de una mesa sí llegan.
+  - El encabezado del menú tiene logo o inicial, el horario de la semana, la dirección con "Cómo llegar" y WhatsApp.
+  - Los productos sin foto muestran su inicial cuando otros tienen foto, en el menú y en Vender.
+  - El logo del negocio sale en el selector de negocio y en el ticket.
+  - Las filas de categorías se desvanecen en el borde que esconde más.
+  - Pendiente:
+    - No hay días festivos ni cierres especiales.
+    - El horario es del negocio, no de cada sucursal.
+    - No hay pedidos programados para cuando abra.
+    - Las respuestas automáticas de WhatsApp todavía no dicen el horario.
 - Resuelto en la Fase 18: listas e Inventario.
   - Cada lista tiene una sola barra con búsqueda, filtros y su acción, y la paginación va abajo.
   - Pedidos filtra por canal (mostrador, WhatsApp, menú en línea) y muestra "Tipo" solo cuando el negocio vende y da servicios.
   - Inventario tiene una fila de pestañas; Compras y Proveedores son su propia sección.
   - Las existencias usan palabras de todos los días, y las acciones de fila dicen lo que hacen.
-  - Pendiente: el filtro Canal sale aunque el negocio no use WhatsApp ni el menú en línea.
+  - Pendiente: el filtro Canal sale aunque el negocio no use WhatsApp ni el menú en línea. El cliente no sabe si el negocio recibe pedidos por WhatsApp; decidirlo por el permiso de WhatsApp se lo ocultaría a los cajeros, así que hace falta que la API lo diga.
 - Resuelto en la Fase 17: las pantallas de trabajo ya no tienen estorbos.
   - El aviso del plan vencido sale completo solo a dueños y administradores, en Inicio y Configuración; en las demás pantallas va en la campana.
   - "Nueva venta" queda en la barra superior y en la pestaña Vender.

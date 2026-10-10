@@ -36,6 +36,21 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `KitchenBoard.test.tsx` y `TabPanel.test.tsx`: las rondas dicen "En preparación".
     - `inventoryForms.test.ts` y `ProductStockCard.test.tsx`: los textos nuevos de existencias.
   - Las de Pedidos y de las rondas se escribieron antes del cambio y fallaron con el código anterior.
+- Fase 19, menú en línea que vende:
+  - **Domain:** `OpeningHoursTests` cubre el horario del día, el que termina al día siguiente, las 24 horas y los horarios que se juntan entre días. También cubre cuándo cierra o abre y el rechazo de días encimados, de tres horarios en un día y de un horario que termina después de que abre el día siguiente.
+  - **Application:**
+    - `OpeningHoursFlowTests`, el horario: guardarlo y quitarlo con su registro en la bitácora, sin repetirlo cuando no cambia; rechazar uno encimado sin tocar el guardado; cambiar solo el del negocio en alcance; y el perfil que lo trae.
+    - `OpeningHoursFlowTests`, el menú: cerrado dice cuándo abre y rechaza el pedido para recoger aunque haya una caja abierta; abierto dice cuándo cierra; desde una mesa del negocio recibe el pedido, y no con una mesa que el negocio no tiene, que está fuera de uso o que es de otro negocio; sin horario nunca se ve cerrado; y trae la dirección en una línea.
+    - `GetMyTenantsQueryTests`: los negocios de la cuenta por nombre, con su logo chico.
+  - **SQL Server:**
+    - `OpeningHoursSqlServerTests`: la columna con nulos, el JSON que guarda, la vuelta y el rollback que solo quita los horarios.
+    - La suite entre negocios: con el encabezado de otro negocio, un dueño solo cambia su propio horario.
+  - **Cliente:**
+    - `openingHours.test.ts`: el horario en palabras, la semana desde el lunes y el estado abierto o cerrado.
+    - `OpeningHoursCard.test.tsx`: un día que se enciende y el que copia su horario, el guardado, el segundo horario y el que termina al día siguiente, las horas que faltan, el error de la API y "Quitar horario".
+    - `PublicMenuPage.test.tsx`: abierto y cerrado, la semana, "Cómo llegar", el pedido desde una mesa, las iniciales y las categorías que se desvanecen.
+    - `PhotoOrInitial`, `CatalogPanel`, `BusinessSwitcher`, `SaleTicket` y `scrollFade`: la inicial donde falta una foto, el logo en el selector y en el ticket, y los bordes que se desvanecen.
+  - Las del cliente se escribieron antes del cambio; las de la tarjeta de horario, el menú, Vender, el ticket y los bordes fallaron con el código anterior.
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15) y en el controller de sondeo de `RequestCancellationTests`; la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

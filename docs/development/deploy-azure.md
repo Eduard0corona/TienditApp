@@ -151,6 +151,20 @@ La Fase 17 solo cambia el cliente: no trae migraciones, scripts ni cambios de co
 
 La Fase 18 no trae migraciones ni scripts y se fusiona sin tocar la base. El contrato solo agrega el parámetro opcional `channel` a `GET /api/v1/orders` (el enum `OrderChannel`: 0 mostrador, 1 WhatsApp, 2 menú en línea); quien no lo manda recibe la lista de siempre, y un valor que no existe responde 400. Volver a la versión anterior no necesita nada en la base.
 
+## Menú en línea que vende (Fase 19)
+
+La Fase 19 trae una migración, [`database/production/20261010074254_AddOpeningHours`](../../database/production/20261010074254_AddOpeningHours). Su `apply.sql` se aplica, como siempre, antes del merge: respaldo, `verify.sql`, `apply.sql`, `verify.sql` y luego el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica.
+
+- **La migración:** `AddOpeningHours` solo agrega `TenantSettings.OpeningHours` (`nvarchar(1000)`, con nulos, sin valor por omisión), el horario del negocio como lista JSON. Empieza vacía: ningún negocio se ve cerrado ni deja de recibir pedidos hasta que su dueño captura el horario en Configuración › Negocio › Horario ([ADR 0011](../adr/0011-opening-hours.md)).
+- **Mientras se publica:** la versión de `master` (Fase 18) no mapea la columna, así que sigue funcionando y sus filas nuevas la dejan en NULL. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y falla al leer la configuración del negocio (`Invalid column name 'OpeningHours'`).
+- **El contrato solo agrega:**
+  - la ruta `PUT /api/v1/auth/my-tenant/opening-hours` y el enum `DayOfWeek` (0 domingo … 6 sábado);
+  - el parámetro opcional `table` en `GET /api/v1/public/menu/{slug}`, la mesa del QR;
+  - los campos `address` y `openingHours` del menú en línea, `openingHours` en el perfil del negocio y `logoUrl` en `GET /api/v1/me/tenants`.
+- **Cambio de comportamiento:** `ordersPaused` del menú en línea también es `true` fuera de horario; antes solo lo era sin caja abierta. Un navegador con el cliente anterior muestra entonces su aviso "Por ahora no estamos recibiendo pedidos en línea", que también es cierto.
+- **Volver a la versión anterior:** no necesita nada en la base. Esa versión no mapea la columna: los horarios se quedan guardados sin efecto y los menús vuelven a recibir pedidos a cualquier hora con una caja abierta.
+- **Dejar también la base como estaba:** aplica el `rollback.sql`. Borra la columna y con ella los horarios capturados (la bitácora conserva cada cambio, `OpeningHoursUpdated`); antes, la consulta 3 de `verify.sql` cuenta los negocios que lo perderían.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

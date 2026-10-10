@@ -144,6 +144,12 @@ stateDiagram-v2
 - Mismas reglas de precio que en mostrador (`OrderLineBuilder`); el pedido se rechaza si el total cambió desde que el cliente lo vio, si un producto ya no está disponible o es un servicio.
 - Llega a la sucursal principal y solo mientras ahí haya una caja abierta, porque todo cobro entra a una caja: sin ella el menú se ve pero no recibe pedidos (`PublicMenuDto.OrdersPaused`, "Por ahora no estamos recibiendo pedidos en línea") y `PlacePublicOrderCommand` los rechaza. El pedido llega sin pago; al cobrarlo, el pago entra a la caja de quien cobra o a la única abierta de la sucursal.
 - El cliente recibe el aviso por WhatsApp cuando el negocio confirma su pedido (o al llegar, si se acepta automáticamente), según la [política de avisos](#avisos-al-cliente-fase-4).
+- Horario (Fase 19, [ADR 0011](../adr/0011-opening-hours.md)):
+  - Con horario capturado, fuera de él el menú se ve pero no recibe pedidos para recoger o a domicilio.
+  - `PublicMenuDto.OpeningHours` dice si está abierto y cuándo cierra o abre, en la hora del negocio, y `OrdersPaused` es `true`.
+  - `PlacePublicOrderCommand` rechaza el pedido aunque haya una caja abierta, con "Ahora está cerrado: abre mañana a las 9:00.".
+  - Un pedido desde una mesa del negocio en uso llega a cualquier hora; una mesa escrita a mano en el enlace que el negocio no tiene no se salta el horario.
+  - Un negocio sin horario nunca se ve cerrado.
 - Pendiente: pago en línea y entrega a domicilio con costo de envío.
 
 ## Variantes y extras (Fase 3)
