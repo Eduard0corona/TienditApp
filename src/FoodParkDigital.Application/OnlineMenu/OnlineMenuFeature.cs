@@ -112,7 +112,10 @@ public class PublicMenuDto
     public bool OrdersPaused { get; set; }
     /// <summary>The colors the business picked: its customers see the menu with them.</summary>
     public BusinessTheme Theme { get; set; }
-    /// <summary>The address in one line, to show it and open it in a map; null without one.</summary>
+    /// <summary>
+    /// Where the main branch is, in one line, to show it and open it in a map; null without a street. Never the fiscal
+    /// address of the business.
+    /// </summary>
     public string? Address { get; set; }
     /// <summary>Its hours and whether it is open now; null while the business has no hours.</summary>
     public PublicOpeningHoursDto? OpeningHours { get; set; }
@@ -229,9 +232,14 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             .GroupBy(p => p.CategoryId)
             .ToDictionary(g => g.Key, g => g.ToList());
         // Online orders arrive at the default branch, and only while a drawer is open there (see PlacePublicOrderCommand).
+        // It is also the address customers see: where the business sells, never its fiscal address, which is often the
+        // owner's home.
+        var mainBranch = await _context.Branches
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && b.IsDefault, cancellationToken);
         var ordersOn = settings.OnlineMenuMode == OnlineMenuMode.Orders;
         var drawerOpen = ordersOn && await OrderCashService.HasOpenDrawerAtBranchAsync(
-            _context, tenant.Id, await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken), cancellationToken);
+            _context, tenant.Id, mainBranch?.Id, cancellationToken);
         // Closed by its hours, it takes no pickup or delivery orders; a customer at one of its tables still orders.
         var acceptsOrders = drawerOpen
             && (!closedByHours || await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken));
@@ -248,7 +256,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             AcceptsOrders = acceptsOrders,
             OrdersPaused = ordersOn && !acceptsOrders,
             Theme = settings.Theme,
-            Address = AddressText.OneLine(tenant.Address),
+            Address = AddressText.OneLine(mainBranch),
             OpeningHours = settings.OpeningHours is null ? null : PublicOpeningHoursDto.From(settings.OpeningHours, openingStatus!, localNow),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))

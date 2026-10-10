@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Dining.Entities;
@@ -261,17 +262,51 @@ public class OpeningHoursFlowTests
     }
 
     [Fact]
-    public async Task Menu_ShouldCarryTheAddressOfTheBusinessInOneLine()
+    public async Task Menu_ShouldCarryTheAddressOfTheMainBranchInOneLine()
     {
         await using var fixture = SalesTestFixture.Create();
         var (tenant, _) = await OpenMenuAsync(fixture);
-        var stored = await fixture.Context.Tenants.SingleAsync(t => t.Id == tenant.Id);
-        stored.SetBusinessInfo(null, null, null, null, new Address("Av. Juárez", "123", "4", "Centro", "72000", "Puebla", "Puebla"));
+        var main = await fixture.DefaultBranchAsync();
+        main.Update(main.Name, main.Code, new BranchContact(
+            AddressLine1: "Av. Juárez 123 int. 4", AddressLine2: "Centro", City: "Puebla", State: "Puebla",
+            Country: "México", PostalCode: "72000"));
         await fixture.Context.SaveChangesAsync();
 
         var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
 
         Assert.Equal("Av. Juárez 123 int. 4, Centro, 72000 Puebla, Puebla", menu!.Address);
+    }
+
+    [Fact]
+    public async Task Menu_ShouldNeverPublishTheFiscalAddressOfTheBusiness()
+    {
+        // The fiscal address is often the owner's home: it stays in the invoices, not in a public page with a map.
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _) = await OpenMenuAsync(fixture);
+        var stored = await fixture.Context.Tenants.SingleAsync(t => t.Id == tenant.Id);
+        stored.SetBusinessInfo(null, null, null, null, new Address("Privada Los Pinos", "8", null, "Jardines", "72000", "Puebla", "Puebla"));
+        await fixture.Context.SaveChangesAsync();
+
+        var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
+
+        Assert.Null(menu!.Address);
+    }
+
+    [Fact]
+    public async Task Menu_ShouldTakeTheAddressOfNoOtherBranch()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _) = await OpenMenuAsync(fixture);
+        var centro = await fixture.AddBranchAsync(tenant, "Centro", "CENTRO");
+        centro.Update(centro.Name, centro.Code, new BranchContact(AddressLine1: "5 de Mayo 10", City: "Puebla"));
+        // Without a street, a city alone does not tell anyone how to get there.
+        var main = await fixture.DefaultBranchAsync();
+        main.Update(main.Name, main.Code, new BranchContact(City: "Puebla", State: "Puebla"));
+        await fixture.Context.SaveChangesAsync();
+
+        var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
+
+        Assert.Null(menu!.Address);
     }
 
     [Fact]

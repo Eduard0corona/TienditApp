@@ -8,9 +8,21 @@ Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 
 
 - `GET /health/ready` debe responder 200 (la API arrancó y llega a la base de datos);
 - `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
-- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build, así que una instancia vieja no pasa).
+- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build, así que una instancia vieja no pasa);
+- desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
 
-Si en 10 minutos no se cumplen las tres, el workflow falla con el último estado de cada consulta. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
+Si en 10 minutos no se cumplen las cuatro, el workflow falla con el último estado de cada consulta. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
+
+## Entrega del cliente comprimida y en caché
+
+Desde la Fase 20 la API entrega el cliente así (`src/FoodParkDigital.WebApi/Http/ClientDelivery.cs`, probado en `ClientDeliveryTests`):
+
+- **Copias comprimidas del publish.** Al publicar, el SDK de .NET deja junto a cada archivo de `client/dist` que se comprime (scripts, estilos, `index.html` y las imágenes SVG) una copia Brotli (`.br`, a su máxima calidad) y una gzip (`.gz`): es la compresión de static web assets, que el csproj deja encendida (`CompressionEnabled`). Para los archivos de `/assets`, la API manda la copia que el navegador acepta (Brotli primero) como el archivo que codifica, con `Content-Encoding` y `Vary: Accept-Encoding`; no comprime nada en cada petición, así que no gasta CPU. Ninguna copia se sirve por su nombre: `/assets/x.js.br` o `/index.html.gz` responden 404.
+- **Solo `/assets` se comprime.** Las respuestas de la API llevan datos de una sesión y nunca se comprimen: su tamaño no sirve para adivinarlos (BREACH).
+- **Caché.** Los archivos de `/assets` llevan el hash de su contenido en el nombre, así que una versión nueva nunca reusa un nombre: van con `Cache-Control: public, max-age=31536000, immutable` y el navegador no vuelve a preguntar por ellos. Solo un archivo que sale (200, 206) o se confirma (304) lleva esa caché y la codificación: una condición o un rango que fallan (412, 416) no se guardan en ninguna caché, que los serviría en lugar del script. `index.html`, que sirve cualquier ruta de la app, va con `no-cache`: el navegador lo revisa en cada visita y un despliegue se ve de inmediato.
+- **Archivos que ya no existen.** Un archivo de `/assets` que no está responde 404, nunca el `index.html`: una página abierta antes del despliegue lo nota y carga la versión nueva (`utils/chunkReload.ts`). Las pantallas del negocio (con sesión) abiertas que no piden nada nuevo ven el aviso "Hay una versión nueva de TienditApp" (`NewVersionNotice`), que revisa el `index.html` al volver a la pestaña, al recuperar la conexión y cada 10 minutos. El menú en línea y el inicio de sesión no lo muestran: se abren de nuevo en cada visita.
+
+Medido en Chromium con tamaño de teléfono sobre el menú en línea (sin fotos): la primera visita bajó de 1,274,580 B a 272,273 B; el CSS global, de 655 KB a 72 KB, y React, de 286 KB a 81 KB. La fuente de iconos (`woff2`, 189 KB) ya viene comprimida y queda igual.
 
 ## Credenciales: del publish profile a OIDC
 
@@ -164,6 +176,14 @@ La Fase 19 trae una migración, [`database/production/20261010074254_AddOpeningH
 - **Cambio de comportamiento:** `ordersPaused` del menú en línea también es `true` fuera de horario; antes solo lo era sin caja abierta. Un navegador con el cliente anterior muestra entonces su aviso "Por ahora no estamos recibiendo pedidos en línea", que también es cierto.
 - **Volver a la versión anterior:** no necesita nada en la base. Esa versión no mapea la columna: los horarios se quedan guardados sin efecto y los menús vuelven a recibir pedidos a cualquier hora con una caja abierta.
 - **Dejar también la base como estaba:** aplica el `rollback.sql`. Borra la columna y con ella los horarios capturados (la bitácora conserva cada cambio, `OpeningHoursUpdated`); antes, la consulta 3 de `verify.sql` cuenta los negocios que lo perderían.
+
+## Cliente comprimido, aviso de versión y dirección del menú (Fase 20A)
+
+La Fase 20A no trae migraciones ni scripts y se fusiona sin tocar la base. El contrato no cambia de forma: ninguna ruta ni campo nuevo.
+
+- **Entrega del cliente:** comprimida y en caché, como describe [la sección de arriba](#entrega-del-cliente-comprimida-y-en-caché). La prueba de humo exige ahora el script del cliente con `Content-Encoding: br` y `immutable`; si el publish dejara de dejar las copias, la app sigue funcionando sin comprimir y el workflow lo marca.
+- **Cambio de comportamiento:** el campo `address` de `GET /api/v1/public/menu/{slug}` es ahora la dirección de la sucursal principal (`Branch.IsDefault`), en una línea y `null` si no tiene calle. En la Fase 19 era la dirección fiscal del negocio (`Tenant.Address`), que suele ser la casa del dueño ([ADR 0011](../adr/0011-opening-hours.md), punto 7).
+- **Volver a la versión anterior:** no necesita nada en la base, pero esa versión vuelve a publicar en el menú, con enlace al mapa, la dirección fiscal de cada negocio que la capturó (al registrarse o en Configuración › Negocio) y tiene el menú encendido. Si hay que regresar, avisa a esos negocios o regresa solo lo indispensable. También quita la compresión y la caché larga; los archivos `immutable` no se quedan viejos porque su nombre cambia con cada build.
 
 ## Slot de staging con swap y aprobación
 

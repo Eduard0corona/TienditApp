@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
@@ -597,10 +598,14 @@ export default function BusinessSettings() {
           {/* Address */}
           <div className="card">
             <div className="card-body">
-              <h4 className="header-title mt-0 mb-3">
-                <i className="ri-map-pin-line me-1"></i>
+              <h4 className="header-title mt-0 mb-1">
+                <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
                 Dirección fiscal
               </h4>
+              <p className="text-muted small mb-3">
+                Para tus facturas; no se muestra en tu menú en línea. Ahí va la dirección de tu{' '}
+                <Link to="/branches">sucursal principal</Link>.
+              </p>
 
               {editMode ? (
                 <>

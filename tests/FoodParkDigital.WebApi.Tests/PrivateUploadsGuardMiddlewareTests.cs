@@ -10,6 +10,13 @@ public class PrivateUploadsGuardMiddlewareTests
     [InlineData("/uploads/orders/t/payment-evidence/202610/f.webp")]
     [InlineData("/uploads/Orders/t/service-intake/202610/f.webp")]
     [InlineData("/UPLOADS/orders/t/payment-evidence/202610/f.pdf")]
+    // Kestrel removes "." and ".." but keeps empty segments and backslashes, and the file provider reads them as the
+    // same folder (a backslash is a separator on Windows).
+    [InlineData("/uploads//orders/t/payment-evidence/202610/f.webp")]
+    [InlineData("//uploads/orders/t/payment-evidence/202610/f.webp")]
+    [InlineData("/uploads/orders//t/payment-evidence/202610/f.webp")]
+    [InlineData("/uploads\\orders\\t\\payment-evidence\\202610\\f.webp")]
+    [InlineData("/uploads/orders")]
     public async Task PrivateFolders_ShouldAnswerNotFound(string path)
     {
         var (context, nextCalled) = await InvokeAsync(path);

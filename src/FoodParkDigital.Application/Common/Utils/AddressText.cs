@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 
 namespace FoodParkDigital.Application.Common.Utils;
@@ -14,15 +15,33 @@ public static class AddressText
             return null;
 
         var interior = string.IsNullOrWhiteSpace(address.InteriorNumber) ? null : $"int. {address.InteriorNumber.Trim()}";
-        var country = address.Country?.Trim() is "México" or "Mexico" or "" ? null : address.Country;
         var line = Join(", ",
             Join(" ", address.Street, address.ExteriorNumber, interior),
             address.Neighborhood,
             Join(" ", address.ZipCode, address.City),
             address.State,
-            country);
+            Abroad(address.Country));
         return line.Length == 0 ? null : line;
     }
+
+    /// <summary>
+    /// Where a branch is, in one line and in the same order: "Av. Juárez 123, Centro, 72000 Puebla, Puebla". Null
+    /// without a street: a city alone does not tell anyone how to get there.
+    /// </summary>
+    public static string? OneLine(Branch? branch)
+    {
+        if (branch is null || string.IsNullOrWhiteSpace(branch.AddressLine1))
+            return null;
+
+        return Join(", ",
+            branch.AddressLine1,
+            branch.AddressLine2,
+            Join(" ", branch.PostalCode, branch.City),
+            branch.State,
+            Abroad(branch.Country));
+    }
+
+    private static string? Abroad(string? country) => country?.Trim() is "México" or "Mexico" or "" ? null : country;
 
     private static string Join(string separator, params string?[] parts)
         => string.Join(separator, parts.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part!.Trim()));

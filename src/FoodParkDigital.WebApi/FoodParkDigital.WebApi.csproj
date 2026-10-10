@@ -32,6 +32,14 @@
     <InternalsVisibleTo Include="FoodParkDigital.WebApi.Tests" />
   </ItemGroup>
 
+  <!--
+    When it publishes, the SDK leaves a Brotli and a gzip copy next to each script and style of client/dist (static web
+    assets compression); Http/ClientDelivery.cs serves them. Explicit, so a change of default cannot turn it off quietly.
+  -->
+  <PropertyGroup>
+    <CompressionEnabled>true</CompressionEnabled>
+  </PropertyGroup>
+
   <ItemGroup>
     <Content Include="..\..\client\dist\**\*">
       <Link>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</Link>
