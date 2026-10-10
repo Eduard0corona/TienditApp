@@ -31,6 +31,11 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
    - La ruta es `PUT /api/v1/auth/my-tenant/opening-hours` (`[RequiresTenantManager]`), desde Configuración › Negocio › Horario.
    - Cada cambio queda en la bitácora (`OpeningHoursUpdated`) con el horario anterior y el nuevo.
    - Una lista vacía quita el horario.
+7. **La dirección del menú es la de la sucursal principal, nunca la fiscal.**
+   - El menú muestra dónde vende el negocio, con "Cómo llegar": la sucursal principal (`Branch.IsDefault`), la misma que recibe los pedidos en línea.
+   - La dirección fiscal (`Tenant.Address`) se queda en las facturas. En un negocio chico suele ser la casa del dueño, y el menú es una página pública con un enlace al mapa.
+   - Sin calle no se publica: una ciudad sola no le dice a nadie cómo llegar.
+   - La primera versión de la Fase 19 publicaba la dirección fiscal; se cambió el mismo día, antes de que algún negocio la capturara para eso. Configuración avisa en las dos pantallas cuál se publica.
 
 ## Consecuencias
 
@@ -38,6 +43,7 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
   - El cliente ve si el negocio está abierto, su horario de la semana y cómo llegar.
   - El negocio deja de recibir pedidos para recoger cuando no hay quien los prepare, aunque una caja haya quedado abierta.
   - El negocio que no captura horario sigue igual.
+  - Nadie publica su dirección fiscal sin saberlo.
 - **Lo que limita:**
   - No hay días festivos ni cierres especiales (vacaciones, inventario): por ahora el dueño quita el horario o apaga el menú.
   - El horario es del negocio, no de cada sucursal; los pedidos en línea llegan a la sucursal principal.

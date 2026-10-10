@@ -311,6 +311,12 @@ export default function BranchesList() {
                   </div>
                 ))}
               </div>
+              {(editing ? editing.isDefault : form.isDefault) && (
+                <p className="text-muted small mt-3 mb-0">
+                  <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
+                  La dirección de la sucursal principal se muestra en tu menú en línea, con un enlace al mapa.
+                </p>
+              )}
               {!editing && (
                 <p className="text-muted small mt-3 mb-0">
                   Si el negocio usa inventario, la sucursal tendrá su propio almacén y sus ventas descontarán de él.
