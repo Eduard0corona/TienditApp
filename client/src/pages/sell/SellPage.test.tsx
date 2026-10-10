@@ -202,8 +202,9 @@ describe('SellPage', () => {
     await userEvent.click(ticket().getByRole('button', { name: 'Enviar a cocina · $25.00' }));
 
     expect(ordersApi.addRound).toHaveBeenCalledWith('tab1', [{ productId: 'taco', quantity: 1, notes: undefined, optionIds: undefined }]);
-    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('Tortilla quedó en -2'), { title: ROUND_STOCK_WARNING_TITLE });
-    expect(toast.success).toHaveBeenCalledWith('Ronda enviada a cocina.');
+    // The toasts come once the round is back from the API, not with the click.
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('Tortilla quedó en -2'), { title: ROUND_STOCK_WARNING_TITLE }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Ronda enviada a cocina.'));
     expect(await screen.findByText('Mesas')).toBeInTheDocument();
   });
 
