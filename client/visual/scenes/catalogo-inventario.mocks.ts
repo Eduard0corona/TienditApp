@@ -1,4 +1,4 @@
-import type { DemoData } from '../fixtures';
+import { asOption, type DemoData } from '../fixtures';
 
 // The demo photos in mocks/img, by product name: the lists then show photos and the placeholder side by side.
 const PHOTOS: Record<string, string> = {
@@ -24,5 +24,4 @@ export function withProductPhotos(data: DemoData) {
  * `withProductPhotos` as the value of `test.use({ prepareData })`. Playwright takes any function given to test.use as
  * the fixture that builds the option, so the function the option holds goes through one.
  */
-// eslint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from this pattern: none.
-export const productPhotos = async ({}, use: (prepare: (data: DemoData) => void) => Promise<void>) => use(withProductPhotos);
+export const productPhotos = asOption(withProductPhotos);
