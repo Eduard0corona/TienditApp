@@ -21,6 +21,9 @@ public static class OpeningHoursMappings
 {
     public const string TimeFormat = "HH\\:mm";
 
+    /// <summary>A time as the requests send it, with two digits for the hour: "09:00", never "9:00" or "24:00".</summary>
+    public const string TimePattern = "^([01][0-9]|2[0-3]):[0-5][0-9]$";
+
     public static List<OpeningIntervalDto> ToDtos(this OpeningHours hours) => hours.Intervals
         .Select(interval => new OpeningIntervalDto
         {

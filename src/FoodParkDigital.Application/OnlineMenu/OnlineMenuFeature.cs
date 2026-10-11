@@ -208,7 +208,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
         // A public request has no tenant: the catalog queries below are scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
         var settings = tenant.Settings;
-        var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(settings.TimeZone)).DateTime;
+        var localNow = TenantDateTimeResolver.LocalNow(_dateTimeProvider.UtcNow, settings.TimeZone);
         var localTime = localNow.TimeOfDay;
         var openingStatus = settings.OpeningHours?.StatusAt(localNow);
         var closedByHours = openingStatus is { IsOpen: false };
@@ -392,7 +392,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         // Outside its hours the business takes no pickup or delivery orders; a customer at one of its tables is already there.
         if (tenant.Settings.OpeningHours is { } hours)
         {
-            var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(tenant.Settings.TimeZone)).DateTime;
+            var localNow = TenantDateTimeResolver.LocalNow(_dateTimeProvider.UtcNow, tenant.Settings.TimeZone);
             var status = hours.StatusAt(localNow);
             if (!status.IsOpen && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
                 return Result.Failure<PublicOrderReceiptDto>(OpeningHoursText.ClosedMessage(status, localNow));

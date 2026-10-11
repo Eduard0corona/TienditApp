@@ -9,13 +9,17 @@ using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Application.Inventory.DTOs;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.Tenants.Commands;
+using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -25,9 +29,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
-/// The lists a business sees whole, without pages (categories, warehouses, agents), stay small because a business keeps
-/// only so many of each, the inactive ones included; another business's never count. The kitchen board shows the newest
-/// orders, oldest first.
+/// The lists a business sees whole, without pages (categories, warehouses, agents, special days), stay small because a
+/// business keeps only so many of each, the inactive ones included; another business's never count. The kitchen board
+/// shows the newest orders, oldest first.
 /// </summary>
 public class PerBusinessLimitsTests
 {
@@ -127,6 +131,23 @@ public class PerBusinessLimitsTests
     }
 
     [Fact]
+    public async Task SpecialDates_ShouldStopAtTheLimit_CountingOnlyTheUpcoming_ButNotAnotherBusinesss()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        await SeedBusinessAsync(host, Shop, BusinessType.Retail, (db, id) => db.SpecialDays.AddRange(UpcomingSpecialDates(id, SpecialDay.MaxUpcomingDates)));
+        await SeedBusinessAsync(host, Shop, BusinessType.Retail, (db, id) => db.SpecialDays.AddRange(
+            UpcomingSpecialDates(id, SpecialDay.MaxUpcomingDates - 1).Concat(PastSpecialDates(id))));
+
+        var last = await AddSpecialDayAsync(host, new DateOnly(2026, 12, 1));
+        var oneMore = await Assert.ThrowsAsync<DomainException>(() => AddSpecialDayAsync(host, new DateOnly(2026, 12, 2)));
+
+        Assert.True(last.IsSuccess, last.Error);
+        Assert.Equal(SpecialDay.MaxUpcomingDates, last.Value.UpcomingDates);
+        Assert.Equal("Puedes tener hasta 120 fechas especiales próximas. Quita alguna antes de agregar otra.", oneMore.Message);
+        Assert.Equal(SpecialDay.MaxUpcomingDates + 10, await host.QueryAsync(db => db.SpecialDays.CountAsync()));
+    }
+
+    [Fact]
     public async Task KitchenBoard_ShouldShowTheNewestOrders_OldestFirst()
     {
         await using var host = await SqliteTestHost.CreateAsync();
@@ -187,6 +208,29 @@ public class PerBusinessLimitsTests
                 agent.SetActive(false);
             return agent;
         });
+
+    /// <summary>Closed dates from March on, for SqliteTestHost's today (2026-02-16), in periods as long as they can be.</summary>
+    private static List<SpecialDay> UpcomingSpecialDates(Guid tenantId, int count)
+    {
+        var calendar = new SpecialDayCalendar(tenantId, new DateOnly(2026, 2, 16), []);
+        var rows = new List<SpecialDay>();
+        for (var from = new DateOnly(2026, 3, 1); rows.Count < count; from = from.AddDays(SpecialDay.MaxDaysPerPeriod))
+        {
+            var days = Math.Min(count - rows.Count, SpecialDay.MaxDaysPerPeriod);
+            rows.AddRange(calendar.Add(from, from.AddDays(days - 1), SpecialDayRule.Closed(null)).Added);
+        }
+        return rows;
+    }
+
+    /// <summary>Ten closed dates marked in January, which already passed.</summary>
+    private static IEnumerable<SpecialDay> PastSpecialDates(Guid tenantId)
+        => new SpecialDayCalendar(tenantId, new DateOnly(2026, 1, 1), [])
+            .Add(new DateOnly(2026, 1, 10), new DateOnly(2026, 1, 19), SpecialDayRule.Closed("Inventario"))
+            .Added;
+
+    private static Task<Result<SpecialDaysDto>> AddSpecialDayAsync(SqliteTestHost host, DateOnly date)
+        => host.HandleAsync<AddSpecialDayCommandHandler, Result<SpecialDaysDto>>(handler => handler.Handle(
+            new AddSpecialDayCommand(date, null, SpecialDayKind.Closed, null, null), CancellationToken.None));
 
     private static Task<Result<CategoryDto>> CreateCategoryAsync(SqliteTestHost host, string name)
         => host.HandleAsync<CreateCategoryCommandHandler, Result<CategoryDto>>(handler => handler.Handle(
