@@ -40,8 +40,8 @@ export default function ResetPassword() {
   const linkIsValid = userId.length > 0 && token.length > 0;
 
   return (
-    <div className="authentication-bg position-relative" style={{ minHeight: '100vh' }}>
-      <div className="account-pages pt-2 pt-sm-5 pb-4 pb-sm-5 position-relative">
+    <div className="position-relative" style={{ minHeight: '100vh' }}>
+      <div className="pt-2 pt-sm-5 pb-4 pb-sm-5 position-relative">
         <div className="container">
           <div className="row justify-content-center">
             <div className="col-xxl-4 col-lg-5">
