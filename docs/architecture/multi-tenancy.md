@@ -20,6 +20,9 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
 - Tema del negocio (Fase 16):
   - `TenantSettings.Theme` es del negocio y viaja con sus ajustes, así que lo cubren el filtro y el interceptor. Lo cambian dueños y administradores, siempre en su propio negocio: en la suite, el cambio hecho con el encabezado de otro negocio cae en el propio.
   - El menú en línea se pinta con el tema del negocio del slug, aunque en el navegador haya una sesión de otro negocio.
+- Días especiales (Fase 21, [ADR 0012](../adr/0012-special-days.md)):
+  - `SpecialDay` es `ITenantScoped`, con el filtro global y el interceptor; su índice único es `(TenantId, Date)`. Los cambian dueños y administradores, siempre en el negocio de `MyTenantResolver`: en la suite, con el encabezado de otro negocio un dueño agrega en el suyo, solo lee los suyos y no cambia ni quita los del otro (404), cuya lista queda igual.
+  - El menú público y su pedido los leen después de fijar el negocio del slug (`SetTenant`), y las respuestas automáticas en el alcance del negocio del mensaje (el del webhook). `BusinessHours.ReadAsync` filtra además por `TenantId`, sin un `IgnoreQueryFilters()` nuevo: `TenantFilterBypassAllowlistTests` no cambia. `PublicMenuSpecialDaysSqlServerTests` comprueba por HTTP que el día especial de un negocio cierra su menú y no el del otro.
 - Archivos (Fase 9): la carpeta de cada archivo sale de su dueño: `products/{negocio}` y `logos/{negocio}`, y para los avatares `avatars/users/{cuenta}` (la persona es la misma en todos sus negocios). Subir y borrar validan esa carpeta; un avatar anterior se borra de la carpeta del negocio donde se subió, tomada de las membresías de la cuenta (`AvatarFiles`).
 
 Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant. Muchas claves e índices incluyen `TenantId`.

@@ -150,6 +150,11 @@ stateDiagram-v2
   - `PlacePublicOrderCommand` rechaza el pedido aunque haya una caja abierta, con "Ahora está cerrado: abre mañana a las 9:00.".
   - Un pedido desde una mesa del negocio en uso llega a cualquier hora; una mesa escrita a mano en el enlace que el negocio no tiene no se salta el horario.
   - Un negocio sin horario nunca se ve cerrado.
+- Días especiales (Fase 21, [ADR 0012](../adr/0012-special-days.md)):
+  - Un día especial cerrado pausa el menú todo ese día y `PlacePublicOrderCommand` rechaza el pedido, también el de una mesa del negocio en uso. Un horario especial se comporta como el horario: fuera de él no recibe pedidos para recoger, y una mesa en uso sí. Cuentan aunque el negocio no tenga horario de la semana.
+  - El menú y el pedido leen el horario con el mismo lector (`BusinessHours.ReadAsync`) y la misma regla, así que no se contradicen. El orden de las revisiones del pedido no cambia: horario, caja abierta y pedidos pendientes por teléfono.
+  - El rechazo dice por qué y cuándo vuelve: "Está cerrado por Navidad: abre mañana a las 9:00." (con motivo), "Hoy está cerrado: abre mañana a las 9:00." (sin motivo) o, por el horario, "Ahora está cerrado: abre mañana a las 9:00.", idéntico al de la Fase 19 a 0 y 1 días. Desde 2 días nombra la fecha: "abre el sábado 26 a las 9:00", "abre el martes 5 de enero a las 9:00".
+  - `PublicMenuDto.OpeningHours` trae además las palabras que escribe el servidor (la etiqueta del chip, su detalle, el aviso mientras no recibe pedidos y el del próximo día especial), el horario de hoy y los días especiales de los próximos 31 días. Es `null` solo sin horario de la semana y sin día especial hoy ni en esos 31 días.
 - Pendiente: pago en línea y entrega a domicilio con costo de envío.
 
 ## Variantes y extras (Fase 3)

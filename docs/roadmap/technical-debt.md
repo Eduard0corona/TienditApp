@@ -97,6 +97,22 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 21: días especiales y horario real en WhatsApp ([ADR 0012](../adr/0012-special-days.md)).
+  - El dueño marca por fecha los días que cierra o abre con otro horario (festivos, vacaciones, inventario), con un motivo que ven sus clientes y festivos sugeridos que nunca se aplican solos. Las fechas pasadas no cambian y cada cambio queda en la bitácora.
+  - El menú en línea y su pedido los toman en cuenta, también sin horario de la semana, y el servidor escribe lo que dicen ("Cerrado · por Navidad · abre el sábado 26 a las 9:00"); en un día especial cerrado tampoco pide una mesa (decisión por omisión).
+  - Las respuestas automáticas de WhatsApp dicen el horario de verdad, con los días especiales de las próximas dos semanas, leído con el mismo lector que el menú.
+  - El cambio de horario de Tijuana y Matamoros se evalúa en instantes, y `/health/ready` avisa (`business-time-zones`) si el servidor no tiene las zonas horarias; la prueba de humo lo exige.
+  - Pendiente:
+    - Horario y días especiales por sucursal.
+    - Pedidos programados para cuando abra.
+    - Preguntas por una fecha en WhatsApp ("¿abren el 25?") más allá de los días especiales de las próximas dos semanas.
+    - Avisar o rechazar citas en los días que el negocio cierra.
+    - Ventanas de envío de campañas y recordatorios según el horario.
+    - Días especiales que se repiten cada año.
+    - Retención de las filas viejas de `SpecialDays` (hoy se conservan todas; la pantalla muestra solo los últimos 90 días).
+    - Sugerir los días de elecciones y los festivos estatales.
+    - Quitar la redacción anterior del cliente (`describeOpeningStatus`, para una API sin `todayDate`) después de una entrega.
+    - Confirmar con el dueño del producto las dos decisiones por omisión: la mesa en un día especial cerrado y la descripción del negocio, que ya no contesta las preguntas de horario cuando hay horario de la semana.
 - Resuelto en la Fase 19: el menú en línea vende ([ADR 0011](../adr/0011-opening-hours.md)).
   - El negocio captura su horario (hasta dos por día) y el menú dice si está abierto, en la hora del negocio. Fuera de horario no recibe pedidos para recoger o a domicilio, y el servidor también los rechaza; los de una mesa sí llegan.
   - El encabezado del menú tiene logo o inicial, el horario de la semana, la dirección de la sucursal principal (nunca la fiscal) con "Cómo llegar" y WhatsApp.
@@ -104,10 +120,10 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - El logo del negocio sale en el selector de negocio y en el ticket.
   - Las filas de categorías se desvanecen en el borde que esconde más.
   - Pendiente:
-    - No hay días festivos ni cierres especiales.
+    - Resuelto en la Fase 21: no había días festivos ni cierres especiales.
     - El horario es del negocio, no de cada sucursal.
     - No hay pedidos programados para cuando abra.
-    - Las respuestas automáticas de WhatsApp todavía no dicen el horario.
+    - Resuelto en la Fase 21: las respuestas automáticas de WhatsApp no decían el horario.
 - Resuelto en la Fase 18: listas e Inventario.
   - Cada lista tiene una sola barra con búsqueda, filtros y su acción, y la paginación va abajo.
   - Pedidos filtra por canal (mostrador, WhatsApp, menú en línea) y muestra "Tipo" solo cuando el negocio vende y da servicios.

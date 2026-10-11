@@ -19,6 +19,10 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
    - `OpeningHours.StatusAt` toma los horarios desde ayer hasta ocho días adelante y une los que se tocan, como un viernes que cierra a las 2:00 y un sábado que abre a esa hora.
    - Responde si está abierto y cuándo cierra, o cuándo abre.
    - El menú recibe el resultado (`PublicOpeningHoursDto`), y el cliente solo lo pone en palabras: "Abierto · cierra a las 20:00", "Cerrado · abre mañana a las 9:00".
+   - Desde la Fase 21 ([ADR 0012](0012-special-days.md)):
+     - `OpeningHours.StatusAt` delega en `BusinessSchedule`, que pone encima los días especiales y evalúa en instantes de la zona del negocio (el cambio de horario de Tijuana y Matamoros).
+     - Las palabras las escribe el servidor (`BusinessHoursText`), no el cliente: el chip, su detalle, los avisos, el pedido rechazado y WhatsApp. El cliente conserva su redacción solo para una API que no manda `todayDate`.
+     - Para decir cuándo abre busca hasta un año adelante cuando un cierre largo viene antes; el horizonte de "Abierto las 24 horas" sigue en ocho días.
 4. **Fuera de horario, el menú se ve pero no recibe pedidos para recoger o a domicilio.**
    - `GET /api/v1/public/menu/{slug}` responde `acceptsOrders: false` y `ordersPaused: true`.
    - `POST /api/v1/public/menu/{slug}/orders` rechaza el pedido aunque haya una caja abierta, con "Ahora está cerrado: abre mañana a las 9:00.".
@@ -27,6 +31,7 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
    - Un pedido desde el QR de una mesa llega a cualquier hora: el cliente ya está sentado, como en un pedido tomado en el mostrador, y el negocio decide si lo atiende.
    - Cualquiera puede escribir `?mesa=` en el enlace, así que solo cuenta una mesa del negocio que esté en uso (`DiningTables`, activa). Cualquier otra mesa es solo una nota del pedido y no se salta el horario.
    - El servidor lo revisa en el menú (`?table=`, que muestra los botones para pedir) y al recibir el pedido (`tableLabel`).
+   - Desde la Fase 21 no aplica en un día especial cerrado: ese día no hay quien atienda ([ADR 0012](0012-special-days.md), punto 5, decisión por omisión). Fuera de horario sigue igual, y el menú lo dice: "Cerrado · tu mesa sí puede pedir".
 6. **Lo cambian dueños y administradores.**
    - La ruta es `PUT /api/v1/auth/my-tenant/opening-hours` (`[RequiresTenantManager]`), desde Configuración › Negocio › Horario.
    - Cada cambio queda en la bitácora (`OpeningHoursUpdated`) con el horario anterior y el nuevo.
@@ -45,7 +50,7 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
   - El negocio que no captura horario sigue igual.
   - Nadie publica su dirección fiscal sin saberlo.
 - **Lo que limita:**
-  - No hay días festivos ni cierres especiales (vacaciones, inventario): por ahora el dueño quita el horario o apaga el menú.
+  - Resuelto en la Fase 21 ([ADR 0012](0012-special-days.md)): no había días festivos ni cierres especiales (vacaciones, inventario), y el dueño quitaba el horario o apagaba el menú. Ahora los marca por fecha, cerrado o con otro horario.
   - El horario es del negocio, no de cada sucursal; los pedidos en línea llegan a la sucursal principal.
   - No hay pedidos programados para cuando abra.
 - **Decisión por omisión:** se tomó sin una preferencia expresa del dueño del producto. Si se prefiere que fuera de horario el menú reciba pedidos para prepararlos al abrir, el cambio está en `GetPublicMenuQueryHandler` y `PlacePublicOrderCommandHandler`, y sería un modo nuevo del negocio, no una regla para todos.
