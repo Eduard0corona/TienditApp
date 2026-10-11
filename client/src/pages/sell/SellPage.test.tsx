@@ -16,6 +16,7 @@ import {
   CfdiTaxObject,
   KitchenTicketStatus,
   OrderChannel,
+  OrderPaymentMethod,
   OrderType,
   TenantCapability,
   UnitType,
@@ -136,6 +137,53 @@ function ticket() {
   return within(screen.getByRole('complementary', { name: 'Ticket de la venta' }));
 }
 
+/** Cobrar from the ticket, paid exactly in cash. */
+async function chargeInCash(total: string) {
+  await userEvent.click(ticket().getByRole('button', { name: `Cobrar ${total} F9` }));
+  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: `Cobrar ${total}` }));
+}
+
+/** The idempotency key of each sale sent, in order. */
+function sentKeys() {
+  return vi.mocked(ordersApi.create).mock.calls.map(([request]) => request.idempotencyKey);
+}
+
+/** The answer of the server: the sale recorded with a taco paid in cash. */
+const chargedTaco: OrderDto = {
+  id: 'o3',
+  createdByBusiness: true,
+  orderNumber: 'ORD-000003',
+  businessType: BusinessType.Food,
+  orderType: OrderType.Retail,
+  status: 2 as OrderDto['status'],
+  canCancel: false,
+  allowedTransitions: [],
+  customerName: 'Público en general',
+  pricesIncludeTax: true,
+  subTotal: 21.55,
+  tax: 3.45,
+  total: 25,
+  taxBreakdown: [],
+  paidAmount: 25,
+  balance: 0,
+  createdAt: '2026-10-10T18:00:00Z',
+  items: [{
+    id: 'i1',
+    productId: 'taco',
+    productName: 'Taco',
+    quantity: 1,
+    unitPrice: 25,
+    totalPrice: 25,
+    taxRate: 16,
+    isTaxExempt: false,
+    unit: UnitType.Unit,
+  }],
+  statusHistory: [],
+  servicePieces: [],
+  payments: [{ id: 'p1', amount: 25, method: OrderPaymentMethod.Cash, paidAt: '2026-10-10T18:00:00Z', cashReceived: 25, change: 0 }],
+  stockWarnings: [],
+};
+
 describe('SellPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -218,6 +266,85 @@ describe('SellPage', () => {
     expect(ticket().queryByRole('button', { name: /Cobrar/ })).not.toBeInTheDocument();
     await userEvent.click(ticket().getByRole('button', { name: 'Guardar pedido · $25.00' }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Pedido ORD-000002 guardado: la caja lo cobra desde Pedidos.'));
+  });
+
+  it('charges with the same key after the page reloads while the charge is on its way', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    // The server never answers before the reload: it may have recorded the sale or not.
+    vi.mocked(ordersApi.create).mockReturnValueOnce(new Promise(() => {}) as never);
+    const page = renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await chargeInCash('$25.00');
+    expect(ordersApi.create).toHaveBeenCalledTimes(1);
+
+    page.unmount();
+    vi.mocked(ordersApi.create).mockResolvedValueOnce({ data: chargedTaco } as never);
+    renderAt('/sell');
+    expect(await ticket().findByRole('textbox', { name: 'Cantidad de Taco' })).toHaveValue('1');
+    await chargeInCash('$25.00');
+
+    // With the same key the server answers with the sale it already had instead of recording another one.
+    expect(await screen.findByRole('heading', { name: 'Venta ORD-000003 cobrada' })).toBeInTheDocument();
+    const [sent, retried] = sentKeys();
+    expect(sent).toEqual(expect.any(String));
+    expect(retried).toBe(sent);
+  });
+
+  it('sends a new key when the cart that came back after the reload changes: it is another sale', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create).mockReturnValue(new Promise(() => {}) as never);
+    const page = renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await chargeInCash('$25.00');
+
+    page.unmount();
+    renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await chargeInCash('$50.00');
+
+    const [sent, other] = sentKeys();
+    expect(other).toEqual(expect.any(String));
+    expect(other).not.toBe(sent);
+  });
+
+  it('retries a refused charge with its key and gives the cart a new one once it changes', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create).mockRejectedValue(new Error('refused'));
+    renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await chargeInCash('$25.00');
+
+    const charge = screen.getByRole('dialog');
+    expect(await within(charge).findByText('No se pudo registrar la venta.')).toBeInTheDocument();
+    await userEvent.click(within(charge).getByRole('button', { name: 'Cobrar $25.00' }));
+    await waitFor(() => expect(ordersApi.create).toHaveBeenCalledTimes(2));
+    await userEvent.click(within(charge).getByRole('button', { name: 'Volver' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    await chargeInCash('$50.00');
+
+    await waitFor(() => expect(ordersApi.create).toHaveBeenCalledTimes(3));
+    const [sent, retried, changed] = sentKeys();
+    expect(retried).toBe(sent);
+    expect(changed).not.toBe(sent);
+  });
+
+  it('gives the next sale a key of its own once the server recorded the previous one, even with the same products', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: { orderNumber: 'ORD-000004', stockWarnings: [] } } as never);
+    const page = renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+
+    page.unmount();
+    renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    expect(ticket().getByRole('textbox', { name: 'Cantidad de Taco' })).toHaveValue('1');
+    await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+    await waitFor(() => expect(ordersApi.create).toHaveBeenCalledTimes(2));
+    const [sent, next] = sentKeys();
+    expect(next).not.toBe(sent);
   });
 
   it('fills in the customer from the customer card as a counter sale that can be charged offline', async () => {
