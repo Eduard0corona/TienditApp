@@ -13,8 +13,8 @@
 
   .sell-cart {
     position: sticky;
-    top: calc(var(--ct-topbar-height, 70px) + 1rem);
-    max-height: calc(100vh - var(--ct-topbar-height, 70px) - 2rem);
+    top: calc(var(--ta-topbar-height) + 1rem);
+    max-height: calc(100vh - var(--ta-topbar-height) - 2rem);
     overflow-y: auto;
   }
 }

@@ -1,6 +1,6 @@
 export default function Footer() {
   return (
-    <footer className="footer">
+    <footer className="ta-footer">
       <div className="container-fluid">
         <div className="row">
           <div className="col-md-6">

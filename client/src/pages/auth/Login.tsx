@@ -187,7 +187,7 @@ export default function Login() {
         </div>
       </div>
 
-      <footer className="footer footer-alt">
+      <footer className="ta-footer ta-footer-centered">
         {new Date().getFullYear()} &copy; TienditApp
       </footer>
     </div>

@@ -15,9 +15,9 @@ export default function PageTitle({ title, parent }: PageTitleProps) {
     <>
       <div className="row">
         <div className="col-12">
-          <div className="page-title-box">
+          <div className="ta-page-title-box">
             {parent && (
-              <nav className="page-title-right" aria-label="Ruta de navegación">
+              <nav className="ta-page-title-right" aria-label="Ruta de navegación">
                 <ol className="breadcrumb m-0">
                   <li className="breadcrumb-item">
                     <Link to={parent.to}>{parent.label}</Link>
@@ -26,7 +26,7 @@ export default function PageTitle({ title, parent }: PageTitleProps) {
                 </ol>
               </nav>
             )}
-            <h4 className="page-title">{title}</h4>
+            <h4 className="ta-page-title">{title}</h4>
           </div>
         </div>
       </div>

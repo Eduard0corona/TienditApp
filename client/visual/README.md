@@ -26,7 +26,7 @@ npx playwright show-report visual/.work/report   # las diferencias, con la image
 - **Estrictas:**
   - Una petición sin respuesta simulada hace fallar la escena: si no, se vería como una pantalla vacía que parece correcta.
   - Un error de JavaScript en la página también la hace fallar.
-- **Selectores:** se busca por rol, etiqueta o texto visible, nunca por las clases de la plantilla (`leftside-menu`, `navbar-custom`, `page-title`…). Así la misma escena corre contra `master` y contra la rama que renombra esas clases.
+- **Selectores:** se busca por rol, etiqueta o texto visible, nunca por las clases de la plantilla ni del marco (`leftside-menu`, `navbar-custom`, `page-title`… y desde la Fase 20C las `ta-*` de `shell.css`). Así la misma escena corre contra `master` y contra la rama que renombra esas clases.
 - **Muestrario** (`specimen.ts`): pone en una pantalla real una muestra de los componentes que usa la app (botones, campos, tarjetas, tablas, badges, alertas, menús y las clases que hoy solo da Hyper). Compara su imagen y, en claro, en oscuro y en los ocho temas, dos cosas:
   - el estilo calculado de cada pieza;
   - el valor de cada variable CSS que leen nuestros estilos.
