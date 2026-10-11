@@ -51,23 +51,23 @@ public static class BusinessHoursText
         return $"el {SpanishCalendar.LongDate(date, withYear: days > WithoutYearDays)}";
     }
 
-    /// <summary>«mañana a las 9:00»; opening at midnight, the day alone: «mañana».</summary>
+    /// <summary>«mañana a las 9:00», «mañana a la 1:00»; opening at midnight, the day alone: «mañana».</summary>
     public static string OpenWhen(DateTime at, DateOnly today)
     {
         var day = DayWords(DateOnly.FromDateTime(at), today);
-        return at.TimeOfDay == TimeSpan.Zero ? day : $"{day} a las {Clock(at)}";
+        return at.TimeOfDay == TimeSpan.Zero ? day : $"{day} {AtClock(at)}";
     }
 
     /// <summary>
-    /// «a las 20:00» today, «mañana a las 2:00»; closing at midnight ends the day before: «a medianoche», «el jueves 24
-    /// a medianoche».
+    /// «a las 20:00» today, «mañana a las 2:00», «a la 1:30»; closing at midnight ends the day before: «a medianoche»,
+    /// «el jueves 24 a medianoche».
     /// </summary>
     public static string CloseWhen(DateTime at, DateOnly today)
     {
         var date = DateOnly.FromDateTime(at);
         return at.TimeOfDay == TimeSpan.Zero
             ? $"{On(date.AddDays(-1), today)}a medianoche"
-            : $"{On(date, today)}a las {Clock(at)}";
+            : $"{On(date, today)}{AtClock(at)}";
     }
 
     /// <summary>The chip: «Abierto», «Abierto las 24 horas» or «Cerrado». It stays short: the reason goes in the detail.</summary>
@@ -129,7 +129,7 @@ public static class BusinessHoursText
         var why = status switch
         {
             { ClosedFor.Reason: { } reason } => $"No recibimos pedidos en línea por {reason}",
-            { ClosedBySpecialDay: true } => "Hoy no abrimos",
+            { TodaySpecial.Kind: SpecialDayKind.Closed } => "Hoy no abrimos",
             _ => "Fuera de horario no recibimos pedidos en línea"
         };
         var back = status.OpensAt is { } opensAt ? $": vuelve {OpenWhen(opensAt, hours.Today)}" : "";
@@ -138,15 +138,21 @@ public static class BusinessHoursText
 
     /// <summary>
     /// The next special day within a week, in one line: «El viernes 25 cerramos por Navidad.», «El jueves 24 abrimos de
-    /// 9:00 a 18:00 por Nochebuena.», «Del lunes 21 de diciembre al lunes 4 de enero cerramos por Vacaciones.»
+    /// 9:00 a 18:00 por Nochebuena.», «Del lunes 21 de diciembre al lunes 4 de enero cerramos por Vacaciones.» Special
+    /// hours under way that last after today come first: «Hasta el viernes 31 de julio abrimos de 10:00 a 14:00 por
+    /// Verano.» Today alone is no news, and a closed period under way already says when it opens.
     /// </summary>
     public static string? UpcomingNotice(BusinessHoursNow hours)
     {
-        if (hours.StartingWithin(UpcomingNoticeDays).FirstOrDefault() is not { } period)
+        var today = hours.Today;
+        if (hours.FromTodayWithin(UpcomingNoticeDays).FirstOrDefault(period => period.From > today
+                || (period.To > today && period.Rule.Kind == SpecialDayKind.SpecialHours)) is not { } period)
             return null;
-        var when = period.From == period.To
-            ? Capitalized(DayWords(period.From, hours.Today))
-            : $"Del {SpanishCalendar.LongDate(period.From)} al {SpanishCalendar.LongDate(period.To)}";
+        var when = period.From == today
+            ? $"Hasta el {SpanishCalendar.LongDate(period.To)}"
+            : period.From == period.To
+                ? Capitalized(DayWords(period.From, today))
+                : $"Del {SpanishCalendar.LongDate(period.From)} al {SpanishCalendar.LongDate(period.To)}";
         var what = period.Rule.Kind == SpecialDayKind.Closed ? "cerramos" : $"abrimos {Openings(period.Rule.Openings)}";
         return $"{when} {what}{Because(period.Rule)}.";
     }
@@ -161,7 +167,7 @@ public static class BusinessHoursText
         var why = status switch
         {
             { ClosedFor.Reason: { } reason } => $"Está cerrado por {reason}",
-            { ClosedBySpecialDay: true } => "Hoy está cerrado",
+            { TodaySpecial.Kind: SpecialDayKind.Closed } => "Hoy está cerrado",
             _ => "Ahora está cerrado"
         };
         return status.OpensAt is { } opensAt ? $"{why}: abre {OpenWhen(opensAt, hours.Today)}." : $"{why}.";
@@ -169,8 +175,8 @@ public static class BusinessHoursText
 
     /// <summary>
     /// The WhatsApp reply about the hours, in blocks: whether it is open now, its week («Lunes a sábado: 9:00 a 20:00»)
-    /// and its special days of the next two weeks. Null when there is nothing to say: no weekly hours, no special day
-    /// today and none in the next two weeks.
+    /// and its special days of the next two weeks, from today: special hours under way say until when they last. Null
+    /// when there is nothing to say: no weekly hours, no special day today and none in the next two weeks.
     /// </summary>
     public static string? ForChat(BusinessHoursNow hours)
     {
@@ -179,7 +185,12 @@ public static class BusinessHoursText
             blocks.Add(status);
         if (hours.Weekly is { } weekly)
             blocks.Add($"Nuestro horario:\n{string.Join("\n", WeekLines(weekly))}");
-        var specialDays = hours.StartingWithin(ChatSpecialDaysAhead).Take(ChatMaxSpecialDays).Select(SpecialDayLine).ToList();
+        var specialDays = hours.FromTodayWithin(ChatSpecialDaysAhead)
+            // A closed period under way is the status line: it says when we open again.
+            .Where(period => period.From > hours.Today || period.Rule.Kind == SpecialDayKind.SpecialHours)
+            .Take(ChatMaxSpecialDays)
+            .Select(period => SpecialDayLine(period, hours.Today))
+            .ToList();
         if (specialDays.Count > 0)
             blocks.Add($"Días especiales:\n{string.Join("\n", specialDays)}");
         return blocks.Count == 0 ? null : string.Join("\n\n", blocks);
@@ -212,7 +223,7 @@ public static class BusinessHoursText
         var why = status switch
         {
             { ClosedFor.Reason: { } reason } => $"Estamos cerrados por {reason}",
-            { ClosedBySpecialDay: true } => "Hoy estamos cerrados",
+            { TodaySpecial.Kind: SpecialDayKind.Closed } => "Hoy estamos cerrados",
             _ => "Ahora estamos cerrados"
         };
         return status.OpensAt is { } opensAt ? $"{why}: abrimos {OpenWhen(opensAt, hours.Today)}." : $"{why}.";
@@ -243,12 +254,15 @@ public static class BusinessHoursText
         }
     }
 
-    // «Jueves 24 de diciembre: 9:00 a 18:00 (Nochebuena)», «Del lunes 21 de diciembre al lunes 4 de enero: cerrado».
-    private static string SpecialDayLine(SpecialDayPeriod period)
+    // «Jueves 24 de diciembre: 9:00 a 18:00 (Nochebuena)», «Del lunes 21 de diciembre al lunes 4 de enero: cerrado»;
+    // from today, «Hoy: 9:00 a 14:00 y 17:00 a 20:00 (Inventario)», «Hasta el sábado 7 de noviembre: 10:00 a 14:00».
+    private static string SpecialDayLine(SpecialDayPeriod period, DateOnly today)
     {
-        var when = period.From == period.To
-            ? Capitalized(SpanishCalendar.LongDate(period.From))
-            : $"Del {SpanishCalendar.LongDate(period.From)} al {SpanishCalendar.LongDate(period.To)}";
+        var when = period.From == today
+            ? period.To == today ? "Hoy" : $"Hasta el {SpanishCalendar.LongDate(period.To)}"
+            : period.From == period.To
+                ? Capitalized(SpanishCalendar.LongDate(period.From))
+                : $"Del {SpanishCalendar.LongDate(period.From)} al {SpanishCalendar.LongDate(period.To)}";
         var what = period.Rule.Kind == SpecialDayKind.Closed ? "cerrado" : ChatOpenings(period.Rule.Openings);
         return period.Rule.Reason is { } reason ? $"{when}: {what} ({reason})" : $"{when}: {what}";
     }
@@ -272,6 +286,9 @@ public static class BusinessHoursText
 
     // Today goes without words: «cierra a las 20:00».
     private static string On(DateOnly date, DateOnly today) => date <= today ? "" : $"{DayWords(date, today)} ";
+
+    // «a las 9:00», and «a la 1:30» in the one o'clock hour, as «a la una».
+    private static string AtClock(DateTime at) => $"{(at.Hour == 1 ? "a la" : "a las")} {Clock(at)}";
 
     private static string Clock(DateTime at) => at.ToString("H:mm", CultureInfo.InvariantCulture);
 

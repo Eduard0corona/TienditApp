@@ -163,14 +163,20 @@ public class PublicOpeningHoursDto
     public string? ClosedNotice { get; set; }
     /// <summary>The next special day within a week, in one line: "El viernes 25 cerramos por Navidad."</summary>
     public string? UpcomingNotice { get; set; }
-    /// <summary>Closed because today is a closed special day: not even a customer at a table orders.</summary>
+    /// <summary>
+    /// Closed by a closed special day (today's, or yesterday's while the night it took away would still run): not even
+    /// a customer at a table orders.
+    /// </summary>
     public bool? ClosedBySpecialDay { get; set; }
     /// <summary>The openings that start today, its special day's or its weekday's; null when <see cref="StatusLabel"/> is.</summary>
     public PublicDayHoursDto? TodayHours { get; set; }
     /// <summary>The dates of <see cref="OpensAt"/> and <see cref="ClosesAt"/>.</summary>
     public DateOnly? OpensOn { get; set; }
     public DateOnly? ClosesOn { get; set; }
-    /// <summary>The special days that start in the next 31 days (at most 5), by first date.</summary>
+    /// <summary>
+    /// The special days of the next 31 days (at most 5), by first date. One under way that lasts after today starts
+    /// today, with the days it has left; today alone is <see cref="TodayHours"/>.
+    /// </summary>
     public List<PublicSpecialDayDto>? SpecialDays { get; set; }
 
     /// <summary>
@@ -180,7 +186,8 @@ public class PublicOpeningHoursDto
     /// <param name="seatedOverride">The business is closed, but the customer at one of its tables still orders.</param>
     public static PublicOpeningHoursDto? From(BusinessHoursNow hours, bool seatedOverride)
     {
-        var specialDays = hours.StartingWithin(SpecialDaysAhead)
+        var specialDays = hours.FromTodayWithin(SpecialDaysAhead)
+            .Where(period => period.To > hours.Today)
             .Take(MaxSpecialDays)
             .Select(period => new PublicSpecialDayDto
             {

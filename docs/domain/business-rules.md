@@ -47,7 +47,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
   - Un periodo dura de 1 a 92 días seguidos, empieza hoy o después en la hora del negocio y termina como mucho a 366 días. Un negocio tiene como máximo 120 fechas próximas (las pasadas no cuentan), y una fecha está en un solo periodo, también si dos personas guardan a la vez (índice único `(TenantId, Date)`).
   - Un día especial reemplaza los horarios que empiezan en su fecha, por encima del horario de la semana; el de la noche anterior sigue pasando de la medianoche. Aplica también sin horario de la semana: entonces los demás días cuentan como abiertos todo el día, y eso nunca se dice como horario.
   - Las fechas pasadas no cambian. Un periodo en curso conserva su primer día, puede terminar desde ayer, y un cambio de regla pasa los días desde hoy a un periodo nuevo; quitarlo lo acorta a ayer. Un periodo pasado no se edita ni se quita. Cada cambio queda en la bitácora con el periodo antes y después, y una petición que no cambia nada no guarda ni registra.
-  - En un día especial cerrado, el menú en línea no recibe pedidos, ni siquiera desde el QR de una mesa en uso (decisión por omisión, `PublicOrderRules.TableOverridesClosure`). Al terminar un horario especial, la mesa sí pide, como fuera de horario.
+  - En un día especial cerrado, el menú en línea no recibe pedidos, ni siquiera desde el QR de una mesa en uso (decisión por omisión, `PublicOrderRules.TableOverridesClosure`), tampoco pasada la medianoche mientras seguiría la noche que quitó. Al terminar un horario especial, la mesa sí pide, como fuera de horario.
 - Solo las entradas modifican el costo promedio de un insumo.
 
 ## Mensajería

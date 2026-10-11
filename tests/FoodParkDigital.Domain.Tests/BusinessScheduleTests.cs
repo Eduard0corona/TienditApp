@@ -112,6 +112,34 @@ public class BusinessScheduleTests
     }
 
     [Fact]
+    public void ClosedDay_ShouldKeepItsReasonPastMidnight_WhileTheNightItTookAwayWouldRun()
+    {
+        // A bar open every day until 2:00; Friday 25 is closed, and so is the night it would have run into Saturday.
+        var bar = OpeningHours.Create(Enum.GetValues<DayOfWeek>().Select(day => Open(day, "18:00", "02:00")));
+        var days = Special(Day(12, 25), Navidad);
+
+        var afterMidnight = StatusAt(bar, days, At(12, 26, "00:30"));
+        Assert.False(afterMidnight.IsOpen);
+        Assert.Null(afterMidnight.TodaySpecial);
+        Assert.Equal(Navidad, afterMidnight.ClosedFor);
+        Assert.True(afterMidnight.ClosedBySpecialDay);
+        Assert.Equal(At(12, 26, "18:00"), afterMidnight.OpensAt);
+
+        // From 2:00 that night would have ended: closed as any morning.
+        var morning = StatusAt(bar, days, At(12, 26, "02:00"));
+        Assert.False(morning.IsOpen);
+        Assert.Null(morning.ClosedFor);
+        Assert.False(morning.ClosedBySpecialDay);
+
+        // Special hours that end before the night they replaced explain it too, and the table still orders then.
+        var posada = SpecialDayRule.Hours([Hours("18:00", "00:00")], "Posada");
+        var afterPosada = StatusAt(bar, Special(Day(12, 19), posada), At(12, 20, "01:00"));
+        Assert.False(afterPosada.IsOpen);
+        Assert.Equal(posada, afterPosada.ClosedFor);
+        Assert.False(afterPosada.ClosedBySpecialDay);
+    }
+
+    [Fact]
     public void SpecialHoursPastMidnight_ShouldRunIntoAClosedDay()
     {
         var finDeAno = SpecialDayRule.Hours([Hours("18:00", "03:00")], "Fin de año");
@@ -261,6 +289,28 @@ public class BusinessScheduleTests
         Assert.False(evening.IsOpen);
         Assert.Equal(At(12, 25, "00:00"), evening.OpensAt);
         Assert.Equal(Nochebuena, evening.ClosedFor);
+    }
+
+    [Fact]
+    public void WithoutWeeklyHours_SpecialHoursShouldCloseWhenTheySay_ThoughTheNextDayIsOpenAllDay()
+    {
+        // The day after is open all day only because nothing closes it: that is no hours, and it does not stretch theirs.
+        var nocheMexicana = SpecialDayRule.Hours([Hours("18:00", "02:00")], "Noche mexicana");
+        var days = Special(Day(10, 16), nocheMexicana);
+
+        var night = StatusAt(null, days, At(10, 16, "20:00"));
+        Assert.True(night.IsOpen);
+        Assert.Equal(At(10, 17, "02:00"), night.ClosesAt);
+        Assert.Equal(nocheMexicana, night.ClosesBy);
+        var untilMidnight = Special(Day(10, 16), SpecialDayRule.Hours([Hours("09:00", "00:00")], null));
+        Assert.Equal(At(10, 17, "00:00"), StatusAt(null, untilMidnight, At(10, 16, "12:00")).ClosesAt);
+
+        // The next day still opens at its midnight, and special hours still join the ones that follow them.
+        Assert.True(StatusAt(null, days, At(10, 17, "01:00")).IsOpen);
+        Assert.True(StatusAt(null, days, At(10, 17, "03:00")).IsOpen);
+        var afterHours = SpecialDayRule.Hours([Hours("00:00", "03:00")], "Después");
+        var joined = StatusAt(null, [.. days, .. Special(Day(10, 17), afterHours)], At(10, 16, "20:00"));
+        Assert.Equal((At(10, 17, "03:00"), afterHours), (joined.ClosesAt, joined.ClosesBy));
     }
 
     [Fact]

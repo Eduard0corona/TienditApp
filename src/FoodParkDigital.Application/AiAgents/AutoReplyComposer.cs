@@ -42,7 +42,7 @@ internal sealed class AutoReplyComposer
             if (text.Length > room)
             {
                 if (room >= MinCutLength)
-                    owner[index] = $"{text[..(room - Ellipsis.Length)].TrimEnd()}{Ellipsis}";
+                    owner[index] = $"{text[..CutAt(text, room - Ellipsis.Length)].TrimEnd()}{Ellipsis}";
                 break;
             }
             owner[index] = text;
@@ -54,6 +54,13 @@ internal sealed class AutoReplyComposer
             .Select((part, index) => part.ByOwner ? owner.GetValueOrDefault(index) : part.Text)
             .OfType<string>());
     }
+
+    /// <summary>
+    /// Where to cut <paramref name="text"/> to at most <paramref name="length"/> characters: never between the two halves
+    /// of an emoji, since one alone reaches the customer as «�».
+    /// </summary>
+    public static int CutAt(string text, int length)
+        => length > 0 && char.IsHighSurrogate(text[length - 1]) ? length - 1 : length;
 
     private AutoReplyComposer Add(string? text, bool byOwner)
     {

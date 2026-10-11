@@ -103,9 +103,41 @@ public class AutoReplyHoursTests
         Assert.Equal(
             "Hoy tenemos horario especial por Nochebuena: cerramos a las 18:00.\n\n" +
             $"{Week}\n\n" +
-            "Días especiales:\nViernes 25 de diciembre: cerrado (Navidad)\n\n" +
+            "Días especiales:\nHoy: 9:00 a 18:00 (Nochebuena)\nViernes 25 de diciembre: cerrado (Navidad)\n\n" +
             $"Mira el menú y haz tu pedido aquí: {MenuLink}",
             reply);
+    }
+
+    [Fact]
+    public async Task SpecialHoursUnderWay_ShouldTellUntilWhenTheyLast_AndTodaysSecondOpening()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, Shop());
+        await SeedAsync(fixture, tenant, new DateOnly(2026, 10, 12), new DateOnly(2026, 11, 7),
+            SpecialDayRule.Hours([Opening("10:00", "14:00")], "Remodelación"));
+        await using var other = SalesTestFixture.Create();
+        var inventory = await BusinessAsync(other, Shop());
+        await SeedAsync(other, inventory, new DateOnly(2026, 10, 19), new DateOnly(2026, 10, 19),
+            SpecialDayRule.Hours([Opening("09:00", "14:00"), Opening("17:00", "20:00")], "Inventario"));
+
+        // Friday 16 October at noon, five days into the remodeling; Monday 19 at noon, the inventory day.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 10, 16, 18, 0, 0, TimeSpan.Zero);
+        var duringRemodeling = await Replies(fixture).BuildReplyAsync(tenant.Id, "¿Qué horario tienen mañana?", null);
+        other.Clock.UtcNow = new DateTimeOffset(2026, 10, 19, 18, 0, 0, TimeSpan.Zero);
+        var onInventoryDay = await Replies(other).BuildReplyAsync(inventory.Id, "¿Qué horario tienen?", null);
+
+        Assert.Equal(
+            "Hoy tenemos horario especial por Remodelación: cerramos a las 14:00.\n\n" +
+            $"{Week}\n\n" +
+            "Días especiales:\nHasta el sábado 7 de noviembre: 10:00 a 14:00 (Remodelación)\n\n" +
+            $"Mira el menú y haz tu pedido aquí: {MenuLink}",
+            duringRemodeling);
+        Assert.Equal(
+            "Hoy tenemos horario especial por Inventario: cerramos a las 14:00.\n\n" +
+            $"{Week}\n\n" +
+            "Días especiales:\nHoy: 9:00 a 14:00 y 17:00 a 20:00 (Inventario)\n\n" +
+            $"Mira el menú y haz tu pedido aquí: {MenuLink}",
+            onInventoryDay);
     }
 
     [Fact]
@@ -266,6 +298,55 @@ public class AutoReplyHoursTests
     }
 
     [Fact]
+    public async Task WithoutWeeklyHours_SpecialHoursUntilOrPastMidnight_ShouldSayWhenTheyClose()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, weekly: null);
+        await SeedAsync(fixture, tenant, new DateOnly(2026, 10, 16), new DateOnly(2026, 10, 16),
+            SpecialDayRule.Hours([Opening("18:00", "02:00")], "Noche mexicana"));
+        await SeedAsync(fixture, tenant, new DateOnly(2026, 10, 23), new DateOnly(2026, 10, 23),
+            SpecialDayRule.Hours([Opening("09:00", "00:00")], null));
+
+        // Friday 16 October at 20:00 and Friday 23 at noon, in Mexico City.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 10, 17, 2, 0, 0, TimeSpan.Zero);
+        var night = await Replies(fixture).BuildReplyAsync(tenant.Id, "¿Siguen abiertos?", null);
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 10, 23, 18, 0, 0, TimeSpan.Zero);
+        var untilMidnight = await Replies(fixture).BuildReplyAsync(tenant.Id, "¿Siguen abiertos?", null);
+
+        // The days after are open all day by default: that is no hours, and never «abiertos las 24 horas».
+        Assert.Equal(
+            "Hoy tenemos horario especial por Noche mexicana: cerramos mañana a las 2:00.\n\n" +
+            "Días especiales:\nHoy: 18:00 a 2:00 (Noche mexicana)\nViernes 23 de octubre: 9:00 a medianoche\n\n" +
+            $"{Description}\n\nMira el menú y haz tu pedido aquí: {MenuLink}",
+            night);
+        Assert.Equal(
+            "Hoy tenemos horario especial: cerramos a medianoche.\n\n" +
+            "Días especiales:\nHoy: 9:00 a medianoche\n\n" +
+            $"{Description}\n\nMira el menú y haz tu pedido aquí: {MenuLink}",
+            untilMidnight);
+    }
+
+    [Fact]
+    public async Task CutTextOfTheBusiness_ShouldNotSplitAnEmoji()
+    {
+        // The cut would land between the two halves of 👋: one alone reaches the customer as «�».
+        var system = new string('s', 28);
+        var welcome = new string('a', 1266) + "👋 bienvenidos a la fonda";
+        var composed = new AutoReplyComposer().Owner(welcome).System(system).Compose();
+
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, weekly: null);
+        var agent = await fixture.Context.AiAgents.SingleAsync();
+        var description = new string('b', 1296) + "👋 estamos en el centro";
+        agent.UpdateGeneral(agent.Name, agent.Role, agent.Personality, agent.Language, agent.Tone, agent.BusinessName, description, null);
+        await fixture.Context.SaveChangesAsync();
+        var limited = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, "¿Dónde están?", null);
+
+        Assert.Equal($"{new string('a', 1266)}...\n\n{system}", composed);
+        Assert.Equal($"{new string('b', 1296)}...", limited);
+    }
+
+    [Fact]
     public async Task LongWelcome_ShouldGiveWay_AndKeepTheHoursWhole()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -421,8 +502,8 @@ public class AutoReplyHoursTests
         var repeatedMenu = (await menu.Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None))!.OpeningHours!;
         var repeatedReply = await Replies(fixture).BuildReplyAsync(tenant.Id, "¿Siguen abiertos?", null);
 
-        Assert.Equal((true, "cierra a las 1:30"), (firstMenu.IsOpen, firstMenu.StatusDetail));
-        Assert.StartsWith("Ahora estamos abiertos: cerramos a las 1:30.\n\n", firstReply);
+        Assert.Equal((true, "cierra a la 1:30"), (firstMenu.IsOpen, firstMenu.StatusDetail));
+        Assert.StartsWith("Ahora estamos abiertos: cerramos a la 1:30.\n\n", firstReply);
         Assert.Equal((false, "abre el sábado 7 a las 18:00"), (repeatedMenu.IsOpen, repeatedMenu.StatusDetail));
         Assert.StartsWith("Ahora estamos cerrados: abrimos el sábado 7 a las 18:00.\n\n", repeatedReply);
         Assert.Contains("Nuestro horario:\nLunes a viernes: cerrado\nSábado: 18:00 a 1:30\nDomingo: cerrado", repeatedReply);

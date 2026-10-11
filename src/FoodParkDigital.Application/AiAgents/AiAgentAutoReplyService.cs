@@ -216,7 +216,7 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
     }
 
     private static string LimitSize(string message, int maxLength)
-        => message.Length <= maxLength ? message : $"{message[..(maxLength - 3)]}...";
+        => message.Length <= maxLength ? message : $"{message[..AutoReplyComposer.CutAt(message, maxLength - 3)]}...";
 
     /// <summary>What a reply needs from the business: its online menu and, when asked or to take orders, its hours.</summary>
     private sealed record ReplyContext(OnlineMenuMode Mode, string Slug, BusinessHoursNow? Hours);

@@ -123,6 +123,41 @@ public class SpecialDaysMenuTests
     }
 
     [Fact]
+    public async Task ClosedDay_ShouldRefuseTheTable_PastMidnight_WhileTheNightItTookAwayWouldRun()
+    {
+        // A bar open every day until 2:00, closed on Christmas: nobody attends the night of the 25th either.
+        await using var fixture = SalesTestFixture.Create();
+        var bar = OpeningHours.Create(Enum.GetValues<DayOfWeek>().Select(day =>
+            new OpeningInterval(day, new TimeOnly(18, 0), new TimeOnly(2, 0))));
+        var (tenant, latte) = await OpenMenuAsync(fixture, bar);
+        await SeedAsync(fixture, tenant, Christmas, Christmas, Navidad);
+        await AddTableAsync(fixture, tenant, "Mesa 4");
+
+        // 0:30 on the 26th in Mexico City.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 12, 26, 6, 30, 0, TimeSpan.Zero);
+        var night = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug, Table: "Mesa 4"), CancellationToken.None);
+        var refused = await OrderHandler(fixture).Handle(Order(tenant.Slug, latte) with { TableLabel = "Mesa 4" }, CancellationToken.None);
+        // From 2:00 that night would have ended: the table orders as outside any hours.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 12, 26, 8, 0, 0, TimeSpan.Zero);
+        var morning = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug, Table: "Mesa 4"), CancellationToken.None);
+        var placed = await OrderHandler(fixture).Handle(Order(tenant.Slug, latte) with { TableLabel = "Mesa 4" }, CancellationToken.None);
+
+        Assert.False(night!.AcceptsOrders);
+        Assert.True(night.OrdersPaused);
+        Assert.True(night.OpeningHours!.ClosedBySpecialDay);
+        Assert.Equal("por Navidad · abre hoy a las 18:00", night.OpeningHours.StatusDetail);
+        Assert.Equal(
+            "No recibimos pedidos en línea por Navidad: vuelve hoy a las 18:00. Mientras, puedes ver el menú.",
+            night.OpeningHours.ClosedNotice);
+        Assert.Equal("Está cerrado por Navidad: abre hoy a las 18:00.", refused.Error);
+        Assert.True(morning!.AcceptsOrders);
+        Assert.False(morning.OpeningHours!.ClosedBySpecialDay);
+        Assert.Equal("tu mesa sí puede pedir", morning.OpeningHours.StatusDetail);
+        Assert.True(placed.IsSuccess, placed.Error);
+        Assert.Single(await fixture.Context.Orders.ToListAsync());
+    }
+
+    [Fact]
     public void TableOverridesClosure_ShouldHoldOutsideTheHours_AndNotOnAClosedDay()
     {
         // The default decision of ADR 0012, until the owner confirms it.
@@ -160,6 +195,37 @@ public class SpecialDaysMenuTests
         Assert.Equal("por Vacaciones · abre el martes 5 de enero a las 9:00", during.StatusDetail);
         Assert.Null(during.UpcomingNotice);
         Assert.Equal("Está cerrado por Vacaciones: abre el martes 5 de enero a las 9:00.", duringOrder.Error);
+    }
+
+    [Fact]
+    public async Task SpecialHoursUnderWay_ShouldBeListedAndAnnounced_UntilTheirLastDay()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, latte) = await OpenMenuAsync(fixture, Shop());
+        await SeedAsync(fixture, tenant, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31),
+            SpecialDayRule.Hours([new DailyOpening(new TimeOnly(10, 0), new TimeOnly(14, 0))], "Verano"));
+
+        // Noon in Mexico City on its first day, halfway through and on its last day; 17:00 on the day after halfway.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 7, 1, 18, 0, 0, TimeSpan.Zero);
+        var firstDay = (await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None))!.OpeningHours!;
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 7, 15, 18, 0, 0, TimeSpan.Zero);
+        var halfway = (await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None))!.OpeningHours!;
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 7, 16, 23, 0, 0, TimeSpan.Zero);
+        var refused = await OrderHandler(fixture).Handle(Order(tenant.Slug, latte), CancellationToken.None);
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 7, 31, 18, 0, 0, TimeSpan.Zero);
+        var lastDay = (await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None))!.OpeningHours!;
+
+        // The week below says 9:00 to 20:00: the list and the notice tell the days its special hours still last.
+        Assert.Equal(["2026-07-01..2026-07-31 SpecialHours 10:00-14:00 Verano"], firstDay.SpecialDays!.Select(Describe));
+        Assert.Equal("Hasta el viernes 31 de julio abrimos de 10:00 a 14:00 por Verano.", firstDay.UpcomingNotice);
+        Assert.Equal(("Abierto", "cierra a las 14:00 por Verano"), (halfway.StatusLabel, halfway.StatusDetail));
+        Assert.Equal(["2026-07-15..2026-07-31 SpecialHours 10:00-14:00 Verano"], halfway.SpecialDays!.Select(Describe));
+        Assert.Equal("Hasta el viernes 31 de julio abrimos de 10:00 a 14:00 por Verano.", halfway.UpcomingNotice);
+        Assert.Equal("Está cerrado por Verano: abre mañana a las 10:00.", refused.Error);
+        // On its last day, today's hours say it all.
+        Assert.Empty(lastDay.SpecialDays!);
+        Assert.Null(lastDay.UpcomingNotice);
+        Assert.Equal((true, "Verano"), (lastDay.TodayHours!.Special, lastDay.TodayHours.Reason));
     }
 
     [Fact]

@@ -44,6 +44,11 @@ public class BusinessHoursTextTests
     [InlineData("2026-12-25T09:00", "2026-12-24", "mañana a las 9:00")]
     [InlineData("2026-12-26T00:00", "2026-12-24", "el sábado 26")]
     [InlineData("2027-01-05T09:00", "2026-12-24", "el martes 5 de enero a las 9:00")]
+    // One o'clock is singular: «a la 1:00», as «a la una».
+    [InlineData("2026-12-25T01:00", "2026-12-24", "mañana a la 1:00")]
+    [InlineData("2026-12-24T01:59", "2026-12-24", "hoy a la 1:59")]
+    [InlineData("2026-12-25T00:30", "2026-12-24", "mañana a las 0:30")]
+    [InlineData("2026-12-24T13:00", "2026-12-24", "hoy a las 13:00")]
     public void OpenWhen_ShouldDropTheTime_OfAnOpeningAtMidnight(string at, string today, string expected)
     {
         Assert.Equal(expected, BusinessHoursText.OpenWhen(At(at), Date(today)));
@@ -55,6 +60,9 @@ public class BusinessHoursTextTests
     [InlineData("2026-12-25T02:00", "2026-12-24", "mañana a las 2:00")]
     [InlineData("2026-12-26T00:00", "2026-12-24", "mañana a medianoche")]
     [InlineData("2026-12-25T00:00", "2026-12-18", "el jueves 24 a medianoche")]
+    [InlineData("2026-12-25T01:30", "2026-12-24", "mañana a la 1:30")]
+    [InlineData("2026-12-24T01:00", "2026-12-24", "a la 1:00")]
+    [InlineData("2026-12-24T13:30", "2026-12-24", "a las 13:30")]
     public void CloseWhen_ShouldEndTheDayBefore_AtMidnight(string at, string today, string expected)
     {
         Assert.Equal(expected, BusinessHoursText.CloseWhen(At(at), Date(today)));
@@ -96,6 +104,22 @@ public class BusinessHoursTextTests
     }
 
     [Fact]
+    public void OneOClock_ShouldReadInTheSingular_EverywhereTheTimeIsSaid()
+    {
+        var bar = Hours(Weekly(Open(DayOfWeek.Friday, "18:00", "01:30")), At("2026-10-09T23:00"));
+        var lateOpening = Hours(Weekly(Open(DayOfWeek.Saturday, "01:00", "05:00")), At("2026-10-09T20:00"));
+
+        Assert.Equal(("Abierto", "cierra mañana a la 1:30"), (Label(bar), Detail(bar)));
+        Assert.Equal("Ahora estamos abiertos: cerramos mañana a la 1:30.", Chat(bar));
+        Assert.Equal(
+            ("Cerrado", "abre mañana a la 1:00",
+                "Fuera de horario no recibimos pedidos en línea: vuelve mañana a la 1:00. Mientras, puedes ver el menú.",
+                "Ahora está cerrado: abre mañana a la 1:00."),
+            Texts(lateOpening));
+        Assert.Equal("Ahora estamos cerrados: abrimos mañana a la 1:00.", Chat(lateOpening));
+    }
+
+    [Fact]
     public void OpenAllTheTime_ShouldSay24Hours_UntilAClosingIsWithinTheWeek()
     {
         var always = Weekly(Enum.GetValues<DayOfWeek>().Select(day => Open(day, "00:00", "00:00")).ToArray());
@@ -125,6 +149,29 @@ public class BusinessHoursTextTests
                 "Hoy no abrimos: vuelve mañana a las 9:00. Mientras, puedes ver el menú.",
                 "Hoy está cerrado: abre mañana a las 9:00."),
             Texts(withoutReason));
+    }
+
+    [Fact]
+    public void ClosedDay_ShouldKeepItsReasonPastMidnight_WithoutSayingTodayIsClosed()
+    {
+        // A bar open every day until 2:00, closed on Christmas: at 0:30 on the 26th, Christmas still closes it.
+        var bar = Weekly(Enum.GetValues<DayOfWeek>().Select(day => Open(day, "18:00", "02:00")).ToArray());
+        var christmasNight = Hours(bar, At("2026-12-26T00:30"), Special(Date("2026-12-25"), Navidad));
+        var withoutReason = Hours(bar, At("2026-12-26T00:30"), Special(Date("2026-12-25"), SpecialDayRule.Closed(null)));
+
+        Assert.Equal(
+            ("Cerrado", "por Navidad · abre hoy a las 18:00",
+                "No recibimos pedidos en línea por Navidad: vuelve hoy a las 18:00. Mientras, puedes ver el menú.",
+                "Está cerrado por Navidad: abre hoy a las 18:00."),
+            Texts(christmasNight));
+        Assert.Equal("Estamos cerrados por Navidad: abrimos hoy a las 18:00.", Chat(christmasNight));
+        // The 26th is not the closed day: no «Hoy no abrimos» before opening today.
+        Assert.Equal(
+            ("Cerrado", "día especial · abre hoy a las 18:00",
+                "Fuera de horario no recibimos pedidos en línea: vuelve hoy a las 18:00. Mientras, puedes ver el menú.",
+                "Ahora está cerrado: abre hoy a las 18:00."),
+            Texts(withoutReason));
+        Assert.Equal("Ahora estamos cerrados: abrimos hoy a las 18:00.", Chat(withoutReason));
     }
 
     [Fact]
@@ -197,6 +244,21 @@ public class BusinessHoursTextTests
     }
 
     [Fact]
+    public void WithoutWeeklyHours_SpecialHoursPastMidnight_ShouldSayWhenTheyClose_NotThe24Hours()
+    {
+        var nocheMexicana = SpecialDayRule.Hours([Opening("18:00", "02:00")], "Noche mexicana");
+        var night = Hours(null, At("2026-10-16T20:00"), Special(Date("2026-10-16"), nocheMexicana));
+        var untilMidnight = Hours(null, At("2026-10-16T12:00"),
+            Special(Date("2026-10-16"), SpecialDayRule.Hours([Opening("09:00", "00:00")], null)));
+
+        Assert.Equal(("Abierto", "cierra mañana a las 2:00 por Noche mexicana"), (Label(night), Detail(night)));
+        Assert.Equal("Hoy tenemos horario especial por Noche mexicana: cerramos mañana a las 2:00.", Chat(night));
+        Assert.Equal(("Abierto", "horario especial · cierra a medianoche"), (Label(untilMidnight), Detail(untilMidnight)));
+        Assert.Equal("Hoy tenemos horario especial: cerramos a medianoche.", Chat(untilMidnight));
+        Assert.All(new[] { night, untilMidnight }, hours => Assert.DoesNotContain("24 horas", BusinessHoursText.ForChat(hours)));
+    }
+
+    [Fact]
     public void UpcomingNotice_ShouldAnnounceTheNextSpecialDayWithinAWeek()
     {
         var sunday = At("2026-12-20T12:00");
@@ -219,6 +281,22 @@ public class BusinessHoursTextTests
             Upcoming(Hours(Shop(), At("2026-10-11T12:00"), Special(Date("2026-10-18"), SpecialDayRule.Closed(null)))));
         Assert.Null(Upcoming(Hours(Shop(), At("2026-10-11T12:00"), Special(Date("2026-10-19"), SpecialDayRule.Closed(null)))));
         Assert.Null(Upcoming(Hours(Shop(), At("2026-12-24T12:00"), Special(Date("2026-12-24"), Nochebuena))));
+    }
+
+    [Fact]
+    public void UpcomingNotice_ShouldAnnounceSpecialHoursUnderWay_UntilTheirLastDay()
+    {
+        var verano = Special(Date("2026-07-01"), Date("2026-07-31"), SpecialDayRule.Hours([Opening("10:00", "14:00")], "Verano"));
+        var nextWeek = Special(Date("2026-07-20"), SpecialDayRule.Closed("Inventario"));
+
+        // From its first day: the days after today keep those hours.
+        Assert.Equal("Hasta el viernes 31 de julio abrimos de 10:00 a 14:00 por Verano.",
+            Upcoming(Hours(Shop(), At("2026-07-01T12:00"), verano)));
+        Assert.Equal("Hasta el viernes 31 de julio abrimos de 10:00 a 14:00 por Verano.",
+            Upcoming(Hours(Shop(), At("2026-07-15T12:00"), verano, nextWeek)));
+        // Its last day is only today's hours, and a closed period under way already says when it opens.
+        Assert.Null(Upcoming(Hours(Shop(), At("2026-07-31T12:00"), verano)));
+        Assert.Null(Upcoming(Hours(Shop(), At("2026-12-28T12:00"), Special(Date("2026-12-21"), Date("2027-01-04"), Vacaciones))));
     }
 
     [Fact]
@@ -328,6 +406,33 @@ public class BusinessHoursTextTests
             "Domingo 20 de diciembre: abierto las 24 horas (Maratón)\n" +
             "Del lunes 21 de diciembre al lunes 4 de enero: cerrado",
             BusinessHoursText.ForChat(hours));
+    }
+
+    [Fact]
+    public void ForChat_ShouldTellTheSpecialHoursFromToday()
+    {
+        var remodelacion = Special(Date("2026-10-12"), Date("2026-11-07"),
+            SpecialDayRule.Hours([Opening("10:00", "14:00")], "Remodelación"));
+        var inventario = Special(Date("2026-10-19"),
+            SpecialDayRule.Hours([Opening("09:00", "14:00"), Opening("17:00", "20:00")], "Inventario"));
+
+        // Under way: until when its hours last, and not only that it closes at 14:00 today.
+        Assert.Equal(
+            "Hoy tenemos horario especial por Remodelación: cerramos a las 14:00.\n\n" +
+            "Nuestro horario:\nLunes a sábado: 9:00 a 20:00\nDomingo: cerrado\n\n" +
+            "Días especiales:\nHasta el sábado 7 de noviembre: 10:00 a 14:00 (Remodelación)",
+            BusinessHoursText.ForChat(Hours(Shop(), At("2026-10-16T12:00"), remodelacion)));
+        // Today only: its second opening too.
+        Assert.Equal(
+            "Hoy tenemos horario especial por Inventario: cerramos a las 14:00.\n\n" +
+            "Nuestro horario:\nLunes a sábado: 9:00 a 20:00\nDomingo: cerrado\n\n" +
+            "Días especiales:\nHoy: 9:00 a 14:00 y 17:00 a 20:00 (Inventario)",
+            BusinessHoursText.ForChat(Hours(Shop(), At("2026-10-19T12:00"), inventario)));
+        // A closed period under way is the status line: it says when we open again.
+        Assert.Equal(
+            "Estamos cerrados por Vacaciones: abrimos el martes 5 de enero a las 9:00.\n\n" +
+            "Nuestro horario:\nLunes a sábado: 9:00 a 20:00\nDomingo: cerrado",
+            BusinessHoursText.ForChat(Hours(Shop(), At("2026-12-28T12:00"), Special(Date("2026-12-21"), Date("2027-01-04"), Vacaciones))));
     }
 
     [Fact]

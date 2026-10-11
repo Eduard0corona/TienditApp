@@ -25,9 +25,13 @@ public sealed record BusinessHoursNow(
     /// <summary>The business's date and time (its wall clock).</summary>
     public DateTime LocalNow => Status.LocalNow;
 
-    /// <summary>The periods that start after today and within <paramref name="days"/> days, by first date.</summary>
-    public IEnumerable<SpecialDayPeriod> StartingWithin(int days)
-        => Periods.Where(period => period.From > Today && period.From <= Today.AddDays(days));
+    /// <summary>
+    /// The periods from today to <paramref name="days"/> days ahead, by first date: one under way starts today here,
+    /// with the days it has left.
+    /// </summary>
+    public IEnumerable<SpecialDayPeriod> FromTodayWithin(int days) => Periods
+        .Where(period => period.To >= Today && period.From <= Today.AddDays(days))
+        .Select(period => period.From < Today ? period with { From = Today } : period);
 }
 
 /// <summary>

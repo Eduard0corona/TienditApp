@@ -6,12 +6,18 @@ namespace FoodParkDigital.Domain.Tenants;
 /// <summary>
 /// Whether the business is open at a moment, in its own time, and why not when a special day decides it.
 /// <see cref="ClosesAt"/> and <see cref="OpensAt"/> are its wall-clock times; <see cref="ClosesAt"/> is null while it
-/// stays open more than a week.
+/// stays open more than a week. Without weekly hours, a special day's hours close when they say, though the day after
+/// is open by default.
 /// </summary>
 /// <param name="TodaySpecial">The special day of <see cref="Today"/>, if it has one.</param>
 /// <param name="ClosesBy">While open: the special day whose hours set the closing (null for the weekly hours).</param>
-/// <param name="ClosedFor">While closed: the special day that keeps it closed now, when today is a special day.</param>
-/// <param name="ClosedBySpecialDay">Closed because today is a closed special day.</param>
+/// <param name="ClosedFor">
+/// While closed: the special day that keeps it closed now, when today is a special day or, past midnight, when
+/// yesterday's took away the night that would still run.
+/// </param>
+/// <param name="ClosedBySpecialDay">
+/// Closed by a closed special day: today is one, or yesterday was and the night it took away would still run.
+/// </param>
 public sealed record ScheduleStatus(
     bool IsOpen,
     DateTime? ClosesAt,
@@ -108,11 +114,18 @@ public sealed class BusinessSchedule
                 date.ToDateTime(opening.Opens) < until && ClosingOf(date, opening) > localNow);
 
             // Only a special day today explains the closing: a weekday the business never opens is not blamed on
-            // tomorrow's holiday. Special hours that ended today give way to a closed day tomorrow that keeps it shut.
+            // tomorrow's holiday. Past midnight, so does yesterday's while the night it took away would still run.
+            // Special hours that ended today give way to a closed day tomorrow that keeps it shut.
+            var yesterday = today.AddDays(-1);
+            var lastNight = SpecialOn(yesterday) is { } yesterdaySpecial && TookAway(yesterday) ? yesterdaySpecial : null;
             SpecialDayRule? closedFor = null;
             if (todaySpecial?.Kind == SpecialDayKind.Closed)
             {
                 closedFor = todaySpecial;
+            }
+            else if (lastNight is not null)
+            {
+                closedFor = lastNight;
             }
             else if (todaySpecial?.Kind == SpecialDayKind.SpecialHours && TookAway(today))
             {
@@ -122,7 +135,8 @@ public sealed class BusinessSchedule
 
             return new ScheduleStatus(
                 false, null, opensAt, today, localNow, todaySpecial,
-                ClosesBy: null, ClosedFor: closedFor, ClosedBySpecialDay: todaySpecial?.Kind == SpecialDayKind.Closed);
+                ClosesBy: null, ClosedFor: closedFor,
+                ClosedBySpecialDay: todaySpecial?.Kind == SpecialDayKind.Closed || lastNight?.Kind == SpecialDayKind.Closed);
         }
     }
 
@@ -144,7 +158,8 @@ public sealed class BusinessSchedule
     /// <summary>
     /// The openings from <paramref name="first"/> to <paramref name="last"/>, in wall-clock time, with the ones that
     /// follow each other joined, one day at a time: the scan stops at the first block the caller needs. A block that
-    /// already reaches <paramref name="near"/> grows no more.
+    /// already reaches <paramref name="near"/> grows no more, and without weekly hours the whole day open by default
+    /// does not stretch a special day's hours: they close when they say, and that day starts a block of its own.
     /// </summary>
     private IEnumerable<Block> Blocks(DateOnly first, DateOnly last, DateTime near)
     {
@@ -152,11 +167,13 @@ public sealed class BusinessSchedule
         for (var date = first; date <= last; date = date.AddDays(1))
         {
             var rule = SpecialOn(date);
+            var openByDefault = _weekly is null && rule is null;
             foreach (var opening in OpeningsOn(date).OrderBy(opening => opening.Opens))
             {
                 var opens = date.ToDateTime(opening.Opens);
                 var closes = ClosingOf(date, opening);
-                if (current is { } joined && opens <= joined.Closes && joined.Closes < near)
+                if (current is { } joined && opens <= joined.Closes && joined.Closes < near
+                    && !(openByDefault && joined.ClosesBy is not null))
                 {
                     if (closes > joined.Closes)
                         current = joined with { Closes = closes, ClosesBy = rule };
