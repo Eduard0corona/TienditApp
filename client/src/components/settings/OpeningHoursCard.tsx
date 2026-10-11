@@ -12,6 +12,7 @@ import {
   dayName,
   firstDayMissingTime,
   fromDraft,
+  rangeHint,
   sameHours,
   setDayOpen,
   toDraft,
@@ -21,20 +22,19 @@ import {
 import { hasCapability } from '../../utils/tenantCapabilities';
 import './OpeningHoursCard.css';
 
-/** What an opening means when it is not plain: the API reads a closing at or before the opening as the next day. */
-function rangeHint(range: TimeRange): string | null {
-  if (!range.opens || !range.closes) return null;
-  if (range.opens === range.closes) return 'Abierto las 24 horas';
-  if (range.closes === '00:00') return 'Cierra a medianoche';
-  return range.closes < range.opens ? 'Cierra al día siguiente' : null;
+interface OpeningHoursCardProps {
+  /** Special days ahead (SpecialDaysCard): without weekly hours the menu still shows as closed on them. */
+  upcomingSpecialDays?: number;
+  /** After the hours are saved or removed: the special days read them for their suggestions. */
+  onSaved?: () => void;
 }
 
 /**
  * Horario in Mi negocio (owners and admins): the days and hours the business attends, up to two openings a day, in
  * its time zone. The public menu shows them and, outside them, takes no pickup or delivery orders (the API decides).
- * Without hours the menu never shows as closed.
+ * Without hours the menu shows as closed only on its special days.
  */
-export default function OpeningHoursCard() {
+export default function OpeningHoursCard({ upcomingSpecialDays = 0, onSaved }: OpeningHoursCardProps) {
   const { tenant, capabilities, refreshTenant } = useTenant();
   const { confirm } = useConfirm();
   const toast = useToast();
@@ -67,6 +67,7 @@ export default function OpeningHoursCard() {
     try {
       await apiRequest('put', '/api/v1/auth/my-tenant/opening-hours', { body: { intervals } });
       await refreshTenant();
+      onSaved?.();
       setDraft(null);
       toast.success(success);
     } catch (err: unknown) {
@@ -93,7 +94,9 @@ export default function OpeningHoursCard() {
   const remove = async () => {
     const accepted = await confirm({
       title: 'Quitar el horario',
-      message: 'Tu menú en línea dejará de mostrar tu horario y ya no aparecerá como cerrado.',
+      message: upcomingSpecialDays === 0
+        ? 'Tu menú en línea dejará de mostrar tu horario y ya no aparecerá como cerrado.'
+        : 'Tu menú en línea dejará de mostrar tu horario de la semana y solo se verá cerrado en tus días especiales.',
       confirmLabel: 'Quitar horario',
       danger: true,
     });
@@ -110,8 +113,10 @@ export default function OpeningHoursCard() {
         </p>
         {!hasHours && draft === null && (
           <p className="small mb-3">
-            Aún no tienes horario: tu menú en línea no muestra horas y nunca aparece como cerrado. Enciende los días que
-            abres.
+            {upcomingSpecialDays === 0
+              ? 'Aún no tienes horario: tu menú en línea no muestra horas y nunca aparece como cerrado.'
+              : 'Aún no tienes horario: tu menú en línea no muestra horas y solo aparece como cerrado en tus días especiales.'}
+            {' '}Enciende los días que abres.
           </p>
         )}
 
@@ -194,7 +199,10 @@ export default function OpeningHoursCard() {
         {takesOrders && (
           <p className="small text-muted mt-3 mb-0">
             Fuera de tu horario el menú se puede ver, pero no recibe pedidos para recoger o a domicilio
-            {hasTables ? '; los pedidos desde el QR de una mesa sí llegan, porque el cliente ya está en tu negocio' : ''}.
+            {hasTables
+              ? '; los pedidos desde el QR de una mesa sí llegan fuera de horario, porque el cliente ya está en tu negocio, '
+                + 'pero no en los días especiales que cierras'
+              : ''}.
           </p>
         )}
         {error && <div className="alert alert-danger mt-3 mb-0" role="alert">{error}</div>}

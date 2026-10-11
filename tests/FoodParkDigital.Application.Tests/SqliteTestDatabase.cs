@@ -28,6 +28,7 @@ internal sealed class SqliteTestDatabase : IAsyncDisposable
     {
         var connection = new SqliteConnection("DataSource=:memory:");
         await connection.OpenAsync();
+        SqliteSqlServerFunctions.Register(connection);
 
         var database = new SqliteTestDatabase(connection);
         await using var context = database.CreateIndependentContext();

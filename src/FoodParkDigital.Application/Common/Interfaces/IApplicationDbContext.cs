@@ -27,6 +27,7 @@ public interface IApplicationDbContext
     DbSet<Tenant> Tenants { get; }
     DbSet<TenantUser> TenantUsers { get; }
     DbSet<TenantSettings> TenantSettings { get; }
+    DbSet<SpecialDay> SpecialDays { get; }
     DbSet<WhatsAppConfig> WhatsAppConfigs { get; }
     DbSet<WhatsAppConversation> WhatsAppConversations { get; }
     DbSet<WhatsAppMessage> WhatsAppMessages { get; }

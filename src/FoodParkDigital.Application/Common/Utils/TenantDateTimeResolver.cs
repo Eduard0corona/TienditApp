@@ -38,6 +38,10 @@ public static class TenantDateTimeResolver
         return TimeZoneInfo.ConvertTime(utcNow, zone).TimeOfDay;
     }
 
+    /// <summary>The business's own date and time at an instant (its wall clock, without an offset).</summary>
+    public static DateTime LocalNow(DateTimeOffset utcNow, string? timeZoneId)
+        => TimeZoneInfo.ConvertTime(utcNow, Resolve(timeZoneId)).DateTime;
+
     private static bool TryFind(string zoneId, out TimeZoneInfo zone)
     {
         try

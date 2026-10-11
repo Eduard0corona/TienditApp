@@ -23,11 +23,6 @@ public sealed class OpeningHours : ValueObject
 {
     public const int MaxIntervalsPerDay = 2;
 
-    // Yesterday (its opening may end today) plus a full week ahead: there is always a next opening in it.
-    private const int DaysScanned = 9;
-
-    private static readonly string[] DayNames = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-
     private OpeningHours(IReadOnlyList<OpeningInterval> intervals)
     {
         Intervals = intervals;
@@ -74,44 +69,13 @@ public sealed class OpeningHours : ValueObject
 
     /// <summary>
     /// At a moment of the business's day (its local date and time): open from an opening until its closing, with
-    /// openings that follow each other joined. Never closes when it is open all the time.
+    /// openings that follow each other joined. Never closes when it is open all the time. The same evaluation as
+    /// <see cref="BusinessSchedule"/>, without special days.
     /// </summary>
     public OpeningStatus StatusAt(DateTime localNow)
-    {
-        var firstDay = localNow.Date.AddDays(-1);
-        var horizon = firstDay.AddDays(DaysScanned);
-        foreach (var (opens, closes) in Joined(firstDay))
-        {
-            if (opens <= localNow && localNow < closes)
-                return new OpeningStatus(true, closes >= horizon ? null : closes, null);
-            if (opens > localNow)
-                return new OpeningStatus(false, null, opens);
-        }
-        return new OpeningStatus(false, null, null);
-    }
+        => BusinessSchedule.Create(this, [])!.StatusAtWallClock(localNow).ToOpeningStatus();
 
-    public static string NameOf(DayOfWeek day) => DayNames[(int)day];
-
-    private IEnumerable<(DateTime Opens, DateTime Closes)> Joined(DateTime firstDay)
-    {
-        var occurrences = Enumerable.Range(0, DaysScanned)
-            .Select(offset => firstDay.AddDays(offset))
-            .SelectMany(date => On(date.DayOfWeek).Select(interval => (
-                Opens: date + interval.Opens.ToTimeSpan(),
-                Closes: (interval.EndsNextDay ? date.AddDays(1) : date) + interval.Closes.ToTimeSpan())))
-            .OrderBy(occurrence => occurrence.Opens)
-            .ToList();
-
-        var joined = new List<(DateTime Opens, DateTime Closes)>();
-        foreach (var occurrence in occurrences)
-        {
-            if (joined.Count > 0 && occurrence.Opens <= joined[^1].Closes)
-                joined[^1] = (joined[^1].Opens, occurrence.Closes > joined[^1].Closes ? occurrence.Closes : joined[^1].Closes);
-            else
-                joined.Add(occurrence);
-        }
-        return joined;
-    }
+    public static string NameOf(DayOfWeek day) => SpanishCalendar.DayName(day);
 
     protected override IEnumerable<object?> GetEqualityComponents() => Intervals;
 }

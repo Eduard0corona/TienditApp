@@ -308,6 +308,28 @@ test.describe('Mi negocio', () => {
     await snap(page, 'negocio-editar-telefono');
   });
 
+  test('negocio, días especiales', async ({ page }) => {
+    // The special days ahead, every suggested holiday and the past ones, open.
+    await open(page, '/settings/business');
+    await expect(page.getByRole('list', { name: 'Próximos días especiales' })).toContainText('Vie 25 dic');
+    await page.getByRole('button', { name: 'Ver 1 más' }).click();
+    await expect(page.getByRole('button', { name: 'Agregar Año Nuevo, viernes 1 de enero' })).toBeVisible();
+    await page.getByText('Pasados (últimos 90 días)').click();
+    await expect(page.getByRole('list', { name: 'Días especiales pasados' })).toBeVisible();
+    await snap(page, 'negocio-dias-especiales');
+  });
+
+  test('negocio, día especial (diálogo)', async ({ page }) => {
+    // A suggested holiday opens the dialog filled in: Fin de año closes at 18:00, from the Thursday hours.
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/settings/business');
+    await page.getByRole('button', { name: 'Agregar Fin de año, jueves 31 de diciembre' }).click();
+    const form = await dialog(page, 'Nuevo día especial');
+    await expect(form.getByLabel('Motivo (opcional)')).toHaveValue('Fin de año');
+    await expect(form.getByText('Tus clientes verán: 7:00 a 18:00 · Fin de año')).toBeVisible();
+    await snapDialog(page, 'negocio-dia-especial-dialogo-telefono');
+  });
+
   test('negocio, vista previa de un tema', async ({ page }) => {
     // Picking a theme shows it on the whole app before it is saved.
     await open(page, '/settings/business');

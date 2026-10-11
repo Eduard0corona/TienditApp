@@ -13,8 +13,8 @@ using FoodParkDigital.WebApi.Errors;
 namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
-/// Guided setup, sales policy, public menu and theme of the signed-in user's business. Under /auth/my-tenant, so the
-/// middleware checks the membership; the requests allow changes only to owners and admins.
+/// Guided setup, sales policy, public menu, hours, special days and theme of the signed-in user's business. Under
+/// /auth/my-tenant, so the middleware checks the membership; the requests allow changes only to owners and admins.
 /// </summary>
 [ApiController]
 [Route("api/v1/auth/my-tenant")]
@@ -91,6 +91,48 @@ public class TenantSetupController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>The days the business closes or opens with other hours, with the holidays it may want to mark.</summary>
+    [HttpGet("special-days")]
+    public async Task<ActionResult<SpecialDaysDto>> GetSpecialDays(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSpecialDaysQuery(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Marks one date, or consecutive dates, as closed or with other hours; answers the refreshed list.</summary>
+    [HttpPost("special-days")]
+    public async Task<ActionResult<SpecialDaysDto>> AddSpecialDay([FromBody] SaveSpecialDayRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new AddSpecialDayCommand(request.From, request.To, request.Kind, request.Openings, request.Reason), cancellationToken);
+        if (result.IsFailure)
+            return SpecialDayProblem(result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Moves a period of special days or gives it another rule; the dates that passed stay as they were.</summary>
+    [HttpPut("special-days/{id:guid}")]
+    public async Task<ActionResult<SpecialDaysDto>> UpdateSpecialDay(Guid id, [FromBody] UpdateSpecialDayRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateSpecialDayCommand(id, request.Revision, request.From, request.To, request.Kind, request.Openings, request.Reason), cancellationToken);
+        if (result.IsFailure)
+            return SpecialDayProblem(result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Removes a period of special days; one under way ends yesterday instead.</summary>
+    [HttpDelete("special-days/{id:guid}")]
+    public async Task<ActionResult<SpecialDaysDto>> RemoveSpecialDay(Guid id, [FromQuery] int revision, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RemoveSpecialDayCommand(id, revision), cancellationToken);
+        if (result.IsFailure)
+            return SpecialDayProblem(result.Error);
+        return Ok(result.Value);
+    }
+
     /// <summary>The colors of the business for its team's app and its public menu.</summary>
     [HttpPut("theme")]
     public async Task<ActionResult<BusinessThemeDto>> UpdateTheme([FromBody] UpdateBusinessThemeRequest request, CancellationToken cancellationToken)
@@ -100,6 +142,12 @@ public class TenantSetupController : ControllerBase
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);
     }
+
+    // Someone changed the period since the owner loaded it: like a concurrent save, the client reloads.
+    private ActionResult SpecialDayProblem(string? error)
+        => error == SpecialDayErrors.Stale
+            ? this.ApiError(StatusCodes.Status409Conflict, error, ApiErrorCodes.ConcurrencyConflict)
+            : this.ApiError(StatusCodes.Status400BadRequest, error);
 }
 
 public record UpdateOnlineMenuRequest(OnlineMenuMode Mode);
@@ -108,3 +156,9 @@ public record UpdateBusinessThemeRequest(BusinessTheme Theme);
 
 /// <summary>The openings of the week; empty or null removes the hours.</summary>
 public record UpdateOpeningHoursRequest(List<OpeningIntervalDto>? Intervals);
+
+/// <summary>A special day: from a date to another (null for one day), closed or with one or two openings.</summary>
+public record SaveSpecialDayRequest(DateOnly From, DateOnly? To, SpecialDayKind Kind, List<SpecialOpeningDto>? Openings, string? Reason);
+
+/// <summary>A period of special days as it should be, with the revision the owner saw.</summary>
+public record UpdateSpecialDayRequest(int Revision, DateOnly From, DateOnly? To, SpecialDayKind Kind, List<SpecialOpeningDto>? Openings, string? Reason);

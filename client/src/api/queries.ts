@@ -14,6 +14,7 @@ export const queryKeys = {
   cfdiDraft: (orderId: string, receiver?: CfdiReceiver) => ['orders', orderId, 'cfdi-draft', receiver ?? null] as const,
   attention: ['attention'] as const,
   currentCashSession: ['cash', 'current-session'] as const,
+  specialDays: ['special-days'] as const,
 };
 
 // The bell and the drawer chip stay current without a live connection of their own.
@@ -122,5 +123,43 @@ export function useCreateCampaign() {
   return useMutation({
     mutationFn: (body: Schemas['CreateCampaignCommand']) => apiRequest('post', '/api/v1/messaging/campaigns', { body }),
     onSuccess: () => client.invalidateQueries({ queryKey: ['messaging', 'campaigns'] }),
+  });
+}
+
+/** The special days of the business (closed, or open with other hours) and the holidays it could mark (owners and admins). */
+export function useSpecialDays(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.specialDays,
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/auth/my-tenant/special-days', { signal }),
+    enabled,
+  });
+}
+
+// A change answers the whole list again, with its suggestions: it replaces the one read.
+
+export function useSaveSpecialDay() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Schemas['SaveSpecialDayRequest']) => apiRequest('post', '/api/v1/auth/my-tenant/special-days', { body }),
+    onSuccess: (specialDays) => client.setQueryData(queryKeys.specialDays, specialDays),
+  });
+}
+
+export function useUpdateSpecialDay() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Schemas['UpdateSpecialDayRequest'] }) =>
+      apiRequest('put', '/api/v1/auth/my-tenant/special-days/{id}', { path: { id }, body }),
+    onSuccess: (specialDays) => client.setQueryData(queryKeys.specialDays, specialDays),
+  });
+}
+
+/** The revision is the one read: when someone else changed the special day meanwhile, the API answers 409. */
+export function useRemoveSpecialDay() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, revision }: { id: string; revision: number }) =>
+      apiRequest('delete', '/api/v1/auth/my-tenant/special-days/{id}', { path: { id }, query: { revision } }),
+    onSuccess: (specialDays) => client.setQueryData(queryKeys.specialDays, specialDays),
   });
 }

@@ -9182,6 +9182,186 @@
         }
       }
     },
+    "/api/v1/auth/my-tenant/special-days": {
+      "get": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpecialDayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpecialDayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpecialDayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/my-tenant/special-days/{id}": {
+      "put": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecialDayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecialDayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecialDayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/my-tenant/theme": {
       "put": {
         "tags": [
@@ -13700,6 +13880,38 @@
         },
         "additionalProperties": false
       },
+      "HolidaySuggestionDto": {
+        "required": [
+          "date",
+          "kind",
+          "name",
+          "openings",
+          "statutory"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "name": {
+            "type": "string"
+          },
+          "statutory": {
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "InstallCategoryTemplateResultDto": {
         "required": [
           "createdCount",
@@ -17121,6 +17333,38 @@
         },
         "additionalProperties": false
       },
+      "PublicDayHoursDto": {
+        "required": [
+          "closed",
+          "date",
+          "openings",
+          "special"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "special": {
+            "type": "boolean"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicMenuCategoryDto": {
         "required": [
           "id",
@@ -17311,6 +17555,55 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "todayDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "hasWeeklyHours": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "statusLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "upcomingNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedBySpecialDay": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "todayHours": {
+            "$ref": "#/components/schemas/PublicDayHoursDto"
+          },
+          "opensOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "closesOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "specialDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSpecialDayDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17338,6 +17631,39 @@
             "type": "string"
           },
           "contactPhone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicSpecialDayDto": {
+        "required": [
+          "from",
+          "kind",
+          "openings",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          },
+          "reason": {
             "type": "string",
             "nullable": true
           }
@@ -18020,6 +18346,39 @@
         },
         "additionalProperties": false
       },
+      "SaveSpecialDayRequest": {
+        "required": [
+          "from",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            },
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "SendChatMessageCommand": {
         "required": [
           "message",
@@ -18564,6 +18923,144 @@
             "items": {
               "$ref": "#/components/schemas/ProductOptionGroupInput"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpecialDayDto": {
+        "required": [
+          "from",
+          "id",
+          "inProgress",
+          "kind",
+          "openings",
+          "revision",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inProgress": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpecialDayKind": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Closed",
+          "SpecialHours"
+        ]
+      },
+      "SpecialDaysDto": {
+        "required": [
+          "hasWeeklyHours",
+          "maxDaysAhead",
+          "maxDaysPerPeriod",
+          "maxReasonLength",
+          "maxUpcomingDates",
+          "past",
+          "suggestions",
+          "today",
+          "upcoming",
+          "upcomingDates"
+        ],
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasWeeklyHours": {
+            "type": "boolean"
+          },
+          "upcoming": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialDayDto"
+            }
+          },
+          "past": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialDayDto"
+            }
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HolidaySuggestionDto"
+            }
+          },
+          "upcomingDates": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxUpcomingDates": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxDaysPerPeriod": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxDaysAhead": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxReasonLength": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpecialOpeningDto": {
+        "required": [
+          "closes",
+          "opens"
+        ],
+        "type": "object",
+        "properties": {
+          "opens": {
+            "type": "string"
+          },
+          "closes": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -20423,6 +20920,44 @@
         "properties": {
           "newStatus": {
             "$ref": "#/components/schemas/ServiceOrderPieceStatus"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSpecialDayRequest": {
+        "required": [
+          "from",
+          "kind",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            },
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

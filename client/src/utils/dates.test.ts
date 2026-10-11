@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   BUSINESS_TIME_ZONES,
+  addCalendarDays,
   businessDayEnd,
   businessDayStart,
+  calendarDaysBetween,
   formatCalendarDate,
+  formatLongCalendarDay,
+  formatShortCalendarDay,
   formatTime,
   getBusinessTimeZone,
   getBusinessToday,
@@ -49,6 +53,29 @@ describe('dates in the business time zone', () => {
   it('shows a calendar date as words without shifting it', () => {
     setBusinessTimeZone('America/Tijuana');
     expect(formatCalendarDate('2026-10-05')).toBe('5 de octubre de 2026');
+  });
+
+  it('names the day of a special date, never the day before', () => {
+    // Read as an instant, 2026-12-24 is still the 23rd in Mexico City (UTC-6): a calendar date has no time.
+    setBusinessTimeZone('America/Mexico_City');
+    expect(formatShortCalendarDay('2026-12-24')).toBe('Jue 24 dic');
+    expect(formatShortCalendarDay('2027-01-04')).toBe('Lun 4 ene');
+    expect(formatLongCalendarDay('2026-12-26')).toBe('sábado 26 de diciembre');
+    expect(formatLongCalendarDay('2026-12-21', false)).toBe('lunes 21');
+
+    setBusinessTimeZone('America/Tijuana');
+    expect(formatShortCalendarDay('2026-12-24')).toBe('Jue 24 dic');
+    expect(formatShortCalendarDay('')).toBe('');
+  });
+
+  it('counts calendar days across months and years', () => {
+    expect(addCalendarDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(addCalendarDays('2026-12-21', 6)).toBe('2026-12-27');
+    expect(addCalendarDays('2026-03-01', -1)).toBe('2026-02-28');
+    expect(addCalendarDays('2026-10-04', 366)).toBe('2027-10-05');
+    expect(calendarDaysBetween('2026-12-31', '2027-01-01')).toBe(1);
+    expect(calendarDaysBetween('2026-12-21', '2027-01-04')).toBe(14);
+    expect(calendarDaysBetween('2026-12-25', '2026-12-24')).toBe(-1);
   });
 
   it('ignores zones it does not know', () => {

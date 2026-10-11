@@ -33,6 +33,7 @@ Migraciones recientes con notas operativas:
 - Fase 16: `AddBusinessTheme` agrega `TenantSettings.Theme` (int, sin nulos, 0 por omisión: Nopal). EF siempre escribe el valor; el de la base solo llena las filas que guarde la versión anterior. Su `Down` quita la columna y con ella el tema que eligió cada negocio (la bitácora conserva cada cambio).
 - `DropRequireOpenCashSession`, escrita a mano porque el modelo ya no tiene la columna, borra `TenantSettings.RequireOpenCashSession` con su valor por omisión (su snapshot no cambia). Va después de las dos que dejaron de mapearla: la versión que corre mientras se aplica (`master` desde la PR #47, con o sin las Fases 14 a 16) no la mapea. Su `Down` la crea otra vez (`bit`, sin nulos, 0 por omisión) para una versión anterior, que la lee: los valores no vuelven, así que la política queda desactivada en todos los negocios (desde la PR #40 ninguna versión la usa).
 - Fase 19: `AddOpeningHours` agrega `TenantSettings.OpeningHours` (`nvarchar(1000)`, con nulos), el horario del negocio como lista JSON. `OpeningHoursStorage` la escribe así: `[{"day":1,"opens":"09:00","closes":"14:00"}]`, con el día de `DayOfWeek` (domingo 0). Al leerla, `OpeningHours.Create` revisa otra vez las reglas. Su `Down` quita la columna y con ella los horarios (la bitácora conserva cada cambio).
+- Fase 21: `AddSpecialDays` crea la tabla `SpecialDays`, los días especiales de cada negocio con una fila por fecha ([ADR 0012](../adr/0012-special-days.md)): `Date` es `date`, las cuatro horas son `time(0)`, `Reason` es `nvarchar(40)` con nulos y `Revision`, el token de concurrencia, es `int`. Tiene cinco restricciones CHECK (`CK_SpecialDays_Kind`, `_Openings`, `_SecondOpening`, `_Reason` y `_Revision`) para que cada fila sea una regla válida; `_Reason` usa `LEN([Reason]) > 0` y no `<> ''`, porque con la intercalación por omisión (`SQL_Latin1_General_CP1_CI_AS`, también la de Azure SQL) un motivo hecho solo de emojis es igual a `''`. Tiene también el índice único `IX_SpecialDays_TenantId_Date` (una regla por fecha en cada negocio) y el índice `(TenantId, PeriodId)`. No tiene llaves foráneas, como `DiningTables`. Solo agrega: no cambia datos ni otras tablas, y empieza vacía. Su `Down` borra la tabla y con ella los días especiales (la bitácora conserva cada cambio).
 
 ## Reglas
 
@@ -145,6 +146,27 @@ Los de `20261010074254_AddOpeningHours` se probaron igual (SQL Server 2022, Dock
 - antes del `rollback.sql`, el `verify.sql` contó el horario que se iba a perder. El `rollback.sql` borró la columna y el registro de la migración; `master` siguió funcionando y la nueva volvió a responder 503 en `/health/schema`. Repetirlo no hizo nada, y aplicar de nuevo dejó la columna vacía.
 
 En CI lo prueba `OpeningHoursSqlServerTests`: revisa la columna (con nulos, de 1000 caracteres), el JSON que se guarda y que al leerlo vuelve el mismo horario. También revisa que revertir la migración solo quita los horarios y que aplicarla otra vez los deja vacíos. Desde esta migración, el modelo actual ya no corre sobre las anteriores; por eso `UnmappedColumnsSqlServerTests` lee y guarda la configuración en ellas con un contexto de la versión anterior, sin la columna del horario (`SqlServerTestDatabase.CreateContext<TContext>`).
+
+Los de `20261011161835_AddSpecialDays` se probaron igual (SQL Server 2022, Docker), con el `sqlcmd` clásico y `-b`. La base se creó en `20261010074254_AddOpeningHours`, como producción con `master` en la Fase 20, con tres negocios: uno con horario partido en la zona del Centro, uno de noche (viernes de 18:00 a 2:00) en Tijuana y uno sin horario:
+- sin el `apply.sql`, la versión nueva respondió 503 en `/health/schema` ("1 migration(s) of this version are not in the database, starting with 20261011161835_AddSpecialDays.") y `master` respondió sano;
+- el `apply.sql` creó la tabla vacía con sus cinco restricciones CHECK, el índice único y el del periodo, sin tocar `TenantSettings`. Repetirlo con la caché de planes vacía no cambió ningún objeto ni el historial. Sobre esa base, la versión nueva y la de `master` respondieron sanas en `/health/schema`;
+- con cinco fechas guardadas de dos negocios (una ya pasada), el `verify.sql` contó lo que el `rollback.sql` perdería: 5 filas, 2 negocios, 4 desde hoy;
+- el `rollback.sql` borró la tabla y el registro de la migración, con los horarios de la semana intactos; `master` siguió sano y la versión nueva volvió a responder 503. Repetirlo con la caché de planes vacía no hizo nada;
+- aplicar de nuevo dejó la tabla vacía, como la primera vez, y la versión nueva volvió a responder sana; repetirlo con la caché de planes vacía tampoco cambió nada.
+
+Después de la revisión de la Fase 21, `_Reason` pasó de `[Reason] <> ''` a `LEN([Reason]) > 0`. La migración todavía no estaba en producción, así que se regeneró con su mismo Id, y sus scripts se generaron y ensayaron otra vez sobre la misma base, también con el `sqlcmd` clásico y `-b`:
+- con el `apply.sql` anterior, un motivo `🎄` o `⭐` fallaba con el error 547. El `rollback.sql`, que no cambió, regresó la base a `20261010074254_AddOpeningHours`;
+- el `apply.sql` nuevo creó la tabla con `([Reason] IS NULL OR len([Reason])>(0))` sin tocar nada más, y repetirlo con la caché de planes vacía no cambió ningún objeto ni el historial;
+- la tabla aceptó `🎄` y `⭐` y rechazó con el error 547 un motivo vacío, uno de un espacio y uno de tres;
+- el `rollback.sql`, dos veces, regresó la base al estado de antes, con los negocios y sus horarios intactos; aplicar otra vez, dos veces, la dejó vacía, igual que la primera vez.
+
+En CI lo prueba `SpecialDaysSqlServerTests`:
+- la forma de la tabla y que cada restricción CHECK rechace un `INSERT` que no es una regla; `_Reason` rechaza un motivo vacío o de puros espacios y acepta uno hecho solo de emojis;
+- que todo motivo que aceptan la validación de la petición y la regla del dominio se guarde tal como la regla lo deja;
+- que el índice único rechace la misma fecha en un negocio y la deje en otro, y que el contexto de un negocio no vea las filas del otro;
+- que una edición con una versión vieja falle con `DbUpdateConcurrencyException` y una fecha marcada al mismo tiempo con `DbUpdateException`;
+- que un contexto de la versión anterior, que no conoce la tabla, lea y guarde la configuración y su horario sobre el esquema nuevo;
+- que revertir hasta `20261010074254_AddOpeningHours` borre solo la tabla y aplicar otra vez la deje vacía.
 
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación. Cuando basta un cambio de datos acotado, lleva además un `repair.sql` idempotente que lista lo que cambia, como `20261005_StorageUrlsOutsideTheirFolder`.
 

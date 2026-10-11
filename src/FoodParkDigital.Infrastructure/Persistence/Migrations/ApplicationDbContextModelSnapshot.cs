@@ -3243,6 +3243,80 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("FolioSequences", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.SpecialDay", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly?>("FirstCloses")
+                        .HasPrecision(0)
+                        .HasColumnType("time(0)");
+
+                    b.Property<TimeOnly?>("FirstOpens")
+                        .HasPrecision(0)
+                        .HasColumnType("time(0)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("PeriodId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly?>("SecondCloses")
+                        .HasPrecision(0)
+                        .HasColumnType("time(0)");
+
+                    b.Property<TimeOnly?>("SecondOpens")
+                        .HasPrecision(0)
+                        .HasColumnType("time(0)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Date")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "PeriodId");
+
+                    b.ToTable("SpecialDays", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SpecialDays_Kind", "[Kind] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_SpecialDays_Openings", "([Kind] = 0 AND [FirstOpens] IS NULL AND [FirstCloses] IS NULL AND [SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([Kind] = 1 AND [FirstOpens] IS NOT NULL AND [FirstCloses] IS NOT NULL AND (([SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([SecondOpens] IS NOT NULL AND [SecondCloses] IS NOT NULL)))");
+
+                            t.HasCheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR LEN([Reason]) > 0");
+
+                            t.HasCheckConstraint("CK_SpecialDays_Revision", "[Revision] >= 1");
+
+                            t.HasCheckConstraint("CK_SpecialDays_SecondOpening", "[SecondOpens] IS NULL OR ([FirstCloses] > [FirstOpens] AND [SecondOpens] >= [FirstCloses] AND [SecondCloses] <> [SecondOpens])");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")

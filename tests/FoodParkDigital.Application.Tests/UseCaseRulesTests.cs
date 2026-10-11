@@ -16,6 +16,7 @@ using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Reports.Queries;
 using FoodParkDigital.Application.Tenants.Commands;
+using FoodParkDigital.Application.Tenants.Queries;
 using FoodParkDigital.Application.WhatsApp.Commands;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -61,6 +62,10 @@ public class UseCaseRulesTests
         { typeof(UpdateSalesPolicyCommand), "Manager" },
         { typeof(UpdateBusinessThemeCommand), "Manager" },
         { typeof(UpdateOpeningHoursCommand), "Manager" },
+        { typeof(GetSpecialDaysQuery), "Manager" },
+        { typeof(AddSpecialDayCommand), "Manager" },
+        { typeof(UpdateSpecialDayCommand), "Manager" },
+        { typeof(RemoveSpecialDayCommand), "Manager" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

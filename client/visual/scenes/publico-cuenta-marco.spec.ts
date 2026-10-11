@@ -1,7 +1,15 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, settle, snap } from '../helpers';
-import { CON_DOS_PASOS, INICIO_CON_ERROR, MENU_CERRADO, NEGOCIO_SUSPENDIDO, PUBLICO_ROUTES } from './publico-cuenta-marco.mocks';
+import {
+  CON_DOS_PASOS,
+  INICIO_CON_ERROR,
+  MENU_CERRADO,
+  MENU_CIERRE_ESPECIAL,
+  MENU_HORARIO_ESPECIAL,
+  NEGOCIO_SUSPENDIDO,
+  PUBLICO_ROUTES,
+} from './publico-cuenta-marco.mocks';
 
 // The screens before signing in (login, registration, recovery, confirmations and the invitation), the public menu of
 // a business and the frame of the app around every screen: its menus, the search, the menu on each size and the
@@ -302,6 +310,41 @@ test.describe('Menú público fuera de horario', () => {
     await expect(page.getByText('Pedido para Mesa 4')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Agregar Latte' })).toBeVisible();
     await snap(page, 'menu-publico-mesa-telefono');
+  });
+});
+
+test.describe('Menú público en un día especial', () => {
+  test.use({ signedIn: false });
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+  });
+
+  test.describe('cerrado', () => {
+    test.use({ prepareData: MENU_CIERRE_ESPECIAL });
+
+    test('menú público cerrado por un día especial', async ({ page }) => {
+      // The API words the closing (why and when it opens again) and lists the special days ahead with the week.
+      await open(page, '/m/cafe-la-esquina');
+      await expect(page.getByText('por Inventario · abre mañana a las 8:00')).toBeVisible();
+      await expect(page.getByText('No recibimos pedidos en línea por Inventario')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Agregar Latte' })).toHaveCount(0);
+      await page.getByText('Hoy: Cerrado · Inventario').click();
+      await expect(page.getByRole('list', { name: 'Días especiales' })).toContainText('Lun 2 nov · Cerrado · Día de Muertos');
+      await snap(page, 'menu-publico-cierre-especial-telefono');
+    });
+  });
+
+  test.describe('con otro horario', () => {
+    test.use({ prepareData: MENU_HORARIO_ESPECIAL });
+
+    test('menú público con horario especial', async ({ page }) => {
+      await open(page, '/m/cafe-la-esquina');
+      await expect(page.getByText('cierra a las 14:00 por Inventario')).toBeVisible();
+      await expect(page.getByText('Hoy: 10:00 a 14:00 · Inventario')).toBeVisible();
+      await expect(page.getByText('El viernes 9 cerramos por Aniversario.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Agregar Latte' })).toBeVisible();
+      await snap(page, 'menu-publico-horario-especial-telefono');
+    });
   });
 });
 

@@ -246,6 +246,7 @@ function buildRoutes(data, token) {
       return ok(payment);
     }],
     ['GET', /^\/auth\/my-tenant\/setup$/, () => ok(data.setup)],
+    ['GET', /^\/auth\/my-tenant\/special-days$/, () => ok(data.specialDays)],
     ['PUT', /^\/auth\/my-tenant\/sales-policy$/, (m, q, body) => {
       Object.assign(data.tenant, body);
       Object.assign(data.setup, { pricesIncludeTax: body.pricesIncludeTax, defaultTaxRate: body.defaultTaxRate });

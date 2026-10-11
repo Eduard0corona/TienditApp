@@ -8,7 +8,14 @@ import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import type { ProductOptionGroupDto } from '../../types';
 import { formatMoney } from '../../utils/money';
-import { WEEK, dayLabel, describeDay, describeOpeningStatus } from '../../utils/openingHours';
+import {
+  WEEK,
+  dayLabel,
+  describeDay,
+  describeOpeningStatus,
+  describeSpecialDay,
+  describeTodayHours,
+} from '../../utils/openingHours';
 import { estimateOrderTotals, resolveProductVat } from '../../utils/orderTotals';
 import {
   getLineKey,
@@ -52,8 +59,8 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
 /**
  * The public menu of a business (/m/:slug), without signing in: the catalog the business published and, when
  * it takes orders, a cart that sends the order with the customer's name and phone. A table QR adds ?mesa=.
- * Its header says whether the business is open now (the API works it out in the business's time), its hours of
- * the week and its address with a map.
+ * Its header says whether the business is open now (the API works it out in the business's time and writes the words),
+ * its hours of the week, its special days ahead and its address with a map.
  */
 export default function PublicMenuPage() {
   const optionsTitleId = useId();
@@ -198,9 +205,26 @@ export default function PublicMenuPage() {
 
   const contact = whatsAppUrl(data.contactPhone, `Hola ${data.businessName}, vi su menú en línea.`);
   const hours = data.openingHours;
-  const status = hours ? describeOpeningStatus(hours) : null;
-  // Paused while it is closed: its hours say when to come back (at one of its tables the API takes the order anyway).
-  const closedByHours = data.ordersPaused && status?.isOpen === false;
+  // The API writes what the menu says about its hours (todayDate tells); an older one sends only the times.
+  const fromServer = hours?.todayDate != null;
+  const legacyStatus = hours && !fromServer ? describeOpeningStatus(hours) : null;
+  // Without weekly hours and without a special day today there is no status to show (statusLabel is null).
+  const status = hours && fromServer
+    ? (hours.statusLabel ? { isOpen: hours.isOpen, label: hours.statusLabel, detail: hours.statusDetail ?? null } : null)
+    : legacyStatus;
+  // Paused while it is closed: its hours say when to come back (at one of its tables the API takes the order outside
+  // its hours, but not on a special day it closes).
+  const closedByHours = data.ordersPaused && hours?.isOpen === false;
+  const closedNotice = hours && fromServer
+    ? hours.closedNotice
+    : `Fuera de horario no recibimos pedidos en línea${legacyStatus?.when ? `: vuelve ${legacyStatus.when}` : ''}. Mientras, puedes ver el menú.`;
+  const today = hours?.todayHours;
+  const specialDays = hours?.specialDays ?? [];
+  const hoursSummary = !hours ? null
+    : !fromServer ? `Hoy: ${describeDay(hours.intervals, hours.today)}`
+    : today ? `Hoy: ${describeTodayHours(today)}` : 'Días especiales';
+  // Without weekly hours and without special days ahead (a special day today alone) there is nothing to open.
+  const hoursOpen = !!hours && (hours.intervals.length > 0 || specialDays.length > 0);
   // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
   const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
 
@@ -257,22 +281,41 @@ export default function PublicMenuPage() {
 
       {(hours || data.address) && (
         <section className="pm-info" aria-label="Horario y ubicación">
-          {hours && (
+          {hours && !hoursOpen && (
+            <p className="pm-today">
+              <i className="ri-time-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">{hoursSummary}</span>
+            </p>
+          )}
+          {hours && hoursOpen && (
             <details className="pm-hours">
               <summary>
                 <i className="ri-time-line" aria-hidden="true"></i>
-                <span className="flex-grow-1">Hoy: {describeDay(hours.intervals, hours.today)}</span>
+                <span className="flex-grow-1">{hoursSummary}</span>
                 <i className="ri-arrow-down-s-line pm-hours-toggle" aria-hidden="true"></i>
               </summary>
-              <ul className="pm-week list-unstyled" aria-label="Horario de la semana">
-                {WEEK.map((day) => (
-                  <li key={day} aria-current={day === hours.today ? 'date' : undefined}>
-                    <span>{dayLabel(day)}</span>
-                    <span>{describeDay(hours.intervals, day)}</span>
-                  </li>
-                ))}
-              </ul>
+              {hours.intervals.length > 0 && (
+                <ul className="pm-week list-unstyled" aria-label="Horario de la semana">
+                  {WEEK.map((day) => (
+                    <li key={day} aria-current={day === hours.today ? 'date' : undefined}>
+                      <span>{dayLabel(day)}</span>
+                      <span>{describeDay(hours.intervals, day)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {specialDays.length > 0 && (
+                <ul className="pm-special-days list-unstyled" aria-label="Días especiales">
+                  {specialDays.map((day) => <li key={day.from}>{describeSpecialDay(day)}</li>)}
+                </ul>
+              )}
             </details>
+          )}
+          {hours?.upcomingNotice && (
+            <p className="pm-upcoming text-muted">
+              <i className="ri-calendar-event-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">{hours.upcomingNotice}</span>
+            </p>
           )}
           {data.address && (
             <p className="pm-address">
@@ -284,11 +327,8 @@ export default function PublicMenuPage() {
         </section>
       )}
 
-      {closedByHours ? (
-        <div className="alert alert-info mx-3 mt-3 mb-0" role="status">
-          Fuera de horario no recibimos pedidos en línea{status?.when ? `: vuelve ${status.when}` : ''}. Mientras, puedes ver
-          el menú.
-        </div>
+      {closedByHours && closedNotice ? (
+        <div className="alert alert-info mx-3 mt-3 mb-0" role="status">{closedNotice}</div>
       ) : data.ordersPaused && (
         <div className="alert alert-warning mx-3 mt-3 mb-0" role="status">
           Por ahora no estamos recibiendo pedidos en línea. Puedes ver el menú y volver más tarde.

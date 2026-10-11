@@ -216,6 +216,12 @@ export const ServiceOrderPieceStatus = {
 } as const;
 export type ServiceOrderPieceStatus = (typeof ServiceOrderPieceStatus)[keyof typeof ServiceOrderPieceStatus];
 
+export const SpecialDayKind = {
+  Closed: 0,
+  SpecialHours: 1,
+} as const;
+export type SpecialDayKind = (typeof SpecialDayKind)[keyof typeof SpecialDayKind];
+
 export const SubscriptionPaymentMethod = {
   Transfer: 0,
   Card: 1,

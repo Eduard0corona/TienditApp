@@ -3,6 +3,9 @@ using System.Text.Json;
 using FoodParkDigital.WebApi.Observability;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -35,6 +38,24 @@ public sealed class HealthEndpointsTests : IClassFixture<HealthEndpointsTests.Ap
         Assert.Equal(BuildInfo.Commit, body.RootElement.GetProperty("commit").GetString());
     }
 
+    [Fact]
+    public async Task Readiness_ShouldSayTheBusinessTimeZonesResolve_AsTheSmokeTestReadsIt()
+    {
+        using var response = await _api.Http.GetAsync("/health/ready");
+        var text = await response.Content.ReadAsStringAsync();
+
+        // The zones do not need the database: the entry is Healthy while readiness fails without one.
+        using var body = JsonDocument.Parse(text);
+        Assert.Equal("Healthy", body.RootElement.GetProperty("checks").GetProperty("business-time-zones").GetString());
+        // The exact text .github/scripts/smoke-test.sh looks for.
+        Assert.Contains("\"business-time-zones\":\"Healthy\"", text);
+
+        // A zone that falls back to UTC, or the check failing, leaves readiness Degraded (200), never Unhealthy.
+        var registration = _api.Services.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations
+            .Single(check => check.Name == "business-time-zones");
+        Assert.Equal(HealthStatus.Degraded, registration.FailureStatus);
+    }
+
     [Theory]
     [InlineData("1.0.0+b16e105d33d19afed856bea34b11db7e6b1a489c", "b16e105d33d19afed856bea34b11db7e6b1a489c")]
     [InlineData("1.0.0", null)]
@@ -64,6 +85,8 @@ public sealed class HealthEndpointsTests : IClassFixture<HealthEndpointsTests.Ap
         }
 
         public HttpClient Http { get; }
+
+        public IServiceProvider Services => _factory.Services;
 
         public void Dispose()
         {
