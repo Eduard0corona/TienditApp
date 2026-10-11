@@ -142,14 +142,14 @@ test.describe('Caja', () => {
   test('caja, registrar movimiento', async ({ page }) => {
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Gasto, retiro o depósito' }).click();
-    await expect(await dialog(page)).toContainText('Registrar movimiento');
+    await dialog(page, 'Registrar movimiento');
     await snapDialog(page, 'caja-movimiento-dialogo');
   });
 
   test('caja, cerrar caja', async ({ page }) => {
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    await expect(await dialog(page)).toContainText('Efectivo esperado');
+    await expect(await dialog(page, 'Cerrar caja')).toContainText('Efectivo esperado');
     await snapDialog(page, 'caja-cerrar-dialogo');
   });
 
@@ -157,7 +157,7 @@ test.describe('Caja', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    await expect(await dialog(page)).toContainText('Efectivo esperado');
+    await expect(await dialog(page, 'Cerrar caja')).toContainText('Efectivo esperado');
     await snapDialog(page, 'caja-cerrar-dialogo-telefono');
   });
 
@@ -165,7 +165,7 @@ test.describe('Caja', () => {
     // A count that does not match: the difference shows and the note becomes required before closing.
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    const closing = await dialog(page);
+    const closing = await dialog(page, 'Cerrar caja');
     await closing.getByLabel('$500.00').fill('3');
     await closing.getByLabel('$200.00').fill('2');
     await expect(closing.getByText('Para cerrar con diferencia escribe qué pasó.')).toBeVisible();
@@ -175,7 +175,7 @@ test.describe('Caja', () => {
   test('caja cerrada con su corte', async ({ page }) => {
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    const closing = await dialog(page);
+    const closing = await dialog(page, 'Cerrar caja');
     await closing.getByRole('button', { name: 'Escribir el total' }).click();
     await closing.getByLabel('Efectivo contado').fill('1800');
     await closing.getByLabel('Notas (explica la diferencia)').fill('Faltaron monedas de cambio');
@@ -224,7 +224,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Faltan $50.00').getByRole('button').click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, 'Turno de carlos.mendez@cafelaesquina.mx');
     // Its movements load after the dialog opens.
     await expect(detail.getByText('Hielo (6 bolsas)')).toBeVisible();
     await snapDialog(page, 'caja-turno-detalle-dialogo');
@@ -234,7 +234,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Faltan $50.00').getByRole('button').click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, 'Turno de carlos.mendez@cafelaesquina.mx');
     await expect(detail.getByText('Hielo (6 bolsas)')).toBeVisible();
     await printCut(page, detail.getByRole('button', { name: 'Imprimir corte' }));
     await snap(page, 'caja-turno-corte-impreso');
@@ -245,7 +245,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Sucursal Coyoacán').filter({ hasText: 'En curso' }).getByRole('button').click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, 'Turno de carlos.mendez@cafelaesquina.mx');
     await expect(detail.getByText('Pago de pan')).toBeVisible();
     await expect(detail.getByRole('button', { name: 'Cerrar esta caja' })).toBeVisible();
     await snapDialog(page, 'caja-turno-abierto-otro-dialogo');
@@ -277,7 +277,7 @@ test.describe('Caja', () => {
     test('caja, cerrar caja en oscuro', async ({ page }) => {
       await open(page, '/cash');
       await page.getByRole('button', { name: 'Cerrar caja' }).click();
-      await expect(await dialog(page)).toContainText('Efectivo esperado');
+      await expect(await dialog(page, 'Cerrar caja')).toContainText('Efectivo esperado');
       await snapDialog(page, 'caja-cerrar-dialogo-oscuro');
     });
 
@@ -364,7 +364,7 @@ test.describe('Sucursales', () => {
     // The main branch's address is the one the online menu shows: its form says so.
     await open(page, '/branches');
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar Sucursal Roma Norte');
     await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
     await snapDialog(page, 'sucursales-editar-principal-dialogo');
   });
@@ -373,7 +373,7 @@ test.describe('Sucursales', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/branches');
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar Sucursal Roma Norte');
     await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
     await snapDialog(page, 'sucursales-editar-principal-dialogo-telefono');
   });
@@ -381,7 +381,7 @@ test.describe('Sucursales', () => {
   test('sucursales, nueva sucursal', async ({ page }) => {
     await open(page, '/branches');
     await page.getByRole('button', { name: 'Nueva sucursal' }).click();
-    const creating = await dialog(page);
+    const creating = await dialog(page, 'Nueva sucursal');
     await expect(creating.getByRole('button', { name: 'Crear sucursal' })).toBeVisible();
     await snapDialog(page, 'sucursales-nueva-dialogo');
   });
@@ -392,7 +392,7 @@ test.describe('Sucursales', () => {
     test('sucursales, editar la principal en oscuro', async ({ page }) => {
       await open(page, '/branches');
       await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-      const editing = await dialog(page);
+      const editing = await dialog(page, 'Editar Sucursal Roma Norte');
       await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
       await snapDialog(page, 'sucursales-editar-principal-dialogo-oscuro');
     });
@@ -403,7 +403,7 @@ test.describe('Equipo', () => {
   test('equipo, invitar persona', async ({ page }) => {
     await open(page, '/employees');
     await page.getByRole('button', { name: 'Invitar persona' }).click();
-    const inviting = await dialog(page);
+    const inviting = await dialog(page, 'Invitar persona');
     await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
     await snapDialog(page, 'equipo-invitar-dialogo');
   });
@@ -412,7 +412,7 @@ test.describe('Equipo', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/employees');
     await page.getByRole('button', { name: 'Invitar persona' }).click();
-    const inviting = await dialog(page);
+    const inviting = await dialog(page, 'Invitar persona');
     await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
     await snapDialog(page, 'equipo-invitar-dialogo-telefono');
   });
@@ -421,7 +421,7 @@ test.describe('Equipo', () => {
     // A cashier: their role preset and the permissions it brings.
     await open(page, '/employees');
     await page.getByRole('button', { name: 'Editar a Carlos Méndez' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Carlos Méndez');
     await expect(editing.getByRole('button', { name: 'Guardar cambios' })).toBeVisible();
     await snapDialog(page, 'equipo-editar-dialogo');
   });
@@ -432,7 +432,7 @@ test.describe('Equipo', () => {
     test('equipo, invitar persona en oscuro', async ({ page }) => {
       await open(page, '/employees');
       await page.getByRole('button', { name: 'Invitar persona' }).click();
-      const inviting = await dialog(page);
+      const inviting = await dialog(page, 'Invitar persona');
       await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
       await snapDialog(page, 'equipo-invitar-dialogo-oscuro');
     });

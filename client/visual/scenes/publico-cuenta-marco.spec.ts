@@ -38,12 +38,10 @@ async function openPhoneMenu(page: Page) {
   await expect(page.getByRole('button', { name: 'Cerrar el menú' })).toBeVisible();
 }
 
-/** Opens the options of the Latte. The dialog does not link its title (no accessible name): it is checked by its heading. */
+/** Opens the options of the Latte. */
 async function openLatteOptions(page: Page) {
   await page.getByRole('button', { name: 'Agregar Latte' }).click();
-  const options = await dialog(page);
-  await expect(options.getByRole('heading', { name: 'Latte' })).toBeVisible();
-  return options;
+  return dialog(page, 'Latte');
 }
 
 /** Adds a Latte to the cart from its options dialog: large, with almond milk. */
@@ -262,7 +260,7 @@ test.describe('Menú público: pedir', () => {
     await page.getByRole('button', { name: 'Agregar Concha de vainilla' }).click();
     await page.getByRole('button', { name: 'Agregar Concha de vainilla' }).click();
     await page.getByRole('button', { name: /^Ver pedido · 4 · / }).click();
-    await dialog(page);
+    await dialog(page, 'Tu pedido');
     await snapScreen(page, 'menu-publico-carrito-telefono');
   });
 
@@ -270,7 +268,7 @@ test.describe('Menú público: pedir', () => {
     await open(page, '/m/cafe-la-esquina');
     await page.getByRole('button', { name: 'Agregar Café americano' }).click();
     await page.getByRole('button', { name: /^Ver pedido · 1 · / }).click();
-    const cart = await dialog(page);
+    const cart = await dialog(page, 'Tu pedido');
     await cart.getByLabel('Tu nombre').fill('Valeria Morales');
     await cart.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
     await cart.getByRole('button', { name: /^Enviar pedido · / }).click();

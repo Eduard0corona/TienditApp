@@ -36,7 +36,7 @@ async function tapProduct(page: Page, name: string, times = 1) {
 /** Opens the variants and extras of the latte and picks a large one with almond milk. */
 async function chooseLatte(page: Page): Promise<Locator> {
   await tapProduct(page, 'Latte');
-  const options = await dialog(page);
+  const options = await dialog(page, 'Latte');
   await options.getByLabel('Grande').check();
   await options.getByLabel('Almendra').check();
   return options;
@@ -54,7 +54,7 @@ async function fillTicket(page: Page) {
 /** Cobrar from the ticket: the side panel on a desktop, the bar at the bottom on a phone. */
 async function openCharge(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: /^Cobrar( \$|$)/ }).click();
-  return dialog(page);
+  return dialog(page, 'Cobrar');
 }
 
 /** Charges the ticket in cash (the bill handed over, or the exact amount) and waits for the sale just recorded. */
@@ -62,10 +62,10 @@ async function charge(page: Page, cashReceived?: string): Promise<Locator> {
   const panel = await openCharge(page);
   if (cashReceived) await panel.getByLabel('Efectivo recibido').fill(cashReceived);
   await panel.getByRole('button', { name: /^Cobrar \$/ }).click();
-  await expect(page.getByRole('heading', { name: /^Venta ORD-\d+ cobrada$/ })).toBeVisible();
+  const sale = await dialog(page, /^Venta ORD-\d+ cobrada$/);
   // The charge dialog closes as the sale opens: only the sale stays.
   await expect(page.getByRole('dialog')).toHaveCount(1);
-  return dialog(page);
+  return sale;
 }
 
 /**
@@ -127,7 +127,7 @@ test.describe('Vender', () => {
     await fillTicket(page);
     await snapPage(page, 'vender-barra-telefono');
     await page.getByRole('button', { name: /artículos · / }).click();
-    await dialog(page);
+    await dialog(page, 'Ticket');
     await snapDialog(page, 'vender-ticket-telefono');
   });
 
@@ -230,7 +230,7 @@ test.describe('Mesas', () => {
   /** Mesa 4: two rounds, the second one ready to take to the table. */
   async function openTableFour(page: Page) {
     await page.getByRole('button', { name: /^Mesa 4, ocupada/ }).click();
-    const panel = await dialog(page);
+    const panel = await dialog(page, /^Mesa 4 · /);
     await expect(panel.getByRole('heading', { name: 'Ronda 2' })).toBeVisible();
   }
 
@@ -272,7 +272,7 @@ test.describe('Pedidos', () => {
   /** Opens the detail of an order from its folio in the list. */
   async function openOrder(page: Page, orderNumber: string) {
     await page.getByRole('button', { name: orderNumber, exact: true }).click();
-    return dialog(page);
+    return dialog(page, `Pedido ${orderNumber}`);
   }
 
   test('Pedidos escritorio', async ({ page }) => {
@@ -317,7 +317,7 @@ test.describe('Pedidos', () => {
   test('Registrar un pago', async ({ page }) => {
     await open(page, '/orders');
     await page.getByRole('row').filter({ hasText: 'ORD-000345' }).getByRole('button', { name: 'Cobrar' }).click();
-    const panel = await dialog(page);
+    const panel = await dialog(page, 'Cobrar ORD-000345');
     await panel.getByLabel('Efectivo recibido').fill('300');
     await snapDialog(page, 'pedidos-registrar-pago');
   });
