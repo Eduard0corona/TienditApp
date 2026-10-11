@@ -223,16 +223,6 @@
   --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
 }
 
-/* Soft buttons: the text of a selected thing on its tint (accentText on accentSubtle passes in every theme). */
-.btn-soft-primary {
-  --ct-btn-color: var(--ct-primary-text-emphasis);
-  --ct-btn-hover-color: var(--ta-on-accent);
-  --ct-btn-active-color: var(--ta-on-accent);
-  --ct-btn-disabled-color: var(--ct-primary-text-emphasis);
-  --ct-btn-disabled-bg: var(--ct-primary-bg-subtle);
-  --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
-}
-
 .btn-success,
 .btn-danger {
   --ct-btn-color: #fff;
@@ -327,27 +317,6 @@
   --ct-btn-focus-shadow-rgb: var(--ct-warning-rgb);
 }
 
-/* Soft state buttons: the emphasis text on the tint; hovered, the fill with its own text color. */
-.btn-soft-success {
-  --ct-btn-color: var(--ct-success-text-emphasis);
-  --ct-btn-disabled-color: var(--ct-success-text-emphasis);
-  --ct-btn-disabled-bg: var(--ct-success-bg-subtle);
-}
-
-.btn-soft-danger {
-  --ct-btn-color: var(--ct-danger-text-emphasis);
-  --ct-btn-disabled-color: var(--ct-danger-text-emphasis);
-  --ct-btn-disabled-bg: var(--ct-danger-bg-subtle);
-}
-
-.btn-soft-warning {
-  --ct-btn-color: var(--ct-warning-text-emphasis);
-  --ct-btn-hover-color: var(--ta-on-warning);
-  --ct-btn-active-color: var(--ta-on-warning);
-  --ct-btn-disabled-color: var(--ct-warning-text-emphasis);
-  --ct-btn-disabled-bg: var(--ct-warning-bg-subtle);
-}
-
 /* Amber is a fill, never a text color on white: badges on it get dark text and the text utility the emphasis. */
 .badge.bg-warning {
   --ct-badge-color: var(--ta-on-warning);
@@ -434,13 +403,6 @@
 .card.bg-primary .text-light,
 .card.bg-primary .text-white-50 {
   color: var(--tt-on-accent) !important;
-}
-
-/* Card titles read as they are written, with a capital only at the start, like the rest of the app (Hyper capitalizes every letter). */
-.card .header-title {
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 1rem;
 }
 
 /* Amounts line up in columns and do not jump while they change. */
