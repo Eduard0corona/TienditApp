@@ -108,19 +108,23 @@ export default function DailyCut({ branches }: DailyCutProps) {
                   <div>
                     {tenant?.name && <div className="text-center fw-bold">{tenant.name}</div>}
                     <div className="text-center fw-bold">Corte del día</div>
-                    <div className="text-center small mb-2">{dateLabel} · {scopeLabel}</div>
+                    <div className="text-center small mb-2 ta-ticket-wrap">{dateLabel} · {scopeLabel}</div>
                     {getDailyCutRows(cut).map(([label, value]) => (
-                      <div key={label} className="d-flex justify-content-between gap-2">
+                      <div key={label} className="ta-ticket-row">
                         <span>{label}</span>
-                        <span>{formatMoney(value)}</span>
+                        <span className="text-nowrap">{formatMoney(value)}</span>
                       </div>
                     ))}
                     <div className="small">{cut.salesPaymentsCount} pagos</div>
                     {cut.byUser.length > 0 && <hr className="my-1" />}
+                    {/* The user (an email) on its own line, so it never pushes the amount past the edge of the ticket. */}
                     {cut.byUser.map((item) => (
-                      <div key={`${item.userName}-${item.paymentsCount}`} className="d-flex justify-content-between gap-2">
-                        <span>{item.userName} ({item.paymentsCount})</span>
-                        <span>{formatMoney(item.totalAmount)}</span>
+                      <div key={`${item.userName}-${item.paymentsCount}`}>
+                        <div className="ta-ticket-wrap">{item.userName}</div>
+                        <div className="ta-ticket-row">
+                          <span>{item.paymentsCount} {item.paymentsCount === 1 ? 'pago' : 'pagos'}</span>
+                          <span className="text-nowrap">{formatMoney(item.totalAmount)}</span>
+                        </div>
                       </div>
                     ))}
                     <div className="text-center small mt-2">

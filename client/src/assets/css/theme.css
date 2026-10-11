@@ -752,6 +752,16 @@ html[data-topbar-color='light'] {
   gap: 1rem;
 }
 
+/* A value that does not fit beside its label (a date on a 58 mm roll) wraps in its own column, against the edge. */
+.ta-ticket-row > :last-child {
+  text-align: end;
+}
+
+/* Text of any length (a user, a note): it breaks inside the ticket instead of passing its edge. */
+.ta-ticket-wrap {
+  overflow-wrap: anywhere;
+}
+
 .ta-ticket-total {
   font-size: 1.05rem;
   font-weight: 800;
