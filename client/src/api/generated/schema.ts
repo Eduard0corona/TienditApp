@@ -7535,6 +7535,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/special-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveSpecialDayRequest"];
+                    "text/json": components["schemas"]["SaveSpecialDayRequest"];
+                    "application/*+json": components["schemas"]["SaveSpecialDayRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/my-tenant/special-days/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateSpecialDayRequest"];
+                    "text/json": components["schemas"]["UpdateSpecialDayRequest"];
+                    "application/*+json": components["schemas"]["UpdateSpecialDayRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: {
+                    revision?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/my-tenant/theme": {
         parameters: {
             query?: never;
@@ -9179,6 +9313,14 @@ export interface components {
         ForgotPasswordCommand: {
             email: string;
         };
+        HolidaySuggestionDto: {
+            /** Format: date */
+            date: string;
+            name: string;
+            statutory: boolean;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings: components["schemas"]["SpecialOpeningDto"][];
+        };
         InstallCategoryTemplateResultDto: {
             templateId: string;
             templateName: string;
@@ -10210,6 +10352,14 @@ export interface components {
             /** Format: double */
             onHand: number;
         };
+        PublicDayHoursDto: {
+            /** Format: date */
+            date: string;
+            closed: boolean;
+            special: boolean;
+            openings: components["schemas"]["SpecialOpeningDto"][];
+            reason?: string | null;
+        };
         PublicMenuCategoryDto: {
             /** Format: uuid */
             id: string;
@@ -10261,6 +10411,20 @@ export interface components {
             opensAt?: string | null;
             /** Format: int32 */
             opensInDays?: number | null;
+            /** Format: date */
+            todayDate?: string | null;
+            hasWeeklyHours?: boolean | null;
+            statusLabel?: string | null;
+            statusDetail?: string | null;
+            closedNotice?: string | null;
+            upcomingNotice?: string | null;
+            closedBySpecialDay?: boolean | null;
+            todayHours?: components["schemas"]["PublicDayHoursDto"];
+            /** Format: date */
+            opensOn?: string | null;
+            /** Format: date */
+            closesOn?: string | null;
+            specialDays?: components["schemas"]["PublicSpecialDayDto"][] | null;
         };
         PublicOrderReceiptDto: {
             orderNumber: string;
@@ -10269,6 +10433,15 @@ export interface components {
             confirmed: boolean;
             businessName: string;
             contactPhone?: string | null;
+        };
+        PublicSpecialDayDto: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings: components["schemas"]["SpecialOpeningDto"][];
+            reason?: string | null;
         };
         PurchaseOrderDto: {
             /** Format: uuid */
@@ -10473,6 +10646,15 @@ export interface components {
             /** Format: double */
             averageTicket: number;
         };
+        SaveSpecialDayRequest: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to?: string | null;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings?: components["schemas"]["SpecialOpeningDto"][] | null;
+            reason?: string | null;
+        };
         SendChatMessageCommand: {
             phoneNumber: string;
             message: string;
@@ -10627,6 +10809,47 @@ export interface components {
         };
         SetProductOptionGroupsRequest: {
             groups: components["schemas"]["ProductOptionGroupInput"][];
+        };
+        SpecialDayDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings: components["schemas"]["SpecialOpeningDto"][];
+            reason?: string | null;
+            /** Format: int32 */
+            revision: number;
+            inProgress: boolean;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        SpecialDayKind: 0 | 1;
+        SpecialDaysDto: {
+            /** Format: date */
+            today: string;
+            hasWeeklyHours: boolean;
+            upcoming: components["schemas"]["SpecialDayDto"][];
+            past: components["schemas"]["SpecialDayDto"][];
+            suggestions: components["schemas"]["HolidaySuggestionDto"][];
+            /** Format: int32 */
+            upcomingDates: number;
+            /** Format: int32 */
+            maxUpcomingDates: number;
+            /** Format: int32 */
+            maxDaysPerPeriod: number;
+            /** Format: int32 */
+            maxDaysAhead: number;
+            /** Format: int32 */
+            maxReasonLength: number;
+        };
+        SpecialOpeningDto: {
+            opens: string;
+            closes: string;
         };
         StarterCatalogDto: {
             id: string;
@@ -11153,6 +11376,17 @@ export interface components {
         };
         UpdateServiceOrderPieceStatusRequest: {
             newStatus: components["schemas"]["ServiceOrderPieceStatus"];
+        };
+        UpdateSpecialDayRequest: {
+            /** Format: int32 */
+            revision: number;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to?: string | null;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings?: components["schemas"]["SpecialOpeningDto"][] | null;
+            reason?: string | null;
         };
         UpdateSupplierCommand: {
             /** Format: uuid */

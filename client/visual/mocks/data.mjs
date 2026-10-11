@@ -855,10 +855,38 @@ export function buildData() {
     ],
   };
 
+  // ---------------------------------------------------------------- special days (SpecialDaysDto, today 2026-10-04)
+  // Kind as the contract numbers it: 0 closed, 1 other hours. The suggestions are the holidays of the next 90 days that
+  // are not special days yet; Fin de año closes at 18:00 from the Thursday hours of the business profile (7:00 to 21:00).
+  const specialDay = (key, from, to, kind, openings, reason, revision = 1) => ({
+    id: uuid(`special:${key}`), from, to, kind, openings, reason, revision, inProgress: false,
+  });
+  const specialDays = {
+    today: '2026-10-04',
+    hasWeeklyHours: true,
+    upcoming: [
+      specialDay('revolucion', '2026-11-16', '2026-11-16', 0, [], 'Día de la Revolución'),
+      specialDay('nochebuena', '2026-12-24', '2026-12-24', 1, [{ opens: '09:00', closes: '18:00' }], 'Nochebuena'),
+      specialDay('navidad', '2026-12-25', '2026-12-25', 0, [], 'Navidad', 2),
+    ],
+    past: [specialDay('independencia', '2026-09-16', '2026-09-16', 0, [], 'Día de la Independencia')],
+    suggestions: [
+      { date: '2026-11-02', name: 'Día de Muertos', statutory: false, kind: 0, openings: [] },
+      { date: '2026-12-12', name: 'Día de la Virgen de Guadalupe', statutory: false, kind: 0, openings: [] },
+      { date: '2026-12-31', name: 'Fin de año', statutory: false, kind: 1, openings: [{ opens: '07:00', closes: '18:00' }] },
+      { date: '2027-01-01', name: 'Año Nuevo', statutory: true, kind: 0, openings: [] },
+    ],
+    upcomingDates: 3,
+    maxUpcomingDates: 120,
+    maxDaysPerPeriod: 92,
+    maxDaysAhead: 366,
+    maxReasonLength: 40,
+  };
+
   return {
     setup, tenant, profile, myTenants, categories, products, customers: customerList, locations, orders, dashboard, kitchenOrders,
     boardPieces, cashSession, cashTx, dailyCut, supplies, stockRows, movements, kardex, alerts, recipes, suppliers,
     purchaseOrders, appointments, employees, permissionOptions, auditLogs, aiAgents, whatsAppConfig, conversations,
-    messagesByConversation, report, categoryTemplates, USER_ID, TENANT_ID, OWNER_EMAIL,
+    messagesByConversation, report, categoryTemplates, specialDays, USER_ID, TENANT_ID, OWNER_EMAIL,
   };
 }

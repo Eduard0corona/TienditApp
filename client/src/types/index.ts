@@ -372,6 +372,9 @@ export { BusinessTheme } from '../api/generated/enums';
 /** Same numbers as .NET's System.DayOfWeek: Sunday is 0. The hours of a business use it. */
 export { DayOfWeek } from '../api/generated/enums';
 
+/** Same numbers as Domain.Tenants.Enums.SpecialDayKind: a special day closes the business or opens it with other hours. */
+export { SpecialDayKind } from '../api/generated/enums';
+
 /**
  * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders
  * placed from a distance and services; a counter sale gets no message.

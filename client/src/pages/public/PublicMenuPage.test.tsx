@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
-import { BusinessTheme, DayOfWeek } from '../../types';
+import { BusinessTheme, DayOfWeek, SpecialDayKind } from '../../types';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import { applyBusinessTheme } from '../../utils/theme';
 import PublicMenuPage from './PublicMenuPage';
@@ -57,6 +57,27 @@ function menu(overrides: Partial<PublicMenu> = {}): PublicMenu {
 const mondayToSaturday = [
   DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday,
 ].map((day) => ({ day, opens: '09:00', closes: '20:00' }));
+
+// Christmas Day as this API words it (todayDate present): closed by a special day, open again on Saturday 26.
+const christmasDay = {
+  intervals: mondayToSaturday,
+  today: DayOfWeek.Friday,
+  isOpen: false,
+  opensAt: '09:00',
+  opensInDays: 1,
+  todayDate: '2026-12-25',
+  hasWeeklyHours: true,
+  statusLabel: 'Cerrado',
+  statusDetail: 'por Navidad · abre mañana a las 9:00',
+  closedNotice: 'No recibimos pedidos en línea por Navidad: vuelve mañana a las 9:00. Mientras, puedes ver el menú.',
+  upcomingNotice: null,
+  closedBySpecialDay: true,
+  todayHours: { date: '2026-12-25', closed: true, special: true, openings: [], reason: 'Navidad' },
+  opensOn: '2026-12-26',
+  specialDays: [
+    { from: '2026-12-31', to: '2026-12-31', kind: SpecialDayKind.SpecialHours, openings: [{ opens: '09:00', closes: '18:00' }], reason: 'Fin de año' },
+  ],
+};
 
 function renderPage(path = '/m/cafe-luna') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -234,5 +255,117 @@ describe('PublicMenuPage', () => {
       .toBeInTheDocument();
     expect(screen.getByText('Latte')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Agregar Latte' })).not.toBeInTheDocument();
+  });
+
+  it('shows the words the API writes about its hours and why it is closed', async () => {
+    api.getMenu.mockResolvedValue(menu({ acceptsOrders: false, ordersPaused: true, openingHours: christmasDay }));
+
+    renderPage();
+
+    // Not "abre mañana a las 9:00" worked out here: the reason comes from the API.
+    expect(await screen.findByText('Cerrado', { selector: '.ta-chip' })).toBeInTheDocument();
+    expect(screen.getByText('por Navidad · abre mañana a las 9:00')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No recibimos pedidos en línea por Navidad: vuelve mañana a las 9:00. Mientras, puedes ver el menú.',
+    );
+    expect(screen.queryByText(/Fuera de horario/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Agregar Latte' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Hoy: Cerrado · Navidad'));
+    expect(within(screen.getByRole('list', { name: 'Horario de la semana' })).getAllByRole('listitem')).toHaveLength(7);
+    expect(within(screen.getByRole('list', { name: 'Días especiales' })).getByRole('listitem'))
+      .toHaveTextContent('Jue 31 dic · 9:00 a 18:00 · Fin de año');
+  });
+
+  it('takes no order at a table on a special day the business closes', async () => {
+    api.getMenu.mockResolvedValue(menu({ acceptsOrders: false, ordersPaused: true, openingHours: christmasDay }));
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+
+    expect(await screen.findByText('Pedido para Mesa 4')).toBeInTheDocument();
+    expect(api.getMenu).toHaveBeenCalledWith('cafe-luna', 'Mesa 4');
+    expect(screen.getByRole('status')).toHaveTextContent('No recibimos pedidos en línea por Navidad');
+    expect(screen.queryByRole('button', { name: 'Agregar Latte' })).not.toBeInTheDocument();
+  });
+
+  it('tells the customer at a table that they can still order outside the hours', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      openingHours: {
+        ...christmasDay,
+        today: DayOfWeek.Thursday,
+        todayDate: '2026-12-24',
+        statusDetail: 'tu mesa sí puede pedir',
+        closedNotice: null,
+        closedBySpecialDay: false,
+        todayHours: { date: '2026-12-24', closed: false, special: true, openings: [{ opens: '09:00', closes: '18:00' }], reason: 'Nochebuena' },
+      },
+    }));
+
+    renderPage('/m/cafe-luna?mesa=Mesa%204');
+
+    expect(await screen.findByText('Cerrado', { selector: '.ta-chip' })).toBeInTheDocument();
+    expect(screen.getByText('tu mesa sí puede pedir')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('shows today\'s special hours and the next special day', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      openingHours: {
+        intervals: mondayToSaturday,
+        today: DayOfWeek.Thursday,
+        isOpen: true,
+        closesAt: '18:00',
+        closesInDays: 0,
+        todayDate: '2026-12-24',
+        hasWeeklyHours: true,
+        statusLabel: 'Abierto',
+        statusDetail: 'cierra a las 18:00 por Nochebuena',
+        upcomingNotice: 'El viernes 25 cerramos por Navidad.',
+        closedBySpecialDay: false,
+        todayHours: { date: '2026-12-24', closed: false, special: true, openings: [{ opens: '09:00', closes: '18:00' }], reason: 'Nochebuena' },
+        closesOn: '2026-12-24',
+        specialDays: [{ from: '2026-12-25', to: '2026-12-25', kind: SpecialDayKind.Closed, openings: [], reason: 'Navidad' }],
+      },
+    }));
+
+    renderPage();
+
+    expect(await screen.findByText('Abierto', { selector: '.ta-chip' })).toBeInTheDocument();
+    expect(screen.getByText('cierra a las 18:00 por Nochebuena')).toBeInTheDocument();
+    expect(screen.getByText('El viernes 25 cerramos por Navidad.')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Hoy: 9:00 a 18:00 · Nochebuena'));
+    expect(within(screen.getByRole('list', { name: 'Días especiales' })).getByRole('listitem'))
+      .toHaveTextContent('Vie 25 dic · Cerrado · Navidad');
+    expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
+  });
+
+  it('shows only the special days of a business without weekly hours, with no status', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      openingHours: {
+        intervals: [],
+        today: DayOfWeek.Monday,
+        isOpen: true,
+        closesAt: null,
+        todayDate: '2026-12-14',
+        hasWeeklyHours: false,
+        statusLabel: null,
+        statusDetail: null,
+        closedBySpecialDay: false,
+        specialDays: [{ from: '2026-12-21', to: '2027-01-04', kind: SpecialDayKind.Closed, openings: [], reason: 'Vacaciones' }],
+      },
+    }));
+
+    const { container } = renderPage();
+
+    expect(await screen.findByText('Pide en línea')).toBeInTheDocument();
+    // "Abierto las 24 horas" would only mean that no special day closes it today.
+    expect(container.querySelector('.ta-chip')).toBeNull();
+    expect(screen.queryByText(/^Hoy:/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('Días especiales'));
+    expect(screen.queryByRole('list', { name: 'Horario de la semana' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Días especiales' })).getByRole('listitem'))
+      .toHaveTextContent('Lun 21 dic al lun 4 ene · Cerrado · Vacaciones');
+    expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
   });
 });

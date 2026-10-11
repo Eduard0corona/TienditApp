@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
 import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
+import SpecialDaysCard from '../../components/settings/SpecialDaysCard';
 import ThemeCard from '../../components/settings/ThemeCard';
 import SubscriptionCard from '../../components/settings/SubscriptionCard';
 import { useMySubscription } from '../../hooks/useMySubscription';
 import { tenantApi } from '../../api/tenantApi';
+import { queryKeys, useSpecialDays } from '../../api/queries';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
@@ -83,7 +86,10 @@ const CAPABILITY_PRESETS = [
 ];
 
 export default function BusinessSettings() {
-  const { refreshTenant } = useTenant();
+  const { tenant: activeTenant, refreshTenant } = useTenant();
+  const queryClient = useQueryClient();
+  // Its special days: removing the weekly hours says what is left of them, and saving the hours renews its suggestions.
+  const specialDays = useSpecialDays(!!activeTenant);
   const [capabilities, setCapabilities] = useState<number>(0);
   const subscription = useMySubscription();
   // Modules the plan lets the business turn on; null without plan (no limits).
@@ -319,7 +325,11 @@ export default function BusinessSettings() {
       <SubscriptionCard />
       <SalesPolicyCard />
       <OnlineMenuCard />
-      <OpeningHoursCard />
+      <OpeningHoursCard
+        upcomingSpecialDays={specialDays.data?.upcoming.length ?? 0}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: queryKeys.specialDays })}
+      />
+      <SpecialDaysCard />
       <ThemeCard />
 
       <div className="row">

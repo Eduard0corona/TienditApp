@@ -1,0 +1,35 @@
+/*
+ * Días especiales (SpecialDaysCard): one row per special day with its text actions on the right, and the holidays it
+ * suggests. The special hours of the dialog reuse the ranges of the Horario card (OpeningHoursCard.css).
+ */
+.special-days-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding-inline: 0;
+}
+
+.special-days-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.special-days-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.special-days-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.special-days-past summary {
+  cursor: pointer;
+}

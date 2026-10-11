@@ -5,6 +5,7 @@ import type { AiAgentDto, CreateAiAgentRequest, UpdateAiAgentRequest } from '../
 import { tenantApi } from '../../api/tenantApi';
 import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useTenant } from '../../hooks/useTenant';
 
 type AgentTab = 'General' | 'Mensajes' | 'Datos que pide' | 'Comportamiento';
 
@@ -59,6 +60,9 @@ const toUpdateRequest = (agent: AiAgentDto): UpdateAiAgentRequest => ({
 
 export default function AiAgentSettings() {
   const { confirm } = useConfirm();
+  const { tenant } = useTenant();
+  // With weekly hours the replies answer hours questions from them (and the special days), not from the description.
+  const hoursAnswerThemselves = (tenant?.openingHours?.length ?? 0) > 0;
   const [agents, setAgents] = useState<AiAgentDto[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<AgentTab>('General');
@@ -299,9 +303,10 @@ export default function AiAgentSettings() {
             <div className="card">
               <div className="card-body">
                 <div className="alert alert-light border small">
-                  Reconocen palabras completas (saludos, precios, menú, horario y ubicación) y contestan con tus textos;
-                  no usan inteligencia artificial. Se pausan solas 12 horas cuando alguien del equipo escribe en el chat
-                  y nunca contestan fotos ni notas de voz.
+                  Reconocen palabras completas (saludos, precios, menú, horario y ubicación) y contestan con tus textos.
+                  Las preguntas de horario se contestan con el horario de Configuración › Negocio y tus días especiales.
+                  No usan inteligencia artificial. Se pausan solas 12 horas cuando alguien del equipo escribe en el chat y
+                  nunca contestan fotos ni notas de voz.
                 </div>
                 <ul className="nav nav-tabs nav-bordered mb-3">
                   {(['General', 'Mensajes', 'Datos que pide', 'Comportamiento'] as AgentTab[]).map((tab) => (
@@ -375,6 +380,7 @@ export default function AiAgentSettings() {
                       <textarea id="aiagentsettings-descripcion-del-negocio"
                         className="form-control"
                         rows={3}
+                        aria-describedby={hoursAnswerThemselves ? 'aiagentsettings-descripcion-del-negocio-help' : undefined}
                         value={selectedAgent.businessDescription || ''}
                         onChange={(e) =>
                           updateSelectedAgent((agent) => ({
@@ -383,6 +389,11 @@ export default function AiAgentSettings() {
                           }))
                         }
                       />
+                      {hoursAnswerThemselves && (
+                        <div id="aiagentsettings-descripcion-del-negocio-help" className="form-text">
+                          Las preguntas de horario ya no usan este texto: se contestan con tu horario de Configuración › Negocio.
+                        </div>
+                      )}
                     </div>
                     <div className="mb-0">
                       <label htmlFor="aiagentsettings-productos-y-servicios" className="form-label">Productos y servicios</label>

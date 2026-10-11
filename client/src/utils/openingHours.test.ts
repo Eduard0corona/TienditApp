@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { DayOfWeek } from '../types';
+import { DayOfWeek, SpecialDayKind } from '../types';
 import {
   clock,
+  dayOfWeekOf,
   describeDay,
   describeInterval,
   describeOpeningStatus,
+  describeSpecialDay,
+  describeTodayHours,
+  endsAfterMidnight,
   firstDayMissingTime,
   fromDraft,
+  openingsOn,
+  rangeHint,
   sameHours,
   setDayOpen,
+  specialDayDates,
+  specialDayDatesInWords,
+  specialDayRule,
   toDraft,
   type PublicOpeningHours,
 } from './openingHours';
@@ -93,5 +102,63 @@ describe('opening hours', () => {
     expect(say({ isOpen: false, opensAt: '09:00', opensInDays: 2 })).toBe('Cerrado · abre el lunes a las 9:00');
     expect(say({ isOpen: false })).toBe('Cerrado');
     expect(describeOpeningStatus({ ...base, isOpen: false, opensAt: '09:00', opensInDays: 1 })).toMatchObject({ isOpen: false, when: 'mañana a las 9:00' });
+  });
+
+  it('explains the openings that are not plain', () => {
+    expect(rangeHint({ opens: '09:00', closes: '20:00' })).toBeNull();
+    expect(rangeHint({ opens: '18:00', closes: '02:00' })).toBe('Cierra al día siguiente');
+    expect(rangeHint({ opens: '13:00', closes: '00:00' })).toBe('Cierra a medianoche');
+    expect(rangeHint({ opens: '08:00', closes: '08:00' })).toBe('Abierto las 24 horas');
+    expect(rangeHint({ opens: '09:00', closes: '' })).toBeNull();
+
+    // Only what still runs after midnight reaches into the next date.
+    expect(endsAfterMidnight({ opens: '18:00', closes: '02:00' })).toBe(true);
+    expect(endsAfterMidnight({ opens: '08:00', closes: '08:00' })).toBe(true);
+    expect(endsAfterMidnight({ opens: '13:00', closes: '00:00' })).toBe(false);
+    expect(endsAfterMidnight({ opens: '00:00', closes: '00:00' })).toBe(false);
+    expect(endsAfterMidnight({ opens: '09:00', closes: '20:00' })).toBe(false);
+  });
+
+  it('finds the weekday of a date and its weekly openings', () => {
+    expect(dayOfWeekOf('2026-12-25')).toBe(DayOfWeek.Friday);
+    expect(dayOfWeekOf('2027-01-03')).toBe(DayOfWeek.Sunday);
+    expect(openingsOn(splitMonday, DayOfWeek.Monday)).toEqual([
+      { opens: '09:00', closes: '14:00' },
+      { opens: '16:00', closes: '20:00' },
+    ]);
+    expect(openingsOn(null, DayOfWeek.Monday)).toEqual([]);
+  });
+
+  it('says today on the menu, with the reason of a special day', () => {
+    const today = { date: '2026-12-24', closed: false, special: false, openings: [{ opens: '09:00', closes: '20:00' }] };
+
+    expect(describeTodayHours(today)).toBe('9:00 a 20:00');
+    expect(describeTodayHours({ ...today, closed: true, openings: [] })).toBe('Cerrado');
+    expect(describeTodayHours({ ...today, special: true, openings: [{ opens: '09:00', closes: '18:00' }], reason: 'Nochebuena' }))
+      .toBe('9:00 a 18:00 · Nochebuena');
+    expect(describeTodayHours({ ...today, special: true, openings: [{ opens: '09:00', closes: '18:00' }], reason: null }))
+      .toBe('9:00 a 18:00 · horario especial');
+    expect(describeTodayHours({ ...today, closed: true, special: true, openings: [], reason: 'Navidad' })).toBe('Cerrado · Navidad');
+    expect(describeTodayHours({ ...today, closed: true, special: true, openings: [] })).toBe('Cerrado · día especial');
+  });
+
+  it('writes a special day as a row of a list and in a sentence', () => {
+    const christmasEve = {
+      from: '2026-12-24', to: '2026-12-24', kind: SpecialDayKind.SpecialHours, openings: [{ opens: '09:00', closes: '18:00' }], reason: 'Nochebuena',
+    };
+    const vacations = { from: '2026-12-21', to: '2027-01-04', kind: SpecialDayKind.Closed, openings: [], reason: 'Vacaciones' };
+
+    expect(describeSpecialDay(christmasEve)).toBe('Jue 24 dic · 9:00 a 18:00 · Nochebuena');
+    expect(describeSpecialDay({ ...christmasEve, from: '2026-12-25', to: '2026-12-25', kind: SpecialDayKind.Closed, openings: [], reason: 'Navidad' }))
+      .toBe('Vie 25 dic · Cerrado · Navidad');
+    expect(describeSpecialDay(vacations)).toBe('Lun 21 dic al lun 4 ene · Cerrado · Vacaciones');
+    expect(describeSpecialDay({ ...vacations, reason: null })).toBe('Lun 21 dic al lun 4 ene · Cerrado');
+    expect(specialDayRule({
+      kind: SpecialDayKind.SpecialHours,
+      openings: [{ opens: '19:00', closes: '22:00' }, { opens: '09:00', closes: '18:00' }],
+    })).toBe('9:00 a 18:00 y 19:00 a 22:00');
+    expect(specialDayDates('2026-12-25', '2026-12-25')).toBe('Vie 25 dic');
+    expect(specialDayDatesInWords('2026-12-25', '2026-12-25')).toBe('viernes 25 de diciembre');
+    expect(specialDayDatesInWords('2026-12-21', '2027-01-04')).toBe('del lunes 21 de diciembre al lunes 4 de enero');
   });
 });
