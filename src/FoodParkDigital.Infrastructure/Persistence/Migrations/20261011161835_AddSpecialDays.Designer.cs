@@ -3312,7 +3312,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_SpecialDays_Openings", "([Kind] = 0 AND [FirstOpens] IS NULL AND [FirstCloses] IS NULL AND [SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([Kind] = 1 AND [FirstOpens] IS NOT NULL AND [FirstCloses] IS NOT NULL AND (([SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([SecondOpens] IS NOT NULL AND [SecondCloses] IS NOT NULL)))");
 
-                            t.HasCheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR [Reason] <> ''");
+                            t.HasCheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR LEN([Reason]) > 0");
 
                             t.HasCheckConstraint("CK_SpecialDays_Revision", "[Revision] >= 1");
 

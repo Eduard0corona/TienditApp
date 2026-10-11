@@ -36,7 +36,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("PK_SpecialDays", x => x.Id);
                     table.CheckConstraint("CK_SpecialDays_Kind", "[Kind] IN (0, 1)");
                     table.CheckConstraint("CK_SpecialDays_Openings", "([Kind] = 0 AND [FirstOpens] IS NULL AND [FirstCloses] IS NULL AND [SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([Kind] = 1 AND [FirstOpens] IS NOT NULL AND [FirstCloses] IS NOT NULL AND (([SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([SecondOpens] IS NOT NULL AND [SecondCloses] IS NOT NULL)))");
-                    table.CheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR [Reason] <> ''");
+                    table.CheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR LEN([Reason]) > 0");
                     table.CheckConstraint("CK_SpecialDays_Revision", "[Revision] >= 1");
                     table.CheckConstraint("CK_SpecialDays_SecondOpening", "[SecondOpens] IS NULL OR ([FirstCloses] > [FirstOpens] AND [SecondOpens] >= [FirstCloses] AND [SecondCloses] <> [SecondOpens])");
                 });

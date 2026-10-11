@@ -5488,7 +5488,7 @@ BEGIN
         CONSTRAINT [PK_SpecialDays] PRIMARY KEY ([Id]),
         CONSTRAINT [CK_SpecialDays_Kind] CHECK ([Kind] IN (0, 1)),
         CONSTRAINT [CK_SpecialDays_Openings] CHECK (([Kind] = 0 AND [FirstOpens] IS NULL AND [FirstCloses] IS NULL AND [SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([Kind] = 1 AND [FirstOpens] IS NOT NULL AND [FirstCloses] IS NOT NULL AND (([SecondOpens] IS NULL AND [SecondCloses] IS NULL) OR ([SecondOpens] IS NOT NULL AND [SecondCloses] IS NOT NULL)))),
-        CONSTRAINT [CK_SpecialDays_Reason] CHECK ([Reason] IS NULL OR [Reason] <> ''),
+        CONSTRAINT [CK_SpecialDays_Reason] CHECK ([Reason] IS NULL OR LEN([Reason]) > 0),
         CONSTRAINT [CK_SpecialDays_Revision] CHECK ([Revision] >= 1),
         CONSTRAINT [CK_SpecialDays_SecondOpening] CHECK ([SecondOpens] IS NULL OR ([FirstCloses] > [FirstOpens] AND [SecondOpens] >= [FirstCloses] AND [SecondCloses] <> [SecondOpens]))
     );

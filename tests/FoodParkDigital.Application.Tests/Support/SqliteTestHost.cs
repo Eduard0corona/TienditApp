@@ -101,6 +101,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
     {
         var connection = new SqliteConnection("DataSource=:memory:;Foreign Keys=True");
         await connection.OpenAsync();
+        SqliteSqlServerFunctions.Register(connection);
 
         var host = new SqliteTestHost(connection);
         await host.InScopeAsync(async services =>

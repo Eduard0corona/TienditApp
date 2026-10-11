@@ -21,8 +21,10 @@ public class SpecialDayConfiguration : IEntityTypeConfiguration<SpecialDay>
             table.HasCheckConstraint(
                 "CK_SpecialDays_SecondOpening",
                 "[SecondOpens] IS NULL OR ([FirstCloses] > [FirstOpens] AND [SecondOpens] >= [FirstCloses] AND [SecondCloses] <> [SecondOpens])");
-            // Not LEN(), which SQLite (the relational tests) lacks; SQL Server ignores trailing spaces here as LEN does.
-            table.HasCheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR [Reason] <> ''");
+            // LEN, not <> '': the default collation gives emoji no weight, so a reason made only of emoji equals '' there
+            // and the rule's own reasons would be refused. LEN counts every character but trailing spaces, which the
+            // rule trims. The SQLite of the relational tests gets a LEN that does the same.
+            table.HasCheckConstraint("CK_SpecialDays_Reason", "[Reason] IS NULL OR LEN([Reason]) > 0");
             table.HasCheckConstraint("CK_SpecialDays_Revision", "[Revision] >= 1");
         });
         builder.HasKey(x => x.Id);

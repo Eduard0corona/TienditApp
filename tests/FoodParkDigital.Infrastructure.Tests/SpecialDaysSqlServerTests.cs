@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -76,6 +77,8 @@ public class SpecialDaysSqlServerTests
         await RefusedAsync(context, "CK_SpecialDays_SecondOpening", tenant.Id, (int)SpecialDayKind.SpecialHours, nine, new TimeOnly(2, 0), four, six, null, 1);
         await RefusedAsync(context, "CK_SpecialDays_SecondOpening", tenant.Id, (int)SpecialDayKind.SpecialHours, nine, two, four, four, null, 1);
         await RefusedAsync(context, "CK_SpecialDays_Reason", tenant.Id, (int)SpecialDayKind.Closed, null, null, null, null, "", 1);
+        await RefusedAsync(context, "CK_SpecialDays_Reason", tenant.Id, (int)SpecialDayKind.Closed, null, null, null, null, " ", 1);
+        await RefusedAsync(context, "CK_SpecialDays_Reason", tenant.Id, (int)SpecialDayKind.Closed, null, null, null, null, "   ", 1);
         await RefusedAsync(context, "CK_SpecialDays_Revision", tenant.Id, (int)SpecialDayKind.Closed, null, null, null, null, null, 0);
 
         // What the domain writes goes in: two openings, the second one past midnight.
@@ -87,6 +90,44 @@ public class SpecialDaysSqlServerTests
         Assert.Contains("IX_SpecialDays_TenantId_Date", duplicate.Message);
         await InsertAsync(context, other.Id, (int)SpecialDayKind.Closed, null, null, null, null, "Navidad", 1);
         Assert.Equal(2, await CountAsync(context, $"SELECT COUNT(*) AS [Value] FROM SpecialDays WHERE [Date] = {Christmas}"));
+        // A reason made only of emoji weighs nothing in the default collation (it equals '' there), and it is a reason.
+        await InsertAsync(context, tenant.Id, (int)SpecialDayKind.Closed, null, null, null, null, "🎄", 1, Christmas.AddDays(-1));
+        await InsertAsync(context, tenant.Id, (int)SpecialDayKind.Closed, null, null, null, null, "⭐", 1, Christmas.AddDays(1));
+        Assert.Equal(
+            new[] { "🎄", "⭐" },
+            await context.Database.SqlQuery<string>($"""
+                SELECT [Reason] AS [Value] FROM SpecialDays WHERE [Date] <> {Christmas} ORDER BY [Date]
+                """).ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task Reason_ThatTheRequestAndTheRuleTake_ShouldBeStoredAsTheRuleKeepsIt()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        // Whatever the collation weighs: emoji alone, a flag, symbols, 40 characters that are 20 emoji, spaces around
+        // (the rule trims them) or alone (no reason at all).
+        var twentyEmoji = string.Concat(Enumerable.Repeat("🎉", 20));
+        string?[] reasons = ["🎄", "⭐", " 🇲🇽 ", "☕✨", twentyEmoji, "   ", "Navidad 🎄"];
+
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            var calendar = new SpecialDayCalendar(tenant.Id, Today, []);
+            foreach (var (reason, index) in reasons.Select((reason, index) => (reason, index)))
+            {
+                var date = Christmas.AddDays(index);
+                var request = new AddSpecialDayCommandValidator().Validate(
+                    new AddSpecialDayCommand(date, null, SpecialDayKind.Closed, null, reason));
+                Assert.True(request.IsValid, reason);
+                context.SpecialDays.AddRange(calendar.Add(date, date, SpecialDayRule.Closed(reason)).Added);
+            }
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = database.CreateContext(tenant.Id))
+            Assert.Equal(
+                new[] { "🎄", "⭐", "🇲🇽", "☕✨", twentyEmoji, null, "Navidad 🎄" },
+                (await context.SpecialDays.AsNoTracking().OrderBy(d => d.Date).ToListAsync()).Select(d => d.Rule.Reason));
     }
 
     [SqlServerFact]
@@ -223,13 +264,14 @@ public class SpecialDaysSqlServerTests
         return (tenant, other);
     }
 
-    // A row written straight to the table on Christmas, as no version of the app would.
+    // A row written straight to the table, past the app's own checks: on Christmas unless another date is given.
     private static Task<int> InsertAsync(
         ApplicationDbContext context, Guid tenantId, int kind,
-        TimeOnly? firstOpens, TimeOnly? firstCloses, TimeOnly? secondOpens, TimeOnly? secondCloses, string? reason, int revision)
+        TimeOnly? firstOpens, TimeOnly? firstCloses, TimeOnly? secondOpens, TimeOnly? secondCloses, string? reason, int revision,
+        DateOnly? date = null)
         => context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO SpecialDays (Id, TenantId, PeriodId, [Date], Kind, FirstOpens, FirstCloses, SecondOpens, SecondCloses, Reason, Revision, CreatedAt)
-            VALUES ({Guid.NewGuid()}, {tenantId}, {Guid.NewGuid()}, {Christmas}, {kind}, {firstOpens}, {firstCloses}, {secondOpens}, {secondCloses},
+            VALUES ({Guid.NewGuid()}, {tenantId}, {Guid.NewGuid()}, {date ?? Christmas}, {kind}, {firstOpens}, {firstCloses}, {secondOpens}, {secondCloses},
                 {reason}, {revision}, {DateTimeOffset.UtcNow})
             """);
 

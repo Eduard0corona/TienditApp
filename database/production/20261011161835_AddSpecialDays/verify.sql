@@ -28,7 +28,9 @@ ORDER BY c.[column_id];
 
 -- 3. Después: las cinco restricciones CHECK (CK_SpecialDays_Kind, _Openings, _Reason, _Revision y
 --    _SecondOpening) y los índices: la llave, IX_SpecialDays_TenantId_Date ([Unico] 1) e
---    IX_SpecialDays_TenantId_PeriodId. Antes de aplicar y después de rollback.sql: ninguna fila.
+--    IX_SpecialDays_TenantId_PeriodId. La de _Reason dice ([Reason] IS NULL OR len([Reason])>(0)):
+--    acepta un motivo hecho solo de emojis y rechaza uno vacío o de puros espacios.
+--    Antes de aplicar y después de rollback.sql: ninguna fila.
 SELECT N'CHECK' AS [Tipo], [name] AS [Nombre], NULL AS [Unico], [definition] AS [Definicion]
 FROM sys.check_constraints
 WHERE [parent_object_id] = OBJECT_ID(N'dbo.SpecialDays')
