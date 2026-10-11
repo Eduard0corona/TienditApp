@@ -41,29 +41,9 @@ public static class OpeningHoursMappings
             TimeOnly.ParseExact(interval.Closes, TimeFormat, CultureInfo.InvariantCulture)));
 }
 
-/// <summary>How a customer reads the hours: "abre mañana a las 9:00".</summary>
+/// <summary>The weekly hours for the activity log, the same in any culture. Customers read them through BusinessHoursText.</summary>
 public static class OpeningHoursText
 {
-    /// <summary>Why the menu takes no order now, and when it will.</summary>
-    public static string ClosedMessage(OpeningStatus status, DateTime localNow)
-    {
-        if (status.OpensAt is not { } opensAt)
-            return "Ahora está cerrado.";
-        return $"Ahora está cerrado: abre {When(opensAt, localNow)}.";
-    }
-
-    /// <summary>"hoy a las 16:00", "mañana a las 9:00" or "el lunes a las 9:00".</summary>
-    public static string When(DateTime at, DateTime localNow)
-    {
-        var time = at.ToString("H:mm", CultureInfo.InvariantCulture);
-        return (at.Date - localNow.Date).Days switch
-        {
-            0 => $"hoy a las {time}",
-            1 => $"mañana a las {time}",
-            _ => $"el {OpeningHours.NameOf(at.DayOfWeek)} a las {time}"
-        };
-    }
-
     /// <summary>For the activity log: "Monday 09:00-14:00, Monday 16:00-20:00".</summary>
     public static string Describe(OpeningHours hours) => string.Join(", ", hours.Intervals.Select(interval =>
         $"{interval.Day} {interval.Opens.ToString(OpeningHoursMappings.TimeFormat, CultureInfo.InvariantCulture)}-" +

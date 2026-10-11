@@ -234,7 +234,7 @@ public sealed class CrossTenantHttpSqlServerTests
     {
         const string path = "/api/v1/auth/my-tenant/special-days";
         var today = DateOnly.Parse((await A.Client.GetFromJsonAsync<JsonElement>(path)).GetProperty("today").GetString()!);
-        // Far ahead: the public menu tests of the suite close A today.
+        // Far ahead, clear of any day the other tests of the suite mark.
         var date = today.AddDays(300);
         Guid? aPeriod = null;
         Guid? bPeriod = null;
