@@ -74,7 +74,7 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - Resuelto en el cierre de la 20B: 231 escenas más (Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, las pantallas públicas y de cuenta con el marco): 293 capturas en total y cada ruta de `App.tsx` con escena. Comparadas con el `master` de antes de la 20B, salen iguales: quitar `vendor.min.css` y las reglas muertas no movió ninguna pantalla. Las escenas salen iguales en cada corrida: sin transiciones ni animaciones CSS y con repintado de mosaicos completos. Antes, dos de ellas cambiaban según la carga de la máquina, aun entre dos corridas del mismo `master`.
   - Pendiente en los datos simulados compartidos (`client/visual/mocks`), que cada grupo cubre en su archivo de escenas:
     - registrar un pago devuelve el pago y no el pedido que espera el contrato;
-    - la caja abierta no trae `isMine` ni `cashCount`, y el corte del día no trae las propinas;
+    - la caja abierta no trae `isMine`, `cashCount` ni el nombre de quien la abrió, y el corte del día no trae las propinas ni los nombres;
     - los turnos de caja incluyen uno de otro negocio;
     - el menú público no trae `ordersPaused`, la dirección ni el horario;
     - no hay respuesta de acceso para el equipo de la plataforma;

@@ -74,8 +74,9 @@ public class GetCashSessionsQueryHandler : IRequestHandler<GetCashSessionsQuery,
             .ToListAsync(cancellationToken);
 
         var userId = CashSessionMapping.ParseUserId(_currentUserService.UserId);
+        var people = await CashSessionProjection.PeopleAsync(_context, rows, cancellationToken);
         return new PaginatedList<CashSessionDto>(
-            rows.Select(row => CashSessionProjection.ToDto(row, userId)).ToList(),
+            rows.Select(row => CashSessionProjection.ToDto(row, userId, people)).ToList(),
             totalCount,
             request.PageNumber,
             request.PageSize);

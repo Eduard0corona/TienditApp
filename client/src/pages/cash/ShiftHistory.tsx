@@ -15,7 +15,7 @@ import { CashSessionStatus } from '../../types';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
 import { buildShiftCutText } from './cashCutText';
-import { describeDifference, getTransactionTypeLabel } from './cashFormat';
+import { describeDifference, getTransactionTypeLabel, personLabel } from './cashFormat';
 import { formatInBusinessZone, businessDayEnd, businessDayStart } from '../../utils/dates';
 
 const EMPTY_SESSIONS: PaginatedList<CashSessionDto> = {
@@ -115,7 +115,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
       await cashApi.closeSession(selected.id, { closingAmount, notes, cashCount });
       setClosing(false);
       setSelected(null);
-      toast.success(`Caja de ${selected.openedBy} cerrada.`);
+      toast.success(`Caja de ${personLabel(selected.openedByName, selected.openedBy)} cerrada.`);
       refreshCashState();
       await load();
     } catch (err: unknown) {
@@ -194,7 +194,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
                     {isOpen ? 'Abierta' : `Cerrada ${session.closedAt ? formatInBusinessZone(session.closedAt, { timeStyle: 'short' }) : ''}`}
                   </div>
                 </td>
-                <td>{session.openedBy}{session.isMine && <span className="badge bg-light text-dark ms-1">Tú</span>}</td>
+                <td>{personLabel(session.openedByName, session.openedBy)}{session.isMine && <span className="badge bg-light text-dark ms-1">Tú</span>}</td>
                 <td>{session.branchName ?? session.inventoryLocationName ?? '—'}</td>
                 <td className="text-end ta-money">{formatMoney(isOpen ? session.expectedBalance : session.expectedClosingAmount ?? session.expectedBalance)}</td>
                 <td className="text-end ta-money">{isOpen ? '—' : formatMoney(session.closingAmount ?? 0)}</td>
@@ -220,7 +220,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
           <>
             <Modal.Header closeButton>
               <Modal.Title as="h2" className="h5">
-                Turno de {selected.openedBy}
+                Turno de {personLabel(selected.openedByName, selected.openedBy)}
                 <span className="d-block small text-muted fw-normal">
                   {selected.branchName ?? selected.inventoryLocationName ?? 'Sin sucursal'} · {formatInBusinessZone(selected.openedAt, { dateStyle: 'medium', timeStyle: 'short' })}
                 </span>
@@ -236,7 +236,7 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
                 <dd className="col-6 text-end fw-bold">{formatMoney(selected.expectedClosingAmount ?? selected.expectedBalance)}</dd>
                 {selected.status === CashSessionStatus.Closed && (
                   <>
-                    <dt className="col-6">Contado{selected.closedBy ? ` (${selected.closedBy})` : ''}</dt>
+                    <dt className="col-6">Contado{selected.closedBy ? ` (${personLabel(selected.closedByName, selected.closedBy)})` : ''}</dt>
                     <dd className="col-6 text-end fw-bold">{formatMoney(selected.closingAmount ?? 0)}</dd>
                     {selected.closingDifference !== null && selected.closingDifference !== undefined && (
                       <>

@@ -40,6 +40,7 @@ export function phase5eRoutes(data, { ok, notFound }) {
         status: 1,
         closedAt: NOW_ISO,
         closedBy: session.openedBy,
+        closedByName: session.openedByName ?? null,
         closingAmount: body.closingAmount,
         expectedClosingAmount: expected,
         closingDifference: r2(body.closingAmount - expected),

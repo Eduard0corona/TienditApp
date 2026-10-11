@@ -22,7 +22,7 @@ import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CloseDrawerModal from './CloseDrawerModal';
 import { buildShiftCutText } from './cashCutText';
-import { describeDifference, getTransactionTypeLabel, parseCashAmount } from './cashFormat';
+import { describeDifference, getTransactionTypeLabel, parseCashAmount, personLabel } from './cashFormat';
 import { formatInBusinessZone } from '../../utils/dates';
 
 const EMPTY_PAGE: PaginatedList<CashTransactionDto> = {
@@ -307,7 +307,7 @@ export default function MyDrawer({ branches, workingBranchId, onBranchChosen, on
     <>
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted">
-          {session.isMine ? 'Tu caja' : `Caja de ${session.openedBy}`}
+          {session.isMine ? 'Tu caja' : `Caja de ${personLabel(session.openedByName, session.openedBy)}`}
           {(session.branchName ?? session.inventoryLocationName) ? ` · ${session.branchName ?? session.inventoryLocationName}` : ''}
           {' · abierta '}
           {formatInBusinessZone(session.openedAt, { dateStyle: 'short', timeStyle: 'short' })}
