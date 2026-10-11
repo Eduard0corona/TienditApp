@@ -15,12 +15,13 @@ El menú en línea recibía pedidos a cualquier hora mientras hubiera una caja a
    - Solo el último horario de un día puede pasar de la medianoche, y no puede terminar después de que abre el día siguiente.
    - Se guarda como una lista JSON en una columna con nulos (`nvarchar(1000)`); al leerla, `OpeningHours.Create` revisa otra vez las reglas.
 2. **Sin horario, nada cambia.** Un negocio que no captura horario nunca se ve cerrado, y su menú recibe pedidos como antes. La columna empieza vacía en todos.
+   - Desde la Fase 21, un negocio sin horario de la semana cierra solo en sus días especiales: todo un día cerrado, o fuera de los horarios de un día con otro horario ([ADR 0012](0012-special-days.md), punto 2). Sin horario de la semana ni días especiales sigue sin verse cerrado.
 3. **El servidor decide si está abierto, en la zona horaria del negocio.**
-   - `OpeningHours.StatusAt` toma los horarios desde ayer hasta ocho días adelante y une los que se tocan, como un viernes que cierra a las 2:00 y un sábado que abre a esa hora.
+   - `OpeningHours.StatusAt` (desde la Fase 21, `BusinessSchedule.StatusAt`; ver abajo) toma los horarios desde ayer hasta ocho días adelante y une los que se tocan, como un viernes que cierra a las 2:00 y un sábado que abre a esa hora.
    - Responde si está abierto y cuándo cierra, o cuándo abre.
    - El menú recibe el resultado (`PublicOpeningHoursDto`), y el cliente solo lo pone en palabras: "Abierto · cierra a las 20:00", "Cerrado · abre mañana a las 9:00".
    - Desde la Fase 21 ([ADR 0012](0012-special-days.md)):
-     - `OpeningHours.StatusAt` delega en `BusinessSchedule`, que pone encima los días especiales y evalúa en instantes de la zona del negocio (el cambio de horario de Tijuana y Matamoros).
+     - Decide `BusinessSchedule.StatusAt`: el horario de la semana con los días especiales encima, en instantes de la zona del negocio (el cambio de horario de Tijuana y Matamoros). El menú, su pedido y WhatsApp lo leen con `BusinessHours.ReadAsync`. Ninguna ruta usa ya `OpeningHours.StatusAt`: queda como la evaluación de la semana sola, sin días especiales y en la hora de pared, que fijan las pruebas de `OpeningHoursTests`.
      - Las palabras las escribe el servidor (`BusinessHoursText`), no el cliente: el chip, su detalle, los avisos, el pedido rechazado y WhatsApp. El cliente conserva su redacción solo para una API que no manda `todayDate`.
      - Para decir cuándo abre busca hasta un año adelante cuando un cierre largo viene antes; el horizonte de "Abierto las 24 horas" sigue en ocho días.
 4. **Fuera de horario, el menú se ve pero no recibe pedidos para recoger o a domicilio.**

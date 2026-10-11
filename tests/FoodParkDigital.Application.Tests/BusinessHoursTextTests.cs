@@ -9,8 +9,9 @@ namespace FoodParkDigital.Application.Tests;
 /// <summary>
 /// Every word the public menu, its orders and the WhatsApp replies say about the hours, written by the server: the chip,
 /// its detail, the notices, the message of a refused order and the reply about the hours. A closing from the weekly
-/// hours reads as before (0 and 1 days are byte-identical to what the menu said until now); a special day adds its
-/// reason; and a business without weekly hours never has its whole-day default worded as hours.
+/// hours reads as before (0 and 1 days are what the menu said until now, except an opening at midnight, which gives the
+/// day alone, and the one o'clock hour, which is singular); a special day adds its reason; and a business without
+/// weekly hours never has its whole-day default worded as hours.
 /// </summary>
 public class BusinessHoursTextTests
 {
@@ -42,6 +43,7 @@ public class BusinessHoursTextTests
     [Theory]
     [InlineData("2026-12-24T16:30", "2026-12-24", "hoy a las 16:30")]
     [InlineData("2026-12-25T09:00", "2026-12-24", "mañana a las 9:00")]
+    [InlineData("2026-12-25T00:00", "2026-12-24", "mañana")]
     [InlineData("2026-12-26T00:00", "2026-12-24", "el sábado 26")]
     [InlineData("2027-01-05T09:00", "2026-12-24", "el martes 5 de enero a las 9:00")]
     // One o'clock is singular: «a la 1:00», as «a la una».
@@ -89,6 +91,9 @@ public class BusinessHoursTextTests
         Assert.Equal("abre el lunes 5 a las 9:00", BusinessHoursText.StatusDetail(saturdayNight, seatedOverride: false));
         Assert.Equal("Ahora está cerrado: abre el lunes 5 a las 9:00.", BusinessHoursText.ClosedMessage(saturdayNight));
         Assert.Null(BusinessHoursText.UpcomingNotice(sunday));
+        // An opening at midnight gives the day alone; until now it read «abre mañana a las 0:00».
+        var beforeMidnightOpening = Hours(Weekly(Open(DayOfWeek.Monday, "00:00", "06:00")), At("2026-10-04T23:00"));
+        Assert.Equal("Ahora está cerrado: abre mañana.", BusinessHoursText.ClosedMessage(beforeMidnightOpening));
     }
 
     [Fact]
@@ -183,6 +188,21 @@ public class BusinessHoursTextTests
 
         Assert.Equal(("Abierto", "cierra a las 18:00 por Nochebuena"), (Label(withReason), Detail(withReason)));
         Assert.Equal("horario especial · cierra a las 18:00", Detail(withoutReason));
+    }
+
+    [Fact]
+    public void Open_ShouldGiveTheReasonOfTheSpecialDayThatSetsTheClosing_ThoughTodayIsNone()
+    {
+        // Tomorrow's special hours carry on today's 24 hours; yesterday's run past midnight into a normal day.
+        var always = Weekly(Enum.GetValues<DayOfWeek>().Select(day => Open(day, "00:00", "00:00")).ToArray());
+        var beforeInventory = Hours(always, At("2026-12-20T12:00"),
+            Special(Date("2026-12-21"), SpecialDayRule.Hours([Opening("00:00", "14:00")], "Inventario")));
+        var afterParty = Hours(Shop(), At("2026-10-10T01:00"),
+            Special(Date("2026-10-09"), SpecialDayRule.Hours([Opening("20:00", "02:00")], "Fiesta")));
+
+        Assert.Equal(("Abierto", "cierra mañana a las 14:00 por Inventario"), (Label(beforeInventory), Detail(beforeInventory)));
+        Assert.Equal(("Abierto", "cierra a las 2:00 por Fiesta"), (Label(afterParty), Detail(afterParty)));
+        Assert.Equal("Ahora estamos abiertos: cerramos a las 2:00 por Fiesta.", Chat(afterParty));
     }
 
     [Fact]

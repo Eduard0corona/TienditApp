@@ -123,6 +123,35 @@ public class SpecialDaysMenuTests
     }
 
     [Fact]
+    public async Task ClosedDay_ShouldLetTheNightBeforeTakeOrders_UntilItCloses()
+    {
+        // A bar open on Wednesdays until 2:00, closed on Thursday 24: Wednesday's night still runs into it.
+        await using var fixture = SalesTestFixture.Create();
+        var bar = OpeningHours.Create([new OpeningInterval(DayOfWeek.Wednesday, new TimeOnly(18, 0), new TimeOnly(2, 0))]);
+        var (tenant, latte) = await OpenMenuAsync(fixture, bar);
+        await SeedAsync(fixture, tenant, ChristmasEve, ChristmasEve, SpecialDayRule.Closed("Nochebuena"));
+
+        // 1:00 on the 24th in Mexico City.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 12, 24, 7, 0, 0, TimeSpan.Zero);
+        var lateNight = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
+        var placed = await OrderHandler(fixture).Handle(Order(tenant.Slug, latte), CancellationToken.None);
+        // From 2:00 the closed day keeps it shut.
+        fixture.Clock.UtcNow = new DateTimeOffset(2026, 12, 24, 8, 0, 0, TimeSpan.Zero);
+        var closed = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
+        var refused = await OrderHandler(fixture).Handle(Order(tenant.Slug, latte), CancellationToken.None);
+
+        Assert.True(lateNight!.AcceptsOrders);
+        Assert.False(lateNight.OpeningHours!.ClosedBySpecialDay);
+        Assert.Equal(("Abierto", "cierra a las 2:00"), (lateNight.OpeningHours.StatusLabel, lateNight.OpeningHours.StatusDetail));
+        Assert.True(placed.IsSuccess, placed.Error);
+        Assert.False(closed!.AcceptsOrders);
+        Assert.True(closed.OpeningHours!.ClosedBySpecialDay);
+        Assert.Equal("por Nochebuena · abre el miércoles 30 a las 18:00", closed.OpeningHours.StatusDetail);
+        Assert.Equal("Está cerrado por Nochebuena: abre el miércoles 30 a las 18:00.", refused.Error);
+        Assert.Single(await fixture.Context.Orders.ToListAsync());
+    }
+
+    [Fact]
     public async Task ClosedDay_ShouldRefuseTheTable_PastMidnight_WhileTheNightItTookAwayWouldRun()
     {
         // A bar open every day until 2:00, closed on Christmas: nobody attends the night of the 25th either.

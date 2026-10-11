@@ -96,6 +96,8 @@ public class HolidaySuggestionsTests
     [InlineData(2026, "2026-04-05")]
     [InlineData(2027, "2027-03-28")]
     [InlineData(2028, "2028-04-16")]
+    [InlineData(2029, "2029-04-01")]
+    [InlineData(2030, "2030-04-21")]
     public void Easter_ShouldFallOnItsSunday(int year, string expected)
     {
         Assert.Equal(DateOnly.Parse(expected), MexicanHolidays.EasterSunday(year));
@@ -115,6 +117,24 @@ public class HolidaySuggestionsTests
         Assert.False(Named(spring2027, "Jueves Santo").Statutory);
         Assert.Equal(new DateOnly(2026, 11, 16), Named(MexicanHolidays.Suggest(Today, null, NoneTaken), "Día de la Revolución").Date);
         Assert.Equal(new DateOnly(2027, 11, 15), Named(november, "Día de la Revolución").Date);
+    }
+
+    [Theory]
+    [InlineData(2026, "2026-02-02", "2026-03-16", "2026-04-02", "2026-04-03", "2026-11-16")]
+    [InlineData(2027, "2027-02-01", "2027-03-15", "2027-03-25", "2027-03-26", "2027-11-15")]
+    [InlineData(2028, "2028-02-07", "2028-03-20", "2028-04-13", "2028-04-14", "2028-11-20")]
+    [InlineData(2029, "2029-02-05", "2029-03-19", "2029-03-29", "2029-03-30", "2029-11-19")]
+    [InlineData(2030, "2030-02-04", "2030-03-18", "2030-04-18", "2030-04-19", "2030-11-18")]
+    public void MovableHolidays_ShouldFallOnTheirDays_From2026To2030(
+        int year, string constitution, string juarez, string holyThursday, string goodFriday, string revolution)
+    {
+        var wholeYear = MexicanHolidays.Suggest(new DateOnly(year, 1, 1), null, NoneTaken, windowDays: 364, max: 20);
+
+        Assert.Equal(DateOnly.Parse(constitution), Named(wholeYear, "Día de la Constitución").Date);
+        Assert.Equal(DateOnly.Parse(juarez), Named(wholeYear, "Natalicio de Benito Juárez").Date);
+        Assert.Equal(DateOnly.Parse(holyThursday), Named(wholeYear, "Jueves Santo").Date);
+        Assert.Equal(DateOnly.Parse(goodFriday), Named(wholeYear, "Viernes Santo").Date);
+        Assert.Equal(DateOnly.Parse(revolution), Named(wholeYear, "Día de la Revolución").Date);
     }
 
     [Theory]
