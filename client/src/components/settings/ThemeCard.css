@@ -25,9 +25,15 @@
   box-shadow: 0 0 0 2px rgba(var(--ct-primary-rgb), 0.35);
 }
 
+/* The radio inside is hidden, so the card draws the focus ring (theme.css) for it: only for the keyboard where the
+   browser can tell (:has, Safari 15.4 and later), on any focus before that. */
 .theme-option:focus-within {
-  outline: 3px solid rgba(var(--ct-primary-rgb), 0.45);
-  outline-offset: 2px;
+  outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring);
+  outline-offset: var(--ta-focus-ring-offset);
+}
+
+.theme-option:focus-within:not(:has(:focus-visible)) {
+  outline: none;
 }
 
 fieldset:disabled .theme-option {

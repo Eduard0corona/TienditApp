@@ -92,6 +92,21 @@ test.describe('Productos', () => {
     await snap(page, 'productos-panaderia');
   });
 
+  // A search field with text keeps the focus, so its clear button shows (Bootstrap draws it gray).
+  for (const [colorMode, look] of [['light', 'claro'], ['dark', 'oscuro']] as const) {
+    test.describe(look, () => {
+      test.use({ colorMode });
+
+      test(`productos, buscar en ${look}`, async ({ page }) => {
+        await open(page, '/products');
+        await page.getByRole('searchbox', { name: 'Nombre, SKU o código de barras' }).fill('latte');
+        await expect(page.getByRole('link', { name: 'Editar Chai latte' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Editar Café americano' })).toBeHidden();
+        await snapElement(page.getByRole('search'), `productos-buscar-${look}`);
+      });
+    });
+  }
+
   test('producto editar, opciones y extras', async ({ page }) => {
     await open(page, '/products/c0cf3283-f80a-468d-b62f-9d7e6be47ec1/edit');
     await expect(page.getByRole('button', { name: 'Controlar existencias' })).toBeVisible();

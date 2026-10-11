@@ -1,30 +1,33 @@
 /*
- * Classes of the app that only Hyper defined (Fase 20D): font sizes in pixels, avatars, soft buttons, card titles,
+ * Classes of the app that only Hyper defined (Fase 20D): font sizes, avatars, soft buttons, card titles,
  * the password eye, bordered tabs, round pagination and centered tables. Hyper's values, merged with what theme.css
  * and overrides.css changed of them, so each class is whole in one place. Loaded right after Bootstrap (assets/scss)
  * and before theme.css, where Hyper's rules were: the cascade around them does not change. hyperClasses.test.ts keeps every
  * class the app uses from Hyper alone defined here.
  */
 
-/* Font sizes in pixels, for icons and small print. */
+/*
+ * Font sizes for icons and small print, named after their size in pixels at the browser's default font size (16px).
+ * In rem, so they grow with the font size the person picks in the browser, as the rest of the text does.
+ */
 .font-12 {
-  font-size: 12px !important;
+  font-size: 0.75rem !important;
 }
 
 .font-13 {
-  font-size: 13px !important;
+  font-size: 0.8125rem !important;
 }
 
 .font-15 {
-  font-size: 15px !important;
+  font-size: 0.9375rem !important;
 }
 
 .font-16 {
-  font-size: 16px !important;
+  font-size: 1rem !important;
 }
 
 .font-22 {
-  font-size: 22px !important;
+  font-size: 1.375rem !important;
 }
 
 /* Square boxes for a picture or an initial; avatar-title centers what goes inside. */
@@ -45,14 +48,14 @@
   width: 100%;
   height: 100%;
   background-color: var(--ct-primary);
-  color: #fff;
+  /* The theme's text for the accent: white read at 1.9:1 on the light accents of dark mode. */
+  color: var(--ta-on-accent);
   font-weight: 600;
 }
 
 /*
  * Soft buttons: the color of a state on its tint (the emphasis text passes on it in every theme); hovered or pressed,
- * the fill. Only the primary one draws a focus ring for now: Hyper's focus value for them was a Sass expression left
- * as text, so none drew one until theme.css gave the primary its own (the others get theirs in 20F).
+ * the fill. Focused with the keyboard they draw theme.css's focus ring, like every button.
  */
 .btn-soft-primary {
   --ct-btn-color: var(--ct-primary-text-emphasis);
@@ -67,11 +70,15 @@
   --ct-btn-disabled-color: var(--ct-primary-text-emphasis);
   --ct-btn-disabled-bg: var(--ct-primary-bg-subtle);
   --ct-btn-disabled-border-color: var(--ct-primary);
-  --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
 }
 
 .btn-soft-secondary {
-  --ct-btn-color: var(--ct-secondary);
+  /*
+   * Gray has no emphasis color in theme.css, and Hyper's (#8a969c) is lighter than the fill: 2.8:1 on the tint. The
+   * body text is the gray's dark shade in light mode and its light one in dark, like the others' emphasis, and passes
+   * AA on the tint over the page and a card in both modes. The gray itself read 4.4:1 in light and 2:1 in dark.
+   */
+  --ct-btn-color: var(--ct-body-color);
   --ct-btn-bg: var(--ct-secondary-bg-subtle);
   --ct-btn-border-color: transparent;
   --ct-btn-hover-color: #fff;
@@ -80,8 +87,8 @@
   --ct-btn-active-color: #fff;
   --ct-btn-active-bg: var(--ct-secondary);
   --ct-btn-active-border-color: var(--ct-secondary);
-  --ct-btn-disabled-color: var(--ct-secondary);
-  --ct-btn-disabled-bg: var(--ct-secondary);
+  --ct-btn-disabled-color: var(--ct-body-color);
+  --ct-btn-disabled-bg: var(--ct-secondary-bg-subtle);
   --ct-btn-disabled-border-color: var(--ct-secondary);
 }
 

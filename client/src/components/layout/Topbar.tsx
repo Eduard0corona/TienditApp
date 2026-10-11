@@ -247,11 +247,12 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                   className="rounded-circle"
                 />
               </span>
+              {/* A button holds text, not headings: the name and role only look like an h5 and an h6. */}
               <span className="d-lg-flex flex-column gap-1 d-none">
-                <h5 className="my-0">
+                <span className="h5 my-0">
                   {user ? `${user.firstName} ${user.lastName}` : 'Usuario'}
-                </h5>
-                <h6 className="my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</h6>
+                </span>
+                <span className="h6 my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</span>
               </span>
             </button>
             <div className="dropdown-menu dropdown-menu-end ta-user-menu">

@@ -25,8 +25,12 @@
   --ta-menu-item-color: #6c757d;
   --ta-menu-item-hover-color: var(--ta-accent);
   --ta-menu-item-active-color: var(--ta-accent);
-  /* A link of the condensed menu under the pointer: it grows to show its name on the accent. */
+  /*
+   * A link of the condensed menu under the pointer: it grows to show its name on the accent, in the color each theme
+   * made for text on it. White read at 1.9:1 on the light accents of the dark mode.
+   */
   --ta-menu-condensed-link-bg: var(--tt-accent);
+  --ta-menu-condensed-link-color: var(--tt-on-accent);
   --ta-topbar-bg: #ffffff;
   --ta-topbar-item-color: #6c757d;
   --ta-topbar-item-hover-color: var(--ta-accent);
@@ -35,17 +39,22 @@
 
 :root[data-bs-theme='dark'] {
   --ta-menu-bg: #3a444e;
-  --ta-menu-item-color: #8391a2;
+  /* Hyper's #8391a2 read at 3.1:1 on the menu. */
+  --ta-menu-item-color: var(--ct-secondary-color);
   --ta-menu-item-hover-color: var(--ct-primary-text-emphasis);
   --ta-menu-item-active-color: var(--ct-primary-text-emphasis);
   --ta-menu-condensed-link-bg: var(--tt-dark-accent);
+  --ta-menu-condensed-link-color: var(--tt-dark-on-accent);
   --ta-topbar-bg: #3a444e;
   --ta-topbar-item-color: #8391a2;
   --ta-topbar-item-hover-color: #bccee4;
   --ta-topbar-search-bg: #464f5b;
 }
 
-/* The condensed menu is placed against the page (it scrolls with it), so the page is its containing block. */
+/*
+ * Hyper's: <html> is at least as tall as the window and holds what is placed absolutely without a positioned parent.
+ * The condensed menu was the reason (it scrolled with the page until 20F); kept so nothing else moves.
+ */
 html {
   position: relative;
   min-height: 100%;
@@ -272,18 +281,19 @@ body {
   font-size: 1.15rem;
 }
 
+/*
+ * A key drawn with an outline on the button's own fill, so its text has the contrast of the button's (tested in every
+ * theme). On a tint of their own, Ctrl K and F2 read at 3.2 to 4.2:1.
+ */
 .topbar-search-button kbd,
 .topbar-sell-button kbd {
   padding: 0.1rem 0.35rem;
+  border: 1px solid currentColor;
   border-radius: 4px;
-  background: rgba(var(--ct-emphasis-color-rgb, 20, 32, 27), 0.08);
+  background: transparent;
   color: inherit;
   font-size: 0.72rem;
   font-family: inherit;
-}
-
-.topbar-sell-button kbd {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 .topbar-sell-button {
@@ -344,7 +354,10 @@ body {
   color: var(--ta-menu-item-hover-color);
 }
 
-/* The links scroll under the logo without a visible bar, as they did with SimpleBar when the pointer is away. */
+/*
+ * The links scroll under the logo without a visible bar, as they did with SimpleBar when the pointer is away; the
+ * edge that hides more links fades (useScrollFade), or nothing would say the menu goes on.
+ */
 .ta-sidebar-scroll {
   overflow: auto;
   scrollbar-width: none;
@@ -472,15 +485,25 @@ html[data-ta-sidenav='condensed'] .ta-topbar {
   margin-left: var(--ta-sidebar-width-sm);
 }
 
-/* Placed against the page instead of the window: what grows out of it is not cut. */
+/* Fixed to the window like the whole menu: Hyper hung it on the page, which then had to be 2000 px tall. */
 html[data-ta-sidenav='condensed'] .ta-sidebar {
-  position: absolute;
   width: var(--ta-sidebar-width-sm);
   min-width: var(--ta-sidebar-width-sm);
 }
 
+/*
+ * A scroller cuts what grows out of it, so this one is as wide as a grown link: a name is never cut, and a menu taller
+ * than the window still scrolls (wheel or finger on the icons, or the keyboard). Only the links take the pointer;
+ * past them it reaches the page underneath.
+ */
 html[data-ta-sidenav='condensed'] .ta-sidebar-scroll {
-  overflow: visible;
+  width: var(--ta-sidebar-width);
+  pointer-events: none;
+}
+
+html[data-ta-sidenav='condensed'] .ta-nav {
+  width: var(--ta-sidebar-width-sm);
+  pointer-events: auto;
 }
 
 html[data-ta-sidenav='condensed'] .ta-sidebar-logo {
@@ -521,7 +544,7 @@ html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link {
   position: relative;
   width: var(--ta-sidebar-width);
   background: var(--ta-menu-condensed-link-bg);
-  color: #fff;
+  color: var(--ta-menu-condensed-link-color);
 }
 
 html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span {
@@ -532,9 +555,7 @@ html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span:not(.badg
   margin-left: var(--ta-menu-item-padding-x);
 }
 
-/* The menu scrolls with the page: a page as tall as the longest menu keeps every icon on its background. */
 html[data-ta-sidenav='condensed'] .ta-content-page {
-  min-height: 2000px;
   margin-left: var(--ta-sidebar-width-sm);
 }
 
@@ -718,6 +739,18 @@ html[data-ta-sidenav='full'].ta-sidebar-open .ta-sidebar {
   background: var(--ct-primary);
   color: var(--ta-on-accent);
   box-shadow: 0 6px 14px rgba(var(--ct-primary-rgb), 0.4);
+}
+
+/*
+ * The keyboard's focus ring (theme.css) goes just inside these, where around them it would be cut: the links of the
+ * side menu fill a box that scrolls, the buttons of the top bar are as tall as the bar at the top of the window, and
+ * the tabs of the tab bar sit side by side out to the edges of the screen. Inside, the ring sits on the bar or the
+ * menu, or on the tint of the current page's link, where the accent passes 3:1 too.
+ */
+.ta-sidebar,
+.ta-topbar .ta-topbar-menu .nav-link,
+.bottom-tab-bar {
+  --ta-focus-ring-offset: calc(var(--ta-focus-ring-width) * -1);
 }
 
 /* Focus mode (Vender and Cocina alone, full screen): no menu, a slim bar, 44 px touch targets. */

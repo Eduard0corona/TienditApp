@@ -8,7 +8,6 @@
   border-color: var(--ct-primary) !important;
   box-shadow: 0 8px 18px rgba(var(--ct-primary-rgb), 0.18);
   transform: translateY(-2px);
-  outline: none;
 }
 
 .orders-catalog-search {

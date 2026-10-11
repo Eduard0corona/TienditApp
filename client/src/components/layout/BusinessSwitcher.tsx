@@ -59,7 +59,7 @@ export default function BusinessSwitcher({
             <PhotoOrInitial src={entry.logoUrl} name={entry.name} className="topbar-business-avatar" />
             <span className="flex-grow-1">
               {entry.name}
-              <small className="d-block opacity-75">{getRoleLabel(entry.role)}</small>
+              <small className="d-block text-muted">{getRoleLabel(entry.role)}</small>
             </span>
             {entry.tenantId === currentId && <i className="ri-check-line" aria-hidden="true"></i>}
           </button>

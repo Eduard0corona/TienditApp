@@ -52,6 +52,9 @@
   --ta-font: 'Manrope Variable', 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* Text on the warning fill (an amber badge or button): white on amber cannot be read. */
   --ta-on-warning: #3d2c00;
+  /* The keyboard's focus ring ("Keyboard focus" below): its width, and how far from the element it is drawn. */
+  --ta-focus-ring-width: 2px;
+  --ta-focus-ring-offset: 2px;
   --ct-font-sans-serif: var(--ta-font);
   --ct-body-font-family: var(--ta-font);
   --ct-border-radius: 0.5rem;
@@ -85,6 +88,8 @@
   --ta-chip-cancelled-bg: #fde7e4;
   --ta-chip-cancelled-fg: #b42318;
   --ta-shadow-rgb: 20, 32, 27;
+  /* The color of the focus ring, set here and in the dark block so a dark section of a light page gets its own. */
+  --ta-focus-ring: var(--ta-accent);
 
   --ct-primary: var(--tt-accent);
   --ct-primary-rgb: var(--tt-accent-rgb);
@@ -100,6 +105,8 @@
   --ct-body-color: #475467;
   --ct-body-color-rgb: 71, 84, 103;
   --ct-secondary-color: #5d6b7a;
+  /* Pagination, list groups and a hovered light button: Hyper's gray fell below 4.5:1 on the hover. */
+  --ct-tertiary-color: var(--ct-secondary-color);
   --ct-emphasis-color: #1d2939;
   --ct-emphasis-color-rgb: 29, 41, 57;
   --ct-heading-color: #1d2939;
@@ -151,6 +158,7 @@
   --ta-chip-cancelled-bg: #4f3438;
   --ta-chip-cancelled-fg: #ffa39a;
   --ta-shadow-rgb: 0, 0, 0;
+  --ta-focus-ring: var(--ta-accent);
 
   --ct-primary: var(--tt-dark-accent);
   --ct-primary-rgb: var(--tt-dark-accent-rgb);
@@ -162,9 +170,16 @@
   --ct-link-hover-color: var(--tt-dark-link-hover);
   --ct-link-hover-color-rgb: var(--tt-dark-link-hover-rgb);
   --ct-body-bg: #343a40;
-  --ct-body-color: #aab8c5;
-  --ct-body-color-rgb: 170, 184, 197;
-  --ct-secondary-color: #a9b3be;
+  /*
+   * Hyper's dark surfaces are light grays, up to the light fill (#464f5b: a light button or badge, a table header, the
+   * search box) and the tint of a selected option. Its text grays read at 3.1 to 4.1:1 on them; these pass 4.5:1 on
+   * every one, in every theme (businessThemes.test.ts). Little room is left below the body, so the secondary text
+   * differs only in tint.
+   */
+  --ct-body-color: #c4cdd6;
+  --ct-body-color-rgb: 196, 205, 214;
+  --ct-secondary-color: #c5ccd3;
+  --ct-tertiary-color: var(--ct-secondary-color);
   --ct-emphasis-color: #eef1f4;
   --ct-emphasis-color-rgb: 238, 241, 244;
   --ct-heading-color: #dee2e6;
@@ -177,7 +192,8 @@
   --ct-success-border-subtle: #2f6b4a;
   --ct-danger: #b42318;
   --ct-danger-rgb: 180, 35, 24;
-  --ct-danger-text-emphasis: #ffa39a;
+  /* A shade lighter than the danger chips: it also reads on the light fill (Eliminar, a light button). */
+  --ct-danger-text-emphasis: #ffaba3;
   --ct-danger-bg-subtle: #4f3438;
   --ct-danger-border-subtle: #7a2f2a;
   --ct-warning: #f2b007;
@@ -206,7 +222,6 @@
   --ct-btn-disabled-color: var(--ta-on-accent);
   --ct-btn-disabled-bg: var(--ta-accent);
   --ct-btn-disabled-border-color: var(--ta-accent);
-  --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
 }
 
 .btn-outline-primary {
@@ -220,7 +235,6 @@
   --ct-btn-active-border-color: var(--ct-primary);
   --ct-btn-disabled-color: var(--ct-primary);
   --ct-btn-disabled-border-color: var(--ct-primary);
-  --ct-btn-focus-shadow-rgb: var(--ct-primary-rgb);
 }
 
 .btn-success,
@@ -240,7 +254,6 @@
   --ct-btn-active-border-color: #0f5a2b;
   --ct-btn-disabled-bg: var(--ct-success);
   --ct-btn-disabled-border-color: var(--ct-success);
-  --ct-btn-focus-shadow-rgb: var(--ct-success-rgb);
 }
 
 .btn-danger {
@@ -252,7 +265,6 @@
   --ct-btn-active-border-color: #831a11;
   --ct-btn-disabled-bg: var(--ct-danger);
   --ct-btn-disabled-border-color: var(--ct-danger);
-  --ct-btn-focus-shadow-rgb: var(--ct-danger-rgb);
 }
 
 .btn-warning {
@@ -268,7 +280,6 @@
   --ct-btn-disabled-color: var(--ta-on-warning);
   --ct-btn-disabled-bg: var(--ct-warning);
   --ct-btn-disabled-border-color: var(--ct-warning);
-  --ct-btn-focus-shadow-rgb: var(--ct-warning-rgb);
 }
 
 .btn-outline-success,
@@ -288,7 +299,6 @@
   --ct-btn-active-border-color: var(--ct-success);
   --ct-btn-disabled-color: var(--ct-success-text-emphasis);
   --ct-btn-disabled-border-color: var(--ct-success);
-  --ct-btn-focus-shadow-rgb: var(--ct-success-rgb);
 }
 
 .btn-outline-danger {
@@ -300,7 +310,6 @@
   --ct-btn-active-border-color: var(--ct-danger);
   --ct-btn-disabled-color: var(--ct-danger-text-emphasis);
   --ct-btn-disabled-border-color: var(--ct-danger);
-  --ct-btn-focus-shadow-rgb: var(--ct-danger-rgb);
 }
 
 .btn-outline-warning {
@@ -314,7 +323,6 @@
   --ct-btn-active-border-color: var(--ct-warning);
   --ct-btn-disabled-color: var(--ct-warning-text-emphasis);
   --ct-btn-disabled-border-color: var(--ct-warning);
-  --ct-btn-focus-shadow-rgb: var(--ct-warning-rgb);
 }
 
 /* Amber is a fill, never a text color on white: badges on it get dark text and the text utility the emphasis. */
@@ -323,6 +331,20 @@
 }
 
 .text-bg-warning {
+  color: var(--ta-on-warning) !important;
+}
+
+/* On the accent fill, the theme's text for it: Bootstrap's white read at 1.9:1 on the light accents of dark mode. */
+.badge.bg-primary {
+  --ct-badge-color: var(--ta-on-accent);
+}
+
+.text-bg-primary {
+  color: var(--ta-on-accent) !important;
+}
+
+/* Dark mode swaps the dark color for a light one (_additions.scss), so .text-dark on amber read at 1.7:1. */
+[data-bs-theme='dark'] .bg-warning.text-dark {
   color: var(--ta-on-warning) !important;
 }
 
@@ -348,28 +370,49 @@
   color: var(--ct-emphasis-color) !important;
 }
 
+/* The secondary outline writes in Hyper's gray (#6c757d), 2.3:1 on the dark surfaces. */
+[data-bs-theme='dark'] .btn-outline-secondary {
+  --ct-btn-color: var(--ct-secondary-color);
+}
+
 .form-check-input:checked,
 .form-check-input[type='checkbox']:indeterminate {
   background-color: var(--ct-primary);
   border-color: var(--ct-primary);
 }
 
-.form-check-input:focus,
+/*
+ * Keyboard focus: one ring for everything, in the business color, 2px wide and 2px away from the element. Away from
+ * it, the ring sits on the surface around the element, where the accent passes 3:1 in every theme and mode
+ * (businessThemes.test.ts), whatever the element's own fill.
+ * - It shows when the browser says focus should show (:focus-visible): Tab draws it, a click on a button or a link
+ *   does not.
+ * - Fields show it on any focus, a click or a tap too: what you type goes there. Browsers already treat any focus on
+ *   a text field as visible; a select joins them so every field looks the same.
+ * - !important because Bootstrap's buttons, fields, checks, tabs, pagination and close button set outline: 0 when
+ *   focused. Their own glows are off (assets/scss), so this is the only sign of focus.
+ * - A container that only script focuses (a dialog or a panel as it opens, tabindex -1) draws none: the ring would
+ *   frame the whole panel, and what you act on is inside it.
+ */
+:focus-visible:not([tabindex='-1']),
 .form-control:focus,
 .form-select:focus {
-  border-color: rgba(var(--ct-primary-rgb), 0.6);
-  box-shadow: 0 0 0 0.2rem rgba(var(--ct-primary-rgb), 0.18);
+  outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring) !important;
+  outline-offset: var(--ta-focus-ring-offset) !important;
 }
 
-.nav-link:focus-visible {
-  box-shadow: 0 0 0 0.25rem rgba(var(--ct-primary-rgb), 0.25);
+/* Where the ring does not fit around the element, it goes just inside: tabs in a row that scrolls, whose edges would
+   cut it, and the items of a menu, which fill its width. None of them has a fill of its own under the ring. */
+.section-tabs,
+.nav-tabs,
+.dropdown-menu {
+  --ta-focus-ring-offset: calc(var(--ta-focus-ring-width) * -1);
 }
 
 .pagination {
   --ct-pagination-active-bg: var(--ct-primary);
   --ct-pagination-active-border-color: var(--ct-primary);
   --ct-pagination-active-color: var(--ta-on-accent);
-  --ct-pagination-focus-box-shadow: 0 0 0 0.2rem rgba(var(--ct-primary-rgb), 0.25);
 }
 
 .progress,
@@ -391,10 +434,11 @@
 /*
  * Surfaces painted with the business color under white text and the white logo (Mi negocio, Perfil, the sign-in
  * header) keep the light shade of the theme in both modes: white passes on it in every theme, and Hyper's 50% white
- * did not.
+ * did not. The focus ring of what sits on them is white too: an accent ring would not show on the accent.
  */
 .card.bg-primary,
 .card-header.bg-primary {
+  --ta-focus-ring: var(--tt-on-accent);
   background-color: var(--tt-accent) !important;
   color: var(--tt-on-accent);
 }
@@ -438,6 +482,22 @@
 .ta-scroll-fade.fade-start.fade-end {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
   mask-image: linear-gradient(to right, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+}
+
+/* The same for a list that scrolls down (the side menu): the bottom fades while more links hide below. */
+.ta-scroll-fade-y.fade-end {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+}
+
+.ta-scroll-fade-y.fade-start {
+  -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to top, #000 calc(100% - 2.5rem), transparent);
+}
+
+.ta-scroll-fade-y.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
 }
 
 /* Status chips: always with text, one color per state across the app. */

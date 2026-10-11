@@ -30,12 +30,17 @@
   line-height: 1.3;
 }
 
-// Each solid button casts a shadow of its own color. Hyper's focus ring for .btn-light, .btn-dark and the light and
-// dark outlines was a Sass expression left as text, so they draw none: initial keeps it so (20F).
+// Each solid button casts a shadow of its own color.
 @each $color in primary, secondary, success, info, warning, danger, light, dark {
   .btn-#{$color} {
     box-shadow: var(--#{$prefix}btn-box-shadow) rgba(var(--#{$prefix}#{$color}-rgb), .5);
   }
+}
+
+// A focused button shows theme.css's focus ring and nothing else. Bootstrap's glow (each variant's color at 50%) read
+// under 3:1, several variants drew none, and it would fill the gap between the button and the ring.
+.btn {
+  --#{$prefix}btn-focus-box-shadow: none;
 }
 
 .btn-light {
@@ -48,7 +53,6 @@
   --#{$prefix}btn-active-bg: var(--#{$prefix}tertiary-bg);
   --#{$prefix}btn-active-color: var(--#{$prefix}tertiary-color);
   --#{$prefix}btn-active-border-color: var(--#{$prefix}tertiary-bg);
-  --#{$prefix}btn-focus-shadow-rgb: initial;
 }
 
 .btn-dark {
@@ -61,7 +65,6 @@
   --#{$prefix}btn-active-bg: var(--#{$prefix}dark);
   --#{$prefix}btn-active-color: var(--#{$prefix}light);
   --#{$prefix}btn-active-border-color: var(--#{$prefix}dark);
-  --#{$prefix}btn-focus-shadow-rgb: initial;
 }
 
 .btn-outline-light {
@@ -74,7 +77,6 @@
   --#{$prefix}btn-active-bg: var(--#{$prefix}tertiary-bg);
   --#{$prefix}btn-active-color: var(--#{$prefix}tertiary-color);
   --#{$prefix}btn-active-border-color: var(--#{$prefix}tertiary-bg);
-  --#{$prefix}btn-focus-shadow-rgb: initial;
 }
 
 .btn-outline-dark {
@@ -87,7 +89,6 @@
   --#{$prefix}btn-active-bg: var(--#{$prefix}dark);
   --#{$prefix}btn-active-color: var(--#{$prefix}light);
   --#{$prefix}btn-active-border-color: var(--#{$prefix}dark);
-  --#{$prefix}btn-focus-shadow-rgb: initial;
 }
 
 [data-bs-theme=dark] .btn-secondary {
@@ -124,6 +125,16 @@
   box-shadow: none !important;
 }
 
+// A switch keeps its knob when focused, as the ring shows the focus. Bootstrap paints the focused knob with
+// $input-focus-border-color, here var(--ct-border-color), which an SVG image cannot read: it came out black.
+.form-switch .form-check-input:focus:not(:checked) {
+  --#{$prefix}form-switch-bg: #{escape-svg($form-switch-bg-image)};
+}
+
+[data-bs-theme=dark] .form-switch .form-check-input:focus:not(:checked) {
+  --#{$prefix}form-switch-bg: #{escape-svg($form-switch-bg-image-dark)};
+}
+
 .modal-title {
   margin-top: 0;
   color: inherit;
@@ -147,8 +158,8 @@
   }
 }
 
-// Reboot: headings with room above, semibold labels, bold <b>, and links and buttons without the focus outline (20F
-// gives the keyboard a visible focus).
+// Reboot: headings with room above, semibold labels and bold <b>. Hyper also took the focus outline off links and
+// buttons; theme.css draws the keyboard's ring instead (20F).
 h1, h2, h3, h4, h5, h6,
 .h1, .h2, .h3, .h4, .h5, .h6 {
   margin-top: 10px;
@@ -159,11 +170,6 @@ h1, h2, h3, h4, h5, h6,
   body {
     cursor: pointer;
   }
-}
-
-a,
-button {
-  outline: 0 !important;
 }
 
 label {
@@ -196,8 +202,14 @@ input:disabled + label {
   --#{$prefix}table-border-color: var(--#{$prefix}border-color);
 }
 
-// Bootstrap 5.3.8 greys the clear button of search fields and gives it a pointer; Hyper's 5.3.6 did not (20F).
-[type=search]::-webkit-search-cancel-button {
-  cursor: revert;
-  filter: revert;
+// iOS Safari zooms the page in when a field with text under 16px gets focus, and leaves it zoomed. On a phone the
+// fields and the text beside them in an input group take 1rem (16px): in the phone layout (below 768px, the one with
+// the tab bar) and on a touch screen held sideways (coarse pointer, under 576px tall), which gets the tablet layout.
+// Desktops and tablets keep their sizes, and so do the large fields (20px).
+@media (max-width: 767.98px), (pointer: coarse) and (max-height: 575.98px) {
+  .form-control:not(.form-control-lg, .input-group-lg > *),
+  .form-select:not(.form-select-lg, .input-group-lg > *),
+  .input-group-text:not(.input-group-lg > *) {
+    font-size: 1rem;
+  }
 }
