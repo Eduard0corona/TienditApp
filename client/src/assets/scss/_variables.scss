@@ -151,7 +151,8 @@ $btn-active-bg-shade-amount:     7.5%;
 $btn-active-border-shade-amount: 7.5%;
 $btn-active-bg-tint-amount:      15%;
 
-// Fields: no focus glow and no transition; the background comes from --ct-input-bg (_additions.scss).
+// Fields: no focus glow (a focused field draws theme.css's focus ring) and no transition; the background comes from
+// --ct-input-bg (_additions.scss).
 
 $input-bg:                 var(--#{$prefix}input-bg);
 $input-disabled-bg:        var(--#{$prefix}tertiary-bg);
@@ -180,11 +181,13 @@ $form-floating-label-height: 1.875em;
 // without it). A filled path draws the same either way; the copy keeps the text the specimen compares.
 $form-feedback-icon-valid: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path fill='#{$success}' d='M2.3 6.73.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/></svg>");
 
-// Navs, breadcrumb and pagination (overrides.css draws the breadcrumb divider with Remix)
+// Navs, breadcrumb and pagination (overrides.css draws the breadcrumb divider with Remix). A focused tab or page link
+// draws theme.css's focus ring, without a glow.
 
-$nav-link-transition:     color .1s ease-in-out, border-color .1s ease-in-out;
-$nav-tabs-link-active-bg: var(--#{$prefix}secondary-bg);
-$nav-pills-border-radius: $border-radius;
+$nav-link-transition:       color .1s ease-in-out, border-color .1s ease-in-out;
+$nav-link-focus-box-shadow: none;
+$nav-tabs-link-active-bg:   var(--#{$prefix}secondary-bg);
+$nav-pills-border-radius:   $border-radius;
 
 $breadcrumb-padding-y: $spacer;
 $breadcrumb-divider:   string.quote("\F0142");

@@ -1,6 +1,6 @@
 # Escenas visuales del cliente
 
-Capturas de cada pantalla de TienditApp para comparar un cambio contra `master`. En la Fase 20 se cambia la plantilla (Hyper) por un CSS propio sin que nada se mueva en pantalla: estas escenas lo comprueban con cero píxeles de tolerancia.
+Capturas de cada pantalla de TienditApp para comparar un cambio contra `master`. En la Fase 20 se cambia la plantilla (Hyper) por un CSS propio sin que nada se mueva en pantalla: estas escenas lo comprueban con cero píxeles de tolerancia. Un cambio que sí debe verse (los arreglos de la 20F) dice en su PR cuántas escenas cambiaron y qué arreglo explica cada una.
 
 No corren en CI: se corren en la máquina de quien hace el cambio, antes de abrir el PR, y el PR dice el resultado. CI sí revisa que compilen (`npm run visual:typecheck`).
 

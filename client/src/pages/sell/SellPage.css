@@ -38,12 +38,14 @@
   border-radius: var(--ta-radius);
 }
 
+/* The row scrolls, so its edges cut what sticks out of it: 4px of room for the focus ring around a chip (2px away,
+   2px wide), and negative margins that keep the chips and the fade at the end where they were. */
 .sell-chips {
   display: flex;
   gap: 0.5rem;
   overflow-x: auto;
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.75rem;
+  padding: 4px 4px 0.5rem;
+  margin: -4px 0 0.75rem -4px;
   scrollbar-width: thin;
 }
 
@@ -81,11 +83,6 @@
 
 .sell-product:active {
   transform: scale(0.98);
-}
-
-.sell-product:focus-visible {
-  outline: 3px solid rgba(var(--ct-primary-rgb), 0.45);
-  outline-offset: 2px;
 }
 
 .sell-product.in-cart {

@@ -267,7 +267,8 @@ export default function AiAgentSettings() {
                       <div className="d-flex justify-content-between align-items-start gap-2">
                         <div>
                           <div className="fw-semibold">{agent.name || 'Sin nombre'}</div>
-                          <small className={agent.id === selectedAgentId ? 'text-white' : 'text-muted'}>
+                          {/* Selected, the item's own text color: white read at 1.9:1 on a dark-mode accent. */}
+                          <small className={agent.id === selectedAgentId ? undefined : 'text-muted'}>
                             {agent.role || 'Sin rol'}
                           </small>
                         </div>

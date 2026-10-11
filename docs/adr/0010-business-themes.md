@@ -26,7 +26,8 @@ Un color libre que elige el dueño no garantiza nada de eso. Además tendría qu
    - los enlaces sobre las tarjetas y sobre la página;
    - el texto de lo elegido sobre su fondo;
    - el texto general sobre la página;
-   - el acento como texto (botones con contorno, textos en el color del negocio) sobre las tarjetas y la página en claro, y sobre las tres superficies de la app en oscuro, igual que los enlaces.
+   - el acento como texto (botones con contorno, textos en el color del negocio) sobre las tarjetas y la página en claro, y sobre las tres superficies de la app en oscuro, igual que los enlaces;
+   - desde la Fase 20F, el anillo de foco del teclado (el acento) con 3:1 en cada superficie donde puede quedar, y el texto del modo oscuro con AA sobre el tinte de lo elegido.
 
    Nopal conserva los colores claros con los que salió TienditApp. En oscuro, su acento pasó de `#2fb386` al verde claro de sus enlaces (`#5fd0a8`): el anterior pasaba como borde (3:1) pero no como texto.
 2. **El negocio guarda cuál, el cliente sabe cómo se ve.**

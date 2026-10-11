@@ -28,11 +28,6 @@
   background: var(--ct-primary-bg-subtle);
 }
 
-.table-card:focus-visible {
-  outline: 3px solid var(--ct-primary);
-  outline-offset: 2px;
-}
-
 .table-card-name {
   font-weight: 800;
   font-size: 1.1rem;

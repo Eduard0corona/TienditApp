@@ -110,19 +110,20 @@ export default function WhatsAppSettings() {
               <div className="row align-items-center">
                 <div className="col-auto">
                   <div className="avatar-lg">
-                    <span className="avatar-title bg-white text-success rounded-circle fs-2">
+                    {/* The success green on white in both modes: dark mode turns .text-success light. */}
+                    <span className="avatar-title bg-white rounded-circle fs-2" style={{ color: 'var(--ct-success)' }}>
                       <i className="ri-whatsapp-line"></i>
                     </span>
                   </div>
                 </div>
                 <div className="col">
                   <h4 className="mt-1 mb-1 text-white">WhatsApp Business</h4>
-                  <p className="font-13 text-white-50 mb-0">
+                  <p className="font-13 text-white mb-0">
                     Integración con Meta Cloud API para envío de mensajes
                   </p>
                 </div>
                 <div className="col-auto">
-                  <span className={`badge ${config?.isEnabled ? 'bg-light text-success' : 'bg-white-50 text-dark'} fs-6`}>
+                  <span className={`badge ${config?.isEnabled ? 'bg-light text-success-emphasis' : 'bg-light text-dark'} fs-6`}>
                     {config?.isEnabled ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>

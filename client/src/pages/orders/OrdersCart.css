@@ -3,12 +3,15 @@
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
-.order-catalog-card:hover,
-.order-catalog-card:focus-visible {
+/* Lifted with a glow under the pointer; with the keyboard the focus ring (theme.css) and the border are the sign. */
+.order-catalog-card:hover {
   border-color: var(--ct-primary) !important;
   box-shadow: 0 8px 18px rgba(var(--ct-primary-rgb), 0.18);
   transform: translateY(-2px);
-  outline: none;
+}
+
+.order-catalog-card:focus-visible {
+  border-color: var(--ct-primary) !important;
 }
 
 .orders-catalog-search {

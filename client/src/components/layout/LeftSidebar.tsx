@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import { getAccess } from '../../utils/access';
 import BrandLogo from '../common/BrandLogo';
 import { getAllowedNavGroups, getNavEntryPath, isNavEntryActive } from './navigation';
@@ -19,6 +20,9 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
   const tenantLogoLg = tenant?.logoImages?.large || tenant?.logoImages?.medium || tenant?.logoUrl || '';
   const tenantLogoSm = tenant?.logoImages?.small || tenant?.logoImages?.thumbnail || tenant?.logoUrl || '';
   const tenantLogoAlt = tenant?.name ? `Logotipo de ${tenant.name}` : 'Logotipo';
+  // On a short window the links go on below the edge: the faded edge says so.
+  const linkCount = groups.reduce((count, group) => count + group.entries.length, 0);
+  const { ref: scrollRef, fadeClass: scrollFadeClass } = useScrollFade<HTMLDivElement>(linkCount, 'y');
 
   return (
     <div className="ta-sidebar">
@@ -41,7 +45,7 @@ export default function LeftSidebar({ onClose }: LeftSidebarProps) {
         <i className="ri-close-fill align-middle" aria-hidden="true"></i>
       </button>
 
-      <div className="ta-sidebar-scroll h-100">
+      <div ref={scrollRef} className={`ta-sidebar-scroll ta-scroll-fade-y h-100 ${scrollFadeClass}`}>
         <nav aria-label="Menú principal">
           <ul className="ta-nav">
             {groups.map((group) => (
