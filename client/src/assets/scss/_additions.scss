@@ -1,6 +1,7 @@
 // What the app takes from Hyper on top of Bootstrap's own elements and components (Fase 20E), in the order Hyper had
-// it: same specificity, so the order decides (.card-header and .modal-title keep margin-top 0 under the headings rule).
-// The classes only Hyper had are in components.css (Fase 20D).
+// it: between rules of the same specificity the order decides. The headings rule comes last, so a react-bootstrap title
+// (div.modal-title.h4, div.card-title.h5) gets its 10px margin on top; an h1-h6 with .card-header or .modal-title keeps
+// 0 because a class outranks an element. The classes only Hyper had are in components.css (Fase 20D).
 
 // Cards have no border, fields their own background.
 :root {
@@ -128,7 +129,8 @@
   color: inherit;
 }
 
-// Tabs written as links (the app's are buttons) read in the secondary color, semibold.
+// Tabs and pills written as links (the app's are buttons) read in the secondary color, semibold.
+.nav-pills > li > a,
 .nav-tabs > li > a {
   color: var(--#{$prefix}secondary-color);
   font-weight: 600;

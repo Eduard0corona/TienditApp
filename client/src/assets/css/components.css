@@ -1,8 +1,8 @@
 /*
  * Classes of the app that only Hyper defined (Fase 20D): font sizes in pixels, avatars, soft buttons, card titles,
  * the password eye, bordered tabs, round pagination and centered tables. Hyper's values, merged with what theme.css
- * and overrides.css changed of them, so each class is whole in one place. Loaded right after Hyper and before
- * theme.css, where Hyper's rules were: the cascade around them does not change. hyperClasses.test.ts keeps every
+ * and overrides.css changed of them, so each class is whole in one place. Loaded right after Bootstrap (assets/scss)
+ * and before theme.css, where Hyper's rules were: the cascade around them does not change. hyperClasses.test.ts keeps every
  * class the app uses from Hyper alone defined here.
  */
 

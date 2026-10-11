@@ -1,6 +1,7 @@
 // Read right after Bootstrap's functions and before its variables, so every value Bootstrap derives goes through them.
 @use "sass:color";
 @use "sass:math";
+@use "sass:string";
 
 // Colors Bootstrap mixes (tint-color, shade-color, shift-color and its own mix() calls) come out with whole channels
 // and as hex (#2e3262), as Sass wrote them before 1.79 and as Hyper's values were compiled. Newer Sass keeps the
@@ -23,5 +24,5 @@
 
 // "114,124,245" for the --ct-*-rgb variables, as before: Sass keeps the spaces of a list inside a custom property.
 @function to-rgb($value) {
-  @return unquote("#{color.channel($value, "red", $space: rgb)},#{color.channel($value, "green", $space: rgb)},#{color.channel($value, "blue", $space: rgb)}");
+  @return string.unquote("#{color.channel($value, "red", $space: rgb)},#{color.channel($value, "green", $space: rgb)},#{color.channel($value, "blue", $space: rgb)}");
 }
