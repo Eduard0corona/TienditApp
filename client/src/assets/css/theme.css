@@ -1,6 +1,6 @@
 /*
- * TienditApp theme: design tokens on top of Hyper (Bootstrap 5.3 with --ct- variables). Loaded after
- * app.min.css, so screens keep their markup while Hyper is retired one screen at a time.
+ * TienditApp theme: design tokens on top of Bootstrap 5.3, compiled from Sass with Hyper's values and --ct- variables
+ * (assets/scss). Loaded after it and after components.css.
  *
  * Three layers:
  *   1. The business theme (--tt-*): the accent of the business and the tint of its page. utils/theme.ts sets them

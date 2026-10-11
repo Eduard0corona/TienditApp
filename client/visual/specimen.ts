@@ -1,6 +1,6 @@
 /**
- * A sample of the components the app draws with the global CSS (Bootstrap, Hyper today, theme.css): every button
- * variant, fields, cards, tables, badges, alerts, tabs, pagination, menus and the classes only Hyper defines. The
+ * A sample of the components the app draws with the global CSS (Bootstrap with Hyper's values, theme.css): every
+ * button variant, fields, cards, tables, badges, alerts, tabs, pagination, menus and the classes only Hyper defined. The
  * specimen scenes put it on a real screen and compare its picture and the computed style of each piece: a change of
  * template that moves a padding or a color shows here even where no screen shows it.
  */

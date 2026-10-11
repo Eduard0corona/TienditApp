@@ -26,7 +26,8 @@ $headings-color-dark:           $body-color-dark;
 $border-color-dark:             #464f5b;
 $border-color-translucent-dark: #404d58;
 
-// The accordion chevron as Bootstrap 5.3.6 drew it, in the primary color's light tint.
+// The accordion chevron as Hyper drew it (an older Bootstrap's filled path, closed with "z"), in the primary color's
+// light tint.
 $accordion-icon-color-dark:         tint-color($primary, 40%);
 $accordion-icon-active-color-dark:  tint-color($primary, 40%);
 $accordion-button-icon-dark:        url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$accordion-icon-color-dark}'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");

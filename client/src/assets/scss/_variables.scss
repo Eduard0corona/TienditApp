@@ -2,6 +2,8 @@
 // when it left. Read before Bootstrap's own _variables.scss: only these and Bootstrap's functions are defined here,
 // and anything not set keeps Bootstrap's default. theme.css then maps most colors to the business theme.
 
+@use "sass:string";
+
 $prefix: "ct-";
 
 // Colors
@@ -104,6 +106,8 @@ $code-color:    $cyan;
 $kbd-padding-y: .2rem;
 $kbd-padding-x: .4rem;
 
+$blockquote-footer-color: var(--#{$prefix}secondary-color);
+
 $hr-margin-y:      $spacer * .667;
 $hr-border-color:  var(--#{$prefix}border-color);
 $hr-opacity:       1;
@@ -132,8 +136,9 @@ $input-btn-padding-x:    .9rem;
 $input-btn-padding-y-sm: .28rem;
 $input-btn-padding-x-sm: .8rem;
 
-// Buttons: hovered or pressed, the fill darkens 7.5% (.btn-dark lightens 15% when pressed). --ct-btn-box-shadow is the
-// offset of the colored shadow _additions.scss gives each variant.
+// Buttons: hovered or pressed, the fill darkens 7.5% (Bootstrap lightens .btn-dark 15% instead; _additions.scss then
+// keeps .btn-light and .btn-dark on their own colors). --ct-btn-box-shadow is the offset of the colored shadow
+// _additions.scss gives each variant.
 
 $btn-border-radius:    .15rem;
 $btn-border-radius-sm: $border-radius-sm;
@@ -171,20 +176,24 @@ $form-range-track-bg: var(--#{$prefix}tertiary-bg);
 
 $form-floating-label-height: 1.875em;
 
-// Icons as Bootstrap 5.3.6 drew them, which Hyper compiled: 5.3.8 dropped the closing "z" of their paths.
+// Icons as Hyper's own variables drew them: an older Bootstrap's paths, closed with "z" (5.3.6 and 5.3.8 end them
+// without it). A filled path draws the same either way; the copy keeps the text the specimen compares.
 $form-feedback-icon-valid: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path fill='#{$success}' d='M2.3 6.73.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/></svg>");
 
 // Navs, breadcrumb and pagination (overrides.css draws the breadcrumb divider with Remix)
 
 $nav-link-transition:     color .1s ease-in-out, border-color .1s ease-in-out;
 $nav-tabs-link-active-bg: var(--#{$prefix}secondary-bg);
+$nav-pills-border-radius: $border-radius;
 
 $breadcrumb-padding-y: $spacer;
-$breadcrumb-divider:   quote("\F0142");
+$breadcrumb-divider:   string.quote("\F0142");
 
 $pagination-color:            var(--#{$prefix}tertiary-color);
 $pagination-bg:               var(--#{$prefix}secondary-bg);
 $pagination-focus-box-shadow: none;
+$pagination-border-radius-sm: $border-radius-sm;
+$pagination-border-radius-lg: $border-radius-lg;
 
 // Dropdowns: the caret sits a little higher.
 
