@@ -79,21 +79,28 @@ export interface CompletedSale {
   offline?: boolean;
 }
 
-/** The chat a sale was started from (Vender opened with ?phone=&name=&conversation=). */
-export interface ChatOrigin {
+/** The customer a link fills in (Vender opened with ?phone=&name=), from the customer card or a chat. */
+export interface CustomerPrefill {
   phone: string;
   name?: string;
-  conversationId?: string;
+}
+
+export function readCustomerPrefill(params: URLSearchParams): CustomerPrefill | null {
+  const phone = params.get('phone')?.trim();
+  if (!phone) return null;
+  return { phone, name: params.get('name')?.trim() || undefined };
+}
+
+/** The chat a sale was started from (?conversation= besides the customer): only then is it a WhatsApp order. */
+export interface ChatOrigin extends CustomerPrefill {
+  conversationId: string;
 }
 
 export function readChatOrigin(params: URLSearchParams): ChatOrigin | null {
-  const phone = params.get('phone')?.trim();
-  if (!phone) return null;
-  return {
-    phone,
-    name: params.get('name')?.trim() || undefined,
-    conversationId: params.get('conversation')?.trim() || undefined,
-  };
+  const customer = readCustomerPrefill(params);
+  const conversationId = params.get('conversation')?.trim();
+  if (!customer || !conversationId) return null;
+  return { ...customer, conversationId };
 }
 
 export type CategoryFilter = 'all' | 'featured' | string;

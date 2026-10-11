@@ -27,6 +27,11 @@ export async function settle(page: Page) {
     return !spinning && !loading && pictures;
   }, null, { timeout: 20_000 });
   await page.evaluate(() => document.fonts.ready);
+  // Transitions and finite animations end first (a menu sliding in, a dialog fading in). One still running when the
+  // screenshot stops it leaves its element on a layer of its own, with its text smoothed another way: the same screen
+  // came out different depending on how busy the machine was.
+  await page.waitForFunction(() => document.getAnimations().every((animation) =>
+    animation.playState !== 'running' || animation.effect?.getComputedTiming().endTime === Infinity), null, { timeout: 20_000 });
 }
 
 /** Opens a route of the app and waits until it has drawn. */

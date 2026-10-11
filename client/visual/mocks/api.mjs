@@ -93,7 +93,6 @@ function computeTaxes(lines, pricesIncludeTax) {
   return { breakdown, subTotal, tax, total: Math.round((subTotal + tax) * 100) / 100 };
 }
 
-let mockOrderSeq = 400;
 /** A stored payment as the API returns it: the tip and the cash handed over travel with it, the change is the rest. */
 function mockPayment(id, pay) {
   const amount = Math.round(Number(pay?.amount ?? 0) * 100) / 100;
@@ -120,12 +119,14 @@ function createMockOrder(data, body) {
   }
   const payments = (body?.payments ?? []).map((pay, idx) => mockPayment(`pay-${idx}`, pay));
   const paidAmount = Math.round(payments.reduce((s, x) => s + x.amount, 0) * 100) / 100;
-  mockOrderSeq += 1;
+  // Counted per scene (data is built for each one): a folio that depends on the scenes before it would change by worker.
+  data.mockOrderSeq = (data.mockOrderSeq ?? 400) + 1;
+  const seq = data.mockOrderSeq;
   const isService = body?.orderType === 1;
   const paid = paidAmount >= taxes.total && items.length > 0;
   const status = paid && data.tenant.autoCloseCounterSales ? (isService ? 7 : 6) : 1;
   const order = {
-    id: `mock-order-${mockOrderSeq}`, createdByBusiness: true, orderNumber: `ORD-${String(mockOrderSeq).padStart(6, '0')}`,
+    id: `mock-order-${seq}`, createdByBusiness: true, orderNumber: `ORD-${String(seq).padStart(6, '0')}`,
     businessType: 0, orderType: body?.orderType ?? 0, status, canCancel: payments.length === 0, allowedTransitions: status === 1 ? [4, 2, 99] : [],
     customerName: body?.customerName || 'Público en general', customerPhone: body?.customerPhone, customerNotes: body?.customerNotes, tableNumber: body?.tableNumber,
     pricesIncludeTax: data.tenant.pricesIncludeTax, taxBreakdown: taxes.breakdown, subTotal: taxes.subTotal, tax: taxes.tax, total: taxes.total,

@@ -34,17 +34,20 @@ import CompletedSaleModal from './CompletedSaleModal';
 import MeasureModal from './MeasureModal';
 import OptionsModal from './OptionsModal';
 import SellHeader from './SellHeader';
-import { readSellDraft, writeSellDraft } from './sellDraft';
+import { describeSale, readSellDraft, writeSellDraft, type PendingCharge, type SellDraft } from './sellDraft';
 import {
   isPlausiblePhone,
   MAX_LINES,
   MAX_QUANTITY_PER_LINE,
   NO_SALE_DETAILS,
   readChatOrigin,
+  readCustomerPrefill,
   readTabTarget,
+  type CartLine,
   type CategoryFilter,
   type ChatOrigin,
   type CompletedSale,
+  type CustomerPrefill,
   type MeasureRequest,
   type OptionsRequest,
   type SaleDetails,
@@ -53,6 +56,14 @@ import {
 import { useSellCart } from './useSellCart';
 import { useSellCatalog } from './useSellCatalog';
 import './SellPage.css';
+
+/** The sale on screen as the device keeps it. */
+function toDraft(cart: CartLine[], details: SaleDetails): SellDraft {
+  return {
+    lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
+    ...details,
+  };
+}
 
 /**
  * Vender: touch catalog, ticket and charge in one screen. The cart survives a reload, F9 charges and
@@ -105,8 +116,9 @@ export default function SellPage() {
   const online = useOnlineStatus();
   const pendingSales = usePendingSales();
   const [showPendingSales, setShowPendingSales] = useState(false);
-  // Key of the sale being charged: kept across retries until it is recorded, so a retry never charges twice.
-  const saleKey = useRef<string | null>(null);
+  // The charge sent for the sale on screen and not confirmed: kept with the draft until the sale is recorded, so a
+  // retry, also after a reload, sends the same key and never charges twice. Another cart is another sale.
+  const pendingCharge = useRef<PendingCharge | null>(null);
   const workingBranch = useWorkingBranch();
   // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
   const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
@@ -116,7 +128,9 @@ export default function SellPage() {
   const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
   const [tabOrder, setTabOrder] = useState<OrderDto | null>(null);
   const [choosing, setChoosing] = useState<OptionsRequest | null>(null);
-  // Read once: the link fills the customer after the saved draft is restored.
+  // Read once: the link fills the customer after the saved draft is restored. Only a link from a chat (with its
+  // conversation) makes it a WhatsApp order; the customer card just fills the customer in.
+  const pendingCustomer = useRef<CustomerPrefill | null>(readCustomerPrefill(searchParams));
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [measure, setMeasure] = useState<MeasureRequest | null>(null);
@@ -145,13 +159,18 @@ export default function SellPage() {
           orderNotes: draft.orderNotes,
         });
         setShowDetails(Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
+        // A charge left on its way by a reload: the retry sends its key, unless the cart came back different.
+        pendingCharge.current = draft.pendingCharge ?? null;
       }
-      const origin = pendingChatOrigin.current;
-      if (origin) {
-        pendingChatOrigin.current = null;
-        setDetails((current) => ({ ...current, customerPhone: origin.phone, customerName: origin.name ?? '' }));
+      const customer = pendingCustomer.current;
+      if (customer) {
+        pendingCustomer.current = null;
+        setDetails((current) => ({ ...current, customerPhone: customer.phone, customerName: customer.name ?? '' }));
         setShowDetails(true);
-        setChatOrigin(origin);
+      }
+      if (pendingChatOrigin.current) {
+        setChatOrigin(pendingChatOrigin.current);
+        pendingChatOrigin.current = null;
       }
     } else {
       // Reload (a price changed): keep the cart with current prices and drop what is no longer sold.
@@ -207,13 +226,18 @@ export default function SellPage() {
     };
   }, [access.cash, tenantId, workingBranchId]);
 
-  useEffect(() => {
+  /** Keeps the sale on screen, with the key of the charge sent for it (a table's round is not kept). */
+  const saveDraft = useCallback((draft: SellDraft) => {
     if (!tenantId || draftLoadedFor.current !== tenantId || tabTarget) return;
-    writeSellDraft(tenantId, {
-      lines: cart.map((line) => ({ productId: line.productId, quantity: line.quantity, notes: line.notes, optionIds: line.optionIds })),
-      ...details,
-    });
-  }, [cart, details, tabTarget, tenantId]);
+    writeSellDraft(tenantId, { ...draft, pendingCharge: pendingCharge.current ?? undefined });
+  }, [tabTarget, tenantId]);
+
+  useEffect(() => {
+    const draft = toDraft(cart, details);
+    // The cart changed: the key of the charge sent before belongs to another sale.
+    if (pendingCharge.current?.sale !== describeSale(draft)) pendingCharge.current = null;
+    saveDraft(draft);
+  }, [cart, details, saveDraft]);
 
   const totals = useMemo(
     () => estimateOrderTotals(
@@ -276,7 +300,7 @@ export default function SellPage() {
   }, [addOne, cart]);
 
   const clearSale = () => {
-    saleKey.current = null;
+    pendingCharge.current = null;
     setCart([]);
     setDetails(NO_SALE_DETAILS);
     setShowDetails(false);
@@ -423,10 +447,16 @@ export default function SellPage() {
     // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid or a service
     // (its pieces are picked up with the server's folio) need the server.
     const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices;
+    // The same key on a retry returns this sale instead of charging twice; another cart is another sale.
+    const draft = toDraft(cart, details);
+    const sale = describeSale(draft);
+    const pending = pendingCharge.current?.sale === sale ? pendingCharge.current : { key: newUuid(), sale };
+    pendingCharge.current = pending;
+    // Saved before sending: a reload while the charge is on its way brings the cart back with this key.
+    saveDraft(draft);
     const request: CreateOrderRequest = {
       ...buildOrderRequest(),
-      // The same key on a retry returns this sale instead of charging twice.
-      idempotencyKey: (saleKey.current ??= newUuid()),
+      idempotencyKey: pending.key,
       payments: charge?.payments.map((payment) => ({
         amount: payment.amount,
         method: payment.method,

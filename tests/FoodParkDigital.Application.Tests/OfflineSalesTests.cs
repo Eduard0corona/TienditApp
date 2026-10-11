@@ -32,6 +32,52 @@ public class OfflineSalesTests
     }
 
     [Fact]
+    public async Task SameKeyWithThePaymentTypedAgain_ShouldReturnTheRecordedSaleAndItsPayment()
+    {
+        // Vender keeps the key with the cart: after a reload the cashier charges again and may type another amount.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail);
+        var soda = await fixture.AddProductAsync(tenant, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(tenant);
+        var key = Guid.NewGuid();
+
+        var first = await fixture.CreateOrderHandler().Handle(Sale(soda.Id, key, cashReceived: 50m), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var retry = await fixture.CreateOrderHandler().Handle(Sale(soda.Id, key, cashReceived: 100m), CancellationToken.None);
+
+        Assert.True(first.IsSuccess, first.Error);
+        Assert.True(retry.IsSuccess, retry.Error);
+        Assert.Equal(first.Value.Id, retry.Value.Id);
+        Assert.Equal(50m, Assert.Single(retry.Value.Payments).CashReceived);
+        Assert.Equal(50m, Assert.Single(await fixture.Context.OrderPayments.ToListAsync()).CashReceived);
+    }
+
+    [Fact]
+    public async Task SameKeyInAnotherBusiness_ShouldBeASaleOfItsOwn_WithoutAnsweringTheOtherOne()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, slug: "tienda");
+        var soda = await fixture.AddProductAsync(shop, "Refresco", 20m);
+        await fixture.OpenCashSessionAsync(shop);
+        var key = Guid.NewGuid();
+        var shopSale = await fixture.CreateOrderHandler().Handle(Sale(soda.Id, key), CancellationToken.None);
+
+        var other = await fixture.AddTenantAsync(BusinessType.Retail, TenantCapability.Retail, slug: "otra");
+        var water = await fixture.AddProductAsync(other, "Agua", 20m);
+        await fixture.OpenCashSessionAsync(other);
+        fixture.Context.ChangeTracker.Clear();
+        var otherSale = await fixture.CreateOrderHandler().Handle(Sale(water.Id, key), CancellationToken.None);
+
+        Assert.True(shopSale.IsSuccess, shopSale.Error);
+        Assert.True(otherSale.IsSuccess, otherSale.Error);
+        Assert.NotEqual(shopSale.Value.Id, otherSale.Value.Id);
+        Assert.Equal("Agua", Assert.Single(otherSale.Value.Items).ProductName);
+        Assert.Equal(otherSale.Value.Id, (await fixture.Context.Orders.SingleAsync()).Id);
+        fixture.TenantService.SetTenant(shop.Id);
+        Assert.Equal(shopSale.Value.Id, (await fixture.Context.Orders.SingleAsync()).Id);
+    }
+
+    [Fact]
     public async Task DifferentKeys_ShouldBeDifferentSales()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -90,10 +136,10 @@ public class OfflineSalesTests
         Assert.Contains(result.Errors, e => e.PropertyName == nameof(CreateOrderCommand.CapturedOfflineAt));
     }
 
-    private static CreateOrderCommand Sale(Guid productId, Guid key) => new()
+    private static CreateOrderCommand Sale(Guid productId, Guid key, decimal? cashReceived = null) => new()
     {
         IdempotencyKey = key,
         Items = [new CreateOrderItemDto { ProductId = productId, Quantity = 1 }],
-        Payments = [new CreateOrderPaymentDto { Amount = 23.20m, Method = OrderPaymentMethod.Cash }]
+        Payments = [new CreateOrderPaymentDto { Amount = 23.20m, Method = OrderPaymentMethod.Cash, CashReceived = cashReceived }]
     };
 }
