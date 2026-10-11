@@ -72,6 +72,11 @@ export function clock(time: string): string {
   return time.replace(/^0(\d)/, '$1');
 }
 
+/** "a las 9:00", or "a la 1:30" in the one o'clock hour, as the API words it. */
+function atClock(time: string): string {
+  return `${time.startsWith('01:') ? 'a la' : 'a las'} ${clock(time)}`;
+}
+
 /** "9:00 a 20:00", "13:00 a medianoche", or "Abierto las 24 horas" when it closes at the time it opens. */
 export function describeInterval(range: TimeRange): string {
   if (range.opens === range.closes) return 'Abierto las 24 horas';
@@ -161,7 +166,10 @@ function onDay(today: DayOfWeek, inDays: number): string {
   return `el ${dayName(((today + inDays) % 7) as DayOfWeek)}`;
 }
 
-/** "Abierto" and "cierra a las 20:00", or "Cerrado" and "abre mañana a las 9:00" (when: "mañana a las 9:00"). */
+/**
+ * "Abierto" and "cierra a las 20:00", or "Cerrado" and "abre mañana a las 9:00" (when: "mañana a las 9:00"; "mañana a la
+ * 1:00" in the one o'clock hour).
+ */
 export interface OpeningStatusText {
   isOpen: boolean;
   label: string;
@@ -177,11 +185,11 @@ export function describeOpeningStatus(hours: PublicOpeningHours): OpeningStatusT
     // Closing at 00:00 ends the day before: "cierra a medianoche", not "mañana a las 0:00".
     const when = hours.closesAt === '00:00'
       ? `${inDays <= 1 ? '' : `${onDay(hours.today, inDays - 1)} `}a medianoche`
-      : `${inDays <= 0 ? '' : `${onDay(hours.today, inDays)} `}a las ${clock(hours.closesAt)}`;
+      : `${inDays <= 0 ? '' : `${onDay(hours.today, inDays)} `}${atClock(hours.closesAt)}`;
     return { isOpen: true, label: 'Abierto', detail: `cierra ${when}`, when };
   }
   if (!hours.opensAt) return { isOpen: false, label: 'Cerrado', detail: null, when: null };
-  const when = `${onDay(hours.today, hours.opensInDays ?? 0)} a las ${clock(hours.opensAt)}`;
+  const when = `${onDay(hours.today, hours.opensInDays ?? 0)} ${atClock(hours.opensAt)}`;
   return { isOpen: false, label: 'Cerrado', detail: `abre ${when}`, when };
 }
 

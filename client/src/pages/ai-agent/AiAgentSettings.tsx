@@ -61,7 +61,8 @@ const toUpdateRequest = (agent: AiAgentDto): UpdateAiAgentRequest => ({
 export default function AiAgentSettings() {
   const { confirm } = useConfirm();
   const { tenant } = useTenant();
-  // With weekly hours the replies answer hours questions from them (and the special days), not from the description.
+  // With weekly hours the replies answer hours questions from them (and the special days), not from the description;
+  // without them, from the special days of the next two weeks, or else the description.
   const hoursAnswerThemselves = (tenant?.openingHours?.length ?? 0) > 0;
   const [agents, setAgents] = useState<AiAgentDto[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
@@ -303,8 +304,10 @@ export default function AiAgentSettings() {
             <div className="card">
               <div className="card-body">
                 <div className="alert alert-light border small">
-                  Reconocen palabras completas (saludos, precios, menú, horario y ubicación) y contestan con tus textos.
-                  Las preguntas de horario se contestan con el horario de Configuración › Negocio y tus días especiales.
+                  Reconocen palabras completas (saludos, precios, menú, horario y ubicación) y contestan con tus textos.{' '}
+                  {hoursAnswerThemselves
+                    ? 'Las preguntas de horario se contestan con el horario de Configuración › Negocio y tus días especiales.'
+                    : 'Sin horario en Configuración › Negocio, las preguntas de horario se contestan con tus días especiales de las próximas dos semanas o, si no hay, con la descripción del negocio.'}{' '}
                   No usan inteligencia artificial. Se pausan solas 12 horas cuando alguien del equipo escribe en el chat y
                   nunca contestan fotos ni notas de voz.
                 </div>

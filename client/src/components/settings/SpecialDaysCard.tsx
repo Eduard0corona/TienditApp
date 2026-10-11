@@ -43,6 +43,13 @@ type SpecialDays = Schemas['SpecialDaysDto'];
 const SUGGESTIONS_SHOWN = 3;
 // "Varios días" starts a week long.
 const DEFAULT_EXTRA_DAYS = 6;
+// Same limits as the public menu (PublicOpeningHoursDto): today's special day in its "Hoy", and at most 5 of the next 31
+// days in its list.
+const MENU_SPECIAL_DAYS_AHEAD = 31;
+const MENU_MAX_SPECIAL_DAYS = 5;
+// The API refused because the special days changed meanwhile (changed, removed, ended or a date taken by someone else):
+// the list is read again to show them as they are now.
+const LIST_CHANGED_CODES: readonly string[] = ['concurrency_conflict', 'not_found', 'domain_rule', 'business_rule'];
 
 /** The dialog's form. Dates stay as a date input writes them ("2026-12-25"). */
 interface SpecialDayDraft {
@@ -123,6 +130,17 @@ function customerPreview(draft: SpecialDayDraft): string | null {
   return `${describeOpenings(draft.ranges)} · ${reason || 'horario especial'}`;
 }
 
+/** Whether the public menu already shows the special day that starts on that date, in the list the API answered. */
+function menuShowsNow(specialDays: SpecialDays, from: string): boolean {
+  const { today } = specialDays;
+  if (from <= today) return true;
+  const lastDate = addCalendarDays(today, MENU_SPECIAL_DAYS_AHEAD);
+  return specialDays.upcoming
+    .filter((day) => day.to > today && day.from <= lastDate)
+    .slice(0, MENU_MAX_SPECIAL_DAYS)
+    .some((day) => day.from === from);
+}
+
 function confirmMessage(day: SpecialDay): string {
   if (day.inProgress) return 'Desde hoy vuelve tu horario de siempre; los días que ya pasaron se quedan en Pasados.';
   if (day.from === day.to) return `El ${formatLongCalendarDay(day.from)} vuelve tu horario de siempre.`;
@@ -170,17 +188,24 @@ export default function SpecialDaysCard() {
     }
     setError('');
     try {
-      if (draft.editing) {
-        await updateDay.mutateAsync({ id: draft.editing.id, body: { revision: draft.editing.revision, ...bodyOf(draft) } });
-      } else {
-        await saveDay.mutateAsync(bodyOf(draft));
-      }
+      const saved = draft.editing
+        ? await updateDay.mutateAsync({ id: draft.editing.id, body: { revision: draft.editing.revision, ...bodyOf(draft) } })
+        : await saveDay.mutateAsync(bodyOf(draft));
       setDraft(null);
-      toast.success(menuOn ? 'Día especial guardado: tu menú en línea ya lo muestra.' : 'Día especial guardado.');
+      if (!menuOn) toast.success('Día especial guardado.');
+      else if (menuShowsNow(saved, draft.from)) toast.success('Día especial guardado: tu menú en línea ya lo muestra.');
+      else toast.success('Día especial guardado: tu menú en línea lo mostrará cuando se acerque la fecha.');
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'No se pudo guardar el día especial.'));
-      // Someone else changed it meanwhile: the list shows it as it is now.
-      if (getApiErrorCode(err) === 'concurrency_conflict') void specialDays.refetch();
+      const message = getApiErrorMessage(err, 'No se pudo guardar el día especial.');
+      const code = getApiErrorCode(err);
+      if (code && LIST_CHANGED_CODES.includes(code)) void specialDays.refetch();
+      // Changed or removed by someone else: saving it again would fail the same way. It opens again from the list.
+      if (code === 'concurrency_conflict' || code === 'not_found') {
+        setDraft(null);
+        toast.error(message);
+      } else {
+        setError(message);
+      }
     }
   };
 
@@ -197,7 +222,8 @@ export default function SpecialDaysCard() {
       toast.success('Día especial quitado.');
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'No se pudo quitar el día especial.'));
-      if (getApiErrorCode(err) === 'concurrency_conflict') void specialDays.refetch();
+      const code = getApiErrorCode(err);
+      if (code && LIST_CHANGED_CODES.includes(code)) void specialDays.refetch();
     }
   };
 
@@ -232,8 +258,8 @@ export default function SpecialDaysCard() {
           <>
             {data.upcoming.length === 0 ? (
               <p className="small mb-0">
-                Aún no tienes días especiales. Marca los días que cierras (16 de noviembre, Navidad, vacaciones) o abres con
-                otro horario.
+                {data.past.length > 0 ? 'No tienes días especiales próximos.' : 'Aún no tienes días especiales.'} Marca los
+                días que cierras (el Día de la Revolución, Navidad, vacaciones) o abres con otro horario.
               </p>
             ) : (
               // A short, bounded list (at most 120 dates in periods) without search: a list in the card, not DataTable.
@@ -347,7 +373,7 @@ export default function SpecialDaysCard() {
 interface SpecialDayDialogProps {
   draft: SpecialDayDraft;
   data: SpecialDays;
-  /** The weekly hours: special hours start from that weekday's, and the hints read them. */
+  /** The weekly hours: special hours start from that weekday's, and the hints read them with the special days. */
   weekly: readonly OpeningIntervalDto[];
   error: string;
   saving: boolean;
@@ -369,9 +395,17 @@ function SpecialDayDialog({ draft, data, weekly, error, saving, onChange, onCanc
   const weekday = draft.from ? dayOfWeekOf(draft.from) : null;
   const closedByWeek = hasWeeklyHours && weekday !== null && !draft.severalDays && draft.kind === SpecialDayKind.Closed
     && openingsOn(weekly, weekday).length === 0;
-  // The night before keeps its hours when they run past midnight into this date.
-  const dayBefore = draft.from && !inProgress ? dayOfWeekOf(addCalendarDays(draft.from, -1)) : null;
-  const spills = hasWeeklyHours && dayBefore !== null && openingsOn(weekly, dayBefore).some(endsAfterMidnight);
+  // The night before keeps its hours when they run past midnight into this date: a special day marked on that date
+  // (other than the one being changed, which leaves it) decides them, or else its weekday's hours.
+  const dateBefore = draft.from && !inProgress ? addCalendarDays(draft.from, -1) : null;
+  const markedBefore = dateBefore === null ? undefined : [...data.upcoming, ...data.past]
+    .find((day) => day.id !== draft.editing?.id && day.from <= dateBefore && dateBefore <= day.to);
+  const openingsBefore = dateBefore === null ? []
+    : markedBefore ? (markedBefore.kind === SpecialDayKind.Closed ? [] : markedBefore.openings)
+    : openingsOn(weekly, dayOfWeekOf(dateBefore));
+  const spills = openingsBefore.some(endsAfterMidnight);
+  // Before today it can no longer be marked or changed.
+  const changeBefore = dateBefore !== null && dateBefore >= data.today;
   const summary = lengthSummary(draft);
   const preview = customerPreview(draft);
 
@@ -522,10 +556,12 @@ function SpecialDayDialog({ draft, data, weekly, error, saving, onChange, onCanc
             </div>
           )}
           {closedByWeek && <div className="form-text">Ese día ya cierras por tu horario de la semana.</div>}
-          {spills && dayBefore !== null && (
+          {spills && dateBefore !== null && (
             <div className="form-text">
-              El {dayName(dayBefore)} tu horario termina después de medianoche y se respeta. Para cambiarlo, marca también ese
-              día.
+              {markedBefore
+                ? `El ${formatLongCalendarDay(dateBefore)} tu horario especial termina después de medianoche y se respeta.`
+                : `El ${dayName(dayOfWeekOf(dateBefore))} tu horario termina después de medianoche y se respeta.`}
+              {changeBefore && (markedBefore ? ' Para cambiarlo, edita ese día especial.' : ' Para cambiarlo, marca también ese día.')}
             </div>
           )}
 

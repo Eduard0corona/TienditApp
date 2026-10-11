@@ -368,4 +368,33 @@ describe('PublicMenuPage', () => {
       .toHaveTextContent('Lun 21 dic al lun 4 ene · Cerrado · Vacaciones');
     expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
   });
+
+  it('says today in a plain line when there is no week and no special day ahead to open', async () => {
+    api.getMenu.mockResolvedValue(menu({
+      acceptsOrders: false,
+      ordersPaused: true,
+      openingHours: {
+        intervals: [],
+        today: DayOfWeek.Monday,
+        isOpen: false,
+        todayDate: '2026-10-12',
+        hasWeeklyHours: false,
+        statusLabel: 'Cerrado',
+        statusDetail: 'por Inventario',
+        closedNotice: 'No recibimos pedidos en línea por Inventario. Mientras, puedes ver el menú.',
+        closedBySpecialDay: true,
+        todayHours: { date: '2026-10-12', closed: true, special: true, openings: [], reason: 'Inventario' },
+        specialDays: [],
+      },
+    }));
+
+    const { container } = renderPage();
+
+    const today = await screen.findByText('Hoy: Cerrado · Inventario');
+    // Nothing to open: no disclosure and no arrow that promises more.
+    expect(today.closest('details')).toBeNull();
+    expect(container.querySelector('details')).toBeNull();
+    expect(container.querySelector('.pm-hours-toggle')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Horario y ubicación' })).toContainElement(today);
+  });
 });

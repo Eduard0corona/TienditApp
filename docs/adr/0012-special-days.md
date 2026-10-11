@@ -27,7 +27,7 @@ Además:
      - **`OwnsMany`:** `ArchitectureTests` no revisa los tipos propios.
      - **Una fila por periodo con sus horarios en JSON:** la base no puede impedir rangos encimados, y un JSON que no se lee volvería un 500 el menú público.
 2. **Precedencia.**
-   - Un día especial reemplaza los horarios que empiezan en su fecha, siempre por encima del horario de la semana. La regla del ADR 0011 (un horario es del día en que empieza) no cambia: la noche anterior sigue pasando de la medianoche. Un miércoles 23 de 18:00 a 2:00 con el jueves 24 cerrado sigue abierto hasta las 2:00; para cortarla, el dueño marca también el 23 (el diálogo lo avisa solo cuando el horario del día anterior pasa de la medianoche).
+   - Un día especial reemplaza los horarios que empiezan en su fecha, siempre por encima del horario de la semana. La regla del ADR 0011 (un horario es del día en que empieza) no cambia: la noche anterior sigue pasando de la medianoche. Un miércoles 23 de 18:00 a 2:00 con el jueves 24 cerrado sigue abierto hasta las 2:00; para cortarla, el dueño marca también el 23 (el diálogo lo avisa solo cuando el horario del día anterior pasa de la medianoche, el de su día especial si ya tiene uno).
    - Los días especiales aplican sin horario de la semana: un negocio sin horario puede marcar sus vacaciones. Para decidir, sus demás días cuentan como abiertos todo el día, y eso nunca se dice como horario: ni "Abierto las 24 horas" ni "cerramos a medianoche". Ese día abierto por omisión tampoco alarga un horario especial: uno de 18:00 a 2:00 dice "cerramos mañana a las 2:00". El menú y WhatsApp solo muestran sus días especiales.
    - Sin horario de la semana ni días especiales nada cambia: el negocio nunca se ve cerrado (ADR 0011, punto 2).
 3. **Instantes y horizontes.**
@@ -60,7 +60,7 @@ Además:
    - Las palabras de horario ("horario", "abren", "cierran", "abierto", "festivo", "vacaciones"…) contestan con el horario: si está abierto ahora y por qué no ("Estamos cerrados por Navidad: abrimos mañana a las 9:00."), la semana en tramos ("Lunes a sábado: 9:00 a 20:00") y los días especiales de las próximas dos semanas desde hoy, máximo cuatro ("Hoy: 9:00 a 14:00 y 17:00 a 20:00 (Inventario)", "Hasta el sábado 7 de noviembre: 10:00 a 14:00 (Remodelación)"). Un cierre en curso no se repite: la primera línea ya dice cuándo abre.
    - "A qué hora", "hora", "atiende", "abrir" y "cerrar" no cuentan, para que "¿A qué hora llega mi pedido?" no reciba el horario.
    - El orden es: bienvenida, horario, descripción (si preguntan dónde están o el negocio no tiene horario de la semana), productos, menú y al final las preguntas de datos. Mientras está cerrado, el menú en modo pedidos se ofrece solo para verlo.
-   - Con horario de la semana, la descripción del negocio ya no contesta las preguntas de horario, salvo que también pregunten dónde están; el aviso bajo "Descripción del negocio" en Respuestas automáticas lo dice. Esto también es una decisión por omisión.
+   - Con horario de la semana, la descripción del negocio ya no contesta las preguntas de horario, salvo que también pregunten dónde están; el aviso bajo "Descripción del negocio" en Respuestas automáticas lo dice. Sin horario de la semana, el aviso de arriba dice que contestan los días especiales de las próximas dos semanas o, si no hay, la descripción. Esto también es una decisión por omisión.
    - Si el horario no se puede leer, el log registra un error con el id del negocio (sin teléfono ni texto) y el cliente recibe la respuesta de antes.
 
 ## Consecuencias

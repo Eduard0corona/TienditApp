@@ -102,6 +102,11 @@ describe('opening hours', () => {
     expect(say({ isOpen: false, opensAt: '09:00', opensInDays: 2 })).toBe('Cerrado · abre el lunes a las 9:00');
     expect(say({ isOpen: false })).toBe('Cerrado');
     expect(describeOpeningStatus({ ...base, isOpen: false, opensAt: '09:00', opensInDays: 1 })).toMatchObject({ isOpen: false, when: 'mañana a las 9:00' });
+    // The one o'clock hour is singular, as the API words it: "a la 1:30".
+    expect(say({ isOpen: true, closesAt: '01:30', closesInDays: 1 })).toBe('Abierto · cierra mañana a la 1:30');
+    expect(say({ isOpen: false, opensAt: '01:00', opensInDays: 1 })).toBe('Cerrado · abre mañana a la 1:00');
+    expect(say({ isOpen: true, closesAt: '13:00', closesInDays: 0 })).toBe('Abierto · cierra a las 13:00');
+    expect(say({ isOpen: false, opensAt: '10:00', opensInDays: 0 })).toBe('Cerrado · abre hoy a las 10:00');
   });
 
   it('explains the openings that are not plain', () => {

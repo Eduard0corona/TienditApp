@@ -50,6 +50,7 @@
 }
 
 .pm-hours summary,
+.pm-today,
 .pm-upcoming,
 .pm-address {
   display: flex;
@@ -102,6 +103,8 @@
 .pm-address + .pm-hours,
 .pm-hours + .pm-address,
 .pm-hours + .pm-upcoming,
+.pm-today + .pm-address,
+.pm-today + .pm-upcoming,
 .pm-upcoming + .pm-address {
   border-top: 1px solid var(--ct-border-color);
 }

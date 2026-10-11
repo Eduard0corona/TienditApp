@@ -47,6 +47,11 @@ const christmasEve: SpecialDay = {
 const vacations: SpecialDay = {
   id: 'vacaciones', from: '2026-12-21', to: '2027-01-04', kind: SpecialDayKind.Closed, openings: [], reason: 'Vacaciones', revision: 2, inProgress: false,
 };
+// Thursday the 31st until 3:00, though Thursdays close at 20:00.
+const newYearsEve: SpecialDay = {
+  id: 'fin-de-ano', from: '2026-12-31', to: '2026-12-31', kind: SpecialDayKind.SpecialHours,
+  openings: [{ opens: '20:00', closes: '03:00' }], reason: 'Fin de año', revision: 1, inProgress: false,
+};
 // Started on Friday the 9th: today (Sunday the 11th) is one of its days.
 const inventory: SpecialDay = {
   id: 'inventario', from: '2026-10-09', to: '2026-10-15', kind: SpecialDayKind.Closed, openings: [], reason: 'Inventario', revision: 3, inProgress: true,
@@ -133,7 +138,7 @@ describe('SpecialDaysCard', () => {
     answer(specialDays());
 
     expect(await screen.findByText(/Aún no tienes días especiales/)).toHaveTextContent(
-      'Aún no tienes días especiales. Marca los días que cierras (16 de noviembre, Navidad, vacaciones) o abres con otro horario.',
+      'Aún no tienes días especiales. Marca los días que cierras (el Día de la Revolución, Navidad, vacaciones) o abres con otro horario.',
     );
     expect(screen.getByText(/Tu menú en línea y tus respuestas automáticas de WhatsApp los toman en cuenta\./)).toHaveTextContent(
       'en la hora de tu negocio: Centro (CDMX, Guadalajara, Monterrey, Mérida).',
@@ -143,6 +148,21 @@ describe('SpecialDaysCard', () => {
     expect(screen.queryByText('Próximos festivos')).not.toBeInTheDocument();
     expect(screen.queryByText('Pasados (últimos 90 días)')).not.toBeInTheDocument();
     expect(screen.queryByText(/Sin horario de la semana/)).not.toBeInTheDocument();
+  });
+
+  it('says there are none ahead, not none at all, while Pasados lists some', async () => {
+    serve({
+      get: () => Promise.resolve(specialDays({
+        past: [{ ...christmas, id: 'independencia', from: '2026-09-16', to: '2026-09-16', reason: 'Día de la Independencia' }],
+      })),
+    });
+    renderCard();
+
+    expect(await screen.findByText(/No tienes días especiales próximos/)).toHaveTextContent(
+      'No tienes días especiales próximos. Marca los días que cierras (el Día de la Revolución, Navidad, vacaciones) o abres con otro horario.',
+    );
+    expect(screen.queryByText(/Aún no tienes días especiales/)).not.toBeInTheDocument();
+    expect(screen.getByText('Pasados (últimos 90 días)')).toBeInTheDocument();
   });
 
   it('offers to try again when the special days cannot be read', async () => {
@@ -189,7 +209,7 @@ describe('SpecialDaysCard', () => {
     expect(within(past).queryByRole('button', { hidden: true })).not.toBeInTheDocument();
   });
 
-  it('adds a closed day and tells the menu shows it', async () => {
+  it('adds a closed day and tells the menu shows it as the date comes closer', async () => {
     serve({
       get: () => Promise.resolve(specialDays()),
       post: () => Promise.resolve(specialDays({ upcoming: [christmas], upcomingDates: 1 })),
@@ -209,11 +229,44 @@ describe('SpecialDaysCard', () => {
     expect(apiRequest).toHaveBeenCalledWith('post', PATH, {
       body: { from: '2026-12-25', to: null, kind: SpecialDayKind.Closed, openings: [], reason: 'Navidad' },
     });
-    expect(toast.success).toHaveBeenCalledWith('Día especial guardado: tu menú en línea ya lo muestra.');
+    // 75 days away: the menu lists the special days of the next 31 days.
+    expect(toast.success).toHaveBeenCalledWith('Día especial guardado: tu menú en línea lo mostrará cuando se acerque la fecha.');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     // The answer is the list as it is now: no second read.
     expect(screen.getByRole('list', { name: 'Próximos días especiales' })).toHaveTextContent('Vie 25 dic');
     expect(calls('get')).toHaveLength(1);
+  });
+
+  it('tells the menu already shows a special day only while it lists it: today, or among the first 5 of the next 31 days', async () => {
+    const closed = (date: string): SpecialDay => ({ ...christmas, id: date, from: date, to: date, reason: null });
+    let answer = specialDays();
+    serve({ get: () => Promise.resolve(specialDays()), post: () => Promise.resolve(answer) });
+    renderCard();
+
+    const add = async (date: string, upcoming: SpecialDay[]) => {
+      answer = specialDays({ upcoming, upcomingDates: upcoming.length });
+      const dialog = await openNew();
+      fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: date } });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    };
+    const shown = 'Día especial guardado: tu menú en línea ya lo muestra.';
+    const later = 'Día especial guardado: tu menú en línea lo mostrará cuando se acerque la fecha.';
+
+    // Today goes in the menu's «Hoy».
+    await add('2026-10-11', [closed('2026-10-11')]);
+    expect(toast.success).toHaveBeenLastCalledWith(shown);
+    // The last date of the next 31 days, and the first one after.
+    await add('2026-11-11', [closed('2026-11-11')]);
+    expect(toast.success).toHaveBeenLastCalledWith(shown);
+    await add('2026-11-12', [closed('2026-11-12')]);
+    expect(toast.success).toHaveBeenLastCalledWith(later);
+    // Five special days come before it: the menu lists at most five.
+    const october = ['2026-10-13', '2026-10-15', '2026-10-17', '2026-10-19', '2026-10-21'].map(closed);
+    await add('2026-10-23', [...october, closed('2026-10-23')]);
+    expect(toast.success).toHaveBeenLastCalledWith(later);
+    await add('2026-10-12', [closed('2026-10-12'), ...october]);
+    expect(toast.success).toHaveBeenLastCalledWith(shown);
   });
 
   it('opens with other hours, starting from the hours of that weekday', async () => {
@@ -297,18 +350,56 @@ describe('SpecialDaysCard', () => {
     expect(calls('post')).toHaveLength(0);
   });
 
-  it('warns that the night before keeps hours that run past midnight', async () => {
-    serve({ get: () => Promise.resolve(specialDays()) });
+  it('warns that the night before keeps hours that run past midnight, as that date has them', async () => {
+    serve({ get: () => Promise.resolve(specialDays({ upcoming: [christmas, newYearsEve], upcomingDates: 2 })) });
     renderCard();
 
     const dialog = await openNew();
-    // Saturday the 26th: on Friday the business opens from 18:00 to 2:00.
-    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-26' } });
+    // Saturday the 19th: on Friday the business opens from 18:00 to 2:00.
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-19' } });
     expect(within(dialog).getByText(
       'El viernes tu horario termina después de medianoche y se respeta. Para cambiarlo, marca también ese día.',
     )).toBeInTheDocument();
-    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-25' } });
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-18' } });
     expect(within(dialog).queryByText(/termina después de medianoche/)).not.toBeInTheDocument();
+    // Saturday the 26th: Friday the 25th is closed for Navidad, so no night runs into it.
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-26' } });
+    expect(within(dialog).queryByText(/termina después de medianoche/)).not.toBeInTheDocument();
+    // Friday the 1st: Thursday the 31st is marked until 3:00, and changing it is editing that special day.
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2027-01-01' } });
+    expect(within(dialog).getByText(
+      'El jueves 31 de diciembre tu horario especial termina después de medianoche y se respeta. Para cambiarlo, edita ese día especial.',
+    )).toBeInTheDocument();
+  });
+
+  it('does not ask to change the night before when it was yesterday', async () => {
+    // Yesterday, Saturday the 10th, was marked until 3:00: it is history now.
+    const birthday: SpecialDay = { ...newYearsEve, id: 'cumple', from: '2026-10-10', to: '2026-10-10', reason: 'Cumpleaños' };
+    serve({ get: () => Promise.resolve(specialDays({ past: [birthday] })) });
+    renderCard();
+
+    const dialog = await openNew();
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-10-11' } });
+    expect(within(dialog).getByText(/termina después de medianoche/)).toHaveTextContent(
+      'El sábado 10 de octubre tu horario especial termina después de medianoche y se respeta.',
+    );
+    expect(within(dialog).queryByText(/Para cambiarlo/)).not.toBeInTheDocument();
+  });
+
+  it('reads the night before without the dates of the special day being changed', async () => {
+    // Friday 18 and Saturday 19, until 3:00.
+    const posada: SpecialDay = { ...newYearsEve, id: 'posada', from: '2026-12-18', to: '2026-12-19', reason: 'Posada' };
+    serve({ get: () => Promise.resolve(specialDays({ upcoming: [posada], upcomingDates: 2 })) });
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Editar del viernes 18 de diciembre al sábado 19 de diciembre' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar día especial' });
+    await userEvent.click(within(dialog).getByRole('switch', { name: 'Varios días' }));
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-19' } });
+    // Saved, Friday the 18th is no longer special: its weekly hours run until 2:00.
+    expect(within(dialog).getByText(
+      'El viernes tu horario termina después de medianoche y se respeta. Para cambiarlo, marca también ese día.',
+    )).toBeInTheDocument();
   });
 
   it('changes a special day that already started: its first date stays and the revision read goes with it', async () => {
@@ -332,17 +423,20 @@ describe('SpecialDaysCard', () => {
       path: { id: 'inventario' },
       body: { revision: 3, from: '2026-10-09', to: '2026-10-13', kind: SpecialDayKind.Closed, openings: [], reason: 'Inventario' },
     });
-    expect(toast.success).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith('Día especial guardado: tu menú en línea ya lo muestra.');
   });
 
-  it('shows why the API refuses a special day and keeps the dialog open', async () => {
+  it('shows why the API refuses a special day, keeps the dialog open and reads the list again', async () => {
+    let list = specialDays();
     serve({
-      get: () => Promise.resolve(specialDays({ upcoming: [christmas], upcomingDates: 1 })),
+      get: () => Promise.resolve(list),
       post: () => Promise.reject(apiError(422, 'domain_rule', 'El viernes 25 de diciembre ya tiene un día especial: cámbialo o quítalo primero.')),
     });
     renderCard();
 
     const dialog = await openNew();
+    // Someone else marked Navidad meanwhile.
+    list = specialDays({ upcoming: [christmas], upcomingDates: 1 });
     fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-25' } });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
 
@@ -352,24 +446,118 @@ describe('SpecialDaysCard', () => {
     expect(screen.getByRole('dialog', { name: 'Nuevo día especial' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Guardar' })).toBeEnabled();
     expect(toast.success).not.toHaveBeenCalled();
-    expect(calls('get')).toHaveLength(1);
+    // The date it names is in the list now, to change or remove.
+    expect(await screen.findByRole('list', { name: 'Próximos días especiales', hidden: true })).toHaveTextContent('Vie 25 dic');
+    expect(calls('get')).toHaveLength(2);
   });
 
-  it('reads the list again when someone else changed the special day meanwhile', async () => {
+  it('reads the list again when another person took one of the dates at the same time', async () => {
+    let list = specialDays();
     serve({
-      get: () => Promise.resolve(specialDays({ upcoming: [christmas], upcomingDates: 1 })),
+      get: () => Promise.resolve(list),
+      post: () => Promise.reject(apiError(400, 'business_rule', 'Otra persona marcó una de esas fechas al mismo tiempo. Recarga para verla.')),
+    });
+    renderCard();
+
+    const dialog = await openNew();
+    list = specialDays({ upcoming: [vacations], upcomingDates: 15 });
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2026-12-25' } });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Otra persona marcó una de esas fechas al mismo tiempo.');
+    expect(await screen.findByRole('list', { name: 'Próximos días especiales', hidden: true })).toHaveTextContent('Lun 21 dic al lun 4 ene');
+  });
+
+  it('closes the dialog on the list as it is now when someone else changed the special day meanwhile', async () => {
+    let list = specialDays({ upcoming: [christmas], upcomingDates: 1 });
+    serve({
+      get: () => Promise.resolve(list),
       put: () => Promise.reject(apiError(409, 'concurrency_conflict', 'Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.')),
     });
     renderCard();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Editar viernes 25 de diciembre' }));
-    const dialog = screen.getByRole('dialog', { name: 'Editar día especial' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+    // Someone else gave Navidad another reason meanwhile.
+    list = specialDays({ upcoming: [{ ...christmas, reason: 'Navidad en familia', revision: 2 }], upcomingDates: 1 });
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Editar día especial' })).getByRole('button', { name: 'Guardar' }));
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      'Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.',
-    );
-    await waitFor(() => expect(calls('get')).toHaveLength(2));
+    // Saving again from it would send the revision it read, and fail the same way.
+    expect(toast.error).toHaveBeenCalledWith('Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(await screen.findByText(/Navidad en familia/)).toBeInTheDocument();
+    expect(calls('get')).toHaveLength(2);
+    expect(calls('put')).toHaveLength(1);
+
+    // Opened again, it saves on the revision just read.
+    serve({ get: () => Promise.resolve(list), put: () => Promise.resolve(list) });
+    await userEvent.click(screen.getByRole('button', { name: 'Editar viernes 25 de diciembre' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar día especial' });
+    expect(within(dialog).getByLabelText('Motivo (opcional)')).toHaveValue('Navidad en familia');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar' }));
+    expect(apiRequest).toHaveBeenLastCalledWith('put', `${PATH}/{id}`, {
+      path: { id: 'navidad' },
+      body: { revision: 2, from: '2026-12-25', to: null, kind: SpecialDayKind.Closed, openings: [], reason: 'Navidad en familia' },
+    });
+  });
+
+  it('drops a special day someone else removed: the 404 reads the list again', async () => {
+    confirm.mockResolvedValue(true);
+    let list = specialDays({ upcoming: [christmasEve, christmas], upcomingDates: 2 });
+    const gone = () => Promise.reject(apiError(404, 'not_found', 'No se encontró el registro. Es posible que ya no exista.'));
+    serve({ get: () => Promise.resolve(list), put: gone, delete: gone });
+    renderCard();
+
+    const quit = await screen.findByRole('button', { name: 'Quitar viernes 25 de diciembre' });
+    list = specialDays({ upcoming: [christmasEve], upcomingDates: 1 });
+    await userEvent.click(quit);
+
+    expect(toast.error).toHaveBeenCalledWith('No se encontró el registro. Es posible que ya no exista.');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Quitar viernes 25 de diciembre' })).not.toBeInTheDocument());
+    expect(calls('get')).toHaveLength(2);
+
+    // Gone while its dialog was open: the dialog closes, since saving it can never work.
+    await userEvent.click(screen.getByRole('button', { name: 'Editar jueves 24 de diciembre' }));
+    list = specialDays();
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Editar día especial' })).getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.error).toHaveBeenLastCalledWith('No se encontró el registro. Es posible que ya no exista.');
+    expect(await screen.findByText(/Aún no tienes días especiales/)).toBeInTheDocument();
+    expect(calls('get')).toHaveLength(3);
+  });
+
+  it('moves a special day that ended meanwhile to Pasados when removing it fails', async () => {
+    confirm.mockResolvedValue(true);
+    let list = specialDays({ upcoming: [inventory], upcomingDates: 5 });
+    serve({
+      get: () => Promise.resolve(list),
+      delete: () => Promise.reject(apiError(422, 'domain_rule', 'Ese día especial ya pasó: se queda en el historial.')),
+    });
+    renderCard();
+
+    const quit = await screen.findByRole('button', { name: 'Quitar del viernes 9 de octubre al jueves 15 de octubre' });
+    // Someone else ended it yesterday.
+    list = specialDays({ past: [{ ...inventory, to: '2026-10-10', inProgress: false }] });
+    await userEvent.click(quit);
+
+    expect(toast.error).toHaveBeenCalledWith('Ese día especial ya pasó: se queda en el historial.');
+    expect(await screen.findByText(/No tienes días especiales próximos/)).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Días especiales pasados', hidden: true })).toHaveTextContent('Vie 9 oct al sáb 10 oct');
+  });
+
+  it('keeps the list as it is when the request never reached the API', async () => {
+    confirm.mockResolvedValue(true);
+    serve({
+      get: () => Promise.resolve(specialDays({ upcoming: [christmas], upcomingDates: 1 })),
+      delete: () => Promise.reject(new AxiosError('Network Error', 'ERR_NETWORK')),
+    });
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Quitar viernes 25 de diciembre' }));
+
+    expect(toast.error).toHaveBeenCalledWith('No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.');
+    expect(screen.getByRole('list', { name: 'Próximos días especiales' })).toHaveTextContent('Vie 25 dic');
+    expect(calls('get')).toHaveLength(1);
   });
 
   it('opens a suggested holiday filled in, without saving it', async () => {
@@ -447,7 +635,7 @@ describe('SpecialDaysCard', () => {
 
   it('says that without weekly hours the menu closes only on these days', async () => {
     withTenant(OnlineMenuMode.MenuOnly, null);
-    serve({ get: () => Promise.resolve(specialDays({ hasWeeklyHours: false })) });
+    serve({ get: () => Promise.resolve(specialDays({ hasWeeklyHours: false, upcoming: [newYearsEve], upcomingDates: 1 })) });
     renderCard();
 
     expect(await screen.findByText('Sin horario de la semana, tu menú solo se ve cerrado en estos días.')).toBeInTheDocument();
@@ -461,5 +649,8 @@ describe('SpecialDaysCard', () => {
     expect(within(dialog).getByLabelText('Abre ese día')).toHaveValue('09:00');
     expect(within(dialog).getByLabelText('Cierra ese día')).toHaveValue('20:00');
     expect(within(dialog).getByText('Tus clientes verán: 9:00 a 20:00 · horario especial')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/termina después de medianoche/)).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Fecha'), { target: { value: '2027-01-01' } });
+    expect(within(dialog).getByText(/El jueves 31 de diciembre tu horario especial termina después de medianoche/)).toBeInTheDocument();
   });
 });

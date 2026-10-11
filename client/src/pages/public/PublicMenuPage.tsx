@@ -220,6 +220,11 @@ export default function PublicMenuPage() {
     : `Fuera de horario no recibimos pedidos en línea${legacyStatus?.when ? `: vuelve ${legacyStatus.when}` : ''}. Mientras, puedes ver el menú.`;
   const today = hours?.todayHours;
   const specialDays = hours?.specialDays ?? [];
+  const hoursSummary = !hours ? null
+    : !fromServer ? `Hoy: ${describeDay(hours.intervals, hours.today)}`
+    : today ? `Hoy: ${describeTodayHours(today)}` : 'Días especiales';
+  // Without weekly hours and without special days ahead (a special day today alone) there is nothing to open.
+  const hoursOpen = !!hours && (hours.intervals.length > 0 || specialDays.length > 0);
   // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
   const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
 
@@ -276,15 +281,17 @@ export default function PublicMenuPage() {
 
       {(hours || data.address) && (
         <section className="pm-info" aria-label="Horario y ubicación">
-          {hours && (
+          {hours && !hoursOpen && (
+            <p className="pm-today">
+              <i className="ri-time-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">{hoursSummary}</span>
+            </p>
+          )}
+          {hours && hoursOpen && (
             <details className="pm-hours">
               <summary>
                 <i className="ri-time-line" aria-hidden="true"></i>
-                <span className="flex-grow-1">
-                  {!fromServer
-                    ? `Hoy: ${describeDay(hours.intervals, hours.today)}`
-                    : today ? `Hoy: ${describeTodayHours(today)}` : 'Días especiales'}
-                </span>
+                <span className="flex-grow-1">{hoursSummary}</span>
                 <i className="ri-arrow-down-s-line pm-hours-toggle" aria-hidden="true"></i>
               </summary>
               {hours.intervals.length > 0 && (
