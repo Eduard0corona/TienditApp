@@ -1,14 +1,12 @@
-import bootstrapCss from 'bootstrap/dist/css/bootstrap.css?raw';
-import remixiconCss from 'remixicon/fonts/remixicon.css?raw';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import hyperCss from './app.min.css?raw';
+import hyperClassNamesJson from './hyperClassNames.json?raw';
 
-// Fase 20D: every class the app takes from Hyper alone (not from Bootstrap, not from Remix) has a rule of our own, so
-// Hyper can go (20E) without anything on screen losing its style.
-const ourCss = import.meta.glob<string>(['/src/**/*.css', '!/src/assets/css/app.min.css'], {
-  query: '?raw', import: 'default', eager: true,
-});
+// Fase 20D: every class the app takes from Hyper alone (not from Bootstrap, not from Remix) has a rule of our own.
+// Since 20E Hyper's stylesheet is gone: hyperClassNames.json keeps the names of the classes only it defined, so a class
+// copied from Hyper (its docs, an old screen) cannot come back without a rule.
+const hyperClassNames = new Set<string>(JSON.parse(hyperClassNamesJson));
+const ourCss = import.meta.glob<string>('/src/**/*.css', { query: '?raw', import: 'default', eager: true });
 const code = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}', '!/src/**/generated/**'], {
   query: '?raw', import: 'default', eager: true,
 });
@@ -51,21 +49,19 @@ const NOT_CLASSES = new Set([
 ]);
 
 describe('classes the app takes from Hyper', () => {
-  it('reads the code and the stylesheets it checks', () => {
+  it('reads the code, the stylesheets and the names it checks', () => {
     expect(Object.keys(code).length).toBeGreaterThan(100);
     expect(Object.keys(ourCss)).toContain('/src/assets/css/components.css');
-    expect(classesOf(bootstrapCss)).toContain('btn');
-    expect(classesOf(remixiconCss)).toContain('ri-eye-line');
-    expect(classesOf(hyperCss)).toContain('btn-soft-primary');
+    expect(classesOf(ourCss['/src/assets/css/components.css'])).toContain('btn-soft-primary');
+    expect(hyperClassNames.size).toBe(930);
+    expect(hyperClassNames).toContain('btn-soft-primary');
   });
 
   it('have a rule of our own for each one the code uses', () => {
-    const hyper = classesOf(hyperCss);
-    const elsewhere = new Set([...classesOf(bootstrapCss), ...classesOf(remixiconCss)]);
     const ours = new Set(Object.values(ourCss).flatMap((source) => [...classesOf(source)]));
 
     const missing = [...wordsInCode()]
-      .filter(([word]) => hyper.has(word) && !elsewhere.has(word) && !ours.has(word) && !NOT_CLASSES.has(word))
+      .filter(([word]) => hyperClassNames.has(word) && !ours.has(word) && !NOT_CLASSES.has(word))
       .map(([word, file]) => `${word} (${file})`);
 
     expect(missing).toEqual([]);

@@ -17,8 +17,9 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'remixicon/fonts/remixicon.css';
 import '@fontsource-variable/manrope';
 
-// Hyper CSS and the classes the app took from it, then the TienditApp theme, the frame of the app and fixes on top
-import './assets/css/app.min.css';
+// Bootstrap with the app's values and the classes the app took from Hyper, then the TienditApp theme, the frame of
+// the app and fixes on top
+import './assets/scss/bootstrap.scss';
 import './assets/css/components.css';
 import './assets/css/theme.css';
 import './assets/css/shell.css';

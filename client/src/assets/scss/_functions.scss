@@ -1,0 +1,27 @@
+// Read right after Bootstrap's functions and before its variables, so every value Bootstrap derives goes through them.
+@use "sass:color";
+@use "sass:math";
+
+// Colors Bootstrap mixes (tint-color, shade-color, shift-color and its own mix() calls) come out with whole channels
+// and as hex (#2e3262), as Sass wrote them before 1.79 and as Hyper's values were compiled. Newer Sass keeps the
+// fractions (rgb(17.88%, 19.45%, 38.43%)): a slightly different color, and different text for a custom property a
+// component reads.
+@function _ta-whole-channels($color) {
+  // Changed from a hex color, so Sass writes it as hex, also inside a custom property.
+  @return color.change(
+    #000000,
+    $red: math.round(color.channel($color, "red", $space: rgb)),
+    $green: math.round(color.channel($color, "green", $space: rgb)),
+    $blue: math.round(color.channel($color, "blue", $space: rgb)),
+    $alpha: color.alpha($color)
+  );
+}
+
+@function mix($color-1, $color-2, $weight: 50%) {
+  @return _ta-whole-channels(color.mix($color-1, $color-2, $weight));
+}
+
+// "114,124,245" for the --ct-*-rgb variables, as before: Sass keeps the spaces of a list inside a custom property.
+@function to-rgb($value) {
+  @return unquote("#{color.channel($value, "red", $space: rgb)},#{color.channel($value, "green", $space: rgb)},#{color.channel($value, "blue", $space: rgb)}");
+}
