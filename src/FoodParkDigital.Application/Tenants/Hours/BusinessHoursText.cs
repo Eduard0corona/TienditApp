@@ -6,8 +6,8 @@ namespace FoodParkDigital.Application.Tenants.Hours;
 
 /// <summary>
 /// How a customer reads the hours, the same in any culture: «Cerrado · por Navidad · abre el sábado 26 a las 9:00».
-/// The server writes every word, so the menu and the order it refuses never disagree. Without weekly hours a business
-/// is open all day except on its special days, and that is never worded as hours.
+/// The server writes every word, so the menu, the order it refuses and the WhatsApp replies never disagree. Without
+/// weekly hours a business is open all day except on its special days, and that is never worded as hours.
 /// </summary>
 public static class BusinessHoursText
 {
@@ -17,6 +17,17 @@ public static class BusinessHoursText
     // Within this many days a date of the same month is its weekday and number; past the other it carries its year.
     private const int WeekdayOnlyDays = 6;
     private const int WithoutYearDays = 180;
+
+    // How far ahead, and how many, special days a WhatsApp reply about the hours lists.
+    private const int ChatSpecialDaysAhead = 14;
+    private const int ChatMaxSpecialDays = 4;
+
+    // The week as a business reads it, Monday first.
+    private static readonly DayOfWeek[] Week =
+    [
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday,
+        DayOfWeek.Sunday
+    ];
 
     /// <summary>
     /// Whether the status can be put in words: with weekly hours, or on a special day. Otherwise «abierto» would only
@@ -156,11 +167,106 @@ public static class BusinessHoursText
         return status.OpensAt is { } opensAt ? $"{why}: abre {OpenWhen(opensAt, hours.Today)}." : $"{why}.";
     }
 
+    /// <summary>
+    /// The WhatsApp reply about the hours, in blocks: whether it is open now, its week («Lunes a sábado: 9:00 a 20:00»)
+    /// and its special days of the next two weeks. Null when there is nothing to say: no weekly hours, no special day
+    /// today and none in the next two weeks.
+    /// </summary>
+    public static string? ForChat(BusinessHoursNow hours)
+    {
+        var blocks = new List<string>();
+        if (ChatStatusLine(hours) is { } status)
+            blocks.Add(status);
+        if (hours.Weekly is { } weekly)
+            blocks.Add($"Nuestro horario:\n{string.Join("\n", WeekLines(weekly))}");
+        var specialDays = hours.StartingWithin(ChatSpecialDaysAhead).Take(ChatMaxSpecialDays).Select(SpecialDayLine).ToList();
+        if (specialDays.Count > 0)
+            blocks.Add($"Días especiales:\n{string.Join("\n", specialDays)}");
+        return blocks.Count == 0 ? null : string.Join("\n\n", blocks);
+    }
+
+    /// <summary>
+    /// Whether it is open now, as the business says it on WhatsApp: «Ahora estamos abiertos: cerramos a las 20:00.»,
+    /// «Hoy tenemos horario especial por Nochebuena: cerramos a las 18:00.», «Estamos cerrados por Navidad: abrimos el
+    /// sábado 26 a las 9:00.» Null when the status cannot be put in words (<see cref="MayWordStatus"/>).
+    /// </summary>
+    public static string? ChatStatusLine(BusinessHoursNow hours)
+    {
+        if (!MayWordStatus(hours))
+            return null;
+        var status = hours.Status;
+        if (status.IsOpen)
+        {
+            if (status.ClosesAt is not { } closesAt)
+                return "Ahora estamos abiertos las 24 horas.";
+            var closes = $"cerramos {CloseWhen(closesAt, hours.Today)}";
+            return status.ClosesBy switch
+            {
+                null => $"Ahora estamos abiertos: {closes}.",
+                // Today's own special hours; a special day ahead that sets the closing only gives its reason.
+                var rule when rule == status.TodaySpecial => $"Hoy tenemos horario especial{Because(rule)}: {closes}.",
+                var rule => $"Ahora estamos abiertos: {closes}{Because(rule)}."
+            };
+        }
+
+        var why = status switch
+        {
+            { ClosedFor.Reason: { } reason } => $"Estamos cerrados por {reason}",
+            { ClosedBySpecialDay: true } => "Hoy estamos cerrados",
+            _ => "Ahora estamos cerrados"
+        };
+        return status.OpensAt is { } opensAt ? $"{why}: abrimos {OpenWhen(opensAt, hours.Today)}." : $"{why}.";
+    }
+
+    // One line per run of consecutive days that open alike: «Lunes a sábado: 9:00 a 20:00», «Domingo: cerrado».
+    private static IEnumerable<string> WeekLines(OpeningHours weekly)
+    {
+        var days = Week.Select(day =>
+        {
+            var openings = weekly.On(day).Select(interval => new DailyOpening(interval.Opens, interval.Closes));
+            return (Day: day, Hours: ChatOpenings(openings));
+        }).ToList();
+        for (var first = 0; first < days.Count;)
+        {
+            var last = first;
+            while (last + 1 < days.Count && days[last + 1].Hours == days[first].Hours)
+                last++;
+            var name = Capitalized(SpanishCalendar.DayName(days[first].Day));
+            var label = (last - first) switch
+            {
+                0 => name,
+                1 => $"{name} y {SpanishCalendar.DayName(days[last].Day)}",
+                _ => $"{name} a {SpanishCalendar.DayName(days[last].Day)}"
+            };
+            yield return $"{label}: {days[first].Hours}";
+            first = last + 1;
+        }
+    }
+
+    // «Jueves 24 de diciembre: 9:00 a 18:00 (Nochebuena)», «Del lunes 21 de diciembre al lunes 4 de enero: cerrado».
+    private static string SpecialDayLine(SpecialDayPeriod period)
+    {
+        var when = period.From == period.To
+            ? Capitalized(SpanishCalendar.LongDate(period.From))
+            : $"Del {SpanishCalendar.LongDate(period.From)} al {SpanishCalendar.LongDate(period.To)}";
+        var what = period.Rule.Kind == SpecialDayKind.Closed ? "cerrado" : ChatOpenings(period.Rule.Openings);
+        return period.Rule.Reason is { } reason ? $"{when}: {what} ({reason})" : $"{when}: {what}";
+    }
+
+    // «9:00 a 14:00 y 16:00 a 20:00», «18:00 a 2:00», «13:00 a medianoche», «abierto las 24 horas»; none, «cerrado».
+    private static string ChatOpenings(IEnumerable<DailyOpening> openings)
+    {
+        var ranges = openings
+            .Select(opening => opening.IsAllDay ? "abierto las 24 horas" : $"{Clock(opening.Opens)} a {Until(opening.Closes)}")
+            .ToList();
+        return ranges.Count == 0 ? "cerrado" : string.Join(" y ", ranges);
+    }
+
     // «de 9:00 a 14:00 y de 16:00 a 18:00», «de 18:00 a medianoche», «las 24 horas».
     private static string Openings(IEnumerable<DailyOpening> openings) => string.Join(" y ", openings.Select(opening =>
-        opening.IsAllDay
-            ? "las 24 horas"
-            : $"de {Clock(opening.Opens)} a {(opening.Closes == TimeOnly.MinValue ? "medianoche" : Clock(opening.Closes))}"));
+        opening.IsAllDay ? "las 24 horas" : $"de {Clock(opening.Opens)} a {Until(opening.Closes)}"));
+
+    private static string Until(TimeOnly closes) => closes == TimeOnly.MinValue ? "medianoche" : Clock(closes);
 
     private static string Because(SpecialDayRule rule) => rule.Reason is { } reason ? $" por {reason}" : "";
 

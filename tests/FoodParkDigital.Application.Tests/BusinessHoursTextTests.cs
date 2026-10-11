@@ -7,10 +7,10 @@ using FoodParkDigital.Domain.Tenants.Entities;
 namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
-/// Every word the public menu and its orders say about the hours, written by the server: the chip, its detail, the
-/// notices and the message of a refused order. A closing from the weekly hours reads as before (0 and 1 days are
-/// byte-identical to what the menu said until now); a special day adds its reason; and a business without weekly hours
-/// never has its whole-day default worded as hours.
+/// Every word the public menu, its orders and the WhatsApp replies say about the hours, written by the server: the chip,
+/// its detail, the notices, the message of a refused order and the reply about the hours. A closing from the weekly
+/// hours reads as before (0 and 1 days are byte-identical to what the menu said until now); a special day adds its
+/// reason; and a business without weekly hours never has its whole-day default worded as hours.
 /// </summary>
 public class BusinessHoursTextTests
 {
@@ -238,6 +238,112 @@ public class BusinessHoursTextTests
             Texts(vacationsNever));
     }
 
+    [Fact]
+    public void ChatStatusLine_ShouldSayItInTheFirstPerson()
+    {
+        var always = Weekly(Enum.GetValues<DayOfWeek>().Select(day => Open(day, "00:00", "00:00")).ToArray());
+
+        Assert.Equal("Ahora estamos abiertos: cerramos a las 20:00.", Chat(Hours(Shop(), At("2026-10-05T12:00"))));
+        Assert.Equal("Ahora estamos abiertos: cerramos a medianoche.",
+            Chat(Hours(Weekly(Open(DayOfWeek.Monday, "13:00", "00:00")), At("2026-10-05T15:00"))));
+        Assert.Equal("Ahora estamos abiertos: cerramos mañana a las 2:00.",
+            Chat(Hours(Weekly(Open(DayOfWeek.Friday, "18:00", "02:00")), At("2026-10-09T20:00"))));
+        Assert.Equal("Ahora estamos abiertos las 24 horas.", Chat(Hours(always, At("2026-12-10T12:00"))));
+        Assert.Equal("Ahora estamos cerrados: abrimos mañana a las 9:00.", Chat(Hours(Shop(), At("2026-10-04T11:00"))));
+        // A week ahead, the date; opening at midnight, the day alone.
+        Assert.Equal("Ahora estamos cerrados: abrimos el martes 13 de octubre a las 9:00.",
+            Chat(Hours(Weekly(Open(DayOfWeek.Tuesday, "09:00", "14:00")), At("2026-10-06T15:00"))));
+        Assert.Equal("Ahora estamos cerrados: abrimos mañana.",
+            Chat(Hours(Weekly(Open(DayOfWeek.Tuesday, "00:00", "12:00")), At("2026-10-05T15:00"))));
+    }
+
+    [Fact]
+    public void ChatStatusLine_ShouldGiveTheReasonOfASpecialDay()
+    {
+        var always = Weekly(Enum.GetValues<DayOfWeek>().Select(day => Open(day, "00:00", "00:00")).ToArray());
+        var inventory = SpecialDayRule.Hours([Opening("00:00", "14:00")], "Inventario");
+
+        Assert.Equal("Hoy tenemos horario especial por Nochebuena: cerramos a las 18:00.",
+            Chat(Hours(Shop(), At("2026-12-24T12:00"), Special(Date("2026-12-24"), Nochebuena))));
+        Assert.Equal("Hoy tenemos horario especial: cerramos a las 18:00.",
+            Chat(Hours(Shop(), At("2026-12-24T12:00"), Special(Date("2026-12-24"), SpecialDayRule.Hours([Opening("09:00", "18:00")], null)))));
+        // Tomorrow's special hours set today's closing: not «hoy tenemos horario especial».
+        Assert.Equal("Ahora estamos abiertos: cerramos mañana a las 14:00 por Inventario.",
+            Chat(Hours(always, At("2026-12-20T12:00"), Special(Date("2026-12-21"), inventory))));
+        Assert.Equal("Estamos cerrados por Navidad: abrimos mañana a las 9:00.",
+            Chat(Hours(Shop(), At("2026-12-25T12:00"), Special(Date("2026-12-25"), Navidad))));
+        Assert.Equal("Estamos cerrados por Navidad: abrimos el sábado 26 a las 9:00.",
+            Chat(Hours(Shop(), At("2026-12-24T19:00"), Special(Date("2026-12-24"), Nochebuena), Special(Date("2026-12-25"), Navidad))));
+        Assert.Equal("Hoy estamos cerrados: abrimos mañana a las 9:00.",
+            Chat(Hours(Shop(), At("2026-12-25T12:00"), Special(Date("2026-12-25"), SpecialDayRule.Closed(null)))));
+        Assert.Equal("Estamos cerrados por Vacaciones: abrimos el martes 5 de enero a las 9:00.",
+            Chat(Hours(Shop(), At("2026-12-28T12:00"), Special(Date("2026-12-21"), Date("2027-01-04"), Vacaciones))));
+    }
+
+    [Fact]
+    public void ChatStatusLine_WithoutANextOpening_ShouldOnlySayItIsClosed()
+    {
+        var sunday = Hours(Shop(), At("2026-10-04T11:00"));
+        var vacations = Hours(Shop(), At("2026-12-28T12:00"), Special(Date("2026-12-21"), Date("2027-01-04"), Vacaciones));
+
+        Assert.Equal("Ahora estamos cerrados.", Chat(sunday with { Status = sunday.Status with { OpensAt = null } }));
+        Assert.Equal("Estamos cerrados por Vacaciones.", Chat(vacations with { Status = vacations.Status with { OpensAt = null } }));
+    }
+
+    [Fact]
+    public void ForChat_ShouldTellTheWeekInRunsOfDays_MondayFirst()
+    {
+        var bar = Weekly(
+            Open(DayOfWeek.Monday, "09:00", "14:00"), Open(DayOfWeek.Monday, "16:00", "20:00"),
+            Open(DayOfWeek.Tuesday, "09:00", "14:00"), Open(DayOfWeek.Tuesday, "16:00", "20:00"),
+            Open(DayOfWeek.Wednesday, "13:00", "00:00"),
+            Open(DayOfWeek.Thursday, "00:00", "00:00"),
+            Open(DayOfWeek.Friday, "18:00", "02:00"), Open(DayOfWeek.Saturday, "18:00", "02:00"));
+
+        Assert.Equal(
+            "Ahora estamos abiertos: cerramos a las 14:00.\n\n" +
+            "Nuestro horario:\n" +
+            "Lunes y martes: 9:00 a 14:00 y 16:00 a 20:00\n" +
+            "Miércoles: 13:00 a medianoche\n" +
+            "Jueves: abierto las 24 horas\n" +
+            "Viernes y sábado: 18:00 a 2:00\n" +
+            "Domingo: cerrado",
+            BusinessHoursText.ForChat(Hours(bar, At("2026-10-05T12:00"))));
+        Assert.Equal(
+            "Ahora estamos abiertos: cerramos a las 20:00.\n\nNuestro horario:\nLunes a sábado: 9:00 a 20:00\nDomingo: cerrado",
+            BusinessHoursText.ForChat(Hours(Shop(), At("2026-10-05T12:00"))));
+    }
+
+    [Fact]
+    public void ForChat_ShouldListTheSpecialDaysOfTheNextTwoWeeks()
+    {
+        var hours = Hours(Shop(), At("2026-12-18T12:00"),
+            Special(Date("2026-12-21"), Date("2027-01-04"), SpecialDayRule.Closed(null)),
+            Special(Date("2026-12-19"), SpecialDayRule.Hours([Opening("09:00", "14:00"), Opening("16:00", "18:00")], "Posada")),
+            Special(Date("2026-12-20"), SpecialDayRule.Hours([Opening("00:00", "00:00")], "Maratón")));
+
+        Assert.EndsWith(
+            "Días especiales:\n" +
+            "Sábado 19 de diciembre: 9:00 a 14:00 y 16:00 a 18:00 (Posada)\n" +
+            "Domingo 20 de diciembre: abierto las 24 horas (Maratón)\n" +
+            "Del lunes 21 de diciembre al lunes 4 de enero: cerrado",
+            BusinessHoursText.ForChat(hours));
+    }
+
+    [Fact]
+    public void ForChat_WithoutWeeklyHours_ShouldTellOnlyItsSpecialDays()
+    {
+        var before = Hours(null, At("2026-12-22T12:00"), Special(Date("2026-12-25"), Navidad));
+        var farAhead = Hours(null, At("2026-10-11T12:00"), Special(Date("2026-12-25"), Navidad));
+        var christmas = Hours(null, At("2026-12-25T12:00"), Special(Date("2026-12-25"), Navidad));
+
+        // Open all day is no hours: no status, no week.
+        Assert.Null(BusinessHoursText.ChatStatusLine(before));
+        Assert.Equal("Días especiales:\nViernes 25 de diciembre: cerrado (Navidad)", BusinessHoursText.ForChat(before));
+        Assert.Null(BusinessHoursText.ForChat(farAhead));
+        Assert.Equal("Estamos cerrados por Navidad: abrimos mañana.", BusinessHoursText.ForChat(christmas));
+    }
+
     /// <summary>The chip, its detail, the notice over the menu and the message of a refused order.</summary>
     private static (string? Label, string? Detail, string? Notice, string Message) Texts(BusinessHoursNow hours)
         => (Label(hours), Detail(hours), Notice(hours), BusinessHoursText.ClosedMessage(hours));
@@ -249,6 +355,8 @@ public class BusinessHoursTextTests
     private static string? Notice(BusinessHoursNow hours) => BusinessHoursText.ClosedNotice(hours, seatedOverride: false);
 
     private static string? Upcoming(BusinessHoursNow hours) => BusinessHoursText.UpcomingNotice(hours);
+
+    private static string? Chat(BusinessHoursNow hours) => BusinessHoursText.ChatStatusLine(hours);
 
     /// <summary>The hours of a business in Mexico City when its clock reads <paramref name="localNow"/>.</summary>
     private static BusinessHoursNow Hours(OpeningHours? weekly, DateTime localNow, params List<SpecialDay>[] specialDays)
