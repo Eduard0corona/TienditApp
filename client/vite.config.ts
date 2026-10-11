@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  css: {
+    preprocessorOptions: {
+      // Bootstrap 5.3's Sass still uses @import and the global color functions: Dart Sass warns on every build.
+      scss: {
+        quietDeps: true,
+        silenceDeprecations: ['import', 'global-builtin', 'color-functions', 'if-function'],
+      },
+    },
+  },
   build: {
     rollupOptions: {
       onwarn(warning, warn) {

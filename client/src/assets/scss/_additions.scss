@@ -1,0 +1,201 @@
+// What the app takes from Hyper on top of Bootstrap's own elements and components (Fase 20E), in the order Hyper had
+// it: same specificity, so the order decides (.card-header and .modal-title keep margin-top 0 under the headings rule).
+// The classes only Hyper had are in components.css (Fase 20D).
+
+// Cards have no border, fields their own background.
+:root {
+  --#{$prefix}theme-card-border-width: 0px; // with the unit: it goes into a calc() with lengths
+}
+
+:root,
+[data-bs-theme=light] {
+  --#{$prefix}input-bg: #fff;
+}
+
+[data-bs-theme=dark] {
+  --#{$prefix}light: #464f5b;
+  --#{$prefix}light-rgb: 70,79,91;
+  --#{$prefix}dark: #f1f1f1;
+  --#{$prefix}dark-rgb: 241,241,241;
+  --#{$prefix}secondary: #6c757d;
+  --#{$prefix}secondary-rgb: 108,117,125;
+  --#{$prefix}input-bg: #404954;
+  --#{$prefix}box-shadow: 0px 0px 35px 0px rgba(49, 57, 66, .5);
+}
+
+// The divider's size (overrides.css draws it with Remix).
+.breadcrumb-item + .breadcrumb-item::before {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+// Each solid button casts a shadow of its own color. Hyper's focus ring for .btn-light, .btn-dark and the light and
+// dark outlines was a Sass expression left as text, so they draw none: initial keeps it so (20F).
+@each $color in primary, secondary, success, info, warning, danger, light, dark {
+  .btn-#{$color} {
+    box-shadow: var(--#{$prefix}btn-box-shadow) rgba(var(--#{$prefix}#{$color}-rgb), .5);
+  }
+}
+
+.btn-light {
+  --#{$prefix}btn-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-bg: var(--#{$prefix}light);
+  --#{$prefix}btn-border-color: transparent;
+  --#{$prefix}btn-hover-color: var(--#{$prefix}tertiary-color);
+  --#{$prefix}btn-hover-bg: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-hover-border-color: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-active-bg: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-active-color: var(--#{$prefix}tertiary-color);
+  --#{$prefix}btn-active-border-color: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-focus-shadow-rgb: initial;
+}
+
+.btn-dark {
+  --#{$prefix}btn-color: var(--#{$prefix}light);
+  --#{$prefix}btn-bg: var(--#{$prefix}dark);
+  --#{$prefix}btn-border-color: transparent;
+  --#{$prefix}btn-hover-color: var(--#{$prefix}light);
+  --#{$prefix}btn-hover-bg: var(--#{$prefix}dark);
+  --#{$prefix}btn-hover-border-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-active-bg: var(--#{$prefix}dark);
+  --#{$prefix}btn-active-color: var(--#{$prefix}light);
+  --#{$prefix}btn-active-border-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-focus-shadow-rgb: initial;
+}
+
+.btn-outline-light {
+  --#{$prefix}btn-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-bg: transparent;
+  --#{$prefix}btn-border-color: var(--#{$prefix}light);
+  --#{$prefix}btn-hover-color: var(--#{$prefix}tertiary-color);
+  --#{$prefix}btn-hover-bg: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-hover-border-color: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-active-bg: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-active-color: var(--#{$prefix}tertiary-color);
+  --#{$prefix}btn-active-border-color: var(--#{$prefix}tertiary-bg);
+  --#{$prefix}btn-focus-shadow-rgb: initial;
+}
+
+.btn-outline-dark {
+  --#{$prefix}btn-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-bg: transparent;
+  --#{$prefix}btn-border-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-hover-color: var(--#{$prefix}light);
+  --#{$prefix}btn-hover-bg: var(--#{$prefix}dark);
+  --#{$prefix}btn-hover-border-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-active-bg: var(--#{$prefix}dark);
+  --#{$prefix}btn-active-color: var(--#{$prefix}light);
+  --#{$prefix}btn-active-border-color: var(--#{$prefix}dark);
+  --#{$prefix}btn-focus-shadow-rgb: initial;
+}
+
+[data-bs-theme=dark] .btn-secondary {
+  box-shadow: var(--#{$prefix}btn-box-shadow) rgba(var(--#{$prefix}light-rgb), .5);
+}
+
+.badge {
+  vertical-align: middle;
+}
+
+.card {
+  box-shadow: var(--#{$prefix}box-shadow);
+  margin-bottom: 1.5rem;
+}
+
+.card-header,
+.card-title {
+  margin-top: 0;
+}
+
+.dropdown-menu {
+  box-shadow: var(--#{$prefix}dropdown-box-shadow);
+}
+
+.dropdown-header {
+  margin-top: 0;
+}
+
+// A field with a validation state keeps no glow when focused.
+.form-control.is-invalid:focus,
+.form-control.is-valid:focus,
+.form-control:invalid:focus,
+.form-control:valid:focus {
+  box-shadow: none !important;
+}
+
+.modal-title {
+  margin-top: 0;
+  color: inherit;
+}
+
+// Tabs written as links (the app's are buttons) read in the secondary color, semibold.
+.nav-tabs > li > a {
+  color: var(--#{$prefix}secondary-color);
+  font-weight: 600;
+}
+
+@media print {
+  .card-body {
+    padding: 0;
+    margin: 0;
+  }
+
+  .card {
+    box-shadow: none;
+  }
+}
+
+// Reboot: headings with room above, semibold labels, bold <b>, and links and buttons without the focus outline (20F
+// gives the keyboard a visible focus).
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  margin-top: 10px;
+}
+
+// iOS Safari only fires a click on a pointer element: taps outside a menu still close it.
+@supports (-webkit-overflow-scrolling: touch) {
+  body {
+    cursor: pointer;
+  }
+}
+
+a,
+button {
+  outline: 0 !important;
+}
+
+label {
+  font-weight: 600;
+}
+
+b,
+strong {
+  font-weight: 700;
+}
+
+input:disabled + label {
+  opacity: .5;
+  cursor: default;
+}
+
+// Table cells paint their background, so a row's color is not lost under the cell's.
+.table > :not(caption) > * > * {
+  background-color: var(--#{$prefix}table-bg) !important;
+}
+
+.table.table-bordered tbody {
+  border-top: 1px solid;
+  border-top-color: inherit;
+}
+
+[data-bs-theme=dark] .table-light {
+  --#{$prefix}table-color: var(--#{$prefix}body-color);
+  --#{$prefix}table-bg: var(--#{$prefix}light);
+  --#{$prefix}table-border-color: var(--#{$prefix}border-color);
+}
+
+// Bootstrap 5.3.8 greys the clear button of search fields and gives it a pointer; Hyper's 5.3.6 did not (20F).
+[type=search]::-webkit-search-cancel-button {
+  cursor: revert;
+  filter: revert;
+}

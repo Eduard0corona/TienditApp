@@ -61,7 +61,7 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - Modo oscuro: tiene fondo oscuro (antes la página se quedaba clara detrás de tarjetas oscuras), con alertas, chips, chat de WhatsApp y fichas en versión oscura.
   - Consistencia: Cobrar usa el color principal en Vender, Mesas y Pedidos, y ningún estado se pinta con el acento.
   - Pendiente:
-    - Hyper sigue cargado (436 KB de `app.min.css`), con colores compilados que `theme.css` cubre uno por uno; los 60 KB de `vendor.min.css` sin uso salieron en la Fase 20B.
+    - Hyper salió en la Fase 20E (antes, en la 20B, los 60 KB de `vendor.min.css` sin uso). `theme.css` todavía cubre uno por uno colores que Bootstrap compila con los valores de Hyper.
     - No hay color libre de marca, solo los temas curados.
     - El logo del negocio todavía no salía en el ticket ni en el selector de negocio; se resolvió en la Fase 19.
 - En curso, Fase 20: retirar Hyper, empezando por la entrega del cliente (un PR por subfase).
@@ -83,7 +83,9 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - Pendiente para la 20F (visto al escribir el marco, sin cambiarlo en la 20C para no mover nada): el menú condensado de las tablets hace que cada página mida al menos 2000 px (va pegado a la página para que sus etiquetas salgan sin cortarse); su etiqueta al pasar el puntero es blanca sobre el acento, que en modo oscuro es claro (poco contraste); el menú lateral no muestra que tiene más enlaces abajo; el nombre y el rol del botón de la cuenta son encabezados (`h5`, `h6`) dentro de un botón.
   - Resuelto en la 20D: las clases que la app tomaba solo de Hyper (tamaños de letra, avatares, botones suaves, títulos de tarjeta, ojo de la contraseña, pestañas con línea, paginación redonda y tablas centradas) tienen regla propia en `components.css`, con cero diferencias contra `master` en las 313 escenas. `hyperClasses.test.ts` falla si el código usa una clase que solo existe en Hyper. El CSS global sube 0.3 KB con gzip mientras `app.min.css` siga cargado.
   - Pendiente para la 20F (visto al pasar las clases, sin cambiarlo en la 20D para no mover nada): de los botones suaves solo el principal dibuja anillo de foco; el secundario deshabilitado toma el gris lleno en lugar de su tinte, y los tamaños de letra en píxeles (`font-12`…`font-22`) no crecen con el tamaño de letra del navegador.
-  - Pendiente (20E y 20F): Bootstrap 5.3.8 compilado con los valores actuales en lugar de `app.min.css` y los arreglos visibles (foco del teclado, contraste del modo oscuro, campos de 16 px en el teléfono). Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+  - Resuelto en la 20E: Bootstrap 5.3.8 se compila desde Sass con los valores de Hyper (`assets/scss`), en lugar de la hoja que compiló Hyper, que salió con sus imágenes. Cero diferencias contra `master` en las escenas. El CSS global baja de 607 KB a 403 KB (de 87.5 KB a 62.1 KB con gzip).
+  - Pendiente para la 20F (visto al compilar Bootstrap, sin cambiarlo en la 20E para no mover nada): los enlaces y botones no muestran el contorno de foco (`outline: 0 !important` de Hyper); `.btn-light`, `.btn-dark` y los contornos claro y oscuro no dibujan anillo de foco (el valor de Hyper era una expresión de Sass sin compilar); el botón de borrar de los campos de búsqueda sigue como lo dibuja el navegador (Bootstrap 5.3.8 lo pone gris y con cursor de mano).
+  - Pendiente (20F): los arreglos visibles (foco del teclado, contraste del modo oscuro, campos de 16 px en el teléfono). Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
 - Resuelto en la Fase 19: el menú en línea vende ([ADR 0011](../adr/0011-opening-hours.md)).
   - El negocio captura su horario (hasta dos por día) y el menú dice si está abierto, en la hora del negocio. Fuera de horario no recibe pedidos para recoger o a domicilio, y el servidor también los rechaza; los de una mesa sí llegan.
   - El encabezado del menú tiene logo o inicial, el horario de la semana, la dirección de la sucursal principal (nunca la fiscal) con "Cómo llegar" y WhatsApp.
@@ -157,7 +159,7 @@ Pendientes detectados en la Fase 0:
 
 - El emisor que ven las apps autenticadoras sale del `JwtSettings:Issuer` ("FoodParkDigital"); cambiarlo exige separar el nombre visible del emisor del JWT.
 - La confirmación de teléfono no permite corregir el número capturado.
-- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio; desde la Fase 16, `theme.css` por capas con el tema de cada negocio encima de Hyper, que sigue pendiente de retirar).
+- El tema visual era el CSS de Hyper (fase 1: tema propio; desde la Fase 16, `theme.css` por capas con el tema de cada negocio). Resuelto en la Fase 20E: Hyper salió y Bootstrap se compila desde Sass con sus valores.
 
 ## Resuelto el 2026-10-04 (Fase 1: plataforma)
 

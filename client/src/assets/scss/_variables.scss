@@ -1,0 +1,281 @@
+// The app's values for Bootstrap 5.3.8 (Fase 20E): Hyper's, read from the stylesheet it compiled, so nothing moved
+// when it left. Read before Bootstrap's own _variables.scss: only these and Bootstrap's functions are defined here,
+// and anything not set keeps Bootstrap's default. theme.css then maps most colors to the business theme.
+
+$prefix: "ct-";
+
+// Colors
+
+$blue:   #2c8ef8;
+$indigo: #727cf5;
+$purple: #6b5eae;
+$pink:   #ff679b;
+$red:    #fa5c7c;
+$yellow: #ffc35a;
+$green:  #0acf97;
+$teal:   #02a8b5;
+$cyan:   #39afd1;
+
+$gray-100: #f6f7fb;
+$gray-200: #eef2f7;
+$gray-300: #e5e8eb;
+$gray-500: #a1a9b1;
+$gray-600: #8a969c;
+$gray-700: #6c757d;
+$gray-900: #313a46;
+
+$primary:   $indigo;
+$secondary: $gray-700;
+$success:   $green;
+$info:      $cyan;
+$warning:   $yellow;
+$danger:    $red;
+$light:     $gray-200;
+$dark:      $gray-900;
+
+// color-contrast(): white text down to a 1.5:1 ratio (.btn-warning keeps white) and #313a46 as the dark text.
+$min-contrast-ratio:  1.5;
+$color-contrast-dark: $gray-900;
+
+$secondary-text-emphasis: $gray-600;
+
+$primary-bg-subtle:   tint-color($primary, 90%);
+$secondary-bg-subtle: $gray-100;
+$success-bg-subtle:   tint-color($success, 90%);
+$info-bg-subtle:      tint-color($info, 90%);
+$warning-bg-subtle:   tint-color($warning, 90%);
+$danger-bg-subtle:    tint-color($danger, 90%);
+
+$secondary-border-subtle: $gray-200;
+
+// Spacing: Bootstrap's scale on 1.5rem (.375, .75, 1.5, 2.25 and 4.5rem).
+
+$spacer: 1.5rem;
+
+// Body and links
+
+$body-color:           $gray-700;
+$body-bg:              #fafbfe;
+$body-emphasis-color:  rgba($gray-700, .75);
+$body-secondary-color: $gray-600;
+$body-secondary-bg:    #fff;
+$body-tertiary-color:  $gray-700;
+$body-tertiary-bg:     $gray-100;
+
+$link-decoration:       none;
+$link-shade-percentage: 15%;
+
+// Borders and shadows
+
+$border-color-translucent: $gray-200;
+
+$border-radius:    .25rem;
+$border-radius-sm: .2rem;
+$border-radius-lg: .3rem;
+
+$box-shadow:       0px 0px 35px 0px rgba(154, 161, 171, .15);
+$box-shadow-sm:    0 .125rem .25rem rgba(var(--#{$prefix}body-color-rgb), .15);
+$box-shadow-lg:    0 0 45px 0 rgba(var(--#{$prefix}body-color-rgb), .2);
+$box-shadow-inset: inset 0 1px 2px rgba(var(--#{$prefix}body-color-rgb), .075);
+
+$focus-ring-width: .15rem;
+
+// Typography (theme.css sets the app's typeface, Manrope)
+
+$font-family-sans-serif: "Nunito", sans-serif;
+
+$font-size-base: .9rem;
+$font-size-sm:   .875rem;
+$font-size-lg:   $font-size-base * 1.39;
+
+$h2-font-size: $font-size-base * 2.08;
+$h3-font-size: $font-size-base * 1.67;
+$h4-font-size: $font-size-base * 1.25;
+$h5-font-size: $font-size-base * 1.04;
+$h6-font-size: $font-size-base * .85;
+
+$headings-margin-bottom: 10px;
+$headings-font-weight:   700;
+$headings-line-height:   1.1;
+
+$small-font-size: .75rem;
+
+$code-color:    $cyan;
+$kbd-padding-y: .2rem;
+$kbd-padding-x: .4rem;
+
+$hr-margin-y:      $spacer * .667;
+$hr-border-color:  var(--#{$prefix}border-color);
+$hr-opacity:       1;
+
+// Tables: roomy cells, body color on a transparent background, and striped, active and hovered rows painted with the
+// tertiary background at full strength. The factor 1 also gives .table-<variant> rows the contrast color.
+
+$table-cell-padding-y:    .95rem;
+$table-cell-padding-x:    .95rem;
+$table-cell-padding-y-sm: .5rem;
+$table-cell-padding-x-sm: .5rem;
+$table-color:             var(--#{$prefix}body-color);
+$table-bg:                transparent;
+$table-striped-bg-factor: 1;
+$table-striped-bg:        rgba(var(--#{$prefix}tertiary-bg-rgb), $table-striped-bg-factor);
+$table-active-bg-factor:  1;
+$table-active-bg:         rgba(var(--#{$prefix}tertiary-bg-rgb), $table-active-bg-factor);
+$table-hover-bg-factor:   1;
+$table-hover-bg:          rgba(var(--#{$prefix}tertiary-bg-rgb), $table-hover-bg-factor);
+$table-border-factor:     .1;
+
+// Buttons and fields share their padding.
+
+$input-btn-padding-y:    .45rem;
+$input-btn-padding-x:    .9rem;
+$input-btn-padding-y-sm: .28rem;
+$input-btn-padding-x-sm: .8rem;
+
+// Buttons: hovered or pressed, the fill darkens 7.5% (.btn-dark lightens 15% when pressed). --ct-btn-box-shadow is the
+// offset of the colored shadow _additions.scss gives each variant.
+
+$btn-border-radius:    .15rem;
+$btn-border-radius-sm: $border-radius-sm;
+$btn-border-radius-lg: $border-radius-lg;
+$btn-box-shadow:       0px 2px 6px 0px;
+
+$btn-hover-bg-shade-amount:      7.5%;
+$btn-hover-border-shade-amount:  7.5%;
+$btn-active-bg-shade-amount:     7.5%;
+$btn-active-border-shade-amount: 7.5%;
+$btn-active-bg-tint-amount:      15%;
+
+// Fields: no focus glow and no transition; the background comes from --ct-input-bg (_additions.scss).
+
+$input-bg:                 var(--#{$prefix}input-bg);
+$input-disabled-bg:        var(--#{$prefix}tertiary-bg);
+$input-border-radius:      $border-radius;
+$input-border-radius-sm:   $border-radius-sm;
+$input-border-radius-lg:   $border-radius-lg;
+$input-focus-border-color: var(--#{$prefix}border-color);
+$input-focus-box-shadow:   none;
+$input-transition:         none;
+
+$form-text-font-size: .75rem;
+
+$form-check-input-width:            1.25em;
+$form-check-margin-bottom:          0;
+$form-check-input-bg:               var(--#{$prefix}secondary-bg);
+$form-check-input-focus-box-shadow: none;
+
+$form-select-bg-size:     14px 10px;
+$form-select-focus-width: 0;
+
+$form-range-track-bg: var(--#{$prefix}tertiary-bg);
+
+$form-floating-label-height: 1.875em;
+
+// Icons as Bootstrap 5.3.6 drew them, which Hyper compiled: 5.3.8 dropped the closing "z" of their paths.
+$form-feedback-icon-valid: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><path fill='#{$success}' d='M2.3 6.73.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/></svg>");
+
+// Navs, breadcrumb and pagination (overrides.css draws the breadcrumb divider with Remix)
+
+$nav-link-transition:     color .1s ease-in-out, border-color .1s ease-in-out;
+$nav-tabs-link-active-bg: var(--#{$prefix}secondary-bg);
+
+$breadcrumb-padding-y: $spacer;
+$breadcrumb-divider:   quote("\F0142");
+
+$pagination-color:            var(--#{$prefix}tertiary-color);
+$pagination-bg:               var(--#{$prefix}secondary-bg);
+$pagination-focus-box-shadow: none;
+
+// Dropdowns: the caret sits a little higher.
+
+$caret-vertical-align: .15em;
+
+$dropdown-padding-y:           .25rem;
+$dropdown-bg:                  var(--#{$prefix}secondary-bg);
+$dropdown-border-color:        var(--#{$prefix}border-color);
+$dropdown-border-radius:       $border-radius;
+$dropdown-link-active-color:   var(--#{$prefix}body-color);
+$dropdown-link-active-bg:      var(--#{$prefix}tertiary-bg);
+$dropdown-link-disabled-color: var(--#{$prefix}emphasis-color);
+$dropdown-header-color:        inherit;
+$dropdown-header-padding-x:    $spacer * .75;
+$dropdown-header-padding-y:    .5rem;
+
+// Cards: no border (--ct-theme-card-border-width is 0px, in _additions.scss) and a soft shadow.
+
+$card-border-width:  var(--#{$prefix}theme-card-border-width);
+$card-border-color:  var(--#{$prefix}border-color);
+$card-box-shadow:    var(--#{$prefix}box-shadow);
+$card-cap-padding-y: $spacer * .75;
+$card-cap-bg:        transparent;
+$card-bg:            var(--#{$prefix}secondary-bg);
+
+// Accordion
+
+$accordion-bg:                      var(--#{$prefix}secondary-bg);
+$accordion-button-active-color:     var(--#{$prefix}primary);
+$accordion-button-focus-box-shadow: none;
+$accordion-icon-width:              .75rem;
+$accordion-icon-color:              $body-color;
+$accordion-icon-active-color:       shade-color($primary, 60%);
+$accordion-button-icon:             url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$accordion-icon-color}'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");
+$accordion-button-active-icon:      url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$accordion-icon-active-color}'><path fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/></svg>");
+
+// Tooltips, popovers and toasts
+
+$tooltip-bg:      var(--#{$prefix}body-color);
+$tooltip-opacity: 1;
+
+$popover-bg:               var(--#{$prefix}secondary-bg);
+$popover-border-color:     var(--#{$prefix}border-color);
+$popover-box-shadow:       $box-shadow;
+$popover-header-bg:        var(--#{$prefix}tertiary-bg);
+$popover-header-padding-y: .7rem;
+$popover-header-padding-x: .8rem;
+$popover-body-padding-y:   .5rem;
+$popover-body-padding-x:   .75rem;
+
+$toast-border-color: var(--#{$prefix}border-color);
+
+// Badges, alerts, progress and spinners
+
+$badge-padding-y:     .25em;
+$badge-padding-x:     .4em;
+$badge-border-radius: $border-radius;
+
+$alert-padding-y:     .8rem;
+$alert-padding-x:     1.25rem;
+$alert-border-radius: $border-radius;
+
+$progress-bg: var(--#{$prefix}tertiary-bg);
+
+$spinner-vertical-align: -.25em;
+
+// Modals and offcanvas (the offcanvas takes the modal's padding, border, shadow and backdrop)
+
+$modal-inner-padding:         1rem;
+$modal-content-bg:            var(--#{$prefix}secondary-bg);
+$modal-content-border-color:  transparent;
+$modal-content-box-shadow-xs: $box-shadow-sm;
+$modal-backdrop-bg:           var(--#{$prefix}emphasis-color);
+
+$offcanvas-bg-color: var(--#{$prefix}secondary-bg);
+
+// List group
+
+$list-group-color:              var(--#{$prefix}tertiary-color);
+$list-group-bg:                 var(--#{$prefix}secondary-bg);
+$list-group-item-padding-x:     1.2rem;
+$list-group-action-hover-color: var(--#{$prefix}tertiary-color);
+$list-group-disabled-bg:        var(--#{$prefix}tertiary-bg);
+
+// Close button and carousel controls
+
+$btn-close-color:         var(--#{$prefix}secondary-color);
+$btn-close-bg:            url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$btn-close-color}'><path d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/></svg>");
+$btn-close-focus-shadow:  none;
+$btn-close-hover-opacity: .8;
+
+$carousel-control-color:        #fff;
+$carousel-control-prev-icon-bg: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$carousel-control-color}'><path d='M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z'/></svg>");
+$carousel-control-next-icon-bg: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$carousel-control-color}'><path d='M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z'/></svg>");
