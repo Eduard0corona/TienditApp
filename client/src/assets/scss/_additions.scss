@@ -135,6 +135,36 @@
   --#{$prefix}form-switch-bg: #{escape-svg($form-switch-bg-image-dark)};
 }
 
+// Dark mode: the accent is its light shade, so the mark of a checked box, radio or switch is dark (white read at 1.9:1
+// on it). An image in a data URI cannot read a custom property: the mark is the darkest text the themes put on their
+// dark accents, which passes on every one (businessThemes.test.ts).
+$ta-dark-check-mark: #171b1f;
+
+[data-bs-theme=dark] {
+  .form-check-input:checked[type=checkbox] {
+    --#{$prefix}form-check-bg-image: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='none' stroke='#{$ta-dark-check-mark}' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/></svg>"))};
+  }
+
+  .form-check-input:checked[type=radio] {
+    --#{$prefix}form-check-bg-image: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='2' fill='#{$ta-dark-check-mark}'/></svg>"))};
+  }
+
+  .form-check-input[type=checkbox]:indeterminate {
+    --#{$prefix}form-check-bg-image: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='none' stroke='#{$ta-dark-check-mark}' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/></svg>"))};
+  }
+
+  .form-switch .form-check-input:checked {
+    --#{$prefix}form-switch-bg: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='#{$ta-dark-check-mark}'/></svg>"))};
+  }
+
+  // The close button draws its light X itself instead of inverting a dark one with Bootstrap's filter: a filter
+  // repaints the focus ring around the button too, which came out gray instead of the business color.
+  .btn-close {
+    --#{$prefix}btn-close-filter: none;
+    --#{$prefix}btn-close-bg: #{escape-svg(url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='#{$white}'><path d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/></svg>"))};
+  }
+}
+
 .modal-title {
   margin-top: 0;
   color: inherit;

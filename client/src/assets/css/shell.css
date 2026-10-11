@@ -419,6 +419,15 @@ body {
   vertical-align: middle;
 }
 
+/*
+ * In dark mode the links already read light, close to the accent's light shade (Grafito's is a gray): under the
+ * pointer a link also gets a faint pill, so the change does not rest on the color alone.
+ */
+html[data-bs-theme='dark']:not([data-ta-sidenav='condensed']) .ta-nav-link:not(.active):hover {
+  border-radius: var(--ta-radius-sm);
+  background: rgba(var(--ct-emphasis-color-rgb), 0.08);
+}
+
 /* Current page: a tinted pill, not only a color change. */
 .ta-nav-link.active,
 .ta-nav-link.active:hover,
@@ -492,18 +501,22 @@ html[data-ta-sidenav='condensed'] .ta-sidebar {
 }
 
 /*
- * A scroller cuts what grows out of it, so this one is as wide as a grown link: a name is never cut, and a menu taller
- * than the window still scrolls (wheel or finger on the icons, or the keyboard). Only the links take the pointer;
- * past them it reaches the page underneath.
+ * With a mouse a link grows to show its name, and a scroller cuts what grows out of it: there this one is as wide as a
+ * grown link, so a name is never cut, and a menu taller than the window still scrolls (the wheel on the icons, or the
+ * keyboard). Only the links take the pointer; past them it reaches the page underneath. A touch screen grows no link:
+ * its scroller stays as narrow as the menu and takes the finger like any list, as a box that ignores the pointer may
+ * not scroll under a finger in iOS.
  */
-html[data-ta-sidenav='condensed'] .ta-sidebar-scroll {
-  width: var(--ta-sidebar-width);
-  pointer-events: none;
-}
+@media (hover: hover) {
+  html[data-ta-sidenav='condensed'] .ta-sidebar-scroll {
+    width: var(--ta-sidebar-width);
+    pointer-events: none;
+  }
 
-html[data-ta-sidenav='condensed'] .ta-nav {
-  width: var(--ta-sidebar-width-sm);
-  pointer-events: auto;
+  html[data-ta-sidenav='condensed'] .ta-nav {
+    width: var(--ta-sidebar-width-sm);
+    pointer-events: auto;
+  }
 }
 
 html[data-ta-sidenav='condensed'] .ta-sidebar-logo {
@@ -540,19 +553,23 @@ html[data-ta-sidenav='condensed'] .ta-nav-link i {
   min-width: calc(var(--ta-sidebar-width-sm) - var(--ta-menu-item-padding-x) * 2);
 }
 
-html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link {
-  position: relative;
-  width: var(--ta-sidebar-width);
-  background: var(--ta-menu-condensed-link-bg);
-  color: var(--ta-menu-condensed-link-color);
-}
+/* Under the pointer a link grows to show its name on the accent; the focus ring on it takes the text's color. */
+@media (hover: hover) {
+  html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link {
+    --ta-focus-ring: var(--ta-menu-condensed-link-color);
+    position: relative;
+    width: var(--ta-sidebar-width);
+    background: var(--ta-menu-condensed-link-bg);
+    color: var(--ta-menu-condensed-link-color);
+  }
 
-html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span {
-  visibility: visible;
-}
+  html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span {
+    visibility: visible;
+  }
 
-html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span:not(.badge) {
-  margin-left: var(--ta-menu-item-padding-x);
+  html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span:not(.badge) {
+    margin-left: var(--ta-menu-item-padding-x);
+  }
 }
 
 html[data-ta-sidenav='condensed'] .ta-content-page {
@@ -745,7 +762,8 @@ html[data-ta-sidenav='full'].ta-sidebar-open .ta-sidebar {
  * The keyboard's focus ring (theme.css) goes just inside these, where around them it would be cut: the links of the
  * side menu fill a box that scrolls, the buttons of the top bar are as tall as the bar at the top of the window, and
  * the tabs of the tab bar sit side by side out to the edges of the screen. Inside, the ring sits on the bar or the
- * menu, or on the tint of the current page's link, where the accent passes 3:1 too.
+ * menu, or on the tint of the current page's link, where the accent passes 3:1 too; on a condensed link grown on the
+ * accent it takes the text's color.
  */
 .ta-sidebar,
 .ta-topbar .ta-topbar-menu .nav-link,

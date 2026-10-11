@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import additionsSource from '../assets/scss/_additions.scss?raw';
 import shellCssSource from '../assets/css/shell.css?raw';
 import themeCssSource from '../assets/css/theme.css?raw';
 import { BusinessTheme } from '../types';
@@ -80,6 +81,16 @@ describe('business themes', () => {
       }
       // On a surface painted with the accent (Mi negocio, Perfil, the sign-in header) the ring is the text on it.
       expect(contrastRatio(l.onAccent, l.accent)).toBeGreaterThanOrEqual(NON_TEXT);
+    },
+  );
+
+  it.each(BUSINESS_THEMES.map((definition) => [definition.name, definition] as const))(
+    '%s marks a checked box, radio or switch with 3:1 on its dark accent',
+    (_, { dark: d }) => {
+      // The marks are an image (_additions.scss), so their color is a literal there instead of a theme variable.
+      const mark = /\$ta-dark-check-mark:\s*(#[0-9a-f]{6});/i.exec(additionsSource)?.[1];
+      expect(mark, '_additions.scss defines the dark mark').toBeDefined();
+      expect(contrastRatio(mark!, d.accent), `${mark} on ${d.accent}`).toBeGreaterThanOrEqual(NON_TEXT);
     },
   );
 

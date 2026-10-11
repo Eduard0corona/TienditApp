@@ -393,12 +393,34 @@
  *   focused. Their own glows are off (assets/scss), so this is the only sign of focus.
  * - A container that only script focuses (a dialog or a panel as it opens, tabindex -1) draws none: the ring would
  *   frame the whole panel, and what you act on is inside it.
+ * - Fields go in a rule of their own: Safari before 15.4 does not know :focus-visible and drops every rule that
+ *   names it, so fields keep their ring there. Checks and page buttons, which Bootstrap leaves without any sign of
+ *   focus, get it on any focus in those browsers (the @supports below).
  */
-:focus-visible:not([tabindex='-1']),
+:focus-visible:not([tabindex='-1']) {
+  outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring) !important;
+  outline-offset: var(--ta-focus-ring-offset) !important;
+}
+
 .form-control:focus,
 .form-select:focus {
   outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring) !important;
   outline-offset: var(--ta-focus-ring-offset) !important;
+}
+
+@supports not selector(:focus-visible) {
+  .form-check-input:focus,
+  .page-link:focus {
+    outline: var(--ta-focus-ring-width) solid var(--ta-focus-ring) !important;
+    outline-offset: var(--ta-focus-ring-offset) !important;
+  }
+}
+
+/* An input group stacks its pieces: a focused one goes on top, so the ring of a button inside it (the eye of the
+   password) is not hidden under the field beside it, as Bootstrap already does for its buttons and fields. */
+.input-group > :focus-visible {
+  position: relative;
+  z-index: 5;
 }
 
 /* Where the ring does not fit around the element, it goes just inside: tabs in a row that scrolls, whose edges would
@@ -469,6 +491,11 @@
 }
 
 /* A row that scrolls sideways (useScrollFade): the edge that hides more chips fades, so it shows there is more. */
+.ta-scroll-fade {
+  /* What the keyboard or a scroll into view brings forward stops clear of the faded edges. */
+  scroll-padding-inline: 2.5rem;
+}
+
 .ta-scroll-fade.fade-end {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
@@ -485,6 +512,11 @@
 }
 
 /* The same for a list that scrolls down (the side menu): the bottom fades while more links hide below. */
+.ta-scroll-fade-y {
+  /* What the keyboard or a scroll into view brings forward stops clear of the faded edges. */
+  scroll-padding-block: 2.5rem;
+}
+
 .ta-scroll-fade-y.fade-end {
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
@@ -913,7 +945,10 @@
   white-space: nowrap;
 }
 
-.section-tab:hover,
+.section-tab:hover {
+  color: var(--ct-link-color);
+}
+
 .section-tab:focus-visible {
   color: var(--ct-link-color);
 }
@@ -1022,7 +1057,10 @@ button.section-tab.active {
   color: var(--ct-body-color);
 }
 
-.attention-row:hover,
+.attention-row:hover {
+  color: var(--ct-link-color);
+}
+
 .attention-row:focus-visible {
   color: var(--ct-link-color);
 }

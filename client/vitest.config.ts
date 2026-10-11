@@ -11,8 +11,8 @@ export default mergeConfig(
       setupFiles: ['./src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}'],
       // CSS stays out of the tests, except a stylesheet a test reads as text (?raw): businessThemes.test.ts checks the
-      // colors of theme.css, hyperClasses.test.ts the classes of every stylesheet and focusRing.test.ts that none,
-      // Sass included, takes the focus ring away. Without this, ?raw reads empty.
+      // colors of theme.css, shell.css and _additions.scss, hyperClasses.test.ts the classes of every stylesheet and
+      // focusRing.test.ts that none, Sass included, takes the focus ring away. Without this, ?raw reads empty.
       css: { include: [/\.s?css\?raw$/] },
       restoreMocks: true,
     },

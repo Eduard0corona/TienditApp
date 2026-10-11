@@ -110,7 +110,8 @@ export default function WhatsAppSettings() {
               <div className="row align-items-center">
                 <div className="col-auto">
                   <div className="avatar-lg">
-                    <span className="avatar-title bg-white text-success rounded-circle fs-2">
+                    {/* The success green on white in both modes: dark mode turns .text-success light. */}
+                    <span className="avatar-title bg-white rounded-circle fs-2" style={{ color: 'var(--ct-success)' }}>
                       <i className="ri-whatsapp-line"></i>
                     </span>
                   </div>
@@ -122,7 +123,7 @@ export default function WhatsAppSettings() {
                   </p>
                 </div>
                 <div className="col-auto">
-                  <span className={`badge ${config?.isEnabled ? 'bg-light text-success' : 'bg-light text-dark'} fs-6`}>
+                  <span className={`badge ${config?.isEnabled ? 'bg-light text-success-emphasis' : 'bg-light text-dark'} fs-6`}>
                     {config?.isEnabled ? 'Activo' : 'Inactivo'}
                   </span>
                 </div>
