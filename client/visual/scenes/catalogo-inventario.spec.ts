@@ -106,14 +106,14 @@ test.describe('Categorías', () => {
   test('categorías, nueva categoría', async ({ page }) => {
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Nueva categoría' }).click();
-    await expect(await dialog(page)).toContainText('Nueva categoría');
+    await dialog(page, 'Nueva categoría');
     await snap(page, 'categorias-nueva-dialogo', { fullPage: false });
   });
 
   test('categorías, editar categoría', async ({ page }) => {
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Editar Bebidas calientes' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar categoría');
     await expect(editing.getByLabel('Nombre')).toHaveValue('Bebidas calientes');
     await snap(page, 'categorias-editar-dialogo', { fullPage: false });
   });
@@ -122,7 +122,7 @@ test.describe('Categorías', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Editar Bebidas calientes' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar categoría');
     await expect(editing.getByLabel('Nombre')).toHaveValue('Bebidas calientes');
     await snap(page, 'categorias-editar-dialogo-telefono', { fullPage: false });
   });
@@ -138,14 +138,14 @@ test.describe('Categorías', () => {
     // A category with products asks where to move them before it is archived.
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Archivar Bebidas calientes' }).click();
-    await expect(await dialog(page)).toContainText('Pasar los productos a');
+    await expect(await dialog(page, 'Archivar “Bebidas calientes”')).toContainText('Pasar los productos a');
     await snap(page, 'categorias-archivar-dialogo', { fullPage: false });
   });
 
   test('categorías, instalar plantilla', async ({ page }) => {
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Instalar plantilla' }).click();
-    const templates = await dialog(page);
+    const templates = await dialog(page, 'Instalar plantilla de categorías');
     await expect(templates).toContainText('Lavanderia de calzado');
     await snap(page, 'categorias-plantillas-dialogo', { fullPage: false });
   });
@@ -156,7 +156,7 @@ test.describe('Categorías', () => {
     test('categorías, editar categoría en oscuro', async ({ page }) => {
       await open(page, '/categories');
       await page.getByRole('button', { name: 'Editar Bebidas calientes' }).click();
-      const editing = await dialog(page);
+      const editing = await dialog(page, 'Editar categoría');
       await expect(editing.getByLabel('Nombre')).toHaveValue('Bebidas calientes');
       await snap(page, 'categorias-editar-dialogo-oscuro', { fullPage: false });
     });
@@ -167,7 +167,7 @@ test.describe('Servicios', () => {
   test('servicios, editar servicio', async ({ page }) => {
     await open(page, '/services');
     await page.getByRole('button', { name: 'Editar Mantenimiento de cafetera espresso' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar servicio');
     await expect(editing.getByLabel('Nombre')).toHaveValue('Mantenimiento de cafetera espresso');
     await snap(page, 'servicios-editar-dialogo', { fullPage: false });
   });
@@ -223,7 +223,7 @@ test.describe('Inventario', () => {
   test('inventario, editar insumo', async ({ page }) => {
     await open(page, '/inventory');
     await page.getByRole('button', { name: 'Editar Leche entera' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar insumo');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Leche entera');
     await snap(page, 'inventario-insumo-dialogo', { fullPage: false });
   });
@@ -232,7 +232,7 @@ test.describe('Inventario', () => {
     // Pan de elote is the stock of a product: its unit is the product's and cannot change here.
     await open(page, '/inventory');
     await page.getByRole('button', { name: 'Editar Pan de elote' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar insumo');
     await expect(editing.getByText('Es la unidad del producto.')).toBeVisible();
     await snap(page, 'inventario-insumo-producto-dialogo', { fullPage: false });
   });
@@ -241,7 +241,7 @@ test.describe('Inventario', () => {
     await open(page, '/inventory');
     await page.getByRole('tab', { name: 'Entradas y salidas' }).click();
     await page.getByRole('button', { name: 'Registrar movimiento' }).click();
-    await expect(await dialog(page)).toContainText('Registrar movimiento de inventario');
+    await dialog(page, 'Registrar movimiento de inventario');
     await snap(page, 'inventario-movimiento-dialogo', { fullPage: false });
   });
 
@@ -249,7 +249,7 @@ test.describe('Inventario', () => {
     await open(page, '/inventory');
     await page.getByRole('tab', { name: 'Entradas y salidas' }).click();
     await page.getByRole('button', { name: 'Ver el movimiento INV-20261004-0001' }).click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, 'Detalle de movimiento');
     await expect(detail).toContainText('Recepción parcial de lácteos');
     await snap(page, 'inventario-movimiento-detalle-dialogo', { fullPage: false });
   });
@@ -258,7 +258,7 @@ test.describe('Inventario', () => {
     await open(page, '/inventory');
     await page.getByRole('tab', { name: 'Ubicaciones' }).click();
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar ubicación');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Sucursal Roma Norte');
     await snap(page, 'inventario-ubicacion-dialogo', { fullPage: false });
   });
@@ -269,7 +269,7 @@ test.describe('Compras', () => {
     // A partial reception: what came, what is missing and every action its status allows.
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'Ver PO-20261003-0002' }).click();
-    await expect(await dialog(page)).toContainText('faltan');
+    await expect(await dialog(page, /^PO-20261003-0002/)).toContainText('faltan');
     await snap(page, 'compras-detalle-escritorio', { fullPage: false });
   });
 
@@ -277,14 +277,14 @@ test.describe('Compras', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'PO-20261003-0002', exact: true }).click();
-    await expect(await dialog(page)).toContainText('faltan');
+    await expect(await dialog(page, /^PO-20261003-0002/)).toContainText('faltan');
     await snap(page, 'compras-detalle-telefono', { fullPage: false });
   });
 
   test('compras, recibir mercancía', async ({ page }) => {
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'Recibir PO-20261002-0001' }).click();
-    const receiving = await dialog(page);
+    const receiving = await dialog(page, /^PO-20261002-0001/);
     await expect(receiving.getByRole('button', { name: 'Registrar recepción' })).toBeVisible();
     await snap(page, 'compras-recibir-escritorio', { fullPage: false });
   });
@@ -294,7 +294,7 @@ test.describe('Compras', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'PO-20261002-0001', exact: true }).click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, /^PO-20261002-0001/);
     await detail.getByRole('button', { name: 'Recibir mercancía' }).click();
     await expect(detail.getByRole('button', { name: 'Registrar recepción' })).toBeVisible();
     await snap(page, 'compras-recibir-telefono', { fullPage: false });
@@ -303,7 +303,7 @@ test.describe('Compras', () => {
   test('compras, nueva compra', async ({ page }) => {
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'Nueva compra' }).click();
-    await expect(await dialog(page)).toContainText('Registrar compra');
+    await expect(await dialog(page, 'Nueva compra')).toContainText('Registrar compra');
     await snap(page, 'compras-nueva-dialogo', { fullPage: false });
   });
 
@@ -313,7 +313,7 @@ test.describe('Compras', () => {
     test('compras, detalle de una compra en oscuro', async ({ page }) => {
       await open(page, '/purchases');
       await page.getByRole('button', { name: 'Ver PO-20261003-0002' }).click();
-      await expect(await dialog(page)).toContainText('faltan');
+      await expect(await dialog(page, /^PO-20261003-0002/)).toContainText('faltan');
       await snap(page, 'compras-detalle-escritorio-oscuro', { fullPage: false });
     });
   });
@@ -323,7 +323,7 @@ test.describe('Proveedores', () => {
   test('proveedores, editar proveedor', async ({ page }) => {
     await open(page, '/suppliers');
     await page.getByRole('button', { name: 'Editar Café Finca Las Nubes' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar proveedor');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Café Finca Las Nubes');
     await snap(page, 'proveedores-editar-dialogo', { fullPage: false });
   });
@@ -332,7 +332,7 @@ test.describe('Proveedores', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/suppliers');
     await page.getByRole('button', { name: 'Nuevo proveedor' }).click();
-    await expect(await dialog(page)).toContainText('Crear proveedor');
+    await expect(await dialog(page, 'Nuevo proveedor')).toContainText('Crear proveedor');
     await snap(page, 'proveedores-nuevo-dialogo-telefono', { fullPage: false });
   });
 });

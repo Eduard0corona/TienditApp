@@ -109,6 +109,10 @@ describe('PublicMenuPage', () => {
     // A business without hours or address shows neither.
     expect(screen.queryByText(/^Hoy:/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Cómo llegar/ })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar Latte' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+    expect(within(screen.getByRole('dialog', { name: 'Tu pedido' })).getByText('Latte')).toBeInTheDocument();
   });
 
   it('puts the initial where a product has no photo while others have one', async () => {

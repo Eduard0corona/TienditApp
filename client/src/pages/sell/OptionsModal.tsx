@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Modal } from 'react-bootstrap';
 import type { ProductDto } from '../../types';
 import { formatMoney } from '../../utils/money';
@@ -15,6 +16,7 @@ interface OptionsModalProps {
 
 /** Variants and extras of a product, and how many, before it goes to the ticket. */
 export default function OptionsModal({ request, onChange, onConfirm, onClose }: OptionsModalProps) {
+  const titleId = useId();
   const quantity = request ? parseQuantity(request.quantityText, request.product.unit) : null;
   const choiceError = request ? getSelectionError(request.product.optionGroups, request.optionIds) : null;
 
@@ -40,7 +42,7 @@ export default function OptionsModal({ request, onChange, onConfirm, onClose }: 
   };
 
   return (
-    <Modal show={!!request} onHide={onClose} centered scrollable fullscreen="sm-down">
+    <Modal show={!!request} onHide={onClose} centered scrollable fullscreen="sm-down" aria-labelledby={titleId}>
       {request && (
         <form
           onSubmit={(event) => {
@@ -50,7 +52,7 @@ export default function OptionsModal({ request, onChange, onConfirm, onClose }: 
           }}
         >
           <Modal.Header closeButton>
-            <Modal.Title as="h2" className="h5">{request.product.name}</Modal.Title>
+            <Modal.Title id={titleId} as="h2" className="h5">{request.product.name}</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             {(request.product.optionGroups ?? []).map((group) => {

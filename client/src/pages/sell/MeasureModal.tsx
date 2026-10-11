@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Modal } from 'react-bootstrap';
 import type { ProductDto } from '../../types';
 import { formatMoney } from '../../utils/money';
@@ -14,12 +15,13 @@ interface MeasureModalProps {
 
 /** How much of a weighed or measured product: typed, or one of the quick picks of its unit. */
 export default function MeasureModal({ request, onChange, onConfirm, onClose }: MeasureModalProps) {
+  const titleId = useId();
   const quantity = request ? parseQuantity(request.text, request.product.unit) : null;
   const tooLarge = quantity !== null && quantity > MAX_QUANTITY_PER_LINE;
   const invalid = !!request?.text && (quantity === null || tooLarge);
 
   return (
-    <Modal show={!!request} onHide={onClose} centered>
+    <Modal show={!!request} onHide={onClose} centered aria-labelledby={titleId}>
       {request && (
         <form
           onSubmit={(event) => {
@@ -29,7 +31,7 @@ export default function MeasureModal({ request, onChange, onConfirm, onClose }: 
           }}
         >
           <Modal.Header closeButton>
-            <Modal.Title as="h2" className="h5">{request.product.name}</Modal.Title>
+            <Modal.Title id={titleId} as="h2" className="h5">{request.product.name}</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             <label className="form-label" htmlFor="sell-measure">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -56,6 +56,8 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
  * the week and its address with a map.
  */
 export default function PublicMenuPage() {
+  const optionsTitleId = useId();
+  const cartTitleId = useId();
   const { slug = '' } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
   const tableLabel = searchParams.get('mesa')?.trim().slice(0, 50) || '';
@@ -345,11 +347,11 @@ export default function PublicMenuPage() {
         </div>
       )}
 
-      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down">
+      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down" aria-labelledby={optionsTitleId}>
         {choosing && (
           <>
             <Modal.Header closeButton>
-              <Modal.Title as="h2" className="h5">{choosing.product.name}</Modal.Title>
+              <Modal.Title id={optionsTitleId} as="h2" className="h5">{choosing.product.name}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               {groupsOf(choosing.product).map((group) => (
@@ -402,9 +404,9 @@ export default function PublicMenuPage() {
         )}
       </Modal>
 
-      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="bottom" className="pm-sheet">
+      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="bottom" className="pm-sheet" aria-labelledby={cartTitleId}>
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title as="h2" className="h5">Tu pedido</Offcanvas.Title>
+          <Offcanvas.Title id={cartTitleId} as="h2" className="h5">Tu pedido</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
           <form onSubmit={(event) => void send(event)}>

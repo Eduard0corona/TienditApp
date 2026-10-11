@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal } from 'react-bootstrap';
 import { ConfirmContext, type ConfirmApi, type ConfirmOptions, type PromptOptions } from './feedbackContexts';
 
@@ -11,6 +11,7 @@ type Request =
  * follow the theme and keep keyboard focus inside the dialog.
  */
 export default function ConfirmProvider({ children }: { children: ReactNode }) {
+  const titleId = useId();
   const [request, setRequest] = useState<Request | null>(null);
   const [value, setValue] = useState('');
   const settled = useRef(false);
@@ -55,7 +56,7 @@ export default function ConfirmProvider({ children }: { children: ReactNode }) {
   return (
     <ConfirmContext.Provider value={api}>
       {children}
-      <Modal show={!!request} onHide={() => close(false)} centered>
+      <Modal show={!!request} onHide={() => close(false)} centered aria-labelledby={titleId}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -63,7 +64,7 @@ export default function ConfirmProvider({ children }: { children: ReactNode }) {
           }}
         >
           <Modal.Header closeButton>
-            <Modal.Title as="h5">{options?.title}</Modal.Title>
+            <Modal.Title id={titleId} as="h5">{options?.title}</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             {options?.message && <div className={promptOptions ? 'mb-3' : undefined}>{options.message}</div>}

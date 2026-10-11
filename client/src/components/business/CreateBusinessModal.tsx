@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { authApi } from '../../api/authApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -15,6 +15,7 @@ interface CreateBusinessModalProps {
  * guided setup starts (modules, IVA, sample catalog).
  */
 export default function CreateBusinessModal({ show, onHide }: CreateBusinessModalProps) {
+  const titleId = useId();
   const { switchTenant } = useAuth();
   const [name, setName] = useState('');
   const [businessType, setBusinessType] = useState<BusinessType>(BusinessType.Retail);
@@ -46,10 +47,10 @@ export default function CreateBusinessModal({ show, onHide }: CreateBusinessModa
   };
 
   return (
-    <Modal show={show} onHide={close} centered>
+    <Modal show={show} onHide={close} centered aria-labelledby={titleId}>
       <form onSubmit={(event) => void submit(event)}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">Abrir otro negocio</Modal.Title>
+          <Modal.Title id={titleId} as="h2" className="h5">Abrir otro negocio</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p className="text-muted small">

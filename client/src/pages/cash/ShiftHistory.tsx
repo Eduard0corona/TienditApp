@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import CashCutTicket from '../../components/cash/CashCutTicket';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -54,6 +54,7 @@ function toEndOfDay(date: string) {
 
 /** Every drawer by date, branch and status, with what it should have held, what was counted and why it differed. */
 export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: ShiftHistoryProps) {
+  const titleId = useId();
   const toast = useToast();
   const { tenant } = useTenant();
   const refreshCashState = useRefreshCashState();
@@ -215,11 +216,11 @@ export default function ShiftHistory({ branches, canCloseOthers, refreshKey }: S
         />
       </div>
 
-      <Modal show={selected !== null && !closing} onHide={() => setSelected(null)} centered size="lg">
+      <Modal show={selected !== null && !closing} onHide={() => setSelected(null)} centered size="lg" aria-labelledby={titleId}>
         {selected && (
           <>
             <Modal.Header closeButton>
-              <Modal.Title as="h2" className="h5">
+              <Modal.Title id={titleId} as="h2" className="h5">
                 Turno de {selected.openedBy}
                 <span className="d-block small text-muted fw-normal">
                   {selected.branchName ?? selected.inventoryLocationName ?? 'Sin sucursal'} · {formatInBusinessZone(selected.openedAt, { dateStyle: 'medium', timeStyle: 'short' })}

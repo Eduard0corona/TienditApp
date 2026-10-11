@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -105,6 +105,9 @@ function getStatusLabel(status: OrderStatus): string {
 const EVENT_RELOAD_DELAY_MS = 400;
 
 export default function OrdersList() {
+  const detailTitleId = useId();
+  const paymentTitleId = useId();
+  const receiptTitleId = useId();
   const queryClient = useQueryClient();
   const today = getBusinessToday();
   const [searchParams] = useSearchParams();
@@ -667,9 +670,10 @@ export default function OrdersList() {
         }}
         size="lg"
         centered
+        aria-labelledby={detailTitleId}
       >
         <Modal.Header closeButton>
-          <Modal.Title>Pedido {selectedOrder?.orderNumber}</Modal.Title>
+          <Modal.Title id={detailTitleId}>Pedido {selectedOrder?.orderNumber}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedOrder && (
@@ -1081,9 +1085,9 @@ export default function OrdersList() {
         />
       ))}
 
-      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down">
+      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down" aria-labelledby={paymentTitleId}>
         <Modal.Header closeButton={!paymentSubmitting}>
-          <Modal.Title as="h2" className="h5">
+          <Modal.Title id={paymentTitleId} as="h2" className="h5">
             Cobrar {paymentOrder?.orderNumber}
             <span className="d-block small text-muted fw-normal">{paymentOrder?.customerName}</span>
           </Modal.Title>
@@ -1107,9 +1111,9 @@ export default function OrdersList() {
         </Modal.Body>
       </Modal>
 
-      <Modal show={!!paidReceipt} onHide={() => setPaidReceipt(null)} centered fullscreen="sm-down">
+      <Modal show={!!paidReceipt} onHide={() => setPaidReceipt(null)} centered fullscreen="sm-down" aria-labelledby={receiptTitleId}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">
+          <Modal.Title id={receiptTitleId} as="h2" className="h5">
             <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
             Pago registrado en {paidReceipt?.order.orderNumber}
           </Modal.Title>

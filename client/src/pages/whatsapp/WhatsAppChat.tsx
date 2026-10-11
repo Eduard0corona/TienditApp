@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { Offcanvas } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
@@ -40,6 +40,7 @@ function MessageTicks({ status }: { status: string }) {
 }
 
 export default function WhatsAppChat() {
+  const titleId = useId();
   const [conversations, setConversations] = useState<ConversationDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
@@ -583,9 +584,9 @@ export default function WhatsAppChat() {
         </div>
       </div>
 
-      <Offcanvas show={showCard && !!selectedConvo} onHide={() => setShowCard(false)} placement="end">
+      <Offcanvas show={showCard && !!selectedConvo} onHide={() => setShowCard(false)} placement="end" aria-labelledby={titleId}>
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title as="h2" className="h5">Ficha del cliente</Offcanvas.Title>
+          <Offcanvas.Title id={titleId} as="h2" className="h5">Ficha del cliente</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
           {selectedConvo && (

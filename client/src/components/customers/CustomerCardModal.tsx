@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -14,15 +15,16 @@ interface CustomerCardModalProps {
 }
 
 export default function CustomerCardModal({ phone, customerId, name, onClose }: CustomerCardModalProps) {
+  const titleId = useId();
   const { user } = useAuth();
   const { capabilities } = useTenant();
   const navigate = useNavigate();
   const canSell = getAccess(user, capabilities).sell;
 
   return (
-    <Modal show onHide={onClose} centered fullscreen="sm-down">
+    <Modal show onHide={onClose} centered fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">Ficha del cliente</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">Ficha del cliente</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <CustomerCardPanel

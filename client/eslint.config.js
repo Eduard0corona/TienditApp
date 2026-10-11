@@ -28,6 +28,11 @@ export default defineConfig([
       'jsx-a11y/label-has-associated-control': ['error', { assert: 'either', depth: 4 }],
       // Dialogs focus their main field on purpose: at the counter the cashier types the amount right away.
       'jsx-a11y/no-autofocus': 'off',
+      // react-bootstrap does not tie a dialog to its title: without this a screen reader announces it with no name.
+      'no-restricted-syntax': ['error', {
+        selector: 'JSXOpeningElement[name.name=/^(Modal|Offcanvas)$/]:not(:has(JSXAttribute[name.name=/^aria-label(ledby)?$/]))',
+        message: 'A dialog needs a name: give its title an id (useId) and pass it as aria-labelledby, or pass an aria-label.',
+      }],
     },
   },
   // The visual scenes run in Node through Playwright: they read files and the process, and have no React.

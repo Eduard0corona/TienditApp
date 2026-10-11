@@ -47,18 +47,18 @@ describe('BranchesList', () => {
     renderBranches();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Editar Sucursal principal' }));
-    expect(within(screen.getByRole('dialog')).getByText(MENU_HINT)).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog', { name: 'Editar Sucursal principal' })).getByText(MENU_HINT)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Editar Centro' }));
-    expect(within(screen.getByRole('dialog')).queryByText(MENU_HINT)).not.toBeInTheDocument();
+    expect(within(screen.getByRole('dialog', { name: 'Editar Centro' })).queryByText(MENU_HINT)).not.toBeInTheDocument();
   });
 
   it('says it for a new branch once it is marked as the main one', async () => {
     renderBranches();
 
     fireEvent.click(await screen.findByRole('button', { name: /Nueva sucursal/ }));
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('dialog', { name: 'Nueva sucursal' });
     expect(within(dialog).queryByText(MENU_HINT)).not.toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByLabelText('Sucursal principal'));

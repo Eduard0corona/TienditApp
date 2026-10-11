@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -18,6 +18,7 @@ interface OpenDrawerModalProps {
 
 /** Opens the cashier's drawer without leaving the screen (Vender): the opening float and, with several branches, where. */
 export default function OpenDrawerModal({ show, onHide, branches, defaultBranchId, onOpened }: OpenDrawerModalProps) {
+  const titleId = useId();
   const refreshCashState = useRefreshCashState();
   const [openingAmount, setOpeningAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -59,10 +60,10 @@ export default function OpenDrawerModal({ show, onHide, branches, defaultBranchI
   };
 
   return (
-    <Modal show={show} onHide={close} centered>
+    <Modal show={show} onHide={close} centered aria-labelledby={titleId}>
       <form onSubmit={(event) => void submit(event)}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">Abrir mi caja</Modal.Title>
+          <Modal.Title id={titleId} as="h2" className="h5">Abrir mi caja</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p className="text-muted small">El efectivo que cobres desde ahora entra a tu corte.</p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Modal } from 'react-bootstrap';
 import { useForm } from 'react-hook-form';
@@ -20,6 +20,7 @@ const COLUMNS = [
 ];
 
 export default function CustomersList() {
+  const titleId = useId();
   const { confirm } = useConfirm();
   const [searchParams] = useSearchParams();
   // A customer opened from the global search (Ctrl K) arrives with its name or phone.
@@ -291,9 +292,9 @@ export default function CustomersList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered>
+      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
-          <Modal.Title>{editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}</Modal.Title>
+          <Modal.Title id={titleId}>{editingCustomer ? 'Editar cliente' : 'Nuevo cliente'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>

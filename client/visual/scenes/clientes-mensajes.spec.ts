@@ -12,9 +12,6 @@ const LOOKS = [
   { suffix: 'escritorio-oscuro', colorMode: 'dark', viewport: SIZES.desktop },
 ] as const;
 
-// These dialogs do not link their title to the dialog (no accessible name): each one is found as the dialog that
-// opened, then checked by its heading.
-
 /** A dialog or side panel as the screen shows it. */
 async function snapDialog(page: Page, name: string) {
   await snap(page, name, { fullPage: false });
@@ -29,8 +26,7 @@ function conversationPanel(page: Page): Locator {
 /** Clientes: the card of María Fernanda López, with her orders, notes and delivery address. */
 async function openCustomerCard(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Ficha de María Fernanda López' }).click();
-  const card = await dialog(page);
-  await expect(card.getByRole('heading', { name: 'Ficha del cliente' })).toBeVisible();
+  const card = await dialog(page, 'Ficha del cliente');
   // The card loads after the dialog opens ("Cargando ficha…" is not the generic loading text settle waits for).
   await expect(card.getByText('Últimos pedidos')).toBeVisible();
   await expect(card.getByText(/^Av\. Insurgentes Sur 1235/)).toBeVisible();
@@ -68,8 +64,7 @@ async function openMaferConversation(page: Page) {
 /** Mensajes: the customer card beside the conversation. */
 async function openChatCard(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: /^Ficha/ }).click();
-  const card = await dialog(page);
-  await expect(card.getByRole('heading', { name: 'Ficha del cliente' })).toBeVisible();
+  const card = await dialog(page, 'Ficha del cliente');
   await expect(card.getByText('Lo que más pide')).toBeVisible();
   return card;
 }
@@ -77,8 +72,7 @@ async function openChatCard(page: Page): Promise<Locator> {
 /** Campañas: the detail of the campaign being sent, with each message and its state. */
 async function openCampaignDetail(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: '2x1 lattes sábado' }).click();
-  const detail = await dialog(page);
-  await expect(detail.getByRole('heading', { name: '2x1 lattes sábado' })).toBeVisible();
+  const detail = await dialog(page, '2x1 lattes sábado');
   await expect(detail.getByText('Luis Ángel Martínez')).toBeVisible();
   return detail;
 }
@@ -86,8 +80,7 @@ async function openCampaignDetail(page: Page): Promise<Locator> {
 /** Campañas: a new campaign with its name and the preview of who receives it. */
 async function fillNewCampaign(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Nueva campaña' }).click();
-  const form = await dialog(page);
-  await expect(form.getByRole('heading', { name: 'Nueva campaña' })).toBeVisible();
+  const form = await dialog(page, 'Nueva campaña');
   await form.getByLabel('Nombre').fill('Pan de muerto en octubre');
   await form.getByRole('button', { name: '¿A cuántos llega?' }).click();
   await expect(form.getByText(/^Llega a/)).toBeVisible();
@@ -97,8 +90,7 @@ async function fillNewCampaign(page: Page): Promise<Locator> {
 /** Agenda: the new appointment form once the services and the team have loaded. */
 async function openNewAppointment(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Nueva cita' }).click();
-  const form = await dialog(page);
-  await expect(form.getByRole('heading', { name: 'Nueva cita' })).toBeVisible();
+  const form = await dialog(page, 'Nueva cita');
   await expect(form.getByRole('option', { name: 'Cata de café de especialidad' })).toBeAttached();
   await expect(form.getByRole('option', { name: 'Carlos Méndez' })).toBeAttached();
   return form;
@@ -118,8 +110,7 @@ async function fillNewAppointment(form: Locator) {
 /** Taller: the De'Longhi in progress, with its checklist and the other piece of the same order. */
 async function openPieceDetail(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: "Cafetera De'Longhi Dedica EC685" }).click();
-  const panel = await dialog(page);
-  await expect(panel.getByRole('heading', { name: /^Cafetera De'Longhi Dedica EC685/ })).toBeVisible();
+  const panel = await dialog(page, /^Cafetera De'Longhi Dedica EC685/);
   await expect(panel.getByRole('heading', { name: 'Otras piezas del pedido' })).toBeVisible();
   return panel;
 }
@@ -259,8 +250,7 @@ test.describe('Campañas', () => {
   test('campaña nueva', async ({ page }) => {
     await open(page, '/campaigns');
     await page.getByRole('button', { name: 'Nueva campaña' }).click();
-    const form = await dialog(page);
-    await expect(form.getByRole('heading', { name: 'Nueva campaña' })).toBeVisible();
+    await dialog(page, 'Nueva campaña');
     await snapDialog(page, 'campanas-nueva-escritorio');
   });
 

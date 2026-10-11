@@ -222,13 +222,13 @@ describe('SellPage', () => {
     renderAt('/sell');
 
     await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
-    const options = screen.getByRole('dialog');
+    const options = screen.getByRole('dialog', { name: 'Latte' });
     await userEvent.click(within(options).getByLabelText(/Grande/));
     await userEvent.click(within(options).getByRole('button', { name: 'Agregar · $67.00' }));
     expect(ticket().getByText('Grande')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /^Agregar Arrachera/ }));
-    const weight = screen.getByRole('dialog');
+    const weight = screen.getByRole('dialog', { name: 'Arrachera' });
     await userEvent.type(within(weight).getByLabelText(/¿Cuánto\?/), '0.5');
     expect(within(weight).getByText('Importe: $194.95')).toBeInTheDocument();
     await userEvent.click(within(weight).getByRole('button', { name: 'Agregar' }));

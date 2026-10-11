@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,6 +26,9 @@ const COLUMNS = [
 const productsLabel = (count: number) => (count === 1 ? '1 producto' : `${count} productos`);
 
 export default function CategoriesList() {
+  const formTitleId = useId();
+  const archiveTitleId = useId();
+  const templatesTitleId = useId();
   const { confirm } = useConfirm();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -284,9 +287,9 @@ export default function CategoriesList() {
       </div>
 
       {/* Create/Edit Modal */}
-      <Modal show={showModal} onHide={closeModal} centered>
+      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={formTitleId}>
         <Modal.Header closeButton>
-          <Modal.Title>{editingCategory ? 'Editar categoría' : 'Nueva categoría'}</Modal.Title>
+          <Modal.Title id={formTitleId}>{editingCategory ? 'Editar categoría' : 'Nueva categoría'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>
@@ -327,9 +330,9 @@ export default function CategoriesList() {
         </form>
       </Modal>
 
-      <Modal show={archiving !== null} onHide={() => !archiveBusy && setArchiving(null)} centered>
+      <Modal show={archiving !== null} onHide={() => !archiveBusy && setArchiving(null)} centered aria-labelledby={archiveTitleId}>
         <Modal.Header closeButton={!archiveBusy}>
-          <Modal.Title>Archivar {archiving ? `“${archiving.name}”` : 'categoría'}</Modal.Title>
+          <Modal.Title id={archiveTitleId}>Archivar {archiving ? `“${archiving.name}”` : 'categoría'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p>
@@ -372,9 +375,9 @@ export default function CategoriesList() {
         </Modal.Footer>
       </Modal>
 
-      <Modal show={showTemplatesModal} onHide={closeTemplatesModal} centered size="lg">
+      <Modal show={showTemplatesModal} onHide={closeTemplatesModal} centered size="lg" aria-labelledby={templatesTitleId}>
         <Modal.Header closeButton>
-          <Modal.Title>Instalar plantilla de categorías</Modal.Title>
+          <Modal.Title id={templatesTitleId}>Instalar plantilla de categorías</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {templatesLoading ? (

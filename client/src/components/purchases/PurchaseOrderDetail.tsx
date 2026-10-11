@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Offcanvas } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { purchaseOrdersApi } from '../../api/purchaseOrdersApi';
@@ -39,6 +39,7 @@ const parseNumber = (text: string) => {
 
 /** What came in and what is still missing from a purchase order, and the actions its status allows. */
 export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHide, onChanged }: PurchaseOrderDetailProps) {
+  const titleId = useId();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm, prompt } = useConfirm();
@@ -171,9 +172,9 @@ export default function PurchaseOrderDetail({ orderId, mode, onModeChange, onHid
   };
 
   return (
-    <Offcanvas show={orderId !== null} onHide={onHide} placement="end" style={{ width: 'min(640px, 100vw)' }}>
+    <Offcanvas show={orderId !== null} onHide={onHide} placement="end" style={{ width: 'min(640px, 100vw)' }} aria-labelledby={titleId}>
       <Offcanvas.Header closeButton>
-        <Offcanvas.Title as="h2" className="h5 mb-0">
+        <Offcanvas.Title id={titleId} as="h2" className="h5 mb-0">
           {order ? order.orderNumber : 'Compra'}
           {order && (
             <span className="d-block small text-muted fw-normal">

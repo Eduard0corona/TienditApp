@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -23,6 +23,7 @@ interface MovementModalProps {
 
 /** An entry, exit, adjustment or transfer with one line per supply and location. */
 export default function MovementModal({ show, supplyOptions, activeLocations, onHide, onSaved }: MovementModalProps) {
+  const titleId = useId();
   const [form, setForm] = useState<MovementFormState>(buildEmptyMovementForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -65,9 +66,9 @@ export default function MovementModal({ show, supplyOptions, activeLocations, on
   };
 
   return (
-    <Modal show={show} onHide={onHide} size="xl" centered>
+    <Modal show={show} onHide={onHide} size="xl" centered aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title>Registrar movimiento de inventario</Modal.Title>
+        <Modal.Title id={titleId}>Registrar movimiento de inventario</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}

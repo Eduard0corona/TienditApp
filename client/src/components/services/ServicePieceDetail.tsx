@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Offcanvas } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
@@ -40,6 +41,7 @@ function Photos({ title, photos }: { title: string; photos: ServicePhoto[] }) {
 
 /** Everything a technician needs to take the next job: what came in, how, its photos and the rest of the order. */
 export default function ServicePieceDetail({ piece, onHide }: ServicePieceDetailProps) {
+  const titleId = useId();
   const orderId = piece?.orderId;
   const orderQuery = useQuery({
     queryKey: ['orders', 'detail', orderId],
@@ -57,11 +59,11 @@ export default function ServicePieceDetail({ piece, onHide }: ServicePieceDetail
     : '';
 
   return (
-    <Offcanvas show={piece !== null} onHide={onHide} placement="end" style={{ width: 'min(480px, 100vw)' }}>
+    <Offcanvas show={piece !== null} onHide={onHide} placement="end" style={{ width: 'min(480px, 100vw)' }} aria-labelledby={titleId}>
       {piece && (
         <>
           <Offcanvas.Header closeButton>
-            <Offcanvas.Title as="h2" className="h5 mb-0">
+            <Offcanvas.Title id={titleId} as="h2" className="h5 mb-0">
               {piece.itemName}
               <span className="d-block small text-muted fw-normal">{piece.orderNumber} · {getServicePieceStatusLabel(piece.status)}</span>
             </Offcanvas.Title>
