@@ -9,6 +9,21 @@ export type DemoData = Record<string, any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Route = ['GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', RegExp, (match: RegExpMatchArray, query: URLSearchParams, body: any) => unknown];
 
+/** The page of a list as the API answers it (pageNumber and pageSize from the query, `defaultSize` without one). */
+export interface Paged<T> {
+  items: T[];
+  pageNumber: number;
+  totalPages: number;
+  totalCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+export interface RouteHelpers {
+  ok: (json: unknown) => { status: number; json: unknown };
+  paginate: <T>(items: T[], query: URLSearchParams, defaultSize?: number) => Paged<T>;
+}
+
 export interface SceneOptions {
   /** Signed in as the owner of Café La Esquina (the default), or a visitor. */
   signedIn: boolean;
@@ -21,7 +36,16 @@ export interface SceneOptions {
   /** Changes to the demo data before the first request. */
   prepareData: ((data: DemoData) => void) | undefined;
   /** Routes of a scene file, tried before the shared ones. */
-  extraRoutes: ((data: DemoData, helpers: { ok: (json: unknown) => { status: number; json: unknown } }) => Route[]) | undefined;
+  extraRoutes: ((data: DemoData, helpers: RouteHelpers) => Route[]) | undefined;
+}
+
+/**
+ * A function as the value of an option (`prepareData`, `extraRoutes`). Playwright takes a function given to test.use()
+ * for a fixture, so it goes through one that needs nothing: `test.use({ prepareData: asOption((data) => { … }) })`.
+ */
+export function asOption<T>(value: T) {
+  // eslint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from this pattern: none.
+  return async ({}, use: (value: T) => Promise<void>) => use(value);
 }
 
 /**
@@ -51,6 +75,17 @@ export const test = base.extend<SceneOptions>({
         // Storage blocked: the app falls back to its defaults.
       }
     }, { signedIn, colorMode, businessTheme });
+    // No transitions or animations: a menu sliding in or a dialog fading in is painted while it moves, and what is left
+    // on screen after it stops depended on how busy the machine was. Only the way there changes, never where it ends.
+    await context.addInitScript(() => {
+      const still = () => {
+        const style = document.createElement('style');
+        style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+        document.head.appendChild(style);
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', still);
+      else still();
+    });
 
     const mocks = await installMocks(context, {
       origin: new URL(baseURL!).origin,

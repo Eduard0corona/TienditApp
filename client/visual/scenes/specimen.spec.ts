@@ -45,8 +45,9 @@ for (const colorMode of ['light', 'dark'] as const) {
           return Object.fromEntries(names.map((name) => [name, computed.getPropertyValue(name).trim()]));
         }, VARIABLES);
 
-        expect(`${JSON.stringify(styles, null, 1)}\n`).toMatchSnapshot(`estilos-${colorMode}-${businessTheme}.json`);
-        expect(`${JSON.stringify(variables, null, 1)}\n`).toMatchSnapshot(`variables-${colorMode}-${businessTheme}.json`);
+        // Soft: the three checks always run, so one failing does not hide the others.
+        expect.soft(`${JSON.stringify(styles, null, 1)}\n`).toMatchSnapshot(`estilos-${colorMode}-${businessTheme}.json`);
+        expect.soft(`${JSON.stringify(variables, null, 1)}\n`).toMatchSnapshot(`variables-${colorMode}-${businessTheme}.json`);
         // One picture per mode is enough: the themes only change colors, which the styles above already compare.
         if (businessTheme === 0) await expect(page.locator('#specimen')).toHaveScreenshot(`muestrario-${colorMode}.png`);
       });
