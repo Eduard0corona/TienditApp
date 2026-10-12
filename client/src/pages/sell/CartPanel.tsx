@@ -104,6 +104,7 @@ export default function CartPanel(props: CartPanelProps) {
           onChange={props.onDetailsChange}
           folioError={props.folioError}
           disabled={submitting}
+          canCharge={props.canCharge}
         />
       )}
       <div className="d-flex align-items-center justify-content-between mb-2">
@@ -168,7 +169,7 @@ export default function CartPanel(props: CartPanelProps) {
       {platform && !props.online && (
         <div className="alert alert-warning small py-2 mt-2 mb-0" role="status">
           <i className="ri-wifi-off-line me-1" aria-hidden="true"></i>
-          Sin conexión: los pedidos de plataforma se registran cuando vuelva la conexión.
+          Sin conexión no se pueden registrar pedidos de plataforma ni se guardan solos: déjalo en pantalla y regístralo cuando vuelva la conexión.
         </div>
       )}
 

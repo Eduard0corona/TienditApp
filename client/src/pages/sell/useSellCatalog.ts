@@ -57,8 +57,10 @@ export function useSellCatalog(
         setOfflineCatalogAt(null);
         if (!includeOutOfSchedule) void saveCatalogSnapshot(tenantId, loaded, categoriesResponse.data);
       } catch (err: unknown) {
-        // Without connection, keep selling with the catalog this device saved the last time.
-        const snapshot = isNetworkError(err) ? await loadCatalogSnapshot(tenantId) : null;
+        // Without connection, keep selling with the catalog this device saved the last time. Not for an order of a
+        // platform: the saved one keeps the hours, and the ticket would silently lose what the app sold out of them;
+        // the load fails instead, keeping the products and the ticket on screen until it is retried.
+        const snapshot = isNetworkError(err) && !includeOutOfSchedule ? await loadCatalogSnapshot(tenantId) : null;
         if (load !== latestLoad.current) return;
         if (!snapshot) throw err;
         loaded = snapshot.products;

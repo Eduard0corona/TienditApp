@@ -48,6 +48,31 @@ public class GetDeliveryPlatformOrdersQueryTests
     }
 
     [Fact]
+    public async Task Search_ShouldFindAFolio_OnAnyPage_AsTheStatementWritesIt()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _, tacos) = await ShopAsync(fixture);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.UberEats);
+        var oldest = await SellAtAsync(fixture, At(Today.AddDays(-3), 10), SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC953", tacos.Id));
+        await SellAtAsync(fixture, At(Today.AddDays(-2), 10), SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "XK201", tacos.Id));
+        await SellAtAsync(fixture, At(Today.AddDays(-1), 10), SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "MM777", tacos.Id));
+        // The same folio in another platform is another order.
+        await SellAtAsync(fixture, At(Today, 10), SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "BC953", tacos.Id));
+        var uber = new GetDeliveryPlatformOrdersQuery { Channel = OrderChannel.UberEats, PageSize = 1 };
+
+        // The oldest is on the last page; searching finds it from the first one.
+        var byFolio = await ListAsync(fixture, uber with { Search = "#bc 953" });
+        var byOrderNumber = await ListAsync(fixture, uber with { Search = oldest.OrderNumber.ToLowerInvariant() });
+        var nothing = await ListAsync(fixture, uber with { Search = "ZZ999" });
+
+        Assert.Equal((1, oldest.Id), (byFolio.TotalCount, Assert.Single(byFolio.Items).OrderId));
+        Assert.Equal((1, oldest.Id), (byOrderNumber.TotalCount, Assert.Single(byOrderNumber.Items).OrderId));
+        Assert.Equal(0, nothing.TotalCount);
+        Assert.Equal(3, (await ListAsync(fixture, uber)).TotalCount);
+    }
+
+    [Fact]
     public async Task Order_ShouldShowWhatItCopied_AndWhatWasGivenBack()
     {
         await using var fixture = SalesTestFixture.Create();

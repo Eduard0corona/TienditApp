@@ -58,7 +58,14 @@ public class DeliveryPlatformSetting : AuditableEntity, ITenantScoped, IAggregat
     public bool Update(bool isActive, PlatformTerms terms)
     {
         ArgumentNullException.ThrowIfNull(terms);
-        if (IsActive == isActive && Terms == terms)
+        // Compared field by field, not through Terms: a stored row outside today's limits (they live in the domain and
+        // may tighten) must still take valid terms instead of failing while it is read back.
+        if (IsActive == isActive
+            && CommissionPercent == terms.CommissionPercent
+            && CommissionBase == terms.CommissionBase
+            && CommissionVatPercent == terms.CommissionVatPercent
+            && IsrWithholdingPercent == terms.IsrWithholdingPercent
+            && VatWithholdingPercent == terms.VatWithholdingPercent)
             return false;
 
         IsActive = isActive;

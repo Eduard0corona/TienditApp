@@ -88,7 +88,7 @@ describe('cash cut text', () => {
       ['Tarjeta', 400],
       ['Transferencia', 49.9],
       ['Otros', 0.3],
-      ['Plataformas (por liquidar)', 350],
+      ['Cobrado por plataformas', 350],
       ['Devuelto por plataformas', 120],
       ['Neto en efectivo', 780],
     ]);
@@ -100,13 +100,13 @@ describe('cash cut text', () => {
     const labels = getDailyCutRows(cut({ platformTotal: 0, platformRefundsTotal: 350 })).map(([label]) => label);
 
     expect(labels).toContain('Devuelto por plataformas');
-    expect(labels).not.toContain('Plataformas (por liquidar)');
+    expect(labels).not.toContain('Cobrado por plataformas');
   });
 
   it('writes the platform rows in the message too', () => {
     const text = plain(buildDailyCutText(cut({ platformTotal: 350, platformRefundsTotal: 120 }), { dateLabel: 'Hoy', scopeLabel: 'Centro' }));
 
-    expect(text).toContain('Otros: $0.30\nPlataformas (por liquidar): $350.00\nDevuelto por plataformas: $120.00\nNeto en efectivo: $780.00');
+    expect(text).toContain('Otros: $0.30\nCobrado por plataformas: $350.00\nDevuelto por plataformas: $120.00\nNeto en efectivo: $780.00');
   });
 
   it('shows the tips apart when there are any', () => {

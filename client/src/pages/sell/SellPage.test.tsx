@@ -1,9 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { categoriesApi } from '../../api/categoriesApi';
 import { cashApi } from '../../api/cashApi';
 import { ordersApi } from '../../api/ordersApi';
@@ -14,7 +14,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { saveCatalogSnapshot } from '../../offline/catalogCache';
+import { loadCatalogSnapshot, saveCatalogSnapshot, type CatalogSnapshot } from '../../offline/catalogCache';
 import { enqueueSale } from '../../offline/saleQueue';
 import {
   BusinessType,
@@ -26,6 +26,7 @@ import {
   PlatformCollectedBy,
   TenantCapability,
   UnitType,
+  type CategoryDto,
   type OrderDto,
   type ProductDto,
 } from '../../types';
@@ -590,6 +591,39 @@ describe('SellPage with delivery platforms', () => {
     expect(await screen.findByRole('dialog', { name: 'Pedido ORD-000006 de DiDi Food cobrado' })).toBeInTheDocument();
   });
 
+  it('does not register the order with F9 while it is being charged now, or while the drawer is being opened', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'DiDi Food' }));
+    await userEvent.type(ticket().getByLabelText('Folio de DiDi Food'), '12');
+    await userEvent.click(ticket().getByRole('radio', { name: 'El negocio (el repartidor nos paga)' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: 'Cobrar ahora' }));
+    const charge = await screen.findByRole('dialog', { name: 'Cobrar' });
+
+    // The courier's cash is being counted: F9 (charge, at the counter) must not register it unpaid behind the dialog.
+    await userEvent.keyboard('{F9}');
+    expect(ordersApi.create).not.toHaveBeenCalled();
+    expect(charge).toBeInTheDocument();
+  });
+
+  it('does not register the order with F9 behind the dialog to open the drawer', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: null } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'DiDi Food' }));
+    await userEvent.type(ticket().getByLabelText('Folio de DiDi Food'), '12');
+    await userEvent.click(ticket().getByRole('radio', { name: 'El negocio (el repartidor nos paga)' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: 'Cobrar ahora' }));
+    await screen.findByRole('dialog', { name: /caja/i });
+
+    await userEvent.keyboard('{F9}');
+    expect(ordersApi.create).not.toHaveBeenCalled();
+  });
+
   it('leaves an order the courier pays to the cashier when the person cannot charge', async () => {
     signIn(['ManageOrders']);
     vi.mocked(ordersApi.create).mockResolvedValue({ data: platformOrder(OrderChannel.DidiFood, '12', PlatformCollectedBy.Business, 'ORD-000007') } as never);
@@ -604,9 +638,12 @@ describe('SellPage with delivery platforms', () => {
     expect(ticket().getByText('La caja lo cobra desde Pedidos cuando el repartidor pague.')).toBeInTheDocument();
     await userEvent.keyboard('{F9}');
 
+    // Charging at the drawer is the cashier's: nothing tells this person to do it.
+    expect(ticket().queryByText('El repartidor te paga al recoger: cóbralo en la caja como siempre.')).not.toBeInTheDocument();
     expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({ collectedBy: PlatformCollectedBy.Business, payments: undefined }));
     const done = await screen.findByRole('dialog', { name: 'Pedido ORD-000007 de DiDi Food registrado' });
-    expect(within(done).getByText('Cóbralo en Pedidos cuando el repartidor te pague.')).toBeInTheDocument();
+    expect(within(done).getByText('La caja lo cobra desde Pedidos cuando el repartidor pague.')).toBeInTheDocument();
+    expect(within(done).queryByText('Cóbralo en Pedidos cuando el repartidor te pague.')).not.toBeInTheDocument();
   });
 
   it('waits for the connection to register an order of a platform: it is never queued on the device', async () => {
@@ -618,7 +655,9 @@ describe('SellPage with delivery platforms', () => {
     await userEvent.type(ticket().getByLabelText('Folio de Rappi'), '152390');
     await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
 
-    expect(ticket().getByText('Sin conexión: los pedidos de plataforma se registran cuando vuelva la conexión.')).toBeInTheDocument();
+    expect(ticket().getByText(
+      'Sin conexión no se pueden registrar pedidos de plataforma ni se guardan solos: déjalo en pantalla y regístralo cuando vuelva la conexión.',
+    )).toBeInTheDocument();
     expect(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Registrar' })).toBeDisabled();
     await userEvent.keyboard('{F9}');
@@ -750,5 +789,143 @@ describe('SellPage with delivery platforms', () => {
     expect(await screen.findByText(
       'Tu caja está cerrada: ábrela para cobrar. Todo cobro se registra en una caja; sin ella solo puedes guardar pedidos.',
     )).toBeInTheDocument();
+  });
+});
+
+describe('SellPage with a platform order and no connection', () => {
+  // At 19:00 the chilaquiles are out of their hours (sold until 12:00): only the catalog without hours brings them.
+  const chilaquiles = product({ id: 'chilaquiles', name: 'Chilaquiles', priceAmount: 95, sortOrder: 5 });
+  const comida: CategoryDto[] = [{ id: 'c1', name: 'Comida', sortOrder: 1, isActive: true, productCount: 2 }];
+  const draftKey = 'tienditapp.sell.draft.v1.t1';
+  let saved: CatalogSnapshot | null;
+  let networkDown: boolean;
+  const networkError = () => new AxiosError('Network Error', 'ERR_NETWORK');
+  const lines = () => ticket().queryAllByRole('textbox', { name: /^Cantidad de / }).map((box) => box.getAttribute('aria-label'));
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    window.localStorage.clear();
+    saved = null;
+    networkDown = false;
+    vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
+    // The catalog saved on the device is the last one loaded with the hours, as the real cache keeps it.
+    vi.mocked(saveCatalogSnapshot).mockImplementation(async (_tenantId, products, categories) => {
+      saved = { products, categories, savedAt: '2026-10-12T19:00:00.000Z' };
+    });
+    vi.mocked(loadCatalogSnapshot).mockImplementation(async () => saved);
+    vi.mocked(productsApi.getAll).mockImplementation((async (params?: { onlyAvailableNow?: boolean }) => {
+      if (networkDown) throw networkError();
+      const items = params?.onlyAvailableNow ? [taco] : [taco, chilaquiles];
+      return { data: { items, totalCount: items.length } };
+    }) as never);
+    vi.mocked(categoriesApi.getAll).mockImplementation((async () => {
+      if (networkDown) throw networkError();
+      return { data: comida };
+    }) as never);
+    vi.mocked(ordersApi.create).mockImplementation((async () => {
+      if (networkDown) throw networkError();
+      return { data: platformOrder(OrderChannel.Rappi, '152390', PlatformCollectedBy.Platform, 'ORD-000009') };
+    }) as never);
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: { isMine: true } } as never);
+    vi.mocked(useOnlineStatus).mockReturnValue(true);
+    givePlatforms([{ channel: OrderChannel.Rappi, isActive: true }]);
+  });
+
+  afterEach(() => {
+    onlineManager.setOnline(true);
+    vi.restoreAllMocks();
+  });
+
+  it('keeps what the app sold out of its hours when the connection drops while registering', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    renderAt('/sell');
+    // The counter's catalog, with its hours, is the one saved for selling offline.
+    await waitFor(() => expect(saved?.products.map((item) => item.id)).toEqual(['taco']));
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    await userEvent.type(ticket().getByLabelText('Folio de Rappi'), '152390');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Chilaquiles/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    expect(lines()).toEqual(['Cantidad de Chilaquiles', 'Cantidad de Taco']);
+
+    networkDown = true;
+    const loadsBefore = vi.mocked(productsApi.getAll).mock.calls.length;
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $120.00 F9' }));
+    // The failed sale reloads the catalog; without connection it fails too, and the saved one (with hours) is not used.
+    await waitFor(() => expect(vi.mocked(productsApi.getAll).mock.calls.length).toBeGreaterThan(loadsBefore));
+    await screen.findByRole('button', { name: 'Reintentar' });
+    expect(loadCatalogSnapshot).not.toHaveBeenCalled();
+    expect(lines()).toEqual(['Cantidad de Chilaquiles', 'Cantidad de Taco']);
+
+    // Back online, the retry registers the whole order with the same key.
+    networkDown = false;
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument());
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $120.00 F9' }));
+    await screen.findByRole('dialog', { name: 'Pedido ORD-000009 de Rappi registrado' });
+    const sent = vi.mocked(ordersApi.create).mock.calls.map(([request]) => request);
+    expect(sent.map((request) => request.items.map((item) => item.productId))).toEqual([['chilaquiles', 'taco'], ['chilaquiles', 'taco']]);
+    expect(sent[1].idempotencyKey).toBe(sent[0].idempotencyKey);
+  });
+
+  it('keeps a platform order brought back without connection, with a way back to the counter', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    saved = { products: [taco], categories: comida, savedAt: '2026-10-12T18:00:00.000Z' };
+    window.localStorage.setItem(draftKey, JSON.stringify({
+      lines: [{ productId: 'chilaquiles', quantity: 1, notes: '' }, { productId: 'taco', quantity: 1, notes: '' }],
+      customerName: '', customerPhone: '', tableNumber: '', orderNotes: '',
+      channel: OrderChannel.Rappi, externalOrderNumber: '152390', collectedBy: PlatformCollectedBy.Platform,
+    }));
+    // Without connection the list of platforms waits (paused) and the catalog cannot load.
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    onlineManager.setOnline(false);
+    vi.mocked(useOnlineStatus).mockReturnValue(false);
+    networkDown = true;
+    renderAt('/sell');
+
+    await screen.findByRole('button', { name: 'Reintentar' });
+    // Nothing of the order is dropped or written over meanwhile, and the counter is still a choice.
+    expect(ticket().getByLabelText('Folio de Rappi')).toHaveValue('152390');
+    const radios = within(originPicker()).getAllByRole('radio');
+    expect(radios.map((radio) => radio.textContent)).toEqual(['Mostrador', 'Rappi']);
+    expect(within(originPicker()).getByRole('radio', { name: 'Rappi' })).toHaveAttribute('aria-checked', 'true');
+    expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}')).toMatchObject({ externalOrderNumber: '152390' });
+    expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').lines).toHaveLength(2);
+
+    // Back online, the order comes back whole.
+    vi.mocked(useOnlineStatus).mockReturnValue(true);
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+    networkDown = false;
+    onlineManager.setOnline(true);
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() => expect(lines()).toEqual(['Cantidad de Chilaquiles', 'Cantidad de Taco']));
+    expect(ticket().getByLabelText('Folio de Rappi')).toHaveValue('152390');
+  });
+
+  it('takes a platform order brought back without connection to the counter when the cashier chooses it', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    saved = { products: [taco], categories: comida, savedAt: '2026-10-12T18:00:00.000Z' };
+    window.localStorage.setItem(draftKey, JSON.stringify({
+      lines: [{ productId: 'chilaquiles', quantity: 1, notes: '' }, { productId: 'taco', quantity: 1, notes: '' }],
+      customerName: '', customerPhone: '', tableNumber: '', orderNotes: '',
+      channel: OrderChannel.Rappi, externalOrderNumber: '152390', collectedBy: PlatformCollectedBy.Platform,
+    }));
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    onlineManager.setOnline(false);
+    vi.mocked(useOnlineStatus).mockReturnValue(false);
+    networkDown = true;
+    renderAt('/sell');
+
+    await screen.findByRole('button', { name: 'Reintentar' });
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Mostrador' }));
+
+    // At the counter the saved catalog (with its hours) sells offline: the sale stays at the counter, without folio.
+    expect(await ticket().findByRole('button', { name: 'Cobrar $25.00 F9' })).toBeInTheDocument();
+    expect(lines()).toEqual(['Cantidad de Taco']);
+    expect(ticket().queryByLabelText('Folio de Rappi')).not.toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}')).toMatchObject({
+      channel: OrderChannel.Counter,
+      externalOrderNumber: '',
+    }));
   });
 });

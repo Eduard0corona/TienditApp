@@ -124,22 +124,22 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
   ```
 
 - **Ejemplos fijados por `PlatformOrderCalculatorTests`:**
-  - Un pedido de $1,000 con IVA incluido (subtotal 862.07, IVA 137.93), comisión de 30 % sobre el total, ISR de 2.5 % e IVA retenido de 50 %, cobrado por la plataforma: comisión 300.00, IVA de la comisión 48.00, ISR 21.55 e IVA retenido 68.97. **Neto esperado: 561.48**, igual que el ejemplo publicado de DiDi; con ISR de 1 %, **574.41**.
+  - Un pedido de $1,000 con IVA incluido (subtotal 862.07, IVA 137.93), comisión de 30 % sobre el total, ISR de 2.5 % e IVA retenido de 50 %, cobrado por la plataforma: comisión 300.00, IVA de la comisión 48.00, ISR 21.55 e IVA retenido 68.97. **Neto esperado: 561.48** con las tasas de 2026. Con ISR de 1 % (la tasa anterior a 2026) da **574.41**, el neto del ejemplo publicado de DiDi.
   - El mismo pedido cobrado por el negocio: retenciones en 0 y neto esperado **−348.00**.
   - Con IVA sumado y la comisión de 25 % sobre el subtotal (total 290, subtotal 250, IVA 40): comisión 62.50, IVA de la comisión 10.00, ISR 6.25, IVA retenido 20.00 y neto esperado 191.25.
   - Con tasas mezcladas ($500 al 16 % incluido y $200 al 0 %): neto esperado 406.14. La parte al 0 % no causa IVA retenido.
   - Una comisión de 10 % sobre 1.25 da 0.125 y queda en 0.12 (con `AwayFromZero` quedaría en 0.13).
 - **Por qué el IVA retenido sale de la base por la tasa:** con el IVA ya redondeado del pedido, el de $1,000 daría 137.93 × 50 % = 68.965, que queda en 68.96. La base por la tasa da 862.07 × 0.16 × 0.5 = 68.9656, que queda en 68.97, como DiDi.
 - **Qué no entra:** la propina, el envío y las promociones de la plataforma.
-- **Retenciones y costo:** las retenciones son pagos a cuenta de los impuestos del negocio, no un costo. El costo del canal es la comisión y su IVA, que el contador puede acreditar.
+- **Retenciones y costo:** por lo general las retenciones son pagos a cuenta de los impuestos del negocio, no un costo (para quien optó por el pago definitivo, son su impuesto). El costo del canal es la comisión y su IVA, que el contador puede acreditar.
 - **Corte del día (`GET /api/v1/cash/daily-cut`):**
   - **Cifras propias:** `PlatformTotal` y `PlatformPaymentsCount` son los pagos «Plataforma» del día.
   - **Devoluciones:** `PlatformRefundsTotal` son los reembolsos «Plataforma» del día, con los mismos filtros que los pagos: sucursal por la del pedido, usuario por quien reembolsó y ubicación por la del pago «Plataforma» del pedido.
   - **«Otros»:** `OtherTotal` es ahora todo método sin cubeta propia, así que efectivo, tarjeta, transferencia, billetera, otros y plataforma suman siempre lo cobrado, para cada método del enum.
   - **Filas:** la fila de cada cajero (`ByUser`) no incluye lo que cobró la plataforma; las de ubicación y sucursal sí.
   - **Flujos:** `NetCashFlow = SalesPaymentsTotal − PlatformTotal + TipsTotal + ManualIncomeTotal − ManualExpenseTotal`, y `NetCashOnlyFlow` no cambia.
-  - **En pantalla:** Corte del día muestra «Plataformas» con «Por liquidar: no entra a la caja» y lo devuelto. El impreso y el texto de WhatsApp suman las filas «Plataformas (por liquidar)» y «Devuelto por plataformas». Los turnos y Mi caja no cambian.
-- **Inicio:** «Cobrado» (`TotalRevenue`) conserva su significado e incluye lo que cobraron las plataformas. `PlatformCollected` es lo que cobraron (pagos «Plataforma» menos reembolsos «Plataforma» del rango, con los mismos tipos de pedido legibles), y la pantalla lo dice debajo: «Incluye $350.00 que cobraron las plataformas, por liquidar.». «Por cobrar» no cambia: lo que cobró la plataforma no tiene saldo, y lo que el negocio todavía no cobra sí está pendiente.
+  - **En pantalla:** Corte del día muestra «Plataformas» con «Lo cobró la plataforma: no entra a la caja» y lo devuelto. El impreso y el texto de WhatsApp suman las filas «Cobrado por plataformas» y «Devuelto por plataformas». No dicen «por liquidar»: mientras no haya liquidación, el sistema no sabe qué ya depositó cada plataforma. Los turnos y Mi caja no cambian.
+- **Inicio:** «Cobrado» (`TotalRevenue`) conserva su significado e incluye lo que cobraron las plataformas. `PlatformCollected` es lo que cobraron (pagos «Plataforma» menos reembolsos «Plataforma» del rango, con los mismos tipos de pedido legibles), y la pantalla lo dice debajo: «Incluye $350.00 que cobraron las plataformas; no entra a la caja.». «Por cobrar» no cambia: lo que cobró la plataforma no tiene saldo, y lo que el negocio todavía no cobra sí está pendiente.
 - **CFDI (vista previa):**
   - **Forma de pago:** un pedido pagado por completo con «Plataforma» se declara PUE con la forma 31, Intermediario pagos (`SatCatalog.PaymentFormIntermediary`).
   - **Avisos:** que normalmente va en la factura global del periodo; si cobró la plataforma, además que lleva la forma 31 y que la plataforma retiene ISR e IVA. Los dos piden confirmar con el contador. Con un receptor, avisa que la plataforma no comparte los datos de sus clientes y que solo se factura a nombre de alguien que dio los suyos.

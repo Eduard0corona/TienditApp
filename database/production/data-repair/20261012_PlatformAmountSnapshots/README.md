@@ -16,26 +16,27 @@ Por eso `apply.sql` recomienda no publicar entre las 00:00 y las 00:45, hora del
 - Se borran **todas** las filas de cada día afectado (todas sus sucursales y tipos de pedido), no solo la que tiene «Otros»: un día con alguna fila guardada no se vuelve a calcular, y la fila que faltara dejaría de contar en los reportes.
 - Borrar de más es inofensivo. Mientras el worker no guarde otra vez el día, los reportes lo calculan desde las ventas, y lo guarda en su siguiente pasada (`BackgroundJobs:SalesSnapshots:IntervalMinutes`).
 - Córrelo solo con la versión nueva desplegada en todas las instancias: si la anterior sigue corriendo, puede volver a guardar el día igual que antes.
+- Los dos scripts piden `DesplegadoEn`: la hora UTC desde la que la versión nueva ya corría en todas las instancias (cuando terminó el swap). Solo un día calculado antes de esa hora pudo guardarlo la versión anterior; uno calculado después, con pagos «Otro» y sin plataformas, está bien y no se toca. Si pones una hora más tarde de la real, solo agregas días que recalcular da lo mismo. Sin la variable, `sqlcmd` se detiene sin leer ni borrar.
 - Los dos scripts traen el bloque `SET` de los `apply.sql`.
 
 ## Paso 1. Dimensionar
 
 ```
-sqlcmd -S <servidor> -d <base> <autenticación> -W -s "|" -f o:65001 -i verify.sql
+sqlcmd -S <servidor> -d <base> <autenticación> -W -s "|" -f o:65001 -v DesplegadoEn="<hora UTC del fin del swap>" -i verify.sql
 ```
 
-La consulta es la 7 del `verify.sql` de `database/production/20261012005540_AddDeliveryPlatformOrders`. Lista los días de negocios con pagos «Plataforma» que tienen `PlatformAmount` en 0, `OtherAmount` mayor que 0 y se calcularon después del primer pago «Plataforma» del negocio. Un día con pagos del método «Otro» y sin pagos de plataformas también aparece: recalcularlo da lo mismo.
+La consulta es la 7 del `verify.sql` de `database/production/20261012005540_AddDeliveryPlatformOrders`, acotada con `DesplegadoEn`. Lista los días de negocios con pagos «Plataforma» que tienen `PlatformAmount` en 0, `OtherAmount` mayor que 0 y se calcularon después del primer pago «Plataforma» del negocio y antes de `DesplegadoEn`.
 
 Si sale vacía, no hay nada que reparar.
 
 ## Paso 2. Reparar
 
 ```
-sqlcmd -S <servidor> -d <base> <autenticación> -b -W -s "|" -f o:65001 -i repair.sql -o repair-salida.txt
+sqlcmd -S <servidor> -d <base> <autenticación> -b -W -s "|" -f o:65001 -v DesplegadoEn="<la misma hora>" -i repair.sql -o repair-salida.txt
 ```
 
-`repair.sql` borra en una transacción todas las filas de los días que lista `verify.sql` y muestra cada fila borrada con sus cifras. Guarda la salida en el registro del cambio. Es idempotente: una segunda ejecución no borra nada.
+`repair.sql` borra en una transacción todas las filas de los días que lista `verify.sql` y muestra cada fila borrada con sus cifras. Guarda la salida en el registro del cambio. Es idempotente: el worker vuelve a calcular esos días con una hora posterior a `DesplegadoEn`, así que otra ejecución, ahora o después, no borra nada.
 
 ## Paso 3. Confirmar
 
-Después de la siguiente pasada del worker, vuelve a ejecutar `verify.sql`: debe salir vacío. En Reportes, las ventas por sucursal de esos días muestran lo que cobraron las plataformas en su propia columna.
+Después de la siguiente pasada del worker, vuelve a ejecutar `verify.sql` con la misma `DesplegadoEn`: debe salir vacío. En Reportes, las ventas por sucursal de esos días muestran lo que cobraron las plataformas en su propia columna.

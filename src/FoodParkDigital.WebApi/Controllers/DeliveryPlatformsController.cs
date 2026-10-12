@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FoodParkDigital.Application.DeliveryPlatforms;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.WebApi.Errors;
@@ -65,12 +66,15 @@ public class DeliveryPlatformsController : ControllerBase
     }
 }
 
-/// <summary>A platform as it should be, with the revision the person saw (0 for one never saved).</summary>
+/// <summary>
+/// A platform as it should be, with the revision the person saw (0 for one never saved). Every field is required: a
+/// missing one is refused (400) instead of being read as 0, so no commission is saved that nobody wrote.
+/// </summary>
 public record SaveDeliveryPlatformRequest(
-    int Revision,
-    bool IsActive,
-    decimal CommissionPercent,
-    PlatformCommissionBase CommissionBase,
-    decimal CommissionVatPercent,
-    decimal IsrWithholdingPercent,
-    decimal VatWithholdingPercent);
+    [property: JsonRequired] int Revision,
+    [property: JsonRequired] bool IsActive,
+    [property: JsonRequired] decimal CommissionPercent,
+    [property: JsonRequired] PlatformCommissionBase CommissionBase,
+    [property: JsonRequired] decimal CommissionVatPercent,
+    [property: JsonRequired] decimal IsrWithholdingPercent,
+    [property: JsonRequired] decimal VatWithholdingPercent);

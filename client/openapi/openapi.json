@@ -8459,6 +8459,13 @@
             }
           },
           {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -11073,6 +11080,10 @@
         "properties": {
           "reason": {
             "type": "string",
+            "nullable": true
+          },
+          "restockItems": {
+            "type": "boolean",
             "nullable": true
           }
         },
@@ -17283,11 +17294,16 @@
           "commissionAndTax",
           "expectedSettlement",
           "orderTotal",
+          "orderVatPercent",
           "withheld"
         ],
         "type": "object",
         "properties": {
           "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "orderVatPercent": {
             "type": "number",
             "format": "double"
           },

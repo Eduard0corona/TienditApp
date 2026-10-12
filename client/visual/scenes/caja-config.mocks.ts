@@ -247,12 +247,12 @@ function deliveryPlatforms() {
       {
         channel: RAPPI, isConfigured: true, isActive: true, commissionPercent: 30, commissionBase: TOTAL_WITH_TAX, ...fiscal, revision: 2,
         changedAt: at(10, 5, -3), changedBy: MARIANA,
-        example: { orderTotal: 1000, commissionAndTax: 348, withheld: 90.52, expectedSettlement: 561.48 },
+        example: { orderTotal: 1000, orderVatPercent: 16, commissionAndTax: 348, withheld: 90.52, expectedSettlement: 561.48 },
       },
       {
         channel: UBER_EATS, isConfigured: true, isActive: false, commissionPercent: 27, commissionBase: SUBTOTAL_WITHOUT_TAX, ...fiscal,
         revision: 3, changedAt: at(18, 40, -1), changedBy: MARIANA,
-        example: { orderTotal: 1000, commissionAndTax: 270, withheld: 90.52, expectedSettlement: 639.48 },
+        example: { orderTotal: 1000, orderVatPercent: 16, commissionAndTax: 270, withheld: 90.52, expectedSettlement: 639.48 },
       },
       {
         channel: DIDI_FOOD, isConfigured: false, isActive: false, commissionPercent: null, commissionBase: TOTAL_WITH_TAX, ...fiscal,

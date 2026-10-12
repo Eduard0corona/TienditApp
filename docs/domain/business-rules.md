@@ -39,7 +39,7 @@ Un pedido de Rappi, Uber Eats o DiDi Food entra por la app de la plataforma, y e
 - **Configuración por plataforma** (`DeliveryPlatformSetting`, Configuración › Negocio › Plataformas de reparto):
   - una fila por negocio y plataforma;
   - la cambian dueños y administradores, con la revisión que vieron (0 la primera vez); una revisión vieja responde 409 `concurrency_conflict`;
-  - la comisión va de 0 % a 60 % y es obligatoria;
+  - la comisión va de 0 % a 60 % y es obligatoria: el servidor exige los siete campos del guardado y responde 400 `validation_failed` si falta alguno, en lugar de tomarlo como 0;
   - el IVA de la comisión es de 16, 8 o 0 %;
   - el ISR retenido va de 0 % a 20 % y el IVA retenido de 0 % a 100 % del IVA del pedido, todos con hasta dos decimales.
 

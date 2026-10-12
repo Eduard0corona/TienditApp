@@ -3,10 +3,14 @@
 -- Fase 22F guardó con lo que cobraron las plataformas en [OtherAmount], para que el worker los
 -- vuelva a calcular. Córrelo solo después de revisar verify.sql y con la versión nueva desplegada
 -- en todas las instancias; ver README.md.
+-- DesplegadoEn es la hora (UTC) desde la que la versión nueva ya corría en todas las instancias: solo
+-- los días calculados antes de esa hora pudo guardarlos la versión anterior. Sin ella, sqlcmd se
+-- detiene sin borrar nada.
 -- Solo borra filas de [DailySalesSnapshots] (datos derivados), todas las de cada día afectado.
 -- Lista cada fila borrada: guarda la salida en el registro del cambio.
--- Idempotente: una segunda ejecución no borra nada.
---     sqlcmd -S <servidor> -d <base> <autenticación> -b -W -s "|" -f o:65001 -i repair.sql -o repair-salida.txt
+-- Idempotente: lo que vuelve a calcular el worker lleva una hora posterior a DesplegadoEn, así que
+-- otra ejecución, ahora o después, no borra nada.
+--     sqlcmd -S <servidor> -d <base> <autenticación> -b -W -s "|" -f o:65001 -v DesplegadoEn="2026-10-12T06:18:00Z" -i repair.sql -o repair-salida.txt
 -- =====================================================================================
 SET NOCOUNT ON;
 SET ANSI_NULLS ON;
@@ -41,6 +45,7 @@ INNER JOIN (
         GROUP BY [TenantId]
     ) f ON f.[TenantId] = d.[TenantId]
     WHERE d.[PlatformAmount] = 0 AND d.[OtherAmount] > 0 AND d.[ComputedAt] > f.[PrimerPagoPlataforma]
+        AND d.[ComputedAt] < CAST(N''$(DesplegadoEn)'' AS datetimeoffset)
 ) a ON a.[TenantId] = s.[TenantId] AND a.[BusinessDate] = s.[BusinessDate];');
 
 COMMIT;

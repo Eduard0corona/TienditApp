@@ -77,9 +77,9 @@ Las decisiones fijas de la fase eran:
      - neto esperado = total − comisión − IVA de la comisión − ISR − IVA retenido;
    - si cobró el negocio: la plataforma no retiene lo que no cobró. Las retenciones son 0 y el neto esperado es −(comisión + IVA de la comisión), lo que descontará de un depósito.
 
-   Así se reproduce al centavo el ejemplo publicado de DiDi: un pedido de $1,000 con IVA incluido, comisión de 30 % sobre el total, ISR de 2.5 % e IVA retenido de 50 % da un neto de 561.48 (574.41 con ISR de 1 %). El IVA retenido sale 68.97; con el IVA ya redondeado del pedido saldría 68.96.
+   Así se reproduce al centavo el ejemplo publicado de DiDi: un pedido de $1,000 con IVA incluido, comisión de 30 % sobre el total, ISR de 1 % (la tasa anterior a 2026) e IVA retenido de 50 % da un neto de 574.41, el de su ejemplo. Con el ISR de 2.5 % de 2026 da 561.48. El IVA retenido sale 68.97; con el IVA ya redondeado del pedido saldría 68.96.
 
-   Las retenciones son pagos a cuenta de los impuestos del negocio, no un costo: el costo del canal es la comisión y su IVA. La propina, el envío y las promociones de la plataforma no entran.
+   Por lo general las retenciones son pagos a cuenta de los impuestos del negocio, no un costo (para quien optó por el pago definitivo, son su impuesto): el costo del canal es la comisión y su IVA. La propina, el envío y las promociones de la plataforma no entran.
 6. **Reportes en base caja, con cifras que siguen al dinero.**
    - **Corte del día:**
      - `PlatformTotal` y `PlatformPaymentsCount` son propios, y `PlatformRefundsTotal` va aparte;
@@ -91,7 +91,7 @@ Las decisiones fijas de la fase eran:
    - **Ventas por canal (`GET /reports/sales-by-channel`):** se calcula en vivo, sin agregar una dimensión al resumen diario. Lo cobrado cuenta en la fecha de cada pago y lo devuelto en la de cada reembolso, como Inicio y las ventas por sucursal. La comisión, su IVA y las retenciones siguen al dinero: cada pago de un pedido con detalle suma su parte de lo que copió el pedido (importe × pago / total del pedido), y cada reembolso resta la suya. Se redondea una vez por fila, y el neto esperado se deriva de lo redondeado.
    - **Anulaciones:** una anulación otro día compensa ese día, y un rango que cubre los dos queda en cero. Ningún día cerrado cambia: la corrección compensa, no edita ([ADR 0007](0007-tax-and-financial-adjustments.md)).
    - **Invariantes:** I1 a I9 fijan el cuadre con las ventas por sucursal, Inicio, el corte, el resumen diario y el CFDI, y cada una es una prueba con nombre ([sucursales y reportes](../domain/branches-and-reporting.md#ventas-por-canal-fase-22f)).
-   - **Lista por pedido (`GET /reports/delivery-platform-orders`):** sirve para comparar folio por folio con el estado de cuenta semanal. Es de solo lectura: no importa ni concilia nada.
+   - **Lista por pedido (`GET /reports/delivery-platform-orders`):** sirve para comparar folio por folio con el estado de cuenta semanal. Busca en el servidor (`search`, por folio de la app escrito como venga o por `ORD`) sobre todas las páginas. Es de solo lectura: no importa ni concilia nada.
    - **Inicio:** «Cobrado» conserva su significado e incluye lo que cobraron las plataformas. `PlatformCollected` dice cuánto es.
 7. **Un aviso de folio repetido en lugar de un índice único.**
    - **Por qué no un índice:** los folios cortos se repiten (los 5 caracteres de Uber Eats, el número de recolección de DiDi). Un índice único rechazaría pedidos reales, y su choque caería en el `catch` de la llave de idempotencia de la venta, el 500 que la Fase 4G ya había cerrado.
@@ -138,7 +138,7 @@ Las decisiones fijas de la fase eran:
   - **Fuera del neto esperado:** el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por efectivo y las cancelaciones tardías de la plataforma (un pedido ya entregado que la plataforma cancela queda entregado y reembolsado). Mientras no haya liquidación, el neto esperado puede no coincidir con el depósito.
   - **Estimaciones:** un reembolso parcial compensa la comisión y las retenciones en proporción, y el redondeo por fila puede diferir por centavos del estado de cuenta. En SQL Server, cada parte (importe × pago / total) se calcula con escala 6 antes de sumarse. Con pagos completos el resultado es exacto; con pagos parciales, en un punto medio raro, puede diferir un centavo del cálculo con toda la precisión.
   - **Folio repetido:** el aviso no es una restricción. Dos capturas del mismo folio en el mismo instante pasan las dos; se ven en la búsqueda y en la lista por pedido, y se corrigen anulando una.
-  - **Tasas fiscales:** las de 2026 (ISR de 2.5 % e IVA retenido de 50 %; 20 % y 100 % sin RFC) vienen de publicaciones fiscales, no del Diario Oficial. Son configurables, y la pantalla pide confirmarlas con el contador. La clave 31 y la base de la comisión de Uber Eats (con o sin IVA) también faltan por confirmar.
+  - **Tasas fiscales:** las de 2026 (ISR de 2.5 % e IVA retenido de 50 %; 20 % y 100 % sin RFC) son las de la Ley de Ingresos de la Federación 2026 (publicada en el DOF en noviembre de 2025) y la Ley del IVA, pero dependen de cada caso (persona física o moral, RFC, pago definitivo) y cambian cada año. Son configurables, y la pantalla pide confirmarlas con el contador. La clave 31 y la base de la comisión de Uber Eats (con o sin IVA) también faltan por confirmar.
   - **Folio:** solo se guarda el folio corto. El ID largo de DiDi o de Uber para conciliar queda para la liquidación.
   - **Conteos:** `PaidOrders` del reporte por canal cuenta cada pedido una vez por periodo, como Inicio, y las ventas por sucursal lo cuentan por día. Ningún importe depende de esa diferencia.
 - **Reversibilidad:**
@@ -154,4 +154,3 @@ Las decisiones fijas de la fase eran:
 - **Integraciones** por la API de cada plataforma o por un integrador, en lugar de la captura manual.
 - **CFDI de retenciones** que emiten las plataformas.
 - **El ID largo del pedido** para conciliar.
-- **Búsqueda en el servidor** en la lista de pedidos de una plataforma, si hace falta conciliar muchos pedidos por folio. Hoy la búsqueda cubre la página cargada.

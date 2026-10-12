@@ -190,7 +190,8 @@ public class OrdersController : ControllerBase
         var result = await _mediator.Send(new CancelOrderCommand
         {
             OrderId = id,
-            Reason = request?.Reason
+            Reason = request?.Reason,
+            RestockItems = request?.RestockItems ?? true
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -323,6 +324,9 @@ public record UpdateOrderStatusRequest
 public record CancelOrderRequest
 {
     public string? Reason { get; init; }
+
+    /// <summary>Whether what the order consumed goes back to the stock; true when left out.</summary>
+    public bool? RestockItems { get; init; }
 }
 
 public record AddOrderPaymentRequest

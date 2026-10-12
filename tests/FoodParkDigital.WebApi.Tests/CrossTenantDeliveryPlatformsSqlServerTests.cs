@@ -92,6 +92,42 @@ public sealed class CrossTenantDeliveryPlatformsSqlServerTests
     }
 
     [SqlServerFact]
+    public async Task SaveWithoutATerm_ShouldBeRefused_InsteadOfSavingItAsZero()
+    {
+        var owner = await _api.SignUpAsync("plataformas-sin-comision", TwoBusinessesApi.FoodBusiness);
+
+        // No commission typed: nothing is saved with 0 % (a net from a contract nobody wrote would be false).
+        var first = await owner.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi", new
+        {
+            revision = 0,
+            isActive = true,
+            commissionBase = 0,
+            commissionVatPercent = 16m,
+            isrWithholdingPercent = 2.5m,
+            vatWithholdingPercent = 50m
+        });
+        var bare = await owner.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi", new { revision = 0, isActive = true });
+
+        foreach (var refused in new[] { first, bare })
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+            Assert.Equal(ApiErrorCodes.ValidationFailed, JsonDocument.Parse(await refused.Content.ReadAsStringAsync()).RootElement.GetProperty("code").GetString());
+        }
+        var rappi = Rappi(await owner.Client.GetFromJsonAsync<JsonElement>("/api/v1/delivery-platforms"));
+        Assert.Equal((false, 0), (rappi.GetProperty("isConfigured").GetBoolean(), rappi.GetProperty("revision").GetInt32()));
+
+        // A saved platform keeps its terms when a change leaves one out.
+        await TwoBusinessesApi.ReadAsync(await owner.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi", Terms(revision: 0, commission: 30m)));
+        var partial = await owner.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi", new { revision = 1, isActive = true, commissionPercent = 25m });
+        Assert.Equal(HttpStatusCode.BadRequest, partial.StatusCode);
+        rappi = Rappi(await owner.Client.GetFromJsonAsync<JsonElement>("/api/v1/delivery-platforms"));
+        Assert.Equal((30m, 16m, 1), (
+            rappi.GetProperty("commissionPercent").GetDecimal(),
+            rappi.GetProperty("commissionVatPercent").GetDecimal(),
+            rappi.GetProperty("revision").GetInt32()));
+    }
+
+    [SqlServerFact]
     public async Task Staff_ShouldNotReadOrChangeTheTerms_AndWhoSellsOrReadsReportsSeeOnlyWhichAreOn()
     {
         var owner = await _api.SignUpAsync("plataformas-equipo", TwoBusinessesApi.FoodBusiness);

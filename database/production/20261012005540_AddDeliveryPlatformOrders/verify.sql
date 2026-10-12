@@ -119,10 +119,11 @@ END;
 -- 7. Después de desplegar: días que guardó la versión anterior durante un swap que cruzó la
 --    medianoche, con lo que cobraron las plataformas en [OtherAmount]. Son los de negocios con pagos
 --    «Plataforma» con [PlatformAmount] 0, [OtherAmount] mayor que 0 y [ComputedAt] posterior al
---    primer pago «Plataforma» del negocio. Debe dar 0 filas. Si no, el repair.sql de
---    database/production/data-repair/20261012_PlatformAmountSnapshots borra esos días y el worker los
---    vuelve a calcular (un día con pagos del método «Otro» también aparece: recalcularlo no cambia
---    nada).
+--    primer pago «Plataforma» del negocio. También lista días bien calculados con pagos del método
+--    «Otro» y sin plataformas: no es un error. Para separar los que guardó la versión anterior y
+--    repararlos, usa database/production/data-repair/20261012_PlatformAmountSnapshots con la hora
+--    en que terminó el swap (DesplegadoEn); su repair.sql borra esos días y el worker los vuelve a
+--    calcular.
 IF COL_LENGTH(N'dbo.DailySalesSnapshots', N'PlatformAmount') IS NOT NULL
     EXEC(N'SELECT s.[TenantId] AS [Negocio], s.[BusinessDate] AS [Dia], s.[BranchId] AS [Sucursal], s.[OrderType] AS [TipoDePedido],
     s.[OtherAmount] AS [Otros], s.[ComputedAt] AS [Calculado]

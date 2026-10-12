@@ -193,17 +193,17 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
     - Si cobró la plataforma, la única acción es «Registrar pedido de Rappi · $350.00» (F9, «Registrar» en la barra del teléfono). Funciona sin caja abierta y sin `ChargeOrders`, sin abrir el cobro ni la caja.
     - Si cobra el negocio, la acción principal registra sin cobrar y, con permiso de cobro, «Cobrar ahora» abre el cobro sin propina. Antes revisa el folio.
     - En el teléfono, «Registrar» sin folio abre la hoja del ticket para mostrar el campo y su error.
-    - F9 hace la acción principal de lo que está en pantalla.
-  - **Catálogo:** con una plataforma elegida se carga sin el filtro del horario (`useSellCatalog` con `includeOutOfSchedule`, que pide `onlyAvailableNow: false`) y esa carga no se guarda como catálogo sin conexión. Una carga vieja se descarta, así que ir a una plataforma y volver rápido no deja el catálogo equivocado.
+    - F9 hace la acción principal de lo que está en pantalla, y nada mientras hay un diálogo de Vender abierto (cobrar, abrir la caja, una opción, un peso, ventas pendientes o la venta terminada): así no registra un pedido detrás del cobro de «Cobrar ahora».
+  - **Catálogo:** con una plataforma elegida se carga sin el filtro del horario (`useSellCatalog` con `includeOutOfSchedule`, que pide `onlyAvailableNow: false`) y esa carga no se guarda como catálogo sin conexión. Si falla por la red, tampoco cae al catálogo guardado (que trae el horario y quitaría del ticket lo que la app vendió fuera de él): marca el error, deja los productos y el ticket en pantalla y reintenta al volver la conexión. Una carga vieja se descarta, así que ir a una plataforma y volver rápido no deja el catálogo equivocado.
   - **Borrador:**
     - Guarda el canal, el folio y quién cobró. `describeSale` los incluye: otra plataforma, otro folio u otro cobrador es otra venta, con otra llave.
     - Al montarse, Vender lee el origen del borrador antes de la primera carga, así que un pedido de plataforma restaurado ya trae el catálogo completo y sus líneas no se pierden.
-    - Si la plataforma del borrador ya no está activa, o la lista no carga, vuelve a Mostrador.
+    - Si la plataforma del borrador ya no está activa, o la lista no carga, vuelve a Mostrador. Mientras la lista no se conoce (sin conexión espera), el selector ofrece la plataforma del borrador junto a Mostrador: el pedido se conserva tal cual y el cajero puede pasar la venta a Mostrador, y esa elección se respeta cuando el borrador se restaura.
   - **Cambios de origen:** elegir Mostrador limpia el folio y cambiar de plataforma lo conserva. Un cliente que llega por enlace (ficha o chat) regresa la venta a Mostrador, porque un pedido con teléfono nunca es de plataforma.
-  - **Sin conexión:** no se encola. Las acciones se desactivan con «Sin conexión: los pedidos de plataforma se registran cuando vuelva la conexión.».
+  - **Sin conexión:** no se encola. Las acciones se desactivan con «Sin conexión no se pueden registrar pedidos de plataforma ni se guardan solos: déjalo en pantalla y regístralo cuando vuelva la conexión.».
   - **Folio repetido:** ante un 409 `possible_duplicate_order`, `useConfirm` pregunta «¿Es otro pedido?». «Registrar de todos modos» reenvía la misma petición con la misma llave y `confirmPossibleDuplicate`. «Revisar» no guarda nada y deja la misma llave, así que un reintento vuelve a preguntar.
   - **Caja cerrada:** el aviso cambia solo si hay alguna plataforma activa.
-  - **Al terminar:** `CompletedSaleModal` dice «Pedido ORD-000123 de Rappi registrado», ofrece «Imprimir para la bolsa» y no ofrece «Enviar por WhatsApp», porque no hay teléfono.
+  - **Al terminar:** `CompletedSaleModal` dice «Pedido ORD-000123 de Rappi registrado», ofrece «Imprimir para la bolsa» y no ofrece «Enviar por WhatsApp», porque no hay teléfono. Si cobra el negocio y quedó saldo, a quien puede cobrar le dice «Cóbralo en Pedidos cuando el repartidor te pague.» y a quien no, «La caja lo cobra desde Pedidos cuando el repartidor pague.»; la ayuda «cóbralo en la caja como siempre» del folio sale solo a quien puede cobrar.
 - **Ticket** (`SaleTicket` y `buildTicketText`):
   - **Si cobró la plataforma:** sale en modo empaque, con «Rappi · Folio BC953», los productos sin precios ni totales (mientras no haya precio por plataforma, la bolsa no contradice la app) y «Pagado en la app de Rappi».
   - **Si cobra el negocio:** sale el ticket normal con la línea del folio y, si hay saldo, «Cobrar al repartidor: $245.00» en lugar de «Saldo pendiente».
@@ -214,10 +214,11 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
   - **Detalle:** dice «Origen» y «Cobró», sin teléfono, mesa ni «Ver ficha», y el pago dice «Plataforma · folio». El saldo de un pedido que cobra el negocio se cobra sin propina, y el diálogo del pago registrado tampoco ofrece WhatsApp.
   - **Aviso en vivo:** «Nuevo pedido ORD-000123 de Rappi (folio BC953)».
   - **Reembolsar** (`RefundOrderModal`): con un pago «Plataforma», el método queda fijo en «Plataforma», con su nota. En cualquier otro pedido no se ofrece.
+  - **Cancelar un pedido de plataforma sin cobrar:** después del motivo pregunta «¿Regresar los insumos al inventario?» («Sí, regresarlos» o «No, ya se preparó»); cerrarla manda `restockItems: false`.
   - **Anular un pedido de plataforma:** lleva su introducción y tres botones de motivo, que llenan el campo y se pueden editar. «Regresar los insumos al inventario» empieza apagado. La frase «Lo que cobró Rappi no sale de tu caja.» sale solo si el pedido tiene un pago «Plataforma»: en uno de DiDi que el repartidor pagó en efectivo, anular sí saca dinero de la caja.
 - **Cocina:** la tarjeta lleva `ChannelBadge`, el folio de la app en el `h4`, el `ORD-…` chico y «Bolsa: …» (oculto si es «Público en general»). Una comanda sin folio se ve como cualquier otra.
 - **Configuración › Negocio › Plataformas de reparto** (`DeliveryPlatformsCard`, después de los días especiales):
-  - **Filas:** una por plataforma, con su estado, el resumen de sus términos, el ejemplo que calcula el servidor y quién la cambió. «Configurar» o «Editar» llevan el nombre en su `aria-label`.
+  - **Filas:** una por plataforma, con su estado, el resumen de sus términos, el ejemplo que calcula el servidor con la tasa de IVA del negocio («Con un pedido de $1,000.00 con IVA al 16 % incluido…»; 8 % en la frontera) y quién la cambió. «Configurar» o «Editar» llevan el nombre en su `aria-label`.
   - **Formulario** (`DeliveryPlatformForm`): una plataforma nunca guardada abre con el interruptor encendido, porque configurarla es para recibir sus pedidos, y se puede apagar antes de guardar. El aviso al guardar depende del cambio: «quedó activa», «ya no aparece en Vender» o «guardada». Desactivar pide confirmación.
   - **Validación local:** solo para la experiencia de uso. Una comisión vacía dice «Escribe la comisión de tu contrato.» y un porcentaje que no se puede leer, el mensaje del servidor; acepta coma decimal. Los rangos los decide la API.
   - **Errores:** un 409 `concurrency_conflict` relee la lista, cierra el diálogo y lo dice en un aviso, como los días especiales. Los demás errores se quedan en el diálogo.
@@ -226,17 +227,18 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
     - **Controles:** Desde, Hasta, la sucursal y los atajos «Semana pasada» (lunes a domingo en los días del negocio) y «Este mes».
     - **Columnas:** las de plataforma dicen «—» en los demás canales. «Comisión e IVA» y «Retenciones» suman en centavos, solo para mostrarlas, dos cifras que el servidor ya redondeó.
     - **Notas:** la nota de lo que cobró el negocio y las notas al pie salen solo si hay filas de plataforma. Sin plataformas, la fila Total dice «—» en esas columnas.
-    - **«Ver pedidos»:** abre `DeliveryPlatformOrdersModal`, un `DataTable` paginado (20, 50 o 100). Su búsqueda filtra solo la página cargada, por folio normalizado o por `ORD`, porque el reporte no busca en el servidor.
+    - **«Ver pedidos»:** abre `DeliveryPlatformOrdersModal`, un `DataTable` paginado (20, 50 o 100). Su búsqueda va al servidor (`search` en `GET /reports/delivery-platform-orders`), por folio normalizado o por `ORD`, sobre todas las páginas y desde la primera.
   - **Ventas por sucursal:** la columna «Plataformas» sale solo si el periodo tiene ese dinero.
 - **Corte del día:**
   - **En pantalla:** «Plataformas» sale si se cobró algo por plataformas o si hubo devoluciones «Plataforma», así se ve también la anulación de hoy de un pedido de otro día.
-  - **Impreso y WhatsApp:** `getDailyCutRows` agrega «Plataformas (por liquidar)» y «Devuelto por plataformas», cada una solo si es mayor que 0.
+  - **En pantalla, el detalle:** «Lo cobró la plataforma: no entra a la caja».
+  - **Impreso y WhatsApp:** `getDailyCutRows` agrega «Cobrado por plataformas» y «Devuelto por plataformas», cada una solo si es mayor que 0. Ninguna dice «por liquidar»: mientras no haya liquidación, el sistema no sabe qué ya depositó cada plataforma.
   - El corte de un turno (`CashCutTicket`) no cambia.
-- **Inicio:** «Incluye $X que cobraron las plataformas, por liquidar.» sale debajo de «Cobrado» solo si es mayor que 0.
+- **Inicio:** «Incluye $X que cobraron las plataformas; no entra a la caja.» sale debajo de «Cobrado» solo si es mayor que 0.
 - **Escenas visuales:**
   - **Datos simulados por omisión:** sin plataformas activas, las tres sin configurar y las ventas por canal vacías.
   - **Escenas:** diez nuevas, con dieciséis capturas, con sus propias rutas simuladas, y doce de Mi negocio y Reportes que cambian a propósito por las tarjetas nuevas.
-  - **Primera visita:** 175,848 de los 176,000 B del presupuesto.
+  - **Primera visita:** 175,868 de los 176,000 B del presupuesto.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

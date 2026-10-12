@@ -19,6 +19,8 @@ interface CompletedSaleModalProps {
   /** The chat the sale was started from: the summary goes back to it. */
   chatOrigin: ChatOrigin | null;
   canChat: boolean;
+  /** Whoever cannot charge leaves what the courier pays to the cashier. */
+  canCharge: boolean;
   hasKitchen: boolean;
   onNewSale: () => void;
 }
@@ -28,7 +30,7 @@ interface CompletedSaleModalProps {
  * order of a delivery platform ends here too, charged or not: its ticket goes in the bag, and there is no phone to
  * send it to.
  */
-export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOrigin, canChat, hasKitchen, onNewSale }: CompletedSaleModalProps) {
+export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOrigin, canChat, canCharge, hasKitchen, onNewSale }: CompletedSaleModalProps) {
   const titleId = useId();
   const toast = useToast();
   const [sendingToChat, setSendingToChat] = useState(false);
@@ -84,7 +86,7 @@ export default function CompletedSaleModal({ sale, businessName, logoUrl, chatOr
             {leftToCollect && (
               <div className="alert alert-info small" role="status">
                 <i className="ri-e-bike-2-line me-1" aria-hidden="true"></i>
-                Cóbralo en Pedidos cuando el repartidor te pague.
+                {canCharge ? 'Cóbralo en Pedidos cuando el repartidor te pague.' : 'La caja lo cobra desde Pedidos cuando el repartidor pague.'}
               </div>
             )}
             {change > 0 && (

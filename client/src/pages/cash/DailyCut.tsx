@@ -63,7 +63,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
       ? [{
         label: 'Plataformas',
         value: platformTotal,
-        detail: 'Por liquidar: no entra a la caja',
+        detail: 'Lo cobró la plataforma: no entra a la caja',
         note: platformRefundsTotal > 0 ? `Devuelto: ${formatMoney(platformRefundsTotal)}` : undefined,
       }]
       : []),

@@ -156,6 +156,8 @@ export default function SellPage() {
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [measure, setMeasure] = useState<MeasureRequest | null>(null);
   const draftLoadedFor = useRef('');
+  // The cashier chose where the sale comes from before the saved sale was brought back (see syncCart).
+  const originChosen = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   /** Keeps the ticket in line with the catalog just loaded; the first load brings back the sale being built. */
@@ -173,6 +175,9 @@ export default function SellPage() {
           if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
           return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
         }));
+        // The cashier may have taken the sale to the counter before this first load (it waits without connection):
+        // that choice stays, as when going back to the counter at any other moment.
+        const toCounter = originChosen.current && isDeliveryPlatform(draft.channel);
         setDetails({
           customerName: draft.customerName,
           customerPhone: draft.customerPhone,
@@ -181,9 +186,10 @@ export default function SellPage() {
           channel: draft.channel,
           externalOrderNumber: draft.externalOrderNumber,
           collectedBy: draft.collectedBy,
+          ...(toCounter ? COUNTER_ORIGIN : {}),
         });
         // The name for the bag of a platform's order is in sight with its folio: behind the link there are only notes.
-        setShowDetails(isDeliveryPlatform(draft.channel)
+        setShowDetails(isDeliveryPlatform(draft.channel) && !toCounter
           ? Boolean(draft.orderNotes)
           : Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
         // A charge left on its way by a reload: the retry sends its key, unless the cart came back different.
@@ -221,6 +227,14 @@ export default function SellPage() {
   if (!platformChannels.isPending && isDeliveryPlatform(details.channel) && !activePlatforms.includes(details.channel)) {
     setDetails((current) => ({ ...current, ...COUNTER_ORIGIN }));
   }
+  // While the list is not known yet (without connection it waits), the platform of a sale brought back stays offered:
+  // its order is kept as it is, and the cashier can still take Vender back to the counter.
+  const offeredPlatforms = useMemo(
+    () => (platformChannels.isPending && activePlatforms.length === 0 && isDeliveryPlatform(details.channel)
+      ? [details.channel]
+      : activePlatforms),
+    [activePlatforms, details.channel, platformChannels.isPending],
+  );
   // The platform whose app took the order on screen; a chat is a WhatsApp order and a tab goes to a table.
   const platform: DeliveryPlatform | null = !tabTarget && !chatOrigin && isDeliveryPlatform(details.channel) ? details.channel : null;
 
@@ -358,6 +372,7 @@ export default function SellPage() {
 
   /** The counter or a platform: a counter sale carries no folio; another platform keeps the folio typed. */
   const changeChannel = (channel: OrderChannel) => {
+    if (draftLoadedFor.current !== tenantId) originChosen.current = true;
     setSaleError('');
     setFolioChecked(false);
     setDetails((current) => (isDeliveryPlatform(channel) ? { ...current, channel } : { ...current, ...COUNTER_ORIGIN }));
@@ -639,10 +654,13 @@ export default function SellPage() {
     else setCartOpenOnPhone(true);
   };
 
-  // F9 does the main action of the ticket: charge a counter sale, register an order of a platform.
+  // F9 does the main action of the ticket: charge a counter sale, register an order of a platform. Not while a dialog of
+  // Vender is open (charging, opening the drawer, an option, a weight): there it would register past what is on screen.
+  // The ticket's sheet on a phone is not one of them: it is the ticket itself.
+  const dialogOpen = chargeOpen || showOpenDrawer || choosing !== null || measure !== null || showPendingSales || completedSale !== null;
   const mainAction = useRef<() => void>(() => undefined);
   useEffect(() => {
-    mainAction.current = platform ? registerPlatformOrder : openCharge;
+    mainAction.current = dialogOpen ? () => undefined : platform ? registerPlatformOrder : openCharge;
   });
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -683,7 +701,7 @@ export default function SellPage() {
       onSendToKitchen={() => void sendToKitchen()}
       onOpenCharge={openCharge}
       onSaveUnpaid={() => void submitSale(null)}
-      activePlatforms={activePlatforms}
+      activePlatforms={offeredPlatforms}
       platform={platform}
       onChannelChange={changeChannel}
       folioError={folioError}
@@ -858,6 +876,7 @@ export default function SellPage() {
         logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
         chatOrigin={chatOrigin}
         canChat={access.chat}
+        canCharge={canCharge}
         hasKitchen={hasKitchen}
         onNewSale={startNewSale}
       />

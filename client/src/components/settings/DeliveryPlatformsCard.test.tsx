@@ -2,13 +2,14 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../../api/queries';
 import { apiRequest, type Schemas } from '../../api/typedClient';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OrderChannel, PlatformCommissionBase, type TenantProfileDto } from '../../types';
+import { setBusinessTimeZone } from '../../utils/dates';
 import DeliveryPlatformsCard from './DeliveryPlatformsCard';
 
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
@@ -39,8 +40,8 @@ function unconfigured(channel: OrderChannel): Platform {
   };
 }
 
-// DiDi's published example: $1,000 with IVA included, 30 % on the total, ISR 2.5 % and half the IVA withheld.
-const EXAMPLE = { orderTotal: 1000, commissionAndTax: 348, withheld: 90.52, expectedSettlement: 561.48 };
+// DiDi's method on $1,000 with IVA at 16 % included, 30 % on the total, ISR 2.5 % and half the IVA withheld.
+const EXAMPLE = { orderTotal: 1000, orderVatPercent: 16, commissionAndTax: 348, withheld: 90.52, expectedSettlement: 561.48 };
 
 function configured(channel: OrderChannel, patch: Partial<Platform> = {}): Platform {
   return {
@@ -101,6 +102,8 @@ async function row(name: string) {
 describe('DeliveryPlatformsCard', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // Who changed each platform and when is written in the business's time zone, whatever the machine's.
+    setBusinessTimeZone('America/Mexico_City');
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
     vi.mocked(useConfirm).mockReturnValue({ confirm, prompt: vi.fn() });
     vi.mocked(useTenant).mockReturnValue({
@@ -109,6 +112,10 @@ describe('DeliveryPlatformsCard', () => {
       isLoading: false,
       refreshTenant: vi.fn(),
     });
+  });
+
+  afterEach(() => {
+    setBusinessTimeZone(null);
   });
 
   it('lists the three platforms: the ones never saved to configure, the others with their terms and the example of the server', async () => {
@@ -131,7 +138,7 @@ describe('DeliveryPlatformsCard', () => {
     expect(within(uber).getByText('Activa')).toHaveClass('ta-chip', 'ta-chip-ready');
     expect(within(uber).getByText('Comisión 30 % sobre el total con IVA + IVA 16 % · Retiene ISR 2.5 % e IVA 50 %')).toBeInTheDocument();
     expect(within(uber).getByText(
-      'Con un pedido de $1,000.00 cobrado por Uber Eats: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48.',
+      'Con un pedido de $1,000.00 con IVA al 16 % incluido cobrado por Uber Eats: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48.',
     )).toBeInTheDocument();
     expect(within(uber).getByText(/^Cambió ana@cafelaesquina\.mx el 11 oct/)).toBeInTheDocument();
     expect(within(uber).getByRole('button', { name: 'Editar Uber Eats' })).toHaveTextContent('Editar');
@@ -176,7 +183,8 @@ describe('DeliveryPlatformsCard', () => {
     expect(within(dialog).getByRole('heading', { name: 'Retenciones cuando cobra la plataforma' })).toBeInTheDocument();
     expect(within(dialog).getByLabelText('ISR (%)')).toHaveValue('2.5');
     expect(within(dialog).getByLabelText('IVA retenido (% del IVA del pedido)')).toHaveValue('50');
-    expect(within(dialog).getByText(/Las tasas de retención de 2026 vienen de publicaciones fiscales/)).toHaveClass('alert', 'alert-warning');
+    expect(within(dialog).getByText(/^Las tasas por omisión son las de 2026 \(Ley de Ingresos de la Federación y Ley del IVA\)/))
+      .toHaveClass('alert', 'alert-warning');
     expect(within(dialog).getByText(/Por ahora los pedidos usan los precios de tu catálogo/)).toHaveClass('alert', 'alert-light', 'border');
     // One main action in the dialog.
     expect(within(dialog).getByRole('button', { name: 'Guardar' })).toHaveClass('btn-primary');

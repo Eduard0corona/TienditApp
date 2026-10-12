@@ -44,6 +44,8 @@ public class DeliveryPlatformDto
 public class PlatformSettlementExampleDto
 {
     public decimal OrderTotal { get; set; }
+    /// <summary>The IVA included in the example order: the business's own rate.</summary>
+    public decimal OrderVatPercent { get; set; }
     /// <summary>The cost of the channel: the commission and its IVA.</summary>
     public decimal CommissionAndTax { get; set; }
     /// <summary>ISR and IVA withheld: payments on account of the business's taxes, not a cost.</summary>

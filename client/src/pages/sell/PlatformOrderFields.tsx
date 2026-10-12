@@ -15,13 +15,15 @@ interface PlatformOrderFieldsProps {
   /** What is wrong with the folio, once there is something to say (the server checks it again). */
   folioError: string;
   disabled: boolean;
+  /** Whoever cannot charge gets no «charge it» help: under the totals the ticket says the cashier does. */
+  canCharge: boolean;
 }
 
 /**
  * What an order of a delivery platform needs, in sight without opening anything: the folio of its app (focused as the
  * platform is chosen, with the keyboard that platform's folio takes), who charged it and the name for the bag.
  */
-export default function PlatformOrderFields({ platform, details, onChange, folioError, disabled }: PlatformOrderFieldsProps) {
+export default function PlatformOrderFields({ platform, details, onChange, folioError, disabled, canCharge }: PlatformOrderFieldsProps) {
   // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
   const id = useId();
   const collectedLabelId = `${id}-collected`;
@@ -79,7 +81,7 @@ export default function PlatformOrderFields({ platform, details, onChange, folio
             </button>
           ))}
         </div>
-        {businessCollects && (
+        {businessCollects && canCharge && (
           <div className="form-text">El repartidor te paga al recoger: cóbralo en la caja como siempre.</div>
         )}
       </div>

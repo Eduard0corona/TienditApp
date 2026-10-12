@@ -111,12 +111,16 @@ export function describeTerms(platform: PlatformSetting): string {
     + ` · Retiene ISR ${formatPercent(platform.isrWithholdingPercent)} e IVA ${formatPercent(platform.vatWithholdingPercent)}`;
 }
 
-/** The server's example: "Con un pedido de $1,000.00 cobrado por Rappi: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48." */
+/**
+ * The server's example, at the business's rate of IVA: "Con un pedido de $1,000.00 con IVA al 16 % incluido cobrado por
+ * Rappi: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48."
+ */
 export function describeExample(platform: PlatformSetting): string | null {
   const example = platform.example;
   if (!example) return null;
-  return `Con un pedido de ${formatMoney(example.orderTotal)} cobrado por ${platformName(platform.channel)}: comisión e IVA `
-    + `${formatMoney(example.commissionAndTax)}, retenciones ${formatMoney(example.withheld)}, te deposita ${formatMoney(example.expectedSettlement)}.`;
+  return `Con un pedido de ${formatMoney(example.orderTotal)} con IVA al ${formatPercent(example.orderVatPercent)} incluido `
+    + `cobrado por ${platformName(platform.channel)}: comisión e IVA ${formatMoney(example.commissionAndTax)}, `
+    + `retenciones ${formatMoney(example.withheld)}, te deposita ${formatMoney(example.expectedSettlement)}.`;
 }
 
 /** "Cambió mariana.ortiz@cafelaesquina.mx el 11 oct 2026", in the business's time zone. */

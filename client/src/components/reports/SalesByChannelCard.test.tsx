@@ -169,7 +169,7 @@ describe('SalesByChannelCard', () => {
     expect(await screen.findByText('De DiDi Food cobraste tú $1,200.00: su comisión e IVA se descuentan de tu depósito.')).toBeInTheDocument();
     expect(screen.queryByText(/De Rappi cobraste tú/)).not.toBeInTheDocument();
     expect(screen.getByText(/^El neto esperado es lo que la plataforma debería depositarte/)).toBeInTheDocument();
-    expect(screen.getByText(/^Las retenciones son pagos a cuenta de tus impuestos, no un costo\./)).toHaveTextContent(
+    expect(screen.getByText(/^Por lo general las retenciones son pagos a cuenta de tus impuestos, no un costo\./)).toHaveTextContent(
       'la de Uber Eats va del lunes a las 4:00 al lunes siguiente a las 3:59',
     );
     // No main action of its own: the page already has one.
@@ -252,6 +252,24 @@ describe('SalesByChannelCard', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cerrar' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('searches a folio of the statement on the server, over every page of the platform', async () => {
+    vi.mocked(reportsApi.getDeliveryPlatformOrders).mockImplementation((async (query: { search?: string }) => (query.search
+      ? page([order({ orderId: 'o9', orderNumber: 'ORD-000099', externalOrderNumber: 'BC953' })])
+      : { ...page([order({})]), totalCount: 57 })) as never);
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Ver pedidos de Rappi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Pedidos de Rappi · 1 al 11 oct.' });
+    await within(dialog).findByRole('cell', { name: '152390' });
+    await userEvent.type(within(dialog).getByRole('searchbox'), '#bc 953');
+
+    // Not only in the page on screen: the server finds it wherever it is, from the first page.
+    await waitFor(() => expect(reportsApi.getDeliveryPlatformOrders).toHaveBeenLastCalledWith(
+      expect.objectContaining({ channel: OrderChannel.Rappi, search: '#bc 953', pageNumber: 1 }), expect.anything(),
+    ));
+    expect(await within(dialog).findByRole('cell', { name: 'BC953' })).toBeInTheDocument();
   });
 
   it('names who charged each order and says when a platform had none in the period', async () => {

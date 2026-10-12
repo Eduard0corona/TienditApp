@@ -62,7 +62,7 @@ function platformSale(channel: OrderChannel, folio: string, collectedBy: Platfor
   };
 }
 
-function renderModal(sale: CompletedSale) {
+function renderModal(sale: CompletedSale, canCharge = true) {
   return render(
     <MemoryRouter>
       <CompletedSaleModal
@@ -70,6 +70,7 @@ function renderModal(sale: CompletedSale) {
         businessName="Cocina Lupita"
         chatOrigin={null}
         canChat
+        canCharge={canCharge}
         hasKitchen
         onNewSale={vi.fn()}
       />
@@ -113,6 +114,14 @@ describe('CompletedSaleModal', () => {
     const dialog = screen.getByRole('dialog', { name: 'Pedido ORD-000124 de DiDi Food registrado' });
     expect(within(dialog).getByText('Cóbralo en Pedidos cuando el repartidor te pague.')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Ticket ORD-000124')).toHaveTextContent('Cobrar al repartidor$350.00');
+  });
+
+  it('leaves charging the courier to the cashier when whoever registered it cannot charge', () => {
+    renderModal(platformSale(OrderChannel.DidiFood, '12', PlatformCollectedBy.Business, 350), false);
+
+    const dialog = screen.getByRole('dialog', { name: 'Pedido ORD-000124 de DiDi Food registrado' });
+    expect(within(dialog).getByText('La caja lo cobra desde Pedidos cuando el repartidor pague.')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Cóbralo en Pedidos cuando el repartidor te pague.')).not.toBeInTheDocument();
   });
 
   it('says an order of DiDi Food the courier already paid was charged', () => {

@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders;
@@ -64,7 +65,10 @@ public class GetDeliveryPlatformChannelsQueryHandler : IRequestHandler<GetDelive
 /// <summary>The list of the screen, as the query and every save answer it.</summary>
 internal static class DeliveryPlatformsReader
 {
-    /// <summary>The order of the example: $1,000 with IVA at 16 % included, as in DiDi's published example.</summary>
+    /// <summary>
+    /// The order of the example: $1,000 with IVA included, as in DiDi's published example, at the business's own rate of
+    /// IVA (16 %, or 8 % at the border), since the IVA withheld depends on it.
+    /// </summary>
     public const decimal ExampleOrderTotal = 1000m;
 
     /// <summary>
@@ -77,16 +81,17 @@ internal static class DeliveryPlatformsReader
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .ToListAsync(cancellationToken);
+        var vatPercent = (await TenantSalesSettings.ReadAsync(context, tenantId, cancellationToken)).DefaultTaxRate;
 
         return new DeliveryPlatformsDto
         {
             Platforms = OrderChannelRules.DeliveryPlatforms
-                .Select(channel => ToDto(channel, saved.FirstOrDefault(x => x.Channel == channel)))
+                .Select(channel => ToDto(channel, saved.FirstOrDefault(x => x.Channel == channel), vatPercent))
                 .ToList()
         };
     }
 
-    private static DeliveryPlatformDto ToDto(OrderChannel channel, DeliveryPlatformSetting? setting)
+    private static DeliveryPlatformDto ToDto(OrderChannel channel, DeliveryPlatformSetting? setting, decimal vatPercent)
     {
         if (setting is null)
         {
@@ -114,12 +119,12 @@ internal static class DeliveryPlatformsReader
             Revision = setting.Revision,
             ChangedAt = updated ? setting.UpdatedAt : setting.CreatedAt,
             ChangedBy = updated ? setting.UpdatedBy : setting.CreatedBy,
-            Example = Example(setting)
+            Example = Example(setting, vatPercent)
         };
     }
 
     /// <summary>What the terms give on the example order charged by the platform, calculated by the domain.</summary>
-    private static PlatformSettlementExampleDto? Example(DeliveryPlatformSetting setting)
+    private static PlatformSettlementExampleDto? Example(DeliveryPlatformSetting setting, decimal vatPercent)
     {
         PlatformTerms terms;
         try
@@ -132,13 +137,14 @@ internal static class DeliveryPlatformsReader
             return null;
         }
 
-        var taxLines = OrderTaxCalculator.Calculate(pricesIncludeTax: true, [new TaxableAmount(ExampleOrderTotal, VatRate.General)]);
+        var taxLines = OrderTaxCalculator.Calculate(pricesIncludeTax: true, [new TaxableAmount(ExampleOrderTotal, VatRate.Of(vatPercent))]);
         var subTotal = taxLines.Sum(line => line.TaxableBase);
         var total = taxLines.Sum(line => line.Total);
         var amounts = PlatformOrderCalculator.Calculate(terms, PlatformCollectedBy.Platform, subTotal, total, taxLines);
         return new PlatformSettlementExampleDto
         {
             OrderTotal = total,
+            OrderVatPercent = vatPercent,
             CommissionAndTax = amounts.CommissionAndTax,
             Withheld = amounts.Withheld,
             ExpectedSettlement = amounts.ExpectedSettlement

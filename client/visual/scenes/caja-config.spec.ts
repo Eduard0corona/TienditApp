@@ -287,7 +287,7 @@ test.describe('Caja', () => {
 
     test('caja, corte del día con plataforma', async ({ page }) => {
       await open(page, '/cash');
-      await openCashTab(page, 'Corte del día', page.getByText('Por liquidar: no entra a la caja'));
+      await openCashTab(page, 'Corte del día', page.getByText('Lo cobró la plataforma: no entra a la caja'));
       await expect(page.getByText('Devuelto: $350.00')).toBeVisible();
       await snap(page, 'caja-corte-del-dia-plataforma');
 
@@ -396,7 +396,7 @@ test.describe('Plataformas de reparto', () => {
     await open(page, '/settings/business');
     const card = page.getByRole('region', { name: 'Plataformas de reparto' });
     await expect(card.getByText(
-      'Con un pedido de $1,000.00 cobrado por Rappi: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48.',
+      'Con un pedido de $1,000.00 con IVA al 16 % incluido cobrado por Rappi: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48.',
     )).toBeVisible();
     await snapElement(card, 'negocio-plataformas');
 

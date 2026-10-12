@@ -213,9 +213,9 @@ export default function Dashboard() {
               <div className="small text-muted">
                 {loading ? '' : `${metrics?.paidOrders ?? 0} ${metrics?.paidOrders === 1 ? 'pedido pagado' : 'pedidos pagados'}`}
               </div>
-              {/* Charged in the delivery platforms' apps: in "Cobrado", but in no drawer until each platform settles. */}
+              {/* Charged in the delivery platforms' apps: in "Cobrado", but in no drawer (each platform deposits it). */}
               {!loading && platformCollected > 0 && (
-                <div className="small text-muted">Incluye {formatMoney(platformCollected)} que cobraron las plataformas, por liquidar.</div>
+                <div className="small text-muted">Incluye {formatMoney(platformCollected)} que cobraron las plataformas; no entra a la caja.</div>
               )}
             </div>
           </div>

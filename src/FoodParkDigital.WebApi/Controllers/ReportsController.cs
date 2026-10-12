@@ -82,6 +82,7 @@ public class ReportsController : ControllerBase
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
         [FromQuery] Guid? branchId,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = GetDeliveryPlatformOrdersQuery.DefaultPageSize,
         CancellationToken cancellationToken = default)
@@ -92,6 +93,7 @@ public class ReportsController : ControllerBase
             From = from,
             To = to,
             BranchId = branchId,
+            Search = search,
             PageNumber = pageNumber,
             PageSize = pageSize
         }, cancellationToken);

@@ -181,7 +181,7 @@ export default function SalesByChannelCard() {
                   retenciones. Si es negativo, le debes por pedidos que cobraste tú.
                 </p>
                 <p className="mb-0">
-                  Las retenciones son pagos a cuenta de tus impuestos, no un costo. Compáralo con el estado de cuenta semanal de
+                  Por lo general las retenciones son pagos a cuenta de tus impuestos, no un costo. Compáralo con el estado de cuenta semanal de
                   cada plataforma (la de Uber Eats va del lunes a las 4:00 al lunes siguiente a las 3:59); puede variar por
                   centavos, promociones o cancelaciones que la plataforma ajuste en su liquidación.
                 </p>

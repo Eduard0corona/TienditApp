@@ -16,7 +16,9 @@ const realtime = vi.hoisted(() => ({ created: undefined as ((payload: OrderCreat
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
-vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ prompt: vi.fn(), confirm: vi.fn() }) }));
+// What the person answers in the dialogs of the page (the reason to cancel, a yes or no).
+const dialogs = vi.hoisted(() => ({ prompt: vi.fn(), confirm: vi.fn() }));
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => dialogs }));
 vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('../../hooks/useArrivalChime', () => ({ useArrivalChime: () => ({ enabled: false, toggle: vi.fn(), play: vi.fn() }) }));
 vi.mock('../../hooks/useOrderSignalR', () => {
@@ -31,7 +33,7 @@ vi.mock('../../hooks/useOrderSignalR', () => {
     }),
   };
 });
-vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn() } }));
+vi.mock('../../api/ordersApi', () => ({ ordersApi: { getAll: vi.fn(), getById: vi.fn(), cancel: vi.fn() } }));
 // The delivery platforms of the business (GET /delivery-platforms/channels) come through the typed client.
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
@@ -226,6 +228,45 @@ describe('OrdersList', () => {
     const counter = screen.getByText('ORD-000125').closest('tr') as HTMLElement;
     await user.click(within(counter).getByRole('button', { name: 'Cobrar' }));
     expect(within(await screen.findByRole('dialog', { name: /Cobrar ORD-000125/ })).getByRole('radiogroup', { name: 'Propina' })).toBeInTheDocument();
+  });
+
+  it('asks whether the supplies go back when cancelling an order of a platform, and leaves them used by default', async () => {
+    const user = userEvent.setup();
+    const didi = rappiOrder({
+      channel: OrderChannel.DidiFood, status: 1, paidAmount: 0, balance: 350, payments: [], canCancel: true,
+      platformOrder: { externalOrderNumber: '12', collectedBy: PlatformCollectedBy.Business },
+    });
+    renderOrders(TenantCapability.Food, [didi, order({ id: 'c1', orderNumber: 'ORD-000125', status: 1, canCancel: true, paidAmount: 0, balance: 120 })]);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: didi } as Awaited<ReturnType<typeof ordersApi.getById>>);
+    vi.mocked(ordersApi.cancel).mockResolvedValue({} as Awaited<ReturnType<typeof ordersApi.cancel>>);
+    dialogs.prompt.mockResolvedValue('DiDi lo canceló');
+    dialogs.confirm.mockResolvedValue(false);
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000123' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000123' })).getByRole('button', { name: 'Cancelar pedido' }));
+
+    // The food is usually cooked when the app cancels: closing that question keeps the supplies as used.
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('r1', 'DiDi lo canceló', false));
+    expect(dialogs.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      title: '¿Regresar los insumos al inventario?',
+      confirmLabel: 'Sí, regresarlos',
+      cancelLabel: 'No, ya se preparó',
+    }));
+  });
+
+  it('cancels a counter order as always, without asking about the supplies', async () => {
+    const user = userEvent.setup();
+    const counter = order({ id: 'c1', orderNumber: 'ORD-000125', status: 1, canCancel: true, paidAmount: 0, balance: 120, items: [], payments: [], refunds: [], statusHistory: [], servicePieces: [], allowedTransitions: [], taxBreakdown: [] });
+    renderOrders(TenantCapability.Food, [counter]);
+    vi.mocked(ordersApi.getById).mockResolvedValue({ data: counter } as Awaited<ReturnType<typeof ordersApi.getById>>);
+    vi.mocked(ordersApi.cancel).mockResolvedValue({} as Awaited<ReturnType<typeof ordersApi.cancel>>);
+    dialogs.prompt.mockResolvedValue('');
+
+    await user.click(await screen.findByRole('button', { name: 'ORD-000125' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Pedido ORD-000125' })).getByRole('button', { name: 'Cancelar pedido' }));
+
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith('c1', undefined, undefined));
+    expect(dialogs.confirm).not.toHaveBeenCalled();
   });
 
   it('announces a new order of a platform by its platform and folio', async () => {

@@ -7,7 +7,7 @@ import DataTable, { type DataTableColumn } from '../common/DataTable';
 import StatusChip from '../common/StatusChip';
 import { OrderStatus } from '../../types';
 import { formatCalendarDate, formatShortDateTime } from '../../utils/dates';
-import { getPlatformName, normalizePlatformFolio, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
+import { getPlatformName, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { getCollectedByLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 
@@ -59,11 +59,13 @@ export default function DeliveryPlatformOrdersModal({ platform, from, to, branch
   const titleId = useId();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  // Searched on the server, over every page: the folio of the statement may be on any of them.
+  const [search, setSearch] = useState('');
   const name = getPlatformName(platform);
   const orders = useQuery({
-    queryKey: ['reports', 'delivery-platform-orders', platform, from, to, branchId, page, pageSize],
+    queryKey: ['reports', 'delivery-platform-orders', platform, from, to, branchId, search, page, pageSize],
     queryFn: ({ signal }) => reportsApi.getDeliveryPlatformOrders(
-      { channel: platform, from, to, branchId: branchId || undefined, pageNumber: page, pageSize },
+      { channel: platform, from, to, branchId: branchId || undefined, search: search || undefined, pageNumber: page, pageSize },
       signal,
     ),
     // Another page keeps this one on screen until it arrives.
@@ -90,8 +92,6 @@ export default function DeliveryPlatformOrdersModal({ platform, from, to, branch
             loading={orders.isPending}
             emptyMessage={`Sin pedidos de ${name} en el periodo.`}
             searchPlaceholder="Buscar folio o pedido"
-            searchFilter={(order, search) =>
-              order.externalOrderNumber.includes(normalizePlatformFolio(search)) || order.orderNumber.toLowerCase().includes(search)}
             pageSizeOptions={PAGE_SIZES}
             serverSide={{
               totalCount: orders.data?.totalCount ?? 0,
@@ -100,6 +100,10 @@ export default function DeliveryPlatformOrdersModal({ platform, from, to, branch
               onPageChange: setPage,
               onPageSizeChange: (size) => {
                 setPageSize(size);
+                setPage(1);
+              },
+              onSearchChange: (term) => {
+                setSearch(term);
                 setPage(1);
               },
             }}

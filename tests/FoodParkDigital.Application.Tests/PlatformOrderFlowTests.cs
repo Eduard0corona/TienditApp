@@ -154,6 +154,56 @@ public class PlatformOrderFlowTests
     }
 
     [Fact]
+    public async Task OrderTheBusinessCollects_CancelledUnpaid_ShouldKeepWhatWasCooked_UnlessAskedToGiveItBack()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _, tacos) = await ShopAsync(fixture, TenantCapability.Food | TenantCapability.Inventory);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.DidiFood);
+        var tortilla = new SupplyItem(tenant.Id, "Tortilla", UnitType.Unit, defaultCost: 1m);
+        var location = await fixture.Context.InventoryLocations.SingleAsync();
+        var stock = new InventoryStock(tenant.Id, tortilla.Id, location.Id);
+        stock.ApplyMovement(20m, 1m, SalesTestFixture.Now);
+        fixture.Context.SupplyItems.Add(tortilla);
+        fixture.Context.InventoryStocks.Add(stock);
+        fixture.Context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(tenant.Id, tacos.Id, tortilla.Id, 2m));
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context), NullLogger<OrderInventoryService>.Instance);
+        async Task<decimal> OnHand() => (await fixture.Context.InventoryStocks.AsNoTracking().SingleAsync()).OnHandQuantity;
+        async Task<Guid> RegisterUnpaid(string folio)
+        {
+            var saved = await fixture.CreateOrderHandler(inventory).Handle(
+                SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, folio, tacos.Id, quantity: 3, collectedBy: PlatformCollectedBy.Business),
+                CancellationToken.None);
+            fixture.Context.ChangeTracker.Clear();
+            Assert.True(saved.IsSuccess, saved.Error);
+            Assert.Empty(saved.Value.Payments);
+            return saved.Value.Id;
+        }
+        Task<Result> Cancel(Guid orderId, bool? restock) => new CancelOrderCommandHandler(fixture.Context, fixture.CurrentUser, inventory)
+            .Handle(restock is { } value
+                ? new CancelOrderCommand { OrderId = orderId, Reason = "DiDi lo canceló", RestockItems = value }
+                : new CancelOrderCommand { OrderId = orderId, Reason = "DiDi lo canceló" }, CancellationToken.None);
+
+        // Three tacos take six tortillas as the order is registered.
+        var cooked = await RegisterUnpaid("12");
+        Assert.Equal(14m, await OnHand());
+
+        // DiDi cancelled it once the dishes were cooked: the tortillas used stay used.
+        Assert.True((await Cancel(cooked, restock: false)).IsSuccess);
+        fixture.Context.ChangeTracker.Clear();
+        Assert.Equal(14m, await OnHand());
+        Assert.Equal(OrderStatus.Cancelled, (await fixture.Context.Orders.AsNoTracking().SingleAsync(o => o.Id == cooked)).Status);
+
+        // Left out, the supplies go back as they always did.
+        var notCooked = await RegisterUnpaid("13");
+        Assert.Equal(8m, await OnHand());
+        Assert.True((await Cancel(notCooked, restock: null)).IsSuccess);
+        fixture.Context.ChangeTracker.Clear();
+        Assert.Equal(14m, await OnHand());
+    }
+
+    [Fact]
     public async Task PlatformNotActiveInTheBusiness_ShouldBeRefused_WithoutSavingAnything()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -224,7 +274,8 @@ public class PlatformOrderFlowTests
             "sin folio" => rappi with { ExternalOrderNumber = "   " },
             "folio con acento" => rappi with { ExternalOrderNumber = "ÁB1" },
             "folio de 31" => rappi with { ExternalOrderNumber = new string('7', 31) },
-            "más de 60 caracteres" => rappi with { ExternalOrderNumber = string.Concat(Enumerable.Repeat("7 ", 31)) },
+            // 61 characters typed, a valid folio once its spaces go: only the limit on what is typed refuses it.
+            "más de 60 caracteres" => rappi with { ExternalOrderNumber = "BC953" + new string(' ', 56) },
             _ => throw new ArgumentOutOfRangeException(nameof(what), what, null)
         };
 
@@ -248,8 +299,10 @@ public class PlatformOrderFlowTests
             Payments = [Cash(245m) with { CashReceived = 300m }]
         };
         var confirmed = rappi with { ConfirmPossibleDuplicate = true, CollectedBy = PlatformCollectedBy.Platform };
+        // 60 characters typed is still within the limit.
+        var padded = rappi with { ExternalOrderNumber = "BC953" + new string(' ', 55) };
 
-        Assert.All(new[] { rappi, didi, confirmed }, command =>
+        Assert.All(new[] { rappi, didi, confirmed, padded }, command =>
         {
             var result = validator.Validate(command);
             Assert.True(result.IsValid, string.Join(" ", result.Errors));

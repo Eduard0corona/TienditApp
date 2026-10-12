@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Reports.ReadModels;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
@@ -29,6 +30,8 @@ public record GetDeliveryPlatformOrdersQuery : IRequest<PaginatedList<DeliveryPl
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }
     public Guid? BranchId { get; init; }
+    /// <summary>A folio of the app (written as it comes: «#bc 953» finds BC953) or a folio of TienditApp (ORD-…).</summary>
+    public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = DefaultPageSize;
 }
@@ -42,6 +45,7 @@ public class GetDeliveryPlatformOrdersQueryValidator : AbstractValidator<GetDeli
         RuleFor(x => x.Channel)
             .Must(channel => channel is { } value && OrderChannelRules.IsDeliveryPlatform(value))
             .WithMessage(ChooseAPlatformMessage);
+        RuleFor(x => x.Search).MaximumLength(100);
         RuleFor(x => x.PageNumber).GreaterThanOrEqualTo(1);
         RuleFor(x => x.PageSize).InclusiveBetween(1, GetDeliveryPlatformOrdersQuery.MaxPageSize);
         this.ValidateTheRange();
@@ -101,6 +105,16 @@ public class GetDeliveryPlatformOrdersQueryHandler
             select new { detail, order };
         if (request.BranchId is { } branchId)
             orders = orders.Where(x => x.order.BranchId == branchId);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            // On the server, over every page: the folio of the statement may be on any of them. The folio of the app is
+            // stored normalized and the one of TienditApp is lower-cased on both sides, so neither depends on the collation.
+            var term = request.Search.Trim().ToLowerInvariant();
+            var folioTerm = PlatformOrderNumber.NormalizeForSearch(request.Search);
+            orders = orders.Where(x =>
+                (folioTerm != "" && x.detail.ExternalOrderNumber.Contains(folioTerm))
+                || x.order.OrderNumber.ToLower().Contains(term));
+        }
 
         var rows = orders
             .OrderByDescending(x => x.detail.RegisteredAt)

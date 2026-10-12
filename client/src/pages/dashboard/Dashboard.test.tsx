@@ -70,7 +70,7 @@ describe('Dashboard', () => {
     } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
     renderDashboard();
 
-    const line = await screen.findByText('Incluye $350.00 que cobraron las plataformas, por liquidar.');
+    const line = await screen.findByText('Incluye $350.00 que cobraron las plataformas; no entra a la caja.');
     expect(line).toHaveClass('small', 'text-muted');
     // One line more under "Cobrado", which keeps its meaning: everything charged, the platforms included.
     expect(line.closest('.card-body')).toHaveTextContent('Cobrado$1,600.008 pedidos pagados');

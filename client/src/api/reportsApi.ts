@@ -32,7 +32,7 @@ export const reportsApi = {
 
   /** The orders of one delivery platform registered in the range, the newest first, with the amounts each one copied. */
   getDeliveryPlatformOrders: (
-    query: ReportRangeQuery & { channel: OrderChannel; pageNumber: number; pageSize: number },
+    query: ReportRangeQuery & { channel: OrderChannel; search?: string; pageNumber: number; pageSize: number },
     signal?: AbortSignal,
   ) => apiRequest('get', '/api/v1/reports/delivery-platform-orders', { query, signal }),
 };

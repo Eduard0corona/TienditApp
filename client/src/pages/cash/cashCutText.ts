@@ -23,7 +23,7 @@ export function getDailyCutRows(cut: DailyCashCutDto): Array<[label: string, amo
   // What Rappi, Uber Eats or DiDi Food charged in their apps is part of "Cobrado" but in no drawer: the platform settles it.
   const platformTotal = cut.platformTotal ?? 0;
   const platformRefundsTotal = cut.platformRefundsTotal ?? 0;
-  if (platformTotal > 0) rows.push(['Plataformas (por liquidar)', platformTotal]);
+  if (platformTotal > 0) rows.push(['Cobrado por plataformas', platformTotal]);
   if (platformRefundsTotal > 0) rows.push(['Devuelto por plataformas', platformRefundsTotal]);
   rows.push(['Neto en efectivo', cut.netCashOnlyFlow]);
   // Tips are for the team: apart from what was sold.

@@ -63,7 +63,7 @@ describe('DailyCut', () => {
     render(<DailyCut branches={[]} />);
 
     const platforms = await figure('Plataformas');
-    expect(lines(platforms)).toBe('Plataformas $350.00 Por liquidar: no entra a la caja');
+    expect(lines(platforms)).toBe('Plataformas $350.00 Lo cobró la plataforma: no entra a la caja');
     expect(within(platforms).queryByText(/Devuelto/)).not.toBeInTheDocument();
     // "Cobrado" includes it; the cash in the drawers does not.
     expect(lines(await figure('Cobrado'))).toBe('Cobrado $1,600.00 13 pagos');
@@ -74,14 +74,14 @@ describe('DailyCut', () => {
     serve(cut({ platformRefundsTotal: 350 }));
     render(<DailyCut branches={[]} />);
 
-    expect(lines(await figure('Plataformas'))).toBe('Plataformas $350.00 Por liquidar: no entra a la caja Devuelto: $350.00');
+    expect(lines(await figure('Plataformas'))).toBe('Plataformas $350.00 Lo cobró la plataforma: no entra a la caja Devuelto: $350.00');
   });
 
   it('shows the platforms when they only gave something back that day', async () => {
     serve(cut({ salesPaymentsTotal: 1250, salesPaymentsCount: 12, platformTotal: 0, platformPaymentsCount: 0, platformRefundsTotal: 350 }));
     render(<DailyCut branches={[]} />);
 
-    expect(lines(await figure('Plataformas'))).toBe('Plataformas $0.00 Por liquidar: no entra a la caja Devuelto: $350.00');
+    expect(lines(await figure('Plataformas'))).toBe('Plataformas $0.00 Lo cobró la plataforma: no entra a la caja Devuelto: $350.00');
   });
 
   it('leaves the platforms out of a day without them', async () => {
@@ -90,7 +90,7 @@ describe('DailyCut', () => {
 
     await figure('Cobrado');
     expect(screen.queryByText('Plataformas')).not.toBeInTheDocument();
-    expect(screen.queryByText('Por liquidar: no entra a la caja')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lo cobró la plataforma: no entra a la caja')).not.toBeInTheDocument();
   });
 
   it('prints the platform rows of the cut, so the methods add up to what was charged', async () => {
@@ -112,7 +112,7 @@ describe('DailyCut', () => {
       'Tarjeta $400.00',
       'Transferencia $50.00',
       'Otros $0.00',
-      'Plataformas (por liquidar) $350.00',
+      'Cobrado por plataformas $350.00',
       'Devuelto por plataformas $120.00',
       'Neto en efectivo $780.00',
     ]);

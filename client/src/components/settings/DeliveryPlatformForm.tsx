@@ -144,8 +144,10 @@ export default function DeliveryPlatformForm({ platform, draft, problem, saving,
             </div>
 
             <div className="alert alert-warning small mt-3 mb-2">
-              Las tasas de retención de 2026 vienen de publicaciones fiscales, no del Diario Oficial. Confírmalas con tu contador
-              antes de usar estas cifras para declarar. Las retenciones son pagos a cuenta de tus impuestos, no un costo.
+              Las tasas por omisión son las de 2026 (Ley de Ingresos de la Federación y Ley del IVA): ISR de 2.5{'\u00a0'}% y la
+              mitad del IVA. Cambian cada año y dependen de tu caso (persona física o moral, RFC, pago definitivo): confírmalas
+              con tu contador antes de usar estas cifras para declarar. Por lo general las retenciones son pagos a cuenta de tus
+              impuestos, no un costo.
             </div>
             <div className="alert alert-light border small mb-0">
               Por ahora los pedidos usan los precios de tu catálogo. Si en la app cobras más, la comisión calculada saldrá menor

@@ -91,12 +91,13 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `GetDeliveryPlatformOrdersQueryTests` y `GetDashboardMetricsQueryTests` (`PlatformCollected`).
     - `DeliveryPlatformSettingsFlowTests`: los valores por omisión, crear, actualizar, sin cambios sin bitácora, `Stale`, 16/8/0, términos guardados fuera de los límites, dos negocios y `/channels` sin tasas.
     - Otras: `PlatformPaymentValidatorTests`, `DtoMappingTests`, `OrderSearchTests` ("#bc 953" encuentra `BC953`), `FractionalSaleAndCfdiDraftTests` (forma 31, PUE y avisos, I9) y las cinco líneas nuevas de `UseCaseRulesTests`.
+  - **Infrastructure (sin SQL Server):** `SalesSnapshotWorkerTests` (el worker guarda `PlatformAmount` aparte de «Otros», sobre EF InMemory) y `OutboxTests` (un `OrderCreatedEvent` guardado antes, sin canal, folio ni quién cobró, se lee como de mostrador).
   - **SQL Server:**
     - `DeliveryPlatformsSqlServerTests`: la forma, las restricciones, la precisión, el índice único y las dos carreras del guardado.
     - `DeliveryPlatformsMigrationSqlServerTests`: el error 50008, el rollback limpio y el contexto de la versión anterior (ver [migraciones](database-migrations.md)).
     - `SaleTransactionSqlServerTests`: una sola transacción; un rechazo sin detalle y con el folio devuelto; el folio repetido con otra llave que avisa y nunca da 500.
     - `SalesByChannelSqlServerTests`: la traducción del `GROUP BY`, las sumas condicionales con división decimal y `COUNT DISTINCT`, e I1 a I4, I7 e I8 contra las ventas por sucursal, Inicio y los cortes, con días guardados.
-    - Otras: `DtoProjectionSqlServerTests`, `DashboardMetricsSqlServerTests`, `CampaignAudienceSqlServerTests`, y `SalesSnapshotWorkerTests` y `OutboxTests` (un `OrderCreatedEvent` guardado antes se lee como de mostrador).
+    - Otras: `DtoProjectionSqlServerTests`, `DashboardMetricsSqlServerTests` y `CampaignAudienceSqlServerTests`.
   - **WebApi:**
     - `PlatformOrdersSqlServerTests`: 409 `possible_duplicate_order` y 201 con la confirmación; 400 `business_rule` con la plataforma inactiva.
     - `CrossTenantDeliveryPlatformsSqlServerTests`: dos negocios, la revisión vieja con 409, el personal con 403 y `/channels` para cocina y reportes, el pedido de una plataforma que solo activó el otro negocio, y las listas, búsquedas y reportes sin los pedidos del otro.

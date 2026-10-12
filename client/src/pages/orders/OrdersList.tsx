@@ -184,7 +184,7 @@ export default function OrdersList() {
   }, [chime.play]);
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
-  const { prompt } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const toast = useToast();
   // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
   // roles can read orders but move food orders from the kitchen board. Refunds also need ProcessRefunds.
@@ -360,11 +360,21 @@ export default function OrdersList() {
       danger: true,
     });
     if (reason === null) return;
+    // A platform's app often cancels once the food is cooked: then its supplies were used, and nothing goes back unless
+    // the person says the food was never made (as when voiding one).
+    const restockItems = isDeliveryPlatform(order.channel)
+      ? await confirm({
+        title: '¿Regresar los insumos al inventario?',
+        message: 'Solo si la comida no se preparó. Si ya estaba lista, los insumos ya se usaron.',
+        confirmLabel: 'Sí, regresarlos',
+        cancelLabel: 'No, ya se preparó',
+      })
+      : undefined;
 
     setStatusSubmitting(true);
     setStatusError('');
     try {
-      await ordersApi.cancel(order.id, reason || undefined);
+      await ordersApi.cancel(order.id, reason || undefined, restockItems);
       void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
       toast.success(`Pedido ${order.orderNumber} cancelado.`);

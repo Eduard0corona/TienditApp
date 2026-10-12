@@ -54,7 +54,7 @@ public class DeliveryPlatformSettingsFlowTests
         Assert.True(result.IsSuccess, result.Error);
         var rappi = result.Value.Platforms[0];
         Assert.Equal((OrderChannel.Rappi, true, true, 30m, 1), (rappi.Channel, rappi.IsConfigured, rappi.IsActive, rappi.CommissionPercent, rappi.Revision));
-        // DiDi's published example: $1,000 with IVA included, charged by the platform.
+        // DiDi's method on $1,000 with IVA included, charged by the platform, with the rates of 2026.
         Assert.NotNull(rappi.Example);
         Assert.Equal((1000m, 348m, 90.52m, 561.48m),
             (rappi.Example.OrderTotal, rappi.Example.CommissionAndTax, rappi.Example.Withheld, rappi.Example.ExpectedSettlement));
@@ -196,6 +196,20 @@ public class DeliveryPlatformSettingsFlowTests
     }
 
     [Fact]
+    public async Task Example_ShouldTakeTheBusinessesRateOfIva()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        // A business at the border sells with IVA at 8 %: the IVA withheld is half of that.
+        await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, defaultTaxRate: 8m);
+
+        var saved = await SaveAsync(fixture, Rappi(revision: 0));
+
+        var example = saved.Value.Platforms[0].Example!;
+        Assert.Equal((1000m, 8m, 348m, 60.19m, 591.81m),
+            (example.OrderTotal, example.OrderVatPercent, example.CommissionAndTax, example.Withheld, example.ExpectedSettlement));
+    }
+
+    [Fact]
     public async Task StoredTermsOutsideTodaysLimits_ShouldStillShow_WithoutAnExample()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -209,6 +223,30 @@ public class DeliveryPlatformSettingsFlowTests
 
         Assert.Equal((true, 70m), (didi.IsConfigured, didi.CommissionPercent));
         Assert.Null(didi.Example);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task StoredTermsOutsideTodaysLimits_ShouldBeFixed_WithASave(bool isActive)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food);
+        var setting = await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.DidiFood, isActive: isActive);
+        fixture.Context.Entry(setting).Property(s => s.CommissionPercent).CurrentValue = 70m;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        // The owner corrects the commission without touching whether it is active.
+        var saved = await SaveAsync(fixture, Rappi(revision: 1) with { Channel = OrderChannel.DidiFood, IsActive = isActive });
+
+        Assert.True(saved.IsSuccess, saved.IsFailure ? saved.Error : null);
+        var didi = saved.Value.Platforms.Single(p => p.Channel == OrderChannel.DidiFood);
+        Assert.Equal((30m, 2, isActive), (didi.CommissionPercent, didi.Revision, didi.IsActive));
+        Assert.NotNull(didi.Example);
+        var audit = Metadata((await fixture.Context.AuditLogs.SingleAsync()).Metadata);
+        Assert.Equal(70m, audit.GetProperty("Previous").GetProperty("CommissionPercent").GetDecimal());
+        Assert.Equal(30m, audit.GetProperty("New").GetProperty("CommissionPercent").GetDecimal());
     }
 
     [Fact]

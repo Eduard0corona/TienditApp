@@ -6914,6 +6914,7 @@ export interface paths {
                     from?: string;
                     to?: string;
                     branchId?: string;
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -8621,6 +8622,7 @@ export interface components {
         CampaignStatus: 0 | 1 | 2 | 3;
         CancelOrderRequest: {
             reason?: string | null;
+            restockItems?: boolean | null;
         };
         CancelTabItemRequest: {
             /** Format: uuid */
@@ -10469,6 +10471,8 @@ export interface components {
         PlatformSettlementExampleDto: {
             /** Format: double */
             orderTotal: number;
+            /** Format: double */
+            orderVatPercent: number;
             /** Format: double */
             commissionAndTax: number;
             /** Format: double */
