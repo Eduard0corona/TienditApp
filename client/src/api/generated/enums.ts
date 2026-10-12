@@ -208,6 +208,23 @@ export const PlatformCommissionBase = {
 } as const;
 export type PlatformCommissionBase = (typeof PlatformCommissionBase)[keyof typeof PlatformCommissionBase];
 
+export const PlatformSettlementAdjustmentKind = {
+  Promotion: 1,
+  Claim: 2,
+  Cancellation: 3,
+  Fee: 4,
+  PreviousBalance: 5,
+  Other: 99,
+} as const;
+export type PlatformSettlementAdjustmentKind = (typeof PlatformSettlementAdjustmentKind)[keyof typeof PlatformSettlementAdjustmentKind];
+
+export const PlatformSettlementStatus = {
+  Open: 0,
+  Closed: 1,
+  Voided: 99,
+} as const;
+export type PlatformSettlementStatus = (typeof PlatformSettlementStatus)[keyof typeof PlatformSettlementStatus];
+
 export const ProductCatalogItemType = {
   Product: 0,
   Service: 1,

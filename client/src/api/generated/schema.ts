@@ -6185,6 +6185,311 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform-settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    status?: components["schemas"]["PlatformSettlementStatus"];
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDtoPaginatedList"];
+                        "application/json": components["schemas"]["PlatformSettlementDtoPaginatedList"];
+                        "text/json": components["schemas"]["PlatformSettlementDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreatePlatformSettlementRequest"];
+                    "text/json": components["schemas"]["CreatePlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["CreatePlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/receivable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformReceivableDto"][];
+                        "application/json": components["schemas"]["PlatformReceivableDto"][];
+                        "text/json": components["schemas"]["PlatformReceivableDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/pending-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PendingPlatformOrdersDto"];
+                        "application/json": components["schemas"]["PendingPlatformOrdersDto"];
+                        "text/json": components["schemas"]["PendingPlatformOrdersDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdatePlatformSettlementRequest"];
+                    "text/json": components["schemas"]["UpdatePlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["UpdatePlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ClosePlatformSettlementRequest"];
+                    "text/json": components["schemas"]["ClosePlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["ClosePlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["VoidPlatformSettlementRequest"];
+                    "text/json": components["schemas"]["VoidPlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["VoidPlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products": {
         parameters: {
             query?: never;
@@ -8955,6 +9260,10 @@ export interface components {
             notes?: string | null;
             cashCount?: components["schemas"]["CashCountLineDto"][] | null;
         };
+        ClosePlatformSettlementRequest: {
+            /** Format: int32 */
+            revision: number;
+        };
         ClosePurchaseOrderRequest: {
             reason?: string | null;
         };
@@ -9209,6 +9518,21 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isDefaultForNewBusinesses: boolean;
+        };
+        CreatePlatformSettlementRequest: {
+            channel: components["schemas"]["OrderChannel"];
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            /** Format: date */
+            depositedOn: string;
+            /** Format: double */
+            depositedAmount: number;
+            reference?: string | null;
+            notes?: string | null;
+            orderIds: string[];
+            adjustments: components["schemas"]["PlatformSettlementAdjustmentRequest"][];
         };
         CreateProductCommand: {
             /** Format: uuid */
@@ -10463,6 +10787,12 @@ export interface components {
             otpTemplateLanguageCode: string;
             hasAccessToken: boolean;
         };
+        PendingPlatformOrdersDto: {
+            orders: components["schemas"]["PlatformSettlementOrderDto"][];
+            truncated: boolean;
+            /** Format: uuid */
+            openSettlementId?: string | null;
+        };
         PlacePublicOrderRequest: {
             customerName: string;
             customerPhone: string;
@@ -10591,6 +10921,90 @@ export interface components {
         PlatformReasonRequest: {
             reason: string;
         };
+        PlatformReceivableDto: {
+            channel: components["schemas"]["OrderChannel"];
+            isActive: boolean;
+            /** Format: int32 */
+            pendingOrders: number;
+            /** Format: double */
+            pendingAmount: number;
+            /** Format: date */
+            oldestPendingOn?: string | null;
+            /** Format: uuid */
+            openSettlementId?: string | null;
+            /** Format: date */
+            settledThrough?: string | null;
+        };
+        PlatformSettlementAdjustmentDto: {
+            kind: components["schemas"]["PlatformSettlementAdjustmentKind"];
+            description?: string | null;
+            /** Format: double */
+            amount: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformSettlementAdjustmentKind: 1 | 2 | 3 | 4 | 5 | 99;
+        PlatformSettlementAdjustmentRequest: {
+            kind: components["schemas"]["PlatformSettlementAdjustmentKind"];
+            description?: string | null;
+            /** Format: double */
+            amount: number;
+        };
+        PlatformSettlementDetailDto: {
+            settlement: components["schemas"]["PlatformSettlementDto"];
+            orders: components["schemas"]["PlatformSettlementOrderDto"][];
+            adjustments: components["schemas"]["PlatformSettlementAdjustmentDto"][];
+            candidates: components["schemas"]["PlatformSettlementOrderDto"][];
+            candidatesTruncated: boolean;
+        };
+        PlatformSettlementDto: {
+            /** Format: uuid */
+            id: string;
+            channel: components["schemas"]["OrderChannel"];
+            status: components["schemas"]["PlatformSettlementStatus"];
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            /** Format: date */
+            depositedOn: string;
+            /** Format: double */
+            depositedAmount: number;
+            reference?: string | null;
+            notes?: string | null;
+            /** Format: double */
+            ordersTotal: number;
+            /** Format: double */
+            adjustmentsTotal: number;
+            /** Format: double */
+            expectedDeposit: number;
+            /** Format: double */
+            difference: number;
+            /** Format: int32 */
+            orderCount: number;
+            /** Format: int32 */
+            revision: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closedAt?: string | null;
+            /** Format: date-time */
+            voidedAt?: string | null;
+            voidReason?: string | null;
+        };
+        PlatformSettlementDtoPaginatedList: {
+            items: components["schemas"]["PlatformSettlementDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
         PlatformSettlementExampleDto: {
             /** Format: double */
             orderTotal: number;
@@ -10603,6 +11017,32 @@ export interface components {
             /** Format: double */
             expectedSettlement: number;
         };
+        PlatformSettlementOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            externalOrderNumber: string;
+            /** Format: date-time */
+            registeredAt: string;
+            /** Format: date */
+            registeredOn: string;
+            inPeriod: boolean;
+            status: components["schemas"]["OrderStatus"];
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            refundedAmount: number;
+            /** Format: double */
+            expectedNet: number;
+            /** Format: double */
+            currentExpectedNet: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformSettlementStatus: 0 | 1 | 99;
         PlatformTenantDto: {
             /** Format: uuid */
             tenantId: string;
@@ -11808,6 +12248,22 @@ export interface components {
             id: string;
             isActive: boolean;
         };
+        UpdatePlatformSettlementRequest: {
+            /** Format: int32 */
+            revision: number;
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            /** Format: date */
+            depositedOn: string;
+            /** Format: double */
+            depositedAmount: number;
+            reference?: string | null;
+            notes?: string | null;
+            orderIds: string[];
+            adjustments: components["schemas"]["PlatformSettlementAdjustmentRequest"][];
+        };
         UpdateProductCommand: {
             /** Format: uuid */
             id: string;
@@ -11991,6 +12447,11 @@ export interface components {
         VoidOrderRequest: {
             reason: string;
             restockItems: boolean;
+        };
+        VoidPlatformSettlementRequest: {
+            /** Format: int32 */
+            revision: number;
+            reason: string;
         };
         WhatsAppConfigDto: {
             /** Format: uuid */
