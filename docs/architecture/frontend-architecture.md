@@ -242,7 +242,7 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
 - **Corte del día:**
   - **En pantalla:** «Plataformas» sale si se cobró algo por plataformas o si hubo devoluciones «Plataforma», así se ve también la anulación de hoy de un pedido de otro día.
   - **En pantalla, el detalle:** «Lo cobró la plataforma: no entra a la caja».
-  - **Impreso y WhatsApp:** `getDailyCutRows` agrega «Cobrado por plataformas» y «Devuelto por plataformas», cada una solo si es mayor que 0. Ninguna dice «por liquidar»: mientras no haya liquidación, el sistema no sabe qué ya depositó cada plataforma.
+  - **Impreso y WhatsApp:** `getDailyCutRows` agrega «Cobrado por plataformas» y «Devuelto por plataformas», cada una solo si es mayor que 0. Ninguna dice «por liquidar»: lo que debe cada plataforma está en Reportes › Liquidaciones (Fase 22G).
   - El corte de un turno (`CashCutTicket`) no cambia.
 - **Inicio:** «Incluye $X que cobraron las plataformas; no entra a la caja.» sale debajo de «Cobrado» solo si es mayor que 0.
 - **Escenas visuales:**
@@ -268,6 +268,29 @@ Catálogo › Precios en apps (`/platform-prices`, Fase 22F-2, [ADR 0014](../adr
 - **Cambios sin guardar:**
   - La barra bajo la lista dice cuántos precios cambiaron. No está fija a la pantalla: la lista ya se desplaza en su propia caja, y una barra fija tapaba sus últimas filas (y la caja en la que se escribe) y, en el teléfono, quedaba bajo la barra de pestañas.
   - Cambiar de plataforma o descartar pide confirmar, y cerrar o recargar la pestaña lo pregunta el navegador (`beforeunload`). Cambiar de pantalla dentro de la app no pregunta, porque `BrowserRouter` no permite detener una navegación.
+
+Reportes › Liquidaciones (`/reports/settlements`, Fase 22G, [ADR 0015](../adr/0015-delivery-platform-settlements.md)):
+
+- **Acceso y menú:**
+  - Reportes es una sección con dos pestañas: «Ventas» (`/reports`, exacta) y «Liquidaciones». Las dos piden el área `reports` (`ViewReports`).
+  - Abrir, guardar, cerrar y anular solo salen a `access.isAdmin`. A los demás, una liquidación se ve como está, y `/reports/settlements/new` les dice quién registra los depósitos sin pedir nada a la API.
+  - La búsqueda global la encuentra por «liquidaciones», «depósitos», «rappi», «conciliación»… sin la palabra «plataformas», que contiene «lat» y cambiaba la escena de la búsqueda.
+- **API** (`api/platformSettlements.ts`, fuera de `api/queries.ts` para que solo la carguen estas pantallas):
+  - `usePlatformReceivables`, `usePlatformSettlements` (filtros y búsqueda en el servidor), `usePendingPlatformOrders` y `usePlatformSettlement`.
+  - El detalle se lee al abrir la pantalla y después solo cuando se pide (`staleTime: Infinity`, `refetchOnMount: 'always'`, sin leer otra vez al reconectar). Así, una lectura en segundo plano no borra lo que la persona escribe.
+  - Abrir, guardar, cerrar y anular ponen la respuesta en la caché del detalle y vuelven a leer las listas y lo que se debe.
+- **Lista:** una tarjeta por plataforma con lo que debe (sus pedidos pendientes, desde cuándo y hasta dónde se liquidó) y «Registrar depósito» o «Continuar la liquidación». Debajo, la lista de liquidaciones (`DataTable` paginado en el servidor, 20, 50 o 100) con plataforma, estado y búsqueda por referencia o notas.
+- **Detalle** (`PlatformSettlementPage`; `new?channel=` abre una nueva):
+  - Cada revisión vuelve a montar la pantalla con lo que respondió el servidor (`key` con el id y la revisión), y guardar manda la revisión con que se abrió.
+  - **Depósito:** periodo (la semana pasada al abrir una nueva), fecha, lo depositado, referencia y notas. Las cajas de importes no piden el teclado decimal, que en el iPhone no tiene «-».
+  - **Pedidos** (`SettlementOrders`): los de la liquidación más los pendientes hasta el final del periodo, los más viejos primero, buscables por folio. En una nueva van incluidos los del periodo y sin incluir los de antes; en una guardada, los suyos. Uno registrado después del periodo no se puede incluir. Si cambia el periodo, se leen los pendientes del periodo nuevo.
+  - **Ajustes** (`SettlementAdjustments`): motivo, descripción («Otro» la pide) e importe con signo.
+  - **Cuentas** (`SettlementSummary`): pedidos, ajustes, debió depositar, depositó y la diferencia, sumados en centavos solo para mostrarlos; el servidor los cuenta otra vez al guardar. «Registrar la diferencia como ajuste» agrega un «Otro» por la diferencia.
+  - **Acciones, una principal a la vez:** con cambios sin guardar, «Guardar» (y «Descartar»). Guardada y abierta, «Cerrar liquidación», que se habilita con la diferencia en $0.00, y «Anular», que pide el motivo. Cerrada, solo «Anular».
+  - **Reglas del servidor** (`settlementEdits.ts`, con pruebas): los límites y los mensajes del dominio. Lo que la API rechazaría se marca en rojo, y al intentar guardar sale todo lo que falta.
+  - **Cifras que cambiaron:** si un pedido guardado trae otro neto esperado (una devolución), lo dice y pide guardar antes de cerrar.
+  - **Respuestas 409:** `concurrency_conflict` (alguien más guardó) ofrece «Ver la versión guardada», que pregunta antes de perder lo escrito. `conflict` trae su motivo: otro pedido tomado, o cifras que cambiaron al cerrar; en ese caso la pantalla vuelve a leer la liquidación y muestra el motivo.
+- **Primera visita:** suma 306 B (de 176,009 a 176,315 B): la sección del menú, las dos rutas y los dos enums del contrato que usan las pantallas. Las etiquetas de estados y motivos viven en `components/reports/settlementLabels.ts`, fuera de `utils/labels.ts`, que carga la primera visita.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

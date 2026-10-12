@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-12 con las Fases 22F y 22F-2, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-12 con las Fases 22F, 22F-2 y 22G, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -97,6 +97,17 @@ Actualizada el 2026-10-12 con las Fases 22F y 22F-2, después de las Fases 0 a 2
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22G: la liquidación de cada depósito de Rappi, Uber Eats y DiDi Food y su conciliación con el estado de cuenta ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
+  - Reportes › Liquidaciones dice lo que debe cada plataforma por sus pedidos pendientes. El dueño captura cada depósito, TienditApp propone los pedidos del periodo, lo que no cuadra se explica con ajustes con motivo (el 35 % que cubre Rappi, los faltantes, el saldo de DiDi, la publicidad, las cancelaciones tardías…) y la liquidación solo se cierra con la diferencia en $0.00.
+  - Cerrar vuelve a calcular cada pedido y, si una devolución cambió alguno, pide revisarlo; anular conserva la liquidación y libera sus pedidos; las dos quedan en la bitácora.
+  - Pendiente:
+    - El estado de cuenta se captura a mano: importar el archivo de cada plataforma, o leerlo de su API, llega con las integraciones.
+    - Un depósito no es un movimiento de caja ni de banco: TienditApp no lleva cuentas de banco ni concilia contra el estado de cuenta del banco.
+    - Con liquidaciones guardadas, el rollback de la base se detiene (error 50010): hay que exportarlas y borrarlas antes, o corregir hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
+    - Lo escrito en una liquidación se pierde sin preguntar al cambiar de pantalla dentro de la app (`BrowserRouter` no permite detener una navegación); cerrar o recargar la pestaña sí pregunta, como en Precios en apps.
+    - Una liquidación lista hasta 2,000 pedidos pendientes: con más hasta el final del periodo, la pantalla pide un periodo más corto.
+    - «Por cobrar» suma el neto esperado de cada pedido redondeado por separado, y Ventas por canal redondea por fila: pueden diferir por centavos.
+    - La 22G suma 306 B a la primera visita (de 176,009 a 176,315 B, contra `master` en `fa7c761`): la sección del menú, las dos rutas y los dos enums del contrato que usan las pantallas; las pantallas, su API y sus etiquetas se cargan aparte. El presupuesto sube de 176,400 a 176,700 B y queda a 385 B: el siguiente crecimiento tendrá que subirlo y decir por qué.
 - Resuelto en la Fase 22F-2: el precio de cada producto y opción en la app de cada plataforma ([ADR 0014](../adr/0014-delivery-platform-prices.md)).
   - Catálogo › Precios en apps pone lo que cuesta cada producto, y lo que suma cada opción, en Rappi, Uber Eats y DiDi Food, con un cálculo por porcentaje que la persona revisa antes de guardar. Sin precio propio, se cobra el del menú.
   - Vender carga el catálogo con los precios de la plataforma elegida y no deja registrar hasta tenerlos; la venta cobra los mismos, así que el total, la comisión, las retenciones y el neto esperado salen de lo que cobró la app.
@@ -116,7 +127,7 @@ Actualizada el 2026-10-12 con las Fases 22F y 22F-2, después de las Fases 0 a 2
   - Un folio repetido el mismo día se pregunta (409 `possible_duplicate_order`) en lugar de bloquearse con un índice único.
   - Los pedidos de plataforma nunca mandan avisos de WhatsApp y quedan fuera de las campañas y de la ficha del cliente.
   - Pendiente:
-    - Liquidación semanal y conciliación con el estado de cuenta: el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías (un pedido ya entregado que la plataforma cancela queda entregado y reembolsado).
+    - Resuelta en la Fase 22G (arriba): la liquidación semanal y la conciliación con el estado de cuenta. Una cancelación tardía (un pedido ya entregado que la plataforma cancela) sigue quedando entregada y reembolsada; en la liquidación se explica con un ajuste.
     - Integraciones por la API de las plataformas o por un integrador, el CFDI de retenciones y el ID largo del pedido para conciliar.
     - Confirmar con un contador las tasas de retención de 2026 para cada caso (persona física o moral, RFC, pago definitivo; las por omisión son las de la Ley de Ingresos 2026 y la Ley del IVA), la clave de forma de pago 31 y la base de la comisión de Uber Eats.
     - El aviso de folio repetido no es una restricción: dos capturas del mismo folio en el mismo instante pasan las dos.

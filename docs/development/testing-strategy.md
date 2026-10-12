@@ -133,6 +133,49 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Nuevas:** cinco escenas con cinco capturas: Precios en apps en escritorio, teléfono y oscuro, el diálogo «Calcular precios» y la lista con cambios y una caja en rojo.
     - **Cambian a propósito:** veintidós capturas. Diecisiete por la pestaña nueva de Catálogo: Productos, Servicios, Categorías y sus diálogos en escritorio y oscuro, y la impresión del producto nuevo. Las cuatro de Vender un pedido de Rappi, que cobra los precios de la app ($220.00 y «Con tus precios de Rappi»). Y la última del diálogo de Plataformas de reparto, cuyo aviso enlaza a Precios en apps.
     - **Resultado:** las 340 escenas pasaron dos corridas seguidas. Las nuevas, y las de Rappi con los precios de la app, no salen de la línea base de `master` hasta que la fase entre a `master`.
+- Fase 22G, liquidación de los depósitos de las plataformas ([ADR 0015](../adr/0015-delivery-platform-settlements.md)):
+  - **Domain:** `PlatformSettlementTests` (23 pruebas, 31 casos):
+    - el neto esperado por lo que sigue cobrado, con redondeo al par;
+    - los límites del periodo, de la fecha del depósito, de lo depositado, de la referencia y de las notas;
+    - los pedidos de su plataforma hasta el final del periodo, una vez cada uno, y los ajustes con motivo e importe («Otro» con descripción);
+    - guardar entera conservando las filas de los pedidos que se quedan, y un guardado rechazado que no cambia nada;
+    - contar otra vez con revisión nueva solo si algo cambió;
+    - cerrar con cada peso explicado y algo que cerrar; una cerrada que ya no cambia pero se anula; anular con motivo, una sola vez, liberando sus pedidos;
+    - los números guardados de cada enum.
+  - **Application:** `PlatformSettlementFlowTests` (15 pruebas):
+    - los pendientes hasta el periodo con lo que trae cada uno ahora;
+    - abrir contando cada pedido y dejando los demás como candidatos;
+    - una segunda abierta, un pedido de otra plataforma o de otro negocio y uno de una liquidación vigente, rechazados hasta anularla;
+    - las reglas del dominio como reglas de negocio;
+    - guardar con la revisión vista;
+    - cerrar con diferencia 0 y su bitácora, y la devolución en medio que guarda las cifras nuevas;
+    - el detalle que avisa un pedido que cambió;
+    - anular con motivo y su bitácora;
+    - lo que debe cada plataforma y hasta dónde liquidó;
+    - la lista por plataforma y estado y la búsqueda por referencia o notas;
+    - el detalle de otro negocio, que no existe.
+
+    `UseCaseRulesTests` suma las cuatro lecturas como `Permission(ViewReports)` y los cuatro cambios como `Manager`.
+  - **SQL Server:** `PlatformSettlementsSqlServerTests` (la forma, el guardado sin perder centavos y en su negocio, los pedidos que salen, una abierta por plataforma, un pedido en una sola vigente, la revisión vieja, la llave sin cascada del pedido y las restricciones) y `PlatformSettlementsMigrationSqlServerTests` (la versión anterior que reembolsa un pedido liquidado, el error 50010 y el rollback limpio, ver [migraciones](database-migrations.md)). `PlatformPricesMigrationSqlServerTests` aplica ahora hasta su propia migración, no hasta la última.
+  - **WebApi:** `CrossTenantPlatformSettlementsSqlServerTests`:
+    - dos negocios que solo ven y cambian sus liquidaciones, también con el encabezado del otro;
+    - el ciclo completo en SQL Server: abrir, la segunda abierta rechazada, no cerrar con diferencia, la revisión vieja (409 `concurrency_conflict`), cerrar con su bitácora, el pedido tomado por otra (409 `conflict`) y anular;
+    - el permiso: reportes lee, y ni reportes ni el cajero cambian;
+    - los rechazos: un canal que no es plataforma, `[JsonRequired]`, un ajuste null, el tercer decimal y el periodo que falta.
+  - **Cliente:**
+    - `settlementEdits.test.ts`: los importes con signo como la API (la coma solo entre miles), el periodo y la fecha del depósito, dónde cae cada pedido, cada ajuste, los propuestos y los guardados, las cuentas en centavos, el cuerpo sin textos vacíos, qué cambió desde el guardado y el ajuste por la diferencia.
+    - `reportPeriods.test.ts`: la semana pasada y el texto del periodo.
+    - `PlatformSettlementPage.test.tsx`:
+      - una nueva con los pedidos de la semana, la diferencia explicada con un ajuste y el guardado;
+      - lo que la API rechazaría, marcado sin guardar;
+      - la segunda abierta de una plataforma que no se abre;
+      - cerrar después de confirmar, y el 409 al cerrar que vuelve a leer las cifras;
+      - el pedido que cambió y pide guardar;
+      - la versión de otra persona;
+      - anular con motivo;
+      - la vista de solo lectura, la nueva sin permiso y la liquidación que no existe.
+    - `PlatformSettlements.test.tsx`: lo que debe cada plataforma con sus botones según el rol, la invitación a activar una plataforma y la lista con filtros y búsqueda en el servidor.
+    - `navigation.test.ts`: las pestañas «Ventas» y «Liquidaciones» de Reportes y la búsqueda global.
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 

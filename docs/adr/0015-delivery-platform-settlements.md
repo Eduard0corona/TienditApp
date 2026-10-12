@@ -73,7 +73,7 @@ Las decisiones fijas de la fase eran:
 6. **Por cobrar.** Para cada plataforma activa o con pedidos pendientes: cuántos pedidos están pendientes, la suma de sus netos esperados (cada uno redondeado como en la liquidación), la fecha del más antiguo y la liquidación abierta, si hay una.
 7. **API** (`api/v1/platform-settlements`):
    - **Lecturas:**
-     - `GET /`: la lista, la más nueva primero, por plataforma y estado, en páginas;
+     - `GET /`: la lista, la más nueva primero, por plataforma y estado o con un texto de su referencia o sus notas (`search`), en páginas;
      - `GET /{id}`: el detalle con sus pedidos, sus ajustes, las cuentas y los demás pedidos pendientes hasta el final del periodo;
      - `GET /pending-orders?channel=&from=&to=`: los pendientes para una liquidación nueva, cada uno con si cae en el periodo;
      - `GET /receivable`: lo que hay por cobrar.
@@ -85,8 +85,8 @@ Las decisiones fijas de la fase eran:
    - **Respuestas:**
      - 400 `validation_failed` o `business_rule`;
      - 404 si la liquidación no es del negocio;
-     - 409 `concurrency_conflict` con una revisión vieja o cuando otra liquidación de la plataforma se abrió al mismo tiempo: alguien más guardó, y la pantalla ofrece ver lo guardado;
-     - 409 `conflict`, con el motivo en `detail`, cuando otra liquidación tomó uno de los pedidos o cuando, al cerrar, cambió lo que se espera de un pedido (el servidor guarda las cifras nuevas).
+     - 409 `concurrency_conflict` con una revisión vieja, o cuando al mismo tiempo otra liquidación de la plataforma se abrió o tomó uno de los pedidos: alguien más guardó, y la pantalla ofrece ver lo guardado;
+     - 409 `conflict`, con el motivo en `detail`, cuando otra liquidación ya tenía uno de los pedidos o cuando, al cerrar, cambió lo que se espera de un pedido (el servidor guarda las cifras nuevas).
 8. **Permisos.**
    - **Leer:** `ViewReports`, igual que Ventas por canal, donde ya se ven la comisión y el neto.
    - **Crear, guardar, cerrar y anular:** dueños y administradores (`[RequiresTenantManager]`), igual que los términos de cada plataforma.
