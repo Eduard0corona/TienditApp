@@ -11202,7 +11202,8 @@
           "id",
           "isActive",
           "isDefault",
-          "name"
+          "name",
+          "serviceMode"
         ],
         "type": "object",
         "properties": {
@@ -11258,6 +11259,9 @@
           "isActive": {
             "type": "boolean"
           },
+          "serviceMode": {
+            "$ref": "#/components/schemas/BranchServiceMode"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -11290,6 +11294,18 @@
           }
         },
         "additionalProperties": false
+      },
+      "BranchServiceMode": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Premises",
+          "DeliveryOnly"
+        ]
       },
       "BusinessTheme": {
         "enum": [
@@ -12818,6 +12834,9 @@
           "contactPhone": {
             "type": "string",
             "nullable": true
+          },
+          "serviceMode": {
+            "$ref": "#/components/schemas/BranchServiceMode"
           },
           "isDefault": {
             "type": "boolean"
@@ -19220,6 +19239,7 @@
           "categories",
           "currency",
           "defaultTaxRate",
+          "deliveryOnly",
           "ordersPaused",
           "pricesIncludeTax",
           "slug",
@@ -19263,6 +19283,9 @@
           "address": {
             "type": "string",
             "nullable": true
+          },
+          "deliveryOnly": {
+            "type": "boolean"
           },
           "openingHours": {
             "$ref": "#/components/schemas/PublicOpeningHoursDto"
@@ -22208,6 +22231,9 @@
           "contactPhone": {
             "type": "string",
             "nullable": true
+          },
+          "serviceMode": {
+            "$ref": "#/components/schemas/BranchServiceMode"
           },
           "id": {
             "type": "string",

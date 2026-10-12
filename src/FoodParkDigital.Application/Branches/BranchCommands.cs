@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Inventory.Commands;
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FluentValidation;
@@ -27,6 +28,11 @@ public abstract record BranchFields
     public string? PostalCode { get; init; }
     public string? ContactName { get; init; }
     public string? ContactPhone { get; init; }
+    /// <summary>
+    /// Whether customers come to it or it only delivers (its address then stays private). Left out, a new branch has
+    /// premises and a saved one keeps what it had: a screen that does not know the field never publishes an address.
+    /// </summary>
+    public BranchServiceMode? ServiceMode { get; init; }
 
     public BranchContact ToContact() => new(
         Description, AddressLine1, AddressLine2, City, State, Country, PostalCode, ContactName, ContactPhone);
@@ -47,6 +53,7 @@ internal static class BranchFieldRules
         validator.RuleFor(x => x.PostalCode).MaximumLength(20);
         validator.RuleFor(x => x.ContactName).MaximumLength(120);
         validator.RuleFor(x => x.ContactPhone).MaximumLength(30);
+        validator.RuleFor(x => x.ServiceMode).IsInEnum().WithMessage(Branch.ServiceModeMessage);
     }
 
     public static Task<bool> CodeTakenAsync(IApplicationDbContext context, string code, Guid? exceptId, CancellationToken cancellationToken)
@@ -117,7 +124,9 @@ public class CreateBranchCommandHandler : IRequestHandler<CreateBranchCommand, R
                 return Result.Failure<BranchDto>(InventoryLocationLimits.Reached);
 
             var makeDefault = request.IsDefault || !await _context.Branches.AnyAsync(x => x.IsDefault, ct);
-            var branch = new Branch(tenantId, request.Name, request.Code, request.ToContact());
+            var branch = new Branch(
+                tenantId, request.Name, request.Code, request.ToContact(),
+                serviceMode: request.ServiceMode ?? BranchServiceMode.Premises);
             _context.Branches.Add(branch);
             if (withWarehouse)
                 _context.InventoryLocations.Add(await NewStockLocationAsync(branch, ct));
@@ -187,7 +196,7 @@ public class UpdateBranchCommandHandler : IRequestHandler<UpdateBranchCommand, R
         if (await BranchFieldRules.CodeTakenAsync(_context, request.Code, branch.Id, cancellationToken))
             return Result.Failure<BranchDto>("Ya existe una sucursal con esa clave.");
 
-        branch.Update(request.Name, request.Code, request.ToContact());
+        branch.Update(request.Name, request.Code, request.ToContact(), request.ServiceMode ?? branch.ServiceMode);
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success(BranchDto.FromEntity(branch));
     }

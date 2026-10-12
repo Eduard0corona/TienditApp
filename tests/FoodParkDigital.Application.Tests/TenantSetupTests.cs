@@ -67,6 +67,23 @@ public class TenantSetupTests
     }
 
     [Fact]
+    public async Task InstallStarterCatalog_ForAKitchenThatOnlyDelivers_ShouldCreateItsMenuWithTheBusinessRate()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        var handler = new InstallStarterCatalogCommandHandler(fixture.Context, fixture.TenantService);
+
+        var result = await handler.Handle(new InstallStarterCatalogCommand { TemplateId = "comida-a-domicilio" }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Equal(5, result.Value.CategoriesCreated);
+        Assert.Equal(10, result.Value.ProductsCreated);
+        // Prepared food pays the business's IVA, delivered or not.
+        Assert.All(await fixture.Context.Products.ToListAsync(), product => Assert.Null(product.TaxRate));
+        Assert.True((await fixture.Context.Products.SingleAsync(p => p.Name == "Paquete familiar")).IsFeatured);
+    }
+
+    [Fact]
     public async Task InstallStarterCatalog_ShouldNeverTouchACatalogWithProducts()
     {
         await using var fixture = SalesTestFixture.Create();

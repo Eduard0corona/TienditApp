@@ -6,6 +6,7 @@ using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Dining.Entities;
@@ -269,7 +270,7 @@ public class OpeningHoursFlowTests
         var main = await fixture.DefaultBranchAsync();
         main.Update(main.Name, main.Code, new BranchContact(
             AddressLine1: "Av. Juárez 123 int. 4", AddressLine2: "Centro", City: "Puebla", State: "Puebla",
-            Country: "México", PostalCode: "72000"));
+            Country: "México", PostalCode: "72000"), BranchServiceMode.Premises);
         await fixture.Context.SaveChangesAsync();
 
         var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
@@ -298,15 +299,51 @@ public class OpeningHoursFlowTests
         await using var fixture = SalesTestFixture.Create();
         var (tenant, _) = await OpenMenuAsync(fixture);
         var centro = await fixture.AddBranchAsync(tenant, "Centro", "CENTRO");
-        centro.Update(centro.Name, centro.Code, new BranchContact(AddressLine1: "5 de Mayo 10", City: "Puebla"));
+        centro.Update(centro.Name, centro.Code, new BranchContact(AddressLine1: "5 de Mayo 10", City: "Puebla"), BranchServiceMode.Premises);
         // Without a street, a city alone does not tell anyone how to get there.
         var main = await fixture.DefaultBranchAsync();
-        main.Update(main.Name, main.Code, new BranchContact(City: "Puebla", State: "Puebla"));
+        main.Update(main.Name, main.Code, new BranchContact(City: "Puebla", State: "Puebla"), BranchServiceMode.Premises);
         await fixture.Context.SaveChangesAsync();
 
         var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
 
         Assert.Null(menu!.Address);
+    }
+
+    [Fact]
+    public async Task Menu_OfAMainBranchThatOnlyDelivers_ShouldKeepItsAddressPrivate_AndSaySo()
+    {
+        // Without premises the kitchen is often a home: customers get their food, never the way there.
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _) = await OpenMenuAsync(fixture);
+        var main = await fixture.DefaultBranchAsync();
+        main.Update(main.Name, main.Code, new BranchContact(
+            AddressLine1: "Privada Los Pinos 8", AddressLine2: "Jardines", City: "Puebla", PostalCode: "72000"),
+            BranchServiceMode.DeliveryOnly);
+        await fixture.Context.SaveChangesAsync();
+
+        var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
+
+        Assert.Null(menu!.Address);
+        Assert.True(menu.DeliveryOnly);
+        Assert.True(menu.AcceptsOrders);
+    }
+
+    [Fact]
+    public async Task Menu_OfAMainBranchWithPremises_ShouldNotSayDeliveryOnly_EvenWhenAnotherBranchOnlyDelivers()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, _) = await OpenMenuAsync(fixture);
+        var kitchen = await fixture.AddBranchAsync(tenant, "Cocina", "COCINA");
+        kitchen.Update(kitchen.Name, kitchen.Code, new BranchContact(AddressLine1: "Privada Los Pinos 8"), BranchServiceMode.DeliveryOnly);
+        var main = await fixture.DefaultBranchAsync();
+        main.Update(main.Name, main.Code, new BranchContact(AddressLine1: "5 de Mayo 10", City: "Puebla"), BranchServiceMode.Premises);
+        await fixture.Context.SaveChangesAsync();
+
+        var menu = await MenuHandler(fixture).Handle(new GetPublicMenuQuery(tenant.Slug), CancellationToken.None);
+
+        Assert.Equal("5 de Mayo 10, Puebla", menu!.Address);
+        Assert.False(menu.DeliveryOnly);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Reporting.Entities;
@@ -26,6 +27,41 @@ public class BranchTests
     public void Branch_ShouldNeedNameAndCode(string name, string code)
     {
         Assert.Throws<DomainException>(() => new Branch(Guid.NewGuid(), name, code));
+    }
+
+    [Fact]
+    public void Branch_ShouldHavePremises_UnlessItOnlyDelivers_AndThenKeepItsAddressPrivate()
+    {
+        var centro = new Branch(Guid.NewGuid(), "Centro", "CEN");
+        var kitchen = new Branch(centro.TenantId, "Cocina", "COC", new BranchContact(AddressLine1: "Privada Los Pinos 8"),
+            serviceMode: BranchServiceMode.DeliveryOnly);
+
+        Assert.Equal(BranchServiceMode.Premises, centro.ServiceMode);
+        Assert.False(centro.KeepsAddressPrivate);
+        Assert.True(kitchen.KeepsAddressPrivate);
+        // The address stays with the team: only the customers do not see it.
+        Assert.Equal("Privada Los Pinos 8", kitchen.AddressLine1);
+
+        kitchen.Update(kitchen.Name, kitchen.Code, new BranchContact(AddressLine1: "5 de Mayo 10"), BranchServiceMode.Premises);
+        Assert.False(kitchen.KeepsAddressPrivate);
+    }
+
+    [Fact]
+    public void DefaultBranch_ShouldOnlyDeliver_ForABusinessWithoutPremises()
+    {
+        var main = Branch.CreateDefault(Guid.NewGuid(), BranchServiceMode.DeliveryOnly);
+
+        Assert.True(main.IsDefault);
+        Assert.Equal(BranchServiceMode.DeliveryOnly, main.ServiceMode);
+        Assert.Equal(BranchServiceMode.Premises, Branch.CreateDefault(Guid.NewGuid()).ServiceMode);
+    }
+
+    [Fact]
+    public void Branch_ShouldRefuseAServiceModeItDoesNotKnow()
+    {
+        var error = Assert.Throws<DomainException>(() => new Branch(Guid.NewGuid(), "Centro", "CEN", serviceMode: (BranchServiceMode)7));
+
+        Assert.Equal(Branch.ServiceModeMessage, error.Message);
     }
 
     [Fact]

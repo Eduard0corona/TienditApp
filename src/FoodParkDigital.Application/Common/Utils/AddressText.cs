@@ -25,6 +25,12 @@ public static class AddressText
     }
 
     /// <summary>
+    /// The address of a branch for its customers: none for a branch that only delivers, whose address (often a home)
+    /// stays with the team.
+    /// </summary>
+    public static string? ForCustomers(Branch? branch) => branch is { KeepsAddressPrivate: true } ? null : OneLine(branch);
+
+    /// <summary>
     /// Where a branch is, in one line and in the same order: "Av. Juárez 123, Centro, 72000 Puebla, Puebla". Null
     /// without a street: a city alone does not tell anyone how to get there.
     /// </summary>

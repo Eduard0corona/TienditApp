@@ -150,6 +150,66 @@ public static class StarterCatalogTemplates
         },
         new StarterCatalogDefinition
         {
+            Id = "comida-a-domicilio",
+            Name = "Comida a domicilio",
+            Description = "Paquetes, platos fuertes, guarniciones, bebidas y postres para entregar.",
+            BusinessType = BusinessType.Food,
+            Categories =
+            [
+                new StarterCategoryDefinition
+                {
+                    Name = "Paquetes",
+                    SortOrder = 10,
+                    Products =
+                    [
+                        new("Comida corrida", 95m, IsFeatured: true, PreparationTimeMinutes: 15),
+                        new("Paquete familiar", 320m, IsFeatured: true, PreparationTimeMinutes: 25)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Platos fuertes",
+                    SortOrder = 20,
+                    Products =
+                    [
+                        new("Pollo en mole", 120m, PreparationTimeMinutes: 15),
+                        new("Enchiladas verdes", 95m, PreparationTimeMinutes: 12),
+                        new("Milanesa con papas", 110m, PreparationTimeMinutes: 15)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Guarniciones",
+                    SortOrder = 30,
+                    Products =
+                    [
+                        new("Arroz", 30m),
+                        new("Frijoles", 30m)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Bebidas",
+                    SortOrder = 40,
+                    Products =
+                    [
+                        new("Agua fresca de 1 litro", 40m),
+                        new("Refresco", 30m)
+                    ]
+                },
+                new StarterCategoryDefinition
+                {
+                    Name = "Postres",
+                    SortOrder = 50,
+                    Products =
+                    [
+                        new("Flan", 40m)
+                    ]
+                }
+            ]
+        },
+        new StarterCatalogDefinition
+        {
             Id = "abarrotes",
             Name = "Abarrotes",
             Description = "Básicos con IVA 0 %, bebidas, botanas y limpieza.",

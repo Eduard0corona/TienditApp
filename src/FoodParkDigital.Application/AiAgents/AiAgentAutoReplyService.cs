@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,7 +14,8 @@ namespace FoodParkDigital.Application.AiAgents;
 /// "Respuestas automáticas": answers by keywords (whole words, without accents) with the texts the business wrote.
 /// There is no language model behind it, so it never promises what it cannot do: orders go through the online menu
 /// or a person of the team. A question about the hours gets the real ones, special days included, read as the public
-/// menu reads them.
+/// menu reads them; a question about where it is, when its main branch only delivers, gets that it has no premises to
+/// visit. No reply carries the address of a branch.
 /// </summary>
 public class AiAgentAutoReplyService : IAiAgentAutoReplyService
 {
@@ -41,6 +43,8 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
 
     // Without hours to tell, the description the business wrote answers both.
     private static readonly string[] InformationKeywords = [.. HoursKeywords, .. LocationKeywords];
+
+    public const string DeliveryOnlyText = "Somos solo a domicilio: no tenemos local para visitar.";
 
     // "ok, gracias" closes the conversation: it gets the closing message instead of "no tengo esa información".
     private static readonly HashSet<string> ThanksWords =
@@ -97,7 +101,9 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         var greeting = AutoReplyKeywords.ContainsAny(words, GreetingKeywords);
         var catalog = AutoReplyKeywords.ContainsAny(words, CatalogKeywords);
         var hoursAsked = AutoReplyKeywords.ContainsAny(words, HoursKeywords);
-        var context = hoursAsked || catalog ? await TryReadContextAsync(tenantId, hoursAsked, cancellationToken) : null;
+        var locationAsked = AutoReplyKeywords.ContainsAny(words, LocationKeywords);
+        var deliveryOnly = locationAsked && await TryReadDeliveryOnlyAsync(tenantId, cancellationToken);
+        var context = hoursAsked || catalog || deliveryOnly ? await TryReadContextAsync(tenantId, hoursAsked, cancellationToken) : null;
 
         // The hours first, when there is something to say about them; the texts of the business go around them.
         if (hoursAsked && context?.Hours is { } hours && BusinessHoursText.ForChat(hours) is { } hoursText)
@@ -106,8 +112,10 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
             if (greeting)
                 reply.Owner(agent.WelcomeMessage);
             reply.System(hoursText);
+            if (deliveryOnly)
+                reply.System(DeliveryOnlyText);
             // Without weekly hours there is no week to tell: the description may say how the business attends.
-            if (AutoReplyKeywords.ContainsAny(words, LocationKeywords) || !hours.HasWeeklyHours)
+            if (locationAsked || !hours.HasWeeklyHours)
                 reply.Owner(agent.BusinessDescription);
             if (catalog)
                 reply.Owner(agent.BusinessProductsAndServices);
@@ -128,6 +136,16 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
                 .Compose(separator: "\n");
         }
 
+        // Where it is, for a business without premises: there is nowhere to come, the food goes to the customer.
+        if (deliveryOnly)
+        {
+            return new AutoReplyComposer()
+                .System(DeliveryOnlyText)
+                .Owner(agent.BusinessDescription)
+                .System(Invitation(context, catalog: false, hoursReply: false))
+                .Compose();
+        }
+
         if (AutoReplyKeywords.ContainsAny(words, InformationKeywords) && !string.IsNullOrWhiteSpace(agent.BusinessDescription))
             return agent.BusinessDescription;
 
@@ -138,6 +156,26 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
             return $"{agent.FallbackMessage}\n{agent.BusinessDescription}";
 
         return agent.FallbackMessage;
+    }
+
+    /// <summary>
+    /// Whether the main branch of the business only delivers. A failure is logged and the reply goes on as for a
+    /// business with premises: with the description it wrote, never with an address.
+    /// </summary>
+    private async Task<bool> TryReadDeliveryOnlyAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _context.Branches
+                .AsNoTracking()
+                .AnyAsync(b => b.TenantId == tenantId && b.IsDefault && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Tenant id only: never the customer's phone or text.
+            _logger.LogError(ex, "The main branch for the automatic reply failed for tenant {TenantId}", tenantId);
+            return false;
+        }
     }
 
     /// <summary>

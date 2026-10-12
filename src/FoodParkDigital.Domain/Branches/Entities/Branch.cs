@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
 
@@ -15,12 +16,18 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
 
     private Branch() { }
 
-    public Branch(Guid tenantId, string name, string code, BranchContact? contact = null, bool isDefault = false)
+    public Branch(
+        Guid tenantId,
+        string name,
+        string code,
+        BranchContact? contact = null,
+        bool isDefault = false,
+        BranchServiceMode serviceMode = BranchServiceMode.Premises)
     {
         TenantId = tenantId;
         IsActive = true;
         IsDefault = isDefault;
-        Update(name, code, contact ?? BranchContact.Empty);
+        Update(name, code, contact ?? BranchContact.Empty, serviceMode);
     }
 
     public Guid TenantId { get; private set; }
@@ -39,15 +46,24 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
     public bool IsDefault { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>Whether customers come to it or it only delivers; a branch that only delivers keeps its address private.</summary>
+    public BranchServiceMode ServiceMode { get; private set; }
+
+    /// <summary>Delivery only: its address is the team's, never the customers'.</summary>
+    public bool KeepsAddressPrivate => ServiceMode == BranchServiceMode.DeliveryOnly;
+
     public const string DefaultBranchName = "Sucursal principal";
     public const string DefaultBranchCode = "PRINCIPAL";
 
-    /// <summary>The branch every business starts with.</summary>
-    public static Branch CreateDefault(Guid tenantId) => new(tenantId, DefaultBranchName, DefaultBranchCode, isDefault: true);
+    public const string ServiceModeMessage = "Elige cómo atiende la sucursal.";
+
+    /// <summary>The branch every business starts with: delivery only for a business that has no premises.</summary>
+    public static Branch CreateDefault(Guid tenantId, BranchServiceMode serviceMode = BranchServiceMode.Premises)
+        => new(tenantId, DefaultBranchName, DefaultBranchCode, isDefault: true, serviceMode: serviceMode);
 
     public static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
 
-    public void Update(string name, string code, BranchContact contact)
+    public void Update(string name, string code, BranchContact contact, BranchServiceMode serviceMode)
     {
         var trimmedName = name?.Trim();
         if (string.IsNullOrEmpty(trimmedName) || trimmedName.Length > MaxNameLength)
@@ -55,6 +71,8 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
         var normalizedCode = code is null ? string.Empty : NormalizeCode(code);
         if (normalizedCode.Length == 0 || normalizedCode.Length > MaxCodeLength)
             throw new DomainException($"La clave de la sucursal es obligatoria y tiene máximo {MaxCodeLength} caracteres.");
+        if (!Enum.IsDefined(serviceMode))
+            throw new DomainException(ServiceModeMessage);
 
         Name = trimmedName;
         Code = normalizedCode;
@@ -67,6 +85,7 @@ public class Branch : AuditableEntity, ITenantScoped, IAggregateRoot
         PostalCode = contact.PostalCode;
         ContactName = contact.ContactName;
         ContactPhone = contact.ContactPhone;
+        ServiceMode = serviceMode;
     }
 
     /// <summary>Makes this the branch of sales and drawers that name none. The caller unmarks the previous one.</summary>

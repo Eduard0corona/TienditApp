@@ -5,6 +5,8 @@ using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -26,6 +28,8 @@ public class AutoReplyHoursTests
     private const string Description = "Estamos en Av. Juárez 10, Centro.";
     private const string Products = "Tacos $25, aguas $15.";
     private const string Week = "Nuestro horario:\nLunes a sábado: 9:00 a 20:00\nDomingo: cerrado";
+    private const string KitchenDescription = "Comida casera hasta tu puerta.";
+    private const string KitchenStreet = "Privada Los Pinos 8";
 
     // Times in Mexico City (UTC-6).
     private static readonly DateTimeOffset MondayNoon = new(2026, 10, 5, 18, 0, 0, TimeSpan.Zero);
@@ -229,6 +233,54 @@ public class AutoReplyHoursTests
         Assert.Equal(
             $"Ahora estamos abiertos: cerramos a las 20:00.\n\n{Week}\n\n{Description}\n\nMira el menú y haz tu pedido aquí: {MenuLink}",
             reply);
+    }
+
+    [Fact]
+    public async Task WhereAreYou_ForABusinessThatOnlyDelivers_ShouldSaySo_WithItsDescriptionAndTheMenu_NeverTheAddress()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, Shop());
+        await OnlyDeliversAsync(fixture);
+        fixture.Clock.UtcNow = MondayNoon;
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, "¿Dónde están?", null);
+
+        Assert.Equal(
+            $"{AiAgentAutoReplyService.DeliveryOnlyText}\n\n{KitchenDescription}\n\nMira el menú y haz tu pedido aquí: {MenuLink}",
+            reply);
+        Assert.DoesNotContain(KitchenStreet, reply);
+    }
+
+    [Fact]
+    public async Task WhereAndWhen_ForABusinessThatOnlyDelivers_ShouldTellTheHours_AndThatThereIsNowhereToCome()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, Shop());
+        await OnlyDeliversAsync(fixture);
+        fixture.Clock.UtcNow = MondayNoon;
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, "¿Dónde están y a qué hora abren?", null);
+
+        Assert.Equal(
+            $"Ahora estamos abiertos: cerramos a las 20:00.\n\n{Week}\n\n{AiAgentAutoReplyService.DeliveryOnlyText}\n\n" +
+            $"{KitchenDescription}\n\nMira el menú y haz tu pedido aquí: {MenuLink}",
+            reply);
+    }
+
+    [Fact]
+    public async Task WhereAreYou_WithPremisesAtTheMainBranch_ShouldKeepAnsweringWithTheDescription()
+    {
+        // Another branch that only delivers says nothing about the main one, where customers come.
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, Shop());
+        var kitchen = await fixture.AddBranchAsync(tenant, "Cocina", "COCINA");
+        kitchen.Update(kitchen.Name, kitchen.Code, new BranchContact(AddressLine1: KitchenStreet), BranchServiceMode.DeliveryOnly);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Clock.UtcNow = MondayNoon;
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, "¿Dónde están?", null);
+
+        Assert.Equal(Description, reply);
     }
 
     [Fact]
@@ -525,6 +577,16 @@ public class AutoReplyHoursTests
         fixture.Context.AiAgents.Add(agent);
         await fixture.Context.SaveChangesAsync();
         return tenant;
+    }
+
+    /// <summary>The main branch only delivers (from a home, with its street saved), and the description says so.</summary>
+    private static async Task OnlyDeliversAsync(SalesTestFixture fixture)
+    {
+        var main = await fixture.DefaultBranchAsync();
+        main.Update(main.Name, main.Code, new BranchContact(AddressLine1: KitchenStreet, City: "Puebla"), BranchServiceMode.DeliveryOnly);
+        var agent = await fixture.Context.AiAgents.SingleAsync();
+        agent.UpdateGeneral(agent.Name, agent.Role, agent.Personality, agent.Language, agent.Tone, agent.BusinessName, KitchenDescription, null);
+        await fixture.Context.SaveChangesAsync();
     }
 
     /// <summary>A period saved as it was marked, on its first day.</summary>
