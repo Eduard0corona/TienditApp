@@ -223,11 +223,160 @@ function businessWithOnlineMenu(data: DemoData) {
   data.tenant.onlineMenuMode = 2;
 }
 
+// OrderChannel, PlatformCommissionBase, PlatformCollectedBy and OrderStatus as the contract numbers them.
+const RAPPI = 3;
+const UBER_EATS = 4;
+const DIDI_FOOD = 5;
+const TOTAL_WITH_TAX = 0;
+const SUBTOTAL_WITHOUT_TAX = 1;
+const BY_THE_PLATFORM = 0;
+const BY_THE_BUSINESS = 1;
+const DELIVERED = 6;
+const CANCELLED = 99;
+
+const MARIANA = 'mariana.ortiz@cafelaesquina.mx';
+
+/**
+ * Plataformas de reparto as the API answers it: Rappi takes orders (30 % on the total), Uber Eats was set up and turned
+ * off (27 % on the subtotal) and DiDi Food was never saved. Each example is the server's, on $1,000 with IVA included.
+ */
+function deliveryPlatforms() {
+  const fiscal = { commissionVatPercent: 16, isrWithholdingPercent: 2.5, vatWithholdingPercent: 50 };
+  return {
+    platforms: [
+      {
+        channel: RAPPI, isConfigured: true, isActive: true, commissionPercent: 30, commissionBase: TOTAL_WITH_TAX, ...fiscal, revision: 2,
+        changedAt: at(10, 5, -3), changedBy: MARIANA,
+        example: { orderTotal: 1000, commissionAndTax: 348, withheld: 90.52, expectedSettlement: 561.48 },
+      },
+      {
+        channel: UBER_EATS, isConfigured: true, isActive: false, commissionPercent: 27, commissionBase: SUBTOTAL_WITHOUT_TAX, ...fiscal,
+        revision: 3, changedAt: at(18, 40, -1), changedBy: MARIANA,
+        example: { orderTotal: 1000, commissionAndTax: 270, withheld: 90.52, expectedSettlement: 639.48 },
+      },
+      {
+        channel: DIDI_FOOD, isConfigured: false, isActive: false, commissionPercent: null, commissionBase: TOTAL_WITH_TAX, ...fiscal,
+        revision: 0, changedAt: null, changedBy: null, example: null,
+      },
+    ],
+  };
+}
+
+interface ChannelRow {
+  channel: number | null;
+  isDeliveryPlatform: boolean;
+  paidOrders: number;
+  paymentsAmount: number;
+  refundsAmount: number;
+  netSales: number;
+  platformCollected: number;
+  businessCollected: number;
+  commission: number;
+  commissionTax: number;
+  isrWithheld: number;
+  vatWithheld: number;
+  expectedSettlement: number;
+}
+
+/**
+ * Sales by channel of the month so far: the counter, WhatsApp and the online menu, and the platforms with what they
+ * charged, their commission and what they should deposit. One Rappi order was voided and one was paid by its courier.
+ */
+function salesByChannel(from: string, to: string) {
+  const row = (patch: Partial<ChannelRow>): ChannelRow => ({
+    channel: null, isDeliveryPlatform: false, paidOrders: 0, paymentsAmount: 0, refundsAmount: 0, netSales: 0, platformCollected: 0,
+    businessCollected: 0, commission: 0, commissionTax: 0, isrWithheld: 0, vatWithheld: 0, expectedSettlement: 0, ...patch,
+  });
+  const channels = [
+    row({ channel: 0, paidOrders: 186, paymentsAmount: 31420, refundsAmount: 470, netSales: 30950 }),
+    row({ channel: 1, paidOrders: 21, paymentsAmount: 4380, netSales: 4380 }),
+    row({ channel: 2, paidOrders: 12, paymentsAmount: 2260, netSales: 2260 }),
+    row({
+      channel: RAPPI, isDeliveryPlatform: true, paidOrders: 9, paymentsAmount: 3500, refundsAmount: 350, netSales: 3150,
+      platformCollected: 2800, businessCollected: 350, commission: 945, commissionTax: 151.2, isrWithheld: 60.34, vatWithheld: 193.1,
+      expectedSettlement: 1450.36,
+    }),
+    row({
+      channel: UBER_EATS, isDeliveryPlatform: true, paidOrders: 4, paymentsAmount: 1240, netSales: 1240, platformCollected: 1240,
+      commission: 288.62, commissionTax: 46.18, isrWithheld: 26.72, vatWithheld: 85.52, expectedSettlement: 792.96,
+    }),
+  ];
+  // The sum of the rows, in cents, as the server adds them.
+  const sum = (key: Exclude<keyof ChannelRow, 'channel' | 'isDeliveryPlatform'>) =>
+    channels.reduce((total, item) => total + Math.round(item[key] * 100), 0) / 100;
+  const totals = row({
+    paidOrders: sum('paidOrders'), paymentsAmount: sum('paymentsAmount'), refundsAmount: sum('refundsAmount'), netSales: sum('netSales'),
+    platformCollected: sum('platformCollected'), businessCollected: sum('businessCollected'), commission: sum('commission'),
+    commissionTax: sum('commissionTax'), isrWithheld: sum('isrWithheld'), vatWithheld: sum('vatWithheld'),
+    expectedSettlement: sum('expectedSettlement'),
+  });
+  return { from, to, channels, totals };
+}
+
+/** The Rappi orders of the period, the newest first, with what each one copied when it was registered. */
+function rappiOrders() {
+  const order = (folio: string, number: number, registeredAt: string, total: number, amounts: {
+    commissionAndTax: number; withheld: number; expectedSettlement: number;
+  }, extra: { status?: number; collectedBy?: number; refundedAmount?: number } = {}) => ({
+    orderId: `rappi-${folio}`, orderNumber: `ORD-${String(number).padStart(6, '0')}`, externalOrderNumber: folio, registeredAt,
+    status: extra.status ?? DELIVERED, collectedBy: extra.collectedBy ?? BY_THE_PLATFORM, orderTotal: total, ...amounts,
+    refundedAmount: extra.refundedAmount ?? 0,
+  });
+  return [
+    order('152412', 341, at(12, 10), 420, { commissionAndTax: 146.16, withheld: 38.02, expectedSettlement: 235.82 }),
+    order('152398', 329, at(20, 40, -1), 350, { commissionAndTax: 121.8, withheld: 31.68, expectedSettlement: 196.52 },
+      { status: CANCELLED, refundedAmount: 350 }),
+    order('152371', 318, at(14, 5, -1), 350, { commissionAndTax: 121.8, withheld: 0, expectedSettlement: -121.8 },
+      { collectedBy: BY_THE_BUSINESS }),
+    order('152355', 307, at(13, 30, -2), 610, { commissionAndTax: 212.28, withheld: 55.22, expectedSettlement: 342.5 }),
+    order('152340', 296, at(19, 15, -3), 1000, { commissionAndTax: 348, withheld: 90.52, expectedSettlement: 561.48 }),
+  ];
+}
+
+/** Mi negocio with the delivery platforms set up, beside Caja's routes. */
+const platformsRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/delivery-platforms$/, () => helpers.ok(deliveryPlatforms())],
+  ...cashRoutes(data, helpers),
+];
+
+/** Reportes with sales by channel and the list of the Rappi orders, beside Caja's routes. */
+const salesByChannelRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/reports\/sales-by-channel$/, (_match, query) =>
+    helpers.ok(salesByChannel(query.get('from') || '2026-10-01', query.get('to') || '2026-10-04'))],
+  ['GET', /^\/reports\/delivery-platform-orders$/, (_match, query) =>
+    helpers.ok(helpers.paginate(query.get('channel') === String(RAPPI) ? rappiOrders() : [], query, 20))],
+  ...cashRoutes(data, helpers),
+];
+
+/**
+ * The day's cut of a day with Rappi orders: $1,380.00 Rappi charged in its app (three orders, in "Cobrado" and in its
+ * branch, in no cashier's row) and one voided order of $350.00 it gave back. The drawers do not change.
+ */
+function withPlatformInTheCut(data: DemoData) {
+  completeCashData(data);
+  const cut = data.dailyCut;
+  const charged = 1380;
+  const add = (amount: number) => Math.round((amount + charged) * 100) / 100;
+  Object.assign(cut, {
+    salesPaymentsTotal: add(cut.salesPaymentsTotal),
+    salesPaymentsCount: cut.salesPaymentsCount + 3,
+    platformTotal: charged,
+    platformPaymentsCount: 3,
+    platformRefundsTotal: 350,
+  });
+  for (const place of [...cut.byLocation, ...cut.byBranch]) {
+    Object.assign(place, { paymentsCount: place.paymentsCount + 3, totalAmount: add(place.totalAmount) });
+  }
+}
+
 export const CAJA_ROUTES = asOption(cashRoutes);
 export const CAJA_DATA = asOption(completeCashData);
 export const SIN_CAJA_DATA = asOption(withoutDrawer);
 export const NEGOCIO_DATA = asOption(businessProfile);
 export const MENU_EN_LINEA_DATA = asOption(businessWithOnlineMenu);
+export const PLATAFORMAS_ROUTES = asOption(platformsRoutes);
+export const VENTAS_POR_CANAL_ROUTES = asOption(salesByChannelRoutes);
+export const CORTE_CON_PLATAFORMA_DATA = asOption(withPlatformInTheCut);
 
 /** The platform admin (TienditApp's own team): no role in the business, the platform console. */
 export const SUPER_ADMIN_PROFILE = {

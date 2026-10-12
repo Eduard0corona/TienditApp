@@ -137,6 +137,25 @@ function createMockOrder(data, body) {
   return order;
 }
 
+/** Rappi, Uber Eats and DiDi Food as GET /delivery-platforms answers them to a business that never saved one. */
+function unconfiguredPlatforms() {
+  return {
+    platforms: [3, 4, 5].map((channel) => ({
+      channel, isConfigured: false, isActive: false, commissionPercent: null, commissionBase: 0, commissionVatPercent: 16,
+      isrWithholdingPercent: 2.5, vatWithholdingPercent: 50, revision: 0, changedAt: null, changedBy: null, example: null,
+    })),
+  };
+}
+
+/** Sales by channel of a period without orders of any channel: the demo shows its sales by branch, not by channel. */
+function emptySalesByChannel(q) {
+  const totals = {
+    channel: null, isDeliveryPlatform: false, paidOrders: 0, paymentsAmount: 0, refundsAmount: 0, netSales: 0, platformCollected: 0,
+    businessCollected: 0, commission: 0, commissionTax: 0, isrWithheld: 0, vatWithheld: 0, expectedSettlement: 0,
+  };
+  return { from: q.get('from') || '2026-10-01', to: q.get('to') || '2026-10-04', channels: [], totals };
+}
+
 function buildRoutes(data, token) {
   const ok = (json) => ({ status: 200, json });
   const notFound = (what) => ({ status: 404, json: { error: `${what} no encontrado` } });
@@ -162,6 +181,7 @@ function buildRoutes(data, token) {
     // ------------------------------------------------------------- dashboard / reports / audit
     ['GET', /^\/dashboard\/metrics$/, () => ok(data.dashboard)],
     ['GET', /^\/reports\/operational-summary$/, () => ok(data.report)],
+    ['GET', /^\/reports\/sales-by-channel$/, (m, q) => ok(emptySalesByChannel(q))],
     ['GET', /^\/audit\/logs$/, (m, q) => {
       let rows = data.auditLogs;
       if (q.get('entityName')) rows = rows.filter((r) => includesCI(r.entityName, q.get('entityName').toLowerCase()));
@@ -263,8 +283,10 @@ function buildRoutes(data, token) {
       return { status: 204, json: null };
     }],
     ['GET', /^\/kitchen\/orders$/, () => ok(data.kitchenOrders)],
-    // The demo business set up no delivery platform: Vender and Pedidos look as they do without them.
+    // The demo business set up no delivery platform: Vender and Pedidos look as they do without them, and Mi negocio
+    // offers the three to configure.
     ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
+    ['GET', /^\/delivery-platforms$/, () => ok(unconfiguredPlatforms())],
     ['GET', /^\/service-board\/pieces$/, (m, q) => {
       let rows = data.boardPieces;
       if (!bool(q, 'includeCompleted')) rows = rows.filter((p) => p.status !== 2);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CashSessionDto, DailyCashCutDto } from '../../types';
 import { CashSessionStatus } from '../../types';
-import { buildDailyCutText, buildShiftCutText, getOtherMethodsTotal } from './cashCutText';
+import { buildDailyCutText, buildShiftCutText, getDailyCutRows, getOtherMethodsTotal } from './cashCutText';
 
 const plain = (text: string) => text.replace(/\u00a0/g, ' ');
 
@@ -68,6 +68,45 @@ describe('cash cut text', () => {
     expect(text).toContain('Neto en efectivo: $780.00');
     expect(text).not.toContain('Propinas');
     expect(text).toContain('• Ana: 8 pagos / $900.00');
+  });
+
+  it('leaves the platform rows out of a day without platform orders', () => {
+    const labels = getDailyCutRows(cut({ platformTotal: 0, platformPaymentsCount: 0, platformRefundsTotal: 0 })).map(([label]) => label);
+
+    expect(labels).toEqual(['Cobrado', 'Efectivo', 'Tarjeta', 'Transferencia', 'Otros', 'Neto en efectivo']);
+    // A server that does not send them yet reads the same.
+    expect(getDailyCutRows(cut()).map(([label]) => label)).toEqual(labels);
+  });
+
+  it('shows what the platforms charged and gave back apart from the drawers, after the other methods', () => {
+    // $350.00 of Rappi in "Cobrado": the methods, the platforms included, add up to it (I5).
+    const rows = getDailyCutRows(cut({ salesPaymentsTotal: 1600.2, salesPaymentsCount: 13, platformTotal: 350, platformPaymentsCount: 1, platformRefundsTotal: 120 }));
+
+    expect(rows).toEqual([
+      ['Cobrado', 1600.2],
+      ['Efectivo', 800],
+      ['Tarjeta', 400],
+      ['Transferencia', 49.9],
+      ['Otros', 0.3],
+      ['Plataformas (por liquidar)', 350],
+      ['Devuelto por plataformas', 120],
+      ['Neto en efectivo', 780],
+    ]);
+    const methods = rows.slice(1, 6).reduce((total, [, amount]) => total + Math.round(amount * 100), 0);
+    expect(methods).toBe(160020);
+  });
+
+  it('shows only what the platforms gave back on a day they charged nothing', () => {
+    const labels = getDailyCutRows(cut({ platformTotal: 0, platformRefundsTotal: 350 })).map(([label]) => label);
+
+    expect(labels).toContain('Devuelto por plataformas');
+    expect(labels).not.toContain('Plataformas (por liquidar)');
+  });
+
+  it('writes the platform rows in the message too', () => {
+    const text = plain(buildDailyCutText(cut({ platformTotal: 350, platformRefundsTotal: 120 }), { dateLabel: 'Hoy', scopeLabel: 'Centro' }));
+
+    expect(text).toContain('Otros: $0.30\nPlataformas (por liquidar): $350.00\nDevuelto por plataformas: $120.00\nNeto en efectivo: $780.00');
   });
 
   it('shows the tips apart when there are any', () => {

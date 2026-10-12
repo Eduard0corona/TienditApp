@@ -19,8 +19,13 @@ export function getDailyCutRows(cut: DailyCashCutDto): Array<[label: string, amo
     ['Tarjeta', cut.cardTotal],
     ['Transferencia', cut.transferTotal],
     ['Otros', getOtherMethodsTotal(cut)],
-    ['Neto en efectivo', cut.netCashOnlyFlow],
   ];
+  // What Rappi, Uber Eats or DiDi Food charged in their apps is part of "Cobrado" but in no drawer: the platform settles it.
+  const platformTotal = cut.platformTotal ?? 0;
+  const platformRefundsTotal = cut.platformRefundsTotal ?? 0;
+  if (platformTotal > 0) rows.push(['Plataformas (por liquidar)', platformTotal]);
+  if (platformRefundsTotal > 0) rows.push(['Devuelto por plataformas', platformRefundsTotal]);
+  rows.push(['Neto en efectivo', cut.netCashOnlyFlow]);
   // Tips are for the team: apart from what was sold.
   if (cut.tipsTotal > 0) rows.push(['Propinas', cut.tipsTotal], ['Propinas en efectivo', cut.cashTipsTotal]);
   return rows;

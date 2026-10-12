@@ -1,5 +1,5 @@
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
-import { NOW_ISO } from '../mocks/data.mjs';
+import { NOW_ISO, at } from '../mocks/data.mjs';
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
@@ -25,9 +25,18 @@ interface SaleRequest {
   customerNotes?: string;
   tableNumber?: string;
   channel?: number;
+  /** The folio of a delivery platform's app, normalized by Vender (Rappi, Uber Eats or DiDi Food only). */
+  externalOrderNumber?: string;
+  /** Who charged an order of a platform: the platform (0, also when omitted) or the business (1). */
+  collectedBy?: number;
   items?: SaleItemRequest[];
   payments?: SalePaymentRequest[];
 }
+
+// OrderChannel and OrderPaymentMethod as the contract numbers them.
+const RAPPI = 3;
+const DELIVERY_PLATFORMS = [3, 4, 5];
+const PLATFORM_PAYMENT = 5;
 
 interface ProductOption {
   id: string;
@@ -95,7 +104,17 @@ function createSale(data: DemoData, body: SaleRequest) {
   const taxCents = taxBreakdown.reduce((sum, line) => sum + cents(line.taxAmount), 0);
   const totalCents = subTotalCents + taxCents;
 
-  const payments = (body.payments ?? []).map((payment, index) => {
+  // An order of a delivery platform: when the platform charged it, the server records its «Plataforma» payment itself,
+  // by the total and with the folio as its reference; when the business does, it is charged as at the counter.
+  const isPlatform = DELIVERY_PLATFORMS.includes(body.channel ?? 0);
+  const collectedBy = isPlatform ? body.collectedBy ?? 0 : null;
+  const platformPayments = collectedBy === 0
+    ? [{
+      id: `${id}-pago-1`, amount: money(totalCents), method: PLATFORM_PAYMENT, paidAt: NOW_ISO,
+      reference: body.externalOrderNumber ?? null, notes: null, tip: 0, cashReceived: null, change: 0,
+    }]
+    : null;
+  const payments = platformPayments ?? (body.payments ?? []).map((payment, index) => {
     const tipCents = cents(payment.tip ?? 0);
     const received = payment.cashReceived ?? null;
     return {
@@ -118,6 +137,7 @@ function createSale(data: DemoData, body: SaleRequest) {
     refundedAmount: 0, netPaidAmount: money(paidCents), canCancel: payments.length === 0, allowedTransitions: status === 1 ? [4, 2, 99] : [],
     createdAt: NOW_ISO, items, statusHistory: [], servicePieces: [], payments, refunds: [], itemCancellations: [],
     isTab: false, isOpenTab: false, kitchenTickets: [], stockWarnings: [],
+    platformOrder: isPlatform ? { externalOrderNumber: body.externalOrderNumber ?? '', collectedBy } : null,
   };
   data.orders.unshift(order);
   return order;
@@ -129,6 +149,41 @@ const sellRoutes: ExtraRoutes = (data, { ok }) => [
 ];
 
 export const SELL_ROUTES = asOption(sellRoutes);
+
+/** The business takes Rappi orders: Vender offers it as an origin and Pedidos filters by it. */
+const rappiRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/delivery-platforms\/channels$/, () => helpers.ok([{ channel: RAPPI, isActive: true }])],
+  ...sellRoutes(data, helpers),
+];
+
+export const RAPPI_ROUTES = asOption(rappiRoutes);
+
+/**
+ * Two Rappi orders of today the platform charged in its app: one already delivered, for Juan, and one the kitchen has
+ * not started. They are added in these scenes only, so the shared lists of today stay as they are.
+ */
+function withRappiOrders(data: DemoData) {
+  const product = (name: string) => data.products.find((candidate: { name: string }) => candidate.name === name).id;
+  const delivered = createSale(data, {
+    channel: RAPPI, externalOrderNumber: '152390', collectedBy: 0, customerName: 'Juan',
+    items: [{ productId: product('Chilaquiles verdes'), quantity: 2 }, { productId: product('Café americano'), quantity: 2 }],
+  });
+  delivered.createdAt = at(12, 40);
+  delivered.payments.forEach((payment: { paidAt: string }) => { payment.paidAt = at(12, 40); });
+  const waiting = createSale(data, {
+    channel: RAPPI, externalOrderNumber: '152395', collectedBy: 0,
+    items: [{ productId: product('Torta de jamón'), quantity: 1, notes: 'Sin chipotle' }, { productId: product('Agua de jamaica'), quantity: 1 }],
+  });
+  Object.assign(waiting, { status: 1, allowedTransitions: [4, 2, 99], createdAt: at(13, 15) });
+  waiting.payments.forEach((payment: { paidAt: string }) => { payment.paidAt = at(13, 15); });
+  // The kitchen sees the one it has not started, with its folio for the bag.
+  data.kitchenOrders.push({
+    id: waiting.id, orderNumber: waiting.orderNumber, channel: RAPPI, externalOrderNumber: '152395', status: waiting.status,
+    customerName: waiting.customerName, tableNumber: null, customerNotes: null, createdAt: waiting.createdAt, items: waiting.items,
+  });
+}
+
+export const RAPPI_ORDERS_DATA = asOption(withRappiOrders);
 
 /** A customer account (Mis pedidos): no business, only its own orders. */
 export const CUSTOMER_PROFILE = {

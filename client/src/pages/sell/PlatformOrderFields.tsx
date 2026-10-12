@@ -22,7 +22,9 @@ interface PlatformOrderFieldsProps {
  * platform is chosen, with the keyboard that platform's folio takes), who charged it and the name for the bag.
  */
 export default function PlatformOrderFields({ platform, details, onChange, folioError, disabled }: PlatformOrderFieldsProps) {
-  const collectedLabelId = useId();
+  // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
+  const id = useId();
+  const collectedLabelId = `${id}-collected`;
   const hint = getPlatformFolioHint(platform);
   const name = getPlatformName(platform);
   const businessCollects = details.collectedBy === PlatformCollectedBy.Business;
@@ -34,11 +36,11 @@ export default function PlatformOrderFields({ platform, details, onChange, folio
   return (
     <div className="sell-details mb-2">
       <div className="mb-2">
-        <label className="form-label small mb-1" htmlFor="sell-platform-folio">{hint.label}</label>
+        <label className="form-label small mb-1" htmlFor={`${id}-folio`}>{hint.label}</label>
         <input
           // Another platform is another folio to type: the field takes the focus again.
           key={platform}
-          id="sell-platform-folio"
+          id={`${id}-folio`}
           className={`form-control ${folioError ? 'is-invalid' : ''}`}
           maxLength={PLATFORM_FOLIO_MAX_LENGTH}
           placeholder={hint.placeholder}
@@ -50,12 +52,12 @@ export default function PlatformOrderFields({ platform, details, onChange, folio
           autoFocus={!details.externalOrderNumber}
           required
           aria-invalid={folioError ? true : undefined}
-          aria-describedby="sell-platform-folio-help"
+          aria-describedby={`${id}-folio-help`}
           value={details.externalOrderNumber}
           onChange={(event) => onChange({ externalOrderNumber: event.target.value })}
           disabled={disabled}
         />
-        <div id="sell-platform-folio-help" className={folioError ? 'invalid-feedback d-block' : 'form-text'}>
+        <div id={`${id}-folio-help`} className={folioError ? 'invalid-feedback d-block' : 'form-text'}>
           {folioError || hint.help}
         </div>
       </div>
@@ -83,18 +85,18 @@ export default function PlatformOrderFields({ platform, details, onChange, folio
       </div>
 
       <div>
-        <label className="form-label small mb-1" htmlFor="sell-bag-name">Nombre para la bolsa (opcional)</label>
+        <label className="form-label small mb-1" htmlFor={`${id}-bag`}>Nombre para la bolsa (opcional)</label>
         <input
-          id="sell-bag-name"
+          id={`${id}-bag`}
           className="form-control"
           maxLength={200}
           autoComplete="off"
-          aria-describedby="sell-bag-name-help"
+          aria-describedby={`${id}-bag-help`}
           value={details.customerName}
           onChange={(event) => onChange({ customerName: event.target.value })}
           disabled={disabled}
         />
-        <div id="sell-bag-name-help" className="form-text">El nombre que muestra la app. No escribas teléfono ni dirección.</div>
+        <div id={`${id}-bag-help`} className="form-text">El nombre que muestra la app. No escribas teléfono ni dirección.</div>
       </div>
     </div>
   );

@@ -64,6 +64,28 @@ describe('Dashboard', () => {
     expect(screen.queryByRole('link', { name: /Nueva venta/ })).not.toBeInTheDocument();
   });
 
+  it('says how much of "Cobrado" the delivery platforms charged and still have to settle', async () => {
+    vi.mocked(dashboardApi.getMetrics).mockResolvedValue({
+      data: metrics({ totalRevenue: 1600, platformCollected: 350 }),
+    } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
+    renderDashboard();
+
+    const line = await screen.findByText('Incluye $350.00 que cobraron las plataformas, por liquidar.');
+    expect(line).toHaveClass('small', 'text-muted');
+    // One line more under "Cobrado", which keeps its meaning: everything charged, the platforms included.
+    expect(line.closest('.card-body')).toHaveTextContent('Cobrado$1,600.008 pedidos pagados');
+  });
+
+  it('leaves that line out without platform money in the period', async () => {
+    vi.mocked(dashboardApi.getMetrics).mockResolvedValue({
+      data: metrics({ platformCollected: 0 }),
+    } as Awaited<ReturnType<typeof dashboardApi.getMetrics>>);
+    renderDashboard();
+    await screen.findByText('Café americano');
+
+    expect(screen.queryByText(/que cobraron las plataformas/)).not.toBeInTheDocument();
+  });
+
   it('counts the orders of the day in singular when there is one', async () => {
     renderDashboard();
 
