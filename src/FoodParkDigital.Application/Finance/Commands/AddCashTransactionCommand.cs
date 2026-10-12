@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -38,6 +39,8 @@ public class AddCashTransactionCommandValidator : AbstractValidator<AddCashTrans
         // The type decides the direction of the movement; the amount is always positive.
         RuleFor(x => x.Amount).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(x => x.PaymentMethod).IsInEnum().When(x => x.PaymentMethod.HasValue);
+        RuleFor(x => x.PaymentMethod).NotEqual(OrderPaymentMethod.Platform)
+            .WithMessage(OrderPaymentMethodRules.NeverEntersADrawerMessage);
         RuleFor(x => x.InventoryLocationId).NotEmpty().When(x => x.InventoryLocationId.HasValue);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);

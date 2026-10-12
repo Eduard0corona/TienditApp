@@ -15585,14 +15585,20 @@
         "enum": [
           0,
           1,
-          2
+          2,
+          3,
+          4,
+          5
         ],
         "type": "integer",
         "format": "int32",
         "x-enum-varnames": [
           "Counter",
           "WhatsApp",
-          "Online"
+          "Online",
+          "Rappi",
+          "UberEats",
+          "DidiFood"
         ]
       },
       "OrderDto": {
@@ -16106,7 +16112,8 @@
           1,
           2,
           3,
-          4
+          4,
+          5
         ],
         "type": "integer",
         "format": "int32",
@@ -16115,7 +16122,8 @@
           "Card",
           "Transfer",
           "DigitalWallet",
-          "Other"
+          "Other",
+          "Platform"
         ]
       },
       "OrderRefundDto": {

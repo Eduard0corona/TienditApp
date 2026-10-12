@@ -61,7 +61,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         TableNumber = tableNumber;
         // The business policy at the time of the sale: later changes to it never alter this order.
         PricesIncludeTax = pricesIncludeTax;
-        Channel = Enum.IsDefined(channel) ? channel : throw new DomainException("El canal del pedido no es válido.");
+        Channel = Enum.IsDefined(channel) ? channel : throw new DomainException(OrderChannelRules.InvalidChannelMessage);
 
         var stateMachine = OrderStateMachineFactory.Create(businessType, orderType);
         Status = stateMachine.GetInitialStatus();
@@ -489,7 +489,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (string.IsNullOrEmpty(OrderNumber))
             throw new DomainException("El pedido no tiene folio.");
 
-        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total, Status));
+        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total, Status, Channel));
     }
 
     public void LinkToCustomerUser(Guid userId)

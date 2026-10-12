@@ -246,6 +246,8 @@ public class OutboxTests
         var events = new FoodParkDigital.Domain.Common.DomainEvent[]
         {
             new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 123.45m, OrderStatus.Pending),
+            new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000002", BusinessType.Food, 350m, OrderStatus.Confirmed,
+                OrderChannel.Rappi, "BC953", PlatformCollectedBy.Platform),
             new OrderStatusChangedEvent(Guid.NewGuid(), TenantA, OrderStatus.Confirmed, OrderStatus.Ready, NotifyCustomer: false),
             new OrderCancelledEvent(Guid.NewGuid(), TenantA, OrderStatus.Pending, "Cliente canceló"),
             new ServiceOrderPieceStatusChangedEvent(Guid.NewGuid(), Guid.NewGuid(), TenantA,
@@ -283,6 +285,27 @@ public class OutboxTests
             OutboxEventSerializer.Deserialize(OutboxEventSerializer.TypeNameOf(current), payload.ToJsonString()));
 
         Assert.Equal(OrderStatus.Confirmed, restored.Status);
+        Assert.Equal(current.OrderId, restored.OrderId);
+    }
+
+    [Fact]
+    public void OrderCreatedEventStoredBeforeItHadAChannel_ShouldReadAsACounterOrder()
+    {
+        // Messages waiting in the outbox during the deploy of the delivery platforms came from the channels before them.
+        var current = new OrderCreatedEvent(Guid.NewGuid(), TenantA, "ORD-000001", BusinessType.Food, 50m, OrderStatus.Pending,
+            OrderChannel.UberEats, "BC953", PlatformCollectedBy.Business);
+        var payload = JsonNode.Parse(OutboxEventSerializer.Serialize(current))!.AsObject();
+        Assert.True(payload.Remove("channel"));
+        Assert.True(payload.Remove("externalOrderNumber"));
+        Assert.True(payload.Remove("collectedBy"));
+
+        var restored = Assert.IsType<OrderCreatedEvent>(
+            OutboxEventSerializer.Deserialize(OutboxEventSerializer.TypeNameOf(current), payload.ToJsonString()));
+
+        Assert.Equal(OrderChannel.Counter, restored.Channel);
+        Assert.Null(restored.ExternalOrderNumber);
+        Assert.Null(restored.CollectedBy);
+        Assert.Equal(OrderStatus.Pending, restored.Status);
         Assert.Equal(current.OrderId, restored.OrderId);
     }
 

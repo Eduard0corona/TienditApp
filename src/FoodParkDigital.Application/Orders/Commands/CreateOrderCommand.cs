@@ -139,6 +139,9 @@ public record ServiceOrderPieceInput
 
 public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
 {
+    public const string PlatformPaymentMessage = "El pago «Plataforma» se registra solo, al indicar que cobró la plataforma.";
+    public const string DeliveryPlatformsNotYetMessage = "Todavía no se pueden registrar pedidos de plataforma.";
+
     public CreateOrderCommandValidator()
     {
         RuleFor(x => x.CustomerName).MaximumLength(200);
@@ -147,7 +150,13 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.OrderType).IsInEnum();
         // Online orders come from the public menu, not from the business's screens.
         RuleFor(x => x.Channel).IsInEnum().NotEqual(OrderChannel.Online)
-            .WithMessage("El canal del pedido no es válido.");
+            .WithMessage(OrderChannelRules.InvalidChannelMessage);
+        // TEMPORARY (Fase 22F, stage 1): the channels of Rappi, Uber Eats and DiDi Food exist in the contract, but an
+        // order of a delivery platform needs its folio, who charged it and its commission, which come in a later
+        // stage. Until then they are refused here; that stage replaces this rule with the full rules of the channel.
+        RuleFor(x => x.Channel)
+            .Must(channel => !OrderChannelRules.IsDeliveryPlatform(channel))
+            .WithMessage(DeliveryPlatformsNotYetMessage);
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
@@ -178,6 +187,8 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             // Stored with 2 decimals, like every payment (see AddOrderPaymentCommand).
             payment.RuleFor(p => p.Amount).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
             payment.RuleFor(p => p.Method).IsInEnum();
+            // The order of a delivery platform records the platform's payment by itself, never the client.
+            payment.RuleFor(p => p.Method).NotEqual(OrderPaymentMethod.Platform).WithMessage(PlatformPaymentMessage);
             payment.RuleFor(p => p.EvidenceUrl).MaximumLength(1000);
             payment.RuleFor(p => p.Reference).MaximumLength(120);
             payment.RuleFor(p => p.Notes).MaximumLength(1000);

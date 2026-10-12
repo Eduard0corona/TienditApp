@@ -36,6 +36,26 @@ public class OrderNotificationRulesTests
             OrderNotificationPolicy.Off, true, OrderChannel.Counter, OrderType.Service));
     }
 
+    [Theory]
+    [InlineData(OrderChannel.Rappi, OrderNotificationPolicy.RemoteAndServices)]
+    [InlineData(OrderChannel.Rappi, OrderNotificationPolicy.AllOrders)]
+    [InlineData(OrderChannel.Rappi, OrderNotificationPolicy.Off)]
+    [InlineData(OrderChannel.UberEats, OrderNotificationPolicy.RemoteAndServices)]
+    [InlineData(OrderChannel.UberEats, OrderNotificationPolicy.AllOrders)]
+    [InlineData(OrderChannel.UberEats, OrderNotificationPolicy.Off)]
+    [InlineData(OrderChannel.DidiFood, OrderNotificationPolicy.RemoteAndServices)]
+    [InlineData(OrderChannel.DidiFood, OrderNotificationPolicy.AllOrders)]
+    [InlineData(OrderChannel.DidiFood, OrderNotificationPolicy.Off)]
+    public void DeliveryPlatformOrders_ShouldNeverMessageTheCustomer_WhateverThePolicy(
+        OrderChannel channel, OrderNotificationPolicy policy)
+    {
+        // The customer talks to the platform's app, which does not share their phone.
+        Assert.False(OrderNotificationRules.ShouldNotifyCustomer(policy, true, channel, OrderType.Retail));
+        Assert.False(OrderNotificationRules.ShouldNotifyCustomer(policy, false, channel, OrderType.Retail));
+        Assert.False(OrderNotificationRules.ShouldNotifyCustomer(policy, true, channel, OrderType.Service));
+        Assert.False(OrderNotificationRules.IsCounterSale(true, channel, OrderType.Retail));
+    }
+
     [Fact]
     public void Settings_ShouldStartWithTheDefaultPolicyAndRejectUnknownOnes()
     {
@@ -63,6 +83,19 @@ public class OrderNotificationRulesTests
     }
 
     [Fact]
+    public void CreatedEvent_ShouldCarryTheChannel()
+    {
+        var order = NewOrder(OrderChannel.WhatsApp);
+
+        order.MarkAsCreated();
+
+        var created = Assert.Single(order.DomainEvents.OfType<OrderCreatedEvent>());
+        Assert.Equal(OrderChannel.WhatsApp, created.Channel);
+        Assert.Null(created.ExternalOrderNumber);
+        Assert.Null(created.CollectedBy);
+    }
+
+    [Fact]
     public void StatusChangesAfterTheOrderWasCreated_ShouldMessageTheCustomer()
     {
         var order = NewOrder();
@@ -86,7 +119,7 @@ public class OrderNotificationRulesTests
         Assert.Empty(order.DomainEvents);
     }
 
-    private static Order NewOrder()
+    private static Order NewOrder(OrderChannel channel = OrderChannel.Counter)
     {
         var order = new Order(
             tenantId: Guid.NewGuid(),
@@ -99,7 +132,8 @@ public class OrderNotificationRulesTests
             customerName: "Karla",
             customerPhone: "+525511112222",
             customerNotes: null,
-            tableNumber: null);
+            tableNumber: null,
+            channel: channel);
         order.AddItem(Guid.NewGuid(), "Producto", 1, 50m);
         return order;
     }

@@ -9823,7 +9823,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderChannel: 0 | 1 | 2;
+        OrderChannel: 0 | 1 | 2 | 3 | 4 | 5;
         OrderDto: {
             /** Format: uuid */
             id: string;
@@ -9979,7 +9979,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4;
+        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5;
         OrderRefundDto: {
             /** Format: uuid */
             id: string;

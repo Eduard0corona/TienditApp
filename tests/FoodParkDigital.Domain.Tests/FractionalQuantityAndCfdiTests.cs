@@ -242,6 +242,20 @@ public class FractionalQuantityAndCfdiTests
         }
     }
 
+    [Theory]
+    [InlineData(OrderPaymentMethod.Cash, "01")]
+    [InlineData(OrderPaymentMethod.Transfer, "03")]
+    [InlineData(OrderPaymentMethod.Card, "04")]
+    [InlineData(OrderPaymentMethod.DigitalWallet, "06")]
+    [InlineData(OrderPaymentMethod.Other, SatCatalog.PaymentFormToBeDefined)]
+    // What Rappi, Uber Eats or DiDi Food charged in their app: "Intermediario pagos".
+    [InlineData(OrderPaymentMethod.Platform, "31")]
+    public void PaymentForm_ShouldDeclareEachMethodWithItsSatCode(OrderPaymentMethod method, string expected)
+    {
+        Assert.Equal(expected, SatCatalog.PaymentForm(method));
+        Assert.Equal("31", SatCatalog.PaymentFormIntermediary);
+    }
+
     private static void AssertWithinSatBounds(CfdiConceptAmounts concept)
     {
         var transfer = concept.Transfer!;

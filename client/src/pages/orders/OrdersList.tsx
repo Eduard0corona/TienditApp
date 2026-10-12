@@ -36,6 +36,7 @@ import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
 import { buildTicketText, buildWhatsAppTicketUrl, formatCancelled, printTicket } from '../../utils/ticket';
 import {
+  ORDER_CHANNEL_LABELS,
   ORDER_TYPE_LABELS,
   SERVICE_PIECE_STATUS_LABELS,
   getOrderStatusLabel,
@@ -57,11 +58,10 @@ const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; l
 };
 
 // Where the order came from; the counter is the usual one and carries no badge in the list.
-const CHANNEL_OPTIONS = [
-  { value: OrderChannel.Counter, label: 'Mostrador' },
-  { value: OrderChannel.WhatsApp, label: 'WhatsApp' },
-  { value: OrderChannel.Online, label: 'En línea' },
-];
+const CHANNEL_OPTIONS = [OrderChannel.Counter, OrderChannel.WhatsApp, OrderChannel.Online].map((value) => ({
+  value,
+  label: ORDER_CHANNEL_LABELS[value],
+}));
 
 /** The kinds of order of the business, by the rule the server lists them with: sales (products or food), services or both (both while unknown). */
 function getOrderTypes(capabilities: number | null): OrderType[] {

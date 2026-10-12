@@ -1,4 +1,4 @@
-import type { OrderPaymentMethod, OrderStatus, OrderType, PurchaseOrderStatus, ServiceOrderPieceStatus } from '../types';
+import type { OrderChannel, OrderPaymentMethod, OrderStatus, OrderType, PurchaseOrderStatus, ServiceOrderPieceStatus } from '../types';
 
 // Single catalog of the Spanish labels shown for backend enums. REST responses carry enums as numbers
 // and SignalR payloads (and some report dictionaries) carry their C# names, so each label is reachable
@@ -39,6 +39,8 @@ const PAYMENT_METHOD_LABELS: Record<OrderPaymentMethod, string> = {
   2: 'Transferencia',
   3: 'Billetera digital',
   4: 'Otro',
+  // Charged by Rappi, Uber Eats or DiDi Food in their app: it never enters a drawer.
+  5: 'Plataforma',
 };
 
 const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
@@ -47,6 +49,26 @@ const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
   Transfer: 2,
   DigitalWallet: 3,
   Other: 4,
+  Platform: 5,
+};
+
+/** Where the order came from, as the server names each channel (OrderChannelRules.DisplayName). */
+export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
+  0: 'Mostrador',
+  1: 'WhatsApp',
+  2: 'En línea',
+  3: 'Rappi',
+  4: 'Uber Eats',
+  5: 'DiDi Food',
+};
+
+const ORDER_CHANNEL_BY_NAME: Record<string, OrderChannel> = {
+  Counter: 0,
+  WhatsApp: 1,
+  Online: 2,
+  Rappi: 3,
+  UberEats: 4,
+  DidiFood: 5,
 };
 
 export const SERVICE_PIECE_STATUS_LABELS: Record<ServiceOrderPieceStatus, string> = {
@@ -107,6 +129,11 @@ export function getOrderStatusLabel(status: OrderStatus | string | null | undefi
 
 export function getPaymentMethodLabel(method: OrderPaymentMethod | string | null | undefined): string {
   return lookup(method, PAYMENT_METHOD_LABELS, PAYMENT_METHOD_BY_NAME);
+}
+
+/** Label of an order channel given as its number (REST) or its name (SignalR payloads). */
+export function getChannelLabel(channel: OrderChannel | string | null | undefined): string {
+  return lookup(channel, ORDER_CHANNEL_LABELS, ORDER_CHANNEL_BY_NAME);
 }
 
 export function getServicePieceStatusLabel(status: ServiceOrderPieceStatus | string | null | undefined): string {
