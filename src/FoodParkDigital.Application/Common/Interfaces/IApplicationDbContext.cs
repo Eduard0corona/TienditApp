@@ -46,6 +46,9 @@ public interface IApplicationDbContext
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
     DbSet<PlatformOrderDetail> PlatformOrderDetails { get; }
     DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings { get; }
+    DbSet<PlatformSettlement> PlatformSettlements { get; }
+    DbSet<PlatformSettlementOrder> PlatformSettlementOrders { get; }
+    DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }
     DbSet<Supplier> Suppliers { get; }

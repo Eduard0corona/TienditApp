@@ -133,10 +133,60 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - **Nuevas:** cinco escenas con cinco capturas: Precios en apps en escritorio, teléfono y oscuro, el diálogo «Calcular precios» y la lista con cambios y una caja en rojo.
     - **Cambian a propósito:** veintidós capturas. Diecisiete por la pestaña nueva de Catálogo: Productos, Servicios, Categorías y sus diálogos en escritorio y oscuro, y la impresión del producto nuevo. Las cuatro de Vender un pedido de Rappi, que cobra los precios de la app ($220.00 y «Con tus precios de Rappi»). Y la última del diálogo de Plataformas de reparto, cuyo aviso enlaza a Precios en apps.
     - **Resultado:** las 340 escenas pasaron dos corridas seguidas. Las nuevas, y las de Rappi con los precios de la app, no salen de la línea base de `master` hasta que la fase entre a `master`.
+- Fase 22G, liquidación de los depósitos de las plataformas ([ADR 0015](../adr/0015-delivery-platform-settlements.md)):
+  - **Domain:** `PlatformSettlementTests` (26 pruebas, 34 casos):
+    - el neto esperado por lo que sigue cobrado, con redondeo al par;
+    - los límites del periodo (también que no empiece antes de 2000), de la fecha del depósito, de lo depositado, de la referencia y de las notas;
+    - los pedidos de su plataforma hasta el final del periodo, una vez cada uno; uno que no trae nada no entra, y uno ya incluido que se devolvió se queda en 0;
+    - los ajustes con motivo e importe («Otro» con descripción), numerados en el orden en que se escribieron;
+    - guardar entera conservando las filas de los pedidos que se quedan, y un guardado rechazado que no cambia nada;
+    - contar otra vez con revisión nueva solo si algo cambió;
+    - cerrar con cada peso explicado y algo que cerrar; una cerrada que ya no cambia pero se anula; anular con motivo, una sola vez, liberando sus pedidos;
+    - los números guardados de cada enum.
+  - **Application:** `PlatformSettlementFlowTests` (18 pruebas):
+    - los pendientes hasta el periodo con lo que trae cada uno ahora; con 2,050 de antes sin liquidar, los del periodo y los 1,997 más recientes de antes (los más viejos, en una liquidación de su semana); un periodo que termina después de hoy, rechazado;
+    - abrir contando cada pedido y dejando los demás como candidatos;
+    - una segunda abierta, un pedido de otra plataforma o de otro negocio y uno de una liquidación vigente, rechazados hasta anularla;
+    - las reglas del dominio como reglas de negocio, y un pedido devuelto completo o sin cobrar que no entra;
+    - guardar con la revisión vista;
+    - cerrar con diferencia 0 y su bitácora, y la devolución en medio que guarda las cifras nuevas;
+    - el detalle que avisa un pedido que cambió;
+    - anular con motivo y su bitácora;
+    - lo que debe cada plataforma y hasta dónde liquidó, con un pedido devuelto a medias contado uno por uno;
+    - la lista por plataforma y estado y la búsqueda por referencia o notas;
+    - el detalle de otro negocio, que no existe.
+
+    `UseCaseRulesTests` suma las cuatro lecturas como `Permission(ViewReports)` y los cuatro cambios como `Manager`.
+  - **SQL Server:** `PlatformSettlementsSqlServerTests` (12 pruebas: los nueve índices con los dos únicos filtrados y las tres llaves; el guardado sin perder centavos y en su negocio; los pedidos que salen; los ajustes que vuelven en el orden en que se escribieron después de cada guardado; una abierta por plataforma; un pedido en una sola vigente; la revisión vieja; la llave sin cascada del pedido; las restricciones; y las carreras de los casos de uso con `SavedMeanwhile`: otra abierta o un pedido tomado mientras se abre una, y el mismo guardado enviado dos veces, que responden «Alguien más modificó…» en lugar de un error) y `PlatformSettlementsMigrationSqlServerTests` (la versión anterior que reembolsa un pedido liquidado, el error 50010 y el rollback limpio, ver [migraciones](database-migrations.md)). `PlatformPricesMigrationSqlServerTests` aplica ahora hasta su propia migración, no hasta la última.
+  - **WebApi:** `CrossTenantPlatformSettlementsSqlServerTests`:
+    - dos negocios que solo ven y cambian sus liquidaciones, también con el encabezado del otro;
+    - el ciclo completo en SQL Server: abrir, la segunda abierta rechazada, no cerrar con diferencia, la revisión vieja (409 `concurrency_conflict`), cerrar con su bitácora, el pedido tomado por otra (409 `conflict`) y anular;
+    - el permiso: reportes lee, y ni reportes ni el cajero cambian;
+    - los rechazos: un canal que no es plataforma, `[JsonRequired]`, un ajuste null, el tercer decimal y el periodo que falta.
+  - **Cliente:**
+    - `settlementEdits.test.ts`: los importes con signo como la API (la coma solo entre miles), el periodo (también un año a medio escribir) y la fecha del depósito, dónde cae cada pedido, cada ajuste, los propuestos y los guardados, las cuentas en centavos, el cuerpo sin textos vacíos, qué cambió desde el guardado (una caja de depósito que la API rechazaría siempre cuenta, también sobre $0) y el ajuste por la diferencia.
+    - `reportPeriods.test.ts`: la semana pasada y el texto del periodo.
+    - `PlatformSettlementPage.test.tsx`:
+      - una nueva con los pedidos de la semana, la diferencia explicada con un ajuste y el guardado;
+      - lo que la API rechazaría, marcado sin guardar;
+      - la segunda abierta de una plataforma que no se abre;
+      - otro periodo, que no deja guardar hasta tener sus pedidos y guarda solo los suyos;
+      - el pedido que otra liquidación tomó al guardar: se vuelven a leer los pedidos y se queda lo escrito;
+      - la liquidación abierta que aparece al guardar una nueva, con su enlace;
+      - descartar y cancelar preguntando, y el aviso al cerrar la pestaña;
+      - cerrar después de confirmar, el 409 al cerrar que vuelve a leer las cifras y el de otra persona que muestra su versión;
+      - el pedido que cambió y pide guardar;
+      - la versión de otra persona al guardar;
+      - anular con motivo;
+      - la vista de solo lectura, la nueva sin permiso y la liquidación que no existe.
+    - `PlatformSettlements.test.tsx`: lo que debe cada plataforma con sus botones según el rol, la invitación a activar una plataforma, la lista con filtros y búsqueda en el servidor, el estado en el nombre de cada enlace (una anulada y la que la reemplazó) y un error que no borra la búsqueda ni los filtros.
+    - `DataTable.test.tsx`: con menos filas, la última página que todavía tiene alguna, y el largo máximo de la búsqueda.
+    - `navigation.test.ts`: las pestañas «Ventas» y «Liquidaciones» de Reportes y la búsqueda global.
+  - **Escenas visuales** (`liquidaciones.spec.ts`, contra `master`): 9 nuevas, la lista y una liquidación abierta en escritorio, teléfono y oscuro, una nueva, una cerrada y el diálogo de anularla. Cambian a propósito las 3 escenas de Reportes (las pestañas «Ventas» y «Liquidaciones») y la tarjeta de Ventas por canal, que se recorre debajo de ellas. Las 349 pruebas pasan dos corridas seguidas contra el mismo build.
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 
-Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 293 capturas en seis grupos (Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, las pantallas públicas y de cuenta con el marco, y el marco en cada tamaño). Salen iguales en cada corrida: sin transiciones ni animaciones CSS, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
+Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 349 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones ni animaciones CSS, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15), en el controller de sondeo de `RequestCancellationTests` y en la entrega del cliente (`ClientDeliveryTests`, Fase 20); la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

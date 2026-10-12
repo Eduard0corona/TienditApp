@@ -1,0 +1,82 @@
+/* Liquidaciones: the deposit, its orders and its adjustments, and beside them (from a wide screen) the accounts and the actions. */
+.settlement-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .settlement-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  }
+
+  /* The accounts stay in sight while the person goes down the orders. */
+  .settlement-aside {
+    position: sticky;
+    top: calc(var(--ta-topbar-height) + 1rem);
+  }
+}
+
+/* Each figure at the end of its line; the difference last, apart and in bold, under one unbroken line. */
+.settlement-accounts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 0;
+}
+
+.settlement-accounts dt {
+  font-weight: 400;
+}
+
+.settlement-accounts dd {
+  margin: 0;
+  padding-left: 1rem;
+  text-align: right;
+}
+
+.settlement-accounts .settlement-accounts-difference {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--ct-border-color);
+  font-weight: 600;
+}
+
+/* The deposit of a settlement that no longer changes: each label beside its value. */
+.settlement-deposit {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.35rem 1.5rem;
+}
+
+.settlement-deposit dt {
+  font-weight: 400;
+  color: var(--ct-secondary-color);
+}
+
+.settlement-deposit dd {
+  margin: 0;
+}
+
+/* The actions of the settlement under its accounts; what is missing to save or close, on their left. */
+.settlement-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* What each platform owes, side by side from a tablet up. */
+.settlement-receivables {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+  .settlement-receivables {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+}

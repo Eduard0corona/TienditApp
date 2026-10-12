@@ -77,6 +77,16 @@ public class UseCaseRulesTests
         // The prices of the products in each app, as the menu's: whoever manages the catalog.
         { typeof(GetPlatformPriceListQuery), "Permission(ManageCatalog)" },
         { typeof(SavePlatformPricesCommand), "Permission(ManageCatalog)" },
+        // The settlements of their deposits: read with the reports, where the commission and the net already are; opened,
+        // saved, closed and voided by owners and admins, as the terms.
+        { typeof(GetPlatformSettlementsQuery), "Permission(ViewReports)" },
+        { typeof(GetPlatformSettlementQuery), "Permission(ViewReports)" },
+        { typeof(GetPendingPlatformOrdersQuery), "Permission(ViewReports)" },
+        { typeof(GetPlatformReceivablesQuery), "Permission(ViewReports)" },
+        { typeof(CreatePlatformSettlementCommand), "Manager" },
+        { typeof(UpdatePlatformSettlementCommand), "Manager" },
+        { typeof(ClosePlatformSettlementCommand), "Manager" },
+        { typeof(VoidPlatformSettlementCommand), "Manager" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

@@ -35,6 +35,8 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Qué plataformas están activas, sin tasas (`GetDeliveryPlatformChannelsQuery`, para Vender, Pedidos, Reportes y, desde la Fase 22F-2, Precios en apps) | `ManageOrders`, `ViewReports` o `ManageCatalog` (`Permission(ManageOrders, ViewReports, ManageCatalog)`) | — |
 | Precios en las apps de las plataformas: la lista y guardarlos (`GetPlatformPriceListQuery`, `SavePlatformPricesCommand`, Fase 22F-2) | `ManageCatalog` (`Permission(ManageCatalog)`), como los precios del menú | — |
 | Ventas por canal y pedidos de una plataforma (`GetSalesByChannelQuery`, `GetDeliveryPlatformOrdersQuery`) | `ViewReports` (`Permission(ViewReports)`) | — |
+| Liquidaciones de las plataformas: la lista, una liquidación, los pedidos pendientes de un periodo y lo que debe cada plataforma (`GetPlatformSettlementsQuery`, `GetPlatformSettlementQuery`, `GetPendingPlatformOrdersQuery`, `GetPlatformReceivablesQuery`, Fase 22G) | `ViewReports` (`Permission(ViewReports)`), como Ventas por canal | — |
+| Abrir, guardar, cerrar y anular una liquidación (`CreatePlatformSettlementCommand`, `UpdatePlatformSettlementCommand`, `ClosePlatformSettlementCommand`, `VoidPlatformSettlementCommand`, Fase 22G) | dueño o admin (`Manager`), como las tasas de las plataformas | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
 
@@ -52,6 +54,14 @@ Precios en las apps (Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices
 - **Los cambia quien cambia los precios del menú** (`ManageCatalog`): la lista y el guardado. Las tasas de los contratos siguen siendo de dueños y administradores.
 - **Los lee quien puede leer el catálogo:** `GET /products?priceChannel=` pide lo mismo que la lista de productos (catálogo, pedidos, inventario o agenda). Los precios de una app no son secretos: los ve cualquier cliente en ella.
 - **La API lo prueba con personal real** (`CrossTenantPlatformPricesSqlServerTests`): solo catálogo recibe 200 en la lista y en `/channels`, 204 en el guardado y 403 en las tasas; un cajero (`ManageOrders`) y solo reportes reciben 403 en la lista y el guardado; el cajero lee el catálogo con los precios de la plataforma.
+
+Liquidaciones de las plataformas (Fase 22G, [ADR 0015](../adr/0015-delivery-platform-settlements.md)):
+
+- **Las lee quien lee los reportes** (`ViewReports`): la lista, el detalle, los pedidos pendientes y lo que debe cada plataforma. En Ventas por canal ya veía la comisión y el neto de cada pedido.
+- **Las cambian dueños y administradores:** abrir, guardar, cerrar y anular, como los términos de cada plataforma. Cerrar y anular quedan en la bitácora (`PlatformSettlementClosed` y `PlatformSettlementVoided`) en el mismo guardado.
+- **En el cliente**, Reportes › Liquidaciones se abre con el área `reports`, y sus botones de cambio salen solo a `access.isAdmin`; a los demás, la liquidación se ve como está. La API decide igual.
+- **La API lo prueba con personal real** (`CrossTenantPlatformSettlementsSqlServerTests`): solo reportes recibe 200 en las cuatro lecturas y 403 en abrir, guardar, cerrar y anular; un cajero (`ManageOrders`) recibe 403 en todo.
+- **Sin capability ni módulo:** ningún caso de uso nuevo declara un módulo.
 
 Un negocio siempre tiene un tipo de venta (productos, servicios o alimentos), como su plan: `TenantCapabilityRules.NormalizeCapabilities` completa el de su giro si su configuración no deja ninguno y `UpdateMyTenantCommand` no guarda módulos sin uno. Por eso ningún caso de uso exige "comercio".
 

@@ -3,23 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { reportsApi, type ChannelSales } from '../../api/reportsApi';
 import { useActiveBranches } from '../../hooks/useWorkingBranch';
-import { addCalendarDays, getBusinessToday } from '../../utils/dates';
+import { getBusinessToday } from '../../utils/dates';
 import { getPlatformName, isDeliveryPlatform, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { getChannelLabel } from '../../utils/labels';
 import { formatMoney, toCents } from '../../utils/money';
 import BranchPicker from '../branches/BranchPicker';
 import DeliveryPlatformOrdersModal from './DeliveryPlatformOrdersModal';
+import { previousWeek } from './reportPeriods';
 
 /** From the 1st of the month to that day: the period the report opens with, as the server's own default. */
 function thisMonth(today: string) {
   return { from: `${today.slice(0, 8)}01`, to: today };
-}
-
-/** Monday to Sunday of the week before that day's: the weeks the platforms settle (yyyy-mm-dd, the business's days). */
-function lastWeek(today: string) {
-  const daysSinceMonday = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
-  const monday = addCalendarDays(today, -daysSinceMonday - 7);
-  return { from: monday, to: addCalendarDays(monday, 6) };
 }
 
 /** Two figures of the server shown in one column (the commission and its IVA), added in cents. */
@@ -98,7 +92,7 @@ export default function SalesByChannelCard() {
             </div>
             <BranchPicker id="sales-channel-branch" branches={branches.data ?? []} value={branchId} onChange={setBranchId}
               allLabel="Todas las sucursales" />
-            <button type="button" className="btn btn-light btn-sm" onClick={() => choose(lastWeek(today))}>Semana pasada</button>
+            <button type="button" className="btn btn-light btn-sm" onClick={() => choose(previousWeek(today))}>Semana pasada</button>
             <button type="button" className="btn btn-light btn-sm" onClick={() => choose(thisMonth(today))}>Este mes</button>
           </div>
         </div>

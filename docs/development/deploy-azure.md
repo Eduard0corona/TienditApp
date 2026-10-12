@@ -261,6 +261,32 @@ La Fase 22F-2 trae una migración, [`database/production/20261012112823_AddPlatf
 - **Volver a la versión anterior:** funciona sin tocar la base, porque no conoce las tablas. Los precios se quedan guardados sin efecto: los pedidos de plataforma vuelven a cobrarse con el precio del menú, en Vender y en la venta a la vez, y los precios vuelven a aplicarse al publicar otra vez esta versión. Una pestaña que ya tenía el cliente nuevo, hasta recargarse, sigue pidiendo `priceChannel` (la versión anterior lo ignora): su ticket dice «Con tus precios de Rappi» sobre los precios del menú, que son los que se cobran, y Precios en apps responde 404.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50009, sin cambiar nada, si hay algún precio guardado, porque ninguna bitácora los conserva; su consulta 4 dice cuántos son y de cuántos negocios. Sin precios, borra las dos tablas. Es preferible corregir hacia adelante.
 
+## Liquidación de los depósitos de las plataformas (Fase 22G)
+
+La Fase 22G trae una migración, [`database/production/20261012145908_AddPlatformSettlements`](../../database/production/20261012145908_AddPlatformSettlements). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
+
+- **La migración:**
+  - **Qué agrega:** crea `PlatformSettlements`, `PlatformSettlementOrders` y `PlatformSettlementAdjustments` (con el lugar de cada ajuste, para leerlos en su orden), vacías. No toca ninguna otra tabla.
+  - **Cuándo cambia algo:** cuando un dueño o administrador registra un depósito en Reportes › Liquidaciones. Mientras no haya liquidaciones, todo sigue como en la Fase 22F-2.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las nueve restricciones CHECK, las tres llaves (dos en cascada y la del pedido sin ella) y los índices, con el filtro de los dos únicos. Su consulta 4 (las liquidaciones guardadas) sigue vacía hasta desplegar, y las cinco de la 5 (consistencia) deben quedar vacías siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22F-2) no conoce las tablas y sigue funcionando: ninguna de sus consultas las lee, y un pedido liquidado se puede reembolsar porque un reembolso no borra el pedido (`PlatformSettlementsMigrationSqlServerTests`, ver [migraciones](database-migrations.md)). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - **Rutas** (`api/v1/platform-settlements`):
+    - `GET /`, con `channel`, `status`, `search`, `pageNumber` y `pageSize` (20 por omisión, hasta 100);
+    - `GET /receivable`;
+    - `GET /pending-orders?channel=&from=&to=`, con el periodo obligatorio: de hasta 31 días, desde 2000 y hasta hoy;
+    - `GET /{id}`;
+    - `POST /` responde 201, y `PUT /{id}`, `POST /{id}/close` y `POST /{id}/void` responden 200.
+    - Leer pide `ViewReports`, y cambiar, dueño o administrador; 403 sin ellos.
+  - **Esquemas:** `PlatformSettlementDto` (y su página), `PlatformSettlementDetailDto`, `PlatformSettlementOrderDto`, `PlatformSettlementAdjustmentDto`, `PendingPlatformOrdersDto`, `PlatformReceivableDto`, `CreatePlatformSettlementRequest`, `UpdatePlatformSettlementRequest`, `PlatformSettlementAdjustmentRequest`, `ClosePlatformSettlementRequest` y `VoidPlatformSettlementRequest`. Los enums `PlatformSettlementStatus` y `PlatformSettlementAdjustmentKind` viajan como números.
+  - **Campos obligatorios:** todo menos la referencia, las notas y la descripción de un ajuste es `[JsonRequired]`: sin el campo, o con un ajuste null, la API responde 400 `validation_failed`.
+  - **Respuestas de los cambios:** 400 `validation_failed` o `business_rule`; 404 si la liquidación es de otro negocio; 409 `concurrency_conflict` con una revisión vieja, una carrera con otra persona o el mismo guardado enviado dos veces; y 409 `conflict`, con su motivo, cuando otra liquidación ya tenía un pedido o cuando, al cerrar, cambió lo que se espera de uno (las cifras nuevas quedan guardadas).
+
+  Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior no conoce Reportes › Liquidaciones ni la pestaña «Ventas»: las ve al recargar (el aviso de versión nueva lo ofrece). Nada de lo que hacía cambia.
+- **Volver a la versión anterior:** funciona sin tocar la base, porque no conoce las tablas. Las liquidaciones se quedan guardadas sin efecto, y Reportes › Liquidaciones vuelve al publicar otra vez esta versión. Una pestaña con el cliente nuevo recibe 404 en Liquidaciones hasta recargarse.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50010, sin cambiar nada, si hay alguna liquidación guardada, porque la bitácora no guarda qué pedidos lleva cada una (solo cuántos) ni nada de una abierta; la consulta 4 del `verify.sql` dice cuántas son, de qué plataforma y estado, y de cuántos negocios. Sin liquidaciones, borra las tres tablas. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

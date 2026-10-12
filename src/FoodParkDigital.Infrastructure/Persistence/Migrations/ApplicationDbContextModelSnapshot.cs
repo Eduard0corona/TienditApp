@@ -3160,6 +3160,169 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AdjustmentsTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("DepositedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("DepositedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("OrdersTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("PeriodFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("VoidedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PlatformSettlements_TenantId_Channel_Open")
+                        .HasFilter("[Status] = 0");
+
+                    b.HasIndex("TenantId", "PeriodTo");
+
+                    b.ToTable("PlatformSettlements", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlatformSettlements_Channel", "[Channel] IN (3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_PlatformSettlements_Closed", "[Status] <> 1 OR [ClosedAt] IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_PlatformSettlements_Dates", "[PeriodTo] >= [PeriodFrom] AND [DepositedOn] >= [PeriodFrom]");
+
+                            t.HasCheckConstraint("CK_PlatformSettlements_Revision", "[Revision] >= 1");
+
+                            t.HasCheckConstraint("CK_PlatformSettlements_Status", "[Status] IN (0, 1, 99)");
+
+                            t.HasCheckConstraint("CK_PlatformSettlements_Voided", "[Status] <> 99 OR ([VoidedAt] IS NOT NULL AND [VoidReason] IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlementAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettlementId");
+
+                    b.ToTable("PlatformSettlementAdjustments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlatformSettlementAdjustments_Amount", "[Amount] <> 0");
+
+                            t.HasCheckConstraint("CK_PlatformSettlementAdjustments_Kind", "[Kind] IN (1, 2, 3, 4, 5, 99)");
+
+                            t.HasCheckConstraint("CK_PlatformSettlementAdjustments_Other", "[Kind] <> 99 OR [Description] IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlementOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("ExpectedNet")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("SettlementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PlatformSettlementOrders_OrderId_Active")
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("SettlementId");
+
+                    b.HasIndex("TenantId", "OrderId");
+
+                    b.ToTable("PlatformSettlementOrders", (string)null);
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4556,6 +4719,30 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlementAdjustment", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlement", null)
+                        .WithMany("Adjustments")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlementOrder", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlement", null)
+                        .WithMany("Orders")
+                        .HasForeignKey("SettlementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Purchasing.Entities.Supplier", "Supplier")
@@ -4843,6 +5030,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderRefund", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.PlatformSettlement", b =>
+                {
+                    b.Navigation("Adjustments");
+
+                    b.Navigation("Orders");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>

@@ -30,4 +30,4 @@ TienditApp soporta operación multi-tenant para negocios Food, Retail y Service.
 
 ## Fuera de alcance comprobado
 
-No hay evidencia de CFDI, integración SAT, notas de crédito fiscales, motor fiscal mexicano, cuentas por cobrar completas, saldo a favor ni ledger de Wallet. `DigitalWallet` es un método de pago y un total de corte, no un monedero contable. No existe un dominio de suscripciones/churn; una categoría de plantilla llamada “Membresías” no constituye esa funcionalidad. Los pedidos de plataformas de reparto se capturan a mano: no hay integración con sus APIs ni liquidación o conciliación de sus depósitos.
+No hay evidencia de CFDI, integración SAT, notas de crédito fiscales, motor fiscal mexicano, cuentas por cobrar completas, saldo a favor ni ledger de Wallet. `DigitalWallet` es un método de pago y un total de corte, no un monedero contable. No existe un dominio de suscripciones/churn; una categoría de plantilla llamada “Membresías” no constituye esa funcionalidad. Los pedidos de plataformas de reparto se capturan a mano, sin integración con sus APIs, y sus depósitos se concilian a mano en Reportes › Liquidaciones (Fase 22G).

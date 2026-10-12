@@ -30,6 +30,8 @@ const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersLi
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
 const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsList'));
 const OperationalReports = lazy(() => import('./pages/reports/OperationalReports'));
+const PlatformSettlements = lazy(() => import('./pages/reports/PlatformSettlements'));
+const PlatformSettlementPage = lazy(() => import('./pages/reports/PlatformSettlementPage'));
 const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const PlatformConsole = lazy(() => import('./pages/platform/PlatformConsole'));
@@ -211,6 +213,22 @@ export default function App() {
                 element={(
                   <AccessRoute area="reports">
                     <OperationalReports />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/settlements"
+                element={(
+                  <AccessRoute area="reports">
+                    <PlatformSettlements />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/settlements/:id"
+                element={(
+                  <AccessRoute area="reports">
+                    <PlatformSettlementPage />
                   </AccessRoute>
                 )}
               />
