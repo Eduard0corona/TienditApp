@@ -330,6 +330,12 @@ export { BusinessType } from '../api/generated/enums';
 
 export { TenantCapability } from '../api/generated/enums';
 
+/**
+ * Same numbers as Domain.Branches.Enums.BranchServiceMode: a branch customers come to, or one that only delivers and
+ * keeps its address for the team.
+ */
+export { BranchServiceMode } from '../api/generated/enums';
+
 export interface RegisterBusinessRequest {
   email: string;
   password: string;

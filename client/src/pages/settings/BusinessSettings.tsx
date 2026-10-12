@@ -21,7 +21,7 @@ import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
 import { COMMERCE_CAPABILITIES, hasAnyCapability } from '../../utils/tenantCapabilities';
 import { formatInBusinessZone, BUSINESS_TIME_ZONES, DEFAULT_TIME_ZONE } from '../../utils/dates';
-import { INDUSTRY_OPTIONS, matchIndustry } from '../../utils/industries';
+import { HOME_DELIVERY_INDUSTRY, INDUSTRY_OPTIONS, matchIndustry } from '../../utils/industries';
 
 
 const TAX_REGIME_OPTIONS = [
@@ -109,6 +109,7 @@ export default function BusinessSettings() {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<UpdateTenantRequest>();
 
@@ -385,12 +386,20 @@ export default function BusinessSettings() {
                   </div>
                   <div className="mb-3">
                     <label htmlFor="businesssettings-giro-del-negocio" className="form-label">Giro del negocio</label>
-                    <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}>
+                    <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}
+                      aria-describedby={watch('industry') === HOME_DELIVERY_INDUSTRY ? 'business-home-delivery-hint' : undefined}>
                       <option value="">Seleccionar...</option>
                       {industryOptions.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
+                    {/* The giro changes no branch: each one says in Sucursales whether customers come to it. */}
+                    {watch('industry') === HOME_DELIVERY_INDUSTRY && (
+                      <div id="business-home-delivery-hint" className="form-text">
+                        Marca como «Solo a domicilio» en <Link to="/branches">Sucursales</Link> las que no tienen local: su
+                        dirección no se muestra en tu menú en línea.
+                      </div>
+                    )}
                   </div>
                   <div className="mb-3">
                     <div className="form-label d-block">Módulos habilitados</div>
@@ -616,7 +625,7 @@ export default function BusinessSettings() {
               </h4>
               <p className="text-muted small mb-3">
                 Para tus facturas; no se muestra en tu menú en línea. Ahí va la dirección de tu{' '}
-                <Link to="/branches">sucursal principal</Link>.
+                <Link to="/branches">sucursal principal</Link>, si atiende en un local.
               </p>
 
               {editMode ? (

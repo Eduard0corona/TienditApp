@@ -279,7 +279,7 @@ export default function PublicMenuPage() {
         )}
       </header>
 
-      {(hours || data.address) && (
+      {(hours || data.address || data.deliveryOnly) && (
         <section className="pm-info" aria-label="Horario y ubicación">
           {hours && !hoursOpen && (
             <p className="pm-today">
@@ -315,6 +315,13 @@ export default function PublicMenuPage() {
             <p className="pm-upcoming text-muted">
               <i className="ri-calendar-event-line" aria-hidden="true"></i>
               <span className="flex-grow-1">{hours.upcomingNotice}</span>
+            </p>
+          )}
+          {/* A kitchen without premises: the food goes to the customer, and the server sends no address. */}
+          {data.deliveryOnly && (
+            <p className="pm-address">
+              <i className="ri-e-bike-2-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">Solo a domicilio: no tenemos local para visitar.</span>
             </p>
           )}
           {data.address && (

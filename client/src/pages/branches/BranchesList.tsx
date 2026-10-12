@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import { activeBranchesKey } from '../../hooks/useWorkingBranch';
+import { BranchServiceMode } from '../../types';
 
 const COLUMNS = [
   { header: 'Sucursal' },
@@ -30,6 +31,7 @@ interface BranchForm {
   contactName: string;
   contactPhone: string;
   isDefault: boolean;
+  serviceMode: BranchServiceMode;
 }
 
 const EMPTY_FORM: BranchForm = {
@@ -45,9 +47,24 @@ const EMPTY_FORM: BranchForm = {
   contactName: '',
   contactPhone: '',
   isDefault: false,
+  serviceMode: BranchServiceMode.Premises,
 };
 
-const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code'>; label: string; col: string; maxLength: number }> = [
+/** How a branch serves its customers; one that only delivers keeps its address for the team. */
+const SERVICE_MODES = [
+  {
+    value: BranchServiceMode.Premises,
+    label: 'Local abierto al público',
+    hint: 'Tus clientes llegan a comer, a comprar o a recoger.',
+  },
+  {
+    value: BranchServiceMode.DeliveryOnly,
+    label: 'Solo a domicilio, sin local',
+    hint: 'Solo entregas. Su dirección es para tu equipo y nunca se muestra a tus clientes.',
+  },
+];
+
+const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code' | 'serviceMode'>; label: string; col: string; maxLength: number }> = [
   { key: 'addressLine1', label: 'Calle y número', col: 'col-md-6', maxLength: 250 },
   { key: 'addressLine2', label: 'Colonia o referencia', col: 'col-md-6', maxLength: 250 },
   { key: 'city', label: 'Ciudad', col: 'col-md-4', maxLength: 120 },
@@ -72,6 +89,7 @@ function toForm(branch: Branch): BranchForm {
     contactName: branch.contactName ?? '',
     contactPhone: branch.contactPhone ?? '',
     isDefault: branch.isDefault,
+    serviceMode: branch.serviceMode ?? BranchServiceMode.Premises,
   };
 }
 
@@ -132,6 +150,7 @@ export default function BranchesList() {
       postalCode: blankToNull(form.postalCode),
       contactName: blankToNull(form.contactName),
       contactPhone: blankToNull(form.contactPhone),
+      serviceMode: form.serviceMode,
     };
     setSaving(true);
     setFormError('');
@@ -233,6 +252,9 @@ export default function BranchesList() {
                   <div className="text-muted small">
                     {item.code}
                     {item.isDefault && <span className="badge text-bg-info ms-2">Principal</span>}
+                    {item.serviceMode === BranchServiceMode.DeliveryOnly && (
+                      <span className="badge text-bg-light border ms-2">Solo a domicilio</span>
+                    )}
                   </div>
                 </td>
                 <td>
@@ -304,6 +326,18 @@ export default function BranchesList() {
                   <input id="branch-description" className="form-control" maxLength={500}
                     value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                 </div>
+                <fieldset className="col-12">
+                  <legend className="form-label fs-6 mb-1">¿Cómo atiende?</legend>
+                  {SERVICE_MODES.map((mode) => (
+                    <div className="form-check" key={mode.value}>
+                      <input className="form-check-input" type="radio" name="branch-service-mode" id={`branch-service-mode-${mode.value}`}
+                        checked={form.serviceMode === mode.value} aria-describedby={`branch-service-mode-${mode.value}-hint`}
+                        onChange={() => setForm({ ...form, serviceMode: mode.value })} />
+                      <label className="form-check-label" htmlFor={`branch-service-mode-${mode.value}`}>{mode.label}</label>
+                      <div id={`branch-service-mode-${mode.value}-hint`} className="form-text mt-0">{mode.hint}</div>
+                    </div>
+                  ))}
+                </fieldset>
                 {TEXT_FIELDS.map((field) => (
                   <div key={field.key} className={field.col}>
                     <label className="form-label" htmlFor={`branch-${field.key}`}>{field.label}</label>
@@ -312,12 +346,17 @@ export default function BranchesList() {
                   </div>
                 ))}
               </div>
-              {(editing ? editing.isDefault : form.isDefault) && (
+              {(editing ? editing.isDefault : form.isDefault) && (form.serviceMode === BranchServiceMode.DeliveryOnly ? (
+                <p className="text-muted small mt-3 mb-0">
+                  <i className="ri-lock-line me-1" aria-hidden="true"></i>
+                  Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección. Solo la ve tu equipo.
+                </p>
+              ) : (
                 <p className="text-muted small mt-3 mb-0">
                   <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
                   La dirección de la sucursal principal se muestra en tu menú en línea, con un enlace al mapa.
                 </p>
-              )}
+              ))}
               {!editing && (
                 <p className="text-muted small mt-3 mb-0">
                   Si el negocio usa inventario, la sucursal tendrá su propio almacén y sus ventas descontarán de él.

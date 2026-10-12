@@ -1,6 +1,13 @@
+/**
+ * A kitchen that only delivers, without premises. Same text as BusinessIndustries.HomeDelivery: a business that signs up
+ * with it starts with a main branch that only delivers, whose address is never published.
+ */
+export const HOME_DELIVERY_INDUSTRY = 'Comida a domicilio';
+
 /** The giros a business can pick; the one picked is stored as written here. */
 export const INDUSTRY_OPTIONS = [
   'Alimentos y bebidas',
+  HOME_DELIVERY_INDUSTRY,
   'Abarrotes',
   'Farmacia',
   'Ropa y accesorios',
