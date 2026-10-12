@@ -186,10 +186,10 @@ function salesByBranch(data, q) {
   branches.forEach((b) => add(all, b.figures));
   return { from, to, totals: finish(all), branches, days, snapshotDays: Math.max(0, days.length - 1), liveDays: 1 };
 }
-function zero() { return { ordersCreated: 0, paidOrders: 0, paymentsCount: 0, paymentsAmount: 0, cashAmount: 0, cardAmount: 0, transferAmount: 0, walletAmount: 0, otherAmount: 0, refundsCount: 0, refundsAmount: 0, netSales: 0, averageTicket: 0 }; }
+function zero() { return { ordersCreated: 0, paidOrders: 0, paymentsCount: 0, paymentsAmount: 0, cashAmount: 0, cardAmount: 0, transferAmount: 0, walletAmount: 0, otherAmount: 0, platformAmount: 0, refundsCount: 0, refundsAmount: 0, netSales: 0, averageTicket: 0 }; }
 function fig(amount, tickets) {
   const refunds = Math.round(amount * 0.015);
-  return { ordersCreated: tickets + 2, paidOrders: tickets, paymentsCount: tickets + 3, paymentsAmount: amount, cashAmount: Math.round(amount * 0.45), cardAmount: Math.round(amount * 0.4), transferAmount: Math.round(amount * 0.1), walletAmount: 0, otherAmount: amount - Math.round(amount * 0.45) - Math.round(amount * 0.4) - Math.round(amount * 0.1), refundsCount: refunds > 0 ? 1 : 0, refundsAmount: refunds, netSales: amount - refunds, averageTicket: 0 };
+  return { ordersCreated: tickets + 2, paidOrders: tickets, paymentsCount: tickets + 3, paymentsAmount: amount, cashAmount: Math.round(amount * 0.45), cardAmount: Math.round(amount * 0.4), transferAmount: Math.round(amount * 0.1), walletAmount: 0, otherAmount: amount - Math.round(amount * 0.45) - Math.round(amount * 0.4) - Math.round(amount * 0.1), platformAmount: 0, refundsCount: refunds > 0 ? 1 : 0, refundsAmount: refunds, netSales: amount - refunds, averageTicket: 0 };
 }
 function add(target, x) { for (const k of Object.keys(target)) if (k !== 'averageTicket') target[k] += x[k]; }
 function finish(x) { return { ...x, averageTicket: x.paidOrders > 0 ? Math.round((x.netSales / x.paidOrders) * 100) / 100 : 0 }; }

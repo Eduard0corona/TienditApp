@@ -57,6 +57,9 @@ public class DailySalesSnapshotConfiguration : IEntityTypeConfiguration<DailySal
         builder.Property(x => x.WalletAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.OtherAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.RefundsAmount).HasColumnType("decimal(18,2)");
+        // EF always writes it; the default fills the rows the previous version stores while this one is published
+        // (it does not know the «Plataforma» method, so 0 is what those days had).
+        builder.Property(x => x.PlatformAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m).ValueGeneratedNever();
         builder.Ignore(x => x.Figures);
 
         // One row per day, branch and kind of order. A null branch is one more bucket: without the filter SQL Server

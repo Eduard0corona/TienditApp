@@ -41,6 +41,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Ignore(o => o.TipTotal);
         builder.Ignore(o => o.IsOpenTab);
         builder.Ignore(o => o.CurrentRound);
+        builder.Ignore(o => o.IsDeliveryPlatformOrder);
         builder.Property(o => o.IsTab).HasDefaultValue(false).ValueGeneratedNever();
         builder.Property(o => o.TenantId).IsRequired();
 
@@ -71,6 +72,13 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasOne(o => o.ServiceDetail)
             .WithOne(d => d.Order)
             .HasForeignKey<ServiceOrderDetail>(d => d.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The folio, terms and amounts of an order of a delivery platform. Not auto-included: the queries that show
+        // or return the order include it, as they include ServiceDetail.
+        builder.HasOne(o => o.PlatformDetail)
+            .WithOne()
+            .HasForeignKey<PlatformOrderDetail>(d => d.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne<ApplicationUser>()

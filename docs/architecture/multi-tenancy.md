@@ -23,6 +23,16 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
 - Días especiales (Fase 21, [ADR 0012](../adr/0012-special-days.md)):
   - `SpecialDay` es `ITenantScoped`, con el filtro global y el interceptor; su índice único es `(TenantId, Date)`. Los cambian dueños y administradores, siempre en el negocio de `MyTenantResolver`: en la suite, con el encabezado de otro negocio un dueño agrega en el suyo, solo lee los suyos y no cambia ni quita los del otro (404), cuya lista queda igual.
   - El menú público y su pedido los leen después de fijar el negocio del slug (`SetTenant`), y las respuestas automáticas en el alcance del negocio del mensaje (el del webhook). `BusinessHours.ReadAsync` filtra además por `TenantId`, sin un `IgnoreQueryFilters()` nuevo: `TenantFilterBypassAllowlistTests` no cambia. `PublicMenuSpecialDaysSqlServerTests` comprueba por HTTP que el día especial de un negocio cierra su menú y no el del otro.
+- Plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
+  - **Entidades:** `DeliveryPlatformSetting` (una fila por negocio y plataforma, índice único `(TenantId, Channel)`) y `PlatformOrderDetail` (el detalle de un pedido de plataforma, que guarda el negocio de su pedido) son `ITenantScoped`, con el filtro global y el interceptor.
+  - **Lecturas:** los casos de uso filtran además por el `TenantId` de la sesión al leer la configuración, al revisar un folio repetido y en los reportes, sin un `IgnoreQueryFilters()` nuevo: `TenantFilterBypassAllowlistTests` no cambia.
+  - **Configuración ajena:** un pedido de una plataforma que solo otro negocio activó se rechaza (400 `business_rule`), y la configuración de otro negocio nunca calcula una comisión, porque `Order.RegisterPlatformOrder` exige el mismo negocio y canal.
+  - **Suite entre negocios** (`CrossTenantDeliveryPlatformsSqlServerTests`):
+    - con el encabezado de otro negocio, un dueño solo lee y cambia sus propias plataformas, y la bitácora queda en el suyo;
+    - un pedido de Rappi en B, con Rappi activa solo en A, se rechaza;
+    - un pedido de Rappi de A no aparece en la lista, la búsqueda por folio, Cocina, las ventas por canal ni los pedidos por plataforma de B, aunque B también tenga Rappi activa.
+
+    `CrossTenantManagementSqlServerTests` suma las ventas por canal a los reportes que no incluyen al otro negocio.
 - Archivos (Fase 9): la carpeta de cada archivo sale de su dueño: `products/{negocio}` y `logos/{negocio}`, y para los avatares `avatars/users/{cuenta}` (la persona es la misma en todos sus negocios). Subir y borrar validan esa carpeta; un avatar anterior se borra de la carpeta del negocio donde se subió, tomada de las membresías de la cuenta (`AvatarFiles`).
 
 Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant. Muchas claves e índices incluyen `TenantId`.

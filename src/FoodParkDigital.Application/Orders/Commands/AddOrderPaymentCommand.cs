@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -39,6 +40,9 @@ public class AddOrderPaymentCommandValidator : AbstractValidator<AddOrderPayment
         // Payments are stored with 2 decimals; more precision would make orders and the cash ledger diverge.
         RuleFor(x => x.Amount).GreaterThan(0).PrecisionScale(18, 2, ignoreTrailingZeros: true);
         RuleFor(x => x.Method).IsInEnum();
+        // What a delivery platform charged is recorded by its order when it is created, for the total.
+        RuleFor(x => x.Method).NotEqual(OrderPaymentMethod.Platform)
+            .WithMessage(OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
         RuleFor(x => x.EvidenceUrl).MaximumLength(1000);
         RuleFor(x => x.Reference).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(1000);
@@ -109,6 +113,7 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
             .Include(o => o.Items)
             .Include(o => o.StatusHistory)
             .Include(o => o.ServiceDetail)
+            .Include(o => o.PlatformDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)

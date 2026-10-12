@@ -8,6 +8,7 @@ import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
 import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
 import SpecialDaysCard from '../../components/settings/SpecialDaysCard';
+import DeliveryPlatformsCard from '../../components/settings/DeliveryPlatformsCard';
 import ThemeCard from '../../components/settings/ThemeCard';
 import SubscriptionCard from '../../components/settings/SubscriptionCard';
 import { useMySubscription } from '../../hooks/useMySubscription';
@@ -330,6 +331,7 @@ export default function BusinessSettings() {
         onSaved={() => void queryClient.invalidateQueries({ queryKey: queryKeys.specialDays })}
       />
       <SpecialDaysCard />
+      <DeliveryPlatformsCard />
       <ThemeCard />
 
       <div className="row">

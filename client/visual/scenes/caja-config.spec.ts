@@ -1,14 +1,17 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { SIZES, dialog, open, snap } from '../helpers';
+import { SIZES, dialog, open, snap, snapElement } from '../helpers';
 import {
   CAJA_DATA,
   CAJA_ROUTES,
   CASHIER_PROFILE,
+  CORTE_CON_PLATAFORMA_DATA,
   MENU_EN_LINEA_DATA,
   NEGOCIO_DATA,
+  PLATAFORMAS_ROUTES,
   SIN_CAJA_DATA,
   SUPER_ADMIN_PROFILE,
+  VENTAS_POR_CANAL_ROUTES,
 } from './caja-config.mocks';
 
 // Caja, Reportes, Auditoría and Configuración (Mi negocio, WhatsApp, Sucursales, Equipo, Perfil, Plataforma, Planes and
@@ -45,6 +48,13 @@ async function openCashTab(page: Page, name: string, loaded: Locator) {
   await page.getByRole('tab', { name }).click();
   await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
   await expect(loaded).toBeVisible();
+}
+
+/** Scrolls a dialog taller than the screen to its end, for a shot of what is below. */
+async function scrollToEnd(panel: Locator) {
+  await panel.evaluate((root) => {
+    for (const element of [root, ...root.querySelectorAll('*')]) element.scrollTop = element.scrollHeight;
+  });
 }
 
 /** The row of a shift in the history, by what sets it apart (its difference, its branch). */
@@ -271,6 +281,21 @@ test.describe('Caja', () => {
     await snap(page, 'caja-corte-del-dia-impreso');
   });
 
+  test.describe('con plataforma', () => {
+    // Rappi charged three orders in its app and gave one back: in "Cobrado", apart from the drawers, and in the printed cut.
+    test.use({ prepareData: CORTE_CON_PLATAFORMA_DATA });
+
+    test('caja, corte del día con plataforma', async ({ page }) => {
+      await open(page, '/cash');
+      await openCashTab(page, 'Corte del día', page.getByText('Lo cobró la plataforma: no entra a la caja'));
+      await expect(page.getByText('Devuelto: $350.00')).toBeVisible();
+      await snap(page, 'caja-corte-del-dia-plataforma');
+
+      await printCut(page, page.getByRole('button', { name: 'Imprimir corte del día' }));
+      await snap(page, 'caja-corte-del-dia-plataforma-impreso');
+    });
+  });
+
   test.describe('oscuro', () => {
     test.use({ colorMode: 'dark' });
 
@@ -360,6 +385,55 @@ test.describe('Mi negocio', () => {
       await expect(page.getByLabel('Calle')).toHaveValue('Av. Álvaro Obregón');
       await snap(page, 'negocio-editar-oscuro');
     });
+  });
+});
+
+test.describe('Plataformas de reparto', () => {
+  // Rappi takes orders, Uber Eats is turned off and DiDi Food was never set up.
+  test.use({ extraRoutes: PLATAFORMAS_ROUTES, prepareData: NEGOCIO_DATA });
+
+  test('negocio, plataformas de reparto', async ({ page }) => {
+    await open(page, '/settings/business');
+    const card = page.getByRole('region', { name: 'Plataformas de reparto' });
+    await expect(card.getByText(
+      'Con un pedido de $1,000.00 con IVA al 16 % incluido cobrado por Rappi: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48.',
+    )).toBeVisible();
+    await snapElement(card, 'negocio-plataformas');
+
+    await card.getByRole('button', { name: 'Editar Rappi' }).click();
+    const form = await dialog(page, 'Rappi');
+    await expect(form.getByLabel('Comisión (%)')).toHaveValue('30');
+    await snapDialog(page, 'negocio-plataforma-dialogo');
+
+    // Below, the fiscal notice and the one about the prices of the catalog.
+    await scrollToEnd(form);
+    await expect(form.getByText(/^Por ahora los pedidos usan los precios de tu catálogo/)).toBeVisible();
+    await snapDialog(page, 'negocio-plataforma-dialogo-final');
+  });
+
+  test('negocio, plataforma de reparto en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/settings/business');
+    await page.getByRole('button', { name: 'Configurar DiDi Food' }).click();
+    const form = await dialog(page, 'DiDi Food');
+    await expect(form.getByRole('switch', { name: 'Recibo pedidos de DiDi Food' })).toBeChecked();
+    await snapDialog(page, 'negocio-plataforma-dialogo-telefono');
+  });
+});
+
+test.describe('Ventas por canal', () => {
+  test.use({ extraRoutes: VENTAS_POR_CANAL_ROUTES });
+
+  test('reportes, ventas por canal', async ({ page }) => {
+    await open(page, '/reports');
+    const card = page.getByRole('region', { name: 'Ventas por canal' });
+    await expect(card.getByText('De Rappi cobraste tú $350.00: su comisión e IVA se descuentan de tu depósito.')).toBeVisible();
+    await snapElement(card, 'reportes-ventas-por-canal');
+
+    await card.getByRole('button', { name: 'Ver pedidos de Rappi' }).click();
+    const orders = await dialog(page, 'Pedidos de Rappi · 1 al 4 oct.');
+    await expect(orders.getByRole('cell', { name: '152412' })).toBeVisible();
+    await snapDialog(page, 'reportes-pedidos-de-rappi');
   });
 });
 

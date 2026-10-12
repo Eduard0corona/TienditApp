@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Messaging;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Messaging.Enums;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,11 @@ public sealed record CampaignAudience(IReadOnlyList<CampaignRecipient> Recipient
 public sealed class CampaignAudienceResolver
 {
     private static readonly OrderStatus[] CompletedStatuses = [OrderStatus.Delivered, OrderStatus.Completed];
+    /// <summary>
+    /// Customers of Rappi, Uber Eats and DiDi Food belong to the platform: their orders keep no phone, and are left out
+    /// here too, so a campaign never reaches them.
+    /// </summary>
+    private static readonly OrderChannel[] DeliveryPlatforms = [.. OrderChannelRules.DeliveryPlatforms];
 
     private readonly IApplicationDbContext _context;
     private readonly IPhoneNormalizationService _phones;
@@ -94,7 +100,7 @@ public sealed class CampaignAudienceResolver
             .ToListAsync(cancellationToken);
         var ordered = await _context.Orders
             .AsNoTracking()
-            .Where(o => o.CustomerPhone != null && o.Status != OrderStatus.Cancelled)
+            .Where(o => o.CustomerPhone != null && o.Status != OrderStatus.Cancelled && !DeliveryPlatforms.Contains(o.Channel))
             .GroupBy(o => o.CustomerPhone!)
             .Select(g => new { Phone = g.Key, Name = g.Max(o => o.CustomerName) })
             .ToListAsync(cancellationToken);
@@ -109,7 +115,7 @@ public sealed class CampaignAudienceResolver
     {
         var orders = _context.Orders
             .AsNoTracking()
-            .Where(o => o.CustomerPhone != null && CompletedStatuses.Contains(o.Status));
+            .Where(o => o.CustomerPhone != null && CompletedStatuses.Contains(o.Status) && !DeliveryPlatforms.Contains(o.Channel));
         if (since is { } from)
             orders = orders.Where(o => o.CreatedAt >= from);
 
@@ -126,7 +132,7 @@ public sealed class CampaignAudienceResolver
     {
         var lapsed = await _context.Orders
             .AsNoTracking()
-            .Where(o => o.CustomerPhone != null && CompletedStatuses.Contains(o.Status))
+            .Where(o => o.CustomerPhone != null && CompletedStatuses.Contains(o.Status) && !DeliveryPlatforms.Contains(o.Channel))
             .GroupBy(o => o.CustomerPhone!)
             .Where(g => g.Count() >= minimumOrders && g.Max(o => o.CreatedAt) < cutoff)
             .Select(g => new { Phone = g.Key, Name = g.Max(o => o.CustomerName) })

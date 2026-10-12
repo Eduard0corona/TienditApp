@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
@@ -156,7 +157,12 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        {
+            // The same folio of the same platform again today: the client confirms and sends it again.
+            return result.Error == PlatformOrderErrors.PossibleDuplicate
+                ? this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.PossibleDuplicateOrder)
+                : this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        }
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
@@ -184,7 +190,8 @@ public class OrdersController : ControllerBase
         var result = await _mediator.Send(new CancelOrderCommand
         {
             OrderId = id,
-            Reason = request?.Reason
+            Reason = request?.Reason,
+            RestockItems = request?.RestockItems ?? true
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -317,6 +324,9 @@ public record UpdateOrderStatusRequest
 public record CancelOrderRequest
 {
     public string? Reason { get; init; }
+
+    /// <summary>Whether what the order consumed goes back to the stock; true when left out.</summary>
+    public bool? RestockItems { get; init; }
 }
 
 public record AddOrderPaymentRequest

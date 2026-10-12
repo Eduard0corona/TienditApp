@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
@@ -16,11 +17,11 @@ public record GetOrdersByBusinessQuery : IRequest<PaginatedList<OrderDto>>
 {
     public OrderType? OrderTypeFilter { get; init; }
     public OrderStatus? StatusFilter { get; init; }
-    /// <summary>Where the order came from: the counter, a WhatsApp conversation or the online menu.</summary>
+    /// <summary>Where the order came from: the counter, a WhatsApp conversation, the online menu or a delivery platform.</summary>
     public OrderChannel? ChannelFilter { get; init; }
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
-    /// <summary>Folio, customer name or phone digits.</summary>
+    /// <summary>Folio, customer name, phone digits or the folio of a delivery platform's app ("#bc 953" finds BC953).</summary>
     public string? Search { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
@@ -97,10 +98,14 @@ public class GetOrdersByBusinessQueryHandler : IRequestHandler<GetOrdersByBusine
             // Phones are stored normalized (+5215512345678): compare the digits that were typed.
             var digits = new string(term.Where(char.IsDigit).ToArray());
             var searchPhone = digits.Length >= 4;
+            // The folio of a platform's app is stored normalized (upper case, no # or spaces): written the same way, the
+            // match does not depend on the collation either. Empty when the term cannot be a folio.
+            var folioTerm = PlatformOrderNumber.NormalizeForSearch(request.Search);
             query = query.Where(o =>
                 o.OrderNumber.ToLower().Contains(term)
                 || o.CustomerName.ToLower().Contains(term)
-                || (searchPhone && o.CustomerPhone != null && o.CustomerPhone.Contains(digits)));
+                || (searchPhone && o.CustomerPhone != null && o.CustomerPhone.Contains(digits))
+                || (folioTerm != "" && o.PlatformDetail != null && o.PlatformDetail.ExternalOrderNumber.Contains(folioTerm)));
         }
 
         // The id breaks ties: two orders created at the same instant keep their place between pages.

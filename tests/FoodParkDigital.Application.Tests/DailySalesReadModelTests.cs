@@ -4,7 +4,9 @@ using FoodParkDigital.Application.Reports.Queries;
 using FoodParkDigital.Application.Reports.ReadModels;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -131,6 +133,65 @@ public class DailySalesReadModelTests
         Assert.True(validator.Validate(new GetSalesByBranchQuery { From = Today.AddDays(-30), To = Today }).IsValid);
     }
 
+    [Fact]
+    public async Task WhatThePlatformsCharged_ShouldGoToPlatformAmount_NotToOther_AndBeStored()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food);
+        var yesterday = Today.AddDays(-1);
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Platform, 350m, yesterday, PaymentAt(13));
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Other, 100m, yesterday, PaymentAt(14));
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Cash, 50m, yesterday, PaymentAt(15));
+
+        var live = Assert.Single(await DailySalesReadModel.ComputeAsync(
+            fixture.Context, tenant.Id, Mexico, yesterday, yesterday, CancellationToken.None)).Figures;
+        await MaterializeAsync(fixture, tenant, firstDay: yesterday);
+        var stored = Assert.Single(await fixture.Context.DailySalesSnapshots.AsNoTracking().ToListAsync());
+
+        Assert.Equal(350m, live.PlatformAmount);
+        Assert.Equal(100m, live.OtherAmount);
+        Assert.Equal(50m, live.CashAmount);
+        Assert.Equal(500m, live.PaymentsAmount);
+        Assert.Equal(3, live.PaidOrders);
+        Assert.Equal(350m, stored.PlatformAmount);
+        Assert.Equal(100m, stored.OtherAmount);
+        Assert.Equal(live, stored.Figures);
+    }
+
+    public static TheoryData<OrderPaymentMethod> EveryPaymentMethod => new(Enum.GetValues<OrderPaymentMethod>());
+
+    /// <summary>I6: in every day's figures, what was charged is the sum of its methods, whatever the method.</summary>
+    [Theory, MemberData(nameof(EveryPaymentMethod))]
+    public async Task ChargedAmount_ShouldBeTheSumOfItsMethods_ForEveryMethod(OrderPaymentMethod method)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food);
+        var yesterday = Today.AddDays(-1);
+        await SeedPaidOrderAsync(fixture, tenant, method, 245m, yesterday, PaymentAt(12));
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Card, 10m, yesterday, PaymentAt(12, 30));
+
+        await MaterializeAsync(fixture, tenant, firstDay: yesterday);
+        var figures = Assert.Single(await fixture.Context.DailySalesSnapshots.AsNoTracking().ToListAsync()).Figures;
+
+        Assert.Equal(255m, figures.PaymentsAmount);
+        Assert.Equal(
+            figures.PaymentsAmount,
+            figures.CashAmount + figures.CardAmount + figures.TransferAmount + figures.WalletAmount + figures.OtherAmount
+                + figures.PlatformAmount);
+        var expectedBucket = method switch
+        {
+            OrderPaymentMethod.Cash => figures.CashAmount,
+            OrderPaymentMethod.Card => figures.CardAmount - 10m,
+            OrderPaymentMethod.Transfer => figures.TransferAmount,
+            OrderPaymentMethod.DigitalWallet => figures.WalletAmount,
+            OrderPaymentMethod.Platform => figures.PlatformAmount,
+            _ => figures.OtherAmount
+        };
+        Assert.Equal(245m, expectedBucket);
+        if (method != OrderPaymentMethod.Platform)
+            Assert.Equal(0m, figures.PlatformAmount);
+    }
+
     private static TimeOnly PaymentAt(int hour, int minute = 0) => new(hour, minute);
 
     /// <summary>A paid counter sale at a local date and time of Mexico City.</summary>
@@ -152,6 +213,38 @@ public class DailySalesReadModelTests
         order.CreatedAt = at;
         await fixture.Context.SaveChangesAsync();
         fixture.Clock.UtcNow = SalesTestFixture.Now;
+    }
+
+    /// <summary>
+    /// A paid order of the tenant in scope, written through the aggregate at a local date and time of Mexico City. The
+    /// «Plataforma» method is only made by registering an order of Rappi charged by the platform.
+    /// </summary>
+    private static async Task SeedPaidOrderAsync(
+        SalesTestFixture fixture, Tenant tenant, OrderPaymentMethod method, decimal amount, DateOnly date, TimeOnly time)
+    {
+        var at = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(date.ToDateTime(time), Mexico), TimeSpan.Zero);
+        var branch = await fixture.DefaultBranchAsync();
+        var isPlatform = method == OrderPaymentMethod.Platform;
+        var number = await fixture.Context.Orders.CountAsync() + 1;
+        var order = new Order(
+            tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
+            null, null, null, pricesIncludeTax: true, channel: isPlatform ? OrderChannel.Rappi : OrderChannel.Counter,
+            branchId: branch.Id);
+        order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
+        if (isPlatform)
+        {
+            var setting = new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, isActive: true, PlatformTerms.WithFiscalDefaults(30m));
+            fixture.Context.DeliveryPlatformSettings.Add(setting);
+            order.RegisterPlatformOrder(setting, PlatformOrderNumber.From($"R{number}"), PlatformCollectedBy.Platform, at, null);
+        }
+        else
+        {
+            order.RegisterPayment(amount, method, at, null, null, null, null);
+        }
+
+        order.CreatedAt = at;
+        fixture.Context.Orders.Add(order);
+        await fixture.Context.SaveChangesAsync();
     }
 
     private static Task<int> MaterializeAsync(SalesTestFixture fixture, Tenant tenant, DateOnly firstDay, TimeZoneInfo? zone = null)

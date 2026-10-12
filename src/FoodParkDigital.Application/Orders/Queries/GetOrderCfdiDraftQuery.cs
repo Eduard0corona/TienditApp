@@ -6,6 +6,8 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Orders;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -128,6 +130,8 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         SetIssuer(draft, tenant.Rfc, tenant.LegalName, tenant.TaxRegime, tenant.Address?.ZipCode);
         SetReceiver(draft, request.Receiver);
         SetPayment(draft, order.Balance, order.Payments.Select(payment => (payment.Method, payment.Amount)).ToList());
+        if (order.IsDeliveryPlatformOrder)
+            AddDeliveryPlatformWarnings(draft, order, hasReceiver: request.Receiver is not null);
 
         if (draft.Difference != 0)
         {
@@ -223,6 +227,30 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .First();
         draft.PaymentMethod = "PUE";
         draft.PaymentForm = SatCatalog.PaymentForm(main.Method);
+    }
+
+    /// <summary>
+    /// An order of Rappi, Uber Eats or DiDi Food. When the platform charged it, the invoice declares form 31
+    /// (intermediary of payments) and the platform withholds ISR and IVA from the sale; either way such orders usually
+    /// go in the global invoice of the period. The platform shares no customer data, so an invoice to a named customer
+    /// only makes sense when they gave theirs. To be confirmed with the accountant: the CFDI of withholdings is the
+    /// platform's, not part of this draft.
+    /// </summary>
+    private static void AddDeliveryPlatformWarnings(CfdiDraftDto draft, Order order, bool hasReceiver)
+    {
+        var platform = OrderChannelRules.DisplayName(order.Channel);
+        draft.Warnings.Add(order.Payments.Any(payment => payment.Method == OrderPaymentMethod.Platform)
+            ? $"{platform} cobró este pedido en su app: la factura lleva la forma de pago 31 (intermediario de pagos) y "
+              + $"normalmente va en la factura global del periodo. {platform} te retiene ISR e IVA de la venta; confirma con "
+              + "tu contador cómo facturar los pedidos de plataformas."
+            : $"Pedido de {platform} que cobra el negocio: normalmente va en la factura global del periodo. Confirma con tu "
+              + "contador cómo facturar los pedidos de plataformas.");
+        if (hasReceiver)
+        {
+            draft.Warnings.Add(
+                $"{platform} no comparte los datos de sus clientes: factura este pedido a nombre de alguien solo si te dio "
+                + "sus datos fiscales, y déjalo fuera de la factura global.");
+        }
     }
 
     private static CfdiTransferDto ToDto(CfdiTransfer transfer) => new()

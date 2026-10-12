@@ -101,6 +101,7 @@ export default function Dashboard() {
   const pendingSetupSteps = setup ? SETUP_STEPS.filter((step) => !setup.steps.find((item) => item.key === step.key)?.done) : [];
   const doneSetupSteps = SETUP_STEPS.length - pendingSetupSteps.length;
   const value = (amount: number | undefined) => (loading ? '—' : formatMoney(amount ?? 0));
+  const platformCollected = metrics?.platformCollected ?? 0;
   const count = (amount: number | undefined) => (loading ? '—' : String(amount ?? 0));
   const topSellers = metrics?.topSellingItems ?? [];
   // A column that says "Producto" on every row tells nothing: the type shows only when products and services mix.
@@ -212,6 +213,10 @@ export default function Dashboard() {
               <div className="small text-muted">
                 {loading ? '' : `${metrics?.paidOrders ?? 0} ${metrics?.paidOrders === 1 ? 'pedido pagado' : 'pedidos pagados'}`}
               </div>
+              {/* Charged in the delivery platforms' apps: in "Cobrado", but in no drawer (each platform deposits it). */}
+              {!loading && platformCollected > 0 && (
+                <div className="small text-muted">Incluye {formatMoney(platformCollected)} que cobraron las plataformas; no entra a la caja.</div>
+              )}
             </div>
           </div>
         </div>

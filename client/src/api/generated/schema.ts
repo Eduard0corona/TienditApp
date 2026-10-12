@@ -2844,6 +2844,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/delivery-platforms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformsDto"];
+                        "application/json": components["schemas"]["DeliveryPlatformsDto"];
+                        "text/json": components["schemas"]["DeliveryPlatformsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-platforms/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformChannelDto"][];
+                        "application/json": components["schemas"]["DeliveryPlatformChannelDto"][];
+                        "text/json": components["schemas"]["DeliveryPlatformChannelDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-platforms/{channel}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    channel: components["schemas"]["OrderChannel"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveDeliveryPlatformRequest"];
+                    "text/json": components["schemas"]["SaveDeliveryPlatformRequest"];
+                    "application/*+json": components["schemas"]["SaveDeliveryPlatformRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformsDto"];
+                        "application/json": components["schemas"]["DeliveryPlatformsDto"];
+                        "text/json": components["schemas"]["DeliveryPlatformsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees": {
         parameters: {
             query?: never;
@@ -6740,6 +6859,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reports/sales-by-channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    to?: string;
+                    branchId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SalesByChannelReportDto"];
+                        "application/json": components["schemas"]["SalesByChannelReportDto"];
+                        "text/json": components["schemas"]["SalesByChannelReportDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/delivery-platform-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    from?: string;
+                    to?: string;
+                    branchId?: string;
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformOrderDtoPaginatedList"];
+                        "application/json": components["schemas"]["DeliveryPlatformOrderDtoPaginatedList"];
+                        "text/json": components["schemas"]["DeliveryPlatformOrderDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/service-board/pieces": {
         parameters: {
             query?: never;
@@ -8417,6 +8622,7 @@ export interface components {
         CampaignStatus: 0 | 1 | 2 | 3;
         CancelOrderRequest: {
             reason?: string | null;
+            restockItems?: boolean | null;
         };
         CancelTabItemRequest: {
             /** Format: uuid */
@@ -8626,6 +8832,32 @@ export interface components {
             userId: string;
             password: string;
             phoneNumber: string;
+        };
+        ChannelSalesDto: {
+            channel?: components["schemas"]["OrderChannel"];
+            isDeliveryPlatform: boolean;
+            /** Format: int32 */
+            paidOrders: number;
+            /** Format: double */
+            paymentsAmount: number;
+            /** Format: double */
+            refundsAmount: number;
+            /** Format: double */
+            netSales: number;
+            /** Format: double */
+            platformCollected: number;
+            /** Format: double */
+            businessCollected: number;
+            /** Format: double */
+            commission: number;
+            /** Format: double */
+            commissionTax: number;
+            /** Format: double */
+            isrWithheld: number;
+            /** Format: double */
+            vatWithheld: number;
+            /** Format: double */
+            expectedSettlement: number;
         };
         ChatMessageDto: {
             /** Format: uuid */
@@ -8854,6 +9086,10 @@ export interface components {
             /** Format: double */
             expectedTotal?: number | null;
             channel: components["schemas"]["OrderChannel"];
+            externalOrderNumber?: string | null;
+            collectedBy?: components["schemas"]["PlatformCollectedBy"];
+            /** @default false */
+            confirmPossibleDuplicate: boolean;
             openTab: boolean;
             /** Format: uuid */
             diningTableId?: string | null;
@@ -9158,6 +9394,12 @@ export interface components {
             /** Format: double */
             otherTotal: number;
             /** Format: double */
+            platformTotal: number;
+            /** Format: int32 */
+            platformPaymentsCount: number;
+            /** Format: double */
+            platformRefundsTotal: number;
+            /** Format: double */
             tipsTotal: number;
             /** Format: double */
             cashTipsTotal: number;
@@ -9215,6 +9457,8 @@ export interface components {
             /** Format: double */
             totalRevenue: number;
             /** Format: double */
+            platformCollected: number;
+            /** Format: double */
             averageOrderValue: number;
             /** Format: int32 */
             paidOrders: number;
@@ -9232,6 +9476,64 @@ export interface components {
          * @enum {integer}
          */
         DayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        DeliveryPlatformChannelDto: {
+            channel: components["schemas"]["OrderChannel"];
+            isActive: boolean;
+        };
+        DeliveryPlatformDto: {
+            channel: components["schemas"]["OrderChannel"];
+            isConfigured: boolean;
+            isActive: boolean;
+            /** Format: double */
+            commissionPercent?: number | null;
+            commissionBase: components["schemas"]["PlatformCommissionBase"];
+            /** Format: double */
+            commissionVatPercent: number;
+            /** Format: double */
+            isrWithholdingPercent: number;
+            /** Format: double */
+            vatWithholdingPercent: number;
+            /** Format: int32 */
+            revision: number;
+            /** Format: date-time */
+            changedAt?: string | null;
+            changedBy?: string | null;
+            example?: components["schemas"]["PlatformSettlementExampleDto"];
+        };
+        DeliveryPlatformOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            externalOrderNumber: string;
+            /** Format: date-time */
+            registeredAt: string;
+            status: components["schemas"]["OrderStatus"];
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            commissionAndTax: number;
+            /** Format: double */
+            withheld: number;
+            /** Format: double */
+            expectedSettlement: number;
+            /** Format: double */
+            refundedAmount: number;
+        };
+        DeliveryPlatformOrderDtoPaginatedList: {
+            items: components["schemas"]["DeliveryPlatformOrderDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        DeliveryPlatformsDto: {
+            platforms: components["schemas"]["DeliveryPlatformDto"][];
+        };
         DiningRoomDto: {
             tables: components["schemas"]["DiningTableDto"][];
             tabsWithoutTable: components["schemas"]["OpenTabSummaryDto"][];
@@ -9560,6 +9862,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             orderNumber: string;
+            channel: components["schemas"]["OrderChannel"];
+            externalOrderNumber?: string | null;
             status: components["schemas"]["OrderStatus"];
             customerName: string;
             tableNumber?: string | null;
@@ -9823,7 +10127,7 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderChannel: 0 | 1 | 2;
+        OrderChannel: 0 | 1 | 2 | 3 | 4 | 5;
         OrderDto: {
             /** Format: uuid */
             id: string;
@@ -9842,6 +10146,7 @@ export interface components {
             tableNumber?: string | null;
             pricesIncludeTax: boolean;
             channel: components["schemas"]["OrderChannel"];
+            platformOrder?: components["schemas"]["OrderPlatformDto"];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -9979,7 +10284,11 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4;
+        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderPlatformDto: {
+            externalOrderNumber: string;
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+        };
         OrderRefundDto: {
             /** Format: uuid */
             id: string;
@@ -10118,6 +10427,16 @@ export interface components {
             /** Format: int32 */
             tenantsCount: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformCollectedBy: 0 | 1;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformCommissionBase: 0 | 1;
         PlatformOverviewDto: {
             /** Format: int32 */
             totalTenants: number;
@@ -10148,6 +10467,18 @@ export interface components {
         };
         PlatformReasonRequest: {
             reason: string;
+        };
+        PlatformSettlementExampleDto: {
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            orderVatPercent: number;
+            /** Format: double */
+            commissionAndTax: number;
+            /** Format: double */
+            withheld: number;
+            /** Format: double */
+            expectedSettlement: number;
         };
         PlatformTenantDto: {
             /** Format: uuid */
@@ -10618,6 +10949,14 @@ export interface components {
             /** Format: int32 */
             liveDays: number;
         };
+        SalesByChannelReportDto: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            channels: components["schemas"]["ChannelSalesDto"][];
+            totals: components["schemas"]["ChannelSalesDto"];
+        };
         SalesFiguresDto: {
             /** Format: int32 */
             ordersCreated: number;
@@ -10637,6 +10976,8 @@ export interface components {
             walletAmount: number;
             /** Format: double */
             otherAmount: number;
+            /** Format: double */
+            platformAmount: number;
             /** Format: int32 */
             refundsCount: number;
             /** Format: double */
@@ -10645,6 +10986,20 @@ export interface components {
             netSales: number;
             /** Format: double */
             averageTicket: number;
+        };
+        SaveDeliveryPlatformRequest: {
+            /** Format: int32 */
+            revision: number;
+            isActive: boolean;
+            /** Format: double */
+            commissionPercent: number;
+            commissionBase: components["schemas"]["PlatformCommissionBase"];
+            /** Format: double */
+            commissionVatPercent: number;
+            /** Format: double */
+            isrWithholdingPercent: number;
+            /** Format: double */
+            vatWithholdingPercent: number;
         };
         SaveSpecialDayRequest: {
             /** Format: date */

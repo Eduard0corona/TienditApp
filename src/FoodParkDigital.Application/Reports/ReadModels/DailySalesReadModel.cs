@@ -30,6 +30,19 @@ public static class DailySalesReadModel
     public static DateOnly LocalToday(TimeZoneInfo zone, DateTimeOffset utcNow)
         => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(utcNow, zone).DateTime);
 
+    /// <summary>
+    /// The local days a report covers: the current month up to today when both ends are omitted, the month that starts
+    /// on <paramref name="from"/> when only it is given, and never more than <see cref="MaxRangeDays"/> days.
+    /// </summary>
+    public static (DateOnly From, DateOnly To) ResolveRange(DateOnly? from, DateOnly? to, DateOnly today)
+    {
+        var start = from ?? new DateOnly(today.Year, today.Month, 1);
+        var end = to ?? (from is null ? today : start.AddMonths(1).AddDays(-1));
+        if (end.DayNumber - start.DayNumber >= MaxRangeDays)
+            end = start.AddDays(MaxRangeDays - 1);
+        return (start, end);
+    }
+
     public static async Task<DailySalesReadResult> ReadAsync(
         IApplicationDbContext context,
         Guid tenantId,
@@ -227,6 +240,7 @@ public static class DailySalesReadModel
         private decimal _transfer;
         private decimal _wallet;
         private decimal _other;
+        private decimal _platform;
         private int _refundsCount;
         private decimal _refundsAmount;
 
@@ -243,6 +257,8 @@ public static class DailySalesReadModel
                 case OrderPaymentMethod.Card: _card += amount; break;
                 case OrderPaymentMethod.Transfer: _transfer += amount; break;
                 case OrderPaymentMethod.DigitalWallet: _wallet += amount; break;
+                // Charged by a delivery platform in its app: never in a drawer, so never mixed with «other».
+                case OrderPaymentMethod.Platform: _platform += amount; break;
                 default: _other += amount; break;
             }
         }
@@ -255,6 +271,6 @@ public static class DailySalesReadModel
 
         public DailySalesFigures Build() => new(
             _ordersCreated, _paidOrders.Count, _paymentsCount, _paymentsAmount, _cash, _card, _transfer, _wallet, _other,
-            _refundsCount, _refundsAmount);
+            _refundsCount, _refundsAmount, _platform);
     }
 }

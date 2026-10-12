@@ -135,7 +135,7 @@ La Fase 14 no trae migraciones: no hay `apply.sql` que aplicar antes del merge, 
 La Fase 15 trae dos migraciones en una sola carpeta, [`database/production/20261008074715_StopMappingRequireOpenCashSession`](../../database/production/20261008074715_StopMappingRequireOpenCashSession): su `apply.sql` se aplica, como siempre, antes del merge (respaldo, `verify.sql`, `apply.sql`, `verify.sql`).
 
 - `AddTabItemCancellations` solo agrega: `OrderItems.CancelledQuantity` y `CancelledAmount` (sin nulos, 0 por omisión) y la tabla `OrderItemCancellations`. La Fase 14 no los mapea, así que sigue funcionando mientras se publica la nueva y sus renglones toman 0 cancelado.
-- `StopMappingRequireOpenCashSession` no cambia la base: la versión nueva deja de mapear `TenantSettings.RequireOpenCashSession` (nadie la lee: todo cobro exige una caja abierta). La columna se queda con su valor por omisión, 0, que toman las filas nuevas; una fase posterior la borra cuando ninguna versión desplegada la mapee. Es el mismo paso que hizo la PR #47 en master (sección anterior).
+- `StopMappingRequireOpenCashSession` no cambia la base: la versión nueva deja de mapear `TenantSettings.RequireOpenCashSession` (nadie la lee: todo cobro del negocio exige una caja abierta). La columna se queda con su valor por omisión, 0, que toman las filas nuevas; una fase posterior la borra cuando ninguna versión desplegada la mapee. Es el mismo paso que hizo la PR #47 en master (sección anterior).
 - `GET /orders/{id}` ahora trae las rondas, las opciones, los reembolsos y las cancelaciones de la cuenta. El contrato solo agrega: la ruta `POST /orders/{id}/item-cancellations` y los campos `cancelledQuantity`, `chargedPrice` e `itemCancellations`.
 - Volver a la Fase 14 (con o sin `rollback.sql`) con platillos cancelados en cuentas abiertas: esa versión recalcula el total con todos los renglones al mandar una ronda y cobraría otra vez lo cancelado. Antes de regresar, cierra o cancela esas cuentas; la consulta 4 de `verify.sql` las cuenta. `rollback.sql` borra la tabla y las columnas de cancelaciones (la bitácora conserva cada cancelación con su motivo) y no toca `RequireOpenCashSession`.
 
@@ -205,6 +205,38 @@ La Fase 21 trae una migración, [`database/production/20261011161835_AddSpecialD
   - **Prueba de humo:** también exige `"business-time-zones":"Healthy"` en `/health/ready`. Un servidor sin los datos de zonas horarias hace fallar ahora el despliegue (con el slot de staging, no llega a producción) en lugar de pasar con los horarios en UTC.
 - **Volver a la versión anterior:** no necesita nada en la base. Esa versión no conoce la tabla: los días especiales se quedan guardados sin efecto (los menús reciben pedidos en las fechas cerradas y WhatsApp vuelve a contestar con la descripción) y vuelven a aplicarse al publicar otra vez esta versión. Un navegador con el cliente nuevo sobre la API anterior usa la redacción de antes, porque no recibe `todayDate`.
 - **Dejar también la base como estaba:** aplica el `rollback.sql`. Borra la tabla y con ella los días especiales de todos los negocios, también los pasados (la bitácora conserva cada cambio con sus valores: `SpecialDayAdded`, `SpecialDayUpdated` y `SpecialDayRemoved`); antes, la consulta 4 de `verify.sql` cuenta las filas, los negocios y las fechas desde hoy que se perderían. Es preferible corregir hacia adelante.
+
+## Pedidos de Rappi, Uber Eats y DiDi Food (Fase 22F)
+
+La Fase 22F trae una migración, [`database/production/20261012005540_AddDeliveryPlatformOrders`](../../database/production/20261012005540_AddDeliveryPlatformOrders). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql`, el merge, configurar las plataformas y capturar pedidos. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0013](../adr/0013-delivery-platform-orders.md)).
+
+- **La migración:**
+  - **Qué agrega:** crea `DeliveryPlatformSettings` y `PlatformOrderDetails`, vacías, y agrega `DailySalesSnapshots.PlatformAmount` con 0 por omisión. `Orders`, `OrderPayments`, `OrderRefunds` y `CashTransactions` no cambian.
+  - **Cuándo cambia algo:** cuando el dueño activa una plataforma en Configuración › Negocio › Plataformas de reparto.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las once restricciones CHECK y los índices. Sus consultas 4 y 5 (pedidos con canal 3 a 5 y pagos o reembolsos con el método 5) siguen en 0 hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 21) no conoce las tablas y sigue funcionando. Sus días guardados toman `PlatformAmount` 0 y su validación rechaza los canales 3 a 5. Se ensayó sobre la base ya aplicada: `/health/schema` sano, una venta de mostrador cobrada y su worker ([migraciones](database-migrations.md)). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **No publiques entre las 00:00 y las 00:45, hora del negocio.** Si el swap cruza la medianoche, la instancia anterior puede guardar el día con lo que cobraron las plataformas en «Otros». La consulta 7 del `verify.sql` lo detecta y [`database/production/data-repair/20261012_PlatformAmountSnapshots`](../../database/production/data-repair/20261012_PlatformAmountSnapshots) lo repara con la versión nueva en todas las instancias.
+- **El contrato solo agrega:**
+  - **Rutas:** `GET /api/v1/delivery-platforms` y `PUT /api/v1/delivery-platforms/{channel}` (`[RequiresTenantManager]`), `GET /api/v1/delivery-platforms/channels` (`ManageOrders` o `ViewReports`), y `GET /api/v1/reports/sales-by-channel` y `GET /api/v1/reports/delivery-platform-orders` (`ViewReports`, con `search` opcional), con sus DTOs. `PUT /api/v1/orders/{id}/cancel` acepta `restockItems` opcional (`true` si no viene).
+  - **Enums:** los valores 3 a 5 de `OrderChannel`, el 5 de `OrderPaymentMethod` («Plataforma»), y `PlatformCollectedBy` y `PlatformCommissionBase`.
+  - **Campos:**
+    - en la venta, `externalOrderNumber`, `collectedBy` y `confirmPossibleDuplicate`, opcionales;
+    - `platformOrder` en `OrderDto` (el folio y quién cobró, sin dinero);
+    - `channel` y `externalOrderNumber` en `KitchenOrderDto` y en el aviso en vivo `OrderCreated`;
+    - `platformTotal`, `platformPaymentsCount` y `platformRefundsTotal` en el corte del día;
+    - `platformCollected` en Inicio y `platformAmount` en las ventas por sucursal.
+  - **Código de error:** `possible_duplicate_order` (409), compatible según el [ADR 0008](../adr/0008-api-error-contract.md).
+
+  Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior, hasta que se recarga (el aviso de versión nueva lo ofrece), ve un pedido de plataforma como uno de mostrador y el método «Plataforma» como «5». Su corte del día no tiene la fila de plataformas, así que «Cobrado» puede ser mayor que la suma de sus filas. Vender no ofrece plataformas en ese cliente. El servidor decide igual.
+- **Cambios de comportamiento:**
+  - **«Otros» del corte:** desde la Fase 22F es todo método sin cubeta propia. Con los datos de hoy da lo mismo.
+  - **`NetCashFlow`:** deja fuera lo que cobraron las plataformas. Sin pedidos de plataforma no cambia.
+  - **Avisos y campañas:** un pedido de plataforma nunca manda avisos de WhatsApp ni entra a las campañas.
+- **Volver a la versión anterior:**
+  - **Sin pedidos de plataforma:** funciona sin tocar la base, porque no conoce las tablas ni la columna. La configuración de las plataformas se queda guardada sin efecto.
+  - **Con pedidos de plataforma:** no conviene. Esa versión sacaría de una caja la devolución de una anulación y su worker pondría en «Otros» lo que cobraron las plataformas. Se corrige hacia adelante.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50008, sin cambiar nada, si hay un pedido con canal 3 a 5 o un pago, reembolso o movimiento de caja con el método 5; su consulta 5 dice qué lo detiene. Sin ellos, borra las dos tablas y la columna. Se pierde la configuración de cada plataforma, que la bitácora conserva (`DeliveryPlatformUpdated`).
 
 ## Slot de staging con swap y aprobación
 

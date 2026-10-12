@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { kitchenApi } from '../../api/kitchenApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
-import { KitchenTicketStatus, OrderStatus, TenantCapability, UnitType, type KitchenOrderDto } from '../../types';
+import { KitchenTicketStatus, OrderChannel, OrderStatus, TenantCapability, UnitType, type KitchenOrderDto } from '../../types';
 import KitchenBoard from './KitchenBoard';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
@@ -90,5 +90,34 @@ describe('KitchenBoard', () => {
     await screen.findByRole('heading', { name: 'Mesa 4' });
     expect(within(card('Mesa 4')).getByText('En preparación')).toBeInTheDocument();
     expect(screen.queryByText('Preparando')).not.toBeInTheDocument();
+  });
+
+  it('marks an order of a platform for its bag: the platform, the folio of its app in large and the name for the bag', async () => {
+    vi.mocked(kitchenApi.getOrders).mockResolvedValue({
+      data: [
+        { ...order('r1', 'ORD-000123', OrderStatus.Confirmed), channel: OrderChannel.Rappi, externalOrderNumber: 'BC953', customerName: 'Juan' },
+        { ...order('u1', 'ORD-000124', OrderStatus.Confirmed), channel: OrderChannel.UberEats, externalOrderNumber: 'X7K2P' },
+        { ...order('c1', 'ORD-000125', OrderStatus.Confirmed), channel: OrderChannel.Counter, externalOrderNumber: null },
+      ],
+    } as Awaited<ReturnType<typeof kitchenApi.getOrders>>);
+    renderBoard();
+
+    const rappi = within(await screen.findByRole('heading', { name: 'BC953' }).then((heading) => heading.closest('.card') as HTMLElement));
+    expect(rappi.getByText('Rappi')).toHaveClass('badge', 'text-bg-light', 'border');
+    expect(rappi.getByText('ORD-000123')).toHaveClass('text-muted');
+    expect(rappi.getByText('Bolsa:').parentElement).toHaveTextContent('Bolsa: Juan');
+    expect(rappi.queryByText('Cliente:')).not.toBeInTheDocument();
+    expect(rappi.getAllByRole('button').map((button) => button.textContent)).toEqual(['Iniciar']);
+
+    // The general public has no name worth writing on the bag.
+    const uber = within(card('X7K2P'));
+    expect(uber.getByText('Uber Eats')).toBeInTheDocument();
+    expect(uber.queryByText('Bolsa:')).not.toBeInTheDocument();
+    expect(uber.queryByText('Cliente:')).not.toBeInTheDocument();
+
+    // Any other order reads as always.
+    const counter = within(card('ORD-000125'));
+    expect(counter.getByText('Cliente:')).toBeInTheDocument();
+    expect(counter.queryByText('Rappi')).not.toBeInTheDocument();
   });
 });

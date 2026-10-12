@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { OrderType, UnitType, type OrderDto } from '../../types';
+import { OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, UnitType, type OrderDto } from '../../types';
 import SaleTicket from './SaleTicket';
 
 const order: OrderDto = {
@@ -62,5 +62,56 @@ describe('SaleTicket', () => {
 
     expect(container.querySelector('.ta-ticket-logo')).toBeNull();
     expect(screen.getByText('Fonda Lupita')).toHaveClass('ta-ticket-business');
+  });
+});
+
+describe('SaleTicket of an order of a delivery platform', () => {
+  const rappi: OrderDto = {
+    ...order,
+    channel: OrderChannel.Rappi,
+    customerName: 'Juan',
+    platformOrder: { externalOrderNumber: 'BC953', collectedBy: PlatformCollectedBy.Platform },
+    items: [{ ...order.items[0], notes: 'Sin cebolla', options: [{ optionId: 'o1', groupName: 'Salsa', optionName: 'Verde', priceDelta: 0 }] }],
+    payments: [{ id: 'p1', amount: 75, method: OrderPaymentMethod.Platform, paidAt: '2026-10-08T20:00:00Z', reference: 'BC953' }],
+  };
+
+  it('packs the bag of an order the platform charged: its folio and the products, without prices or totals', () => {
+    render(<SaleTicket order={rappi} businessName="Fonda Lupita" />);
+
+    const ticket = screen.getByLabelText('Ticket ORD-000007');
+    expect(screen.getByText('Rappi · Folio BC953')).toHaveClass('fw-bold');
+    expect(ticket).toHaveTextContent('Bolsa: Juan');
+    expect(ticket).not.toHaveTextContent('Cliente:');
+    expect(ticket).toHaveTextContent('3 ×Tacos');
+    expect(ticket).toHaveTextContent('Verde');
+    expect(ticket).toHaveTextContent('Sin cebolla');
+    expect(ticket).toHaveTextContent('Pagado en la app de Rappi');
+    // Until each platform has its own prices, the bag never contradicts what the app charged.
+    expect(ticket).not.toHaveTextContent('$');
+    expect(ticket).not.toHaveTextContent('Total');
+    expect(ticket).not.toHaveTextContent('Plataforma');
+    // Nor what the platform keeps: the commission, withholdings and net are for Reportes only.
+    expect(ticket).not.toHaveTextContent(/comisi[oó]n|retenci|neto/i);
+  });
+
+  it('charges the courier what is left of an order the business collects, with the folio on top', () => {
+    const didi: OrderDto = {
+      ...rappi,
+      channel: OrderChannel.DidiFood,
+      customerName: 'Público en general',
+      platformOrder: { externalOrderNumber: '12', collectedBy: PlatformCollectedBy.Business },
+      payments: [],
+      paidAmount: 0,
+      balance: 75,
+    };
+    render(<SaleTicket order={didi} businessName="Fonda Lupita" />);
+
+    const ticket = screen.getByLabelText('Ticket ORD-000007');
+    expect(ticket).toHaveTextContent('DiDi Food · Folio 12');
+    expect(ticket).not.toHaveTextContent('Bolsa:');
+    expect(ticket).toHaveTextContent('Total$75.00');
+    expect(ticket).toHaveTextContent('Cobrar al repartidor$75.00');
+    expect(ticket).not.toHaveTextContent('Saldo pendiente');
+    expect(ticket).not.toHaveTextContent(/comisi[oó]n|retenci|neto/i);
   });
 });

@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -141,6 +142,58 @@ public class DashboardMetricsSqlServerTests
         Assert.Equal(untilTheSecond.TotalOrders + 1, metrics.TotalOrders);
         Assert.Equal(untilTheSecond.TotalRevenue + 23.20m, metrics.TotalRevenue);
         Assert.Equal(untilTheSecond.PaidOrders + 1, metrics.PaidOrders);
+    }
+
+    [SqlServerFact]
+    public async Task WhatThePlatformsCharged_ShouldBeInCobrado_AndNotInPorCobrar()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var slug = Guid.NewGuid().ToString("N")[..10];
+        var tenant = new Tenant("Cocina sin local", slug, BusinessType.Food, $"{slug}@demo.com");
+        var rappi = new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, true, PlatformTerms.WithFiscalDefaults(30m));
+        var didi = new DeliveryPlatformSetting(tenant.Id, OrderChannel.DidiFood, true, PlatformTerms.WithFiscalDefaults(30m));
+        var number = 0;
+        Order NewOrder(OrderChannel channel, decimal price, DateTimeOffset createdAt)
+        {
+            var order = new Order(tenant.Id, null, null, true, $"ORD-{++number:D6}", BusinessType.Food, OrderType.Retail, "Juan",
+                null, null, null, pricesIncludeTax: true, channel: channel);
+            order.AddItem(Guid.NewGuid(), "Paquete", 1, price);
+            order.CreatedAt = createdAt;
+            return order;
+        }
+
+        // Yesterday Rappi charged 1,000 in its app (a day the summary stores). Today Rappi charges 245, DiDi's courier has
+        // not paid its 245 yet, and a counter sale of 20 is paid.
+        var yesterdays = NewOrder(OrderChannel.Rappi, 1000m, At(-1, 13));
+        yesterdays.RegisterPlatformOrder(rappi, PlatformOrderNumber.From("R1"), PlatformCollectedBy.Platform, At(-1, 13), null);
+        var todays = NewOrder(OrderChannel.Rappi, 245m, At(0, 9));
+        todays.RegisterPlatformOrder(rappi, PlatformOrderNumber.From("R2"), PlatformCollectedBy.Platform, At(0, 9), null);
+        var waiting = NewOrder(OrderChannel.DidiFood, 245m, At(0, 10));
+        waiting.RegisterPlatformOrder(didi, PlatformOrderNumber.From("12"), PlatformCollectedBy.Business, At(0, 10), null);
+        var counter = NewOrder(OrderChannel.Counter, 20m, At(0, 11));
+        counter.RegisterPayment(20m, OrderPaymentMethod.Cash, At(0, 11, 1), null, null, null, null);
+        await using (var seed = database.CreateContext())
+        {
+            seed.Add(tenant);
+            seed.TenantSettings.Add(new TenantSettings(tenant.Id, TenantCapability.Food));
+            seed.DeliveryPlatformSettings.AddRange(rappi, didi);
+            seed.Orders.AddRange(yesterdays, todays, waiting, counter);
+            await seed.SaveChangesAsync();
+        }
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            Assert.Equal(1, await DailySalesSnapshotBuilder.MaterializeAsync(context, tenant.Id, Mexico, Today.AddDays(-1), Now, 31, CancellationToken.None));
+        }
+
+        await using var read = database.CreateContext(tenant.Id);
+        var metrics = await MetricsAsync(read, tenant.Id, At(-1, 0), At(0, 23, 59, 59));
+
+        // «Cobrado» keeps its meaning: what was charged, the platforms' apps included (yesterday from the summary).
+        Assert.Equal(1000m + 245m + 20m, metrics.TotalRevenue);
+        Assert.Equal(1245m, metrics.PlatformCollected);
+        Assert.Equal(1000m, (await read.DailySalesSnapshots.SingleAsync()).PlatformAmount);
+        // «Por cobrar»: only what the business still has to charge; what a platform charged owes nothing.
+        Assert.Equal((1, 245m), (metrics.UnpaidOrders, metrics.OutstandingBalance));
     }
 
     private static async Task<DashboardMetricsDto> MetricsAsync(

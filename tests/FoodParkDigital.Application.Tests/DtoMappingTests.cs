@@ -88,6 +88,46 @@ public class DtoMappingTests
         Assert.False(Project(order, OrderMappings.AsDto).IsOpenTab);
     }
 
+    [Theory, MemberData(nameof(Seeds))]
+    public void OrderOfAPlatform_ShouldShowItsFolioAndWhoCharged_InMemoryAndForSql_NeverItsCommission(int seed)
+    {
+        var order = new EntityFiller(maxDepth: 3, seed).Create<Order>();
+        EntityFiller.Set(order, nameof(Order.Channel), OrderChannel.Rappi);
+        var detail = order.PlatformDetail!;
+
+        var dto = order.ToDto();
+        Same(dto, Project(order, OrderMappings.AsDto));
+        Assert.Equal(detail.ExternalOrderNumber, dto.PlatformOrder!.ExternalOrderNumber);
+        Assert.Equal(detail.CollectedBy, dto.PlatformOrder.CollectedBy);
+        // The commission, the withholdings and the expected settlement are for the reports, not for every screen.
+        var json = JsonSerializer.Serialize(dto);
+        Assert.DoesNotContain("Commission", json);
+        Assert.DoesNotContain("Withheld", json);
+        Assert.DoesNotContain("ExpectedSettlement", json);
+
+        // Any other order has no platform.
+        EntityFiller.Set(order, nameof(Order.PlatformDetail), null);
+        Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+        Assert.Null(order.ToDto().PlatformOrder);
+    }
+
+    [Fact]
+    public void KitchenOrder_ShouldCarryTheChannelAndTheFolioOfTheApp()
+    {
+        var order = new EntityFiller(maxDepth: 3).Create<Order>();
+        EntityFiller.Set(order, nameof(Order.Channel), OrderChannel.UberEats);
+        var folio = order.PlatformDetail!.ExternalOrderNumber;
+
+        var platform = order.ToKitchenDto();
+        EntityFiller.Set(order, nameof(Order.Channel), OrderChannel.Counter);
+        EntityFiller.Set(order, nameof(Order.PlatformDetail), null);
+        var counter = order.ToKitchenDto();
+
+        Assert.Equal((order.Id, OrderChannel.UberEats, folio), (platform.Id, platform.Channel, platform.ExternalOrderNumber));
+        Assert.Equal(OrderChannel.Counter, counter.Channel);
+        Assert.Null(counter.ExternalOrderNumber);
+    }
+
     [Fact]
     public void Product_ShouldPointToTheMediumImage_AndComputeItsDiscount()
     {

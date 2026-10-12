@@ -16,6 +16,12 @@ public record CancelOrderCommand : IRequest<Result>
 {
     public Guid OrderId { get; init; }
     public string? Reason { get; init; }
+
+    /// <summary>
+    /// Whether what the order consumed goes back to the stock (true by default). A dish of a platform's order is often
+    /// already cooked when its app cancels it: then nothing goes back.
+    /// </summary>
+    public bool RestockItems { get; init; } = true;
 }
 
 public class CancelOrderCommandValidator : AbstractValidator<CancelOrderCommand>
@@ -52,7 +58,8 @@ public class CancelOrderCommandHandler : IRequestHandler<CancelOrderCommand, Res
 
         var stateMachine = OrderStateMachineFactory.Create(order.BusinessType, order.OrderType);
         order.Cancel(stateMachine, _currentUserService.UserName, request.Reason);
-        await _orderInventoryService.ReverseConsumptionForOrderAsync(order, request.Reason, cancellationToken);
+        if (request.RestockItems)
+            await _orderInventoryService.ReverseConsumptionForOrderAsync(order, request.Reason, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();

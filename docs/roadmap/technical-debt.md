@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-12 con la Fase 22F, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -51,7 +51,7 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
 - Resuelto en la Fase 14: Inicio ya no carga en memoria las órdenes y pagos del rango. Los ingresos salen del resumen diario de los reportes (`DailySalesSnapshot` para los días cerrados y sumas en la base para el resto) y lo demás de agregados en SQL; las cifras son las mismas que antes (`DashboardMetricsSqlServerTests` las compara con el cálculo anterior). El rango son días completos del negocio, así que el último segundo del día, que el filtro de la pantalla dejaba fuera, ahora cuenta; un periodo abarca hasta 366 días.
 - Desde la Fase 12 una consulta que incluye colecciones las lee en sentencias separadas (`SplitQuery` por defecto). Fuera de una transacción, esas sentencias pueden ver un cambio hecho entre una y otra; las escrituras se protegen con los tokens de concurrencia, no con lo leído.
 - `client/README.md` sigue siendo template genérico.
-- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos).
+- Todo cobro que recibe el negocio, y todo reembolso de ese dinero, exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). Desde la Fase 22F la excepción es el pago «Plataforma»: lo cobró Rappi, Uber Eats o DiDi Food en su app, así que no entra a ninguna caja, y su reembolso tampoco ([ADR 0013](../adr/0013-delivery-platform-orders.md)). El corte del día lo muestra aparte.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions fijadas por SHA y las imágenes de Docker fijadas por digest no se actualizan solas: no hay Dependabot, y los procedimientos están en [despliegue](../development/deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13). Una imagen fijada no recibe los parches de seguridad de su etiqueta hasta que alguien cambia el digest.
@@ -97,6 +97,23 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22F: pedidos de Rappi, Uber Eats y DiDi Food con captura manual ([ADR 0013](../adr/0013-delivery-platform-orders.md)).
+  - El negocio registra en Vender el pedido que llegó por la app, con su folio y quién cobró. Si cobró la plataforma, el pago «Plataforma» no entra a ninguna caja ni pide una abierta. Si cobra el negocio (el repartidor de DiDi paga en efectivo), se cobra por la caja como siempre.
+  - Cada negocio configura la comisión, su IVA y las retenciones de cada plataforma, con revisión y bitácora. Cada pedido copia sus términos y los importes calculados, que no cambian después.
+  - El corte del día separa lo que cobraron las plataformas («Otros» es ahora el resto), Inicio lo dice debajo de «Cobrado», y Reportes muestra las ventas por canal y los pedidos de cada plataforma con su comisión, sus retenciones y el neto esperado. Nueve invariantes de cuadre (I1 a I9) son pruebas.
+  - Un folio repetido el mismo día se pregunta (409 `possible_duplicate_order`) en lugar de bloquearse con un índice único.
+  - Los pedidos de plataforma nunca mandan avisos de WhatsApp y quedan fuera de las campañas y de la ficha del cliente.
+  - Pendiente:
+    - Precio por plataforma para cada producto (22F-2). Mientras tanto, si en la app se cobra más que en el catálogo, la comisión y el neto calculados salen menores que los reales.
+    - Liquidación semanal y conciliación con el estado de cuenta: el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías (un pedido ya entregado que la plataforma cancela queda entregado y reembolsado).
+    - Integraciones por la API de las plataformas o por un integrador, el CFDI de retenciones y el ID largo del pedido para conciliar.
+    - Confirmar con un contador las tasas de retención de 2026 para cada caso (persona física o moral, RFC, pago definitivo; las por omisión son las de la Ley de Ingresos 2026 y la Ley del IVA), la clave de forma de pago 31 y la base de la comisión de Uber Eats.
+    - El aviso de folio repetido no es una restricción: dos capturas del mismo folio en el mismo instante pasan las dos.
+    - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.
+    - Desde el primer pedido de plataforma no hay rollback de la base (error 50008), solo correcciones hacia adelante. No conviene publicar entre las 00:00 y las 00:45, hora del negocio (ver [migraciones](../development/database-migrations.md)).
+    - El badge «En línea» de Pedidos usa el acento (`bg-primary-subtle`), algo que viene de antes; se dejó igual para no mover las líneas base.
+    - La primera visita queda a 132 B de su presupuesto (175,868 de 176,000 B): el siguiente crecimiento tendrá que subir `bundle-budget.json` y decir por qué.
+- Dependencia con avisos de seguridad (visto en la Fase 22F): `SixLabors.ImageSharp` 3.1.12 (`Directory.Packages.props`) tiene GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altas) y GHSA-wmxv-xphr-5c9g (moderada), y `dotnet restore` las marca (NU1903, NU1902). Las tres están en el manejo de TIFF y se corrigen en la 4.1.2, una versión mayor. Hoy el riesgo es bajo: `ImageProcessingService` solo registra los decodificadores de JPEG, PNG, WebP y GIF, así que un TIFF subido se rechaza antes de decodificarse. Subirla, revisando su API y su licencia, va en un PR propio.
 - Resuelto en la Fase 21: días especiales y horario real en WhatsApp ([ADR 0012](../adr/0012-special-days.md)).
   - El dueño marca por fecha los días que cierra o abre con otro horario (festivos, vacaciones, inventario), con un motivo que ven sus clientes y festivos sugeridos que nunca se aplican solos. Las fechas pasadas no cambian y cada cambio queda en la bitácora.
   - El menú en línea y su pedido los toman en cuenta, también sin horario de la semana, y el servidor escribe lo que dicen ("Cerrado · por Navidad · abre el sábado 26 a las 9:00"); en un día especial cerrado tampoco pide una mesa (decisión por omisión).

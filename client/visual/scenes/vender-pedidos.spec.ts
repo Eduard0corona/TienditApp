@@ -1,9 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
-import { CUSTOMER_PROFILE, SELL_ROUTES } from './vender-pedidos.mocks';
+import { CUSTOMER_PROFILE, RAPPI_ORDERS_DATA, RAPPI_ROUTES, SELL_ROUTES } from './vender-pedidos.mocks';
 
-// Selling and following orders: Vender, Mesas, Pedidos, Orden detallada, Cocina and a customer's Mis pedidos.
+// Selling and following orders: Vender, Mesas, Pedidos, Orden detallada, Cocina and a customer's Mis pedidos, and the
+// orders of a delivery platform (Rappi) through all of them.
 
 /** The whole page. */
 async function snapPage(page: Page, name: string) {
@@ -222,6 +223,86 @@ test.describe('Vender', () => {
       await fillTicket(page);
       await charge(page, '200');
       await snapDialog(page, 'vender-venta-cobrada-oscuro');
+    });
+  });
+});
+
+test.describe('Pedidos de Rappi', () => {
+  // The business takes Rappi orders: Vender offers it as an origin and Pedidos filters by it.
+  test.use({ extraRoutes: RAPPI_ROUTES });
+
+  /** A Rappi order on the ticket: the origin chosen and the folio of its app typed. */
+  async function chooseRappi(scope: Page | Locator) {
+    await scope.getByRole('radio', { name: 'Rappi' }).click();
+    await scope.getByLabel('Folio de Rappi').fill('152390');
+  }
+
+  /** Opens the detail of an order from its folio in the list. */
+  async function openOrder(page: Page, orderNumber: string) {
+    await page.getByRole('button', { name: orderNumber, exact: true }).click();
+    return dialog(page, `Pedido ${orderNumber}`);
+  }
+
+  test('Vender pedido de Rappi', async ({ page }) => {
+    await open(page, '/sell');
+    await fillTicket(page);
+    await chooseRappi(page);
+    await snapPage(page, 'vender-rappi-escritorio');
+
+    // Rappi charged it in its app: one action registers it, without the charge or the drawer.
+    const ticket = page.getByRole('complementary', { name: 'Ticket de la venta' });
+    await scrollToEnd(ticket);
+    await expect(ticket.getByRole('button', { name: /^Registrar pedido de Rappi · \$183\.00/ })).toBeVisible();
+    await snapPage(page, 'vender-rappi-escritorio-final');
+  });
+
+  test('Vender pedido de Rappi en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/sell');
+    await fillTicket(page);
+    await page.getByRole('button', { name: /artículos · / }).click();
+    const ticket = await dialog(page, 'Ticket');
+    await chooseRappi(ticket);
+    await snapDialog(page, 'vender-rappi-telefono');
+
+    await scrollToEnd(ticket);
+    await expect(ticket.getByText('Rappi ya lo cobró: no entra a tu caja.')).toBeVisible();
+    await snapDialog(page, 'vender-rappi-telefono-final');
+  });
+
+  test('Pedido de Rappi registrado', async ({ page }) => {
+    await open(page, '/sell');
+    await fillTicket(page);
+    await chooseRappi(page);
+    await page.getByRole('button', { name: /^Registrar pedido de Rappi · / }).click();
+    const sale = await dialog(page, /^Pedido ORD-\d+ de Rappi registrado$/);
+    await expect(sale.getByRole('button', { name: 'Imprimir para la bolsa' })).toBeVisible();
+    await snapDialog(page, 'vender-rappi-registrado');
+  });
+
+  test.describe('con pedidos de hoy', () => {
+    test.use({ prepareData: RAPPI_ORDERS_DATA });
+
+    test('Pedidos por canal: Rappi', async ({ page }) => {
+      await open(page, '/orders');
+      await page.getByLabel('Canal').selectOption({ label: 'Rappi' });
+      await expect(page.getByRole('button', { name: 'ORD-000348', exact: true })).toBeHidden();
+      await expect(page.getByText('Folio 152390')).toBeVisible();
+      await snapPage(page, 'pedidos-filtro-rappi');
+    });
+
+    test('Detalle de un pedido de Rappi', async ({ page }) => {
+      await open(page, '/orders');
+      const detail = await openOrder(page, 'ORD-000349');
+      await expect(detail.getByText('Plataforma · 152390')).toBeVisible();
+      await snapDialog(page, 'pedidos-detalle-rappi');
+    });
+
+    test('Cocina con un pedido de Rappi', async ({ page }) => {
+      await open(page, '/kitchen');
+      // The folio of the app, big, to find the bag; the order number of the business goes small.
+      await expect(page.getByRole('heading', { name: '152395' })).toBeVisible();
+      await snapPage(page, 'cocina-rappi');
     });
   });
 });
