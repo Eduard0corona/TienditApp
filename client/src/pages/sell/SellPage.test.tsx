@@ -747,6 +747,60 @@ describe('SellPage with delivery platforms', () => {
     expect(ticket().queryByText(/Con tus precios de/)).not.toBeInTheDocument();
   });
 
+  it('adds what a dialog chose at the app\'s prices that came in while it was open', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    let answerRappi: (answer: unknown) => void = () => undefined;
+    // Rappi charges $66 for the latte and $15 more for a large one; the menu, $55 and $12.
+    const rappiLatte = {
+      ...latte,
+      priceAmount: 66,
+      optionGroups: latte.optionGroups!.map((group) => ({
+        ...group,
+        options: group.options.map((option) => (option.id === 'large' ? { ...option, priceDelta: 15 } : option)),
+      })),
+    };
+    vi.mocked(productsApi.getAll).mockImplementation(((params?: { priceChannel?: OrderChannel }) => (params?.priceChannel === OrderChannel.Rappi
+      ? new Promise((resolve) => { answerRappi = resolve; })
+      : Promise.resolve({ data: { items: [taco, steak, latte], totalCount: 3 } }))) as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    // The latte's dialog opens with the menu's prices, still on screen.
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+    const options = await screen.findByRole('dialog', { name: 'Latte' });
+    await userEvent.click(within(options).getByLabelText(/^Grande/));
+    expect(within(options).getByRole('button', { name: 'Agregar · $67.00' })).toBeInTheDocument();
+
+    answerRappi({ data: { items: [taco, steak, rappiLatte], totalCount: 3 } });
+    // The app's prices reach the open dialog, and the line takes them.
+    await userEvent.click(await within(options).findByRole('button', { name: 'Agregar · $81.00' }));
+    expect(await ticket().findByRole('button', { name: 'Registrar pedido de Rappi · $81.00 F9' })).toBeInTheDocument();
+  });
+
+  it('says in the ticket when the app\'s prices did not load, and tries again from there', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    let rappiReads = 0;
+    vi.mocked(productsApi.getAll).mockImplementation(((params?: { priceChannel?: OrderChannel }) => {
+      if (params?.priceChannel !== OrderChannel.Rappi) return Promise.resolve({ data: { items: [taco, steak, latte], totalCount: 3 } });
+      rappiReads += 1;
+      return rappiReads === 1
+        ? Promise.reject(new Error('Network Error'))
+        : Promise.resolve({ data: { items: [{ ...taco, priceAmount: 32 }, steak, latte], totalCount: 3 } });
+    }) as never);
+    renderAt('/sell');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Rappi' }));
+
+    // On a phone the ticket covers the catalog and its error: it says so itself, and nothing registers.
+    expect(await ticket().findByText('No se cargaron tus precios de Rappi.')).toBeInTheDocument();
+    expect(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' })).toBeDisabled();
+    await userEvent.click(ticket().getByRole('button', { name: 'Reintentar' }));
+
+    expect(await ticket().findByRole('button', { name: 'Registrar pedido de Rappi · $32.00 F9' })).toBeInTheDocument();
+    expect(ticket().queryByText('No se cargaron tus precios de Rappi.')).not.toBeInTheDocument();
+  });
+
   it('registers nothing at prices about to change while the app\'s prices load', async () => {
     signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
     let answerRappi: (answer: unknown) => void = () => undefined;
@@ -793,7 +847,10 @@ describe('SellPage with delivery platforms', () => {
     await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
     await userEvent.type(screen.getByRole('searchbox', { name: 'Buscar producto o escanear código de barras' }), 'desayuno{Enter}');
 
-    await waitFor(() => expect(productsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'desayuno', onlyAvailableNow: false })));
+    // With the prices of the app, as the catalog on screen.
+    await waitFor(() => expect(productsApi.getAll).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: 'desayuno', onlyAvailableNow: false, priceChannel: OrderChannel.Rappi }),
+    ));
   });
 
   it('brings an order of a platform back after a reload, from the whole catalog', async () => {

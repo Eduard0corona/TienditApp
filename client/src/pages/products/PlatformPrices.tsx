@@ -15,6 +15,8 @@ import { getPlatformName, isDeliveryPlatform, type DeliveryPlatform } from '../.
 import { DELIVERY_PLATFORM_CHANNELS } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import {
+  MAX_OPTION_PRICE_DELTA,
+  MAX_PLATFORM_PRICE,
   buildSaveBody,
   countChanges,
   optionBox,
@@ -37,8 +39,10 @@ type PriceRow =
   | { kind: 'product'; item: PriceListItem }
   | { kind: 'option'; item: PriceListItem; groupName: string; option: PriceListOption };
 
-const PRICE_HINT = 'Mayor a $0, con dos decimales.';
-const DELTA_HINT = 'Con «-» si resta, con dos decimales.';
+const PRICE_HINT = `Mayor a $0 y hasta $${MAX_PLATFORM_PRICE.toLocaleString('es-MX')}, con dos decimales.`;
+const DELTA_HINT = `Hasta $${MAX_OPTION_PRICE_DELTA.toLocaleString('es-MX')}, con «-» si resta y dos decimales.`;
+// The menu's price has its own column from a small tablet up; on a phone it goes under the name, so the box fits.
+const MENU_COLUMN = 'text-end d-none d-sm-table-cell';
 // Every row of a business on one page: the boxes keep what was typed while the person searches or filters.
 const PAGE_SIZES = [1000];
 
@@ -88,6 +92,8 @@ export default function PlatformPrices() {
   const shownItems = useMemo(() => (category ? items.filter((item) => item.categoryId === category) : items), [items, category]);
   const rows = useMemo(() => rowsOf(shownItems), [shownItems]);
   const { changed, invalid } = useMemo(() => countChanges(items, edits), [items, edits]);
+  // A box marked red in another category keeps the save off too: the bar says where to look.
+  const invalidElsewhere = useMemo(() => invalid - countChanges(shownItems, edits).invalid, [invalid, shownItems, edits]);
   const isOn = activePlatforms.includes(platform);
 
   // A reload or a closed tab would lose what was typed: the browser asks first.
@@ -100,7 +106,14 @@ export default function PlatformPrices() {
     return () => window.removeEventListener('beforeunload', keep);
   }, [changed]);
 
-  const type = (key: string, text: string) => setEdits((current) => ({ ...current, [key]: text }));
+  // The first change fixes the platform on screen: a platform turned on or off meanwhile (the list of the active ones is read
+  // again) never takes what was typed for another.
+  const pinPlatform = () => setChosen((current) => current ?? platform);
+
+  const type = (key: string, text: string) => {
+    pinPlatform();
+    setEdits((current) => ({ ...current, [key]: text }));
+  };
 
   const changePlatform = async (next: DeliveryPlatform) => {
     if (next === platform) return;
@@ -156,8 +169,9 @@ export default function PlatformPrices() {
             <span className="fw-semibold">{item.name}</span>
             {!item.isAvailable && <span className="badge bg-secondary-subtle text-secondary ms-2">No disponible</span>}
             <div className="small text-muted">{item.categoryName}</div>
+            <div className="small text-muted d-sm-none">Tu menú: <span className="ta-money">{formatMoney(item.menuPrice)}</span></div>
           </td>
-          <td className="text-end ta-money">{formatMoney(item.menuPrice)}</td>
+          <td className={`${MENU_COLUMN} ta-money`}>{formatMoney(item.menuPrice)}</td>
           <td className="text-end">
             <input
               className={`form-control form-control-sm text-end platform-price-input ${current.valid ? '' : 'is-invalid'}`}
@@ -185,14 +199,15 @@ export default function PlatformPrices() {
         <td className="platform-price-option">
           {option.name} <span className="small text-muted">· {groupName}</span>
           {!option.isAvailable && <span className="badge bg-secondary-subtle text-secondary ms-2">No disponible</span>}
+          <div className="small text-muted d-sm-none">Tu menú: <span className="ta-money">{formatSignedMoney(option.menuPriceDelta)}</span></div>
         </td>
-        <td className="text-end ta-money small">{formatSignedMoney(option.menuPriceDelta)}</td>
+        <td className={`${MENU_COLUMN} ta-money small`}>{formatSignedMoney(option.menuPriceDelta)}</td>
         <td className="text-end">
+          {/* No decimal keyboard: on an iPhone it has no minus, and a cheaper variant takes one. */}
           <input
             className={`form-control form-control-sm text-end platform-price-input ${current.valid ? '' : 'is-invalid'}`}
-            inputMode="decimal"
             autoComplete="off"
-            aria-label={`${option.name} de ${item.name} en ${name}`}
+            aria-label={`${option.name} (${groupName}) de ${item.name} en ${name}`}
             aria-invalid={current.valid ? undefined : true}
             aria-describedby={current.valid ? undefined : hintId}
             placeholder={toInputText(option.menuPriceDelta)}
@@ -247,7 +262,7 @@ export default function PlatformPrices() {
             data={rows}
             columns={[
               { header: 'Producto' },
-              { header: 'Tu menú', className: 'text-end' },
+              { header: 'Tu menú', className: MENU_COLUMN },
               { header: `En ${name}`, className: 'text-end', width: 150 },
             ]}
             keyExtractor={(row) => (row.kind === 'product' ? productKey(row.item.productId) : optionKey(row.option.id))}
@@ -306,7 +321,7 @@ export default function PlatformPrices() {
               {changed === 0
                 ? 'Sin cambios por guardar.'
                 : invalid > 0
-                  ? 'Revisa los precios marcados en rojo.'
+                  ? invalidElsewhere > 0 ? 'Revisa los precios marcados en rojo, también en otras categorías.' : 'Revisa los precios marcados en rojo.'
                   : changed === 1 ? '1 precio cambiado.' : `${changed} precios cambiados.`}
             </span>
             <button type="button" className="btn btn-light" onClick={() => void discard()} disabled={changed === 0 || save.isPending}>
@@ -332,6 +347,7 @@ export default function PlatformPrices() {
         categoryName={categories.find((option) => option.id === category)?.label}
         onCancel={() => setRaising(false)}
         onRaise={(settings) => {
+          pinPlatform();
           setEdits((current) => raisePrices(shownItems, current, settings));
           setRaising(false);
         }}
@@ -360,7 +376,7 @@ function RaiseModal({ show, titleId, platformName, items, categoryName, onCancel
   const percent = parseRaisePercent(percentText);
   const sample = items[0];
   const scope = categoryName
-    ? `los ${items.length === 1 ? 'producto' : `${items.length} productos`} de «${categoryName}»`
+    ? items.length === 1 ? `el producto de «${categoryName}»` : `los ${items.length} productos de «${categoryName}»`
     : items.length === 1 ? 'tu producto' : `tus ${items.length} productos`;
 
   const submit = (event: FormEvent) => {

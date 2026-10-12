@@ -63,7 +63,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Productos', path: '/products', icon: 'ri-shopping-bag-line', area: 'catalog', keywords: 'catálogo precios menú' },
           { label: 'Servicios', path: '/services', icon: 'ri-service-line', area: 'catalog', capability: TenantCapability.Service, exact: true, keywords: 'catálogo de servicios' },
           { label: 'Categorías', path: '/categories', icon: 'ri-list-check-2', area: 'catalog' },
-          { label: 'Precios en apps', path: '/platform-prices', icon: 'ri-takeaway-line', area: 'catalog', keywords: 'rappi uber eats didi food plataformas de reparto precio en la app' },
+          { label: 'Precios en apps', path: '/platform-prices', icon: 'ri-takeaway-line', area: 'catalog', keywords: 'rappi uber eats didi food reparto precio en la app' },
         ],
       },
       // Inventario has one row of tabs (supplies, stock, movements…); buying from suppliers is its own section.

@@ -10,11 +10,12 @@
   padding-left: 1.75rem;
 }
 
-/* What changed, and how to keep or drop it, stays in sight while the list scrolls. */
+/*
+ * What changed, and how to keep or drop it, right under the list. Not sticky: the list already scrolls inside its own box,
+ * and a bar fixed to the bottom of the screen covered its last rows (and the box being typed in) and, on a phone, went
+ * under the tab bar.
+ */
 .platform-prices-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -23,5 +24,4 @@
   margin-top: 1rem;
   padding: 0.75rem 0 0.25rem;
   border-top: 1px solid var(--ct-border-color);
-  background: var(--ta-surface);
 }

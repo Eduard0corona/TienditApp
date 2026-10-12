@@ -60,6 +60,17 @@ describe('platformPriceEdits', () => {
     for (const wrong of ['0', '0.00', '-5', '1.005', '1000000.01', 'abc', '+5']) expect(parseProductPrice(wrong)).toBeUndefined();
   });
 
+  it('takes a comma only between thousands: «32,50» is not read as 3,250', () => {
+    expect(parseProductPrice('12,345')).toBe(12_345);
+    expect(parseProductPrice('1,000,000')).toBe(1_000_000);
+    expect(parseOptionDelta('-1,000')).toBe(-1_000);
+    for (const wrong of ['32,50', '1,25', '1,2345', ',5', '1,,000']) {
+      expect(parseProductPrice(wrong)).toBeUndefined();
+      expect(parseOptionDelta(wrong)).toBeUndefined();
+    }
+    expect(parseOptionDelta('-32,50')).toBeUndefined();
+  });
+
   it('reads what an option adds, negative for a cheaper variant, up to 100,000', () => {
     expect(parseOptionDelta('')).toBeNull();
     expect(parseOptionDelta('38')).toBe(38);

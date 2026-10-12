@@ -107,6 +107,7 @@ function renderPage() {
       </QueryClientProvider>
     </MemoryRouter>,
   );
+  return queryClient;
 }
 
 const UBER_ON: Channel[] = [
@@ -138,15 +139,21 @@ describe('PlatformPrices', () => {
     expect(screen.getByLabelText('Plataforma')).toHaveValue(String(OrderChannel.UberEats));
     expect(within(screen.getByLabelText('Plataforma')).getAllByRole('option').map((option) => option.textContent))
       .toEqual(['Rappi (apagada)', 'Uber Eats', 'DiDi Food (apagada)']);
-    const rows = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0].textContent);
-    expect(rows).toEqual(['HamburguesaHamburguesas', 'Sencilla · Tamaño', 'Doble · Tamaño', 'RefrescoNo disponibleBebidas']);
-    expect(screen.getByRole('textbox', { name: 'Doble de Hamburguesa en Uber Eats' })).toHaveValue('38.00');
+    const rows = screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent));
+    // The menu's price has its column, and goes under the name too for a phone, where the column is hidden.
+    expect(rows.map((cells) => cells[0])).toEqual([
+      'HamburguesaHamburguesasTu menú: $99.00',
+      'Sencilla · TamañoTu menú: $0.00',
+      'Doble · TamañoTu menú: +$30.00',
+      'RefrescoNo disponibleBebidasTu menú: $25.00',
+    ]);
+    expect(rows.map((cells) => cells[1])).toEqual(['$99.00', '$0.00', '+$30.00', '$25.00']);
+    expect(screen.getByRole('textbox', { name: 'Doble (Tamaño) de Hamburguesa en Uber Eats' })).toHaveValue('38.00');
     // Without a price in the app, the box is empty and shows the menu's.
     const soda = screen.getByRole('textbox', { name: 'Precio de Refresco en Uber Eats' });
     expect(soda).toHaveValue('');
     expect(soda).toHaveAttribute('placeholder', '25.00');
-    expect(screen.getByRole('textbox', { name: 'Sencilla de Hamburguesa en Uber Eats' })).toHaveAttribute('placeholder', '0.00');
-    expect(screen.getByText('+$30.00')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Sencilla (Tamaño) de Hamburguesa en Uber Eats' })).toHaveAttribute('placeholder', '0.00');
     expect(screen.queryByText(/está apagada/)).not.toBeInTheDocument();
     expect(vi.mocked(apiRequest)).toHaveBeenCalledWith('get', '/api/v1/delivery-platforms/{channel}/prices', expect.objectContaining({
       path: { channel: OrderChannel.UberEats },
@@ -206,11 +213,11 @@ describe('PlatformPrices', () => {
 
     const soda = await screen.findByRole('textbox', { name: 'Precio de Refresco en Uber Eats' });
     await userEvent.type(soda, '0');
-    await userEvent.type(screen.getByRole('textbox', { name: 'Doble de Hamburguesa en Uber Eats' }), '.5');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Doble (Tamaño) de Hamburguesa en Uber Eats' }), '.5');
 
     expect(soda).toHaveAttribute('aria-invalid', 'true');
-    expect(soda).toHaveAccessibleDescription('Mayor a $0, con dos decimales.');
-    expect(screen.getByRole('textbox', { name: 'Doble de Hamburguesa en Uber Eats' })).toHaveAccessibleDescription('Con «-» si resta, con dos decimales.');
+    expect(soda).toHaveAccessibleDescription('Mayor a $0 y hasta $1,000,000, con dos decimales.');
+    expect(screen.getByRole('textbox', { name: 'Doble (Tamaño) de Hamburguesa en Uber Eats' })).toHaveAccessibleDescription('Hasta $100,000, con «-» si resta y dos decimales.');
     expect(screen.getByText('Revisa los precios marcados en rojo.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
   });
@@ -232,8 +239,8 @@ describe('PlatformPrices', () => {
     expect(screen.getByRole('textbox', { name: 'Precio de Hamburguesa en Uber Eats' })).toHaveValue('125.00');
     expect(screen.getByRole('textbox', { name: 'Precio de Refresco en Uber Eats' })).toHaveValue('35.00');
     // «Doble» already has its price in the app and «Sencilla» adds nothing: both stay.
-    expect(screen.getByRole('textbox', { name: 'Doble de Hamburguesa en Uber Eats' })).toHaveValue('38.00');
-    expect(screen.getByRole('textbox', { name: 'Sencilla de Hamburguesa en Uber Eats' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: 'Doble (Tamaño) de Hamburguesa en Uber Eats' })).toHaveValue('38.00');
+    expect(screen.getByRole('textbox', { name: 'Sencilla (Tamaño) de Hamburguesa en Uber Eats' })).toHaveValue('');
     expect(screen.getByText('2 precios cambiados.')).toBeInTheDocument();
     expect(saves()).toHaveLength(0);
   });
@@ -278,6 +285,29 @@ describe('PlatformPrices', () => {
     expect(await screen.findByText('Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Precio de Refresco en Uber Eats' })).toHaveValue('32');
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('keeps what was typed on its platform when another one is turned on meanwhile', async () => {
+    const api: Api = {
+      channels: UBER_ON,
+      prices: { [OrderChannel.UberEats]: [catalog()], [OrderChannel.Rappi]: [catalog()] },
+      save: () => Promise.resolve(undefined),
+    };
+    serve(api);
+    const queryClient = renderPage();
+
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Precio de Refresco en Uber Eats' }), '32');
+    // Someone turns Rappi on: it would now be the first platform on, but the prices typed are for Uber Eats.
+    api.channels = [{ channel: OrderChannel.Rappi, isActive: true }, { channel: OrderChannel.UberEats, isActive: true }];
+    await queryClient.invalidateQueries({ queryKey: ['delivery-platforms', 'channels'] });
+    await waitFor(() => expect(within(screen.getByLabelText('Plataforma')).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['Rappi', 'Uber Eats', 'DiDi Food (apagada)']));
+
+    expect(screen.getByLabelText('Plataforma')).toHaveValue(String(OrderChannel.UberEats));
+    expect(screen.getByRole('textbox', { name: 'Precio de Refresco en Uber Eats' })).toHaveValue('32');
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    expect(saves()[0][2]).toEqual(expect.objectContaining({ path: { channel: OrderChannel.UberEats } }));
   });
 
   it('discards the changes after asking', async () => {

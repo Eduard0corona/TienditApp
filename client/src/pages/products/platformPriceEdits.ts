@@ -20,9 +20,18 @@ export function toInputText(amount: number | null | undefined): string {
   return amount == null ? '' : amount.toFixed(2);
 }
 
+/**
+ * A comma only groups thousands («1,250.50»): parseMoneyInput drops every comma, and «32,50» typed as a decimal would be
+ * read as 3,250. A price list is typed in bulk, so it is refused instead.
+ */
+function commasGroupThousands(text: string): boolean {
+  return !text.includes(',') || /^\$?\s*\d{1,3}(,\d{3})+(\.\d*)?$/.test(text.trim());
+}
+
 /** The price of a product as typed: null when empty (the menu's), undefined when the API would refuse it. */
 export function parseProductPrice(text: string): number | null | undefined {
   if (text.trim() === '') return null;
+  if (!commasGroupThousands(text)) return undefined;
   const value = parseMoneyInput(text);
   return value !== null && value > 0 && value <= MAX_PLATFORM_PRICE ? value : undefined;
 }
@@ -35,13 +44,12 @@ export function parseOptionDelta(text: string): number | null | undefined {
   const trimmed = text.trim();
   if (trimmed === '') return null;
   const negative = /^[-−]/.test(trimmed);
-  const value = parseMoneyInput(negative ? trimmed.slice(1) : trimmed);
+  const amount = negative ? trimmed.slice(1) : trimmed;
+  if (!commasGroupThousands(amount)) return undefined;
+  const value = parseMoneyInput(amount);
   if (value === null || value > MAX_OPTION_PRICE_DELTA) return undefined;
   return negative && value !== 0 ? -value : value;
 }
-
-export const PRICE_PROBLEM = `Escribe un precio mayor a $0 y de hasta $${MAX_PLATFORM_PRICE.toLocaleString('es-MX')}, con dos decimales como máximo, o déjalo vacío para cobrar el de tu menú.`;
-export const DELTA_PROBLEM = `Escribe cuánto suma (con «-» si resta), de hasta $${MAX_OPTION_PRICE_DELTA.toLocaleString('es-MX')} y con dos decimales como máximo, o déjalo vacío para sumar lo de tu menú.`;
 
 /** A box of the list: what it holds now, whether it changed from what is saved and whether the API would take it. */
 export interface PriceBox {

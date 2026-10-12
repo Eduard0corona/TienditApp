@@ -243,6 +243,16 @@ export default function SellPage() {
   // The ticket shows the prices of where the sale comes from (the platform's app, or the menu) once its catalog is in:
   // until then nothing is charged or registered at the prices of the other one.
   const pricesPending = catalog.pricesFor !== (platform ?? null);
+  // The options and quantity dialogs show and add a product as the catalog has it now: its prices change with where the
+  // sale comes from, also while a dialog is open.
+  const choosingNow = useMemo(
+    () => choosing && { ...choosing, product: products.find((candidate) => candidate.id === choosing.product.id) ?? choosing.product },
+    [choosing, products],
+  );
+  const measureNow = useMemo(
+    () => measure && { ...measure, product: products.find((candidate) => candidate.id === measure.product.id) ?? measure.product },
+    [measure, products],
+  );
 
   useEffect(() => {
     // A round goes to an open tab: show what it already has.
@@ -401,7 +411,9 @@ export default function SellPage() {
     if (visibleProducts.length === 0 && catalog.catalogTruncated) {
       try {
         // An order of a platform sells what its app took, whatever the hours here.
-        const { data } = await productsApi.getAll({ isAvailable: true, onlyAvailableNow: !platform, search: term, pageSize: 20 });
+        const { data } = await productsApi.getAll({
+          isAvailable: true, onlyAvailableNow: !platform, search: term, pageSize: 20, priceChannel: platform ?? undefined,
+        });
         if (data.items.length === 1) {
           addProduct(data.items[0]);
           setSearch('');
@@ -712,6 +724,8 @@ export default function SellPage() {
       online={online}
       onRegisterPlatformOrder={registerPlatformOrder}
       pricesPending={pricesPending}
+      pricesError={catalog.loadError}
+      onRetryPrices={() => void catalog.reload()}
     />
   );
 
@@ -830,7 +844,7 @@ export default function SellPage() {
       </Offcanvas>
 
       <OptionsModal
-        request={choosing}
+        request={choosingNow}
         onChange={setChoosing}
         onConfirm={(product, optionIds, quantity) => {
           addChosen(product, optionIds, quantity);
@@ -840,7 +854,7 @@ export default function SellPage() {
       />
 
       <MeasureModal
-        request={measure}
+        request={measureNow}
         onChange={setMeasure}
         onConfirm={(product, quantity) => {
           setMeasured(product, quantity);
