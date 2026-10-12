@@ -779,6 +779,70 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("ProductOptionGroups", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductOptionPlatformPrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("OptionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("PriceDelta")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OptionId", "Channel")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Channel");
+
+                    b.ToTable("ProductOptionPlatformPrices", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductOptionPlatformPrices_Channel", "[Channel] IN (3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_ProductOptionPlatformPrices_PriceDelta", "[PriceDelta] BETWEEN -100000 AND 100000");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductPlatformPrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId", "Channel")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Channel");
+
+                    b.ToTable("ProductPlatformPrices", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductPlatformPrices_Channel", "[Channel] IN (3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_ProductPlatformPrices_Price", "[Price] > 0");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.Customer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4126,6 +4190,24 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductOptionPlatformPrice", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Catalog.Entities.ProductOption", null)
+                        .WithMany("PlatformPrices")
+                        .HasForeignKey("OptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductPlatformPrice", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Catalog.Entities.Product", null)
+                        .WithMany("PlatformPrices")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Customers.Entities.CustomerAddress", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Customers.Entities.Customer", null)
@@ -4703,6 +4785,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.Product", b =>
                 {
                     b.Navigation("OptionGroups");
+
+                    b.Navigation("PlatformPrices");
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductOption", b =>
+                {
+                    b.Navigation("PlatformPrices");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.ProductOptionGroup", b =>

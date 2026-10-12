@@ -142,8 +142,8 @@ public class DeliveryPlatformsMigrationSqlServerTests
         // Rolling back again does nothing.
         await MigrateAsync(database, BeforePlatforms);
 
-        // Forward again: the tables start empty and the stored day takes 0.
-        await MigrateAsync(database);
+        // Forward again (to this migration; later ones apply on top): the tables start empty and the stored day takes 0.
+        await MigrateAsync(database, Migration);
         await using (var context = database.CreateContext(tenant.Id))
         {
             Assert.Empty(await context.DeliveryPlatformSettings.ToListAsync());

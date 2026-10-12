@@ -191,6 +191,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<MessagingOptOut> MessagingOptOuts => Set<MessagingOptOut>();
     public DbSet<ProductOptionGroup> ProductOptionGroups => Set<ProductOptionGroup>();
     public DbSet<ProductOption> ProductOptions => Set<ProductOption>();
+    public DbSet<ProductPlatformPrice> ProductPlatformPrices => Set<ProductPlatformPrice>();
+    public DbSet<ProductOptionPlatformPrice> ProductOptionPlatformPrices => Set<ProductOptionPlatformPrice>();
     public DbSet<OrderItemOption> OrderItemOptions => Set<OrderItemOption>();
     public DbSet<DiningTable> DiningTables => Set<DiningTable>();
     public DbSet<KitchenTicket> KitchenTickets => Set<KitchenTicket>();
