@@ -17,12 +17,14 @@ import {
   PERIOD_IN_THE_FUTURE_MESSAGE,
   PERIOD_ORDER_MESSAGE,
   PERIOD_TOO_LONG_MESSAGE,
+  PERIOD_TOO_OLD_MESSAGE,
   TOO_MANY_ORDERS_MESSAGE,
   buildBody,
   changedSinceSaved,
   checkAdjustment,
   depositDateProblem,
   differenceAdjustment,
+  editedSince,
   firstProblem,
   formOf,
   isPicked,
@@ -132,6 +134,9 @@ describe('settlementEdits', () => {
     expect(periodProblem('2026-09-01', '2026-10-01', TODAY)).toBe('');
     expect(periodProblem('2026-09-01', '2026-10-02', TODAY)).toBe(PERIOD_TOO_LONG_MESSAGE);
     expect(periodProblem('2026-10-12', '2026-10-15', TODAY)).toBe(PERIOD_IN_THE_FUTURE_MESSAGE);
+    // 0026 for 2026: the year half typed in a date box.
+    expect(periodProblem('0026-10-05', '0026-10-11', TODAY)).toBe(PERIOD_TOO_OLD_MESSAGE);
+    expect(periodProblem('2000-01-01', '2000-01-07', TODAY)).toBe('');
 
     expect(depositDateProblem('2026-10-13', '2026-10-05', TODAY)).toBe('');
     // A platform that pays every day may deposit inside the period.
@@ -248,14 +253,33 @@ describe('settlementEdits', () => {
   it('knows whether the screen changed the saved settlement: not by the order of the orders nor by how an amount is written', () => {
     const saved = detail();
     const shown = formOf(saved);
+    const edited = (patch: Partial<SettlementForm>, orderIds = ['a', 'b']) => {
+      const changed = { ...shown, ...patch };
+      return editedSince(saved, changed, buildBody(changed, orderIds));
+    };
 
     expect(shown).toMatchObject({ depositedText: '1072.96', reference: 'SPEI 4471', notes: '' });
     expect(sameBody(buildBody(shown, ['b', 'a']), savedBody(saved))).toBe(true);
-    expect(sameBody(buildBody({ ...shown, depositedText: '1,072.960' }, ['a', 'b']), savedBody(saved))).toBe(false);
-    expect(sameBody(buildBody({ ...shown, depositedText: '1072.9' }, ['a', 'b']), savedBody(saved))).toBe(false);
-    expect(sameBody(buildBody({ ...shown, depositedText: '1,072.96' }, ['a', 'b']), savedBody(saved))).toBe(true);
-    expect(sameBody(buildBody(shown, ['a']), savedBody(saved))).toBe(false);
-    expect(sameBody(buildBody({ ...shown, notes: 'Llegó tarde' }, ['a', 'b']), savedBody(saved))).toBe(false);
+    expect(edited({}, ['b', 'a'])).toBe(false);
+    expect(edited({ depositedText: '1,072.96' })).toBe(false);
+    expect(edited({ depositedText: ' $1072.96 ' })).toBe(false);
+    expect(edited({ depositedText: '1072.9' })).toBe(true);
+    expect(edited({}, ['a'])).toBe(true);
+    expect(edited({ notes: 'Llegó tarde' })).toBe(true);
+  });
+
+  it('takes a deposit box the API would refuse as a change, also over a saved $0', () => {
+    const saved = detail({
+      settlement: { ...detail().settlement, depositedAmount: 0, difference: -1072.96 },
+    });
+    const shown = formOf(saved);
+
+    expect(shown.depositedText).toBe('0.00');
+    expect(editedSince(saved, shown, buildBody(shown, ['a', 'b']))).toBe(false);
+    for (const depositedText of ['', '  ', '1,072.960', 'abc']) {
+      const typed = { ...shown, depositedText };
+      expect(editedSince(saved, typed, buildBody(typed, ['a', 'b']))).toBe(true);
+    }
   });
 
   it('finds the saved orders whose expected net changed since the save', () => {

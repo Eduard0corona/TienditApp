@@ -87,7 +87,7 @@ El total lo decide el servidor: la venta rechaza un `ExpectedTotal` distinto del
 ## Consecuencias
 
 - **Lo que logra:**
-  - Un pedido de plataforma cobra lo que cobró la app, y su comisión, retenciones y neto esperado salen del total real. La liquidación semanal tendrá contra qué cuadrar.
+  - Un pedido de plataforma cobra lo que cobró la app, y su comisión, retenciones y neto esperado salen del total real. La liquidación semanal tendrá contra qué cuadrar (resuelto en la Fase 22G, [ADR 0015](0015-delivery-platform-settlements.md)).
   - Subir los precios de una plataforma es una tarea de minutos: calcular con un porcentaje, revisar y guardar.
 - **Lo que limita:**
   - **Precios de la app:** deben coincidir con los de la app. TienditApp no los lee de la plataforma: si alguien cambia un precio en la app y no aquí, el pedido sale con el anterior.
@@ -101,5 +101,5 @@ El total lo decide el servidor: la venta rechaza un `ExpectedTotal` distinto del
 
 ## Siguientes pasos
 
-- **Liquidación semanal y conciliación con el estado de cuenta** de cada plataforma.
+- **Liquidación semanal y conciliación con el estado de cuenta** de cada plataforma. Hecho: [ADR 0015](0015-delivery-platform-settlements.md).
 - **Precios desde la plataforma** por su API o un integrador, cuando lleguen las integraciones.

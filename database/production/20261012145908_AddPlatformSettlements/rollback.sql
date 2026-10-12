@@ -6,8 +6,8 @@
 -- --idempotent` (EF Core 10.0.12). Debajo del bloque SET, el contenido es el que genera EF.
 --
 -- Se detiene sin cambiar nada (error 50010; con -b, sqlcmd termina ahí) si hay liquidaciones
--- guardadas, abiertas, cerradas o anuladas: se perderían y ninguna bitácora conserva sus pedidos ni
--- sus ajustes. Con liquidaciones guardadas solo queda corregir hacia adelante, o exportarlas y
+-- guardadas, abiertas, cerradas o anuladas: se perderían, y la bitácora no guarda qué pedidos lleva
+-- cada una (solo cuántos) ni nada de una abierta. Con liquidaciones guardadas solo queda corregir hacia adelante, o exportarlas y
 -- borrarlas a propósito antes (la consulta 4 de verify.sql las cuenta). Los pedidos no cambian en
 -- ningún caso.
 -- Sin liquidaciones, borra [PlatformSettlementAdjustments], [PlatformSettlementOrders] y

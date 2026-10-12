@@ -80,8 +80,9 @@ internal static class PlatformSettlementReader
                 line.OrderId == row.OrderId && line.IsActive && (settlementId == null || line.SettlementId != settlementId)));
 
     /// <summary>
-    /// The pending orders of a platform registered up to the end of <paramref name="to"/>, the oldest first, at most one
-    /// settlement's worth (<see cref="PlatformSettlement.MaxOrders"/>), leaving out <paramref name="except"/>.
+    /// The pending orders of a platform for a settlement of the period, the oldest first: those registered in it and, in
+    /// the room left of one settlement's worth (<see cref="PlatformSettlement.MaxOrders"/>), the most recent of before (a
+    /// statement brings them late; older ones still wait in Por cobrar). Truncated when some did not fit.
     /// </summary>
     public static async Task<(List<PlatformSettlementOrderDto> Orders, bool Truncated)> CandidatesAsync(
         IApplicationDbContext context,
@@ -89,24 +90,39 @@ internal static class PlatformSettlementReader
         DateOnly from,
         DateOnly to,
         TimeZoneInfo zone,
-        IReadOnlyCollection<Guid> except,
         CancellationToken cancellationToken)
     {
+        var startUtc = DailySalesReadModel.StartUtc(from, zone);
         var endUtc = DailySalesReadModel.EndUtc(to, zone);
-        var excluded = except.ToList();
-        var rows = await Pending(context)
-            .Where(row => row.Channel == channel && row.RegisteredAt <= endUtc && !excluded.Contains(row.OrderId))
+        var pending = Pending(context).Where(row => row.Channel == channel && row.RegisteredAt <= endUtc);
+        // A backlog of before never pushes the period's own orders out: they are read first.
+        var inPeriod = await pending
+            .Where(row => row.RegisteredAt >= startUtc)
             .OrderBy(row => row.RegisteredAt)
             .ThenBy(row => row.OrderId)
             .Take(PlatformSettlement.MaxOrders + 1)
             .ToListAsync(cancellationToken);
+        var room = PlatformSettlement.MaxOrders + 1 - inPeriod.Count;
+        var before = room <= 0
+            ? []
+            : await pending
+                .Where(row => row.RegisteredAt < startUtc)
+                .OrderByDescending(row => row.RegisteredAt)
+                .ThenByDescending(row => row.OrderId)
+                .Take(room)
+                .ToListAsync(cancellationToken);
+        // Each query reads one more than fits: more than a settlement's worth between the two says some were left out.
+        var truncated = inPeriod.Count + before.Count > PlatformSettlement.MaxOrders;
+        var kept = inPeriod.Take(PlatformSettlement.MaxOrders).ToList();
+        kept.AddRange(before.Take(PlatformSettlement.MaxOrders - kept.Count));
         // Rounded to zero (a cent split in half), an order brings nothing either.
-        var orders = rows
-            .Take(PlatformSettlement.MaxOrders)
+        var orders = kept
             .Where(row => row.ExpectedNet != 0)
+            .OrderBy(row => row.RegisteredAt)
+            .ThenBy(row => row.OrderId)
             .Select(row => ToDto(row, row.ExpectedNet, from, zone))
             .ToList();
-        return (orders, rows.Count > PlatformSettlement.MaxOrders);
+        return (orders, truncated);
     }
 
     /// <summary>
@@ -175,13 +191,13 @@ internal static class PlatformSettlementReader
             .Select(line => ToDto(line.Row, line.ExpectedNet, settlement.PeriodFrom, zone))
             .ToList();
 
+        // Its own orders are in a settlement in force: they are not pending, so they are never candidates.
         var candidates = new List<PlatformSettlementOrderDto>();
         var truncated = false;
         if (settlement.Status == PlatformSettlementStatus.Open)
         {
             (candidates, truncated) = await CandidatesAsync(
-                context, settlement.Channel, settlement.PeriodFrom, settlement.PeriodTo, zone,
-                orders.Select(order => order.OrderId).ToList(), cancellationToken);
+                context, settlement.Channel, settlement.PeriodFrom, settlement.PeriodTo, zone, cancellationToken);
         }
 
         return new PlatformSettlementDetailDto

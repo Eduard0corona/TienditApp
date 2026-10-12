@@ -18,11 +18,11 @@
   }
 }
 
-/* Each figure at the end of its line; the difference last, apart and in bold. */
+/* Each figure at the end of its line; the difference last, apart and in bold, under one unbroken line. */
 .settlement-accounts {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.35rem 1rem;
+  gap: 0.35rem 0;
 }
 
 .settlement-accounts dt {
@@ -31,6 +31,7 @@
 
 .settlement-accounts dd {
   margin: 0;
+  padding-left: 1rem;
   text-align: right;
 }
 

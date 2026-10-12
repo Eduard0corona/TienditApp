@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
+import { getApiErrorCode, getApiErrorMessage, getApiErrorStatus } from '../../api/errors';
 import {
   useClosePlatformSettlement,
   useCreatePlatformSettlement,
@@ -20,20 +20,19 @@ import {
   MAX_ADJUSTMENT_AMOUNT,
   MAX_ADJUSTMENTS,
   MAX_NOTES_LENGTH,
-  MAX_PERIOD_DAYS,
   MAX_REFERENCE_LENGTH,
   MAX_VOID_REASON_LENGTH,
   buildBody,
   changedSinceSaved,
   depositProblems,
   differenceAdjustment,
+  editedSince,
   firstProblem,
   formOf,
   isPicked,
   mergeOrders,
   newSettlementForm,
-  sameBody,
-  savedBody,
+  periodProblem,
   savedTotals,
   totalsOf,
   type SettlementForm,
@@ -44,12 +43,17 @@ import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { PlatformSettlementStatus, type OrderChannel } from '../../types';
 import { getAccess } from '../../utils/access';
-import { calendarDaysBetween, formatCalendarDate, formatDateTime, getBusinessToday } from '../../utils/dates';
+import { formatCalendarDate, formatDateTime, getBusinessToday } from '../../utils/dates';
 import { getPlatformName, isDeliveryPlatform, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { formatMoney } from '../../utils/money';
 import './PlatformSettlements.css';
 
 const PARENT = { label: 'Liquidaciones', to: '/reports/settlements' };
+
+/** A save that lost an order to another settlement: the list was read again and what the person wrote stays. */
+const ORDER_TAKEN_NOTICE = 'Otra liquidación tomó uno de los pedidos mientras escribías. Ya actualizamos la lista: revísala y guarda otra vez.';
+/** Closing or voiding over a revision someone else saved: the screen already shows theirs. */
+const SAVED_MEANWHILE_NOTICE = 'Alguien más guardó esta liquidación mientras la veías: esta es la versión que guardó. Revísala y vuelve a intentarlo.';
 
 /**
  * Reportes › Liquidaciones › una liquidación: the deposit of a platform with the orders it pays and the adjustments that
@@ -87,7 +91,9 @@ function SavedSettlement({ id }: { id: string }) {
   // What the last action found (someone else saved, or a figure changed): it stays on screen after reading it again.
   const [notice, setNotice] = useState('');
 
-  if (settlement.isPending) {
+  // One read before writing, also over a settlement already in memory: a newer revision arriving later would open the
+  // screen again and drop what was typed meanwhile.
+  if (settlement.isPending || (settlement.isFetching && !settlement.isFetchedAfterMount)) {
     return (
       <>
         <PageTitle title="Liquidación" parent={PARENT} />
@@ -165,16 +171,22 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const voiding = useVoidPlatformSettlement();
   const busy = create.isPending || update.isPending || close.isPending || voiding.isPending;
 
-  // The pending orders of the period: those the server sent with the settlement, or those of the period being written.
+  // The pending orders of the period: those the server sent with the settlement, or those of the period being written
+  // (only one the API takes: a year half typed is not asked for).
   const periodChanged = !settlement || form.from !== settlement.periodFrom || form.to !== settlement.periodTo;
-  const periodReadable = !!form.from && !!form.to && form.to >= form.from && calendarDaysBetween(form.from, form.to) < MAX_PERIOD_DAYS;
-  const pending = usePendingPlatformOrders(platform, form.from, form.to, editing && periodChanged && periodReadable);
+  const periodReadable = periodProblem(form.from, form.to, today) === '';
+  const readsPeriod = editing && periodChanged && periodReadable;
+  const pending = usePendingPlatformOrders(platform, form.from, form.to, readsPeriod);
   const saved = useMemo(() => new Set(detail?.orders.map((order) => order.orderId) ?? []), [detail]);
   const orders = useMemo(() => {
     if (!editing) return detail?.orders ?? [];
     const candidates = periodChanged ? (periodReadable ? pending.data?.orders ?? [] : []) : detail?.candidates ?? [];
     return mergeOrders(detail?.orders ?? [], candidates);
   }, [editing, detail, periodChanged, periodReadable, pending.data]);
+  // Until the orders of the new period arrive, or when they could not, what is checked is not that period's: no saving.
+  const ordersLoading = readsPeriod && pending.isPending;
+  const ordersFailed = readsPeriod && pending.isError;
+  const ordersUnknown = ordersLoading || ordersFailed;
   const truncated = editing && (periodChanged ? periodReadable && !!pending.data?.truncated : !!detail?.candidatesTruncated);
   // Another settlement of the platform still open: the new one would be refused.
   const openElsewhere = !settlement && periodReadable ? pending.data?.openSettlementId ?? null : null;
@@ -183,13 +195,13 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const totals = editing || !settlement ? totalsOf(picked, form.adjustments, form.depositedText) : savedTotals(settlement);
   const body = buildBody(form, picked.map((order) => order.orderId));
   const changedNets = detail ? changedSinceSaved(detail) : [];
-  const edited = detail ? !sameBody(body, savedBody(detail)) : JSON.stringify(form) !== initial;
+  const edited = detail ? editedSince(detail, form, body) : JSON.stringify(form) !== initial;
   const needsSave = editing && (!settlement || edited || changedNets.length > 0);
   const problem = editing ? firstProblem(form, picked.length, today) : '';
   const problems = depositProblems(form, today);
   const showDeposited = revealed || form.depositedText.trim() !== '';
   const differenceCents = totals.differenceCents;
-  const canExplain = editing && differenceCents !== undefined && differenceCents !== 0
+  const canExplain = editing && !busy && !ordersUnknown && differenceCents !== undefined && differenceCents !== 0
     && Math.abs(differenceCents) <= MAX_ADJUSTMENT_AMOUNT * 100 && form.adjustments.length < MAX_ADJUSTMENTS;
   const canClose = editing && !!settlement && !needsSave && settlement.difference === 0
     && (settlement.orderCount > 0 || (detail?.adjustments.length ?? 0) > 0);
@@ -213,12 +225,18 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
     setError(getApiErrorMessage(err, fallback));
   };
 
+  // The orders the screen offers, read again: those of the period being written, or those the settlement came with.
+  const refreshOrders = async () => {
+    if (periodChanged) await pending.refetch();
+    else await onReload?.();
+  };
+
   const save = async () => {
     if (problem) {
       setRevealed(true);
       return;
     }
-    if (openElsewhere) return;
+    if (openElsewhere || ordersUnknown) return;
     setError('');
     setConflict(false);
     onNotice?.('');
@@ -233,7 +251,18 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
       // The answer replaced the settlement read: the screen opens again with it.
       toast.success('Liquidación guardada.');
     } catch (err: unknown) {
+      if (getApiErrorCode(err) === 'conflict') {
+        // Another settlement took one of the orders meanwhile: the list is read again (it leaves) and what was written
+        // stays, to review it and save again.
+        setError(ORDER_TAKEN_NOTICE);
+        setConflict(false);
+        await refreshOrders();
+        return;
+      }
       fail(err, 'No se pudo guardar la liquidación. Intenta de nuevo.');
+      // A new one refused, because another settlement of the platform opened meanwhile for instance: the pending
+      // orders, read again, bring it with its link.
+      if (!settlement) void pending.refetch();
     }
   };
 
@@ -269,13 +298,14 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
     if (accepted) await onReload?.();
   };
 
-  // A 409 on closing or voiding: someone else saved, or the server counted the orders again and saved the new figures.
+  // A 409 on closing or voiding: someone else saved (the screen shows their version once read again), or the server
+  // counted the orders again and saved the new figures, which the person reviews first (its message says so).
   const readAgain = async (err: unknown, fallback: string) => {
     if (getApiErrorStatus(err) !== 409) {
       fail(err, fallback);
       return;
     }
-    onNotice?.(getApiErrorMessage(err, fallback));
+    onNotice?.(getApiErrorCode(err) === 'conflict' ? getApiErrorMessage(err, fallback) : SAVED_MEANWHILE_NOTICE);
     await onReload?.();
   };
 
@@ -299,11 +329,12 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
 
   const voidIt = async () => {
     if (!settlement) return;
+    const freed = settlement.orderCount === 0
+      ? ''
+      : settlement.orderCount === 1 ? 'Su pedido vuelve a quedar pendiente. ' : `Sus ${settlement.orderCount} pedidos vuelven a quedar pendientes. `;
     const reason = await prompt({
       title: 'Anular liquidación',
-      message: settlement.orderCount === 1
-        ? 'Su pedido vuelve a quedar pendiente. La liquidación se queda como historia: no se borra.'
-        : `Sus ${settlement.orderCount} pedidos vuelven a quedar pendientes. La liquidación se queda como historia: no se borra.`,
+      message: `${freed}La liquidación se queda como historia: no se borra.`,
       inputLabel: 'Motivo',
       placeholder: 'Por ejemplo, capturé el depósito de otra semana',
       required: true,
@@ -336,6 +367,8 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
   const statusText = (() => {
     if (revealed && problem) return problem;
     if (openElsewhere) return `Ya hay una liquidación abierta de ${name}.`;
+    if (ordersLoading) return 'Cargando los pedidos del periodo…';
+    if (ordersFailed) return 'Sin los pedidos del periodo no se puede guardar.';
     if (!settlement) return 'Sin guardar.';
     if (edited) return 'Cambios sin guardar.';
     if (changedNets.length > 0) return 'Guarda para tomar las cifras nuevas.';
@@ -388,7 +421,7 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
               <h2 id={`${id}-deposit`} className="h5 mb-3">Depósito</h2>
               {editing ? (
                 <div className="row g-3">
-                  <div className="col-6 col-lg-3">
+                  <div className="col-12 col-sm-6 col-lg-3">
                     <label className="form-label" htmlFor={`${id}-from`}>Desde</label>
                     <input
                       id={`${id}-from`}
@@ -397,11 +430,12 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                       value={form.from}
                       max={form.to || today}
                       disabled={busy}
+                      aria-invalid={problems.period ? true : undefined}
                       aria-describedby={problems.period ? `${id}-period-problem` : undefined}
                       onChange={(event) => change({ from: event.target.value })}
                     />
                   </div>
-                  <div className="col-6 col-lg-3">
+                  <div className="col-12 col-sm-6 col-lg-3">
                     <label className="form-label" htmlFor={`${id}-to`}>Hasta</label>
                     <input
                       id={`${id}-to`}
@@ -411,11 +445,12 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                       min={form.from || undefined}
                       max={today}
                       disabled={busy}
+                      aria-invalid={problems.period ? true : undefined}
                       aria-describedby={problems.period ? `${id}-period-problem` : undefined}
                       onChange={(event) => change({ to: event.target.value })}
                     />
                   </div>
-                  <div className="col-6 col-lg-3">
+                  <div className="col-12 col-sm-6 col-lg-3">
                     <label className="form-label" htmlFor={`${id}-deposited-on`}>Fecha del depósito</label>
                     <input
                       id={`${id}-deposited-on`}
@@ -425,12 +460,13 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                       min={form.from || undefined}
                       max={today}
                       disabled={busy}
+                      aria-invalid={problems.depositedOn ? true : undefined}
                       aria-describedby={problems.depositedOn ? `${id}-deposited-on-problem` : undefined}
                       onChange={(event) => change({ depositedOn: event.target.value })}
                     />
                     {problems.depositedOn && <div id={`${id}-deposited-on-problem`} className="invalid-feedback d-block">{problems.depositedOn}</div>}
                   </div>
-                  <div className="col-6 col-lg-3">
+                  <div className="col-12 col-sm-6 col-lg-3">
                     <label className="form-label" htmlFor={`${id}-deposited`}>Lo que depositó</label>
                     {/* No decimal keyboard: on an iPhone it has no minus, and a platform may leave a negative balance. */}
                     <input
@@ -440,6 +476,7 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                       placeholder="0.00"
                       value={form.depositedText}
                       disabled={busy}
+                      aria-invalid={showDeposited && problems.deposited ? true : undefined}
                       aria-describedby={`${id}-deposited-help`}
                       onChange={(event) => change({ depositedText: event.target.value })}
                     />
@@ -459,7 +496,7 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                       className={`form-control ${problems.reference ? 'is-invalid' : ''}`}
                       maxLength={MAX_REFERENCE_LENGTH}
                       autoComplete="off"
-                      placeholder="Folio de la transferencia o del estado de cuenta"
+                      placeholder="Folio de la transferencia"
                       value={form.reference}
                       disabled={busy}
                       onChange={(event) => change({ reference: event.target.value })}
@@ -503,14 +540,19 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
             <div className="card-body">
               <h2 id={`${id}-orders`} className="h5 mb-1">Pedidos</h2>
               <p className="small text-muted">
-                {editing
-                  ? `Los pedidos de ${name} pendientes hasta el final del periodo. Van incluidos los del periodo, y sin incluir los de antes que el estado de cuenta traiga tarde. El neto esperado de cada uno es el mismo de Ventas por canal.`
-                  : 'Los pedidos que paga este depósito, con lo que se esperaba de cada uno al guardarla.'}
+                {!editing
+                  ? 'Los pedidos que paga este depósito, con lo que se esperaba de cada uno al guardarla.'
+                  : settlement
+                    ? `Los de esta liquidación y, sin incluir, los de ${name} que siguen pendientes hasta el final del periodo. El neto esperado de cada uno ya descuenta lo devuelto.`
+                    : `Los pedidos de ${name} pendientes hasta el final del periodo: van incluidos los del periodo, y sin incluir los de antes que el estado de cuenta traiga tarde. El neto esperado de cada uno ya descuenta lo devuelto.`}
               </p>
               {truncated && (
-                <div className="alert alert-warning small">Hay más de 2,000 pedidos pendientes hasta el final del periodo: elige un periodo más corto.</div>
+                <div className="alert alert-warning small">
+                  {'Hay más de 2,000 pedidos pendientes hasta el final del periodo y aquí caben 2,000: los del periodo y, si sobra lugar, '
+                    + 'los más recientes de antes. Los demás siguen en Por cobrar para otra liquidación.'}
+                </div>
               )}
-              {editing && periodChanged && periodReadable && pending.isError && (
+              {ordersFailed && (
                 <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
                   <span className="me-auto">{getApiErrorMessage(pending.error, `No se pudieron cargar los pedidos pendientes de ${name}.`)}</span>
                   <button type="button" className="btn btn-sm btn-light" onClick={() => void pending.refetch()}>Reintentar</button>
@@ -533,7 +575,7 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                 picking={editing
                   ? { isPicked: (order) => isPicked(order, form, saved, !settlement), onPick: pick, disabled: busy }
                   : undefined}
-                loading={editing && periodChanged && periodReadable && pending.isPending}
+                loading={ordersLoading}
               />
             </div>
           </section>
@@ -563,7 +605,8 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
               : undefined}
           />
 
-          {error && (
+          {/* Another settlement of the platform open says it above, with its link. */}
+          {error && !openElsewhere && (
             <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
               <span className="me-auto">{error}</span>
               {conflict && (
@@ -584,7 +627,7 @@ function SettlementScreen({ platform, detail, notice = '', onNotice, onReload }:
                   {settlement
                     ? edited && <button type="button" className="btn btn-light" onClick={() => void discard()} disabled={busy}>Descartar</button>
                     : <button type="button" className="btn btn-light" onClick={() => void leave()} disabled={busy}>Cancelar</button>}
-                  <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy || !!openElsewhere}>
+                  <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy || !!openElsewhere || ordersUnknown}>
                     {create.isPending || update.isPending ? 'Guardando…' : 'Guardar'}
                   </button>
                 </>

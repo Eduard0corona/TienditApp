@@ -16,29 +16,35 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
 import { PlatformSettlementStatus } from '../../types';
 import { getAccess, type Access } from '../../utils/access';
-import { formatCalendarDate } from '../../utils/dates';
 import { getPlatformName, isDeliveryPlatform, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { DELIVERY_PLATFORM_CHANNELS } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import './PlatformSettlements.css';
 
+// The state goes under the platform: on a phone the first columns are what shows, and a voided settlement must not
+// look like the closed one that replaced it.
 const COLUMNS: DataTableColumn[] = [
   { header: 'Plataforma' },
   { header: 'Periodo' },
   { header: 'Depositó', className: 'text-end' },
   { header: 'Diferencia', className: 'text-end' },
-  { header: 'Estado' },
   { header: 'Acciones', className: 'text-end' },
 ];
 
-// The API takes up to 100 a page and answers 20 by default.
+// The API takes up to 100 a page and answers 20 by default, and a search of up to 100 characters.
 const PAGE_SIZES = [20, 50, 100];
+const MAX_SEARCH_LENGTH = 100;
 
 const STATUSES = [PlatformSettlementStatus.Open, PlatformSettlementStatus.Closed, PlatformSettlementStatus.Voided];
 
-/** "12 oct.": a date of the business in a short line. */
+/** "12 oct.": a date of the business in a short line, written as the periods are. */
 function shortDay(date: string): string {
-  return formatCalendarDate(date, { day: 'numeric', month: 'short' });
+  return describePeriod(date, date);
+}
+
+/** A sentence that ends in an abbreviation («oct.») takes no second period. */
+function sentence(text: string): string {
+  return text.endsWith('.') ? text : `${text}.`;
 }
 
 function platformOf(settlement: PlatformSettlement): string {
@@ -64,6 +70,7 @@ export default function PlatformSettlements() {
     setFilters((current) => ({ ...current, ...patch }));
     setPage(1);
   };
+  const filtered = filters.channel !== null || filters.status !== null;
 
   return (
     <>
@@ -101,94 +108,97 @@ export default function PlatformSettlements() {
       <section className="card" aria-labelledby={`${id}-history`}>
         <div className="card-body">
           <h2 id={`${id}-history`} className="h5 mb-3">Liquidaciones</h2>
-          {settlements.isError ? (
-            <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2 mb-0" role="alert">
+          {/* Above the list, which stays with its search and filters: what was typed is not lost to the error. */}
+          {settlements.isError && (
+            <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
               <span className="me-auto">{getApiErrorMessage(settlements.error, 'No se pudieron cargar las liquidaciones.')}</span>
               <button type="button" className="btn btn-sm btn-light" onClick={() => void settlements.refetch()}>Reintentar</button>
             </div>
-          ) : (
-            <DataTable<PlatformSettlement>
-              data={settlements.data?.items ?? []}
-              columns={COLUMNS}
-              keyExtractor={(settlement) => settlement.id}
-              loading={settlements.isPending}
-              emptyMessage="Todavía no registras depósitos de las plataformas."
-              searchPlaceholder="Buscar referencia o notas"
-              pageSizeOptions={PAGE_SIZES}
-              serverSide={{
-                totalCount: settlements.data?.totalCount ?? 0,
-                page,
-                pageSize,
-                onPageChange: setPage,
-                onPageSizeChange: (size) => {
-                  setPageSize(size);
-                  setPage(1);
-                },
-                onSearchChange: (search) => filter({ search }),
-              }}
-              filters={(
-                <>
-                  <DataTableFilter label="Plataforma" htmlFor={`${id}-platform`}>
-                    <select
-                      id={`${id}-platform`}
-                      className="form-select form-select-sm"
-                      value={filters.channel ?? ''}
-                      onChange={(event) => filter({ channel: event.target.value === '' ? null : (Number(event.target.value) as DeliveryPlatform) })}
-                    >
-                      <option value="">Todas</option>
-                      {DELIVERY_PLATFORM_CHANNELS.map((channel) => <option key={channel} value={channel}>{getPlatformName(channel)}</option>)}
-                    </select>
-                  </DataTableFilter>
-                  <DataTableFilter label="Estado" htmlFor={`${id}-status`}>
-                    <select
-                      id={`${id}-status`}
-                      className="form-select form-select-sm"
-                      value={filters.status ?? ''}
-                      onChange={(event) => filter({
-                        status: event.target.value === '' ? null : (Number(event.target.value) as PlatformSettlementStatus),
-                      })}
-                    >
-                      <option value="">Todos</option>
-                      {STATUSES.map((status) => <option key={status} value={status}>{getSettlementStatusLabel(status)}</option>)}
-                    </select>
-                  </DataTableFilter>
-                </>
-              )}
-              renderRow={(settlement) => {
-                const period = describePeriod(settlement.periodFrom, settlement.periodTo);
-                const writable = access.isAdmin && settlement.status === PlatformSettlementStatus.Open;
-                const action = writable ? 'Continuar' : 'Ver';
-                return (
-                  <>
-                    <td className="fw-semibold">{platformOf(settlement)}</td>
-                    <td>
-                      {period}
-                      <div className="small text-muted">{settlement.orderCount === 1 ? '1 pedido' : `${settlement.orderCount} pedidos`}</div>
-                    </td>
-                    <td className="text-end">
-                      <span className="ta-money">{formatMoney(settlement.depositedAmount)}</span>
-                      <div className="small text-muted">el {shortDay(settlement.depositedOn)}</div>
-                    </td>
-                    <td className="text-end ta-money">{formatMoney(settlement.difference)}</td>
-                    <td>
-                      <span className={`ta-chip ${getSettlementStatusChip(settlement.status)}`}>
-                        {getSettlementStatusLabel(settlement.status)}
-                      </span>
-                    </td>
-                    <td className="text-end">
-                      <Link
-                        className="btn btn-light btn-sm"
-                        to={`/reports/settlements/${settlement.id}`}
-                        aria-label={`${action} la liquidación de ${platformOf(settlement)} del ${period}`}
-                      >
-                        {action}
-                      </Link>
-                    </td>
-                  </>
-                );
-              }}
-            />
           )}
+          <DataTable<PlatformSettlement>
+            data={settlements.data?.items ?? []}
+            columns={COLUMNS}
+            keyExtractor={(settlement) => settlement.id}
+            loading={settlements.isPending}
+            emptyMessage={settlements.isError
+              ? 'Sin liquidaciones que mostrar.'
+              : filtered ? 'Ninguna liquidación con estos filtros.' : 'Todavía no registras depósitos de las plataformas.'}
+            searchPlaceholder="Buscar referencia o notas"
+            searchMaxLength={MAX_SEARCH_LENGTH}
+            pageSizeOptions={PAGE_SIZES}
+            serverSide={{
+              totalCount: settlements.data?.totalCount ?? 0,
+              page,
+              pageSize,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => {
+                setPageSize(size);
+                setPage(1);
+              },
+              onSearchChange: (search) => filter({ search }),
+            }}
+            filters={(
+              <>
+                <DataTableFilter label="Plataforma" htmlFor={`${id}-platform`}>
+                  <select
+                    id={`${id}-platform`}
+                    className="form-select form-select-sm"
+                    value={filters.channel ?? ''}
+                    onChange={(event) => filter({ channel: event.target.value === '' ? null : (Number(event.target.value) as DeliveryPlatform) })}
+                  >
+                    <option value="">Todas</option>
+                    {DELIVERY_PLATFORM_CHANNELS.map((channel) => <option key={channel} value={channel}>{getPlatformName(channel)}</option>)}
+                  </select>
+                </DataTableFilter>
+                <DataTableFilter label="Estado" htmlFor={`${id}-status`}>
+                  <select
+                    id={`${id}-status`}
+                    className="form-select form-select-sm"
+                    value={filters.status ?? ''}
+                    onChange={(event) => filter({
+                      status: event.target.value === '' ? null : (Number(event.target.value) as PlatformSettlementStatus),
+                    })}
+                  >
+                    <option value="">Todos</option>
+                    {STATUSES.map((status) => <option key={status} value={status}>{getSettlementStatusLabel(status)}</option>)}
+                  </select>
+                </DataTableFilter>
+              </>
+            )}
+            renderRow={(settlement) => {
+              const period = describePeriod(settlement.periodFrom, settlement.periodTo);
+              const writable = access.isAdmin && settlement.status === PlatformSettlementStatus.Open;
+              const action = writable ? 'Continuar' : 'Ver';
+              const state = getSettlementStatusLabel(settlement.status);
+              return (
+                <>
+                  <td>
+                    <div className="fw-semibold">{platformOf(settlement)}</div>
+                    <span className={`ta-chip ${getSettlementStatusChip(settlement.status)}`}>{state}</span>
+                  </td>
+                  <td>
+                    {period}
+                    <div className="small text-muted">{settlement.orderCount === 1 ? '1 pedido' : `${settlement.orderCount} pedidos`}</div>
+                  </td>
+                  <td className="text-end">
+                    <span className="ta-money">{formatMoney(settlement.depositedAmount)}</span>
+                    <div className="small text-muted">el {shortDay(settlement.depositedOn)}</div>
+                  </td>
+                  <td className="text-end ta-money">{formatMoney(settlement.difference)}</td>
+                  <td className="text-end">
+                    {/* The state in the name: a voided settlement and the one that replaced it share platform and period. */}
+                    <Link
+                      className="btn btn-light btn-sm"
+                      to={`/reports/settlements/${settlement.id}`}
+                      aria-label={`${action} la liquidación ${state.toLowerCase()} de ${platformOf(settlement)} del ${period}`}
+                    >
+                      {action}
+                    </Link>
+                  </td>
+                </>
+              );
+            }}
+          />
         </div>
       </section>
     </>
@@ -213,10 +223,10 @@ function ReceivableCard({ receivable, access }: { receivable: PlatformReceivable
         <div className="small text-muted">
           {receivable.pendingOrders === 0
             ? 'Sin pedidos pendientes.'
-            : `${receivable.pendingOrders === 1 ? '1 pedido pendiente' : `${receivable.pendingOrders} pedidos pendientes`}${receivable.oldestPendingOn ? ` desde el ${shortDay(receivable.oldestPendingOn)}` : ''}.`}
+            : sentence(`${receivable.pendingOrders === 1 ? '1 pedido pendiente' : `${receivable.pendingOrders} pedidos pendientes`}${receivable.oldestPendingOn ? ` desde el ${shortDay(receivable.oldestPendingOn)}` : ''}`)}
         </div>
         <div className="small text-muted">
-          {receivable.settledThrough ? `Liquidado hasta el ${shortDay(receivable.settledThrough)}.` : 'Todavía sin liquidaciones cerradas.'}
+          {receivable.settledThrough ? sentence(`Liquidado hasta el ${shortDay(receivable.settledThrough)}`) : 'Todavía sin liquidaciones cerradas.'}
         </div>
         <div className="mt-2">
           {openId ? (

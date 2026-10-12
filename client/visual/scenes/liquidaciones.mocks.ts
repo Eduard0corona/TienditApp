@@ -27,9 +27,17 @@ const r2 = (amount: number) => Math.round(amount * 100) / 100;
 /**
  * An order of a platform registered at a time of a past day: when the platform charged it, the 56.148 % of its total that
  * the platform deposits (30 % of commission, its IVA and the withholdings); when the courier paid the business, the
- * commission and its IVA the platform takes, in negative.
+ * commission and its IVA the platform takes, in negative. In the period of the settlement shown unless said otherwise.
  */
-function order(channel: number, folio: string, number: number, daysAgo: number, total: number, collectedBy = BY_THE_PLATFORM) {
+function order(
+  channel: number,
+  folio: string,
+  number: number,
+  daysAgo: number,
+  total: number,
+  collectedBy = BY_THE_PLATFORM,
+  inPeriod = true,
+) {
   const registeredAt = at(14, 10 + (number % 40), -daysAgo);
   const net = collectedBy === BY_THE_PLATFORM ? r2(total * 0.56148) : r2(-total * 0.348);
   return {
@@ -38,7 +46,7 @@ function order(channel: number, folio: string, number: number, daysAgo: number, 
     externalOrderNumber: folio,
     registeredAt,
     registeredOn: registeredAt.slice(0, 10),
-    inPeriod: true,
+    inPeriod,
     status: DELIVERED,
     collectedBy,
     orderTotal: total,
@@ -105,7 +113,7 @@ const UBER_ORDERS = [
   order(UBER_EATS, 'F2M7T', 238, 9, 1000),
   order(UBER_EATS, 'H8N3R', 247, 8, 350, BY_THE_BUSINESS),
 ];
-const UBER_EARLIER = order(UBER_EATS, 'J5W1B', 188, 15, 285);
+const UBER_EARLIER = order(UBER_EATS, 'J5W1B', 188, 15, 285, BY_THE_PLATFORM, false);
 const UBER_ADJUSTMENTS = [
   { kind: PROMOTION, description: 'Cupón 2x1 que paga el negocio', amount: -84 },
   { kind: FEE, description: 'Publicidad en la app', amount: -38 },
@@ -156,7 +164,7 @@ const RAPPI_CLOSED = settlement({
 // DiDi Food: four orders pending since the 18th, one of them before the week (its statement brought it late) and one the
 // courier paid the business.
 const DIDI_PENDING = [
-  order(DIDI_FOOD, '88213', 181, 16, 610),
+  order(DIDI_FOOD, '88213', 181, 16, 610, BY_THE_PLATFORM, false),
   order(DIDI_FOOD, '88240', 212, 12, 420),
   order(DIDI_FOOD, '88257', 229, 10, 350, BY_THE_BUSINESS),
   order(DIDI_FOOD, '88262', 241, 8, 1000),

@@ -3269,6 +3269,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<int>("Kind")
                         .HasColumnType("int");
 
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
+
                     b.Property<Guid>("SettlementId")
                         .HasColumnType("uniqueidentifier");
 

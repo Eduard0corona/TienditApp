@@ -47,8 +47,9 @@ export default function SettlementSummary({
           <dt className="settlement-accounts-difference">Diferencia</dt>
           <dd className="settlement-accounts-difference ta-money">{differenceCents === undefined ? '—' : money(differenceCents)}</dd>
         </dl>
+        {/* Not a live region: it changes with every key of the deposit, and the bar below says what is missing. */}
         {differenceCents !== undefined && (
-          <div className="d-flex flex-wrap align-items-center gap-2 mt-3" role="status">
+          <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
             {balanced ? (
               <span className="ta-chip ta-chip-ready">Cuadra</span>
             ) : (

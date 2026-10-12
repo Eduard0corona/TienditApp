@@ -54,6 +54,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     TenantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     SettlementId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Position = table.Column<int>(type: "int", nullable: false),
                     Kind = table.Column<int>(type: "int", nullable: false),
                     Description = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
                     Amount = table.Column<decimal>(type: "decimal(18,2)", nullable: false)
@@ -138,8 +139,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // The settlements of the businesses would be lost: no activity entry keeps their orders or adjustments, and
-            // their orders would show as pending again. With settlements saved there is only roll-forward, or exporting
+            // The settlements of the businesses would be lost: the activity entries keep how many orders a settlement had
+            // (and its adjustments, once closed), never which orders, nor anything of an open one; and their orders would
+            // show as pending again. With settlements saved there is only roll-forward, or exporting
             // and deleting them on purpose first. The orders themselves never change either way.
             migrationBuilder.Sql(@"
 IF EXISTS (SELECT 1 FROM [PlatformSettlements])

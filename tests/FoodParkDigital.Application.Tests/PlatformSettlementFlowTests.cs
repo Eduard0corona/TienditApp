@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -59,6 +60,44 @@ public class PlatformSettlementFlowTests
         Assert.Equal(Monday, pending.Orders[1].RegisteredOn);
         Assert.False(pending.Truncated);
         Assert.Null(pending.OpenSettlementId);
+    }
+
+    [Fact]
+    public async Task Pending_WithABacklogOfBefore_ShouldKeepThePeriodsOwnOrders_AndTheMostRecentOfBefore()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        // 2,050 orders of before nobody settled, one every 20 minutes up to the Saturday before; three in the week.
+        await SeedRappiOrdersAsync(fixture, shop, "OLD", 2_050, At(Monday.AddDays(-30), 9), TimeSpan.FromMinutes(20));
+        await SeedRappiOrdersAsync(fixture, shop, "WEEK", 3, At(Monday.AddDays(2), 13), TimeSpan.FromDays(1));
+
+        var pending = await PendingAsync(fixture, OrderChannel.Rappi, Monday, Sunday);
+
+        // The week's three, and the 1,997 most recent of before: the 53 oldest stay in Por cobrar for another settlement.
+        Assert.True(pending.Truncated);
+        Assert.Equal(PlatformSettlement.MaxOrders, pending.Orders.Count);
+        Assert.Equal(["WEEK0", "WEEK1", "WEEK2"], pending.Orders.Where(o => o.InPeriod).Select(o => o.ExternalOrderNumber));
+        Assert.Equal(("OLD53", "OLD2049"), (pending.Orders[0].ExternalOrderNumber, pending.Orders[^4].ExternalOrderNumber));
+        Assert.Equal(pending.Orders.OrderBy(o => o.RegisteredAt).Select(o => o.OrderId), pending.Orders.Select(o => o.OrderId));
+
+        // A settlement of the oldest week takes the oldest ones: the backlog goes down week by week.
+        var oldest = await PendingAsync(fixture, OrderChannel.Rappi, Monday.AddDays(-30), Monday.AddDays(-24));
+        Assert.False(oldest.Truncated);
+        Assert.Equal("OLD0", oldest.Orders[0].ExternalOrderNumber);
+        Assert.All(oldest.Orders, o => Assert.True(o.InPeriod));
+    }
+
+    [Fact]
+    public async Task Pending_OfAPeriodEndingAfterToday_ShouldBeRefused()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await ShopAsync(fixture);
+
+        var error = await Assert.ThrowsAsync<FluentValidation.ValidationException>(
+            () => PendingAsync(fixture, OrderChannel.Rappi, Today.AddDays(-6), Today.AddDays(1)));
+
+        Assert.Equal(PlatformSettlement.PeriodInTheFutureMessage, Assert.Single(error.Errors).ErrorMessage);
+        Assert.Empty((await PendingAsync(fixture, OrderChannel.Rappi, Today.AddDays(-6), Today)).Orders);
     }
 
     [Fact]
@@ -139,6 +178,25 @@ public class PlatformSettlementFlowTests
         Assert.Equal(PlatformSettlement.PeriodInTheFutureMessage, future.Error);
         Assert.Equal(PlatformSettlement.AdjustmentDescriptionRequiredMessage, other.Error);
         Assert.Empty(await fixture.Context.PlatformSettlements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Create_ShouldRefuse_AnOrderThatBringsNothing_GivenBackWholeOrNotCollectedYet()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        var refunded = await SellAtAsync(fixture, At(Monday, 12), Rappi(shop, "R1"));
+        var notCollected = await SellAtAsync(fixture, At(Monday, 13), Rappi(shop, "R2", PlatformCollectedBy.Business));
+        var paid = await SellAtAsync(fixture, At(Monday, 14), Rappi(shop, "R3"));
+        await RefundAsync(fixture, refunded.Id, 1000m);
+
+        var givenBack = await CreateAsync(fixture, Command(OrderChannel.Rappi, PlatformNet, [paid.Id, refunded.Id]));
+        var waiting = await CreateAsync(fixture, Command(OrderChannel.Rappi, PlatformNet, [paid.Id, notCollected.Id]));
+
+        // Closed at 0, the commission DiDi or Rappi deducts once the courier pays would never be pending again.
+        Assert.Equal(PlatformSettlement.OrderBringsNothingMessage, givenBack.Error);
+        Assert.Equal(PlatformSettlement.OrderBringsNothingMessage, waiting.Error);
+        Assert.True((await CreateAsync(fixture, Command(OrderChannel.Rappi, PlatformNet, [paid.Id]))).IsSuccess);
     }
 
     [Fact]
@@ -262,6 +320,11 @@ public class PlatformSettlementFlowTests
         await SellAtAsync(fixture, At(Monday.AddDays(9), 12), Rappi(shop, "R3"));
         var cash = await SellAtAsync(fixture, At(Monday.AddDays(9), 13), Rappi(shop, "R4", PlatformCollectedBy.Business));
         await PayInCashAsync(fixture, shop.Tenant, cash.Id);
+        // Given back by half, it brings half (counted one by one); given back whole, nothing.
+        var halfRefunded = await SellAtAsync(fixture, At(Monday.AddDays(7), 12), Rappi(shop, "R5"));
+        var refunded = await SellAtAsync(fixture, At(Monday.AddDays(7), 11), Rappi(shop, "R6"));
+        await RefundAsync(fixture, halfRefunded.Id, 500m);
+        await RefundAsync(fixture, refunded.Id, 1000m);
         var closing = (await CreateAsync(fixture, Command(OrderChannel.Rappi, PlatformNet, [settled.Id]))).Value;
         await CloseAsync(fixture, closing.Settlement.Id, 1);
         var open = (await CreateAsync(fixture, Command(OrderChannel.UberEats, 0m, [], [new(PlatformSettlementAdjustmentKind.Fee, null, -10m)]) with { DepositedAmount = -10m })).Value;
@@ -271,7 +334,7 @@ public class PlatformSettlementFlowTests
         // DiDi Food is off and owes nothing: it is not listed.
         Assert.Equal([OrderChannel.Rappi, OrderChannel.UberEats], receivables.Select(r => r.Channel));
         var rappi = receivables[0];
-        Assert.Equal((3, 2 * PlatformNet + BusinessNet, Monday.AddDays(8), (Guid?)null, (DateOnly?)Sunday),
+        Assert.Equal((4, 2 * PlatformNet + BusinessNet + 280.74m, Monday.AddDays(7), (Guid?)null, (DateOnly?)Sunday),
             (rappi.PendingOrders, rappi.PendingAmount, rappi.OldestPendingOn, rappi.OpenSettlementId, rappi.SettledThrough));
         var uber = receivables[1];
         Assert.Equal((0, 0m, (DateOnly?)null, (Guid?)open.Settlement.Id, (DateOnly?)null),
@@ -372,6 +435,8 @@ public class PlatformSettlementFlowTests
             error => error.ErrorMessage == PlatformSettlement.PeriodOrderMessage);
         Assert.Contains(pending.Validate(new GetPendingPlatformOrdersQuery { Channel = OrderChannel.Rappi, From = Monday.AddDays(-31), To = Sunday }).Errors,
             error => error.ErrorMessage == PlatformSettlement.PeriodTooLongMessage);
+        Assert.Contains(pending.Validate(new GetPendingPlatformOrdersQuery { Channel = OrderChannel.Rappi, From = new DateOnly(1, 1, 1), To = new DateOnly(1, 1, 7) }).Errors,
+            error => error.ErrorMessage == PlatformSettlement.PeriodTooOldMessage);
         Assert.True(pending.Validate(new GetPendingPlatformOrdersQuery { Channel = OrderChannel.UberEats, From = Monday, To = Sunday }).IsValid);
     }
 
@@ -466,8 +531,30 @@ public class PlatformSettlementFlowTests
             .Handle(new GetPlatformSettlementQuery(id), CancellationToken.None));
 
     private static Task<PendingPlatformOrdersDto> PendingAsync(SalesTestFixture fixture, OrderChannel channel, DateOnly from, DateOnly to)
-        => AtTodayAsync(fixture, () => new GetPendingPlatformOrdersQueryHandler(fixture.Context, fixture.TenantService)
+        => AtTodayAsync(fixture, () => new GetPendingPlatformOrdersQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
             .Handle(new GetPendingPlatformOrdersQuery { Channel = channel, From = from, To = to }, CancellationToken.None));
+
+    /// <summary>
+    /// Orders of Rappi charged by the platform, written straight with the domain (as many as a backlog takes, faster than
+    /// through the sale): folios <paramref name="prefix"/>0, 1… from <paramref name="firstAt"/>, one every <paramref name="every"/>.
+    /// </summary>
+    private static async Task SeedRappiOrdersAsync(
+        SalesTestFixture fixture, Shop shop, string prefix, int count, DateTimeOffset firstAt, TimeSpan every)
+    {
+        var setting = await fixture.Context.DeliveryPlatformSettings.SingleAsync(s => s.Channel == OrderChannel.Rappi);
+        fixture.Context.Orders.AddRange(Enumerable.Range(0, count).Select(index =>
+        {
+            var order = new Order(
+                shop.Tenant.Id, null, null, true, $"{prefix}-{index:D5}", BusinessType.Food, OrderType.Retail, "Juan", null, null, null,
+                pricesIncludeTax: true, channel: OrderChannel.Rappi);
+            order.AddItem(shop.Pack.Id, shop.Pack.Name, 1, 1000m);
+            order.RegisterPlatformOrder(setting, PlatformOrderNumber.From($"{prefix}{index}"), PlatformCollectedBy.Platform, firstAt + every * index, null);
+            order.MarkAsCreated();
+            return order;
+        }));
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+    }
 
     private static Task<List<PlatformReceivableDto>> ReceivablesAsync(SalesTestFixture fixture)
         => AtTodayAsync(fixture, () => new GetPlatformReceivablesQueryHandler(fixture.Context, fixture.TenantService)

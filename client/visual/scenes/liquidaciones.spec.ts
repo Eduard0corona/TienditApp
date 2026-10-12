@@ -22,9 +22,9 @@ for (const look of LOOKS) {
     test(`liquidaciones ${look.suffix}`, async ({ page }) => {
       // Uber Eats has one open; Rappi and DiDi Food are settled up to a week, and the list keeps a voided one as history.
       await open(page, '/reports/settlements');
-      await expect(page.getByRole('link', { name: 'Continuar la liquidación abierta de Uber Eats' })).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Registrar depósito de DiDi Food' })).toBeVisible();
-      await expect(page.getByRole('cell', { name: 'Anulada' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Continuar la liquidación abierta de Uber Eats', exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Registrar depósito de DiDi Food', exact: true })).toBeVisible();
+      await expect(page.getByRole('link', { name: /^Ver la liquidación anulada de Rappi del 14 al 20 sept?\.$/ })).toBeVisible();
       await snap(page, `liquidaciones-${look.suffix}`);
     });
 

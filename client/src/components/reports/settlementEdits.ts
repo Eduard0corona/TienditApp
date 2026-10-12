@@ -12,6 +12,8 @@ import { previousWeek } from './reportPeriods';
 // The limits of the API (PlatformSettlement and PlatformSettlementAdjustment): the screen says them before saving, and the
 // server still decides.
 export const MAX_PERIOD_DAYS = 31;
+/** The earliest day a period starts on (yyyy-mm-dd): a guard against a year typed wrong. */
+export const EARLIEST_PERIOD_FROM = '2000-01-01';
 export const MAX_DEPOSITED_AMOUNT = 10_000_000;
 export const MAX_ADJUSTMENT_AMOUNT = 1_000_000;
 export const MAX_REFERENCE_LENGTH = 60;
@@ -26,6 +28,7 @@ export const CHOOSE_THE_PERIOD_MESSAGE = 'Elige el periodo que paga el depósito
 export const PERIOD_ORDER_MESSAGE = 'El periodo termina antes de empezar.';
 export const PERIOD_TOO_LONG_MESSAGE = 'El periodo puede tener hasta 31 días.';
 export const PERIOD_IN_THE_FUTURE_MESSAGE = 'El periodo no puede terminar después de hoy.';
+export const PERIOD_TOO_OLD_MESSAGE = 'Revisa el año del periodo: no puede empezar antes de 2000.';
 export const CHOOSE_THE_DEPOSIT_DATE_MESSAGE = 'Elige la fecha del depósito.';
 export const DEPOSIT_BEFORE_PERIOD_MESSAGE = 'La fecha del depósito no puede ser anterior al periodo.';
 export const DEPOSIT_IN_THE_FUTURE_MESSAGE = 'La fecha del depósito no puede ser futura.';
@@ -80,6 +83,7 @@ export function periodProblem(from: string, to: string, today: string): string {
   if (!from || !to) return CHOOSE_THE_PERIOD_MESSAGE;
   if (to < from) return PERIOD_ORDER_MESSAGE;
   if (calendarDaysBetween(from, to) + 1 > MAX_PERIOD_DAYS) return PERIOD_TOO_LONG_MESSAGE;
+  if (from < EARLIEST_PERIOD_FROM) return PERIOD_TOO_OLD_MESSAGE;
   if (to > today) return PERIOD_IN_THE_FUTURE_MESSAGE;
   return '';
 }
@@ -324,6 +328,14 @@ export function savedBody(detail: PlatformSettlementDetail): SettlementBody {
 
 export function sameBody(a: SettlementBody, b: SettlementBody): boolean {
   return fingerprint(a) === fingerprint(b);
+}
+
+/**
+ * Whether the screen says something other than the saved settlement. A deposit box the API would refuse (emptied, for
+ * instance) is always a change, even over a saved $0: the body counts it as 0 only to be complete.
+ */
+export function editedSince(detail: PlatformSettlementDetail, form: SettlementForm, body: SettlementBody): boolean {
+  return parseSignedAmount(form.depositedText, MAX_DEPOSITED_AMOUNT) === undefined || !sameBody(body, savedBody(detail));
 }
 
 /**

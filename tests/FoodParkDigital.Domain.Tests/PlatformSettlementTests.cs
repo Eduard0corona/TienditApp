@@ -110,6 +110,17 @@ public class PlatformSettlementTests
     }
 
     [Fact]
+    public void Period_ShouldStartIn2000OrLater_AGuardAgainstAYearTypedWrong()
+    {
+        // 0026 for 2026: the year half typed in a date box.
+        Refused(PlatformSettlement.PeriodTooOldMessage, Deposit(from: new DateOnly(26, 10, 5), to: new DateOnly(26, 10, 11)));
+        Refused(PlatformSettlement.PeriodTooOldMessage, Deposit(from: new DateOnly(1999, 12, 31), to: new DateOnly(2000, 1, 6)));
+
+        var first = Open(Deposit(from: PlatformSettlement.EarliestPeriodFrom, to: new DateOnly(2000, 1, 7), depositedOn: new DateOnly(2000, 1, 10)));
+        Assert.Equal(new DateOnly(2000, 1, 1), first.PeriodFrom);
+    }
+
+    [Fact]
     public void DepositDate_ShouldBeFromThePeriodOn_WithoutReachingTheFuture()
     {
         Refused(PlatformSettlement.DepositBeforePeriodMessage, Deposit(depositedOn: Monday.AddDays(-1)));
@@ -159,7 +170,25 @@ public class PlatformSettlementTests
         // A pending order of before the period still enters: the statement may bring it late.
         var settlement = Open(Deposit(depositedAmount: 101m), [order, Order(1m) with { RegisteredOn = Monday.AddDays(-20) }]);
         Assert.Equal(2, settlement.Orders.Count);
-        Assert.Equal(2_000, Open(Deposit(depositedAmount: 0m), Enumerable.Range(0, 2_000).Select(_ => Order(0m)).ToList()).Orders.Count);
+        Assert.Equal(2_000, Open(Deposit(depositedAmount: 2_000m), Enumerable.Range(0, 2_000).Select(_ => Order(1m)).ToList()).Orders.Count);
+    }
+
+    [Fact]
+    public void Orders_ThatBringNothing_ShouldNotComeIn_ButOneAlreadyInStaysAtZero()
+    {
+        // Given back whole, or charged by the business and not collected yet: nothing tells one from the other.
+        RefusedOrders(PlatformSettlement.OrderBringsNothingMessage, [Order(100m), Order(0m)]);
+
+        // An order already in the settlement that was given back since stays, at 0: the refund shows there.
+        var refunded = Order(100m);
+        var settlement = Open(Deposit(depositedAmount: 100m), [refunded]);
+        settlement.Update(Deposit(depositedAmount: 0m), [refunded with { ExpectedNet = 0m }], [], Today);
+        Assert.Equal((0m, 0m), (Assert.Single(settlement.Orders).ExpectedNet, settlement.OrdersTotal));
+
+        // Taken out, it cannot come back while it brings nothing.
+        settlement.Update(Deposit(depositedAmount: 0m), [], [], Today);
+        Assert.Equal(PlatformSettlement.OrderBringsNothingMessage, Assert.Throws<DomainException>(
+            () => settlement.Update(Deposit(depositedAmount: 0m), [refunded with { ExpectedNet = 0m }], [], Today)).Message);
     }
 
     [Fact]
@@ -189,6 +218,26 @@ public class PlatformSettlementTests
         ], Today);
         Assert.Equal(0m, settlement.AdjustmentsTotal);
         Assert.Null(settlement.Adjustments.First().Description);
+    }
+
+    [Fact]
+    public void Adjustments_ShouldKeepTheOrderTheyWereWrittenIn_FromOne()
+    {
+        var settlement = new PlatformSettlement(Tenant, OrderChannel.Rappi, Deposit(depositedAmount: -60m), [],
+        [
+            new(PlatformSettlementAdjustmentKind.Promotion, "Cupón", -40m),
+            new(PlatformSettlementAdjustmentKind.Claim, "Faltó un refresco", -25m),
+            new(PlatformSettlementAdjustmentKind.Other, "Bono", 5m),
+        ], Today);
+
+        Assert.Equal([(1, "Cupón"), (2, "Faltó un refresco"), (3, "Bono")],
+            settlement.Adjustments.Select(adjustment => (adjustment.Position, adjustment.Description)));
+
+        // Saved again whole, the new list numbers its rows again.
+        settlement.Update(Deposit(depositedAmount: -20m), [],
+            [new(PlatformSettlementAdjustmentKind.Other, "Bono", 5m), new(PlatformSettlementAdjustmentKind.Claim, "Faltó un refresco", -25m)], Today);
+        Assert.Equal([(1, "Bono"), (2, "Faltó un refresco")],
+            settlement.Adjustments.Select(adjustment => (adjustment.Position, adjustment.Description)));
     }
 
     [Fact]

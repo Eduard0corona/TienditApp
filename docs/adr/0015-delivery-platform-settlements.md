@@ -28,7 +28,7 @@ Las decisiones fijas de la fase eran:
 1. **Una liquidación por depósito, de una plataforma.**
    - **El agregado:** `PlatformSettlement` es `AuditableEntity`, `ITenantScoped` e `IAggregateRoot`. Guarda:
      - la plataforma, que no cambia;
-     - el periodo, en fechas del negocio: de 1 a 31 días, sin llegar al futuro;
+     - el periodo, en fechas del negocio: de 1 a 31 días, sin llegar al futuro ni empezar antes de 2000 (una guarda contra un año mal escrito);
      - la fecha del depósito: desde el inicio del periodo y nunca en el futuro;
      - lo depositado, de −10,000,000 a 10,000,000 con dos decimales. Es negativo cuando la plataforma le cobra al negocio;
      - una referencia (hasta 60 caracteres) y notas (hasta 500);
@@ -44,10 +44,12 @@ Las decisiones fijas de la fase eran:
      - 0 si se devolvió todo o si el negocio todavía no lo cobra.
    - **Pendiente:** un pedido de la plataforma que no está en una liquidación abierta ni cerrada y cuyo neto esperado no es 0.
    - **Un pedido, una liquidación:** `PlatformSettlementOrder` (`ITenantScoped`) une la liquidación y el pedido, copia el neto esperado y lleva `IsActive`. Un índice único filtrado `(OrderId) WHERE IsActive = 1` impide que un pedido esté en dos liquidaciones vigentes. Anular una pone `IsActive` en 0, y sus filas se quedan como historia.
-   - **Qué pedidos lleva:** los que la persona elige, hasta 2,000, entre los pendientes de la plataforma registrados hasta el final del periodo (la fecha del negocio de `RegisteredAt`). La pantalla propone marcados los del periodo, y sin marcar los pendientes anteriores.
+   - **Qué pedidos lleva:** los que la persona elige, hasta 2,000, entre los pedidos de la plataforma registrados hasta el final del periodo (la fecha del negocio de `RegisteredAt`) que no están en otra liquidación vigente.
+     - **Uno que no trae nada no entra:** devuelto completo o sin cobrar todavía por el negocio, nada distingue un caso del otro, y liquidado en 0, lo que el segundo traiga después nunca volvería a estar pendiente. Uno que ya está en la liquidación y se devuelve después se queda, en 0.
+     - **La pantalla ofrece los pendientes:** propone marcados los del periodo, y sin marcar los anteriores. Con más de 2,000 pendientes ofrece primero los del periodo y, en el lugar que quede, los más recientes de antes; los demás siguen en Por cobrar para otra liquidación.
    - **Los números se recalculan:** el servidor recalcula cada neto esperado al guardar. Al cerrar los vuelve a calcular y, si uno cambió desde el último guardado (una devolución en medio), guarda los nuevos y responde 409 para que la persona los revise.
 3. **Ajustes con motivo.**
-   - **`PlatformSettlementAdjustment`** (`ITenantScoped`) guarda el motivo, una descripción y un importe con signo: negativo cuando la plataforma descuenta.
+   - **`PlatformSettlementAdjustment`** (`ITenantScoped`) guarda el motivo, una descripción y un importe con signo: negativo cuando la plataforma descuenta. Guarda también su lugar (`Position`, desde 1), así que los ajustes se leen en el orden en que se escribieron.
    - **Motivos:**
 
      | Motivo | Valor | Ejemplo |
@@ -64,29 +66,32 @@ Las decisiones fijas de la fase eran:
    - **Las cuentas:**
      - debió depositar = la suma de sus pedidos + la de sus ajustes;
      - diferencia = depositado − debió depositar.
-   - **Cerrar** exige una diferencia de 0, al menos un pedido o un ajuste y la fecha del depósito sin llegar al futuro. Deja `PlatformSettlementClosed` en la bitácora en el mismo guardado. Una liquidación cerrada ya no cambia.
+   - **Cerrar** exige una diferencia de 0 y al menos un pedido o un ajuste. Deja `PlatformSettlementClosed` en la bitácora en el mismo guardado. Una liquidación cerrada ya no cambia.
    - **Una diferencia que no se explica** se registra como un ajuste «Otro» con su nota. La pantalla lo hace en un clic.
 5. **Anular, nunca borrar.**
    - Una liquidación abierta o cerrada se anula con un motivo obligatorio de hasta 500 caracteres.
    - Sus pedidos vuelven a estar pendientes, y deja `PlatformSettlementVoided` en la bitácora.
    - No hay forma de borrar una liquidación.
-6. **Por cobrar.** Para cada plataforma activa o con pedidos pendientes: cuántos pedidos están pendientes, la suma de sus netos esperados (cada uno redondeado como en la liquidación), la fecha del más antiguo y la liquidación abierta, si hay una.
+6. **Por cobrar.** Para cada plataforma activa, con pedidos pendientes o con una liquidación abierta: cuántos pedidos están pendientes, la suma de sus netos esperados (cada uno redondeado como en la liquidación), la fecha del más antiguo, la liquidación abierta, si hay una, y hasta qué fecha llega la última cerrada. Un pedido pagado completo y sin devoluciones, como casi todos, trae exactamente lo que copió: esos se suman en la base, y solo los demás se leen para contarlos uno por uno.
 7. **API** (`api/v1/platform-settlements`):
    - **Lecturas:**
-     - `GET /`: la lista, la más nueva primero, por plataforma y estado o con un texto de su referencia o sus notas (`search`), en páginas;
-     - `GET /{id}`: el detalle con sus pedidos, sus ajustes, las cuentas y los demás pedidos pendientes hasta el final del periodo;
-     - `GET /pending-orders?channel=&from=&to=`: los pendientes para una liquidación nueva, cada uno con si cae en el periodo;
+     - `GET /`: la lista, la del periodo más reciente primero, por plataforma y estado o con un texto de su referencia o sus notas (`search`), en páginas;
+     - `GET /{id}`: el detalle con sus pedidos, sus ajustes, las cuentas y, mientras está abierta, los demás pedidos pendientes hasta el final del periodo;
+     - `GET /pending-orders?channel=&from=&to=`: los pendientes para una liquidación nueva de un periodo que termina hoy a más tardar (si no, 400), primero los del periodo, cada uno con si cae en él;
      - `GET /receivable`: lo que hay por cobrar.
    - **Cambios:**
-     - `POST /` crea una abierta;
-     - `PUT /{id}` la reemplaza entera con su revisión, como el guardado de Precios en apps;
+     - `POST /` crea una abierta y responde 201 con su detalle;
+     - `PUT /{id}` la reemplaza entera con su revisión, como los términos de cada plataforma;
      - `POST /{id}/close` la cierra con su revisión;
      - `POST /{id}/void` la anula con su revisión y el motivo.
    - **Respuestas:**
      - 400 `validation_failed` o `business_rule`;
      - 404 si la liquidación no es del negocio;
-     - 409 `concurrency_conflict` con una revisión vieja, o cuando al mismo tiempo otra liquidación de la plataforma se abrió o tomó uno de los pedidos: alguien más guardó, y la pantalla ofrece ver lo guardado;
+     - 409 `concurrency_conflict` con una revisión vieja, cuando al mismo tiempo otra liquidación de la plataforma se abrió o tomó uno de los pedidos, o cuando el mismo guardado llega dos veces: alguien más guardó;
      - 409 `conflict`, con el motivo en `detail`, cuando otra liquidación ya tenía uno de los pedidos o cuando, al cerrar, cambió lo que se espera de un pedido (el servidor guarda las cifras nuevas).
+     - **Lo que hace la pantalla con un 409:**
+       - al guardar, con `concurrency_conflict` ofrece ver lo guardado; con `conflict` vuelve a leer los pedidos y conserva lo escrito;
+       - al cerrar o anular, vuelve a leer la liquidación y dice por qué.
 8. **Permisos.**
    - **Leer:** `ViewReports`, igual que Ventas por canal, donde ya se ven la comisión y el neto.
    - **Crear, guardar, cerrar y anular:** dueños y administradores (`[RequiresTenantManager]`), igual que los términos de cada plataforma.
@@ -98,7 +103,7 @@ Las decisiones fijas de la fase eran:
 10. **Lo demás no cambia.** Ventas por canal, Inicio, el corte y el resumen diario siguen en base caja: lo que cobró la plataforma cuenta al registrar el pedido, y la liquidación solo concilia lo que la plataforma le debe al negocio. Un depósito no es un movimiento de caja: TienditApp no lleva cuentas de banco.
 11. **Una migración que solo agrega, con la guarda 50010.**
     - `AddPlatformSettlements` crea tres tablas y no toca ninguna otra. Su `apply.sql` corre en producción antes del merge.
-    - Su `Down` y su `rollback.sql` se detienen con el error 50010 si ya hay liquidaciones: ninguna bitácora guarda sus pedidos ni sus ajustes.
+    - Su `Down` y su `rollback.sql` se detienen con el error 50010 si ya hay liquidaciones: la bitácora no guarda qué pedidos lleva cada una (solo cuántos) ni nada de una abierta.
 
 ## Alternativas descartadas
 
@@ -119,6 +124,7 @@ Las decisiones fijas de la fase eran:
   - Un pedido nunca se cobra dos veces, y un error se corrige anulando, sin perder la historia.
 - **Lo que limita:**
   - **Devoluciones posteriores:** una devolución de un pedido ya liquidado no aparece sola en la siguiente liquidación. La plataforma la descuenta de otro depósito, y la persona la registra como un ajuste «Cancelaciones».
+  - **Cobros en partes:** si el negocio cobra un pedido en dos partes y se liquida con la primera, la segunda no vuelve a Por cobrar; se explica con un ajuste, igual que una devolución posterior.
   - **Centavos:** la liquidación redondea por pedido y Ventas por canal por fila, así que pueden diferir por centavos.
   - **El periodo** sigue la fecha en que se registró cada pedido, no la de entrega ni el corte de cada plataforma (Uber Eats corta los lunes a las 4:00). Los pedidos de la orilla se marcan o desmarcan a mano.
   - **El folio corto** sigue siendo la única llave para comparar con el estado de cuenta.

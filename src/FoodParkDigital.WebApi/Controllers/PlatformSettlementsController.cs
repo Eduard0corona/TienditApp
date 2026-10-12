@@ -48,8 +48,9 @@ public class PlatformSettlementsController : ControllerBase
         => Ok(await _mediator.Send(new GetPlatformReceivablesQuery(), cancellationToken));
 
     /// <summary>
-    /// The orders of a platform pending for a new settlement of a period: registered up to its last date, the oldest
-    /// first, each saying whether it falls in the period.
+    /// The orders of a platform pending for a new settlement of a period (ending today at the latest), the oldest first:
+    /// those registered in it and, in the room left of one settlement, the most recent of before; each says whether it
+    /// falls in the period.
     /// </summary>
     /// <param name="channel">Rappi, UberEats or DidiFood, by name or number.</param>
     [HttpGet("pending-orders")]
@@ -71,6 +72,7 @@ public class PlatformSettlementsController : ControllerBase
     /// another settlement took, 409 <c>conflict</c>.
     /// </summary>
     [HttpPost]
+    [ProducesResponseType<PlatformSettlementDetailDto>(StatusCodes.Status201Created)]
     public async Task<ActionResult<PlatformSettlementDetailDto>> Create(
         [FromBody] CreatePlatformSettlementRequest request,
         CancellationToken cancellationToken)

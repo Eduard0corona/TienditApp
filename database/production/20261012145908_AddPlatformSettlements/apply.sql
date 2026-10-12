@@ -16,7 +16,8 @@
 --     esperado de cada uno: la llave a [PlatformSettlements] (ON DELETE CASCADE), la llave a
 --     [Orders] (sin cascada), el índice único filtrado (OrderId) WHERE [IsActive] = 1, un pedido en
 --     una liquidación vigente, y los índices (SettlementId) y (TenantId, OrderId);
---   - crea la tabla [PlatformSettlementAdjustments], los ajustes que explican el resto del depósito:
+--   - crea la tabla [PlatformSettlementAdjustments], los ajustes que explican el resto del depósito,
+--     cada uno con su lugar ([Position], desde 1) para leerlos en el orden en que se escribieron:
 --     tres restricciones CHECK (motivo conocido, importe distinto de 0, «Otro» con descripción), la
 --     llave a [PlatformSettlements] (ON DELETE CASCADE) y el índice (SettlementId).
 -- Solo agrega. No toca [Orders], [PlatformOrderDetails] ni ninguna otra tabla, ni cambia datos. Las
@@ -5778,6 +5779,7 @@ BEGIN
         [Id] uniqueidentifier NOT NULL,
         [TenantId] uniqueidentifier NOT NULL,
         [SettlementId] uniqueidentifier NOT NULL,
+        [Position] int NOT NULL,
         [Kind] int NOT NULL,
         [Description] nvarchar(200) NULL,
         [Amount] decimal(18,2) NOT NULL,

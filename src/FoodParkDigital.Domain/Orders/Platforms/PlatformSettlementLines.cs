@@ -46,10 +46,11 @@ public class PlatformSettlementAdjustment : BaseEntity, ITenantScoped
     private PlatformSettlementAdjustment() { }
 
     internal PlatformSettlementAdjustment(
-        Guid tenantId, Guid settlementId, PlatformSettlementAdjustmentKind kind, string? description, decimal amount)
+        Guid tenantId, Guid settlementId, int position, PlatformSettlementAdjustmentKind kind, string? description, decimal amount)
     {
         TenantId = tenantId;
         SettlementId = settlementId;
+        Position = position;
         Kind = kind;
         Description = description;
         Amount = amount;
@@ -57,6 +58,10 @@ public class PlatformSettlementAdjustment : BaseEntity, ITenantScoped
 
     public Guid TenantId { get; private set; }
     public Guid SettlementId { get; private set; }
+
+    /// <summary>Its place in the settlement, from 1: the adjustments come back in the order they were written.</summary>
+    public int Position { get; private set; }
+
     public PlatformSettlementAdjustmentKind Kind { get; private set; }
     public string? Description { get; private set; }
 

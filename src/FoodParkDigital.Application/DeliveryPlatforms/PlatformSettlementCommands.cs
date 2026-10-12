@@ -259,9 +259,11 @@ public class UpdatePlatformSettlementCommandHandler
         }
         catch (DbUpdateException)
         {
-            // Another settlement took one of the orders at the same time (the unique index): undone whole.
+            // Another settlement took one of the orders at the same time (the unique index), or the same save came twice
+            // and the first one already holds the new orders, whatever order the database ran the rows in: undone whole.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            if (await PlatformSettlementConflicts.TakenMeanwhileAsync(_context, request.OrderIds, settlement.Id, cancellationToken))
+            if (await PlatformSettlementConflicts.TakenMeanwhileAsync(_context, request.OrderIds, settlement.Id, cancellationToken)
+                || await PlatformSettlementConflicts.ChangedMeanwhileAsync(_context, settlement.Id, request.Revision, cancellationToken))
                 return Result.Failure<PlatformSettlementDetailDto>(PlatformSettlementErrors.Stale);
             throw;
         }
@@ -399,6 +401,10 @@ internal static class PlatformSettlementConflicts
 
     public static Task<bool> OpenedMeanwhileAsync(IApplicationDbContext context, OrderChannel channel, CancellationToken cancellationToken)
         => context.PlatformSettlements.AnyAsync(s => s.Channel == channel && s.Status == PlatformSettlementStatus.Open, cancellationToken);
+
+    /// <summary>Whether someone saved the settlement after <paramref name="revision"/> was read.</summary>
+    public static Task<bool> ChangedMeanwhileAsync(IApplicationDbContext context, Guid settlementId, int revision, CancellationToken cancellationToken)
+        => context.PlatformSettlements.AnyAsync(s => s.Id == settlementId && s.Revision != revision, cancellationToken);
 
     public static Task<bool> TakenMeanwhileAsync(
         IApplicationDbContext context, IReadOnlyList<Guid> orderIds, Guid? settlementId, CancellationToken cancellationToken)

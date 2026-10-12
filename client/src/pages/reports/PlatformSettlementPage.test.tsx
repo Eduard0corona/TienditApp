@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
@@ -181,7 +181,7 @@ describe('PlatformSettlementPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Registrar la diferencia como ajuste' }));
     expect(screen.getByLabelText('Motivo del ajuste 1')).toHaveValue(String(PlatformSettlementAdjustmentKind.Other));
-    expect(screen.getByLabelText('Importe')).toHaveValue('-50.00');
+    expect(screen.getByLabelText('Importe del ajuste 1')).toHaveValue('-50.00');
     expect(account('Diferencia')).toBe('$0.00');
     expect(screen.getByText('Cuadra')).toBeInTheDocument();
 
@@ -332,6 +332,152 @@ describe('PlatformSettlementPage', () => {
     await waitFor(() => expect(screen.getByLabelText('Referencia (opcional)')).toHaveValue('SPEI 9921'));
   });
 
+  it('waits for the orders of another period before saving it, and saves only that period\'s', async () => {
+    const user = userEvent.setup();
+    const LATER = order('d', '152801', '2026-10-12');
+    let release: (orders: unknown) => void = () => undefined;
+    serve({
+      'get /api/v1/platform-settlements/pending-orders': ({ query }) => (query?.to === '2026-10-11'
+        ? Promise.resolve({ orders: [IN_PERIOD, COLLECTED], truncated: false })
+        : new Promise((resolve) => { release = resolve; })),
+      'post /api/v1/platform-settlements': () => Promise.resolve(detail()),
+      'get /api/v1/platform-settlements/{id}': () => Promise.resolve(detail()),
+    });
+    renderAt('/reports/settlements/new?channel=3');
+    await screen.findByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' });
+    await user.type(screen.getByLabelText('Lo que depositó'), '500');
+
+    // Up to the 12th: until its orders arrive, those of the period before are neither shown nor saved.
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-12' } });
+
+    expect(await screen.findByText('Cargando los pedidos del periodo…')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Registrar la diferencia como ajuste' })).not.toBeInTheDocument();
+
+    await act(async () => release({ orders: [IN_PERIOD, COLLECTED, LATER], truncated: false }));
+    expect(await screen.findByRole('checkbox', { name: 'Incluir el pedido 152801 (ORD-d)' })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(calls('post', '/api/v1/platform-settlements')).toHaveLength(1));
+    expect(calls('post', '/api/v1/platform-settlements')[0][2]).toMatchObject({
+      body: { periodTo: '2026-10-12', orderIds: ['b', 'c', 'd'] },
+    });
+  });
+
+  it('keeps what was written when another settlement took one of its orders meanwhile, and reads the orders again', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    let posts = 0;
+    serve({
+      'get /api/v1/platform-settlements/pending-orders': () => Promise.resolve(++reads === 1
+        ? { orders: [IN_PERIOD, COLLECTED], truncated: false }
+        : { orders: [COLLECTED], truncated: false }),
+      'post /api/v1/platform-settlements': () => (++posts === 1
+        ? Promise.reject(apiError(409, 'conflict', 'Otra liquidación ya tiene uno de los pedidos. Recarga e intenta de nuevo.'))
+        : Promise.resolve(detail())),
+      'get /api/v1/platform-settlements/{id}': () => Promise.resolve(detail()),
+    });
+    renderAt('/reports/settlements/new?channel=3');
+    await screen.findByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' });
+    await user.type(screen.getByLabelText('Lo que depositó'), '-348');
+
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    expect(await screen.findByText(/Otra liquidación tomó uno de los pedidos mientras escribías/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' })).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Lo que depositó')).toHaveValue('-348');
+    expect(screen.queryByRole('button', { name: 'Recargar' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(calls('post', '/api/v1/platform-settlements')).toHaveLength(2));
+    expect(calls('post', '/api/v1/platform-settlements')[1][2]).toMatchObject({ body: { orderIds: ['c'] } });
+  });
+
+  it('brings the open settlement of the platform when saving a new one finds it', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    serve({
+      'get /api/v1/platform-settlements/pending-orders': () => Promise.resolve(++reads === 1
+        ? { orders: [IN_PERIOD], truncated: false }
+        : { orders: [IN_PERIOD], truncated: false, openSettlementId: 's9' }),
+      'post /api/v1/platform-settlements': () => Promise.reject(apiError(
+        400,
+        'business_rule',
+        'Ya hay una liquidación abierta de Rappi: termínala o anúlala antes de abrir otra.',
+      )),
+    });
+    renderAt('/reports/settlements/new?channel=3');
+    await screen.findByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' });
+    await user.type(screen.getByLabelText('Lo que depositó'), '561.48');
+
+    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    expect(await screen.findByRole('link', { name: 'Ver la liquidación abierta' })).toHaveAttribute('href', '/reports/settlements/s9');
+    expect(screen.getAllByText(/Ya hay una liquidación abierta de Rappi: termínala o anúlala/)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
+  });
+
+  it('asks before discarding what was changed, and before a closed tab would lose it', async () => {
+    const user = userEvent.setup();
+    serve({ 'get /api/v1/platform-settlements/{id}': () => Promise.resolve(detail()) });
+    renderAt('/reports/settlements/s1');
+    const reference = await screen.findByLabelText('Referencia (opcional)');
+    const leaving = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(leaving()).toBe(false);
+
+    await user.type(reference, 'SPEI 4471');
+    expect(leaving()).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Descartar' }));
+
+    expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Descartar cambios' }));
+    expect(reference).toHaveValue('');
+    expect(leaving()).toBe(false);
+    expect(screen.getByRole('button', { name: 'Cerrar liquidación' })).toBeEnabled();
+  });
+
+  it('asks before leaving a new settlement with something written', async () => {
+    const user = userEvent.setup();
+    serve({ 'get /api/v1/platform-settlements/pending-orders': () => Promise.resolve({ orders: [IN_PERIOD], truncated: false }) });
+    renderAt('/reports/settlements/new?channel=3');
+    await screen.findByRole('checkbox', { name: 'Incluir el pedido 152390 (ORD-b)' });
+    await user.type(screen.getByLabelText('Lo que depositó'), '100');
+    confirm.mockResolvedValueOnce(false);
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'Descartar liquidación' }));
+    expect(screen.getByLabelText('Lo que depositó')).toHaveValue('100');
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(await screen.findByText('Lista de liquidaciones')).toBeInTheDocument();
+  });
+
+  it('shows the version someone else saved when closing over an older one', async () => {
+    const user = userEvent.setup();
+    let reads = 0;
+    serve({
+      'get /api/v1/platform-settlements/{id}': () => Promise.resolve(++reads === 1 ? detail() : detail({ revision: 2, reference: 'SPEI 9921' })),
+      'post /api/v1/platform-settlements/{id}/close': () => Promise.reject(apiError(
+        409,
+        'concurrency_conflict',
+        'Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.',
+      )),
+    });
+    renderAt('/reports/settlements/s1');
+
+    await user.click(await screen.findByRole('button', { name: 'Cerrar liquidación' }));
+
+    expect(await screen.findByText(
+      'Alguien más guardó esta liquidación mientras la veías: esta es la versión que guardó. Revísala y vuelve a intentarlo.',
+    )).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Referencia (opcional)')).toHaveValue('SPEI 9921'));
+    expect(screen.queryByText(/Recarga e intenta de nuevo/)).not.toBeInTheDocument();
+  });
+
   it('voids a closed settlement with the reason the person writes', async () => {
     const user = userEvent.setup();
     const closed = detail({ status: PlatformSettlementStatus.Closed, revision: 2, closedAt: '2026-10-14T18:05:00Z' }, { candidates: [] });
@@ -347,7 +493,12 @@ describe('PlatformSettlementPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Anular' }));
 
-    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ title: 'Anular liquidación', required: true, maxLength: 500 }));
+    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Anular liquidación',
+      message: 'Sus 2 pedidos vuelven a quedar pendientes. La liquidación se queda como historia: no se borra.',
+      required: true,
+      maxLength: 500,
+    }));
     await waitFor(() => expect(calls('post', '/api/v1/platform-settlements/{id}/void')).toHaveLength(1));
     expect(calls('post', '/api/v1/platform-settlements/{id}/void')[0][2]).toMatchObject({
       path: { id: 's1' },

@@ -69,10 +69,10 @@ Cada depósito de Rappi, Uber Eats o DiDi Food se concilia en Reportes › Liqui
 - **Neto esperado de un pedido:** la parte del neto esperado de su plataforma que corresponde a lo que el negocio conserva cobrado: R(`ExpectedSettlement` × (`PaidAmount` − `RefundedAmount`) / `OrderTotal`), redondeado una vez a centavos (`MidpointRounding.ToEven`). Si cobró el negocio, es la comisión que la plataforma descontará, en negativo; con todo devuelto, o sin cobrar todavía, es 0.
 - **Pendiente:** un pedido de la plataforma con neto esperado distinto de 0 que no está en una liquidación abierta ni cerrada.
 - **Qué lleva:**
-  - los pedidos que la persona elige entre los pendientes de su plataforma, registrados hasta el final del periodo (la fecha del negocio), hasta 2,000;
-  - hasta 100 ajustes con motivo: promociones, faltantes y reclamos, cancelaciones, cargos de la plataforma, saldo anterior u «Otro», que pide descripción. El importe lleva signo (negativo cuando la plataforma descuenta), no es 0 y va de −$1,000,000 a $1,000,000 con dos decimales; la descripción, hasta 200 caracteres.
+  - hasta 2,000 pedidos que la persona elige entre los de su plataforma registrados hasta el final del periodo (la fecha del negocio) que no están en otra liquidación vigente. Uno que no trae nada (devuelto completo, o sin cobrar todavía) no entra; uno que ya estaba en la liquidación y se devolvió después se queda, en 0. La pantalla ofrece los pendientes: con más de 2,000, primero los del periodo y, en el lugar que quede, los más recientes de antes;
+  - hasta 100 ajustes con motivo: promociones, faltantes y reclamos, cancelaciones, cargos de la plataforma, saldo anterior u «Otro», que pide descripción. El importe lleva signo (negativo cuando la plataforma descuenta), no es 0 y va de −$1,000,000 a $1,000,000 con dos decimales; la descripción, hasta 200 caracteres. Se leen en el orden en que se escribieron.
 - **El depósito:**
-  - el periodo, de hasta 31 días y sin terminar después de hoy;
+  - el periodo, de hasta 31 días, sin terminar después de hoy ni empezar antes de 2000 (un año mal escrito);
   - la fecha del depósito, desde el inicio del periodo y sin llegar al futuro;
   - lo depositado, de −$10,000,000 a $10,000,000 con dos decimales: negativo si la plataforma dejó saldo en contra;
   - una referencia de hasta 60 caracteres y notas de hasta 500.
@@ -80,8 +80,8 @@ Cada depósito de Rappi, Uber Eats o DiDi Food se concilia en Reportes › Liqui
 - **Las cuentas:** debió depositar = sus pedidos + sus ajustes; diferencia = depositado − debió depositar. El servidor calcula cada neto esperado al guardar.
 - **Cerrar:** pide una diferencia de $0.00 y al menos un pedido o un ajuste. Antes de cerrar, vuelve a calcular el neto esperado de cada pedido. Si uno cambió desde el último guardado (una devolución en medio), guarda las cifras nuevas y responde 409 `conflict` para que la persona las revise. Una liquidación cerrada ya no cambia.
 - **Anular:** una abierta o cerrada, con un motivo de hasta 500 caracteres. Sus pedidos vuelven a estar pendientes, y la liquidación se queda como historia: nada se borra.
-- **Bitácora:** cerrar y anular dejan `PlatformSettlementClosed` y `PlatformSettlementVoided` en el mismo guardado, con la plataforma, el periodo, las cifras y, al anular, el motivo.
-- **Al mismo tiempo:** cada cambio lleva la revisión que vio la persona. Una revisión vieja, o una liquidación abierta o un pedido tomado por otra persona en el mismo instante, responde 409 `concurrency_conflict` sin guardar nada. Un pedido que otra liquidación ya tenía al guardar responde 409 `conflict` con su motivo.
+- **Bitácora:** cerrar y anular dejan `PlatformSettlementClosed` y `PlatformSettlementVoided` en el mismo guardado, con la plataforma, el periodo, las cifras, cuántos pedidos lleva (no cuáles) y, al cerrar, sus ajustes; al anular, el motivo.
+- **Al mismo tiempo:** guardar, cerrar y anular llevan la revisión que vio la persona; abrir una no lleva ninguna. Una revisión vieja, el mismo guardado enviado dos veces, o una liquidación abierta o un pedido tomado por otra persona en el mismo instante, responde 409 `concurrency_conflict` sin guardar nada. Un pedido que otra liquidación ya tenía al guardar responde 409 `conflict` con su motivo.
 - **Quién:** la leen quienes leen los reportes (`ViewReports`); la abren, guardan, cierran y anulan dueños y administradores.
 - **No es caja:** un depósito no es un movimiento de caja, y Ventas por canal, Inicio y el corte siguen en base caja. La liquidación redondea por pedido y Ventas por canal por fila, así que pueden diferir por centavos.
 

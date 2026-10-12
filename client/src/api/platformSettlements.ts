@@ -57,8 +57,9 @@ export function usePlatformSettlements(filters: PlatformSettlementFilters, page:
 }
 
 /**
- * The pending orders of a platform for a settlement of the period (yyyy-mm-dd): registered up to its last day, the
- * oldest first, with the open settlement of that platform if there is one.
+ * The pending orders of a platform for a settlement of the period (yyyy-mm-dd), the oldest first: those of the period and,
+ * in the room left of one settlement, the most recent of before; with the open settlement of that platform if there is
+ * one. Another period loads its own orders from nothing: the ones of the period before would be saved with the new one.
  */
 export function usePendingPlatformOrders(channel: OrderChannel, from: string, to: string, enabled = true) {
   return useQuery({
@@ -68,8 +69,6 @@ export function usePendingPlatformOrders(channel: OrderChannel, from: string, to
       signal,
     }),
     enabled,
-    // Another period keeps the orders on screen until its own arrive.
-    placeholderData: keepPreviousData,
   });
 }
 

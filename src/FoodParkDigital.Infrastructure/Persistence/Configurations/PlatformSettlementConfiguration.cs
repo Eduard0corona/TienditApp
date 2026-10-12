@@ -102,8 +102,11 @@ public class PlatformSettlementAdjustmentConfiguration : IEntityTypeConfiguratio
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
+        builder.Property(x => x.Position).IsRequired();
         builder.Property(x => x.Kind).HasConversion<int>().IsRequired();
         builder.Property(x => x.Description).HasMaxLength(PlatformSettlementAdjustment.MaxDescriptionLength);
         builder.Property(x => x.Amount).HasColumnType("decimal(18,2)").IsRequired();
+        // The place of each adjustment, which the domain numbers on every save, without an index: a unique one would make
+        // two saves of the same settlement collide on it before the revision tells who saved first.
     }
 }

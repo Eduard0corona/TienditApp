@@ -7,6 +7,7 @@ using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
+using FluentValidation.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -145,7 +146,9 @@ public class GetPendingPlatformOrdersQueryValidator : AbstractValidator<GetPendi
         RuleFor(x => x.Channel)
             .Must(channel => channel is { } value && OrderChannelRules.IsDeliveryPlatform(value))
             .WithMessage(DeliveryPlatformSetting.NotADeliveryPlatformMessage);
-        RuleFor(x => x.From).NotNull().WithMessage(ChooseThePeriodMessage);
+        RuleFor(x => x.From).Cascade(CascadeMode.Stop)
+            .NotNull().WithMessage(ChooseThePeriodMessage)
+            .Must(from => from >= PlatformSettlement.EarliestPeriodFrom).WithMessage(PlatformSettlement.PeriodTooOldMessage);
         RuleFor(x => x.To).NotNull().WithMessage(ChooseThePeriodMessage);
         RuleFor(x => x)
             .Must(x => x.From is null || x.To is null || x.To >= x.From)
@@ -159,11 +162,13 @@ public class GetPendingPlatformOrdersQueryHandler : IRequestHandler<GetPendingPl
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly IDateTimeProvider _clock;
 
-    public GetPendingPlatformOrdersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService)
+    public GetPendingPlatformOrdersQueryHandler(IApplicationDbContext context, ICurrentTenantService tenantService, IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
+        _clock = clock;
     }
 
     public async Task<PendingPlatformOrdersDto> Handle(GetPendingPlatformOrdersQuery request, CancellationToken cancellationToken)
@@ -173,7 +178,11 @@ public class GetPendingPlatformOrdersQueryHandler : IRequestHandler<GetPendingPl
             return new PendingPlatformOrdersDto();
 
         var zone = await PlatformSettlementReader.ZoneAsync(_context, _tenantService.TenantId, cancellationToken);
-        var (orders, truncated) = await PlatformSettlementReader.CandidatesAsync(_context, channel, from, to, zone, [], cancellationToken);
+        // As a settlement, the period ends today at the latest: today is the business's, which only the handler knows.
+        if (to > DailySalesReadModel.LocalToday(zone, _clock.UtcNow))
+            throw new ValidationException([new ValidationFailure(nameof(request.To), PlatformSettlement.PeriodInTheFutureMessage)]);
+
+        var (orders, truncated) = await PlatformSettlementReader.CandidatesAsync(_context, channel, from, to, zone, cancellationToken);
         var openId = await _context.PlatformSettlements
             .AsNoTracking()
             .Where(s => s.Channel == channel && s.Status == PlatformSettlementStatus.Open)
@@ -209,11 +218,7 @@ public class GetPlatformReceivablesQueryHandler : IRequestHandler<GetPlatformRec
             .Where(s => s.IsActive)
             .Select(s => s.Channel)
             .ToListAsync(cancellationToken);
-        // Each pending order is counted as a settlement counts it, rounded one by one.
-        var pending = (await PlatformSettlementReader.Pending(_context).ToListAsync(cancellationToken))
-            .Where(row => row.ExpectedNet != 0)
-            .GroupBy(row => row.Channel)
-            .ToDictionary(group => group.Key, group => group.ToList());
+        var pending = await PendingByPlatformAsync(cancellationToken);
         var open = await _context.PlatformSettlements
             .AsNoTracking()
             .Where(s => s.Status == PlatformSettlementStatus.Open)
@@ -230,20 +235,55 @@ public class GetPlatformReceivablesQueryHandler : IRequestHandler<GetPlatformRec
             .Where(channel => active.Contains(channel) || pending.ContainsKey(channel) || open.Any(s => s.Channel == channel))
             .Select(channel =>
             {
-                var orders = pending.GetValueOrDefault(channel) ?? [];
+                var owed = pending.GetValueOrDefault(channel);
                 return new PlatformReceivableDto
                 {
                     Channel = channel,
                     IsActive = active.Contains(channel),
-                    PendingOrders = orders.Count,
-                    PendingAmount = orders.Sum(row => row.ExpectedNet),
-                    OldestPendingOn = orders.Count == 0
-                        ? null
-                        : DailySalesReadModel.LocalDate(orders.Min(row => row.RegisteredAt), zone),
+                    PendingOrders = owed?.Orders ?? 0,
+                    PendingAmount = owed?.Amount ?? 0m,
+                    OldestPendingOn = owed is null ? null : DailySalesReadModel.LocalDate(owed.Oldest, zone),
                     OpenSettlementId = open.FirstOrDefault(s => s.Channel == channel)?.Id,
                     SettledThrough = settledThrough.FirstOrDefault(s => s.Channel == channel)?.Through
                 };
             })
             .ToList();
     }
+
+    /// <summary>
+    /// The pending orders of each platform, counted as a settlement counts them (rounded one by one). Paid in full and with
+    /// nothing given back, as almost every order, one brings exactly what it copied: those are added up in the database,
+    /// so years of pending orders never leave it. Only the rest (a refund, a part collected) are read and counted here.
+    /// </summary>
+    private async Task<Dictionary<OrderChannel, Owed>> PendingByPlatformAsync(CancellationToken cancellationToken)
+    {
+        var pending = PlatformSettlementReader.Pending(_context);
+        var whole = await pending
+            .Where(row => row.NetPaidAmount == row.OrderTotal)
+            .GroupBy(row => row.Channel)
+            .Select(group => new Owed(group.Key, group.Count(), group.Sum(row => row.ExpectedSettlement), group.Min(row => row.RegisteredAt)))
+            .ToListAsync(cancellationToken);
+        var partly = (await pending
+                .Where(row => row.NetPaidAmount != row.OrderTotal)
+                .Select(row => new { row.Channel, row.RegisteredAt, row.ExpectedSettlement, row.NetPaidAmount, row.OrderTotal })
+                .ToListAsync(cancellationToken))
+            .Select(row => new
+            {
+                row.Channel,
+                row.RegisteredAt,
+                ExpectedNet = PlatformSettlementCalculator.ExpectedNet(row.ExpectedSettlement, row.NetPaidAmount, row.OrderTotal)
+            })
+            // Rounded to zero (a cent split in half), an order brings nothing.
+            .Where(row => row.ExpectedNet != 0)
+            .GroupBy(row => row.Channel)
+            .Select(group => new Owed(group.Key, group.Count(), group.Sum(row => row.ExpectedNet), group.Min(row => row.RegisteredAt)));
+
+        return whole.Concat(partly)
+            .GroupBy(owed => owed.Channel)
+            .ToDictionary(
+                group => group.Key,
+                group => new Owed(group.Key, group.Sum(owed => owed.Orders), group.Sum(owed => owed.Amount), group.Min(owed => owed.Oldest)));
+    }
+
+    private sealed record Owed(OrderChannel Channel, int Orders, decimal Amount, DateTimeOffset Oldest);
 }

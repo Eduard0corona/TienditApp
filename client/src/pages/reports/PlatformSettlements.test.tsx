@@ -135,7 +135,7 @@ describe('PlatformSettlements', () => {
     const rappi = await card('Rappi');
     expect(within(rappi).queryByRole('link')).not.toBeInTheDocument();
     expect(within(await card('Uber Eats')).getByRole('link', { name: 'Ver la liquidación abierta de Uber Eats' })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: /^Ver la liquidación de Rappi del 28 sept?\. al 4 oct\.$/ })).toHaveAttribute('href', '/reports/settlements/s1');
+    expect(await screen.findByRole('link', { name: /^Ver la liquidación abierta de Rappi del 28 sept?\. al 4 oct\.$/ })).toHaveAttribute('href', '/reports/settlements/s1');
   });
 
   it('asks the owner to turn a platform on when none is active nor owes anything', async () => {
@@ -154,7 +154,7 @@ describe('PlatformSettlements', () => {
       : [settlement({ id: 's2', status: PlatformSettlementStatus.Open, periodFrom: '2026-10-05', periodTo: '2026-10-11', depositedAmount: 1634.44, difference: -50, orderCount: 1 }), settlement()]));
     renderPage();
 
-    const open = (await screen.findByRole('link', { name: 'Continuar la liquidación de Rappi del 5 al 11 oct.' })).closest('tr') as HTMLElement;
+    const open = (await screen.findByRole('link', { name: 'Continuar la liquidación abierta de Rappi del 5 al 11 oct.' })).closest('tr') as HTMLElement;
     expect(within(open).getByText('$1,634.44')).toBeInTheDocument();
     expect(within(open).getByText('-$50.00')).toBeInTheDocument();
     expect(within(open).getByText('Abierta')).toBeInTheDocument();
@@ -168,5 +168,44 @@ describe('PlatformSettlements', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Buscar referencia o notas' }), 'spei');
     await waitFor(() => expect(listCalls().at(-1)).toMatchObject({ search: 'spei', pageNumber: 1 }));
     await waitFor(() => expect(screen.queryByText('Continuar')).not.toBeInTheDocument());
+  });
+
+  it('names each settlement with its state, so a voided one is not taken for the one that replaced it', async () => {
+    serve(RECEIVABLES, () => [
+      settlement({ id: 's3' }),
+      settlement({ id: 's2', status: PlatformSettlementStatus.Voided, voidedAt: '2026-10-07T17:00:00Z', voidReason: 'Duplicada' }),
+    ]);
+    renderPage();
+
+    const closed = await screen.findByRole('link', { name: /^Ver la liquidación cerrada de Rappi/ });
+    const voided = screen.getByRole('link', { name: /^Ver la liquidación anulada de Rappi/ });
+    expect(closed).toHaveAttribute('href', '/reports/settlements/s3');
+    expect(voided).toHaveAttribute('href', '/reports/settlements/s2');
+    // The state shows beside the platform, in the first column.
+    expect(within(voided.closest('tr') as HTMLElement).getAllByRole('cell')[0]).toHaveTextContent('RappiAnulada');
+  });
+
+  it('keeps the search and its filters when the list fails, and says when a filter finds nothing', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiRequest).mockImplementation(((method: string, path: string, options: Options = {}) => {
+      if (method === 'get' && path === '/api/v1/platform-settlements/receivable') return Promise.resolve(RECEIVABLES);
+      if (method === 'get' && path === '/api/v1/platform-settlements') {
+        return options.query?.search === 'spei' ? Promise.reject(new Error('Sin conexión')) : Promise.resolve(page([]));
+      }
+      return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
+    }) as unknown as typeof apiRequest);
+    renderPage();
+
+    const search = await screen.findByRole('searchbox', { name: 'Buscar referencia o notas' });
+    expect(search).toHaveAttribute('maxLength', '100');
+    expect(await screen.findByText('Todavía no registras depósitos de las plataformas.')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Estado'), String(PlatformSettlementStatus.Voided));
+    expect(await screen.findByText('Ninguna liquidación con estos filtros.')).toBeInTheDocument();
+
+    await user.type(search, 'spei');
+
+    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Buscar referencia o notas' })).toHaveValue('spei');
+    expect(screen.getByLabelText('Estado')).toHaveValue(String(PlatformSettlementStatus.Voided));
   });
 });

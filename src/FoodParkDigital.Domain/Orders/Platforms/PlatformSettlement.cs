@@ -14,6 +14,8 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
 {
     /// <summary>The longest period one deposit pays: a platform settles every week, a catch-up a month at most.</summary>
     public const int MaxPeriodDays = 31;
+    /// <summary>The earliest date a period starts on: a guard against a year typed wrong.</summary>
+    public static readonly DateOnly EarliestPeriodFrom = new(2000, 1, 1);
     /// <summary>The largest deposit either way: a guard against a figure typed wrong.</summary>
     public const decimal MaxDepositedAmount = 10_000_000m;
     public const int MaxReferenceLength = 60;
@@ -26,6 +28,7 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string PeriodOrderMessage = "El periodo termina antes de empezar.";
     public const string PeriodTooLongMessage = "El periodo puede tener hasta 31 días.";
     public const string PeriodInTheFutureMessage = "El periodo no puede terminar después de hoy.";
+    public const string PeriodTooOldMessage = "Revisa el año del periodo: no puede empezar antes de 2000.";
     public const string DepositBeforePeriodMessage = "La fecha del depósito no puede ser anterior al periodo.";
     public const string DepositInTheFutureMessage = "La fecha del depósito no puede ser futura.";
     public const string DepositedAmountMessage = "Lo depositado va de -$10,000,000 a $10,000,000, con dos decimales.";
@@ -35,6 +38,8 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string RepeatedOrderMessage = "Un pedido está repetido en la liquidación.";
     public const string OrderOfAnotherPlatformMessage = "Un pedido de otra plataforma no entra en esta liquidación.";
     public const string OrderAfterThePeriodMessage = "Un pedido registrado después del periodo no entra en esta liquidación.";
+    public const string OrderBringsNothingMessage =
+        "Un pedido que no trae nada (devuelto completo, o que el negocio todavía no cobra) no entra en esta liquidación.";
     public const string TooManyAdjustmentsMessage = "Una liquidación lleva hasta 100 ajustes.";
     public const string AdjustmentKindMessage = "Elige el motivo de cada ajuste.";
     public const string AdjustmentAmountMessage = "Cada ajuste va de -$1,000,000 a $1,000,000, sin ser $0, con dos decimales.";
@@ -103,7 +108,10 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
     public int Revision { get; private set; }
 
     public IReadOnlyCollection<PlatformSettlementOrder> Orders => _orders.AsReadOnly();
-    public IReadOnlyCollection<PlatformSettlementAdjustment> Adjustments => _adjustments.AsReadOnly();
+
+    /// <summary>In the order they were written, whatever order the database read them in.</summary>
+    public IReadOnlyCollection<PlatformSettlementAdjustment> Adjustments
+        => _adjustments.OrderBy(adjustment => adjustment.Position).ToList().AsReadOnly();
 
     /// <summary>What the platform should have deposited: its orders plus its adjustments.</summary>
     public decimal ExpectedDeposit => OrdersTotal + AdjustmentsTotal;
@@ -230,8 +238,8 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
             _orders.Add(new PlatformSettlementOrder(TenantId, Id, order.OrderId, order.ExpectedNet));
 
         _adjustments.Clear();
-        foreach (var adjustment in typed)
-            _adjustments.Add(new PlatformSettlementAdjustment(TenantId, Id, adjustment.Kind, adjustment.Description, adjustment.Amount));
+        foreach (var (adjustment, index) in typed.Select((adjustment, index) => (adjustment, index)))
+            _adjustments.Add(new PlatformSettlementAdjustment(TenantId, Id, index + 1, adjustment.Kind, adjustment.Description, adjustment.Amount));
 
         OrdersTotal = _orders.Sum(line => line.ExpectedNet);
         AdjustmentsTotal = _adjustments.Sum(adjustment => adjustment.Amount);
@@ -243,6 +251,8 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(PeriodOrderMessage);
         if (deposit.PeriodTo.DayNumber - deposit.PeriodFrom.DayNumber + 1 > MaxPeriodDays)
             throw new DomainException(PeriodTooLongMessage);
+        if (deposit.PeriodFrom < EarliestPeriodFrom)
+            throw new DomainException(PeriodTooOldMessage);
         if (deposit.PeriodTo > today)
             throw new DomainException(PeriodInTheFutureMessage);
         if (deposit.DepositedOn < deposit.PeriodFrom)
@@ -263,6 +273,7 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(TooManyOrdersMessage);
         if (orders.Select(order => order.OrderId).Distinct().Count() != orders.Count)
             throw new DomainException(RepeatedOrderMessage);
+        var kept = _orders.Select(line => line.OrderId).ToHashSet();
         foreach (var order in orders)
         {
             if (order.OrderId == Guid.Empty)
@@ -273,6 +284,10 @@ public class PlatformSettlement : AuditableEntity, ITenantScoped, IAggregateRoot
                 throw new DomainException(OrderAfterThePeriodMessage);
             if (decimal.Round(order.ExpectedNet, 2) != order.ExpectedNet)
                 throw new ArgumentException("An expected net comes in cents.", nameof(orders));
+            // Nothing tells «given back whole» from «not collected yet»: settled at 0, what the second brings later would
+            // never be pending again. One already in the settlement stays at 0, which shows the refund.
+            if (order.ExpectedNet == 0 && !kept.Contains(order.OrderId))
+                throw new DomainException(OrderBringsNothingMessage);
         }
     }
 

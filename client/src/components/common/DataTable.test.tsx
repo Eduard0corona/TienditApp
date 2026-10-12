@@ -74,4 +74,39 @@ describe('DataTable', () => {
     expect(screen.getByText('1–10 de 12')).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'Insumo 01' })).toBeInTheDocument();
   });
+
+  it('shows the last page that still has rows when the screen leaves fewer (a filter of its own)', async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderTable(rows(30));
+    await user.click(screen.getByRole('button', { name: '3' }));
+    expect(screen.getByText('21–30 de 30')).toBeInTheDocument();
+
+    rerender(
+      <DataTable
+        data={rows(12)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+      />,
+    );
+
+    expect(screen.getByText('11–12 de 12')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Insumo 12' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('does not let a search longer than the API takes be typed', () => {
+    render(
+      <DataTable
+        data={rows(3)}
+        columns={[{ header: 'Nombre' }]}
+        keyExtractor={(row) => row.id}
+        renderRow={(row) => <td>{row.name}</td>}
+        searchPlaceholder="Buscar referencia"
+        searchMaxLength={100}
+      />,
+    );
+
+    expect(screen.getByRole('searchbox', { name: 'Buscar referencia' })).toHaveAttribute('maxLength', '100');
+  });
 });

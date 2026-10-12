@@ -14,9 +14,9 @@ ORDER BY [MigrationId] DESC;
 
 -- 2. Después: las columnas de [PlatformSettlements], [PlatformSettlementOrders] y
 --    [PlatformSettlementAdjustments]: los importes en decimal(18,2), las fechas del periodo y del
---    depósito en date, y nulos solo en [Reference], [Notes], [ClosedAt], [VoidedAt], [VoidReason],
---    [CreatedBy], [UpdatedAt], [UpdatedBy] y [Description]. Antes de aplicar y después de
---    rollback.sql: ninguna fila.
+--    depósito en date, el lugar de cada ajuste ([Position]) en int, y nulos solo en [Reference],
+--    [Notes], [ClosedAt], [VoidedAt], [VoidReason], [CreatedBy], [UpdatedAt], [UpdatedBy] y
+--    [Description]. Antes de aplicar y después de rollback.sql: ninguna fila.
 SELECT
     OBJECT_NAME(c.[object_id]) AS [Tabla],
     c.[name] AS [Columna],
@@ -68,8 +68,8 @@ ORDER BY [Tipo], [Tabla], [Nombre];
 -- 4. Después de desplegar, y antes de rollback.sql: las liquidaciones guardadas por plataforma
 --    ([Canal] 3 Rappi, 4 Uber Eats y 5 DiDi Food) y estado ([Estado] 0 abierta, 1 cerrada, 99
 --    anulada), y cuántos negocios las tienen. Con alguna fila, rollback.sql se detiene (error 50010)
---    sin cambiar nada: ninguna bitácora conserva sus pedidos ni sus ajustes. Recién aplicado:
---    ninguna fila.
+--    sin cambiar nada: la bitácora no guarda qué pedidos lleva cada una (solo cuántos) ni nada de
+--    una abierta. Recién aplicado: ninguna fila.
 IF OBJECT_ID(N'[PlatformSettlements]') IS NOT NULL
     EXEC(N'SELECT [Channel] AS [Canal], [Status] AS [Estado], COUNT(*) AS [Liquidaciones], COUNT(DISTINCT [TenantId]) AS [Negocios]
 FROM [PlatformSettlements]

@@ -31,6 +31,10 @@ interface SettlementOrdersProps {
 // A statement brings dozens of orders a week: a page holds a week of most businesses.
 const PAGE_SIZES = [50, 100, 500];
 
+// On a phone the box, the folio (with its date) and what it brings, the three that are compared with the statement; who
+// charged and the sale from a tablet up.
+const FROM_TABLET = 'd-none d-sm-table-cell';
+
 /**
  * The orders of a settlement, folio by folio, to compare with the platform's statement: with boxes while it is open, the
  * ones of the period proposed and the pending ones of before unchecked; what each one brings is the server's.
@@ -50,11 +54,13 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
   const columns: DataTableColumn[] = [
     ...(picking ? [{ header: 'Incluir', width: 72 }] : []),
     { header: 'Folio de la app' },
-    { header: 'Fecha' },
-    { header: 'Cobró' },
-    { header: 'Venta', className: 'text-end' },
+    { header: 'Cobró', className: FROM_TABLET },
+    { header: 'Venta', className: `text-end ${FROM_TABLET}` },
     { header: 'Neto esperado', className: 'text-end' },
   ];
+  const emptyMessage = !picking
+    ? 'Esta liquidación no lleva pedidos.'
+    : shown !== 'all' ? 'Ningún pedido aquí.' : 'Sin pedidos pendientes hasta el final del periodo.';
 
   return (
     <DataTable<PlatformSettlementOrder>
@@ -62,7 +68,7 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
       columns={columns}
       keyExtractor={(order) => order.orderId}
       loading={loading}
-      emptyMessage={picking && shown !== 'all' ? 'Ningún pedido aquí.' : 'Sin pedidos pendientes hasta el final del periodo.'}
+      emptyMessage={emptyMessage}
       searchPlaceholder="Buscar folio o pedido"
       searchFilter={(order, search) =>
         order.externalOrderNumber.toLowerCase().includes(search) || order.orderNumber.toLowerCase().includes(search)}
@@ -115,17 +121,14 @@ export default function SettlementOrders({ platform, orders, from, to, saved, pi
             )}
             <td>
               <span className="fw-semibold">{order.externalOrderNumber}</span>
-              <div className="small text-muted">{order.orderNumber}</div>
-            </td>
-            <td>
-              {formatShortDateTime(order.registeredAt)}
+              <div className="small text-muted">{order.orderNumber} · {formatShortDateTime(order.registeredAt)}</div>
               {placement !== 'in' && (
                 <div className="small text-muted">{placement === 'before' ? 'De antes del periodo' : 'Después del periodo: no entra'}</div>
               )}
               {order.status === OrderStatus.Cancelled && <div><StatusChip status={order.status} /></div>}
             </td>
-            <td>{getCollectedByLabel(order.collectedBy, platform)}</td>
-            <td className="text-end">
+            <td className={FROM_TABLET}>{getCollectedByLabel(order.collectedBy, platform)}</td>
+            <td className={`text-end ${FROM_TABLET}`}>
               <span className="ta-money">{formatMoney(order.orderTotal)}</span>
               {order.refundedAmount > 0 && <div className="small text-muted">Devuelto <span className="ta-money">{formatMoney(order.refundedAmount)}</span></div>}
             </td>
