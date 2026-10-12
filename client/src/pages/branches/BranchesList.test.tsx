@@ -73,6 +73,7 @@ describe('BranchesList', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Editar Sucursal principal' }));
     const dialog = screen.getByRole('dialog', { name: 'Editar Sucursal principal' });
+    expect(within(dialog).getByRole('radiogroup', { name: '¿Cómo atiende?' })).toBeInTheDocument();
     expect(within(dialog).getByRole('radio', { name: 'Local abierto al público' })).toBeChecked();
 
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Solo a domicilio, sin local' }));

@@ -100,9 +100,20 @@ function problem(status: number, code: string, title: string, detail: string) {
   return { status, json: { status, title, detail, code, error: detail, traceId: '00-visual-00' } };
 }
 
-/** The address of the default branch in one line, as AddressText.OneLine(Branch) writes it. */
-function mainBranchAddress(data: DemoData): string {
-  const branch = data.locations.find((location: { isDefault: boolean }) => location.isDefault);
+// BranchServiceMode as the contract numbers it.
+const DELIVERY_ONLY = 1;
+
+function mainBranch(data: DemoData) {
+  return data.locations.find((location: { isDefault: boolean }) => location.isDefault);
+}
+
+/**
+ * The address of the default branch in one line, as AddressText.ForCustomers(Branch) writes it: none for a branch that
+ * only delivers.
+ */
+function mainBranchAddress(data: DemoData): string | null {
+  const branch = mainBranch(data);
+  if (branch.serviceMode === DELIVERY_ONLY) return null;
   return [branch.addressLine1, branch.addressLine2, `${branch.postalCode} ${branch.city}`, branch.state].filter(Boolean).join(', ');
 }
 
@@ -140,10 +151,15 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       businessName: data.tenant.name, slug: data.tenant.slug, logoUrl: null, contactPhone: data.tenant.contactPhone,
       currency: 'MXN', pricesIncludeTax: data.tenant.pricesIncludeTax, defaultTaxRate: data.tenant.defaultTaxRate,
       acceptsOrders, ordersPaused: !acceptsOrders, theme: data.tenant.theme, address: mainBranchAddress(data),
-      openingHours: hours, categories,
+      deliveryOnly: mainBranch(data).serviceMode === DELIVERY_ONLY, openingHours: hours, categories,
     },
   };
 }
+
+/** The main branch only delivers: a kitchen without premises, whose address the menu never shows. */
+const mainBranchDeliveryOnly: PrepareData = (data) => {
+  mainBranch(data).serviceMode = DELIVERY_ONLY;
+};
 
 /** The menu closed by its hours. */
 const menuClosed: PrepareData = (data) => {
@@ -205,6 +221,7 @@ const publicRoutes: ExtraRoutes = (data, { ok }) => [
 ];
 
 export const PUBLICO_ROUTES = asOption(publicRoutes);
+export const PRINCIPAL_SOLO_A_DOMICILIO = asOption(mainBranchDeliveryOnly);
 export const MENU_CERRADO = asOption(menuClosed);
 export const MENU_CIERRE_ESPECIAL = asOption(menuSpecialClosing);
 export const MENU_HORARIO_ESPECIAL = asOption(menuSpecialHours);

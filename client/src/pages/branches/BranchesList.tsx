@@ -326,8 +326,9 @@ export default function BranchesList() {
                   <input id="branch-description" className="form-control" maxLength={500}
                     value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                 </div>
-                <fieldset className="col-12">
-                  <legend className="form-label fs-6 mb-1">¿Cómo atiende?</legend>
+                {/* A radio group named like the other fields: a legend would take the heading size of the theme. */}
+                <div className="col-12" role="radiogroup" aria-labelledby="branch-service-mode-label">
+                  <div id="branch-service-mode-label" className="form-label">¿Cómo atiende?</div>
                   {SERVICE_MODES.map((mode) => (
                     <div className="form-check" key={mode.value}>
                       <input className="form-check-input" type="radio" name="branch-service-mode" id={`branch-service-mode-${mode.value}`}
@@ -337,7 +338,7 @@ export default function BranchesList() {
                       <div id={`branch-service-mode-${mode.value}-hint`} className="form-text mt-0">{mode.hint}</div>
                     </div>
                   ))}
-                </fieldset>
+                </div>
                 {TEXT_FIELDS.map((field) => (
                   <div key={field.key} className={field.col}>
                     <label className="form-label" htmlFor={`branch-${field.key}`}>{field.label}</label>

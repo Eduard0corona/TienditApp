@@ -183,6 +183,21 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `DataTable.test.tsx`: con menos filas, la última página que todavía tiene alguna, y el largo máximo de la búsqueda.
     - `navigation.test.ts`: las pestañas «Ventas» y «Liquidaciones» de Reportes y la búsqueda global.
   - **Escenas visuales** (`liquidaciones.spec.ts`, contra `master`): 9 nuevas, la lista y una liquidación abierta en escritorio, teléfono y oscuro, una nueva, una cerrada y el diálogo de anularla. Cambian a propósito las 3 escenas de Reportes (las pestañas «Ventas» y «Liquidaciones») y la tarjeta de Ventas por canal, que se recorre debajo de ellas. Las 349 pruebas pasan dos corridas seguidas contra el mismo build.
+- Fase 22A, sucursal solo a domicilio ([ADR 0016](../adr/0016-delivery-only-branches.md)):
+  - **Domain:** `BranchTests`: una sucursal tiene local salvo que solo entregue, y entonces guarda su dirección para el equipo; la principal de un negocio sin local; y un modo que no existe, rechazado.
+  - **Application:**
+    - `OpeningHoursFlowTests`: el menú de una principal solo a domicilio no lleva su dirección y dice que es solo a domicilio, y otra sucursal solo a domicilio no cambia el menú de una principal con local.
+    - `AutoReplyHoursTests`: «¿Dónde están?» con la principal solo a domicilio responde que no hay local, la descripción y el menú, nunca la calle; con el horario también; y con la principal con local sigue respondiendo con la descripción.
+    - `BranchesTests`: crear una sucursal solo a domicilio; uno sin el campo tiene local, y guardar sin el campo conserva cómo atiende; un modo desconocido, rechazado por los validadores.
+    - `CreateBusinessCommandTests`: el alta con el giro «Comida a domicilio» (sin acentos ni mayúsculas también) empieza con la principal solo a domicilio, y con otro giro o sin giro, con local.
+    - `TenantSetupTests`: la plantilla «Comida a domicilio» con sus cinco categorías y diez productos con el IVA del negocio.
+  - **SQL Server:** `BranchServiceModeMigrationSqlServerTests` (la versión anterior agrega y edita sucursales; la restricción CHECK; revertir detenido con el error 50011 y después solo lo que agregó).
+  - **WebApi:** `PublicMenuDeliveryOnlySqlServerTests`: la respuesta del menú público de una principal solo a domicilio no trae la calle ni el código postal, un guardado sin el campo la mantiene privada y, de vuelta a local, la dirección se publica.
+  - **Cliente:**
+    - `BranchesList.test.tsx`: el grupo «¿Cómo atiende?» con su explicación, el aviso de la dirección privada, el guardado con `serviceMode` y la marca en la lista.
+    - `PublicMenuPage.test.tsx`: «Solo a domicilio» sin dirección ni «Cómo llegar», y el pedido en línea igual.
+    - `industries.test.ts`: el giro «Comida a domicilio», escrito como lo lee el servidor.
+  - **Escenas visuales** (contra `master`): 3 nuevas, la principal solo a domicilio en el formulario de Sucursales y en su lista, y el menú en línea solo a domicilio en el teléfono. Cambian a propósito los 4 diálogos de Sucursales (el grupo «¿Cómo atiende?») y las 9 escenas de Mi negocio (la frase de la dirección fiscal). Las demás pasan sin cambios dos corridas seguidas contra el mismo build.
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 

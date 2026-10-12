@@ -8,6 +8,7 @@ import {
   MENU_CIERRE_ESPECIAL,
   MENU_HORARIO_ESPECIAL,
   NEGOCIO_SUSPENDIDO,
+  PRINCIPAL_SOLO_A_DOMICILIO,
   PUBLICO_ROUTES,
 } from './publico-cuenta-marco.mocks';
 
@@ -310,6 +311,21 @@ test.describe('Menú público fuera de horario', () => {
     await expect(page.getByText('Pedido para Mesa 4')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Agregar Latte' })).toBeVisible();
     await snap(page, 'menu-publico-mesa-telefono');
+  });
+});
+
+test.describe('Menú público de una cocina sin local', () => {
+  test.use({ signedIn: false, prepareData: PRINCIPAL_SOLO_A_DOMICILIO });
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+  });
+
+  test('menú público solo a domicilio', async ({ page }) => {
+    // The main branch only delivers: no address and no «Cómo llegar», only that there are no premises to visit.
+    await open(page, '/m/cafe-la-esquina');
+    await expect(page.getByText('Solo a domicilio: no tenemos local para visitar.')).toBeVisible();
+    await expect(page.getByRole('link', { name: /Cómo llegar/ })).toHaveCount(0);
+    await snap(page, 'menu-publico-solo-a-domicilio-telefono');
   });
 });
 
