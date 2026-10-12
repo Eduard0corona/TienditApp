@@ -89,7 +89,7 @@ Cada depósito de Rappi, Uber Eats o DiDi Food se concilia en Reportes › Liqui
 
 Una cocina sin local no publica su dirección ([ADR 0016](../adr/0016-delivery-only-branches.md)). Cada sucursal dice cómo atiende (`Branch.ServiceMode`): «Local abierto al público» o «Solo a domicilio, sin local».
 
-- **Qué se publica:** con la sucursal principal solo a domicilio, el menú en línea no lleva su dirección (`AddressText.ForCustomers`) y avisa que es solo a domicilio, y la respuesta automática a «¿dónde están?» (sin saludo ni precios) dice que no hay local para visitar, con la descripción del negocio y el menú si está prendido. Ninguna respuesta automática lleva la dirección de una sucursal.
+- **Qué se publica:** con la sucursal principal solo a domicilio, el menú en línea no lleva su dirección (`AddressText.ForCustomers`) y avisa que es solo a domicilio, y la respuesta automática a «¿dónde están?» (también con un saludo, una pregunta de precios o el horario en el mismo mensaje) dice que no hay local para visitar, con la descripción del negocio y el menú si está prendido. «Mi dirección» o «mi ubicación» no preguntan dónde está el negocio. Ninguna respuesta automática lleva la dirección de una sucursal.
 - **Quién la ve:** el equipo, en Configuración › Sucursales y en el almacén de la sucursal, que la copia al crearse.
 - **Guardado:** dueños y administradores. Sin `serviceMode`, una nueva tiene local y una guardada conserva el que tenía; un valor desconocido es 400 `validation_failed` (`Elige cómo atiende la sucursal.`).
 - **Giro:** el alta con «Comida a domicilio» crea la principal solo a domicilio. La guía de inicio, como a todo negocio de comida, ofrece la plantilla «Comida a domicilio». Cambiar el giro después no cambia ninguna sucursal.

@@ -187,7 +187,7 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Domain:** `BranchTests`: una sucursal tiene local salvo que solo entregue, y entonces guarda su dirección para el equipo; la principal de un negocio sin local; y un modo que no existe, rechazado.
   - **Application:**
     - `OpeningHoursFlowTests`: el menú de una principal solo a domicilio no lleva su dirección y dice que es solo a domicilio, y otra sucursal solo a domicilio no cambia el menú de una principal con local.
-    - `AutoReplyHoursTests`: «¿Dónde están?» con la principal solo a domicilio responde que no hay local, la descripción y el menú, nunca la calle; con el horario también; y con la principal con local sigue respondiendo con la descripción.
+    - `AutoReplyHoursTests`: «¿Dónde están?» con la principal solo a domicilio responde que no hay local, la descripción y el menú, nunca la calle; con el horario, con un saludo (bienvenida antes, nombre al final) y con una pregunta de precios (productos después) también; «mi dirección» y «mi ubicación» no lo activan; con la principal con local sigue respondiendo con la descripción; y de dos negocios, solo el que no tiene local lo dice.
     - `BranchesTests`: crear una sucursal solo a domicilio; una sin el campo tiene local; guardar sin el campo conserva cómo atiende, y guardar con local la regresa; un modo desconocido, rechazado por los validadores.
     - `CreateBusinessCommandTests`: el alta (`RegisterBusinessCommand`) con el giro «Comida a domicilio» (con otras mayúsculas y espacios alrededor también) empieza con la principal solo a domicilio, y con otro giro o sin giro, con local.
     - `TenantSetupTests`: la plantilla «Comida a domicilio» con sus cinco categorías y diez productos con el IVA del negocio.

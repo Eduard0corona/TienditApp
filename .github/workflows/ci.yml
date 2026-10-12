@@ -267,6 +267,9 @@ jobs:
             echo "::error::The rollback did not return the database to $PRODUCTION_BASELINE."
             exit 1
           fi
+          # As with apply.sql: without this, the second run reuses the plans of the first one, and a
+          # guard naming a column the rollback already dropped does not fail here as it would there.
+          $SQLCMD -Q "DBCC FREEPROCCACHE WITH NO_INFOMSGS;"
           $SQLCMD -d "$MSSQL_DATABASE" -i /scripts/rollback.sql
           if [ "$(last_migration)" != "$PRODUCTION_BASELINE" ]; then
             echo "::error::Run again, the rollback changed the migration history."

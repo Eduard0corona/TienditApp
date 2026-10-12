@@ -28,10 +28,13 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         {
             // Without the column every branch has premises again, and the previous version publishes the address of the
             // main one on the online menu: for a branch that only delivers, often a home. Change those branches to
-            // premises (and clear their street) on purpose first, or roll forward.
+            // premises (and clear their street) on purpose first, or roll forward. The check runs through EXEC, and only
+            // while the column exists: SQL Server compiles the whole batch, so naming a column already dropped would fail
+            // a second run of rollback.sql.
             migrationBuilder.Sql(@"
-IF EXISTS (SELECT 1 FROM [Branches] WHERE [ServiceMode] <> 0)
-    THROW 50011, N'There are branches that only deliver; rolling back would publish the address of the main one. Change them to premises (and clear their street) first, or roll forward.', 1;
+IF COL_LENGTH(N'dbo.Branches', N'ServiceMode') IS NOT NULL
+    EXEC(N'IF EXISTS (SELECT 1 FROM [Branches] WHERE [ServiceMode] <> 0)
+    THROW 50011, N''There are branches that only deliver; rolling back would publish the address of the main one. Change them to premises (and clear their street) first, or roll forward.'', 1;');
 ");
 
             migrationBuilder.DropCheckConstraint(

@@ -41,6 +41,10 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
     private static readonly string[] LocationKeywords =
         ["ubicacion", "direccion", "donde estan", "donde se ubican", "donde quedan", "como llego"];
 
+    // «Mi dirección es…», «te paso mi ubicación»: the customer gives theirs, often for a delivery, and does not ask where
+    // the business is.
+    private static readonly string[] CustomerAddressKeywords = ["mi direccion", "mi ubicacion"];
+
     // Without hours to tell, the description the business wrote answers both.
     private static readonly string[] InformationKeywords = [.. HoursKeywords, .. LocationKeywords];
 
@@ -101,7 +105,8 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         var greeting = AutoReplyKeywords.ContainsAny(words, GreetingKeywords);
         var catalog = AutoReplyKeywords.ContainsAny(words, CatalogKeywords);
         var hoursAsked = AutoReplyKeywords.ContainsAny(words, HoursKeywords);
-        var locationAsked = AutoReplyKeywords.ContainsAny(words, LocationKeywords);
+        var locationAsked = AutoReplyKeywords.ContainsAny(words, LocationKeywords)
+            && !AutoReplyKeywords.ContainsAny(words, CustomerAddressKeywords);
         var deliveryOnly = locationAsked && await TryReadDeliveryOnlyAsync(tenantId, cancellationToken);
         var context = hoursAsked || catalog || deliveryOnly ? await TryReadContextAsync(tenantId, hoursAsked, cancellationToken) : null;
 
@@ -125,6 +130,22 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
             return reply.Compose();
         }
 
+        // Where it is, for a business without premises: there is nowhere to come, the food goes to the customer. A
+        // greeting or a catalog question in the same message goes around it, as around the hours.
+        if (deliveryOnly)
+        {
+            var reply = new AutoReplyComposer();
+            if (greeting)
+                reply.Owner(agent.WelcomeMessage);
+            reply.System(DeliveryOnlyText).Owner(agent.BusinessDescription);
+            if (catalog)
+                reply.Owner(agent.BusinessProductsAndServices);
+            reply.System(Invitation(context, catalog, hoursReply: false));
+            if (greeting)
+                reply.System(CapturePrompts(agent, customerName));
+            return reply.Compose();
+        }
+
         if (greeting)
             return WithCapturePrompts(agent, agent.WelcomeMessage, customerName);
 
@@ -134,16 +155,6 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
                 .Owner(agent.BusinessProductsAndServices)
                 .System(Invitation(context, catalog: true, hoursReply: false))
                 .Compose(separator: "\n");
-        }
-
-        // Where it is, for a business without premises: there is nowhere to come, the food goes to the customer.
-        if (deliveryOnly)
-        {
-            return new AutoReplyComposer()
-                .System(DeliveryOnlyText)
-                .Owner(agent.BusinessDescription)
-                .System(Invitation(context, catalog: false, hoursReply: false))
-                .Compose();
         }
 
         if (AutoReplyKeywords.ContainsAny(words, InformationKeywords) && !string.IsNullOrWhiteSpace(agent.BusinessDescription))

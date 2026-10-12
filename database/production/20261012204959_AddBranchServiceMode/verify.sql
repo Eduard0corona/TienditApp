@@ -12,9 +12,10 @@ SELECT TOP (5) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
 
--- 2. Después: la columna [ServiceMode] de [Branches] (int, sin nulos, con su DEFAULT ((0))) y la
---    restricción CK_Branches_ServiceMode ([ServiceMode] IN (0, 1)). Antes de aplicar y después de
---    rollback.sql: ninguna fila.
+-- 2. Después: la columna [ServiceMode] de [Branches] (int, sin nulos), su DEFAULT ((0)) con un nombre
+--    que pone SQL Server (DF__Branches__Servic__…) y la restricción CK_Branches_ServiceMode, que se
+--    escribió como [ServiceMode] IN (0, 1) y SQL Server muestra como
+--    ([ServiceMode]=(1) OR [ServiceMode]=(0)). Antes de aplicar y después de rollback.sql: ninguna fila.
 SELECT N'COLUMNA' AS [Tipo], c.[name] AS [Nombre], t.[name] AS [Definicion], c.[is_nullable] AS [AceptaNulos]
 FROM sys.columns c
 INNER JOIN sys.types t ON t.[user_type_id] = c.[user_type_id]
@@ -33,9 +34,10 @@ ORDER BY [Tipo];
 -- 3. Después de desplegar, y antes de volver a la versión anterior o de rollback.sql: las
 --    sucursales por cómo atienden ([Modo] 0 local abierto al público, 1 solo a domicilio), cuántas son
 --    la principal de su negocio y cuántos negocios las tienen; y cuáles son las solo a domicilio (su
---    negocio, su nombre y si es la principal; nunca su dirección). Con alguna, rollback.sql se detiene
---    (error 50011) sin cambiar nada, y la versión anterior publicaría la dirección de las principales
---    en el menú en línea. Recién aplicado: todas en 0 y la lista vacía.
+--    negocio, su nombre, si es la principal y si tiene calle guardada; nunca su dirección). Con alguna,
+--    rollback.sql se detiene (error 50011) sin cambiar nada, y la versión anterior publicaría en el menú
+--    en línea la dirección de las principales (con [TieneCalle] 1, también su calle). Recién aplicado:
+--    todas en 0 y la lista vacía.
 IF COL_LENGTH(N'dbo.Branches', N'ServiceMode') IS NOT NULL
 BEGIN
     EXEC(N'SELECT [ServiceMode] AS [Modo], COUNT(*) AS [Sucursales],
@@ -43,8 +45,8 @@ BEGIN
 FROM [Branches]
 GROUP BY [ServiceMode]
 ORDER BY [Modo];');
-    EXEC(N'SELECT b.[TenantId] AS [Negocio], t.[Name] AS [NombreDelNegocio], b.[Id] AS [Sucursal], b.[Name] AS [Nombre],
-    b.[IsDefault] AS [Principal]
+    EXEC(N'SELECT b.[TenantId] AS [Negocio], t.[Name] AS [NombreDelNegocio], t.[Slug], b.[Id] AS [Sucursal], b.[Name] AS [Nombre],
+    b.[IsDefault] AS [Principal], CASE WHEN NULLIF(LTRIM(RTRIM(b.[AddressLine1])), N'''') IS NULL THEN 0 ELSE 1 END AS [TieneCalle]
 FROM [Branches] b
 INNER JOIN [Tenants] t ON t.[Id] = b.[TenantId]
 WHERE b.[ServiceMode] = 1

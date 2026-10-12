@@ -268,6 +268,57 @@ public class AutoReplyHoursTests
     }
 
     [Fact]
+    public async Task GreetingAndWhere_ForABusinessThatOnlyDelivers_ShouldWelcomeFirst_SayThereIsNowhereToCome_AndAskForTheNameLast()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, Shop());
+        await OnlyDeliversAsync(fixture);
+        var agent = await fixture.Context.AiAgents.SingleAsync();
+        fixture.Clock.UtcNow = MondayNoon;
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, "Hola, ¿dónde están?", null);
+
+        Assert.Equal(
+            $"{agent.WelcomeMessage}\n\n{AiAgentAutoReplyService.DeliveryOnlyText}\n\n{KitchenDescription}\n\n" +
+            $"Mira el menú y haz tu pedido aquí: {MenuLink}\n\n¿Me compartes tu nombre?",
+            reply);
+        Assert.DoesNotContain(KitchenStreet, reply);
+    }
+
+    [Fact]
+    public async Task WhereAndHowMuch_ForABusinessThatOnlyDelivers_ShouldSayThereIsNowhereToCome_BeforeTheProducts()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, Shop());
+        await OnlyDeliversAsync(fixture, Products);
+        fixture.Clock.UtcNow = MondayNoon;
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, "¿Dónde están y cuánto cuestan los tacos?", null);
+
+        Assert.Equal(
+            $"{AiAgentAutoReplyService.DeliveryOnlyText}\n\n{KitchenDescription}\n\n{Products}\n\n" +
+            $"Mira el menú y haz tu pedido aquí: {MenuLink}",
+            reply);
+        Assert.DoesNotContain(KitchenStreet, reply);
+    }
+
+    [Theory]
+    [InlineData("Mi dirección es Reforma 20, Centro")]
+    [InlineData("Te paso mi ubicación para la entrega")]
+    public async Task CustomerGivingTheirAddress_ShouldNotBeToldThereIsNowhereToCome(string message)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture, Shop());
+        await OnlyDeliversAsync(fixture);
+        fixture.Clock.UtcNow = MondayNoon;
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, message, null);
+
+        // As before Fase 22A: the description the business wrote.
+        Assert.Equal(KitchenDescription, reply);
+    }
+
+    [Fact]
     public async Task WhereAreYou_WithPremisesAtTheMainBranch_ShouldKeepAnsweringWithTheDescription()
     {
         // Another branch that only delivers says nothing about the main one, where customers come.
@@ -538,6 +589,25 @@ public class AutoReplyHoursTests
     }
 
     [Fact]
+    public async Task TwoBusinesses_OnlyTheOneWithoutPremisesShouldSayThereIsNowhereToCome()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var kitchen = await BusinessAsync(fixture, Shop());
+        await OnlyDeliversAsync(fixture);
+        var shop = await BusinessAsync(fixture, Shop(), slug: "fonda-vecina");
+        fixture.Clock.UtcNow = MondayNoon;
+
+        // Each message is answered in the scope of the business it was sent to: a kitchen next door changes nothing.
+        var neighbor = await Replies(fixture).BuildReplyAsync(shop.Id, "¿Dónde están?", null);
+        fixture.TenantService.SetTenant(kitchen.Id);
+        var own = await Replies(fixture).BuildReplyAsync(kitchen.Id, "¿Dónde están?", null);
+
+        Assert.Equal(Description, neighbor);
+        Assert.StartsWith($"{AiAgentAutoReplyService.DeliveryOnlyText}\n\n{KitchenDescription}", own);
+        Assert.EndsWith($"{AppUrl}/m/demo", own);
+    }
+
+    [Fact]
     public async Task TijuanaWhenTheClocksGoBack_ShouldAgreeWithTheMenu()
     {
         // Saturday 31 October until 1:30. On Sunday 1 November Tijuana goes from 2:00 PDT back to 1:00 PST: 1:15 comes
@@ -580,12 +650,12 @@ public class AutoReplyHoursTests
     }
 
     /// <summary>The main branch only delivers (from a home, with its street saved), and the description says so.</summary>
-    private static async Task OnlyDeliversAsync(SalesTestFixture fixture)
+    private static async Task OnlyDeliversAsync(SalesTestFixture fixture, string? products = null)
     {
         var main = await fixture.DefaultBranchAsync();
         main.Update(main.Name, main.Code, new BranchContact(AddressLine1: KitchenStreet, City: "Puebla"), BranchServiceMode.DeliveryOnly);
         var agent = await fixture.Context.AiAgents.SingleAsync();
-        agent.UpdateGeneral(agent.Name, agent.Role, agent.Personality, agent.Language, agent.Tone, agent.BusinessName, KitchenDescription, null);
+        agent.UpdateGeneral(agent.Name, agent.Role, agent.Personality, agent.Language, agent.Tone, agent.BusinessName, KitchenDescription, products);
         await fixture.Context.SaveChangesAsync();
     }
 

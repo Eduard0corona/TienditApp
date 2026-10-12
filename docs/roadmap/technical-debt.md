@@ -104,7 +104,7 @@ Actualizada el 2026-10-12 con las Fases 22F, 22F-2, 22G y 22A, después de las F
     - Las mesas y el horario siguen siendo del negocio, no de cada sucursal: un negocio con un local y una cocina aparte no puede tener horarios distintos.
     - El giro decide la sucursal principal solo en el alta; en un negocio que ya existe se marca a mano en Sucursales.
     - La entrega (zonas por código postal, costo de envío, dirección del cliente en el pedido y Paquetenvia) sigue en las Fases 22B y 22C.
-    - La 22A suma 7 B a la primera visita (de 176,326 a 176,333 B): el enum de la sucursal. El presupuesto no cambia.
+    - La 22A suma 1 B a la primera visita (de 176,326 a 176,327 B, contra `master` en `a60b1d4`): el enum de la sucursal. El presupuesto no cambia.
 - Resuelto en la Fase 22G: la liquidación de cada depósito de Rappi, Uber Eats y DiDi Food y su conciliación con el estado de cuenta ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
   - Reportes › Liquidaciones dice lo que debe cada plataforma por sus pedidos pendientes. El dueño o un administrador captura cada depósito, TienditApp propone los pedidos del periodo, lo que no cuadra se explica con ajustes con motivo (el 35 % que cubre Rappi, los faltantes, el saldo de DiDi, la publicidad, las cancelaciones tardías…) y la liquidación solo se cierra con la diferencia en $0.00.
   - Cerrar vuelve a calcular cada pedido y, si una devolución cambió alguno, pide revisarlo; anular conserva la liquidación y libera sus pedidos; las dos quedan en la bitácora.

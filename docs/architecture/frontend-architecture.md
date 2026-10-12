@@ -305,7 +305,7 @@ Sucursal solo a domicilio (Fase 22A, [ADR 0016](../adr/0016-delivery-only-branch
   - La lista marca con «Solo a domicilio» las que no tienen local, junto a su clave.
 - **Menú en línea:** con `deliveryOnly`, el encabezado dice «Solo a domicilio: no tenemos local para visitar.» donde iba la dirección, sin «Cómo llegar». La API ya no manda la dirección, y si una respuesta trajera las dos, la dirección tampoco se muestra.
 - **Giro:** «Comida a domicilio» (`HOME_DELIVERY_INDUSTRY`, el mismo texto que `BusinessIndustries.HomeDelivery`) está en el alta y en Mi negocio, donde al elegirlo recuerda marcar después de guardar, en Configuración › Sucursales, las que no tienen local (sin enlace: la pantalla no avisa antes de perder lo escrito). La dirección fiscal ya no dice que la de la principal siempre sale en el menú.
-- **Primera visita:** suma 7 B (de 176,326 a 176,333 B), el enum `BranchServiceMode` que usa la pantalla de Sucursales.
+- **Primera visita:** suma 1 B (de 176,326 a 176,327 B, contra `master` en `a60b1d4`), el enum `BranchServiceMode` que usa la pantalla de Sucursales.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

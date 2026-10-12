@@ -32,9 +32,10 @@ public static class AddressText
 
     /// <summary>
     /// Where a branch is, in one line and in the same order: "Av. Juárez 123, Centro, 72000 Puebla, Puebla". Null
-    /// without a street: a city alone does not tell anyone how to get there.
+    /// without a street: a city alone does not tell anyone how to get there. Private: a branch's address reaches
+    /// customers only through <see cref="ForCustomers"/>.
     /// </summary>
-    public static string? OneLine(Branch? branch)
+    private static string? OneLine(Branch? branch)
     {
         if (branch is null || string.IsNullOrWhiteSpace(branch.AddressLine1))
             return null;

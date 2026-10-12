@@ -34,8 +34,9 @@ IF EXISTS (
 )
 BEGIN
 
-    IF EXISTS (SELECT 1 FROM [Branches] WHERE [ServiceMode] <> 0)
-        THROW 50011, N'There are branches that only deliver; rolling back would publish the address of the main one. Change them to premises (and clear their street) first, or roll forward.', 1;
+    IF COL_LENGTH(N'dbo.Branches', N'ServiceMode') IS NOT NULL
+        EXEC(N'IF EXISTS (SELECT 1 FROM [Branches] WHERE [ServiceMode] <> 0)
+        THROW 50011, N''There are branches that only deliver; rolling back would publish the address of the main one. Change them to premises (and clear their street) first, or roll forward.'', 1;');
 
 END;
 
@@ -72,4 +73,3 @@ END;
 
 COMMIT;
 GO
-
