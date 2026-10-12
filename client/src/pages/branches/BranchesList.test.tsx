@@ -12,7 +12,8 @@ vi.mock('../../api/branchesApi', () => ({
 vi.mock('../../hooks/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }) }));
 // The section tabs read the signed-in user; they are not what this test is about.
 vi.mock('../../components/layout/SectionTabs', () => ({ default: () => null }));
-vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm: vi.fn() }) }));
+const confirm = vi.fn();
+vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
 
 const MENU_HINT = /dirección de la sucursal principal se muestra en tu menú en línea/i;
 const PRIVATE_HINT = 'Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección. Solo la ve tu equipo.';
@@ -100,5 +101,63 @@ describe('BranchesList', () => {
     const centro = screen.getByText('Centro').closest('tr') as HTMLElement;
     expect(within(main).getByText('Solo a domicilio')).toBeInTheDocument();
     expect(within(centro).queryByText('Solo a domicilio')).not.toBeInTheDocument();
+  });
+
+  it('does not send how a branch serves when the person did not change it, so a list read before stays harmless', async () => {
+    // The list says premises; someone else may have marked it «Solo a domicilio» since: the server keeps what it has.
+    vi.mocked(branchesApi.update).mockResolvedValue(branch({}) as never);
+    renderBranches();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Sucursal principal' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar Sucursal principal' });
+    fireEvent.change(within(dialog).getByLabelText('Teléfono'), { target: { value: '222 123 4567' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    await vi.waitFor(() => expect(branchesApi.update).toHaveBeenCalled());
+    const [, body] = vi.mocked(branchesApi.update).mock.calls[0];
+    expect(body).toMatchObject({ id: 'b1', contactPhone: '222 123 4567' });
+    expect(body.serviceMode).toBeUndefined();
+  });
+
+  it('starts a new branch serving like the main one, and sends it', async () => {
+    vi.mocked(branchesApi.getAll).mockResolvedValue([
+      branch({ serviceMode: BranchServiceMode.DeliveryOnly }),
+    ] as Awaited<ReturnType<typeof branchesApi.getAll>>);
+    vi.mocked(branchesApi.create).mockResolvedValue(branch({ id: 'b3' }) as never);
+    renderBranches();
+
+    await screen.findByText('Sucursal principal');
+    fireEvent.click(screen.getByRole('button', { name: /Nueva sucursal/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Nueva sucursal' });
+    expect(within(dialog).getByRole('radio', { name: 'Solo a domicilio, sin local' })).toBeChecked();
+    // Not the main one: its address never reaches the menu, so there is nothing to warn about.
+    expect(within(dialog).queryByText(PRIVATE_HINT)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(MENU_HINT)).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText('Nombre'), { target: { value: 'Cocina norte' } });
+    fireEvent.change(within(dialog).getByLabelText('Clave'), { target: { value: 'norte' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Crear sucursal' }));
+    await vi.waitFor(() => expect(branchesApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Cocina norte', code: 'NORTE', serviceMode: BranchServiceMode.DeliveryOnly, isDefault: false,
+    })));
+  });
+
+  it('says what the menu will show before making a branch the main one', async () => {
+    vi.mocked(branchesApi.getAll).mockResolvedValue([
+      branch({}),
+      branch({ id: 'b2', name: 'Centro', code: 'CENTRO', isDefault: false }),
+      branch({ id: 'b3', name: 'Cocina', code: 'COCINA', isDefault: false, serviceMode: BranchServiceMode.DeliveryOnly }),
+    ] as Awaited<ReturnType<typeof branchesApi.getAll>>);
+    confirm.mockResolvedValue(false);
+    renderBranches();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Hacer principal Cocina' }));
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0][0].message).toContain('Tu menú en línea dirá «Solo a domicilio» y no mostrará ninguna dirección.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hacer principal Centro' }));
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(confirm.mock.calls[1][0].message).toContain('Su dirección se mostrará en tu menú en línea.');
+    expect(branchesApi.setDefault).not.toHaveBeenCalled();
   });
 });

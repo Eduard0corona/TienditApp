@@ -216,6 +216,8 @@ export default function BusinessSettings() {
   // A giro written by hand stays among the options, so saving the form does not erase it.
   const savedIndustry = matchIndustry(tenant?.industry);
   const industryOptions = savedIndustry && !INDUSTRY_OPTIONS.includes(savedIndustry) ? [...INDUSTRY_OPTIONS, savedIndustry] : INDUSTRY_OPTIONS;
+  // The giro changes no branch: each one says in Sucursales whether customers come to it.
+  const homeDelivery = watch('industry') === HOME_DELIVERY_INDUSTRY;
 
   const formatAddress = () => {
     const parts = [
@@ -387,17 +389,16 @@ export default function BusinessSettings() {
                   <div className="mb-3">
                     <label htmlFor="businesssettings-giro-del-negocio" className="form-label">Giro del negocio</label>
                     <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}
-                      aria-describedby={watch('industry') === HOME_DELIVERY_INDUSTRY ? 'business-home-delivery-hint' : undefined}>
+                      aria-describedby={homeDelivery ? 'business-home-delivery-hint' : undefined}>
                       <option value="">Seleccionar...</option>
                       {industryOptions.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
-                    {/* The giro changes no branch: each one says in Sucursales whether customers come to it. */}
-                    {watch('industry') === HOME_DELIVERY_INDUSTRY && (
+                    {homeDelivery && (
                       <div id="business-home-delivery-hint" className="form-text">
-                        Marca como «Solo a domicilio» en <Link to="/branches">Sucursales</Link> las que no tienen local: su
-                        dirección no se muestra en tu menú en línea.
+                        Después de guardar, marca como «Solo a domicilio» en Configuración › Sucursales las que no tienen
+                        local: su dirección no se muestra en tu menú en línea.
                       </div>
                     )}
                   </div>

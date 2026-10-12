@@ -120,8 +120,10 @@ export default function BranchesList() {
   };
 
   const openCreate = () => {
+    // A new branch starts serving like the main one: the second kitchen of a business without premises is one too.
+    const main = branches.data?.find((branch) => branch.isDefault);
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, serviceMode: main?.serviceMode ?? BranchServiceMode.Premises });
     setFormError('');
   };
 
@@ -150,16 +152,20 @@ export default function BranchesList() {
       postalCode: blankToNull(form.postalCode),
       contactName: blankToNull(form.contactName),
       contactPhone: blankToNull(form.contactPhone),
-      serviceMode: form.serviceMode,
     };
+    // How it serves goes only when it is new or was changed here: a list read before someone else marked the branch
+    // «Solo a domicilio» never turns it back into premises (left out, the server keeps what the branch has).
+    const serviceMode = !editing || form.serviceMode !== (editing.serviceMode ?? BranchServiceMode.Premises)
+      ? form.serviceMode
+      : undefined;
     setSaving(true);
     setFormError('');
     try {
       if (editing) {
-        await branchesApi.update(editing.id, { ...fields, id: editing.id });
+        await branchesApi.update(editing.id, { ...fields, id: editing.id, serviceMode });
         toast.success('Sucursal actualizada.');
       } else {
-        await branchesApi.create({ ...fields, isDefault: form.isDefault });
+        await branchesApi.create({ ...fields, isDefault: form.isDefault, serviceMode });
         toast.success('Sucursal creada.');
       }
       setForm(null);
@@ -174,7 +180,9 @@ export default function BranchesList() {
   const makeDefault = async (branch: Branch) => {
     const accepted = await confirm({
       title: 'Cambiar la sucursal principal',
-      message: `Las ventas y cajas que no elijan sucursal irán a ${branch.name}.`,
+      message: `Las ventas y cajas que no elijan sucursal irán a ${branch.name}. ${branch.serviceMode === BranchServiceMode.DeliveryOnly
+        ? 'Tu menú en línea dirá «Solo a domicilio» y no mostrará ninguna dirección.'
+        : 'Su dirección se mostrará en tu menú en línea.'}`,
       confirmLabel: 'Hacer principal',
     });
     if (!accepted) return;
@@ -326,7 +334,7 @@ export default function BranchesList() {
                   <input id="branch-description" className="form-control" maxLength={500}
                     value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                 </div>
-                {/* A radio group named like the other fields: a legend would take the heading size of the theme. */}
+                {/* A radio group whose title matches the other labels of the form, as in DeliveryPlatformForm. */}
                 <div className="col-12" role="radiogroup" aria-labelledby="branch-service-mode-label">
                   <div id="branch-service-mode-label" className="form-label">¿Cómo atiende?</div>
                   {SERVICE_MODES.map((mode) => (

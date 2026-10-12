@@ -9,11 +9,11 @@ import {
   MENU_EN_LINEA_DATA,
   NEGOCIO_DATA,
   PLATAFORMAS_ROUTES,
+  PRINCIPAL_SOLO_A_DOMICILIO_DATA,
   SIN_CAJA_DATA,
   SUPER_ADMIN_PROFILE,
   VENTAS_POR_CANAL_ROUTES,
 } from './caja-config.mocks';
-import { PRINCIPAL_SOLO_A_DOMICILIO } from './publico-cuenta-marco.mocks';
 
 // Caja, Reportes, Auditoría and Configuración (Mi negocio, WhatsApp, Sucursales, Equipo, Perfil, Plataforma, Planes and
 // the guided start): every screen at the three base looks, then the dialogs, tabs and printed cuts each one has. A
@@ -486,7 +486,7 @@ test.describe('Sucursales', () => {
   });
 
   test.describe('con la principal solo a domicilio', () => {
-    test.use({ prepareData: PRINCIPAL_SOLO_A_DOMICILIO });
+    test.use({ prepareData: PRINCIPAL_SOLO_A_DOMICILIO_DATA });
 
     test('sucursales, lista con la principal solo a domicilio', async ({ page }) => {
       await open(page, '/branches');

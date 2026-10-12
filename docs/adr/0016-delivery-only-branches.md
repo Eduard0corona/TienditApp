@@ -15,26 +15,26 @@ Los clientes reales de TienditApp son negocios de comida a domicilio: cocinan y 
    - Es de la sucursal, no del negocio: un negocio con un local y una cocina aparte marca solo la cocina.
 2. **Una dirección privada nunca sale del equipo.**
    - El menú en línea toma la dirección con `AddressText.ForCustomers`, que no da ninguna para una sucursal solo a domicilio. Con la principal así, `PublicMenuDto.Address` es nulo y `PublicMenuDto.DeliveryOnly` es verdadero: el menú dice «Solo a domicilio: no tenemos local para visitar.» en lugar de la dirección y de «Cómo llegar».
-   - Preguntar por WhatsApp dónde están («¿dónde están?», «dirección», «cómo llego»), con la principal solo a domicilio, responde «Somos solo a domicilio: no tenemos local para visitar.», la descripción que escribió el negocio y el enlace al menú. Ninguna respuesta automática lleva la dirección de una sucursal.
+   - Preguntar por WhatsApp dónde están («¿dónde están?», «dirección», «cómo llego»), sin saludo ni pregunta de precios y con la principal solo a domicilio, responde «Somos solo a domicilio: no tenemos local para visitar.», la descripción que escribió el negocio y el enlace al menú, si está prendido; con el horario, ese texto va después. Ninguna respuesta automática lleva la dirección de una sucursal, salvo lo que el negocio escriba en su descripción.
    - El ticket, las plantillas de WhatsApp, los QR y los correos no llevaban ninguna dirección, y siguen igual.
-   - El equipo sí la ve: Configuración › Sucursales, el almacén de la sucursal y los cortes. Repartidores y plataformas la necesitan para recoger.
+   - El equipo sí la ve: en Configuración › Sucursales y en el almacén de la sucursal, que la copia al crearse. Repartidores y plataformas la necesitan para recoger.
 3. **Ninguna pantalla vieja la publica por error.**
-   - `serviceMode` es opcional al crear y al guardar una sucursal: sin él, una nueva tiene local y una guardada conserva el que tenía. Una pestaña abierta antes del cambio nunca convierte una cocina en local con la dirección a la vista.
+   - `serviceMode` es opcional al crear y al guardar una sucursal: sin él, una nueva tiene local y una guardada conserva el que tenía. Una pestaña abierta antes del cambio nunca convierte una cocina en local con la dirección a la vista, y Sucursales solo lo manda al guardar si la persona lo cambió: una lista leída antes de que otra persona marcara la sucursal tampoco la regresa a local.
    - Un valor que no existe es 400 (`Elige cómo atiende la sucursal.`), y la base lo rechaza (`CK_Branches_ServiceMode`).
 4. **El giro «Comida a domicilio» empieza sin local.**
-   - El alta con ese giro (`BusinessIndustries.HomeDelivery`, comparado sin acentos ni mayúsculas) crea la sucursal principal solo a domicilio, y la guía de inicio ofrece la plantilla «Comida a domicilio».
+   - El alta con ese giro (`BusinessIndustries.HomeDelivery`, comparado sin acentos ni mayúsculas) crea la sucursal principal solo a domicilio. La guía de inicio, como a todo negocio de comida, ofrece la plantilla «Comida a domicilio», y un giro con «comida» recomienda las categorías de comida.
    - Cambiar el giro después no cambia ninguna sucursal: cada una se marca en Sucursales, y Mi negocio lo recuerda al elegir ese giro.
 5. **Lo cambian dueños y administradores**, como el resto de la sucursal (`[RequiresTenantManager]`). Leer las sucursales sigue abierto a todo el equipo.
 
 ## Consecuencias
 
 - **Lo que logra:**
-  - Una cocina sin local usa el menú en línea y las respuestas automáticas sin publicar su dirección.
+  - Una cocina sin local usa el menú en línea y las respuestas automáticas sin publicar su dirección (salvo la que escriba en la descripción de sus respuestas).
   - El negocio deja de borrar la calle de su sucursal para esconderla, y el equipo la conserva.
   - Los negocios con local siguen igual: todas las sucursales que ya existen quedan con local.
 - **Lo que limita:**
   - Solo cambia lo que ven los clientes. Cómo se entrega (zonas, costo de envío, dirección del cliente, Paquetenvia) llega en las Fases 22B y 22C.
-  - Las mesas y el horario siguen siendo del negocio, no de cada sucursal. Un negocio solo a domicilio no crea mesas, y si las tiene, su QR sigue funcionando.
+  - Las mesas y el horario siguen siendo del negocio, no de cada sucursal. Un negocio solo a domicilio no necesita mesas, y si las tiene, su QR sigue funcionando.
   - El giro decide la sucursal principal solo en el alta; para un negocio que ya existe se marca a mano.
 - **Decisión por omisión:** se tomó sin una preferencia expresa del dueño del producto, con su autorización para decidir. Si se prefiere mostrar una zona aproximada (la colonia o la ciudad) en lugar de nada, el cambio está en `AddressText.ForCustomers` y en el menú, sin tocar la base.
 - **Reversibilidad:**

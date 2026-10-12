@@ -173,13 +173,15 @@ describe('PublicMenuPage', () => {
   });
 
   it('says a kitchen only delivers, with no address and no way to get there', async () => {
-    api.getMenu.mockResolvedValue(menu({ deliveryOnly: true, address: null }));
+    // An address next to the flag (an API that sent both) is not shown either.
+    api.getMenu.mockResolvedValue(menu({ deliveryOnly: true, address: 'Privada Los Pinos 8, Puebla' }));
 
     renderPage();
 
     const info = await screen.findByRole('region', { name: 'Horario y ubicación' });
     expect(within(info).getByText('Solo a domicilio: no tenemos local para visitar.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Cómo llegar/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Los Pinos/)).not.toBeInTheDocument();
     // The order is the same: the customer still orders online.
     expect(screen.getByRole('button', { name: 'Agregar Latte' })).toBeInTheDocument();
   });

@@ -98,7 +98,7 @@ Actualizada el 2026-10-12 con las Fases 22F, 22F-2, 22G y 22A, después de las F
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
 - Resuelto en la Fase 22A: una cocina sin local publicaba su dirección, muchas veces su casa, en el menú en línea ([ADR 0016](../adr/0016-delivery-only-branches.md)).
-  - Cada sucursal dice cómo atiende. Con la principal «Solo a domicilio», el menú dice que no hay local para visitar y la respuesta automática a «¿dónde están?» también; ninguna lleva la dirección, que sigue viendo el equipo. El giro «Comida a domicilio» empieza así y trae su plantilla.
+  - Cada sucursal dice cómo atiende. Con la principal «Solo a domicilio», el menú dice que no hay local para visitar y la respuesta automática a «¿dónde están?» también; ninguna lleva la dirección, que sigue viendo el equipo. El giro «Comida a domicilio» empieza así, y la guía de inicio ofrece a todo negocio de comida la plantilla «Comida a domicilio».
   - Queda:
     - Volver a la versión anterior de la app publica otra vez la dirección de una principal solo a domicilio: el aviso está en `deploy-azure.md` y el `rollback.sql` se detiene (50011).
     - Las mesas y el horario siguen siendo del negocio, no de cada sucursal: un negocio con un local y una cocina aparte no puede tener horarios distintos.

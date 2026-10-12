@@ -236,7 +236,7 @@ Los de `20261012204959_AddBranchServiceMode` se probaron igual (SQL Server 2022,
 - el `verify.sql` mostró `AddPlatformSettlements` como última migración, sin la columna;
 - el `apply.sql` agregó la columna (`int`, sin nulos, con su `DEFAULT ((0))`) y su restricción CHECK, con las tres sucursales en 0. Repetirlo no cambió ningún objeto ni el historial;
 - la restricción rechazó con el error 547 un `INSERT` con el modo 2 y un `UPDATE` al −1, y una sucursal agregada sin la columna, como la versión anterior, quedó en 0;
-- con la principal de un negocio solo a domicilio, la consulta 3 la contó aparte, y el `rollback.sql` se detuvo con el error 50011 sin cambiar ningún objeto, el historial ni las filas;
+- con la principal de un negocio solo a domicilio, la consulta 3 la contó aparte y la listó con su negocio y su nombre, y el `rollback.sql` se detuvo con el error 50011 sin cambiar ningún objeto, el historial ni las filas;
 - de vuelta a local, el `rollback.sql` regresó la base a `AddPlatformSettlements` con el mismo esquema de antes de aplicar, y repetirlo no hizo nada. Aplicar de nuevo, dos veces, dejó el mismo esquema que en una base nueva con el script aplicado una vez (SQL Server nombra al azar la restricción `DEFAULT`, así que solo cambia ese nombre).
 
 En CI lo prueban:

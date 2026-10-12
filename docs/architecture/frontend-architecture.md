@@ -147,7 +147,7 @@ Menú en línea que vende (Fase 19):
 - **Encabezado del menú en línea:**
   - El logo, o la inicial del negocio en su color, y si está abierto con un chip de estado (`ta-chip-ready` o `ta-chip-done`, nunca el acento): "Abierto · cierra a las 20:00", "Cerrado · abre mañana a las 9:00".
   - "Hoy: 9:00 a 20:00" abre el horario de la semana (`<details>`, con el día de hoy en `aria-current="date"`).
-  - La dirección de la sucursal principal (nunca la fiscal), con "Cómo llegar" (una búsqueda en Google Maps), y WhatsApp.
+  - La dirección de la sucursal principal (nunca la fiscal), con "Cómo llegar" (una búsqueda en Google Maps), y WhatsApp. Desde la Fase 22A, con la principal solo a domicilio, dice "Solo a domicilio: no tenemos local para visitar." en su lugar.
   - El encabezado se va al bajar y las categorías se quedan arriba. Antes las dos barras eran fijas y las categorías dependían de la altura del encabezado (`top: 4.7rem`).
 - **Fuera de horario:**
   - El menú dice "Fuera de horario no recibimos pedidos en línea: vuelve mañana a las 9:00. Mientras, puedes ver el menú." y no muestra los botones para agregar.
@@ -298,11 +298,13 @@ Reportes › Liquidaciones (`/reports/settlements`, Fase 22G, [ADR 0015](../adr/
 
 Sucursal solo a domicilio (Fase 22A, [ADR 0016](../adr/0016-delivery-only-branches.md)):
 
-- **Sucursales:** el formulario pregunta «¿Cómo atiende?» con dos opciones, «Local abierto al público» y «Solo a domicilio, sin local», cada una con su explicación ligada (`aria-describedby`). Es un grupo `radiogroup` con el título del mismo tamaño que las demás etiquetas: un `legend` tomaría el tamaño de encabezado del tema. Guardar siempre manda `serviceMode`.
+- **Sucursales:** el formulario pregunta «¿Cómo atiende?» con dos opciones, «Local abierto al público» y «Solo a domicilio, sin local», cada una con su explicación ligada (`aria-describedby`). Es un grupo `radiogroup` con el título del mismo tamaño que las demás etiquetas, como en `DeliveryPlatformForm`.
+  - Una sucursal nueva empieza como la principal: la segunda cocina de un negocio sin local también lo es. Crear manda `serviceMode`; guardar lo manda solo si la persona lo cambió, así una lista leída antes de que alguien más marcara la sucursal «Solo a domicilio» nunca la regresa a local (sin el campo, el servidor conserva el que tiene).
+  - «Hacer principal» dice qué mostrará el menú: «Solo a domicilio» sin ninguna dirección, o la dirección de esa sucursal.
   - El aviso bajo la principal cambia con la opción: con local, que su dirección sale en el menú en línea; solo a domicilio, que el menú dice «Solo a domicilio» y no muestra esta dirección, que solo ve el equipo.
   - La lista marca con «Solo a domicilio» las que no tienen local, junto a su clave.
-- **Menú en línea:** con `deliveryOnly`, el encabezado dice «Solo a domicilio: no tenemos local para visitar.» donde iba la dirección, sin «Cómo llegar». La API ya no manda la dirección: el cliente no la esconde, no la tiene.
-- **Giro:** «Comida a domicilio» (`HOME_DELIVERY_INDUSTRY`, el mismo texto que `BusinessIndustries.HomeDelivery`) está en el alta y en Mi negocio, donde al elegirlo recuerda marcar en Sucursales las que no tienen local. La dirección fiscal ya no dice que la de la principal siempre sale en el menú.
+- **Menú en línea:** con `deliveryOnly`, el encabezado dice «Solo a domicilio: no tenemos local para visitar.» donde iba la dirección, sin «Cómo llegar». La API ya no manda la dirección, y si una respuesta trajera las dos, la dirección tampoco se muestra.
+- **Giro:** «Comida a domicilio» (`HOME_DELIVERY_INDUSTRY`, el mismo texto que `BusinessIndustries.HomeDelivery`) está en el alta y en Mi negocio, donde al elegirlo recuerda marcar después de guardar, en Configuración › Sucursales, las que no tienen local (sin enlace: la pantalla no avisa antes de perder lo escrito). La dirección fiscal ya no dice que la de la principal siempre sale en el menú.
 - **Primera visita:** suma 7 B (de 176,326 a 176,333 B), el enum `BranchServiceMode` que usa la pantalla de Sucursales.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.

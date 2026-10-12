@@ -324,7 +324,7 @@ export default function PublicMenuPage() {
               <span className="flex-grow-1">Solo a domicilio: no tenemos local para visitar.</span>
             </p>
           )}
-          {data.address && (
+          {data.address && !data.deliveryOnly && (
             <p className="pm-address">
               <i className="ri-map-pin-line" aria-hidden="true"></i>
               <span className="flex-grow-1">{data.address}</span>
