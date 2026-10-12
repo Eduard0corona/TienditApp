@@ -41,6 +41,7 @@ public class DailySalesSnapshot : BaseEntity, ITenantScoped
         OtherAmount = figures.OtherAmount;
         RefundsCount = figures.RefundsCount;
         RefundsAmount = figures.RefundsAmount;
+        PlatformAmount = figures.PlatformAmount;
     }
 
     public Guid TenantId { get; private set; }
@@ -65,13 +66,22 @@ public class DailySalesSnapshot : BaseEntity, ITenantScoped
     public decimal OtherAmount { get; private set; }
     public int RefundsCount { get; private set; }
     public decimal RefundsAmount { get; private set; }
+    /// <summary>
+    /// What delivery platforms charged in their apps («Plataforma» payments): part of <see cref="PaymentsAmount"/>, never
+    /// of a drawer. Days stored before the method existed read 0, which is what they had.
+    /// </summary>
+    public decimal PlatformAmount { get; private set; }
 
     public DailySalesFigures Figures => new(
         OrdersCreated, PaidOrders, PaymentsCount, PaymentsAmount, CashAmount, CardAmount, TransferAmount,
-        WalletAmount, OtherAmount, RefundsCount, RefundsAmount);
+        WalletAmount, OtherAmount, RefundsCount, RefundsAmount, PlatformAmount);
 }
 
-/// <summary>What was sold in a day: payments by method, refunds and orders.</summary>
+/// <summary>
+/// What was sold in a day: payments by method, refunds and orders. <see cref="PaymentsAmount"/> is the sum of the
+/// amounts by method: cash, card, transfer, wallet, other and platform.
+/// </summary>
+/// <param name="PlatformAmount">What delivery platforms charged («Plataforma» payments); last, so it defaults to 0.</param>
 public sealed record DailySalesFigures(
     int OrdersCreated,
     int PaidOrders,
@@ -83,9 +93,10 @@ public sealed record DailySalesFigures(
     decimal WalletAmount,
     decimal OtherAmount,
     int RefundsCount,
-    decimal RefundsAmount)
+    decimal RefundsAmount,
+    decimal PlatformAmount = 0m)
 {
-    public static DailySalesFigures Zero { get; } = new(0, 0, 0, 0m, 0m, 0m, 0m, 0m, 0m, 0, 0m);
+    public static DailySalesFigures Zero { get; } = new(0, 0, 0, 0m, 0m, 0m, 0m, 0m, 0m, 0, 0m, 0m);
 
     /// <summary>What the business kept: charged minus given back.</summary>
     public decimal NetSales => PaymentsAmount - RefundsAmount;
@@ -103,5 +114,6 @@ public sealed record DailySalesFigures(
         WalletAmount + other.WalletAmount,
         OtherAmount + other.OtherAmount,
         RefundsCount + other.RefundsCount,
-        RefundsAmount + other.RefundsAmount);
+        RefundsAmount + other.RefundsAmount,
+        PlatformAmount + other.PlatformAmount);
 }

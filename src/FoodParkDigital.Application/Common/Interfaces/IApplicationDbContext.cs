@@ -11,6 +11,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -43,6 +44,8 @@ public interface IApplicationDbContext
     DbSet<OrderPayment> OrderPayments { get; }
     DbSet<OrderRefund> OrderRefunds { get; }
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
+    DbSet<PlatformOrderDetail> PlatformOrderDetails { get; }
+    DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }
     DbSet<Supplier> Suppliers { get; }
