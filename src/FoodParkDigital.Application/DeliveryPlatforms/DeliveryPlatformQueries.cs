@@ -22,9 +22,9 @@ public record GetDeliveryPlatformsQuery : IRequest<DeliveryPlatformsDto>;
 
 /// <summary>
 /// The platforms the business set up and whether each one takes orders, without their rates: what Vender and Pedidos
-/// need (and Reportes, to filter by platform).
+/// need (and Reportes, to filter by platform, and Catálogo › Precios en apps, to say which ones are on).
 /// </summary>
-[RequiresPermission(TenantPermission.ManageOrders, TenantPermission.ViewReports)]
+[RequiresPermission(TenantPermission.ManageOrders, TenantPermission.ViewReports, TenantPermission.ManageCatalog)]
 public record GetDeliveryPlatformChannelsQuery : IRequest<List<DeliveryPlatformChannelDto>>;
 
 public class GetDeliveryPlatformsQueryHandler : IRequestHandler<GetDeliveryPlatformsQuery, DeliveryPlatformsDto>

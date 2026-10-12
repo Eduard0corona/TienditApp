@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
 
 namespace FoodParkDigital.Application.Orders;
 
@@ -13,28 +14,32 @@ public sealed record BuiltOrderLine(Product Product, OrderLineRequest Line, bool
 /// <summary>
 /// Turns requested lines into priced lines checked against the catalog: available now (or just available, for an order
 /// of a delivery platform), options valid (each group within its minimum and maximum), quantity limits per product, IVA
-/// and invoicing codes. Shared by counter sales, open tabs and online orders, so a line is priced the same way everywhere.
+/// and invoicing codes. Shared by counter sales, open tabs and online orders, so a line is priced the same way everywhere:
+/// with the menu's prices, or with the prices the business set in the app of the delivery platform that took the order.
 /// </summary>
 public sealed class OrderLineBuilder
 {
     private readonly Dictionary<Guid, decimal> _quantitiesByProduct = new();
     private readonly TimeSpan _localTimeOfDay;
     private readonly decimal _defaultTaxRate;
+    private readonly OrderChannel _channel;
     private readonly bool _enforceProductHours;
 
-    /// <param name="enforceProductHours">
-    /// False for an order a delivery platform's app already took, whatever the hours of each product here: the product
-    /// must still be available (a product the business turned off is refused).
+    /// <param name="channel">
+    /// Where the order comes from. A delivery platform's app already took its order, whatever the hours of each product
+    /// here (a product the business turned off is still refused), and charged the prices the business set in that app
+    /// (the menu's for a product without one). Every other channel sells at the menu's prices and hours.
     /// </param>
     public OrderLineBuilder(
         TimeSpan localTimeOfDay,
         decimal defaultTaxRate,
         IEnumerable<OrderItem>? existingItems = null,
-        bool enforceProductHours = true)
+        OrderChannel channel = OrderChannel.Counter)
     {
         _localTimeOfDay = localTimeOfDay;
         _defaultTaxRate = defaultTaxRate;
-        _enforceProductHours = enforceProductHours;
+        _channel = channel;
+        _enforceProductHours = !OrderChannelRules.IsDeliveryPlatform(channel);
         // Rounds of an open tab add to what the tab already has (MaxQuantityPerOrder).
         foreach (var item in existingItems ?? [])
             _quantitiesByProduct[item.ProductId] = _quantitiesByProduct.GetValueOrDefault(item.ProductId) + item.Quantity;
@@ -62,12 +67,12 @@ public sealed class OrderLineBuilder
         if (isTrackableService && decimal.Truncate(item.Quantity) != item.Quantity)
             return Result.Failure<BuiltOrderLine>($"'{product.Name}' crea una pieza por unidad: la cantidad debe ser entera.");
 
-        var options = product.ResolveOptions(item.OptionIds ?? []);
+        var options = product.ResolveOptions(item.OptionIds ?? [], _channel);
         var line = new OrderLineRequest(
             product.Id,
             product.Name,
             item.Quantity,
-            product.PriceWith(options),
+            product.PriceWith(options, _channel),
             string.IsNullOrWhiteSpace(item.Notes) ? null : item.Notes.Trim(),
             product.GetVatRate(_defaultTaxRate),
             OrderLineFiscalData.From(product),

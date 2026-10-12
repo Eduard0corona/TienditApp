@@ -150,7 +150,8 @@ public sealed class CrossTenantDeliveryPlatformsSqlServerTests
         Assert.Equal(((int)OrderChannel.Rappi, true), (channel.GetProperty("channel").GetInt32(), channel.GetProperty("isActive").GetBoolean()));
         Assert.DoesNotContain("commission", body, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(HttpStatusCode.OK, (await reports.GetAsync("/api/v1/delivery-platforms/channels")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await catalog.GetAsync("/api/v1/delivery-platforms/channels")).StatusCode);
+        // Whoever manages the catalog sets the prices in each app (Fase 22F-2): which ones are on, too.
+        Assert.Equal(HttpStatusCode.OK, (await catalog.GetAsync("/api/v1/delivery-platforms/channels")).StatusCode);
         // The commission of each order is only in the reports.
         Assert.Equal(HttpStatusCode.OK, (await reports.GetAsync("/api/v1/reports/sales-by-channel")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await reports.GetAsync("/api/v1/reports/delivery-platform-orders?channel=3")).StatusCode);
