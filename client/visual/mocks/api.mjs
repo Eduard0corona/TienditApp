@@ -147,6 +147,62 @@ function unconfiguredPlatforms() {
   };
 }
 
+// Hour, Session and Service (UnitType): a service is never in an order of a delivery platform.
+const SERVICE_UNITS = [50, 51, 52];
+
+/**
+ * A product of the list for an order of a delivery platform, as GET /products?priceChannel= prices it: the app's price
+ * where the business set one (without the menu's offer, which is the menu's) and what each option adds in the app.
+ * `prices` is `data.platformPrices[channel]`: `{ products: { [productId]: price }, options: { [optionId]: delta } }`.
+ */
+function withPlatformPrices(product, prices) {
+  if (!prices) return product;
+  const price = prices.products[product.id];
+  return {
+    ...product,
+    ...(price === undefined ? {} : { priceAmount: price, compareAtPrice: null, hasDiscount: false }),
+    optionGroups: product.optionGroups?.map((group) => ({
+      ...group,
+      options: group.options.map((option) => (option.id in prices.options ? { ...option, priceDelta: prices.options[option.id] } : option)),
+    })),
+  };
+}
+
+/** Catálogo › Precios en apps: the products (no services) by category and name, with their menu's and app's prices. */
+function platformPriceList(data, channel) {
+  const prices = data.platformPrices[channel] ?? { products: {}, options: {} };
+  const categories = new Map(data.categories.map((category) => [category.id, category]));
+  return data.products
+    .filter((product) => !SERVICE_UNITS.includes(product.unit))
+    .map((product) => ({ product, category: categories.get(product.categoryId) }))
+    .sort((a, b) => a.category.sortOrder - b.category.sortOrder || a.category.name.localeCompare(b.category.name, 'es')
+      || a.product.name.localeCompare(b.product.name, 'es'))
+    .map(({ product, category }) => ({
+      productId: product.id, name: product.name, categoryId: category.id, categoryName: category.name, unit: product.unit,
+      isAvailable: product.isAvailable, menuPrice: product.priceAmount, platformPrice: prices.products[product.id] ?? null,
+      optionGroups: (product.optionGroups ?? []).map((group) => ({
+        id: group.id, name: group.name,
+        options: group.options.map((option) => ({
+          id: option.id, name: option.name, isAvailable: option.isAvailable, menuPriceDelta: option.priceDelta,
+          platformPriceDelta: prices.options[option.id] ?? null,
+        })),
+      })),
+    }));
+}
+
+/** PUT /delivery-platforms/{channel}/prices: each price sent replaces the saved one; null goes back to the menu's. */
+function savePlatformPrices(data, channel, body) {
+  const prices = (data.platformPrices[channel] ??= { products: {}, options: {} });
+  const set = (map, key, value) => {
+    if (value === null) delete map[key];
+    else map[key] = value;
+  };
+  for (const product of body?.products ?? []) {
+    set(prices.products, product.productId, product.price);
+    for (const option of product.options ?? []) set(prices.options, option.optionId, option.priceDelta);
+  }
+}
+
 /** Sales by channel of a period without orders of any channel: the demo shows its sales by branch, not by channel. */
 function emptySalesByChannel(q) {
   const totals = {
@@ -212,7 +268,8 @@ function buildRoutes(data, token) {
       }
       rows = [...rows].sort((a, b) => a.sortOrder - b.sortOrder);
       const page = paginate(rows, q, 10);
-      return ok({ ...page, items: page.items.map(stripProduct) });
+      const prices = q.has('priceChannel') ? data.platformPrices[q.get('priceChannel')] : undefined;
+      return ok({ ...page, items: page.items.map((p) => withPlatformPrices(stripProduct(p), prices)) });
     }],
     ['GET', /^\/products\/([^/]+)$/, (m) => {
       const p = data.products.find((x) => x.id === m[1]);
@@ -287,6 +344,11 @@ function buildRoutes(data, token) {
     // offers the three to configure.
     ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
     ['GET', /^\/delivery-platforms$/, () => ok(unconfiguredPlatforms())],
+    ['GET', /^\/delivery-platforms\/([345])\/prices$/, (m, q) => ok(paginate(platformPriceList(data, m[1]), q, 100))],
+    ['PUT', /^\/delivery-platforms\/([345])\/prices$/, (m, q, body) => {
+      savePlatformPrices(data, m[1], body);
+      return { status: 204, json: null };
+    }],
     ['GET', /^\/service-board\/pieces$/, (m, q) => {
       let rows = data.boardPieces;
       if (!bool(q, 'includeCompleted')) rows = rows.filter((p) => p.status !== 2);

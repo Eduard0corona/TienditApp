@@ -1,4 +1,7 @@
-import { asOption, type DemoData } from '../fixtures';
+import { asOption, type DemoData, type SceneOptions } from '../fixtures';
+import { withRappiPrices } from '../mocks/data.mjs';
+
+type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
 // The demo photos in mocks/img, by product name: the lists then show photos and the placeholder side by side.
 const PHOTOS: Record<string, string> = {
@@ -25,3 +28,22 @@ export function withProductPhotos(data: DemoData) {
  * the fixture that builds the option, so the function the option holds goes through one.
  */
 export const productPhotos = asOption(withProductPhotos);
+
+// OrderChannel as the contract numbers the delivery platforms.
+const RAPPI = 3;
+const UBER_EATS = 4;
+const DIDI_FOOD = 5;
+
+/** The business set up the three delivery platforms and takes orders of Rappi and Uber Eats; DiDi Food is off. */
+const platformRoutes: ExtraRoutes = (_data, { ok }) => [
+  ['GET', /^\/delivery-platforms\/channels$/, () => ok([
+    { channel: RAPPI, isActive: true },
+    { channel: UBER_EATS, isActive: true },
+    { channel: DIDI_FOOD, isActive: false },
+  ])],
+];
+
+export const PLATFORM_ROUTES = asOption(platformRoutes);
+
+/** Its prices in the Rappi app (see withRappiPrices): the rest of the products charge the menu's there. */
+export const RAPPI_PRICES = asOption(withRappiPrices);

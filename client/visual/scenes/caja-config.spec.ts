@@ -405,9 +405,9 @@ test.describe('Plataformas de reparto', () => {
     await expect(form.getByLabel('Comisión (%)')).toHaveValue('30');
     await snapDialog(page, 'negocio-plataforma-dialogo');
 
-    // Below, the fiscal notice and the one about the prices of the catalog.
+    // Below, the fiscal notice and the one about the prices in the app, with its link to Catálogo › Precios en apps.
     await scrollToEnd(form);
-    await expect(form.getByText(/^Por ahora los pedidos usan los precios de tu catálogo/)).toBeVisible();
+    await expect(form.getByRole('link', { name: 'Catálogo › Precios en apps' })).toBeVisible();
     await snapDialog(page, 'negocio-plataforma-dialogo-final');
   });
 
