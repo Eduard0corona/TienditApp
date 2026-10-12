@@ -34,7 +34,13 @@ public static class PlatformSettlementErrors
         => $"Ya hay una liquidación abierta de {OrderChannelRules.DisplayName(channel)}: termínala o anúlala antes de abrir otra.";
 
     /// <summary>Someone else's save in between: the API answers 409 and the person reloads.</summary>
-    public static bool IsConflict(string? error) => error is Stale or OrderTaken or ExpectedNetsChanged;
+    public static bool IsStale(string? error) => error is Stale;
+
+    /// <summary>
+    /// The data changed under the request (another settlement took one of the orders, or what an order brings changed
+    /// before closing): the API answers 409 with the reason, for the person to review.
+    /// </summary>
+    public static bool IsConflict(string? error) => error is OrderTaken or ExpectedNetsChanged;
 }
 
 /// <summary>Opens a settlement of a platform's deposit with the orders it pays and the adjustments that explain the rest.</summary>

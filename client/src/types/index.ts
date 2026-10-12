@@ -1617,6 +1617,10 @@ export { PlatformCollectedBy } from '../api/generated/enums';
 
 export { PlatformCommissionBase } from '../api/generated/enums';
 
+export { PlatformSettlementStatus } from '../api/generated/enums';
+
+export { PlatformSettlementAdjustmentKind } from '../api/generated/enums';
+
 export interface CustomerCardDto {
   phone?: string;
   name?: string;

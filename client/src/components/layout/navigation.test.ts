@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TenantCapability, type UserProfileDto } from '../../types';
 import { getAccess } from '../../utils/access';
-import { getAllowedNavGroups, getAllowedPages, getNavEntryPath, getSectionTabs, isNavSection, showsPlanNotice } from './navigation';
+import { getAllowedNavGroups, getAllowedPages, getNavEntryPath, getSectionTabs, isNavItemActive, isNavSection, showsPlanNotice } from './navigation';
 
 const RESTAURANT = TenantCapability.Food | TenantCapability.Inventory | TenantCapability.Kitchen | TenantCapability.Retail;
 const EVERYTHING = RESTAURANT | TenantCapability.Service | TenantCapability.Appointments;
@@ -80,6 +80,29 @@ describe('navigation', () => {
     expect(pages).toEqual(expect.arrayContaining(['/sell', '/purchases', '/suppliers', '/campaigns', '/settings/whatsapp', '/audit']));
     // Without the services module there is no services catalog to go to.
     expect(pages).not.toContain('/services');
+  });
+
+  it('shows the sales and the settlements of the platforms as the two tabs of Reportes, for whoever reads the reports', () => {
+    const reader = getAccess(user('STAFF', ['ViewReports']), RESTAURANT);
+    const tabs = (pathname: string) => getSectionTabs(pathname, reader, RESTAURANT);
+
+    expect(tabs('/reports')?.pages.map((page) => page.label)).toEqual(['Ventas', 'Liquidaciones']);
+    expect(tabs('/reports')?.label).toBe('Reportes');
+    // A settlement opens under its tab, and Ventas is only its own page.
+    const settlement = tabs('/reports/settlements/7f1c')!;
+    expect(settlement.pages.filter((page) => isNavItemActive(page, '/reports/settlements/7f1c')).map((page) => page.label)).toEqual(['Liquidaciones']);
+    expect(settlement.pages.filter((page) => isNavItemActive(page, '/reports')).map((page) => page.label)).toEqual(['Ventas']);
+  });
+
+  it('lets the global search find the settlements by what people call them', () => {
+    const pages = getAllowedPages(getAccess(user('TENANT_ADMIN'), RESTAURANT), RESTAURANT);
+    const found = (words: string) => pages
+      .filter((page) => `${page.label} ${page.keywords ?? ''}`.toLowerCase().includes(words))
+      .map((page) => page.label);
+
+    expect(found('liquidaciones')).toEqual(['Liquidaciones']);
+    expect(found('depósitos')).toEqual(['Liquidaciones']);
+    expect(found('reportes')).toEqual(['Ventas']);
   });
 });
 

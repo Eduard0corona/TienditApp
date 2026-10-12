@@ -84,7 +84,15 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Campañas', path: '/campaigns', icon: 'ri-megaphone-line', area: 'campaigns', keywords: 'promociones mensajes masivos whatsapp recordatorios de citas plantillas bajas' },
         ],
       },
-      { label: 'Reportes', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', keywords: 'utilidad ventas del mes' },
+      {
+        label: 'Reportes',
+        icon: 'ri-bar-chart-box-line',
+        pages: [
+          // Exact: Liquidaciones hangs from its path.
+          { label: 'Ventas', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', exact: true, keywords: 'reportes utilidad ventas del mes' },
+          { label: 'Liquidaciones', path: '/reports/settlements', icon: 'ri-bank-line', area: 'reports', keywords: 'depósitos rappi uber eats didi food conciliación por cobrar' },
+        ],
+      },
       {
         label: 'Configuración',
         icon: 'ri-settings-3-line',

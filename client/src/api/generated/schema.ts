@@ -6197,6 +6197,7 @@ export interface paths {
                 query?: {
                     channel?: components["schemas"]["OrderChannel"];
                     status?: components["schemas"]["PlatformSettlementStatus"];
+                    search?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };

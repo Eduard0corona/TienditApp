@@ -121,6 +121,12 @@ public sealed class CrossTenantPlatformSettlementsSqlServerTests
         var receivable = (await owner.Client.GetFromJsonAsync<JsonElement>("/api/v1/platform-settlements/receivable")).EnumerateArray().Single();
         Assert.Equal((0, Today()), (receivable.GetProperty("pendingOrders").GetInt32(), DateOnly.Parse(receivable.GetProperty("settledThrough").GetString()!)));
 
+        // A closed settlement keeps its orders: another one of Rappi cannot take them, and says why.
+        var taken = await owner.Client.PostAsJsonAsync("/api/v1/platform-settlements", Settlement(OrderChannel.Rappi, first.ExpectedNet, [first.Id], []));
+        var takenProblem = Problem(await taken.Content.ReadAsStringAsync());
+        Assert.Equal((HttpStatusCode.Conflict, ApiErrorCodes.Conflict, PlatformSettlementErrors.OrderTaken),
+            (taken.StatusCode, takenProblem.Code, takenProblem.Detail));
+
         // Voided, it stays as history and its orders are pending again.
         var voided = await TwoBusinessesApi.ReadAsync(await owner.Client.PostAsJsonAsync($"/api/v1/platform-settlements/{id}/void",
             new { revision = 3, reason = "Se capturó con el monto de otra semana" }));

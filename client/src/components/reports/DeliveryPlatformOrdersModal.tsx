@@ -6,10 +6,11 @@ import { reportsApi, type DeliveryPlatformOrder } from '../../api/reportsApi';
 import DataTable, { type DataTableColumn } from '../common/DataTable';
 import StatusChip from '../common/StatusChip';
 import { OrderStatus } from '../../types';
-import { formatCalendarDate, formatShortDateTime } from '../../utils/dates';
+import { formatShortDateTime } from '../../utils/dates';
 import { getPlatformName, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { getCollectedByLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
+import { describePeriod } from './reportPeriods';
 
 interface DeliveryPlatformOrdersModalProps {
   platform: DeliveryPlatform;
@@ -35,20 +36,6 @@ const COLUMNS: DataTableColumn[] = [
 
 // The API takes up to 100 a page and answers 20 by default.
 const PAGE_SIZES = [20, 50, 100];
-
-/** "oct.", whatever the period the browser's data puts or leaves after the abbreviation. */
-function shortMonth(date: string): string {
-  return `${formatCalendarDate(date, { month: 'short' }).replace(/\.$/, '')}.`;
-}
-
-/** "6 al 12 oct.", "28 sep. al 4 oct.", or with the years when the period crosses one. */
-function describePeriod(from: string, to: string): string {
-  const day = (date: string) => formatCalendarDate(date, { day: 'numeric' });
-  if (from === to) return `${day(from)} ${shortMonth(from)}`;
-  if (from.slice(0, 4) !== to.slice(0, 4)) return `${day(from)} ${shortMonth(from)} ${from.slice(0, 4)} al ${day(to)} ${shortMonth(to)} ${to.slice(0, 4)}`;
-  if (from.slice(5, 7) !== to.slice(5, 7)) return `${day(from)} ${shortMonth(from)} al ${day(to)} ${shortMonth(to)}`;
-  return `${day(from)} al ${day(to)} ${shortMonth(to)}`;
-}
 
 /**
  * The orders of one delivery platform registered in the period of the report, the newest first, to compare folio by

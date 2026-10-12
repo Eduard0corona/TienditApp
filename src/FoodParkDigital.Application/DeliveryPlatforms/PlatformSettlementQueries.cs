@@ -25,6 +25,9 @@ public record GetPlatformSettlementsQuery : IRequest<PaginatedList<PlatformSettl
     /// <summary>Only open, closed or voided ones.</summary>
     public PlatformSettlementStatus? Status { get; init; }
 
+    /// <summary>Only those whose reference or notes have this text (the folio of the transfer, for instance).</summary>
+    public string? Search { get; init; }
+
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = DefaultPageSize;
 }
@@ -37,6 +40,7 @@ public class GetPlatformSettlementsQueryValidator : AbstractValidator<GetPlatfor
             .Must(channel => channel is null || OrderChannelRules.IsDeliveryPlatform(channel.Value))
             .WithMessage(DeliveryPlatformSetting.NotADeliveryPlatformMessage);
         RuleFor(x => x.Status).IsInEnum();
+        RuleFor(x => x.Search).MaximumLength(100);
         RuleFor(x => x.PageNumber).GreaterThanOrEqualTo(1);
         RuleFor(x => x.PageSize).InclusiveBetween(1, GetPlatformSettlementsQuery.MaxPageSize);
     }
@@ -58,6 +62,14 @@ public class GetPlatformSettlementsQueryHandler : IRequestHandler<GetPlatformSet
             settlements = settlements.Where(s => s.Channel == channel);
         if (request.Status is { } status)
             settlements = settlements.Where(s => s.Status == status);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            // On the server, over every page; lower-cased on both sides, so it does not depend on the collation.
+            var term = request.Search.Trim().ToLowerInvariant();
+            settlements = settlements.Where(s =>
+                (s.Reference != null && s.Reference.ToLower().Contains(term))
+                || (s.Notes != null && s.Notes.ToLower().Contains(term)));
+        }
 
         var rows = settlements
             .OrderByDescending(s => s.PeriodTo)

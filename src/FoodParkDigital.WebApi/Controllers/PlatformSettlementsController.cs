@@ -26,16 +26,20 @@ public class PlatformSettlementsController : ControllerBase
         _mediator = mediator;
     }
 
-    /// <summary>The settlements, the newest period first, of one platform or status if asked.</summary>
+    /// <summary>
+    /// The settlements, the newest period first, of one platform or status if asked, or with a text in their reference or
+    /// notes.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<PaginatedList<PlatformSettlementDto>>> GetSettlements(
         [FromQuery] OrderChannel? channel,
         [FromQuery] PlatformSettlementStatus? status,
+        [FromQuery] string? search,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = GetPlatformSettlementsQuery.DefaultPageSize,
         CancellationToken cancellationToken = default)
         => Ok(await _mediator.Send(
-            new GetPlatformSettlementsQuery { Channel = channel, Status = status, PageNumber = pageNumber, PageSize = pageSize },
+            new GetPlatformSettlementsQuery { Channel = channel, Status = status, Search = search, PageNumber = pageNumber, PageSize = pageSize },
             cancellationToken));
 
     /// <summary>What each platform still owes for its orders not settled yet.</summary>
@@ -63,7 +67,8 @@ public class PlatformSettlementsController : ControllerBase
 
     /// <summary>
     /// Opens a settlement of a platform's deposit with the orders it pays and the adjustments that explain the rest. One
-    /// open per platform; another one opened, or an order taken, at the same time answers 409 <c>concurrency_conflict</c>.
+    /// open per platform: another one opened at the same time answers 409 <c>concurrency_conflict</c>, and an order that
+    /// another settlement took, 409 <c>conflict</c>.
     /// </summary>
     [HttpPost]
     public async Task<ActionResult<PlatformSettlementDetailDto>> Create(
@@ -91,7 +96,8 @@ public class PlatformSettlementsController : ControllerBase
 
     /// <summary>
     /// Replaces an open settlement whole (deposit, orders and adjustments) with the revision the person saw; someone
-    /// else's save in between answers 409 <c>concurrency_conflict</c>.
+    /// else's save in between answers 409 <c>concurrency_conflict</c>, and an order that another settlement took, 409
+    /// <c>conflict</c>.
     /// </summary>
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<PlatformSettlementDetailDto>> Update(
@@ -118,7 +124,8 @@ public class PlatformSettlementsController : ControllerBase
 
     /// <summary>
     /// Closes a settlement once its difference is 0. If what an order brings changed since the last save, the new figures
-    /// are saved and it answers 409 <c>concurrency_conflict</c> for the person to review them.
+    /// are saved and it answers 409 <c>conflict</c> for the person to review them; someone else's save in between, 409
+    /// <c>concurrency_conflict</c>.
     /// </summary>
     [HttpPost("{id:guid}/close")]
     public async Task<ActionResult<PlatformSettlementDetailDto>> Close(
@@ -142,10 +149,15 @@ public class PlatformSettlementsController : ControllerBase
     }
 
     private ObjectResult Refused(string? error)
+    {
         // Someone else's save in between: like any concurrent save, the client reloads.
-        => PlatformSettlementErrors.IsConflict(error)
-            ? this.ApiError(StatusCodes.Status409Conflict, error, ApiErrorCodes.ConcurrencyConflict)
-            : this.ApiError(StatusCodes.Status400BadRequest, error);
+        if (PlatformSettlementErrors.IsStale(error))
+            return this.ApiError(StatusCodes.Status409Conflict, error, ApiErrorCodes.ConcurrencyConflict);
+        // The data changed under the request: the reason says what to review.
+        if (PlatformSettlementErrors.IsConflict(error))
+            return this.ApiError(StatusCodes.Status409Conflict, error, ApiErrorCodes.Conflict);
+        return this.ApiError(StatusCodes.Status400BadRequest, error);
+    }
 
     private static List<PlatformSettlementAdjustmentInput> Adjustments(IReadOnlyList<PlatformSettlementAdjustmentRequest> adjustments)
         => adjustments

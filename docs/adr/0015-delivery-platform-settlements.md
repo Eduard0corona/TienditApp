@@ -85,7 +85,8 @@ Las decisiones fijas de la fase eran:
    - **Respuestas:**
      - 400 `validation_failed` o `business_rule`;
      - 404 si la liquidación no es del negocio;
-     - 409 `concurrency_conflict` con una revisión vieja, con netos que cambiaron al cerrar o cuando otra liquidación tomó un pedido o se abrió al mismo tiempo.
+     - 409 `concurrency_conflict` con una revisión vieja o cuando otra liquidación de la plataforma se abrió al mismo tiempo: alguien más guardó, y la pantalla ofrece ver lo guardado;
+     - 409 `conflict`, con el motivo en `detail`, cuando otra liquidación tomó uno de los pedidos o cuando, al cerrar, cambió lo que se espera de un pedido (el servidor guarda las cifras nuevas).
 8. **Permisos.**
    - **Leer:** `ViewReports`, igual que Ventas por canal, donde ya se ven la comisión y el neto.
    - **Crear, guardar, cerrar y anular:** dueños y administradores (`[RequiresTenantManager]`), igual que los términos de cada plataforma.

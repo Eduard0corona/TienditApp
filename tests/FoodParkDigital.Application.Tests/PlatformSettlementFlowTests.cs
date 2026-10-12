@@ -306,6 +306,28 @@ public class PlatformSettlementFlowTests
     }
 
     [Fact]
+    public async Task List_ShouldFindByTheReferenceOrTheNotes_OverEveryPage()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await ShopAsync(fixture);
+        var rappi = (await CreateAsync(fixture, Command(OrderChannel.Rappi, 0m, []))).Value;
+        var uber = (await CreateAsync(fixture, Command(OrderChannel.UberEats, 0m, []) with
+        {
+            Reference = null,
+            Notes = "Llegó junto con el bono de octubre"
+        })).Value;
+
+        var byReference = await ListAsync(fixture, new GetPlatformSettlementsQuery { Search = " spei 44 ", PageSize = 1 });
+        var byNotes = await ListAsync(fixture, new GetPlatformSettlementsQuery { Search = "BONO" });
+        var none = await ListAsync(fixture, new GetPlatformSettlementsQuery { Search = "transferencia" });
+
+        Assert.Equal(rappi.Settlement.Id, Assert.Single(byReference.Items).Id);
+        Assert.Equal(1, byReference.TotalCount);
+        Assert.Equal(uber.Settlement.Id, Assert.Single(byNotes.Items).Id);
+        Assert.Empty(none.Items);
+    }
+
+    [Fact]
     public async Task Detail_OfAnotherBusiness_ShouldNotBeFound()
     {
         await using var fixture = SalesTestFixture.Create();
