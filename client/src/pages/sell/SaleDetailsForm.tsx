@@ -8,10 +8,45 @@ interface SaleDetailsFormProps {
   /** Food businesses take the table or a reference. */
   isFood: boolean;
   phoneError: string;
+  /**
+   * An order of a delivery platform: its app shares neither the customer's phone nor a table, and the name for the bag
+   * goes with the folio; only the notes for the kitchen are left here.
+   */
+  forPlatform?: boolean;
 }
 
 /** Customer, table and notes of the sale, behind a link: a counter sale goes to the general public. */
-export default function SaleDetailsForm({ details, onChange, open, onToggle, isFood, phoneError }: SaleDetailsFormProps) {
+export default function SaleDetailsForm({ details, onChange, open, onToggle, isFood, phoneError, forPlatform = false }: SaleDetailsFormProps) {
+  const notesField = (label: string) => (
+    <>
+      <label className="form-label small mb-1" htmlFor="sell-notes">{label}</label>
+      <input
+        id="sell-notes"
+        className="form-control"
+        maxLength={1000}
+        value={details.orderNotes}
+        onChange={(event) => onChange({ orderNotes: event.target.value })}
+      />
+    </>
+  );
+
+  if (forPlatform) {
+    return (
+      <>
+        <button
+          type="button"
+          className="btn btn-link btn-sm px-0 mb-2"
+          onClick={onToggle}
+          aria-expanded={open}
+        >
+          <i className={`${open ? 'ri-arrow-up-s-line' : 'ri-sticky-note-add-line'} me-1`} aria-hidden="true"></i>
+          {open ? 'Ocultar notas para cocina' : 'Notas para cocina (opcional)'}
+        </button>
+        {open && <div className="sell-details mb-2">{notesField('Notas para cocina')}</div>}
+      </>
+    );
+  }
+
   return (
     <>
       <button
@@ -66,16 +101,7 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
                 />
               </div>
             )}
-            <div className={isFood ? 'col-sm-6' : 'col-12'}>
-              <label className="form-label small mb-1" htmlFor="sell-notes">Notas del pedido</label>
-              <input
-                id="sell-notes"
-                className="form-control"
-                maxLength={1000}
-                value={details.orderNotes}
-                onChange={(event) => onChange({ orderNotes: event.target.value })}
-              />
-            </div>
+            <div className={isFood ? 'col-sm-6' : 'col-12'}>{notesField('Notas del pedido')}</div>
           </div>
         </div>
       )}

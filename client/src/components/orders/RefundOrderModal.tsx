@@ -2,6 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import type { OrderDto, OrderPaymentMethod, RefundOrderRequest, VoidOrderRequest } from '../../types';
 import { OrderPaymentMethod as PaymentMethod } from '../../types';
+import { getPlatformName, isDeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney, parseMoneyInput, toCents } from '../../utils/money';
 import { allowsFractions, formatQuantity, parseQuantity, roundQuantity } from '../../utils/units';
@@ -16,6 +17,8 @@ type RefundModalProps = {
   | { mode: 'void'; onSubmit: (request: VoidOrderRequest) => void }
 );
 
+// What the business gives back with its own money. «Plataforma» is never one of them: only what a platform charged goes
+// back that way, outside every drawer, and then it is the only way.
 const METHODS: OrderPaymentMethod[] = [
   PaymentMethod.Cash,
   PaymentMethod.Card,
@@ -36,20 +39,27 @@ function remainingByMethod(order: OrderDto): Array<{ method: OrderPaymentMethod;
 
 /**
  * Refund (money back, optionally for returned units) or void (everything back and the sale cancelled).
- * Refunds never edit the sale: they are recorded apart with their reason.
+ * Refunds never edit the sale: they are recorded apart with their reason. What a delivery platform charged goes back
+ * as «Plataforma», outside the drawer, to square it with the platform's settlement.
  */
 export default function RefundOrderModal(props: RefundModalProps) {
   const titleId = useId();
   const { order, submitting, error, onClose } = props;
   const netPaid = order.netPaidAmount ?? order.paidAmount;
   const remaining = useMemo(() => remainingByMethod(order), [order]);
+  const platformName = isDeliveryPlatform(order.channel) ? getPlatformName(order.channel) : null;
+  // The platform charged it: its money goes back the way it came (the server refuses any other method).
+  const platformCharged = order.payments.some((payment) => payment.method === PaymentMethod.Platform);
+  const voidingPlatformOrder = props.mode === 'void' && platformName !== null;
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   // Weighed lines take a typed quantity ("0.5"); the text is kept while it is being written.
   const [quantityTexts, setQuantityTexts] = useState<Record<string, string>>({});
   const [amountInput, setAmountInput] = useState('');
   const [method, setMethod] = useState<OrderPaymentMethod>(remaining[0]?.method ?? PaymentMethod.Cash);
   const [reason, setReason] = useState('');
-  const [restock, setRestock] = useState(true);
+  // An order of a platform is voided mostly because the platform cancelled it or it was registered twice: the food was
+  // usually cooked, so its supplies stay out unless someone says otherwise.
+  const [restock, setRestock] = useState(!voidingPlatformOrder);
 
   // Units cancelled from a tab were never charged: they are not returned.
   const returnableOf = (item: OrderDto['items'][number]) =>
@@ -82,7 +92,7 @@ export default function RefundOrderModal(props: RefundModalProps) {
     }
     props.onSubmit({
       amount: amountCents / 100,
-      method,
+      method: platformCharged ? PaymentMethod.Platform : method,
       reason: reason.trim(),
       restockItems: restock && anyUnits,
       items: Object.entries(quantities)
@@ -105,6 +115,13 @@ export default function RefundOrderModal(props: RefundModalProps) {
             {(order.refundedAmount ?? 0) > 0 && <> · ya reembolsado {formatMoney(order.refundedAmount ?? 0)}</>}
             {' · '}disponible para reembolsar <strong>{formatMoney(netPaid)}</strong>
           </p>
+
+          {voidingPlatformOrder && (
+            <p>
+              Anula el pedido si {platformName} lo canceló o si lo registraste dos veces.
+              {platformCharged && <> Lo que cobró {platformName} no sale de tu caja.</>}
+            </p>
+          )}
 
           {props.mode === 'void' ? (
             <div className="alert alert-warning">
@@ -191,13 +208,25 @@ export default function RefundOrderModal(props: RefundModalProps) {
                 </div>
                 <div className="col-sm-6">
                   <label className="form-label" htmlFor="refund-method">Se devuelve en</label>
-                  <select id="refund-method" className="form-select form-select-lg" value={method}
-                    onChange={(event) => setMethod(Number(event.target.value) as OrderPaymentMethod)}>
-                    {METHODS.map((item) => (
-                      <option key={item} value={item}>{getPaymentMethodLabel(item)}</option>
-                    ))}
-                  </select>
-                  {method === PaymentMethod.Cash && <div className="form-text">Sale del efectivo de tu caja.</div>}
+                  {platformCharged ? (
+                    <>
+                      <input id="refund-method" className="form-control form-control-lg" readOnly
+                        value={getPaymentMethodLabel(PaymentMethod.Platform)} aria-describedby="refund-method-help" />
+                      <div id="refund-method-help" className="form-text">
+                        La devolución queda registrada para cuadrarla con la liquidación de {platformName ?? 'la plataforma'}; no sale de la caja.
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <select id="refund-method" className="form-select form-select-lg" value={method}
+                        onChange={(event) => setMethod(Number(event.target.value) as OrderPaymentMethod)}>
+                        {METHODS.map((item) => (
+                          <option key={item} value={item}>{getPaymentMethodLabel(item)}</option>
+                        ))}
+                      </select>
+                      {method === PaymentMethod.Cash && <div className="form-text">Sale del efectivo de tu caja.</div>}
+                    </>
+                  )}
                 </div>
               </div>
             </>
@@ -214,11 +243,25 @@ export default function RefundOrderModal(props: RefundModalProps) {
               onChange={(event) => setReason(event.target.value)}
               autoFocus
             />
+            {voidingPlatformOrder && (
+              // The usual reasons, one tap away; the text stays editable.
+              <div className="d-flex flex-wrap gap-2 mt-2">
+                {[`${platformName} lo canceló`, 'Lo registré dos veces', 'No llegó el repartidor'].map((text) => (
+                  <button key={text} type="button" className="btn btn-light btn-sm" onClick={() => setReason(text)}>
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="form-check form-switch">
             <input id="refund-restock" type="checkbox" role="switch" className="form-check-input" checked={restock}
-              onChange={(event) => setRestock(event.target.checked)} />
+              onChange={(event) => setRestock(event.target.checked)}
+              aria-describedby={voidingPlatformOrder ? 'refund-restock-help' : undefined} />
             <label className="form-check-label" htmlFor="refund-restock">Regresar los insumos al inventario</label>
+            {voidingPlatformOrder && (
+              <div id="refund-restock-help" className="form-text">Márcalo solo si la comida no se preparó.</div>
+            )}
           </div>
           {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
         </Modal.Body>

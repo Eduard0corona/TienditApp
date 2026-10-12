@@ -15,6 +15,7 @@ export const queryKeys = {
   attention: ['attention'] as const,
   currentCashSession: ['cash', 'current-session'] as const,
   specialDays: ['special-days'] as const,
+  deliveryPlatformChannels: ['delivery-platforms', 'channels'] as const,
 };
 
 // The bell and the drawer chip stay current without a live connection of their own.
@@ -69,6 +70,18 @@ export function useRefreshCashState() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.currentCashSession });
     void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
   }, [queryClient]);
+}
+
+/**
+ * The delivery platforms the business set up (Rappi, Uber Eats, DiDi Food), active or not, without their rates: Vender
+ * offers the active ones and Pedidos filters by them. Whoever takes orders or reads reports may ask.
+ */
+export function useDeliveryPlatformChannels(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.deliveryPlatformChannels,
+    queryFn: ({ signal }) => apiRequest('get', '/api/v1/delivery-platforms/channels', { signal }),
+    enabled,
+  });
 }
 
 /** What the server says the user can do now (fresher than the token's claims). */

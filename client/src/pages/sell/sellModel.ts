@@ -1,5 +1,5 @@
 import type { OrderDto, ProductDto } from '../../types';
-import { UnitType } from '../../types';
+import { OrderChannel, PlatformCollectedBy, UnitType } from '../../types';
 
 // Same limits as the API (OrderLimits).
 export const MAX_QUANTITY_PER_LINE = 10_000;
@@ -105,15 +105,29 @@ export function readChatOrigin(params: URLSearchParams): ChatOrigin | null {
 
 export type CategoryFilter = 'all' | 'featured' | string;
 
-/** Who the sale is for and where it goes: all optional. */
+/** Who the sale is for, where it goes and where it came from: all optional at the counter. */
 export interface SaleDetails {
+  /** At the counter, the customer; in an order of a delivery platform, the name for the bag. */
   customerName: string;
   customerPhone: string;
   tableNumber: string;
   orderNotes: string;
+  /** The counter, or the delivery platform whose app took the order (Rappi, Uber Eats, DiDi Food). */
+  channel: OrderChannel;
+  /** The folio of the platform's app, as typed: the server normalizes it. */
+  externalOrderNumber: string;
+  /** Who charged an order of a platform: the platform in its app (by default) or the business, when the courier pays. */
+  collectedBy: PlatformCollectedBy;
 }
 
-export const NO_SALE_DETAILS: SaleDetails = { customerName: '', customerPhone: '', tableNumber: '', orderNotes: '' };
+/** Where a counter sale comes from: no platform, no folio. */
+export const COUNTER_ORIGIN: Pick<SaleDetails, 'channel' | 'externalOrderNumber' | 'collectedBy'> = {
+  channel: OrderChannel.Counter,
+  externalOrderNumber: '',
+  collectedBy: PlatformCollectedBy.Platform,
+};
+
+export const NO_SALE_DETAILS: SaleDetails = { customerName: '', customerPhone: '', tableNumber: '', orderNotes: '', ...COUNTER_ORIGIN };
 
 const SERVICE_UNITS: ReadonlyArray<number> = [UnitType.Hour, UnitType.Session, UnitType.Service];
 

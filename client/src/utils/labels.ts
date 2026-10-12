@@ -79,7 +79,8 @@ const ORDER_CHANNEL_BY_NAME: Record<string, OrderChannel> = {
   DidiFood: 5,
 };
 
-const DELIVERY_PLATFORM_CHANNELS: readonly OrderChannel[] = [OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood];
+/** Rappi, Uber Eats and DiDi Food, in the order of the enum (OrderChannelRules.DeliveryPlatforms); utils/deliveryPlatforms builds on it. */
+export const DELIVERY_PLATFORM_CHANNELS = [OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood] as const;
 
 /** Who charged an order of a delivery platform; the platform is named by its channel when it is known. */
 const COLLECTED_BY_LABELS: Record<PlatformCollectedBy, string> = {
@@ -167,7 +168,8 @@ export function getCollectedByLabel(
 ): string {
   const label = lookup(collectedBy, COLLECTED_BY_LABELS, COLLECTED_BY_BY_NAME);
   const byThePlatform = label === COLLECTED_BY_LABELS[0];
-  return byThePlatform && channel != null && DELIVERY_PLATFORM_CHANNELS.includes(channel) ? ORDER_CHANNEL_LABELS[channel] : label;
+  const platform = DELIVERY_PLATFORM_CHANNELS.find((candidate) => candidate === channel);
+  return byThePlatform && platform !== undefined ? ORDER_CHANNEL_LABELS[platform] : label;
 }
 
 export function getServicePieceStatusLabel(status: ServiceOrderPieceStatus | string | null | undefined): string {

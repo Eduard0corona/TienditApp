@@ -263,6 +263,8 @@ function buildRoutes(data, token) {
       return { status: 204, json: null };
     }],
     ['GET', /^\/kitchen\/orders$/, () => ok(data.kitchenOrders)],
+    // The demo business set up no delivery platform: Vender and Pedidos look as they do without them.
+    ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
     ['GET', /^\/service-board\/pieces$/, (m, q) => {
       let rows = data.boardPieces;
       if (!bool(q, 'includeCompleted')) rows = rows.filter((p) => p.status !== 2);

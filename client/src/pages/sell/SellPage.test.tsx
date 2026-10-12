@@ -1,15 +1,20 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { categoriesApi } from '../../api/categoriesApi';
 import { cashApi } from '../../api/cashApi';
 import { ordersApi } from '../../api/ordersApi';
 import { productsApi } from '../../api/productsApi';
+import { apiRequest } from '../../api/typedClient';
+import ConfirmProvider from '../../components/feedback/ConfirmProvider';
 import { useAuth } from '../../hooks/useAuth';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { saveCatalogSnapshot } from '../../offline/catalogCache';
 import { enqueueSale } from '../../offline/saleQueue';
 import {
   BusinessType,
@@ -18,6 +23,7 @@ import {
   OrderChannel,
   OrderPaymentMethod,
   OrderType,
+  PlatformCollectedBy,
   TenantCapability,
   UnitType,
   type OrderDto,
@@ -29,7 +35,7 @@ import SellPage from './SellPage';
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
-vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
+vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: vi.fn() }));
 vi.mock('../../hooks/usePendingSales', () => ({ usePendingSales: () => ({ sales: [], failedCount: 0 }) }));
 vi.mock('../../hooks/useWorkingBranch', () => ({
   useWorkingBranch: () => ({ hasSeveral: false, branches: [], branch: undefined, setBranch: vi.fn() }),
@@ -47,6 +53,8 @@ vi.mock('../../api/chatApi', () => ({ chatApi: { sendMessage: vi.fn() } }));
 vi.mock('../../api/ordersApi', () => ({
   ordersApi: { create: vi.fn(), addRound: vi.fn(), getById: vi.fn(), uploadPaymentEvidence: vi.fn() },
 }));
+// The delivery platforms of the business (GET /delivery-platforms/channels) come through the typed client.
+vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
 
 const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() };
 
@@ -122,14 +130,22 @@ function renderAt(path: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/sell" element={<SellPage />} />
-          <Route path="/tables" element={<p>Mesas</p>} />
-        </Routes>
-      </MemoryRouter>
+      <ConfirmProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/sell" element={<SellPage />} />
+            <Route path="/tables" element={<p>Mesas</p>} />
+          </Routes>
+        </MemoryRouter>
+      </ConfirmProvider>
     </QueryClientProvider>,
   );
+}
+
+/** The delivery platforms the business set up, as GET /delivery-platforms/channels answers them. */
+function givePlatforms(rows: Array<{ channel: OrderChannel; isActive: boolean }>) {
+  vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) =>
+    Promise.resolve(path === '/api/v1/delivery-platforms/channels' ? rows : undefined)) as unknown as typeof apiRequest);
 }
 
 /** The ticket on a wide screen (on a phone the same panel opens in a sheet). */
@@ -192,6 +208,8 @@ describe('SellPage', () => {
     vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, steak, latte], totalCount: 3 } } as never);
     vi.mocked(categoriesApi.getAll).mockResolvedValue({ data: [{ id: 'c1', name: 'Comida', sortOrder: 1 }] } as never);
     vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: { isMine: true } } as never);
+    vi.mocked(useOnlineStatus).mockReturnValue(true);
+    givePlatforms([]);
   });
 
   it('adds what is tapped and saves the sale for later with the server checking the total', async () => {
@@ -405,5 +423,332 @@ describe('SellPage', () => {
     expect(await screen.findByText('Pedido ORD-000003 guardado')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Volver al chat' })).toHaveAttribute('href', '/whatsapp/chat?conversation=c1');
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+/** Where the order on screen came from, if the business has a platform active. */
+function originPicker() {
+  return ticket().getByRole('radiogroup', { name: '¿De dónde viene el pedido?' });
+}
+
+/** The server's answer to an order of a platform: the folio and who charged it, never its commission. */
+function platformOrder(channel: OrderChannel, folio: string, collectedBy: PlatformCollectedBy, orderNumber: string): OrderDto {
+  const paidByPlatform = collectedBy === PlatformCollectedBy.Platform;
+  return {
+    ...chargedTaco,
+    id: orderNumber.toLowerCase(),
+    orderNumber,
+    channel,
+    platformOrder: { externalOrderNumber: folio, collectedBy },
+    payments: paidByPlatform
+      ? [{ id: 'p1', amount: 25, method: OrderPaymentMethod.Platform, paidAt: '2026-10-10T18:00:00Z', reference: folio }]
+      : [],
+    paidAmount: paidByPlatform ? 25 : 0,
+    balance: paidByPlatform ? 0 : 25,
+  };
+}
+
+function duplicateFolio(): AxiosError {
+  const headers = new AxiosHeaders();
+  const data = { code: 'possible_duplicate_order', detail: 'Hoy ya registraste un pedido de esta plataforma con el mismo folio.' };
+  return new AxiosError('Request failed', 'ERR_BAD_REQUEST', { headers }, null, {
+    status: 409, data, statusText: '', headers, config: { headers },
+  } as AxiosResponse);
+}
+
+const corte = product({ id: 'corte', name: 'Corte de cabello', priceAmount: 150, unit: UnitType.Service, sortOrder: 4 });
+
+describe('SellPage with delivery platforms', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    window.localStorage.clear();
+    vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
+    vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, steak, latte], totalCount: 3 } } as never);
+    vi.mocked(categoriesApi.getAll).mockResolvedValue({ data: [{ id: 'c1', name: 'Comida', sortOrder: 1 }] } as never);
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: { isMine: true } } as never);
+    vi.mocked(useOnlineStatus).mockReturnValue(true);
+    givePlatforms([
+      { channel: OrderChannel.Rappi, isActive: true },
+      { channel: OrderChannel.UberEats, isActive: false },
+      { channel: OrderChannel.DidiFood, isActive: true },
+    ]);
+  });
+
+  it('offers only the platforms the business has active, with the counter chosen', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    renderAt('/sell');
+
+    const radios = within(await waitFor(originPicker)).getAllByRole('radio');
+    expect(radios.map((radio) => radio.textContent)).toEqual(['Mostrador', 'Rappi', 'DiDi Food']);
+    expect(radios[0]).toHaveAttribute('aria-checked', 'true');
+    expect(ticket().queryByLabelText('Folio de Rappi')).not.toBeInTheDocument();
+  });
+
+  it('offers no platform from a chat (a WhatsApp order) or for a table', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageWhatsApp']);
+    // A closed drawer words its notice by the platforms once they are known: the moment to look for the picker.
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: null } as never);
+    const platformsKnown = 'Tu caja está cerrada: ábrela para cobrar. Sin ella puedes guardar pedidos y registrar los que ya cobró una plataforma.';
+
+    const chat = renderAt('/sell?phone=5512345678&name=Ana&conversation=c1');
+    expect(await screen.findByText(platformsKnown)).toBeInTheDocument();
+    expect(ticket().getByRole('button', { name: 'Ya no es un pedido por WhatsApp' })).toBeInTheDocument();
+    expect(ticket().queryByRole('radiogroup', { name: '¿De dónde viene el pedido?' })).not.toBeInTheDocument();
+    chat.unmount();
+
+    renderAt('/sell?table=t1&label=Mesa%202');
+    expect(await screen.findByText(platformsKnown)).toBeInTheDocument();
+    expect(ticket().getByText('Mesa 2')).toBeInTheDocument();
+    expect(ticket().queryByRole('radiogroup', { name: '¿De dónde viene el pedido?' })).not.toBeInTheDocument();
+  });
+
+  it('registers an order Rappi charged without charging it, without a drawer or the charge permission', async () => {
+    signIn(['ManageOrders', 'ManageCash']);
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: null } as never);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: platformOrder(OrderChannel.Rappi, 'BC953', PlatformCollectedBy.Platform, 'ORD-000005') } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    const folio = ticket().getByLabelText('Folio de Rappi');
+    // Chosen the platform, the folio is the next thing to type, with the keyboard of Rappi's numbers.
+    expect(folio).toHaveFocus();
+    expect(folio).toHaveAttribute('inputmode', 'numeric');
+    expect(ticket().getByText('El número de pedido que ves en Rappi Aliados.')).toBeInTheDocument();
+    // Its app shares neither the phone nor a table: only notes for the kitchen.
+    await userEvent.click(ticket().getByRole('button', { name: 'Notas para cocina (opcional)' }));
+    expect(ticket().getByLabelText('Notas para cocina')).toBeInTheDocument();
+    expect(ticket().queryByLabelText('Teléfono')).not.toBeInTheDocument();
+    expect(ticket().queryByLabelText('Mesa o referencia')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    expect(ticket().getByText('Rappi ya lo cobró: no entra a tu caja.')).toBeInTheDocument();
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' }));
+
+    // The folio is required, and nothing is sent without it.
+    expect(ticket().getAllByText('Escribe el folio de Rappi.').length).toBeGreaterThan(0);
+    expect(ordersApi.create).not.toHaveBeenCalled();
+
+    await userEvent.type(folio, '#bc 953');
+    await userEvent.type(ticket().getByLabelText('Nombre para la bolsa (opcional)'), 'Juan');
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' }));
+
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      channel: OrderChannel.Rappi,
+      externalOrderNumber: 'BC953',
+      collectedBy: PlatformCollectedBy.Platform,
+      customerName: 'Juan',
+      customerPhone: undefined,
+      tableNumber: undefined,
+      payments: undefined,
+      idempotencyKey: expect.any(String),
+    }));
+    // Neither the charge nor the drawer opened: the platform charged it in its app.
+    expect(screen.queryByRole('dialog', { name: 'Cobrar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /caja/i })).not.toBeInTheDocument();
+
+    const done = await screen.findByRole('dialog', { name: 'Pedido ORD-000005 de Rappi registrado' });
+    expect(within(done).getByRole('button', { name: 'Imprimir para la bolsa' })).toBeInTheDocument();
+    expect(within(done).queryByRole('link', { name: 'Enviar por WhatsApp' })).not.toBeInTheDocument();
+    const bagTicket = within(done).getByLabelText('Ticket ORD-000005');
+    expect(bagTicket).toHaveTextContent('Rappi · Folio BC953');
+    expect(bagTicket).toHaveTextContent('Pagado en la app de Rappi');
+    expect(bagTicket).not.toHaveTextContent('$25.00');
+
+    // Every sale starts at the counter again.
+    await userEvent.click(within(done).getByRole('button', { name: 'Nueva venta' }));
+    expect(within(originPicker()).getByRole('radio', { name: 'Mostrador' })).toHaveAttribute('aria-checked', 'true');
+    expect(ticket().queryByLabelText('Folio de Rappi')).not.toBeInTheDocument();
+  });
+
+  it('charges now an order the courier pays, without a tip, and registers it for the cashier otherwise', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create).mockResolvedValue({
+      data: { ...platformOrder(OrderChannel.DidiFood, '12', PlatformCollectedBy.Business, 'ORD-000006'), balance: 0, paidAmount: 25 },
+    } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'DiDi Food' }));
+    await userEvent.type(ticket().getByLabelText('Folio de DiDi Food'), '12');
+    await userEvent.click(ticket().getByRole('radio', { name: 'El negocio (el repartidor nos paga)' }));
+    expect(ticket().getByText('El repartidor te paga al recoger: cóbralo en la caja como siempre.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+
+    // Registering stays the main action; charging now is the other way out.
+    expect(ticket().getByRole('button', { name: 'Registrar pedido de DiDi Food · $25.00 F9' })).toHaveClass('btn-primary');
+    await userEvent.click(ticket().getByRole('button', { name: 'Cobrar ahora' }));
+    const charge = await screen.findByRole('dialog', { name: 'Cobrar' });
+    // The tip of an order of a platform is in its app, for the courier.
+    expect(within(charge).queryByRole('radiogroup', { name: 'Propina' })).not.toBeInTheDocument();
+    await userEvent.click(within(charge).getByRole('button', { name: 'Cobrar $25.00' }));
+
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      channel: OrderChannel.DidiFood,
+      externalOrderNumber: '12',
+      collectedBy: PlatformCollectedBy.Business,
+      payments: [expect.objectContaining({ amount: 25, method: OrderPaymentMethod.Cash, tip: undefined })],
+    }));
+    expect(await screen.findByRole('dialog', { name: 'Pedido ORD-000006 de DiDi Food cobrado' })).toBeInTheDocument();
+  });
+
+  it('leaves an order the courier pays to the cashier when the person cannot charge', async () => {
+    signIn(['ManageOrders']);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: platformOrder(OrderChannel.DidiFood, '12', PlatformCollectedBy.Business, 'ORD-000007') } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'DiDi Food' }));
+    await userEvent.type(ticket().getByLabelText('Folio de DiDi Food'), '12');
+    await userEvent.click(ticket().getByRole('radio', { name: 'El negocio (el repartidor nos paga)' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+
+    expect(ticket().queryByRole('button', { name: 'Cobrar ahora' })).not.toBeInTheDocument();
+    expect(ticket().getByText('La caja lo cobra desde Pedidos cuando el repartidor pague.')).toBeInTheDocument();
+    await userEvent.keyboard('{F9}');
+
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({ collectedBy: PlatformCollectedBy.Business, payments: undefined }));
+    const done = await screen.findByRole('dialog', { name: 'Pedido ORD-000007 de DiDi Food registrado' });
+    expect(within(done).getByText('Cóbralo en Pedidos cuando el repartidor te pague.')).toBeInTheDocument();
+  });
+
+  it('waits for the connection to register an order of a platform: it is never queued on the device', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(useOnlineStatus).mockReturnValue(false);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    await userEvent.type(ticket().getByLabelText('Folio de Rappi'), '152390');
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+
+    expect(ticket().getByText('Sin conexión: los pedidos de plataforma se registran cuando vuelva la conexión.')).toBeInTheDocument();
+    expect(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeDisabled();
+    await userEvent.keyboard('{F9}');
+
+    expect(ordersApi.create).not.toHaveBeenCalled();
+    expect(enqueueSale).not.toHaveBeenCalled();
+  });
+
+  it('asks before registering a folio registered today, and sends it again with the same key once confirmed', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(ordersApi.create)
+      .mockRejectedValueOnce(duplicateFolio())
+      .mockRejectedValueOnce(duplicateFolio())
+      .mockResolvedValueOnce({ data: platformOrder(OrderChannel.Rappi, 'BC953', PlatformCollectedBy.Platform, 'ORD-000008') } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    await userEvent.type(ticket().getByLabelText('Folio de Rappi'), 'bc953');
+    await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' }));
+
+    const ask = await screen.findByRole('dialog', { name: '¿Es otro pedido?' });
+    expect(ask).toHaveTextContent(
+      'Hoy ya registraste un pedido de Rappi con el folio BC953. Los folios cortos se repiten: si es otro pedido, regístralo; si no, búscalo en Pedidos.',
+    );
+    // To check first: nothing is recorded and the order stays on screen.
+    await userEvent.click(within(ask).getByRole('button', { name: 'Revisar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '¿Es otro pedido?' })).not.toBeInTheDocument());
+    expect(ordersApi.create).toHaveBeenCalledTimes(1);
+    expect(ticket().getByRole('textbox', { name: 'Cantidad de Taco' })).toHaveValue('1');
+
+    await userEvent.click(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: '¿Es otro pedido?' })).getByRole('button', { name: 'Registrar de todos modos' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Pedido ORD-000008 de Rappi registrado' })).toBeInTheDocument();
+    const [first, second, confirmed] = vi.mocked(ordersApi.create).mock.calls.map(([request]) => request);
+    expect(first.confirmPossibleDuplicate).toBeUndefined();
+    expect(second.idempotencyKey).toBe(first.idempotencyKey);
+    expect(confirmed).toEqual({ ...second, confirmPossibleDuplicate: true });
+  });
+
+  it('sells from the catalog without its hours for an order of a platform, and keeps it off the device', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    await waitFor(() => expect(productsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ onlyAvailableNow: false })));
+    // The catalog saved for selling offline is the one with the hours.
+    expect(saveCatalogSnapshot).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Mostrador' }));
+    await waitFor(() => expect(productsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ onlyAvailableNow: true })));
+    await waitFor(() => expect(saveCatalogSnapshot).toHaveBeenCalledTimes(2));
+  });
+
+  it('searches the whole catalog without its hours for an order of a platform', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    // A catalog bigger than a page: what is not on screen is searched on the server.
+    vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco], totalCount: 900 } } as never);
+    renderAt('/sell');
+
+    await userEvent.click(within(await waitFor(originPicker)).getByRole('radio', { name: 'Rappi' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Buscar producto o escanear código de barras' }), 'desayuno{Enter}');
+
+    await waitFor(() => expect(productsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'desayuno', onlyAvailableNow: false })));
+  });
+
+  it('brings an order of a platform back after a reload, from the whole catalog', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify({
+      lines: [{ productId: 'taco', quantity: 2, notes: '' }],
+      customerName: 'Juan', customerPhone: '', tableNumber: '', orderNotes: '',
+      channel: OrderChannel.Rappi, externalOrderNumber: 'BC953', collectedBy: PlatformCollectedBy.Platform,
+    }));
+    renderAt('/sell');
+
+    expect(await ticket().findByLabelText('Folio de Rappi')).toHaveValue('BC953');
+    expect(ticket().getByLabelText('Nombre para la bolsa (opcional)')).toHaveValue('Juan');
+    expect(ticket().getByRole('textbox', { name: 'Cantidad de Taco' })).toHaveValue('2');
+    expect(within(originPicker()).getByRole('radio', { name: 'Rappi' })).toHaveAttribute('aria-checked', 'true');
+    // Its app took it whatever the hours here: the very first load already brings every available product.
+    expect(vi.mocked(productsApi.getAll).mock.calls[0][0]).toMatchObject({ onlyAvailableNow: false });
+  });
+
+  it('takes an order of a platform no longer active back to the counter', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    givePlatforms([{ channel: OrderChannel.Rappi, isActive: false }]);
+    window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify({
+      lines: [{ productId: 'taco', quantity: 1, notes: '' }],
+      customerName: '', customerPhone: '', tableNumber: '', orderNotes: '',
+      channel: OrderChannel.Rappi, externalOrderNumber: 'BC953', collectedBy: PlatformCollectedBy.Platform,
+    }));
+    renderAt('/sell');
+
+    expect(await ticket().findByRole('button', { name: 'Cobrar $25.00 F9' })).toBeInTheDocument();
+    expect(ticket().queryByLabelText('Folio de Rappi')).not.toBeInTheDocument();
+    // Without an active platform there is nothing to choose: Vender is the counter's.
+    expect(ticket().queryByRole('radiogroup', { name: '¿De dónde viene el pedido?' })).not.toBeInTheDocument();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('tienditapp.sell.draft.v1.t1') ?? '{}')).toMatchObject({
+      channel: OrderChannel.Counter,
+      externalOrderNumber: '',
+    }));
+  });
+
+  it('turns the platforms off while the ticket has a service', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, corte], totalCount: 2 } } as never);
+    renderAt('/sell');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Corte de cabello/ }));
+
+    const picker = await waitFor(originPicker);
+    expect(within(picker).getByRole('radio', { name: 'Rappi' })).toBeDisabled();
+    expect(within(picker).getByRole('radio', { name: 'Mostrador' })).toBeEnabled();
+    expect(ticket().getByText('Los pedidos de plataforma son de productos: quita los servicios del ticket.')).toBeInTheDocument();
+  });
+
+  it('says a closed drawer still lets the team register what a platform charged, only with one active', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    vi.mocked(cashApi.getCurrentSession).mockResolvedValue({ data: null } as never);
+    const page = renderAt('/sell');
+    expect(await screen.findByText(
+      'Tu caja está cerrada: ábrela para cobrar. Sin ella puedes guardar pedidos y registrar los que ya cobró una plataforma.',
+    )).toBeInTheDocument();
+    page.unmount();
+
+    givePlatforms([]);
+    renderAt('/sell');
+    expect(await screen.findByText(
+      'Tu caja está cerrada: ábrela para cobrar. Todo cobro se registra en una caja; sin ella solo puedes guardar pedidos.',
+    )).toBeInTheDocument();
   });
 });

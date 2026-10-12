@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ChannelBadge from '../../components/common/ChannelBadge';
 import PageTitle from '../../components/common/PageTitle';
 import { useFocusMode } from '../../components/layout/focusMode';
 import { kitchenApi } from '../../api/kitchenApi';
@@ -7,8 +8,9 @@ import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { KitchenTicketStatus, OrderStatus } from '../../types';
 import type { KitchenOrderDto, KitchenTicketDto, OrderItemDto } from '../../types';
+import { isDeliveryPlatform } from '../../utils/deliveryPlatforms';
 import { getOrderStatusLabel } from '../../utils/labels';
-import { activeQuantity, formatCancelled, formatTicketQuantity } from '../../utils/ticket';
+import { activeQuantity, formatCancelled, formatTicketQuantity, getTicketCustomerName } from '../../utils/ticket';
 import { formatInBusinessZone } from '../../utils/dates';
 
 function KitchenItem({ item }: { item: OrderItemDto }) {
@@ -258,6 +260,9 @@ export default function KitchenBoard() {
             const elapsed = getElapsedMinutes(order.createdAt, now);
             const isPreparing = order.status === OrderStatus.InPreparation;
             const isProcessing = processingOrderId === order.id;
+            // An order of a delivery platform is packed for its courier: the bag is marked with the app's folio.
+            const platform = isDeliveryPlatform(order.channel) && order.externalOrderNumber ? order.channel : null;
+            const bagName = platform ? getTicketCustomerName(order) : null;
 
             return (
               <div className="col-xxl-3 col-xl-4 col-md-6" key={order.id}>
@@ -265,7 +270,9 @@ export default function KitchenBoard() {
                   <div className="card-body">
                     <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
                       <div>
-                        <h4 className="mb-1">{order.orderNumber}</h4>
+                        {platform && <ChannelBadge channel={platform} className="mb-1" />}
+                        <h4 className="mb-1">{platform ? order.externalOrderNumber : order.orderNumber}</h4>
+                        {platform && <small className="d-block text-muted mb-1">{order.orderNumber}</small>}
                         <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>
                       </div>
                       <span className={`badge ${isPreparing ? 'ta-chip-preparing' : 'ta-chip-new'}`}>
@@ -274,9 +281,17 @@ export default function KitchenBoard() {
                     </div>
 
                     <div className="mb-2">
-                      <div>
-                        <strong>Cliente:</strong> {order.customerName}
-                      </div>
+                      {platform ? (
+                        bagName && (
+                          <div>
+                            <strong>Bolsa:</strong> {bagName}
+                          </div>
+                        )
+                      ) : (
+                        <div>
+                          <strong>Cliente:</strong> {order.customerName}
+                        </div>
+                      )}
                       {order.tableNumber && (
                         <div>
                           <strong>Mesa:</strong> {order.tableNumber}
