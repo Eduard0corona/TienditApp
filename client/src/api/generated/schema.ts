@@ -2963,6 +2963,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/delivery-platforms/{channel}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    channel: components["schemas"]["OrderChannel"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformPriceItemDtoPaginatedList"];
+                        "application/json": components["schemas"]["PlatformPriceItemDtoPaginatedList"];
+                        "text/json": components["schemas"]["PlatformPriceItemDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    channel: components["schemas"]["OrderChannel"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SavePlatformPricesRequest"];
+                    "text/json": components["schemas"]["SavePlatformPricesRequest"];
+                    "application/*+json": components["schemas"]["SavePlatformPricesRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees": {
         parameters: {
             query?: never;
@@ -6135,6 +6202,7 @@ export interface paths {
                     search?: string;
                     pageNumber?: number;
                     pageSize?: number;
+                    priceChannel?: components["schemas"]["OrderChannel"];
                 };
                 header?: never;
                 path?: never;
@@ -10437,6 +10505,12 @@ export interface components {
          * @enum {integer}
          */
         PlatformCommissionBase: 0 | 1;
+        PlatformOptionPriceRequest: {
+            /** Format: uuid */
+            optionId: string;
+            /** Format: double */
+            priceDelta?: number | null;
+        };
         PlatformOverviewDto: {
             /** Format: int32 */
             totalTenants: number;
@@ -10464,6 +10538,55 @@ export interface components {
             paymentsLast30Days: number;
             /** Format: int32 */
             trialsEndingIn7Days: number;
+        };
+        PlatformPriceItemDto: {
+            /** Format: uuid */
+            productId: string;
+            name: string;
+            /** Format: uuid */
+            categoryId: string;
+            categoryName: string;
+            unit?: components["schemas"]["UnitType"];
+            isAvailable: boolean;
+            /** Format: double */
+            menuPrice: number;
+            /** Format: double */
+            platformPrice?: number | null;
+            optionGroups: components["schemas"]["PlatformPriceOptionGroupDto"][];
+        };
+        PlatformPriceItemDtoPaginatedList: {
+            items: components["schemas"]["PlatformPriceItemDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        PlatformPriceOptionDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            isAvailable: boolean;
+            /** Format: double */
+            menuPriceDelta: number;
+            /** Format: double */
+            platformPriceDelta?: number | null;
+        };
+        PlatformPriceOptionGroupDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            options: components["schemas"]["PlatformPriceOptionDto"][];
+        };
+        PlatformProductPriceRequest: {
+            /** Format: uuid */
+            productId: string;
+            /** Format: double */
+            price?: number | null;
+            options?: components["schemas"]["PlatformOptionPriceRequest"][] | null;
         };
         PlatformReasonRequest: {
             reason: string;
@@ -11000,6 +11123,9 @@ export interface components {
             isrWithholdingPercent: number;
             /** Format: double */
             vatWithholdingPercent: number;
+        };
+        SavePlatformPricesRequest: {
+            products: components["schemas"]["PlatformProductPriceRequest"][];
         };
         SaveSpecialDayRequest: {
             /** Format: date */

@@ -18,6 +18,7 @@ export const queryKeys = {
   specialDays: ['special-days'] as const,
   deliveryPlatforms: ['delivery-platforms'] as const,
   deliveryPlatformChannels: ['delivery-platforms', 'channels'] as const,
+  platformPrices: (channel: OrderChannel) => ['delivery-platforms', channel, 'prices'] as const,
 };
 
 // The bell and the drawer chip stay current without a live connection of their own.

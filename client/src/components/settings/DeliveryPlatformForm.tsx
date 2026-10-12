@@ -1,5 +1,6 @@
 import { useId, type FormEvent } from 'react';
 import { Modal } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { PlatformCommissionBase } from '../../types';
 import {
   COMMISSION_VAT_RATES,
@@ -21,13 +22,15 @@ interface DeliveryPlatformFormProps {
   onChange: (draft: DeliveryPlatformDraft) => void;
   onCancel: () => void;
   onSave: () => void;
+  /** Where the prices of the products in the app are set, for whoever may open it. */
+  pricesPath?: string;
 }
 
 /**
  * The terms of one delivery platform: whether the business takes its orders, the commission of its contract and what it
  * withholds when it charges an order. The server checks them and works out the commission of each order with them.
  */
-export default function DeliveryPlatformForm({ platform, draft, problem, saving, onChange, onCancel, onSave }: DeliveryPlatformFormProps) {
+export default function DeliveryPlatformForm({ platform, draft, problem, saving, onChange, onCancel, onSave, pricesPath }: DeliveryPlatformFormProps) {
   const titleId = useId();
   const id = useId();
   const name = platformName(platform.channel);
@@ -150,8 +153,9 @@ export default function DeliveryPlatformForm({ platform, draft, problem, saving,
               impuestos, no un costo.
             </div>
             <div className="alert alert-light border small mb-0">
-              Por ahora los pedidos usan los precios de tu catálogo. Si en la app cobras más, la comisión calculada saldrá menor
-              que la real hasta que haya precio por plataforma.
+              Los pedidos de {name} se cobran con los precios que pongas en{' '}
+              {pricesPath ? <Link to={pricesPath}>Catálogo › Precios en apps</Link> : 'Catálogo › Precios en apps'}; los productos
+              que no tengan uno, con el de tu menú.
             </div>
           </fieldset>
         </Modal.Body>

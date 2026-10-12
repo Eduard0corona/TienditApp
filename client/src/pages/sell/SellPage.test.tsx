@@ -699,6 +699,59 @@ describe('SellPage with delivery platforms', () => {
     expect(confirmed).toEqual({ ...second, confirmPossibleDuplicate: true });
   });
 
+  it('charges an order of a platform at the prices of its app, and a counter sale at the menu\'s', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    // Rappi charges $32 for the taco; the menu, $25.
+    vi.mocked(productsApi.getAll).mockImplementation((async (params?: { priceChannel?: OrderChannel }) => ({
+      data: { items: params?.priceChannel === OrderChannel.Rappi ? [{ ...taco, priceAmount: 32 }, steak, latte] : [taco, steak, latte], totalCount: 3 },
+    })) as never);
+    vi.mocked(ordersApi.create).mockResolvedValue({ data: platformOrder(OrderChannel.Rappi, 'BC953', PlatformCollectedBy.Platform, 'ORD-000005') } as never);
+    renderAt('/sell');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    expect(ticket().getByRole('button', { name: 'Cobrar $25.00 F9' })).toBeEnabled();
+
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Rappi' }));
+    expect(productsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ priceChannel: OrderChannel.Rappi }));
+    // The ticket takes the app's prices with the catalog of the platform.
+    const register = await ticket().findByRole('button', { name: 'Registrar pedido de Rappi · $32.00 F9' });
+    expect(ticket().getByText('Con tus precios de Rappi')).toBeInTheDocument();
+    await userEvent.type(ticket().getByLabelText('Folio de Rappi'), 'BC953');
+    await userEvent.click(register);
+
+    expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({ channel: OrderChannel.Rappi, expectedTotal: 32 }));
+    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Pedido ORD-000005 de Rappi registrado' })).getByRole('button', { name: 'Nueva venta' }));
+
+    // Back at the counter, the menu's prices.
+    await waitFor(() => expect(productsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ priceChannel: undefined })));
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    expect(await ticket().findByRole('button', { name: 'Cobrar $25.00 F9' })).toBeEnabled();
+    expect(ticket().queryByText(/Con tus precios de/)).not.toBeInTheDocument();
+  });
+
+  it('registers nothing at prices about to change while the app\'s prices load', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    let answerRappi: (answer: unknown) => void = () => undefined;
+    vi.mocked(productsApi.getAll).mockImplementation(((params?: { priceChannel?: OrderChannel }) => (params?.priceChannel === OrderChannel.Rappi
+      ? new Promise((resolve) => { answerRappi = resolve; })
+      : Promise.resolve({ data: { items: [taco, steak, latte], totalCount: 3 } }))) as never);
+    renderAt('/sell');
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+    await userEvent.click(within(originPicker()).getByRole('radio', { name: 'Rappi' }));
+    await userEvent.type(ticket().getByLabelText('Folio de Rappi'), 'BC953');
+
+    // Still the menu's $25 on screen: neither the button nor F9 registers it.
+    expect(ticket().getByRole('button', { name: 'Registrar pedido de Rappi · $25.00 F9' })).toBeDisabled();
+    expect(ticket().getByText('Cargando tus precios de Rappi…')).toBeInTheDocument();
+    await userEvent.keyboard('{F9}');
+    expect(ordersApi.create).not.toHaveBeenCalled();
+
+    answerRappi({ data: { items: [{ ...taco, priceAmount: 32 }, steak, latte], totalCount: 3 } });
+    expect(await ticket().findByRole('button', { name: 'Registrar pedido de Rappi · $32.00 F9' })).toBeEnabled();
+    expect(ticket().queryByText('Cargando tus precios de Rappi…')).not.toBeInTheDocument();
+  });
+
   it('sells from the catalog without its hours for an order of a platform, and keeps it off the device', async () => {
     signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
     renderAt('/sell');

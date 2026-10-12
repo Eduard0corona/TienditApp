@@ -3471,6 +3471,102 @@
         }
       }
     },
+    "/api/v1/delivery-platforms/{channel}/prices": {
+      "get": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPriceItemDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPriceItemDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPriceItemDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlatformPricesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlatformPricesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlatformPricesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/v1/employees": {
       "get": {
         "tags": [
@@ -7421,6 +7517,13 @@
               "type": "integer",
               "format": "int32",
               "default": 20
+            }
+          },
+          {
+            "name": "priceChannel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
             }
           }
         ],
@@ -17204,6 +17307,24 @@
           "SubTotalWithoutTax"
         ]
       },
+      "PlatformOptionPriceRequest": {
+        "required": [
+          "optionId"
+        ],
+        "type": "object",
+        "properties": {
+          "optionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "priceDelta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PlatformOverviewDto": {
         "required": [
           "activeTenants",
@@ -17273,6 +17394,178 @@
           "trialsEndingIn7Days": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceItemDto": {
+        "required": [
+          "categoryId",
+          "categoryName",
+          "isAvailable",
+          "menuPrice",
+          "name",
+          "optionGroups",
+          "productId"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "isAvailable": {
+            "type": "boolean"
+          },
+          "menuPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformPrice": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "optionGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformPriceOptionGroupDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceItemDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformPriceItemDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceOptionDto": {
+        "required": [
+          "id",
+          "isAvailable",
+          "menuPriceDelta",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "isAvailable": {
+            "type": "boolean"
+          },
+          "menuPriceDelta": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformPriceDelta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceOptionGroupDto": {
+        "required": [
+          "id",
+          "name",
+          "options"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformPriceOptionDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformProductPriceRequest": {
+        "required": [
+          "productId"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "price": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformOptionPriceRequest"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -19074,6 +19367,21 @@
           "vatWithholdingPercent": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavePlatformPricesRequest": {
+        "required": [
+          "products"
+        ],
+        "type": "object",
+        "properties": {
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformProductPriceRequest"
+            }
           }
         },
         "additionalProperties": false

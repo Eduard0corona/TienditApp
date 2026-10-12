@@ -20,6 +20,7 @@ const MyOrders = lazy(() => import('./pages/account/MyOrders'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
+const PlatformPrices = lazy(() => import('./pages/products/PlatformPrices'));
 const ServicesList = lazy(() => import('./pages/services/ServicesList'));
 const ServiceBoard = lazy(() => import('./pages/services/ServiceBoard'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
@@ -130,6 +131,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="catalog">
                     <CategoriesList />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/platform-prices"
+                element={(
+                  <AccessRoute area="catalog">
+                    <PlatformPrices />
                   </AccessRoute>
                 )}
               />

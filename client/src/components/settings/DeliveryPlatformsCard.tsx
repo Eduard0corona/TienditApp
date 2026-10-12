@@ -1,9 +1,11 @@
 import { useId, useState } from 'react';
 import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { useDeliveryPlatforms, useSaveDeliveryPlatform } from '../../api/queries';
+import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { getAccess } from '../../utils/access';
 import DeliveryPlatformForm from './DeliveryPlatformForm';
 import {
   bodyOf,
@@ -31,7 +33,10 @@ interface Editing {
  * each one and copies the terms into every order registered after a change; the ones already registered never change.
  */
 export default function DeliveryPlatformsCard() {
-  const { tenant } = useTenant();
+  const { user } = useAuth();
+  const { tenant, capabilities } = useTenant();
+  // Whoever may open Catálogo is sent to the prices of each app from the terms.
+  const access = getAccess(user, capabilities);
   const platforms = useDeliveryPlatforms(!!tenant);
   const save = useSaveDeliveryPlatform();
   const { confirm } = useConfirm();
@@ -147,6 +152,7 @@ export default function DeliveryPlatformsCard() {
           onChange={(draft) => setEditing({ ...editing, draft })}
           onCancel={() => setEditing(null)}
           onSave={() => void submit()}
+          pricesPath={access.catalog ? '/platform-prices' : undefined}
         />
       )}
     </section>

@@ -238,8 +238,11 @@ export default function SellPage() {
   // The platform whose app took the order on screen; a chat is a WhatsApp order and a tab goes to a table.
   const platform: DeliveryPlatform | null = !tabTarget && !chatOrigin && isDeliveryPlatform(details.channel) ? details.channel : null;
 
-  const catalog = useSellCatalog(tenantId, syncCart, { includeOutOfSchedule: platform !== null });
+  const catalog = useSellCatalog(tenantId, syncCart, { includeOutOfSchedule: platform !== null, priceChannel: platform });
   const { products } = catalog;
+  // The ticket shows the prices of where the sale comes from (the platform's app, or the menu) once its catalog is in:
+  // until then nothing is charged or registered at the prices of the other one.
+  const pricesPending = catalog.pricesFor !== (platform ?? null);
 
   useEffect(() => {
     // A round goes to an open tab: show what it already has.
@@ -434,7 +437,7 @@ export default function SellPage() {
   const openCharge = useCallback(() => {
     // A table's round is sent to the kitchen and charged when the table leaves (Mesas). Without the charge
     // permission (a waiter) the order is saved for the cashier.
-    if (cart.length === 0 || submitting || tabTarget || !canCharge) return;
+    if (cart.length === 0 || submitting || tabTarget || !canCharge || pricesPending) return;
     // An order of a platform the courier pays now: its folio first, before taking the money.
     if (platformProblem) {
       if (folioProblem) setFolioChecked(true);
@@ -450,7 +453,7 @@ export default function SellPage() {
       return;
     }
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget, canCharge, platformProblem, folioProblem, cashClosed, online]);
+  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, cashClosed, online]);
 
   const buildOrderRequest = (): CreateOrderRequest => ({
     customerName: details.customerName.trim() || undefined,
@@ -644,7 +647,7 @@ export default function SellPage() {
    * permission needed), or the courier pays the business later in Pedidos.
    */
   const registerPlatformOrder = () => {
-    if (cart.length === 0 || submitting || !online) return;
+    if (cart.length === 0 || submitting || !online || pricesPending) return;
     void submitSale(null);
   };
 
@@ -708,6 +711,7 @@ export default function SellPage() {
       hasServices={hasServices}
       online={online}
       onRegisterPlatformOrder={registerPlatformOrder}
+      pricesPending={pricesPending}
     />
   );
 
@@ -813,7 +817,7 @@ export default function SellPage() {
           onClick={tabTarget
             ? () => void sendToKitchen()
             : platform ? registerFromPhoneBar : canCharge ? openCharge : () => void submitSale(null)}
-          disabled={cart.length === 0 || submitting || (platform !== null && !online)}
+          disabled={cart.length === 0 || submitting || pricesPending || (platform !== null && !online)}
         >
           {tabTarget ? 'Enviar' : platform ? 'Registrar' : canCharge ? 'Cobrar' : 'Guardar'}
         </button>
