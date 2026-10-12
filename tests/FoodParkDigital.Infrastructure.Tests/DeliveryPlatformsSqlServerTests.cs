@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.DeliveryPlatforms;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Platforms;
@@ -7,6 +9,7 @@ using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace FoodParkDigital.Infrastructure.Tests;
 
@@ -254,6 +257,100 @@ public class DeliveryPlatformsSqlServerTests
         }
         await using (var context = database.CreateContext(other.Id))
             Assert.Equal(30m, Assert.Single(await context.DeliveryPlatformSettings.ToListAsync()).CommissionPercent);
+    }
+
+    [SqlServerFact]
+    public async Task SaveOfTheFirstTerms_AtTheSameTimeAsAnother_ShouldKeepOne_AndAnswerTheOtherStale()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        // Someone saves Rappi's first terms after this save read that there were none, and before it writes.
+        await using var racing = database.CreateProductionLikeContext(Tenant(tenant.Id), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext(tenant.Id);
+                other.DeliveryPlatformSettings.Add(new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, true, PlatformTerms.WithFiscalDefaults(25m)));
+                await other.SaveChangesAsync();
+            }));
+
+        var result = await new SaveDeliveryPlatformCommandHandler(racing, Tenant(tenant.Id), new Owner())
+            .Handle(Rappi(revision: 0, commission: 30m), CancellationToken.None);
+
+        // The unique index keeps the other one; this one is undone whole, its activity entry included.
+        Assert.Equal(DeliveryPlatformErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        var stored = Assert.Single(await context.DeliveryPlatformSettings.ToListAsync());
+        Assert.Equal((25m, 1), (stored.CommissionPercent, stored.Revision));
+        Assert.Empty(await context.AuditLogs.ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task EditOverARevisionThatChangedMeanwhile_ShouldBeStale_AndLeaveTheOtherEdit()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        await using (var seed = database.CreateContext(tenant.Id))
+        {
+            Assert.True((await new SaveDeliveryPlatformCommandHandler(seed, Tenant(tenant.Id), new Owner())
+                .Handle(Rappi(revision: 0, commission: 30m), CancellationToken.None)).IsSuccess);
+        }
+
+        // Someone saves Rappi after this edit read revision 1, and before it writes.
+        await using var racing = database.CreateProductionLikeContext(Tenant(tenant.Id), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext(tenant.Id);
+                var rappi = await other.DeliveryPlatformSettings.SingleAsync();
+                rappi.Update(isActive: true, PlatformTerms.WithFiscalDefaults(28m));
+                await other.SaveChangesAsync();
+            }));
+        var result = await new SaveDeliveryPlatformCommandHandler(racing, Tenant(tenant.Id), new Owner())
+            .Handle(Rappi(revision: 1, commission: 25m), CancellationToken.None);
+
+        Assert.Equal(DeliveryPlatformErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        var stored = await context.DeliveryPlatformSettings.SingleAsync();
+        Assert.Equal((28m, 2), (stored.CommissionPercent, stored.Revision));
+        // Only the first save is recorded: the refused edit took its activity entry with it.
+        Assert.Single(await context.AuditLogs.ToListAsync());
+    }
+
+    private static SaveDeliveryPlatformCommand Rappi(int revision, decimal commission)
+        => new(OrderChannel.Rappi, revision, true, commission, PlatformCommissionBase.TotalWithTax, 16m, 2.5m, 50m);
+
+    private static ICurrentTenantService Tenant(Guid tenantId)
+    {
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        tenant.SetTenant(tenantId);
+        return tenant;
+    }
+
+    /// <summary>Runs <paramref name="save"/> once, right before the context it is attached to writes.</summary>
+    private sealed class SavedMeanwhile(Func<Task> save) : SaveChangesInterceptor
+    {
+        private bool _saved;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!_saved)
+            {
+                _saved = true;
+                await save();
+            }
+
+            return result;
+        }
+    }
+
+    private sealed class Owner : ICurrentUserService
+    {
+        public string? UserId => "4f6c2a0e-8d8b-4a8f-9a55-0c4b1f3f8a10";
+        public string? UserName => "duena@demo.com";
+        public string? Role => "TENANT_ADMIN";
+        public string? TenantRole => "Owner";
+        public IReadOnlyCollection<string> Permissions => [];
+        public Guid? TenantId => null;
     }
 
     private static async Task<(Tenant Tenant, Tenant Other)> SeedAsync(SqlServerTestDatabase database)

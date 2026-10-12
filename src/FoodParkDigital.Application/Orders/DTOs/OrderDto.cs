@@ -280,6 +280,11 @@ public class DashboardMetricsDto
     public int ActiveServices { get; set; }
     /// <summary>Payments registered in the range, whatever the status of their orders.</summary>
     public decimal TotalRevenue { get; set; }
+    /// <summary>
+    /// The part of <see cref="TotalRevenue"/> the delivery platforms charged in their apps, minus what went back as
+    /// «Plataforma»: still to be settled with each platform.
+    /// </summary>
+    public decimal PlatformCollected { get; set; }
     /// <summary>Revenue divided by the orders that received those payments.</summary>
     public decimal AverageOrderValue { get; set; }
     public int PaidOrders { get; set; }

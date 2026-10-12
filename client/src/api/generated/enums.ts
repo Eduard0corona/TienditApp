@@ -202,6 +202,12 @@ export const PlatformCollectedBy = {
 } as const;
 export type PlatformCollectedBy = (typeof PlatformCollectedBy)[keyof typeof PlatformCollectedBy];
 
+export const PlatformCommissionBase = {
+  TotalWithTax: 0,
+  SubTotalWithoutTax: 1,
+} as const;
+export type PlatformCommissionBase = (typeof PlatformCommissionBase)[keyof typeof PlatformCommissionBase];
+
 export const ProductCatalogItemType = {
   Product: 0,
   Service: 1,

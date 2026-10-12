@@ -1032,14 +1032,20 @@ export interface DailyCashCutDto {
   cardTotal: number;
   transferTotal: number;
   walletTotal: number;
+  /** Every method without a bucket of its own: the buckets always add up to salesPaymentsTotal. */
   otherTotal: number;
+  /** What the delivery platforms charged in their apps («Plataforma»): in no drawer and in no cashier's row. */
+  platformTotal?: number;
+  platformPaymentsCount?: number;
+  /** What went back as «Plataforma» in the day: no drawer gave it. */
+  platformRefundsTotal?: number;
   /** Deposits, expenses, withdrawals and refunds of the day, whatever their method. */
   manualIncomeTotal: number;
   manualExpenseTotal: number;
   /** The part of those movements made in cash: only it enters or leaves the drawers. */
   cashManualIncomeTotal: number;
   cashManualExpenseTotal: number;
-  /** All the money of the day, of any method: a card refund lowers it. */
+  /** All the money the business received in the day, of any method (a card refund lowers it), without what the platforms charged. */
   netCashFlow: number;
   /** Cash payments plus cash manual income minus cash manual expenses: the net change of the drawers. */
   netCashOnlyFlow: number;
@@ -1609,6 +1615,8 @@ export { OrderChannel } from '../api/generated/enums';
 
 export { PlatformCollectedBy } from '../api/generated/enums';
 
+export { PlatformCommissionBase } from '../api/generated/enums';
+
 export interface CustomerCardDto {
   phone?: string;
   name?: string;
@@ -1752,6 +1760,8 @@ export interface DashboardMetricsDto {
   activeServices: number;
   /** Payments registered in the range, whatever the status of their orders. */
   totalRevenue: number;
+  /** The part of totalRevenue the delivery platforms charged in their apps, minus what went back as «Plataforma». */
+  platformCollected?: number;
   /** Revenue divided by the orders that received those payments. */
   averageOrderValue: number;
   paidOrders: number;

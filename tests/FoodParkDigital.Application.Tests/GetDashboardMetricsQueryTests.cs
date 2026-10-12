@@ -1,7 +1,11 @@
 using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Finance;
+using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
+using FoodParkDigital.Application.Reports.Queries;
+using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -160,6 +164,49 @@ public class GetDashboardMetricsQueryTests
         Assert.Equal(100m, item.TotalAmount);
     }
 
+    /// <summary>
+    /// «Cobrado» keeps its meaning and includes what the delivery platforms charged in their apps; PlatformCollected is that
+    /// part, minus what went back as «Plataforma», and the platform rows of sales by channel add up to it (I8). An order a
+    /// platform charged owes nothing; one whose courier has not paid the business yet is owed.
+    /// </summary>
+    [Fact]
+    public async Task PlatformCollected_ShouldBeWhatThePlatformsCharged_MinusWhatWentBack()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 1000m);
+        var tacos = await fixture.AddProductAsync(tenant, "Orden de tacos", 245m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.DidiFood);
+        await fixture.OpenCashSessionAsync(tenant);
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "R1", pack.Id));
+        var cancelledByRappi = await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "R2", tacos.Id));
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, "D1", tacos.Id, collectedBy: PlatformCollectedBy.Business) with
+        {
+            Payments = [new CreateOrderPaymentDto { Amount = 245m, Method = OrderPaymentMethod.Cash }]
+        });
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, "D2", tacos.Id, collectedBy: PlatformCollectedBy.Business));
+        var voided = await new VoidOrderCommandHandler(
+                fixture.Context, fixture.CurrentUser, new OrderCashService(fixture.Context, fixture.CurrentUser),
+                fixture.Clock, NoOpOrderInventoryService.Instance)
+            .Handle(new VoidOrderCommand { OrderId = cancelledByRappi.Id, Reason = "Rappi lo canceló", RestockItems = false }, CancellationToken.None);
+        Assert.True(voided.IsSuccess, voided.Error);
+        fixture.Context.ChangeTracker.Clear();
+
+        var metrics = await new GetDashboardMetricsQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetDashboardMetricsQuery(), CancellationToken.None);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(SalesTestFixture.Now, Common.Utils.TenantDateTimeResolver.Resolve(null)).DateTime);
+        var byChannel = await new GetSalesByChannelQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(new GetSalesByChannelQuery { From = today, To = today }, CancellationToken.None);
+
+        Assert.Equal(1000m, metrics.PlatformCollected);
+        Assert.Equal(1000m + 245m + 245m - 245m, metrics.TotalRevenue);
+        Assert.Equal(byChannel.Channels.Sum(c => c.PlatformCollected), metrics.PlatformCollected);
+        Assert.Equal(byChannel.Totals.NetSales, metrics.TotalRevenue);
+        // Only DiDi's second order is owed: the platform charged the others in full, or the courier paid.
+        Assert.Equal((1, 245m), (metrics.UnpaidOrders, metrics.OutstandingBalance));
+    }
+
     [Fact]
     public void Period_ShouldGoForwardAndSpanAtMostTheDaysOfTheReports()
     {
@@ -237,6 +284,21 @@ public class GetDashboardMetricsQueryTests
                 $"DECLARE @{explicitTenantPredicate.Groups["parameter"].Value} uniqueidentifier = '{tenantId}';",
                 RegexOptions.IgnoreCase),
             sql);
+    }
+
+    /// <summary>
+    /// A sale in a context of its own, as in the app, stamped with its creation time like the database would (the
+    /// in-memory fixture has no auditing interceptor).
+    /// </summary>
+    private static async Task<OrderDto> SellAsync(SalesTestFixture fixture, CreateOrderCommand command)
+    {
+        var sale = await fixture.CreateOrderHandler().Handle(command, CancellationToken.None);
+        Assert.True(sale.IsSuccess, sale.Error);
+        var order = await fixture.Context.Orders.SingleAsync(o => o.Id == sale.Value.Id);
+        order.CreatedAt = fixture.Clock.UtcNow;
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        return sale.Value;
     }
 
     private sealed class TestFixture : IAsyncDisposable

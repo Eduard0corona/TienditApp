@@ -3346,6 +3346,131 @@
         }
       }
     },
+    "/api/v1/delivery-platforms": {
+      "get": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-platforms/channels": {
+      "get": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryPlatformChannelDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryPlatformChannelDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryPlatformChannelDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-platforms/{channel}": {
+      "put": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryPlatformRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryPlatformRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryPlatformRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/employees": {
       "get": {
         "tags": [
@@ -8241,6 +8366,141 @@
         }
       }
     },
+    "/api/v1/reports/sales-by-channel": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByChannelReportDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByChannelReportDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByChannelReportDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/delivery-platform-orders": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformOrderDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformOrderDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformOrderDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-board/pieces": {
       "get": {
         "tags": [
@@ -11522,6 +11782,76 @@
         },
         "additionalProperties": false
       },
+      "ChannelSalesDto": {
+        "required": [
+          "businessCollected",
+          "commission",
+          "commissionTax",
+          "expectedSettlement",
+          "isDeliveryPlatform",
+          "isrWithheld",
+          "netSales",
+          "paidOrders",
+          "paymentsAmount",
+          "platformCollected",
+          "refundsAmount",
+          "vatWithheld"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isDeliveryPlatform": {
+            "type": "boolean"
+          },
+          "paidOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "netSales": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformCollected": {
+            "type": "number",
+            "format": "double"
+          },
+          "businessCollected": {
+            "type": "number",
+            "format": "double"
+          },
+          "commission": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedSettlement": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatMessageDto": {
         "required": [
           "body",
@@ -13328,6 +13658,9 @@
           "netCashFlow",
           "netCashOnlyFlow",
           "otherTotal",
+          "platformPaymentsCount",
+          "platformRefundsTotal",
+          "platformTotal",
           "salesPaymentsCount",
           "salesPaymentsTotal",
           "tipsTotal",
@@ -13365,6 +13698,18 @@
             "format": "double"
           },
           "otherTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformPaymentsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "platformRefundsTotal": {
             "type": "number",
             "format": "double"
           },
@@ -13471,6 +13816,7 @@
           "outstandingBalance",
           "paidOrders",
           "pendingOrders",
+          "platformCollected",
           "rangeFrom",
           "rangeTo",
           "topSellingItems",
@@ -13522,6 +13868,10 @@
             "format": "int32"
           },
           "totalRevenue": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformCollected": {
             "type": "number",
             "format": "double"
           },
@@ -13578,6 +13928,199 @@
           "Friday",
           "Saturday"
         ]
+      },
+      "DeliveryPlatformChannelDto": {
+        "required": [
+          "channel",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformDto": {
+        "required": [
+          "channel",
+          "commissionBase",
+          "commissionVatPercent",
+          "isActive",
+          "isConfigured",
+          "isrWithholdingPercent",
+          "revision",
+          "vatWithholdingPercent"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isConfigured": {
+            "type": "boolean"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "commissionPercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "commissionBase": {
+            "$ref": "#/components/schemas/PlatformCommissionBase"
+          },
+          "commissionVatPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "changedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "example": {
+            "$ref": "#/components/schemas/PlatformSettlementExampleDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformOrderDto": {
+        "required": [
+          "collectedBy",
+          "commissionAndTax",
+          "expectedSettlement",
+          "externalOrderNumber",
+          "orderId",
+          "orderNumber",
+          "orderTotal",
+          "refundedAmount",
+          "registeredAt",
+          "status",
+          "withheld"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "externalOrderNumber": {
+            "type": "string"
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          },
+          "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionAndTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "withheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedSettlement": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundedAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformOrderDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryPlatformOrderDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformsDto": {
+        "required": [
+          "platforms"
+        ],
+        "type": "object",
+        "properties": {
+          "platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryPlatformDto"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "DiningRoomDto": {
         "required": [
@@ -16638,6 +17181,18 @@
           "Business"
         ]
       },
+      "PlatformCommissionBase": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "TotalWithTax",
+          "SubTotalWithoutTax"
+        ]
+      },
       "PlatformOverviewDto": {
         "required": [
           "activeTenants",
@@ -16719,6 +17274,34 @@
         "properties": {
           "reason": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementExampleDto": {
+        "required": [
+          "commissionAndTax",
+          "expectedSettlement",
+          "orderTotal",
+          "withheld"
+        ],
+        "type": "object",
+        "properties": {
+          "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionAndTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "withheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedSettlement": {
+            "type": "number",
+            "format": "double"
           }
         },
         "additionalProperties": false
@@ -18331,6 +18914,35 @@
         },
         "additionalProperties": false
       },
+      "SalesByChannelReportDto": {
+        "required": [
+          "channels",
+          "from",
+          "to",
+          "totals"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChannelSalesDto"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ChannelSalesDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "SalesFiguresDto": {
         "required": [
           "averageTicket",
@@ -18342,6 +18954,7 @@
           "paidOrders",
           "paymentsAmount",
           "paymentsCount",
+          "platformAmount",
           "refundsAmount",
           "refundsCount",
           "transferAmount",
@@ -18385,6 +18998,10 @@
             "type": "number",
             "format": "double"
           },
+          "platformAmount": {
+            "type": "number",
+            "format": "double"
+          },
           "refundsCount": {
             "type": "integer",
             "format": "int32"
@@ -18398,6 +19015,47 @@
             "format": "double"
           },
           "averageTicket": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveDeliveryPlatformRequest": {
+        "required": [
+          "commissionBase",
+          "commissionPercent",
+          "commissionVatPercent",
+          "isActive",
+          "isrWithholdingPercent",
+          "revision",
+          "vatWithholdingPercent"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "commissionPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionBase": {
+            "$ref": "#/components/schemas/PlatformCommissionBase"
+          },
+          "commissionVatPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatWithholdingPercent": {
             "type": "number",
             "format": "double"
           }

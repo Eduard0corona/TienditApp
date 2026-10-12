@@ -17,7 +17,7 @@ namespace FoodParkDigital.Application.Reports.Queries;
 /// method, what was given back and how many orders came in. Closed days come from the daily snapshots.
 /// </summary>
 [RequiresPermission(TenantPermission.ViewReports)]
-public record GetSalesByBranchQuery : IRequest<SalesByBranchReportDto>
+public record GetSalesByBranchQuery : IRequest<SalesByBranchReportDto>, IReportDateRange
 {
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }
@@ -28,11 +28,7 @@ public class GetSalesByBranchQueryValidator : AbstractValidator<GetSalesByBranch
 {
     public GetSalesByBranchQueryValidator()
     {
-        RuleFor(x => x)
-            .Must(x => x.From is null || x.To is null || x.From <= x.To)
-            .WithMessage("La fecha inicial debe ser anterior a la final.")
-            .Must(x => x.From is null || x.To is null || x.To.Value.DayNumber - x.From.Value.DayNumber < DailySalesReadModel.MaxRangeDays)
-            .WithMessage($"El periodo puede abarcar como máximo {DailySalesReadModel.MaxRangeDays} días.");
+        this.ValidateTheRange();
     }
 }
 
@@ -62,11 +58,7 @@ public class GetSalesByBranchQueryHandler : IRequestHandler<GetSalesByBranchQuer
             .Select(x => x.TimeZone)
             .FirstOrDefaultAsync(cancellationToken);
         var zone = TenantDateTimeResolver.Resolve(timeZoneId);
-        var today = DailySalesReadModel.LocalToday(zone, utcNow);
-        var from = request.From ?? new DateOnly(today.Year, today.Month, 1);
-        var to = request.To ?? (request.From is null ? today : from.AddMonths(1).AddDays(-1));
-        if (to.DayNumber - from.DayNumber >= DailySalesReadModel.MaxRangeDays)
-            to = from.AddDays(DailySalesReadModel.MaxRangeDays - 1);
+        var (from, to) = DailySalesReadModel.ResolveRange(request.From, request.To, DailySalesReadModel.LocalToday(zone, utcNow));
 
         var capabilities = await TenantCapabilityRules.ResolveCapabilitiesAsync(_context, tenantId, cancellationToken);
         var readableTypes = new[] { OrderType.Retail, OrderType.Service }
@@ -168,6 +160,11 @@ public class SalesFiguresDto
     public decimal TransferAmount { get; set; }
     public decimal WalletAmount { get; set; }
     public decimal OtherAmount { get; set; }
+    /// <summary>
+    /// What delivery platforms charged in their apps («Plataforma» payments): part of what was charged, never of a
+    /// drawer. The platform deposits it later, minus its commission and withholdings.
+    /// </summary>
+    public decimal PlatformAmount { get; set; }
     public int RefundsCount { get; set; }
     public decimal RefundsAmount { get; set; }
     /// <summary>Charged minus given back.</summary>
@@ -185,6 +182,7 @@ public class SalesFiguresDto
         TransferAmount = figures.TransferAmount,
         WalletAmount = figures.WalletAmount,
         OtherAmount = figures.OtherAmount,
+        PlatformAmount = figures.PlatformAmount,
         RefundsCount = figures.RefundsCount,
         RefundsAmount = figures.RefundsAmount,
         NetSales = figures.NetSales,
