@@ -22,6 +22,7 @@ import type {
   OrderStatus,
   OrderType,
   OutgoingMessageStatus,
+  PlatformCollectedBy,
   PurchaseOrderStatus,
   ServiceOrderPieceStatus,
   TenantCapability,
@@ -1505,6 +1506,8 @@ export interface OrderDto {
   total: number;
   taxBreakdown: OrderTaxLineDto[];
   channel?: OrderChannel;
+  /** An order of Rappi, Uber Eats or DiDi Food: the folio of its app and who charged it (never its commission). */
+  platformOrder?: OrderPlatformDto | null;
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */
@@ -1534,6 +1537,13 @@ export interface OrderDto {
   stockWarnings?: string[];
   /** When the device captured it without connection; it reached the server later. */
   capturedOfflineAt?: string | null;
+}
+
+export interface OrderPlatformDto {
+  /** The folio the platform's app shows for the order. */
+  externalOrderNumber: string;
+  /** The platform, in its app, or the business, when the courier pays on pickup. */
+  collectedBy: PlatformCollectedBy;
 }
 
 export interface OrderRefundDto {
@@ -1597,6 +1607,8 @@ export interface CreateOrderItemRequest {
 
 export { OrderChannel } from '../api/generated/enums';
 
+export { PlatformCollectedBy } from '../api/generated/enums';
+
 export interface CustomerCardDto {
   phone?: string;
   name?: string;
@@ -1640,8 +1652,14 @@ export interface CreateOrderRequest {
   payments?: CreateOrderPaymentRequest[];
   /** Total shown to the customer; the API rejects the sale if a price changed meanwhile. */
   expectedTotal?: number;
-  /** Counter (default) or WhatsApp when the order is taken from a chat. */
+  /** Counter (default), WhatsApp when the order is taken from a chat, or Rappi, Uber Eats or DiDi Food. */
   channel?: OrderChannel;
+  /** The folio the delivery platform's app shows for the order (Rappi, Uber Eats or DiDi Food only). */
+  externalOrderNumber?: string;
+  /** Who charged an order of a delivery platform: the platform when omitted, or the business. */
+  collectedBy?: PlatformCollectedBy;
+  /** Registers it although today there is an order of the same platform with the same folio (409 possible_duplicate_order). */
+  confirmPossibleDuplicate?: boolean;
   /** Opens the order as a tab: its items are the first round sent to the kitchen. */
   openTab?: boolean;
   diningTableId?: string;
@@ -1747,6 +1765,10 @@ export interface DashboardMetricsDto {
 export interface KitchenOrderDto {
   id: string;
   orderNumber: string;
+  /** Where the order came from: an order of a delivery platform is packed for its courier. */
+  channel?: OrderChannel;
+  /** The folio of the delivery platform's app, written on the bag; null for any other channel. */
+  externalOrderNumber?: string | null;
   status: OrderStatus;
   customerName: string;
   tableNumber?: string;

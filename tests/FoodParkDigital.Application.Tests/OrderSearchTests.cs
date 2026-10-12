@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 
@@ -31,6 +32,30 @@ public class OrderSearchTests
         var order = Assert.Single(result.Items);
         Assert.Equal(expectedCustomer, order.CustomerName);
         Assert.Equal(1, result.TotalCount);
+    }
+
+    [Theory]
+    [InlineData("#bc 953")]
+    [InlineData("bc953")]
+    [InlineData("BC 9")]
+    [InlineData("953")]
+    public async Task SearchOrders_ShouldFindTheFolioOfAPlatformsApp_TypedAnyWay(string search)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var other = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "otro");
+        await AddPlatformOrderAsync(fixture, other, "ORD-000001", "BC953");
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: "propio");
+        await AddOrderAsync(fixture, tenant, "ORD-000001", "Público en general", null);
+        var platform = await AddPlatformOrderAsync(fixture, tenant, "ORD-000002", "BC953");
+        await AddPlatformOrderAsync(fixture, tenant, "ORD-000003", "XY120");
+
+        var handler = new GetOrdersByBusinessQueryHandler(fixture.Context, fixture.TenantService);
+        var result = await handler.Handle(new GetOrdersByBusinessQuery { Search = search }, CancellationToken.None);
+
+        // Only this business's order, whatever the other one has.
+        var order = Assert.Single(result.Items);
+        Assert.Equal(platform.Id, order.Id);
+        Assert.Equal("BC953", order.PlatformOrder!.ExternalOrderNumber);
     }
 
     [Fact]
@@ -133,5 +158,29 @@ public class OrderSearchTests
         order.AddItem(Guid.NewGuid(), "Producto", 1, 10m);
         fixture.Context.Orders.Add(order);
         await fixture.Context.SaveChangesAsync();
+    }
+
+    /// <summary>An order of Uber Eats with the folio of its app, as Vender registers it.</summary>
+    private static async Task<Order> AddPlatformOrderAsync(SalesTestFixture fixture, Tenant tenant, string orderNumber, string folio)
+    {
+        var order = new Order(
+            tenantId: tenant.Id,
+            customerUserId: null,
+            temporaryCustomerId: null,
+            createdByBusiness: true,
+            orderNumber: orderNumber,
+            businessType: tenant.BusinessType,
+            orderType: OrderType.Retail,
+            customerName: "Público en general",
+            customerPhone: null,
+            customerNotes: null,
+            tableNumber: null,
+            channel: OrderChannel.UberEats);
+        order.AddItem(Guid.NewGuid(), "Paquete", 1, 100m);
+        var setting = new DeliveryPlatformSetting(tenant.Id, OrderChannel.UberEats, true, PlatformTerms.WithFiscalDefaults(25m));
+        order.RegisterPlatformOrder(setting, PlatformOrderNumber.From(folio), PlatformCollectedBy.Platform, SalesTestFixture.Now, null);
+        fixture.Context.Orders.Add(order);
+        await fixture.Context.SaveChangesAsync();
+        return order;
     }
 }

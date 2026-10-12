@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Tests;
 
-/// <summary>Selling by weight or measure and previewing the CFDI of a sale.</summary>
+/// <summary>Selling by weight or measure and previewing the CFDI of a sale (an order of a delivery platform too).</summary>
 public class FractionalSaleAndCfdiDraftTests
 {
     [Fact]
@@ -243,6 +243,72 @@ public class FractionalSaleAndCfdiDraftTests
 
         await Assert.ThrowsAsync<EntityNotFoundException>(() => new GetOrderCfdiDraftQueryHandler(fixture.Context)
             .Handle(new GetOrderCfdiDraftQuery { OrderId = foreignOrder.Value.Id }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CfdiDraft_OfAnOrderThePlatformCharged_ShouldBePueWithForm31_AndSayHowToInvoiceIt()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        await SetFiscalProfileAsync(fixture, tenant);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 350m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        var order = await fixture.CreateOrderHandler().Handle(
+            SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "152390", pack.Id), CancellationToken.None);
+        Assert.True(order.IsSuccess, order.Error);
+        var handler = new GetOrderCfdiDraftQueryHandler(fixture.Context);
+
+        var globalInvoice = await handler.Handle(new GetOrderCfdiDraftQuery { OrderId = order.Value.Id }, CancellationToken.None);
+        var toACustomer = await handler.Handle(new GetOrderCfdiDraftQuery
+        {
+            OrderId = order.Value.Id,
+            Receiver = new CfdiReceiverInput { Rfc = "XAXX010101000", Name = "Juan Pérez", PostalCode = "64000", FiscalRegime = "616", CfdiUse = "S01" }
+        }, CancellationToken.None);
+
+        // I9: paid in full by the platform, it declares PUE and form 31 (intermediary of payments).
+        Assert.True(globalInvoice.IsSuccess, globalInvoice.Error);
+        var cfdi = globalInvoice.Value;
+        Assert.Equal(("PUE", SatCatalog.PaymentFormIntermediary), (cfdi.PaymentMethod, cfdi.PaymentForm));
+        Assert.Equal("31", cfdi.PaymentForm);
+        Assert.Equal(350m, cfdi.Total);
+        Assert.True(cfdi.IsReadyToStamp, string.Join(" | ", cfdi.Blockers));
+        Assert.True(cfdi.IsGeneralPublic);
+        Assert.Contains(cfdi.Warnings, warning => warning.StartsWith(
+            "Rappi cobró este pedido en su app: la factura lleva la forma de pago 31 (intermediario de pagos)", StringComparison.Ordinal)
+            && warning.Contains("factura global") && warning.Contains("ISR e IVA") && warning.Contains("contador"));
+        Assert.DoesNotContain(cfdi.Warnings, warning => warning.Contains("no comparte los datos"));
+        // The platform shares no customer data: invoicing someone needs theirs, and keeping it out of the global invoice.
+        Assert.True(toACustomer.IsSuccess, toACustomer.Error);
+        Assert.Contains(toACustomer.Value.Warnings, warning =>
+            warning == "Rappi no comparte los datos de sus clientes: factura este pedido a nombre de alguien solo si te dio sus datos fiscales, y déjalo fuera de la factura global.");
+    }
+
+    [Fact]
+    public async Task CfdiDraft_OfAnOrderTheBusinessCollects_ShouldDeclareHowTheBusinessCharged()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        await SetFiscalProfileAsync(fixture, tenant);
+        var tacos = await fixture.AddProductAsync(tenant, "Orden de tacos", 245m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.DidiFood);
+        var order = await fixture.CreateOrderHandler().Handle(
+            SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, "12", tacos.Id, collectedBy: PlatformCollectedBy.Business), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var handler = new GetOrderCfdiDraftQueryHandler(fixture.Context);
+
+        var unpaid = await handler.Handle(new GetOrderCfdiDraftQuery { OrderId = order.Value.Id }, CancellationToken.None);
+        await fixture.OpenCashSessionAsync(tenant);
+        var payment = await fixture.AddPaymentHandler().Handle(
+            new AddOrderPaymentCommand { OrderId = order.Value.Id, Amount = 245m, Method = OrderPaymentMethod.Cash }, CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var paid = await handler.Handle(new GetOrderCfdiDraftQuery { OrderId = order.Value.Id }, CancellationToken.None);
+
+        Assert.Equal(("PPD", SatCatalog.PaymentFormToBeDefined), (unpaid.Value.PaymentMethod, unpaid.Value.PaymentForm));
+        Assert.True(payment.IsSuccess, payment.Error);
+        Assert.Equal(("PUE", "01"), (paid.Value.PaymentMethod, paid.Value.PaymentForm));
+        Assert.Contains(paid.Value.Warnings, warning =>
+            warning == "Pedido de DiDi Food que cobra el negocio: normalmente va en la factura global del periodo. Confirma con tu contador cómo facturar los pedidos de plataformas.");
+        Assert.DoesNotContain(paid.Value.Warnings, warning => warning.Contains("forma de pago 31"));
     }
 
     [Theory]

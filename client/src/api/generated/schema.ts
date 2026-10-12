@@ -8854,6 +8854,10 @@ export interface components {
             /** Format: double */
             expectedTotal?: number | null;
             channel: components["schemas"]["OrderChannel"];
+            externalOrderNumber?: string | null;
+            collectedBy?: components["schemas"]["PlatformCollectedBy"];
+            /** @default false */
+            confirmPossibleDuplicate: boolean;
             openTab: boolean;
             /** Format: uuid */
             diningTableId?: string | null;
@@ -9560,6 +9564,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             orderNumber: string;
+            channel: components["schemas"]["OrderChannel"];
+            externalOrderNumber?: string | null;
             status: components["schemas"]["OrderStatus"];
             customerName: string;
             tableNumber?: string | null;
@@ -9842,6 +9848,7 @@ export interface components {
             tableNumber?: string | null;
             pricesIncludeTax: boolean;
             channel: components["schemas"]["OrderChannel"];
+            platformOrder?: components["schemas"]["OrderPlatformDto"];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -9980,6 +9987,10 @@ export interface components {
          * @enum {integer}
          */
         OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderPlatformDto: {
+            externalOrderNumber: string;
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+        };
         OrderRefundDto: {
             /** Format: uuid */
             id: string;
@@ -10118,6 +10129,11 @@ export interface components {
             /** Format: int32 */
             tenantsCount: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformCollectedBy: 0 | 1;
         PlatformOverviewDto: {
             /** Format: int32 */
             totalTenants: number;

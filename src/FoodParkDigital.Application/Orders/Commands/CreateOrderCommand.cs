@@ -12,6 +12,7 @@ using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -23,7 +24,10 @@ namespace FoodParkDigital.Application.Orders.Commands;
 [RequiresPermission(TenantPermission.ManageOrders)]
 public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentPermissions, ITransactionalRequest
 {
-    /// <summary>Taking an order needs ManageOrders; charging it at once also needs ChargeOrders.</summary>
+    /// <summary>
+    /// Taking an order needs ManageOrders; charging it at once also needs ChargeOrders. The «Plataforma» payment of an
+    /// order a delivery platform charged is recorded by the server, outside every drawer: nobody charges it.
+    /// </summary>
     public IEnumerable<TenantPermission> RequiredPermissions()
         => Payments is { Count: > 0 } ? [TenantPermission.ChargeOrders] : [];
 
@@ -43,8 +47,24 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// the sale is rejected instead of charging a different amount.
     /// </summary>
     public decimal? ExpectedTotal { get; init; }
-    /// <summary>Counter (default) or WhatsApp, when the business takes the order from a chat.</summary>
+    /// <summary>
+    /// Counter (default); WhatsApp, when the business takes the order from a chat; or Rappi, Uber Eats or DiDi Food, when
+    /// the business registers an order that came in through the delivery platform's app.
+    /// </summary>
     public OrderChannel Channel { get; init; } = OrderChannel.Counter;
+    /// <summary>The folio the delivery platform's app shows for the order: only with Rappi, Uber Eats or DiDi Food.</summary>
+    public string? ExternalOrderNumber { get; init; }
+    /// <summary>
+    /// Who charged an order of a delivery platform: the platform, in its app (when omitted), or the business, when the
+    /// courier pays on pickup. Only with Rappi, Uber Eats or DiDi Food.
+    /// </summary>
+    public PlatformCollectedBy? CollectedBy { get; init; }
+    /// <summary>
+    /// The business already registered an order of the same platform with the same folio today and confirms this is
+    /// another one (short folios repeat). Sent again with the same idempotency key after the possible duplicate warning.
+    /// </summary>
+    [System.ComponentModel.DefaultValue(false)]
+    public bool ConfirmPossibleDuplicate { get; init; }
     /// <summary>
     /// Opens the order as a tab: its items are the first round sent to the kitchen, more rounds are added
     /// later and it is charged and closed when the table leaves.
@@ -140,7 +160,12 @@ public record ServiceOrderPieceInput
 public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
 {
     public const string PlatformPaymentMessage = "El pago «Plataforma» se registra solo, al indicar que cobró la plataforma.";
-    public const string DeliveryPlatformsNotYetMessage = "Todavía no se pueden registrar pedidos de plataforma.";
+    public const string PlatformNoPhoneMessage = "Un pedido de plataforma no guarda el teléfono del cliente: la app no lo comparte.";
+    public const string PlatformNoTableMessage = "Un pedido de plataforma no lleva mesa ni cuenta abierta.";
+    public const string PlatformWithConnectionMessage = "Un pedido de plataforma se registra con conexión.";
+    public const string PlatformAlreadyChargedMessage = "La plataforma ya cobró este pedido: no registres pagos.";
+    public const string PlatformFieldsOnlyForPlatformsMessage =
+        "El folio de la app y quién cobró solo van en pedidos de Rappi, Uber Eats o DiDi Food.";
 
     public CreateOrderCommandValidator()
     {
@@ -151,12 +176,6 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         // Online orders come from the public menu, not from the business's screens.
         RuleFor(x => x.Channel).IsInEnum().NotEqual(OrderChannel.Online)
             .WithMessage(OrderChannelRules.InvalidChannelMessage);
-        // TEMPORARY (Fase 22F, stage 1): the channels of Rappi, Uber Eats and DiDi Food exist in the contract, but an
-        // order of a delivery platform needs its folio, who charged it and its commission, which come in a later
-        // stage. Until then they are refused here; that stage replaces this rule with the full rules of the channel.
-        RuleFor(x => x.Channel)
-            .Must(channel => !OrderChannelRules.IsDeliveryPlatform(channel))
-            .WithMessage(DeliveryPlatformsNotYetMessage);
         RuleFor(x => x.Items).NotEmpty().WithMessage("La orden debe tener al menos un artículo.");
         RuleFor(x => x.Items.Count)
             .LessThanOrEqualTo(OrderLimits.MaxItemsPerOrder)
@@ -226,6 +245,38 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             RuleFor(x => x.ServiceDetail!.IntakeNotes).MaximumLength(2000);
             RuleFor(x => x.ServiceDetail!.DeliveryNotes).MaximumLength(2000);
         });
+
+        // Rappi, Uber Eats and DiDi Food: the business registers, with its folio, an order the platform's app already
+        // took. The app shares neither the customer nor their phone, the courier takes it (no table or tab), and what
+        // the platform charged is recorded by the order itself (Order.RegisterPlatformOrder), never by the client.
+        When(x => OrderChannelRules.IsDeliveryPlatform(x.Channel), () =>
+        {
+            RuleFor(x => x.ExternalOrderNumber).Cascade(CascadeMode.Stop)
+                .NotEmpty().WithMessage(PlatformOrderNumber.RequiredMessage)
+                .Must(number => PlatformOrderNumber.TryNormalize(number, out _)).WithMessage(PlatformOrderNumber.InvalidMessage);
+            RuleFor(x => x.CollectedBy).IsInEnum();
+            RuleFor(x => x.CustomerPhone).Empty().WithMessage(PlatformNoPhoneMessage);
+            RuleFor(x => x.CustomerId).Null().WithMessage(PlatformOrderRules.NoCustomerMessage);
+            RuleFor(x => x.TableNumber).Empty().WithMessage(PlatformNoTableMessage);
+            RuleFor(x => x.OpenTab).Equal(false).WithMessage(PlatformNoTableMessage);
+            RuleFor(x => x.DiningTableId).Null().WithMessage(PlatformNoTableMessage);
+            RuleFor(x => x.OrderType).Equal(OrderType.Retail).WithMessage(PlatformOrderRules.OnlyProductsMessage);
+            RuleFor(x => x.ServiceDetail).Null().WithMessage(PlatformOrderRules.OnlyProductsMessage);
+            RuleFor(x => x.CreatedByBusiness).Equal(true).WithMessage(PlatformOrderRules.RegisteredByBusinessMessage);
+            // A repeated folio is checked against today's orders, and a queued sale would reach them late.
+            RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(PlatformWithConnectionMessage);
+            RuleFor(x => x.Payments).Empty()
+                .When(x => (x.CollectedBy ?? PlatformCollectedBy.Platform) == PlatformCollectedBy.Platform)
+                .WithMessage(PlatformAlreadyChargedMessage);
+            RuleForEach(x => x.Payments).ChildRules(payment =>
+                payment.RuleFor(p => p.Tip).Must(tip => tip <= 0).WithMessage(PlatformOrderRules.NoTipMessage));
+        });
+        When(x => !OrderChannelRules.IsDeliveryPlatform(x.Channel), () =>
+        {
+            RuleFor(x => x.ExternalOrderNumber).Empty().WithMessage(PlatformFieldsOnlyForPlatformsMessage);
+            RuleFor(x => x.CollectedBy).Null().WithMessage(PlatformFieldsOnlyForPlatformsMessage);
+            RuleFor(x => x.ConfirmPossibleDuplicate).Equal(false).WithMessage(PlatformFieldsOnlyForPlatformsMessage);
+        });
     }
 }
 
@@ -267,19 +318,23 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
     public async Task<Result<OrderDto>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
     {
-        // The same key again (a retry or a sale sent after the connection came back): the sale already exists.
+        // 1. The same key again (a retry or a sale sent after the connection came back): the sale already exists.
         if (request.IdempotencyKey is { } key && await ExistingSaleAsync(key, cancellationToken) is { } existing)
             return Result.Success(existing);
 
+        // One clock reading for the whole sale: an order of a delivery platform and its «Plataforma» payment share it.
+        var now = _dateTimeProvider.UtcNow;
+
+        // 2. A sale captured without connection.
         if (request.CapturedOfflineAt is { } capturedAt)
         {
-            var now = _dateTimeProvider.UtcNow;
             if (capturedAt > now.AddMinutes(5))
                 return Result.Failure<OrderDto>("La hora de captura de la venta está en el futuro: revisa el reloj del dispositivo.");
             if (capturedAt < now.AddDays(-OrderLimits.MaxOfflineSaleAgeDays))
                 return Result.Failure<OrderDto>($"La venta se capturó hace más de {OrderLimits.MaxOfflineSaleAgeDays} días: regístrala de nuevo.");
         }
 
+        // 3. The business and its modules.
         var tenant = await _context.Tenants
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(t => t.Id == _tenantService.TenantId, cancellationToken)
@@ -296,52 +351,72 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 $"El negocio no tiene habilitado el módulo requerido para crear órdenes de {typeLabel}.");
         }
 
-        string? customerName = request.CustomerName;
-        string? customerPhone = request.CustomerPhone;
-        var isPublicGeneralCustomer = false;
-
-        if (request.CustomerId.HasValue)
+        // 4. An order of Rappi, Uber Eats or DiDi Food: the platform must be active in the business, whose terms the
+        // order copies.
+        var isPlatform = OrderChannelRules.IsDeliveryPlatform(request.Channel);
+        DeliveryPlatformSetting? platformSetting = null;
+        PlatformOrderNumber? platformNumber = null;
+        if (isPlatform)
         {
-            var legacyCustomer = await _context.Customers
-                .FirstOrDefaultAsync(c => c.Id == request.CustomerId.Value, cancellationToken);
-
-            if (legacyCustomer is null)
-                return Result.Failure<OrderDto>("El cliente seleccionado no existe.");
-
-            customerName ??= legacyCustomer.Name;
-            customerPhone ??= legacyCustomer.Phone;
-            isPublicGeneralCustomer = legacyCustomer.IsPublicGeneral;
+            platformSetting = await PlatformOrderPlacement.LoadActiveSettingAsync(
+                _context, _tenantService.TenantId, request.Channel, cancellationToken);
+            if (platformSetting is null)
+                return Result.Failure<OrderDto>(PlatformOrderErrors.NotActive(request.Channel));
+            platformNumber = PlatformOrderNumber.From(request.ExternalOrderNumber);
         }
 
-        // The phone links the order to a customer (history, claims, notifications). A counter sale to the
-        // general public may skip it; a named customer or an order placed by the customer may not.
+        string? customerName = request.CustomerName;
+        string? customerPhone = isPlatform ? null : request.CustomerPhone;
+        var isPublicGeneralCustomer = false;
         CustomerLookupResult? linkedCustomer = null;
-        if (!string.IsNullOrWhiteSpace(customerPhone))
+
+        // 5. The customer. The app of a delivery platform shares neither the customer nor their phone: its order only
+        // carries the name for the bag.
+        if (!isPlatform)
         {
-            if (!_phoneNormalizationService.TryNormalizeToE164(
-                    customerPhone,
-                    CustomerPhoneOwnershipRules.DefaultCountry,
-                    out var phoneNormalized))
+            if (request.CustomerId.HasValue)
             {
-                return Result.Failure<OrderDto>(PhoneNumberRules.InvalidPhoneMessage);
+                var legacyCustomer = await _context.Customers
+                    .FirstOrDefaultAsync(c => c.Id == request.CustomerId.Value, cancellationToken);
+
+                if (legacyCustomer is null)
+                    return Result.Failure<OrderDto>("El cliente seleccionado no existe.");
+
+                customerName ??= legacyCustomer.Name;
+                customerPhone ??= legacyCustomer.Phone;
+                isPublicGeneralCustomer = legacyCustomer.IsPublicGeneral;
             }
 
-            linkedCustomer = await _customerLookupService.ResolveForOrderAsync(
-                _tenantService.TenantId,
-                phoneNormalized,
-                customerName,
-                CustomerPhoneOwnershipRules.DefaultCountry,
-                cancellationToken);
-        }
-        else if (!request.CreatedByBusiness)
-        {
-            return Result.Failure<OrderDto>("Se requiere el teléfono del cliente para crear la orden.");
-        }
-        else if (request.CustomerId.HasValue && !isPublicGeneralCustomer)
-        {
-            return Result.Failure<OrderDto>("El cliente seleccionado no tiene teléfono. Captura uno para continuar.");
+            // The phone links the order to a customer (history, claims, notifications). A counter sale to the
+            // general public may skip it; a named customer or an order placed by the customer may not.
+            if (!string.IsNullOrWhiteSpace(customerPhone))
+            {
+                if (!_phoneNormalizationService.TryNormalizeToE164(
+                        customerPhone,
+                        CustomerPhoneOwnershipRules.DefaultCountry,
+                        out var phoneNormalized))
+                {
+                    return Result.Failure<OrderDto>(PhoneNumberRules.InvalidPhoneMessage);
+                }
+
+                linkedCustomer = await _customerLookupService.ResolveForOrderAsync(
+                    _tenantService.TenantId,
+                    phoneNormalized,
+                    customerName,
+                    CustomerPhoneOwnershipRules.DefaultCountry,
+                    cancellationToken);
+            }
+            else if (!request.CreatedByBusiness)
+            {
+                return Result.Failure<OrderDto>("Se requiere el teléfono del cliente para crear la orden.");
+            }
+            else if (request.CustomerId.HasValue && !isPublicGeneralCustomer)
+            {
+                return Result.Failure<OrderDto>("El cliente seleccionado no tiene teléfono. Captura uno para continuar.");
+            }
         }
 
+        // 6. The branch.
         var branch = await BranchRules.ResolveForSaleAsync(
             _context,
             _tenantService.TenantId,
@@ -353,8 +428,9 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
 
         var salesSettings = await TenantSalesSettings.ReadAsync(_context, _tenantService.TenantId, cancellationToken);
         var tenantZone = TenantDateTimeResolver.Resolve(salesSettings.TimeZone);
-        var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(_dateTimeProvider.UtcNow, tenantZone);
+        var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(now, tenantZone);
 
+        // 7. The order.
         var order = new Order(
             tenantId: _tenantService.TenantId,
             customerUserId: linkedCustomer?.CustomerUserId,
@@ -364,14 +440,17 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             businessType: tenant.BusinessType,
             orderType: request.OrderType,
             customerName: ResolveCustomerName(customerName, linkedCustomer, customerPhone),
-            customerPhone: linkedCustomer?.PhoneNormalized,
+            customerPhone: isPlatform ? null : linkedCustomer?.PhoneNormalized,
             customerNotes: request.CustomerNotes,
-            tableNumber: request.TableNumber,
+            tableNumber: isPlatform ? null : request.TableNumber,
             pricesIncludeTax: salesSettings.PricesIncludeTax,
             channel: request.Channel,
             branchId: branch.Value);
+
+        // 8. The lines. The platform's app already took the order, whatever the hours of each product here; a product
+        // the business turned off is still refused.
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate);
+        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate, enforceProductHours: !isPlatform);
         var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken);
 
         foreach (var itemDto in request.Items)
@@ -383,6 +462,10 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 return Result.Failure<OrderDto>(
                     $"El item '{product.Name}' no corresponde al tipo de orden '{expectedLabel}'.");
             }
+
+            // An order of a delivery platform is food or goods the courier takes, never a service of the business.
+            if (isPlatform && OrderProductClassifier.IsServiceUnit(product.Unit))
+                return Result.Failure<OrderDto>(PlatformOrderRules.OnlyProductsMessage);
 
             var built = lineBuilder.Build(product, itemDto);
             if (built.IsFailure)
@@ -401,7 +484,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 return Result.Failure<OrderDto>(tabError);
         }
 
-        var serviceDetailError = OrderPlacement.ApplyServiceDetail(order, request.ServiceDetail, _dateTimeProvider.UtcNow);
+        var serviceDetailError = OrderPlacement.ApplyServiceDetail(order, request.ServiceDetail, now);
         if (serviceDetailError is not null)
             return Result.Failure<OrderDto>(serviceDetailError);
         var piecesError = OrderPlacement.AddServicePieces(
@@ -412,9 +495,11 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (piecesError is not null)
             return Result.Failure<OrderDto>(piecesError);
 
+        // 9. The status the team starts it with.
         if (request.CreatedByBusiness)
             OrderPlacement.ApplyBusinessDefaultStatus(order, _currentUserService.UserName);
 
+        // 10. The total the customer saw and the payments.
         if (request.ExpectedTotal.HasValue && request.ExpectedTotal.Value != order.Total)
         {
             return Result.Failure<OrderDto>(
@@ -426,9 +511,31 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
         if (request.Payments.Sum(p => p.Amount) > order.Total)
             return Result.Failure<OrderDto>("Los pagos suman mas que el total de la venta.");
 
-        // The folio, once the checks without side effects passed: payments and supplies name the order by it.
+        // 11. The same folio of the same platform again today: short folios repeat, so the business confirms instead
+        // of a unique index refusing a real order. A retry with the same key never gets here (step 1).
+        if (isPlatform && !request.ConfirmPossibleDuplicate
+            && await PlatformOrderPlacement.HasSameDayDuplicateAsync(
+                _context, _tenantService.TenantId, request.Channel, platformNumber!, now, tenantZone, cancellationToken))
+        {
+            return Result.Failure<OrderDto>(PlatformOrderErrors.PossibleDuplicate);
+        }
+
+        // 12. The folio, once the checks without side effects passed: payments and supplies name the order by it.
         order.AssignNumber(await _folios.NextOrderNumberAsync(_tenantService.TenantId, cancellationToken));
 
+        // 13. The platform's terms and amounts, copied into the order and, when the platform charged, its «Plataforma»
+        // payment for the total: stamped now, at the branch's stock location, outside every drawer.
+        if (isPlatform)
+        {
+            order.RegisterPlatformOrder(
+                platformSetting!,
+                platformNumber!,
+                request.CollectedBy ?? PlatformCollectedBy.Platform,
+                now,
+                await BranchRules.StockLocationIdAsync(_context, _tenantService.TenantId, order.BranchId, cancellationToken));
+        }
+
+        // 14. What the business charged now (when the business collects an order of a platform, too): into a drawer.
         if (request.Payments.Count > 0)
         {
             var registrar = new OrderPaymentRegistrar(_context, _orderCashService, _dateTimeProvider);
@@ -451,19 +558,22 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             }
         }
 
+        // 15. A paid sale closes as at the counter (an order of a platform too: same machines, same closing).
         if (request.CreatedByBusiness)
             CounterSaleClosing.TryClose(order, salesSettings, tenantCapabilities, _currentUserService.UserName);
 
-        // A sale captured offline already happened, and a customer's own order is reviewed by the business: only a
-        // sale the team is making now can be refused for missing supplies. A tab opens with its first round, which
-        // leaves the stock as it goes to the kitchen.
-        var shortageHandling = request.CreatedByBusiness && request.CapturedOfflineAt is null
+        // 16. A sale captured offline already happened, a customer's own order is reviewed by the business, and an
+        // order of a delivery platform was already accepted in its app: only a sale the team is making now can be
+        // refused for missing supplies; the others sell and warn. A tab opens with its first round, which leaves the
+        // stock as it goes to the kitchen.
+        var shortageHandling = request.CreatedByBusiness && request.CapturedOfflineAt is null && !isPlatform
             ? StockShortageHandling.TenantPolicy
             : StockShortageHandling.Allow;
         var shortages = order.IsOpenTab
             ? await _orderInventoryService.ApplyConsumptionForTabRoundAsync(order, 1, cancellationToken, shortageHandling)
             : await _orderInventoryService.ApplyConsumptionForOrderAsync(order, cancellationToken, shortageHandling);
 
+        // 17. Created, in one save with everything above.
         if (request.IdempotencyKey is { } requestKey)
             order.IdentifyClientRequest(requestKey, request.CapturedOfflineAt);
 
@@ -502,6 +612,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             .Include(o => o.Items).ThenInclude(i => i.Options)
             .Include(o => o.StatusHistory)
             .Include(o => o.ServiceDetail)
+            .Include(o => o.PlatformDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .Include(o => o.Refunds)

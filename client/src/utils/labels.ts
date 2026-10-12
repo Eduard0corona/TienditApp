@@ -1,4 +1,12 @@
-import type { OrderChannel, OrderPaymentMethod, OrderStatus, OrderType, PurchaseOrderStatus, ServiceOrderPieceStatus } from '../types';
+import { OrderChannel } from '../types';
+import type {
+  OrderPaymentMethod,
+  OrderStatus,
+  OrderType,
+  PlatformCollectedBy,
+  PurchaseOrderStatus,
+  ServiceOrderPieceStatus,
+} from '../types';
 
 // Single catalog of the Spanish labels shown for backend enums. REST responses carry enums as numbers
 // and SignalR payloads (and some report dictionaries) carry their C# names, so each label is reachable
@@ -71,6 +79,19 @@ const ORDER_CHANNEL_BY_NAME: Record<string, OrderChannel> = {
   DidiFood: 5,
 };
 
+const DELIVERY_PLATFORM_CHANNELS: readonly OrderChannel[] = [OrderChannel.Rappi, OrderChannel.UberEats, OrderChannel.DidiFood];
+
+/** Who charged an order of a delivery platform; the platform is named by its channel when it is known. */
+const COLLECTED_BY_LABELS: Record<PlatformCollectedBy, string> = {
+  0: 'La plataforma',
+  1: 'El negocio',
+};
+
+const COLLECTED_BY_BY_NAME: Record<string, PlatformCollectedBy> = {
+  Platform: 0,
+  Business: 1,
+};
+
 export const SERVICE_PIECE_STATUS_LABELS: Record<ServiceOrderPieceStatus, string> = {
   0: 'Aceptada',
   1: 'En progreso',
@@ -134,6 +155,19 @@ export function getPaymentMethodLabel(method: OrderPaymentMethod | string | null
 /** Label of an order channel given as its number (REST) or its name (SignalR payloads). */
 export function getChannelLabel(channel: OrderChannel | string | null | undefined): string {
   return lookup(channel, ORDER_CHANNEL_LABELS, ORDER_CHANNEL_BY_NAME);
+}
+
+/**
+ * Who charged an order of a delivery platform: the platform by its name («Rappi») when the order's channel is given,
+ * or «El negocio» when the courier paid the business.
+ */
+export function getCollectedByLabel(
+  collectedBy: PlatformCollectedBy | string | null | undefined,
+  channel?: OrderChannel | null,
+): string {
+  const label = lookup(collectedBy, COLLECTED_BY_LABELS, COLLECTED_BY_BY_NAME);
+  const byThePlatform = label === COLLECTED_BY_LABELS[0];
+  return byThePlatform && channel != null && DELIVERY_PLATFORM_CHANNELS.includes(channel) ? ORDER_CHANNEL_LABELS[channel] : label;
 }
 
 export function getServicePieceStatusLabel(status: ServiceOrderPieceStatus | string | null | undefined): string {

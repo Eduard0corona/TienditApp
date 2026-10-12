@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
@@ -156,7 +157,12 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        {
+            // The same folio of the same platform again today: the client confirms and sends it again.
+            return result.Error == PlatformOrderErrors.PossibleDuplicate
+                ? this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.PossibleDuplicateOrder)
+                : this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        }
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 

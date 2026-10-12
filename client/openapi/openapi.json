@@ -12350,6 +12350,17 @@
           "channel": {
             "$ref": "#/components/schemas/OrderChannel"
           },
+          "externalOrderNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          },
+          "confirmPossibleDuplicate": {
+            "type": "boolean",
+            "default": false
+          },
           "openTab": {
             "type": "boolean"
           },
@@ -14701,6 +14712,7 @@
       },
       "KitchenOrderDto": {
         "required": [
+          "channel",
           "createdAt",
           "customerName",
           "id",
@@ -14716,6 +14728,13 @@
           },
           "orderNumber": {
             "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "externalOrderNumber": {
+            "type": "string",
+            "nullable": true
           },
           "status": {
             "$ref": "#/components/schemas/OrderStatus"
@@ -15687,6 +15706,9 @@
           "channel": {
             "$ref": "#/components/schemas/OrderChannel"
           },
+          "platformOrder": {
+            "$ref": "#/components/schemas/OrderPlatformDto"
+          },
           "branchId": {
             "type": "string",
             "format": "uuid",
@@ -16125,6 +16147,22 @@
           "Other",
           "Platform"
         ]
+      },
+      "OrderPlatformDto": {
+        "required": [
+          "collectedBy",
+          "externalOrderNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "externalOrderNumber": {
+            "type": "string"
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          }
+        },
+        "additionalProperties": false
       },
       "OrderRefundDto": {
         "required": [
@@ -16587,6 +16625,18 @@
           }
         },
         "additionalProperties": false
+      },
+      "PlatformCollectedBy": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Platform",
+          "Business"
+        ]
       },
       "PlatformOverviewDto": {
         "required": [

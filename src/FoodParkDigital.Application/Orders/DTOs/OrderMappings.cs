@@ -27,6 +27,11 @@ public static class OrderMappings
         TableNumber = order.TableNumber,
         PricesIncludeTax = order.PricesIncludeTax,
         Channel = order.Channel,
+        PlatformOrder = order.PlatformDetail is null ? null : new OrderPlatformDto
+        {
+            ExternalOrderNumber = order.PlatformDetail.ExternalOrderNumber,
+            CollectedBy = order.PlatformDetail.CollectedBy
+        },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,
         SubTotal = order.SubTotal,
@@ -53,10 +58,13 @@ public static class OrderMappings
         KitchenTickets = order.KitchenTickets.OrderBy(t => t.Round).Select(ToSummaryDto).ToList()
     };
 
+    /// <summary>The order on the kitchen board; the folio of a delivery platform needs its detail loaded.</summary>
     public static KitchenOrderDto ToKitchenDto(this Order order) => new()
     {
         Id = order.Id,
         OrderNumber = order.OrderNumber,
+        Channel = order.Channel,
+        ExternalOrderNumber = order.PlatformDetail?.ExternalOrderNumber,
         Status = order.Status,
         CustomerName = order.CustomerName,
         TableNumber = order.TableNumber,
@@ -212,6 +220,11 @@ public static class OrderMappings
         TableNumber = order.TableNumber,
         PricesIncludeTax = order.PricesIncludeTax,
         Channel = order.Channel,
+        PlatformOrder = order.PlatformDetail == null ? null : new OrderPlatformDto
+        {
+            ExternalOrderNumber = order.PlatformDetail.ExternalOrderNumber,
+            CollectedBy = order.PlatformDetail.CollectedBy
+        },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,
         SubTotal = order.SubTotal,

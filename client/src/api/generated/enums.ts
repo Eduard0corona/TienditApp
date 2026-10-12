@@ -196,6 +196,12 @@ export const OutgoingMessageStatus = {
 } as const;
 export type OutgoingMessageStatus = (typeof OutgoingMessageStatus)[keyof typeof OutgoingMessageStatus];
 
+export const PlatformCollectedBy = {
+  Platform: 0,
+  Business: 1,
+} as const;
+export type PlatformCollectedBy = (typeof PlatformCollectedBy)[keyof typeof PlatformCollectedBy];
+
 export const ProductCatalogItemType = {
   Product: 0,
   Service: 1,

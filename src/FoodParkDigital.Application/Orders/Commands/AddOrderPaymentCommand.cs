@@ -113,6 +113,7 @@ public class AddOrderPaymentCommandHandler : IRequestHandler<AddOrderPaymentComm
             .Include(o => o.Items)
             .Include(o => o.StatusHistory)
             .Include(o => o.ServiceDetail)
+            .Include(o => o.PlatformDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId, cancellationToken)

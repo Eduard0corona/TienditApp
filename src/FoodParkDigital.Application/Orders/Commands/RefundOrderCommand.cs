@@ -123,6 +123,7 @@ internal static class OrderRefundQueries
             .Include(o => o.Items)
             .Include(o => o.StatusHistory)
             .Include(o => o.ServiceDetail)
+            .Include(o => o.PlatformDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)

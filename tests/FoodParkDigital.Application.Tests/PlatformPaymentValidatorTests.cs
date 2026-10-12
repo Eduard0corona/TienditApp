@@ -3,12 +3,13 @@ using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 
 namespace FoodParkDigital.Application.Tests;
 
 /// <summary>
-/// The «Plataforma» payment method and the channels of Rappi, Uber Eats and DiDi Food exist in the contract, but no
-/// client records the platform's payment or puts it in a drawer: the order of a delivery platform records it by itself.
+/// The «Plataforma» payment method exists in the contract, but no client records the platform's payment or puts it in a
+/// drawer: the order of a delivery platform records it by itself (the rules of those orders: PlatformOrderFlowTests).
 /// </summary>
 public class PlatformPaymentValidatorTests
 {
@@ -43,12 +44,29 @@ public class PlatformPaymentValidatorTests
     [InlineData(OrderChannel.Rappi)]
     [InlineData(OrderChannel.UberEats)]
     [InlineData(OrderChannel.DidiFood)]
-    public void CreateOrder_ShouldRefuseTheDeliveryPlatforms_UntilTheirOrdersCanBeRegistered(OrderChannel channel)
+    public void CreateOrder_ShouldTakeTheDeliveryPlatforms_WithTheFolioOfTheirApp(OrderChannel channel)
     {
-        var result = new CreateOrderCommandValidator().Validate(Sale() with { Channel = channel });
+        var validator = new CreateOrderCommandValidator();
 
-        var error = Assert.Single(result.Errors);
-        Assert.Equal(CreateOrderCommandValidator.DeliveryPlatformsNotYetMessage, error.ErrorMessage);
+        var withFolio = validator.Validate(Sale() with { Channel = channel, ExternalOrderNumber = "#bc 953" });
+        var withoutFolio = validator.Validate(Sale() with { Channel = channel });
+
+        Assert.True(withFolio.IsValid, string.Join(" ", withFolio.Errors));
+        Assert.Equal(PlatformOrderNumber.RequiredMessage, Assert.Single(withoutFolio.Errors).ErrorMessage);
+    }
+
+    [Fact]
+    public void CreateOrder_ShouldRefuseAPlatformPayment_EvenWhenTheBusinessCollectsAnOrderOfAPlatform()
+    {
+        var result = new CreateOrderCommandValidator().Validate(Sale() with
+        {
+            Channel = OrderChannel.DidiFood,
+            ExternalOrderNumber = "12",
+            CollectedBy = PlatformCollectedBy.Business,
+            Payments = [new CreateOrderPaymentDto { Amount = 50m, Method = OrderPaymentMethod.Platform }]
+        });
+
+        Assert.Equal(CreateOrderCommandValidator.PlatformPaymentMessage, Assert.Single(result.Errors).ErrorMessage);
     }
 
     [Theory]
