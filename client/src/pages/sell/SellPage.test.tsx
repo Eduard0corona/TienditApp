@@ -406,4 +406,22 @@ describe('SellPage', () => {
     expect(screen.getByRole('link', { name: 'Volver al chat' })).toHaveAttribute('href', '/whatsapp/chat?conversation=c1');
     expect(toast.success).not.toHaveBeenCalled();
   });
+
+  it('names the fields of the phone sheet with its own labels, not with those of the ticket hidden beside the catalog', async () => {
+    signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+    renderAt('/sell');
+    await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: /^1 artículo/ }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'Ticket' }));
+    await userEvent.click(sheet.getByRole('button', { name: 'Cliente, mesa y notas (opcional)' }));
+
+    for (const name of ['Nombre', 'Teléfono', 'Mesa o referencia', 'Notas del pedido']) {
+      expect(sheet.getByRole('textbox', { name })).toBeInTheDocument();
+    }
+    expect(sheet.getByRole('textbox', { name: 'Teléfono' })).toHaveAccessibleDescription('Con teléfono la venta queda en su historial.');
+    // The ticket is in the page twice: a repeated id would send a label or a description to the hidden copy.
+    const ids = Array.from(document.querySelectorAll('[id]'), (element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

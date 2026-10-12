@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { SaleDetails } from './sellModel';
 
 interface SaleDetailsFormProps {
@@ -12,6 +13,8 @@ interface SaleDetailsFormProps {
 
 /** Customer, table and notes of the sale, behind a link: a counter sale goes to the general public. */
 export default function SaleDetailsForm({ details, onChange, open, onToggle, isFood, phoneError }: SaleDetailsFormProps) {
+  // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
+  const id = useId();
   return (
     <>
       <button
@@ -27,9 +30,9 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
         <div className="sell-details mb-2">
           <div className="row g-2">
             <div className="col-sm-6">
-              <label className="form-label small mb-1" htmlFor="sell-customer-name">Nombre</label>
+              <label className="form-label small mb-1" htmlFor={`${id}-name`}>Nombre</label>
               <input
-                id="sell-customer-name"
+                id={`${id}-name`}
                 className="form-control"
                 maxLength={200}
                 placeholder="Público en general"
@@ -38,9 +41,9 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
               />
             </div>
             <div className="col-sm-6">
-              <label className="form-label small mb-1" htmlFor="sell-customer-phone">Teléfono</label>
+              <label className="form-label small mb-1" htmlFor={`${id}-phone`}>Teléfono</label>
               <input
-                id="sell-customer-phone"
+                id={`${id}-phone`}
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel"
@@ -48,17 +51,17 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
                 placeholder="55 1234 5678"
                 value={details.customerPhone}
                 onChange={(event) => onChange({ customerPhone: event.target.value })}
-                aria-describedby="sell-customer-phone-help"
+                aria-describedby={`${id}-phone-help`}
               />
-              <div id="sell-customer-phone-help" className={phoneError ? 'invalid-feedback d-block' : 'form-text'}>
+              <div id={`${id}-phone-help`} className={phoneError ? 'invalid-feedback d-block' : 'form-text'}>
                 {phoneError || 'Con teléfono la venta queda en su historial.'}
               </div>
             </div>
             {isFood && (
               <div className="col-sm-6">
-                <label className="form-label small mb-1" htmlFor="sell-table">Mesa o referencia</label>
+                <label className="form-label small mb-1" htmlFor={`${id}-table`}>Mesa o referencia</label>
                 <input
-                  id="sell-table"
+                  id={`${id}-table`}
                   className="form-control"
                   maxLength={50}
                   value={details.tableNumber}
@@ -67,9 +70,9 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
               </div>
             )}
             <div className={isFood ? 'col-sm-6' : 'col-12'}>
-              <label className="form-label small mb-1" htmlFor="sell-notes">Notas del pedido</label>
+              <label className="form-label small mb-1" htmlFor={`${id}-notes`}>Notas del pedido</label>
               <input
-                id="sell-notes"
+                id={`${id}-notes`}
                 className="form-control"
                 maxLength={1000}
                 value={details.orderNotes}
