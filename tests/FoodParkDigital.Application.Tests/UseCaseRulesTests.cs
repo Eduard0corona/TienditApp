@@ -73,7 +73,10 @@ public class UseCaseRulesTests
         // which platforms are on.
         { typeof(GetDeliveryPlatformsQuery), "Manager" },
         { typeof(SaveDeliveryPlatformCommand), "Manager" },
-        { typeof(GetDeliveryPlatformChannelsQuery), "Permission(ManageOrders, ViewReports)" },
+        { typeof(GetDeliveryPlatformChannelsQuery), "Permission(ManageOrders, ViewReports, ManageCatalog)" },
+        // The prices of the products in each app, as the menu's: whoever manages the catalog.
+        { typeof(GetPlatformPriceListQuery), "Permission(ManageCatalog)" },
+        { typeof(SavePlatformPricesCommand), "Permission(ManageCatalog)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

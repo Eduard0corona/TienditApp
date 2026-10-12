@@ -447,11 +447,11 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             channel: request.Channel,
             branchId: branch.Value);
 
-        // 8. The lines. The platform's app already took the order, whatever the hours of each product here; a product
-        // the business turned off is still refused.
+        // 8. The lines. The platform's app already took the order, whatever the hours of each product here (a product
+        // the business turned off is still refused), and charged the prices the business set in it.
         var checklistCandidates = new List<(Product Product, CreateOrderItemDto Item)>();
-        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate, enforceProductHours: !isPlatform);
-        var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken);
+        var lineBuilder = new OrderLineBuilder(localTimeOfDay, salesSettings.DefaultTaxRate, channel: request.Channel);
+        var products = await OrderCatalog.LoadProductsAsync(_context.Products, request.Items, cancellationToken, request.Channel);
 
         foreach (var itemDto in request.Items)
         {

@@ -1,5 +1,5 @@
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
-import { NOW_ISO, at } from '../mocks/data.mjs';
+import { NOW_ISO, at, withRappiPrices } from '../mocks/data.mjs';
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
@@ -44,6 +44,12 @@ interface ProductOption {
   priceDelta: number;
 }
 
+/** The prices set in the app of a delivery platform (`data.platformPrices` by channel, as mocks/data.mjs describes it). */
+interface PlatformPrices {
+  products: Record<string, number>;
+  options: Record<string, number>;
+}
+
 const cents = (value: number) => Math.round(value * 100);
 const money = (valueInCents: number) => valueInCents / 100;
 
@@ -58,20 +64,26 @@ function halfEven(numerator: number, denominator: number) {
 /**
  * A counter sale as the API records it. The shared POST /orders numbers sales with a counter that lives in the worker
  * (the folio would change with the order the scenes run in) and drops the variants and extras, so the sale ticket
- * would not match the cart. Here the folio follows the demo's last one and each line keeps its options.
+ * would not match the cart. Here the folio follows the demo's last one and each line keeps its options. An order of a
+ * delivery platform charges the prices set in its app, where there are, as Vender showed them.
  */
 function createSale(data: DemoData, body: SaleRequest) {
   data.vpSales = (data.vpSales ?? 0) + 1;
   const orderNumber = `ORD-${String(348 + data.vpSales).padStart(6, '0')}`;
   const id = `venta-${orderNumber.toLowerCase()}`;
+  const appPrices: PlatformPrices = (DELIVERY_PLATFORMS.includes(body.channel ?? 0) && data.platformPrices[body.channel ?? 0])
+    || { products: {}, options: {} };
 
   const items = (body.items ?? []).map((line, index) => {
     const product = data.products.find((candidate: { id: string }) => candidate.id === line.productId);
     const groups: Array<{ name: string; options: ProductOption[] }> = product.optionGroups ?? [];
     const options = groups.flatMap((group) => group.options
       .filter((option) => (line.optionIds ?? []).includes(option.id))
-      .map((option) => ({ optionId: option.id, groupName: group.name, optionName: option.name, priceDelta: option.priceDelta })));
-    const unitPriceCents = cents(product.priceAmount) + options.reduce((sum, option) => sum + cents(option.priceDelta), 0);
+      .map((option) => ({
+        optionId: option.id, groupName: group.name, optionName: option.name, priceDelta: appPrices.options[option.id] ?? option.priceDelta,
+      })));
+    const unitPriceCents = cents(appPrices.products[product.id] ?? product.priceAmount)
+      + options.reduce((sum, option) => sum + cents(option.priceDelta), 0);
     const totalCents = Math.round(unitPriceCents * line.quantity);
     return {
       id: `${id}-linea-${index + 1}`, productId: product.id, productName: product.name, quantity: line.quantity,
@@ -157,6 +169,9 @@ const rappiRoutes: ExtraRoutes = (data, helpers) => [
 ];
 
 export const RAPPI_ROUTES = asOption(rappiRoutes);
+
+/** The business charges more in the Rappi app than in its menu (see withRappiPrices). */
+export const RAPPI_PRICES_DATA = asOption(withRappiPrices);
 
 /**
  * Two Rappi orders of today the platform charged in its app: one already delivered, for Juan, and one the kitchen has

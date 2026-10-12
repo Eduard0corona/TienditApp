@@ -100,7 +100,7 @@ Las decisiones fijas de la fase eran:
    - **La confirmación:** Vender pregunta y, si es otro pedido, reenvía la misma petición con la misma llave y `confirmPossibleDuplicate`.
 8. **Privilegio mínimo.**
    - **Tasas:** solo las leen y las cambian dueños y administradores (`GET` y `PUT /delivery-platforms`).
-   - **Qué plataformas están activas:** `GET /delivery-platforms/channels` lo dice sin tasas, a quien tiene `ManageOrders` o `ViewReports`.
+   - **Qué plataformas están activas:** `GET /delivery-platforms/channels` lo dice sin tasas, a quien tiene `ManageOrders` o `ViewReports` (desde la Fase 22F-2, también `ManageCatalog`, para Precios en apps).
    - **Dinero de la comisión:** `OrderDto`, el ticket, Cocina y el aviso en vivo nunca lo llevan. La comisión de cada pedido solo se ve en Reportes, con `ViewReports`.
 9. **Sin capability ni módulo de plan:** está disponible en todos los planes.
 10. **Avisos y clientes.**
@@ -134,7 +134,7 @@ Las decisiones fijas de la fase eran:
   - Cada pedido guarda la comisión, las retenciones y el neto que le tocaban, y Reportes los suma por canal y los lista por folio para compararlos con el estado de cuenta.
   - Un folio repetido se pregunta antes de registrarse.
 - **Lo que limita:**
-  - **Precios:** los pedidos usan los precios del catálogo, y la venta rechaza un total distinto del que calcula el servidor. Si en la app se cobra más, la comisión y el neto calculados salen menores que los reales hasta que haya precio por plataforma. La configuración lo avisa, y el ticket de empaque va sin precios cuando cobró la plataforma.
+  - **Precios:** los pedidos usan los precios del catálogo, y la venta rechaza un total distinto del que calcula el servidor. Si en la app se cobra más, la comisión y el neto calculados salen menores que los reales hasta que haya precio por plataforma. La configuración lo avisaba, y el ticket de empaque va sin precios cuando cobró la plataforma. Resuelto en la Fase 22F-2: cada pedido se cobra con los precios de la app de su plataforma, y el del menú donde no hay uno ([ADR 0014](0014-delivery-platform-prices.md)).
   - **Fuera del neto esperado:** el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por efectivo y las cancelaciones tardías de la plataforma (un pedido ya entregado que la plataforma cancela queda entregado y reembolsado). Mientras no haya liquidación, el neto esperado puede no coincidir con el depósito.
   - **Estimaciones:** un reembolso parcial compensa la comisión y las retenciones en proporción, y el redondeo por fila puede diferir por centavos del estado de cuenta. En SQL Server, cada parte (importe × pago / total) se calcula con escala 6 antes de sumarse. Con pagos completos el resultado es exacto; con pagos parciales, en un punto medio raro, puede diferir un centavo del cálculo con toda la precisión.
   - **Folio repetido:** el aviso no es una restricción. Dos capturas del mismo folio en el mismo instante pasan las dos; se ven en la búsqueda y en la lista por pedido, y se corrigen anulando una.
@@ -149,7 +149,7 @@ Las decisiones fijas de la fase eran:
 
 ## Siguientes pasos
 
-- **22F-2:** precio por plataforma para cada producto.
+- **22F-2:** precio por plataforma para cada producto. Hecho: [ADR 0014](0014-delivery-platform-prices.md).
 - **Liquidación semanal y conciliación con el estado de cuenta:** el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías.
 - **Integraciones** por la API de cada plataforma o por un integrador, en lugar de la captura manual.
 - **CFDI de retenciones** que emiten las plataformas.

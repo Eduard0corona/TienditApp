@@ -11,7 +11,10 @@ public class RefreshTokenTests
     [Fact]
     public void NewToken_ShouldKeepOnlyTheHashOfItsValue()
     {
-        var token = new RefreshToken(Guid.NewGuid(), Guid.NewGuid(), "valor-del-token", Now, Now.AddDays(7));
+        // Whether a token is active reads the real clock (IsExpired): a token issued on a fixed date stopped being active
+        // once its seven days went by, so this one is issued now.
+        var issuedAt = DateTimeOffset.UtcNow;
+        var token = new RefreshToken(Guid.NewGuid(), Guid.NewGuid(), "valor-del-token", issuedAt, issuedAt.AddDays(7));
 
         Assert.Equal(RefreshToken.HashOf("valor-del-token"), token.TokenHash);
         Assert.Matches("^[0-9A-F]{64}$", token.TokenHash);

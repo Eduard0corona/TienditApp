@@ -34,6 +34,13 @@ public class ProductOptionConfiguration : IEntityTypeConfiguration<ProductOption
         builder.Property(x => x.Name).HasMaxLength(ProductOption.MaxNameLength).IsRequired();
         builder.Property(x => x.PriceDelta).HasColumnType("decimal(18,2)").IsRequired();
 
+        // What it adds in the app of each delivery platform, removed with the option.
+        builder.HasMany(x => x.PlatformPrices)
+            .WithOne()
+            .HasForeignKey(price => price.OptionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.PlatformPrices).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         builder.HasIndex(x => new { x.TenantId, x.GroupId });
     }
 }

@@ -1,10 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
-import { productPhotos } from './catalogo-inventario.mocks';
+import { PLATFORM_ROUTES, RAPPI_PRICES, productPhotos } from './catalogo-inventario.mocks';
 
-// Catálogo (productos, categorías, servicios) and Inventario (insumos, compras, proveedores): every screen at the
-// three base looks, then the tabs, filters and dialogs each one has. A dialog is taken at the size of the screen
+// Catálogo (productos, categorías, servicios, precios en apps) and Inventario (insumos, compras, proveedores): every
+// screen at the three base looks, then the tabs, filters and dialogs each one has. A dialog is taken at the size of the screen
 // (not the whole page): it is fixed over the page, and the shot shows it where the person sees it.
 
 const LOOKS = [
@@ -70,6 +70,18 @@ for (const look of LOOKS) {
       await expect(page.getByRole('button', { name: 'Editar Café Finca Las Nubes' })).toBeVisible();
       await snap(page, `proveedores-${look.suffix}`);
     });
+
+    test.describe('con plataformas de reparto', () => {
+      test.use({ extraRoutes: PLATFORM_ROUTES, prepareData: RAPPI_PRICES });
+
+      test(`precios en apps ${look.suffix}`, async ({ page }) => {
+        // Rappi, the first platform that is on, with its prices beside the menu's: the empty boxes charge the menu's.
+        await open(page, '/platform-prices');
+        await expect(page.getByLabel('Precio de Latte en Rappi')).toHaveValue('66.00');
+        await expect(page.getByLabel('Precio de Espresso doble en Rappi')).toHaveValue('');
+        await snap(page, `precios-en-apps-${look.suffix}`);
+      });
+    });
   });
 }
 
@@ -114,6 +126,42 @@ test.describe('Productos', () => {
     const editor = page.locator('.ta-options-editor');
     await expect(editor).toContainText('Leche');
     await snapElement(editor, 'producto-opciones');
+  });
+});
+
+test.describe('Precios en apps', () => {
+  test.use({ extraRoutes: PLATFORM_ROUTES, prepareData: RAPPI_PRICES });
+
+  /** Fills the boxes still empty with the menu's prices plus 25 %, rounded up to $5. */
+  async function calculate(page: Page) {
+    await page.getByRole('button', { name: 'Calcular precios' }).click();
+    const calculating = await dialog(page, 'Calcular precios de Rappi');
+    await calculating.getByLabel('Tu precio más (%)').fill('25');
+    await calculating.getByLabel('Redondear hacia arriba').selectOption({ label: 'A $5' });
+    return calculating;
+  }
+
+  test('precios en apps, calcular', async ({ page }) => {
+    await open(page, '/platform-prices');
+    const calculating = await calculate(page);
+    // The first product as the example: the americano, $35.00 in the menu.
+    await expect(calculating.getByText('Por ejemplo: Café americano, de $35.00 a $45.00.')).toBeVisible();
+    await snap(page, 'precios-en-apps-calcular-dialogo', { fullPage: false });
+  });
+
+  test('precios en apps, con cambios', async ({ page }) => {
+    // What the calculation filled waits to be checked and saved, and a box the API would refuse is marked.
+    await open(page, '/platform-prices');
+    const calculating = await calculate(page);
+    await calculating.getByRole('button', { name: 'Calcular', exact: true }).click();
+    await expect(calculating).toBeHidden();
+    await expect(page.getByLabel('Precio de Espresso doble en Rappi')).toHaveValue('50.00');
+    // The prices already set stay as they are.
+    await expect(page.getByLabel('Precio de Latte en Rappi')).toHaveValue('66.00');
+    await page.getByLabel('Precio de Capuchino en Rappi').fill('0');
+    // The bar under the list says why nothing can be saved yet.
+    await expect(page.getByText('Revisa los precios marcados en rojo.')).toBeVisible();
+    await snap(page, 'precios-en-apps-con-cambios');
   });
 });
 

@@ -97,6 +97,7 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
     Un pedido que cobró la plataforma no admite otros pagos.
   - **Devoluciones:** lo que cobró la plataforma se devuelve como «Plataforma», sin caja (anular un pedido de Rappi no la necesita), y solo eso se devuelve así. `OrderRefundProcessor` no busca caja para ese método.
 - **Cuando cobra el negocio:** se cobra como siempre, al registrarlo o después desde Pedidos, y el cobro entra a una caja. No lleva propina, porque la de la app es del repartidor, y la plataforma no retiene nada.
+- **Precios (Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices.md)):** cada línea cobra lo que cuesta el producto en la app de esa plataforma, más lo que suma ahí cada opción, y el del menú donde el negocio no puso uno (Catálogo › Precios en apps). El servidor resuelve el precio (`Product.PriceIn` y `ProductOption.PriceDeltaIn`) y lo copia a la línea, así que el IVA, el total, la comisión, las retenciones y el neto esperado salen del total que cobró la app. Cambiar un precio después no reescribe ningún pedido.
 - **Términos por plataforma** (`DeliveryPlatformSetting`, uno por negocio y plataforma, Configuración › Negocio › Plataformas de reparto). Son porcentajes con hasta dos decimales:
 
   | Término | Rango del dominio | Rango de la API | Por omisión |
@@ -130,7 +131,7 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
   - Con tasas mezcladas ($500 al 16 % incluido y $200 al 0 %): neto esperado 406.14. La parte al 0 % no causa IVA retenido.
   - Una comisión de 10 % sobre 1.25 da 0.125 y queda en 0.12 (con `AwayFromZero` quedaría en 0.13).
 - **Por qué el IVA retenido sale de la base por la tasa:** con el IVA ya redondeado del pedido, el de $1,000 daría 137.93 × 50 % = 68.965, que queda en 68.96. La base por la tasa da 862.07 × 0.16 × 0.5 = 68.9656, que queda en 68.97, como DiDi.
-- **Qué no entra:** la propina, el envío y las promociones de la plataforma.
+- **Qué no entra:** la propina, el envío y las promociones de la plataforma. Un precio de la app que no se actualizó en Precios en apps tampoco: el pedido sale con el que está guardado.
 - **Retenciones y costo:** por lo general las retenciones son pagos a cuenta de los impuestos del negocio, no un costo (para quien optó por el pago definitivo, son su impuesto). El costo del canal es la comisión y su IVA, que el contador puede acreditar.
 - **Corte del día (`GET /api/v1/cash/daily-cut`):**
   - **Cifras propias:** `PlatformTotal` y `PlatformPaymentsCount` son los pagos «Plataforma» del día.
@@ -144,7 +145,7 @@ Un pedido de Rappi, Uber Eats o DiDi Food (canales 3 a 5) lo registra el negocio
   - **Forma de pago:** un pedido pagado por completo con «Plataforma» se declara PUE con la forma 31, Intermediario pagos (`SatCatalog.PaymentFormIntermediary`).
   - **Avisos:** que normalmente va en la factura global del periodo; si cobró la plataforma, además que lleva la forma 31 y que la plataforma retiene ISR e IVA. Los dos piden confirmar con el contador. Con un receptor, avisa que la plataforma no comparte los datos de sus clientes y que solo se factura a nombre de alguien que dio los suyos.
   - **Fuera de alcance:** el CFDI de retenciones lo emite la plataforma.
-- **Pendiente:** la liquidación semanal y su conciliación con el estado de cuenta: el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías. También el precio por plataforma (22F-2).
+- **Pendiente:** la liquidación semanal y su conciliación con el estado de cuenta: el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías.
 
 ## Otros cálculos
 

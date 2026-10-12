@@ -33,6 +33,10 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
     - un pedido de Rappi de A no aparece en la lista, la búsqueda por folio, Cocina, las ventas por canal ni los pedidos por plataforma de B, aunque B también tenga Rappi activa.
 
     `CrossTenantManagementSqlServerTests` suma las ventas por canal a los reportes que no incluyen al otro negocio.
+- Precios en las apps (Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices.md)):
+  - **Entidades:** `ProductPlatformPrice` y `ProductOptionPlatformPrice` son `ITenantScoped`, con el filtro global y el interceptor, y copian el `TenantId` de su producto. La consulta 5 del `verify.sql` de `20261012112823_AddPlatformPrices` comprueba que ningún precio tenga otro negocio que su producto u opción.
+  - **Lecturas y guardado:** pasan por los productos del negocio de la sesión, sin un `IgnoreQueryFilters()` nuevo: un producto de otro negocio no se encuentra («Uno de los productos ya no está en el catálogo…»).
+  - **Suite entre negocios** (`CrossTenantPlatformPricesSqlServerTests`): con el encabezado de otro negocio, un dueño solo lista y cambia los precios de sus productos, no ve los del otro en su lista ni en el catálogo de Vender, y no cambia ninguno del otro. `ProductPlatformPricesSqlServerTests` comprueba que los precios de cada negocio se quedan en él.
 - Archivos (Fase 9): la carpeta de cada archivo sale de su dueño: `products/{negocio}` y `logos/{negocio}`, y para los avatares `avatars/users/{cuenta}` (la persona es la misma en todos sus negocios). Subir y borrar validan esa carpeta; un avatar anterior se borra de la carpeta del negocio donde se subió, tomada de las membresías de la cuenta (`AvatarFiles`).
 
 Identity es global; `TenantUser` vincula usuario y tenant. Capabilities se leen de `TenantSettings`. SignalR agrupa conexiones por el claim de tenant. Muchas claves e índices incluyen `TenantId`.

@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
-import { CUSTOMER_PROFILE, RAPPI_ORDERS_DATA, RAPPI_ROUTES, SELL_ROUTES } from './vender-pedidos.mocks';
+import { CUSTOMER_PROFILE, RAPPI_ORDERS_DATA, RAPPI_PRICES_DATA, RAPPI_ROUTES, SELL_ROUTES } from './vender-pedidos.mocks';
 
 // Selling and following orders: Vender, Mesas, Pedidos, Orden detallada, Cocina and a customer's Mis pedidos, and the
 // orders of a delivery platform (Rappi) through all of them.
@@ -228,13 +228,18 @@ test.describe('Vender', () => {
 });
 
 test.describe('Pedidos de Rappi', () => {
-  // The business takes Rappi orders: Vender offers it as an origin and Pedidos filters by it.
-  test.use({ extraRoutes: RAPPI_ROUTES });
+  // The business takes Rappi orders, which it charges with the prices of its Rappi app: Vender offers Rappi as an
+  // origin and Pedidos filters by it.
+  test.use({ extraRoutes: RAPPI_ROUTES, prepareData: RAPPI_PRICES_DATA });
 
-  /** A Rappi order on the ticket: the origin chosen and the folio of its app typed. */
+  /**
+   * A Rappi order on the ticket: the origin chosen and the folio of its app typed. The ticket goes from the menu's prices
+   * ($183.00) to those of the Rappi app: two americanos at $42, a croissant at $45 and a large almond latte at $91.
+   */
   async function chooseRappi(scope: Page | Locator) {
     await scope.getByRole('radio', { name: 'Rappi' }).click();
     await scope.getByLabel('Folio de Rappi').fill('152390');
+    await expect(scope.getByText('Con tus precios de Rappi')).toBeVisible();
   }
 
   /** Opens the detail of an order from its folio in the list. */
@@ -252,7 +257,7 @@ test.describe('Pedidos de Rappi', () => {
     // Rappi charged it in its app: one action registers it, without the charge or the drawer.
     const ticket = page.getByRole('complementary', { name: 'Ticket de la venta' });
     await scrollToEnd(ticket);
-    await expect(ticket.getByRole('button', { name: /^Registrar pedido de Rappi · \$183\.00/ })).toBeVisible();
+    await expect(ticket.getByRole('button', { name: /^Registrar pedido de Rappi · \$220\.00/ })).toBeVisible();
     await snapPage(page, 'vender-rappi-escritorio-final');
   });
 
@@ -281,6 +286,7 @@ test.describe('Pedidos de Rappi', () => {
   });
 
   test.describe('con pedidos de hoy', () => {
+    // Orders of a business without prices in the Rappi app: charged with its menu's.
     test.use({ prepareData: RAPPI_ORDERS_DATA });
 
     test('Pedidos por canal: Rappi', async ({ page }) => {

@@ -238,6 +238,29 @@ La Fase 22F trae una migración, [`database/production/20261012005540_AddDeliver
   - **Con pedidos de plataforma:** no conviene. Esa versión sacaría de una caja la devolución de una anulación y su worker pondría en «Otros» lo que cobraron las plataformas. Se corrige hacia adelante.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50008, sin cambiar nada, si hay un pedido con canal 3 a 5 o un pago, reembolso o movimiento de caja con el método 5; su consulta 5 dice qué lo detiene. Sin ellos, borra las dos tablas y la columna. Se pierde la configuración de cada plataforma, que la bitácora conserva (`DeliveryPlatformUpdated`).
 
+## Precios en las apps de las plataformas (Fase 22F-2)
+
+La Fase 22F-2 trae una migración, [`database/production/20261012112823_AddPlatformPrices`](../../database/production/20261012112823_AddPlatformPrices). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql`, el merge, y poner los precios en Catálogo › Precios en apps. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0014](../adr/0014-delivery-platform-prices.md)).
+
+- **La migración:**
+  - **Qué agrega:** crea `ProductPlatformPrices` y `ProductOptionPlatformPrices`, vacías. No toca ninguna otra tabla.
+  - **Cuándo cambia algo:** cuando alguien con `ManageCatalog` guarda precios en Catálogo › Precios en apps. Mientras no haya precios, los pedidos de plataforma se cobran con el precio del menú, como en la Fase 22F.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las cuatro restricciones CHECK, las dos llaves en cascada y los seis índices. Su consulta 4 (los precios guardados) sigue vacía hasta desplegar, y la 5 (precios de otro negocio que su producto u opción) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22F) no conoce las tablas y sigue funcionando: ninguna de sus consultas las lee, y al quitar una opción o borrar un producto la base se lleva sus precios (`PlatformPricesMigrationSqlServerTests`, ver [migraciones](database-migrations.md)). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - **Rutas:** `GET` y `PUT /api/v1/delivery-platforms/{channel}/prices` (`ManageCatalog`; 403 sin él).
+    - **Esquemas:** `PlatformPriceItemDto` (y su página, `PlatformPriceItemDtoPaginatedList`), `PlatformPriceOptionGroupDto`, `PlatformPriceOptionDto`, `SavePlatformPricesRequest`, `PlatformProductPriceRequest` y `PlatformOptionPriceRequest`.
+    - **Campos obligatorios:** `products`, `price` y `priceDelta` son `[JsonRequired]` y el contrato los marca como requeridos: null se manda explícito (vuelve al precio del menú), y sin el campo, o con un elemento null en la lista, la API responde 400 `validation_failed`.
+    - **Respuestas del `PUT`:** 204; 400 `validation_failed` (la petición) o `business_rule` (un producto ajeno, un servicio, un precio fuera de los límites o un negocio sin el módulo de productos ni el de alimentos); y 409 `concurrency_conflict` si otra persona guardó al mismo tiempo el primer precio del mismo producto u opción, o lo borró.
+  - **Parámetro:** `GET /api/v1/products` acepta `priceChannel`, opcional: solo un canal de plataforma (400 si no).
+  - **Permiso ampliado:** `GET /api/v1/delivery-platforms/channels` también responde a `ManageCatalog`, sin tasas.
+  - **Mismo contrato, otros importes:** `POST /api/v1/orders` con canal 3 a 5 no cambia de forma, pero cobra los precios de la app donde los hay.
+
+  Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior no conoce Precios en apps, y su Vender cobra los pedidos de plataforma con el precio del menú. Si el negocio ya puso un precio en la app, la venta se rechaza porque el total no es el que calcula el servidor, hasta que la pantalla se recarga (el aviso de versión nueva lo ofrece). El servidor decide igual.
+- **Volver a la versión anterior:** funciona sin tocar la base, porque no conoce las tablas. Los precios se quedan guardados sin efecto: los pedidos de plataforma vuelven a cobrarse con el precio del menú, en Vender y en la venta a la vez, y los precios vuelven a aplicarse al publicar otra vez esta versión. Una pestaña que ya tenía el cliente nuevo, hasta recargarse, sigue pidiendo `priceChannel` (la versión anterior lo ignora): su ticket dice «Con tus precios de Rappi» sobre los precios del menú, que son los que se cobran, y Precios en apps responde 404.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50009, sin cambiar nada, si hay algún precio guardado, porque ninguna bitácora los conserva; su consulta 4 dice cuántos son y de cuántos negocios. Sin precios, borra las dos tablas. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

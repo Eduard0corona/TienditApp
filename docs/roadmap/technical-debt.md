@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-12 con la Fase 22F, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-12 con las Fases 22F y 22F-2, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -97,6 +97,18 @@ Actualizada el 2026-10-12 con la Fase 22F, después de las Fases 0 a 21 del road
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22F-2: el precio de cada producto y opción en la app de cada plataforma ([ADR 0014](../adr/0014-delivery-platform-prices.md)).
+  - Catálogo › Precios en apps pone lo que cuesta cada producto, y lo que suma cada opción, en Rappi, Uber Eats y DiDi Food, con un cálculo por porcentaje que la persona revisa antes de guardar. Sin precio propio, se cobra el del menú.
+  - Vender carga el catálogo con los precios de la plataforma elegida y no deja registrar hasta tenerlos; la venta cobra los mismos, así que el total, la comisión, las retenciones y el neto esperado salen de lo que cobró la app.
+  - Pendiente:
+    - Los precios se capturan a mano: si alguien cambia uno en la app y no aquí, el pedido sale con el anterior. Leerlos de cada plataforma llega con las integraciones.
+    - Sin bitácora de cada cambio de precio, igual que los del menú; cada pedido copia los que cobró.
+    - Fuera de alcance: las promociones de la plataforma, los precios por sucursal y un menú, una disponibilidad o un horario distintos por plataforma.
+    - Con precios guardados, el rollback de la base se detiene (error 50009): hay que exportarlos y borrarlos antes, o corregir hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
+    - Lo escrito en Precios en apps se pierde sin preguntar al cambiar de pantalla dentro de la app: `BrowserRouter` no permite detener una navegación (`useBlocker` pide un router de datos). Cerrar o recargar la pestaña sí pregunta.
+    - Con más de 500 productos, Precios en apps muestra los primeros 500 y avisa que los demás se cobran con el precio del menú.
+    - Dos cambios del mismo precio ya guardado no chocan (sin token de concurrencia): gana el último, como en el menú.
+    - La 22F-2 suma 150 B a la primera visita (de 175,859 a 176,009 B, contra `master` en `9c17a90`): la entrada del menú y la ruta de Precios en apps; la pantalla y sus ganchos se cargan aparte. El presupuesto sube a 176,400 B y queda a 391 B: el siguiente crecimiento tendrá que subirlo y decir por qué.
 - Resuelto en la Fase 22F: pedidos de Rappi, Uber Eats y DiDi Food con captura manual ([ADR 0013](../adr/0013-delivery-platform-orders.md)).
   - El negocio registra en Vender el pedido que llegó por la app, con su folio y quién cobró. Si cobró la plataforma, el pago «Plataforma» no entra a ninguna caja ni pide una abierta. Si cobra el negocio (el repartidor de DiDi paga en efectivo), se cobra por la caja como siempre.
   - Cada negocio configura la comisión, su IVA y las retenciones de cada plataforma, con revisión y bitácora. Cada pedido copia sus términos y los importes calculados, que no cambian después.
@@ -104,7 +116,6 @@ Actualizada el 2026-10-12 con la Fase 22F, después de las Fases 0 a 21 del road
   - Un folio repetido el mismo día se pregunta (409 `possible_duplicate_order`) en lugar de bloquearse con un índice único.
   - Los pedidos de plataforma nunca mandan avisos de WhatsApp y quedan fuera de las campañas y de la ficha del cliente.
   - Pendiente:
-    - Precio por plataforma para cada producto (22F-2). Mientras tanto, si en la app se cobra más que en el catálogo, la comisión y el neto calculados salen menores que los reales.
     - Liquidación semanal y conciliación con el estado de cuenta: el 35 % que cubre Rappi, los faltantes, el saldo negativo de DiDi por el efectivo que cobra el negocio y las cancelaciones tardías (un pedido ya entregado que la plataforma cancela queda entregado y reembolsado).
     - Integraciones por la API de las plataformas o por un integrador, el CFDI de retenciones y el ID largo del pedido para conciliar.
     - Confirmar con un contador las tasas de retención de 2026 para cada caso (persona física o moral, RFC, pago definitivo; las por omisión son las de la Ley de Ingresos 2026 y la Ley del IVA), la clave de forma de pago 31 y la base de la comisión de Uber Eats.
@@ -112,7 +123,6 @@ Actualizada el 2026-10-12 con la Fase 22F, después de las Fases 0 a 21 del road
     - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.
     - Desde el primer pedido de plataforma no hay rollback de la base (error 50008), solo correcciones hacia adelante. No conviene publicar entre las 00:00 y las 00:45, hora del negocio (ver [migraciones](../development/database-migrations.md)).
     - El badge «En línea» de Pedidos usa el acento (`bg-primary-subtle`), algo que viene de antes; se dejó igual para no mover las líneas base.
-    - La primera visita queda a 132 B de su presupuesto (175,868 de 176,000 B): el siguiente crecimiento tendrá que subir `bundle-budget.json` y decir por qué.
 - Dependencia con avisos de seguridad (visto en la Fase 22F): `SixLabors.ImageSharp` 3.1.12 (`Directory.Packages.props`) tiene GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altas) y GHSA-wmxv-xphr-5c9g (moderada), y `dotnet restore` las marca (NU1903, NU1902). Las tres están en el manejo de TIFF y se corrigen en la 4.1.2, una versión mayor. Hoy el riesgo es bajo: `ImageProcessingService` solo registra los decodificadores de JPEG, PNG, WebP y GIF, así que un TIFF subido se rechaza antes de decodificarse. Subirla, revisando su API y su licencia, va en un PR propio.
 - Resuelto en la Fase 21: días especiales y horario real en WhatsApp ([ADR 0012](../adr/0012-special-days.md)).
   - El dueño marca por fecha los días que cierra o abre con otro horario (festivos, vacaciones, inventario), con un motivo que ven sus clientes y festivos sugeridos que nunca se aplican solos. Las fechas pasadas no cambian y cada cambio queda en la bitácora.

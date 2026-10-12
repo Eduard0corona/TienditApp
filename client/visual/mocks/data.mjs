@@ -886,10 +886,27 @@ export function buildData() {
     maxReasonLength: 40,
   };
 
+  // The prices set in the app of each delivery platform, by channel: `{ products: { [productId]: price }, options:
+  // { [optionId]: delta } }`. The demo set none: its orders of a platform would charge the menu's.
+  const platformPrices = {};
+
   return {
     setup, tenant, profile, myTenants, categories, products, customers: customerList, locations, orders, dashboard, kitchenOrders,
     boardPieces, cashSession, cashTx, dailyCut, supplies, stockRows, movements, kardex, alerts, recipes, suppliers,
     purchaseOrders, appointments, employees, permissionOptions, auditLogs, aiAgents, whatsAppConfig, conversations,
-    messagesByConversation, report, categoryTemplates, specialDays, USER_ID, TENANT_ID, OWNER_EMAIL,
+    messagesByConversation, report, categoryTemplates, specialDays, platformPrices, USER_ID, TENANT_ID, OWNER_EMAIL,
+  };
+}
+
+/**
+ * What the demo business charges in the Rappi app (Catálogo › Precios en apps), for the scenes that show it: more than
+ * in its menu for the americano ($35 there), the croissant ($38) and the latte ($55), and for a large one (+$12) with
+ * almond milk (+$8; the latte's options are seeded with routes-p3). The rest charges the menu's.
+ */
+export function withRappiPrices(data) {
+  const product = (name) => data.products.find((candidate) => candidate.name === name).id;
+  data.platformPrices[3] = {
+    products: { [product('Café americano')]: 42, [product('Croissant de mantequilla')]: 45, [product('Latte')]: 66 },
+    options: { 'o-gr': 15, 'o-alm': 10 },
   };
 }

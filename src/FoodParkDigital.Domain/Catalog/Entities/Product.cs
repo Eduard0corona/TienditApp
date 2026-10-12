@@ -4,6 +4,8 @@ using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
 using FoodParkDigital.Domain.Orders;
+using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 
 namespace FoodParkDigital.Domain.Catalog.Entities;
 
@@ -12,6 +14,7 @@ public class Product : AuditableEntity, ITenantScoped
     public const int MaxOptionGroups = 10;
 
     private readonly List<ProductOptionGroup> _optionGroups = new();
+    private readonly List<ProductPlatformPrice> _platformPrices = new();
 
     private Product() { }
 
@@ -224,11 +227,68 @@ public class Product : AuditableEntity, ITenantScoped
         _optionGroups.RemoveAll(group => !kept.Contains(group));
     }
 
+    /// <summary>What the product costs in the app of each delivery platform where the business set a price of its own.</summary>
+    public IReadOnlyCollection<ProductPlatformPrice> PlatformPrices => _platformPrices.AsReadOnly();
+
+    /// <summary>
+    /// The price of one unit in a sales channel: in the app of a delivery platform, the price the business set for it there
+    /// (the menu's when it set none); everywhere else, the menu's.
+    /// </summary>
+    public decimal PriceIn(OrderChannel channel) => OrderChannelRules.IsDeliveryPlatform(channel)
+        ? _platformPrices.FirstOrDefault(price => price.Channel == channel)?.Price ?? PriceAmount
+        : PriceAmount;
+
+    /// <summary>
+    /// Sets what the product costs in the app of a delivery platform; null goes back to the menu's price there. Orders
+    /// already registered keep the price they copied.
+    /// </summary>
+    public void SetPlatformPrice(OrderChannel channel, decimal? price)
+    {
+        EnsureDeliveryPlatform(channel);
+        var current = _platformPrices.FirstOrDefault(existing => existing.Channel == channel);
+        if (price is not { } amount)
+        {
+            if (current is not null)
+                _platformPrices.Remove(current);
+            return;
+        }
+
+        if (!ProductPlatformPrice.IsValid(amount))
+        {
+            throw new DomainException(
+                $"El precio de '{Name}' en {OrderChannelRules.DisplayName(channel)} debe ser mayor a 0 y de hasta {ProductPlatformPrice.MaxPrice:N0}, con dos decimales como máximo.");
+        }
+
+        if (current is null)
+            _platformPrices.Add(new ProductPlatformPrice(TenantId, Id, channel, amount));
+        else
+            current.Change(amount);
+    }
+
+    /// <summary>
+    /// Sets what one of the product's options adds in the app of a delivery platform; null goes back to what it adds in
+    /// the menu there.
+    /// </summary>
+    public void SetOptionPlatformPrice(Guid optionId, OrderChannel channel, decimal? priceDelta)
+    {
+        EnsureDeliveryPlatform(channel);
+        var option = _optionGroups.SelectMany(group => group.Options).FirstOrDefault(existing => existing.Id == optionId)
+            ?? throw new DomainException($"Una de las opciones de '{Name}' ya no existe. Recarga e intenta de nuevo.");
+        option.SetPlatformPriceDelta(channel, priceDelta);
+    }
+
+    private static void EnsureDeliveryPlatform(OrderChannel channel)
+    {
+        if (!OrderChannelRules.IsDeliveryPlatform(channel))
+            throw new DomainException(DeliveryPlatformSetting.NotADeliveryPlatformMessage);
+    }
+
     /// <summary>
     /// The options chosen for a sale, checked against the catalog: they belong to the product, are available,
-    /// each one is chosen once and every group gets between its minimum and maximum.
+    /// each one is chosen once and every group gets between its minimum and maximum. Each one carries what it adds in
+    /// <paramref name="channel"/> (in the menu, unless it is a delivery platform with a price of its own).
     /// </summary>
-    public IReadOnlyList<OrderLineOption> ResolveOptions(IReadOnlyCollection<Guid> optionIds)
+    public IReadOnlyList<OrderLineOption> ResolveOptions(IReadOnlyCollection<Guid> optionIds, OrderChannel channel = OrderChannel.Counter)
     {
         if (optionIds.Count != optionIds.Distinct().Count())
             throw new DomainException($"Una opción de '{Name}' está repetida.");
@@ -259,7 +319,7 @@ public class Product : AuditableEntity, ITenantScoped
                     : $"Elige como máximo {group.MaxSelections} opciones de '{group.Name}' para '{Name}'.");
             }
 
-            chosen.AddRange(picked.Select(option => new OrderLineOption(option.Id, group.Name, option.Name, option.PriceDelta)));
+            chosen.AddRange(picked.Select(option => new OrderLineOption(option.Id, group.Name, option.Name, option.PriceDeltaIn(channel))));
         }
 
         if (remaining.Count > 0)
@@ -268,10 +328,13 @@ public class Product : AuditableEntity, ITenantScoped
         return chosen;
     }
 
-    /// <summary>Price of one unit with the chosen options; never below zero.</summary>
-    public decimal PriceWith(IReadOnlyCollection<OrderLineOption> options)
+    /// <summary>
+    /// Price of one unit in <paramref name="channel"/> with the options chosen (resolved for the same channel); never below
+    /// zero.
+    /// </summary>
+    public decimal PriceWith(IReadOnlyCollection<OrderLineOption> options, OrderChannel channel = OrderChannel.Counter)
     {
-        var price = PriceAmount + options.Sum(option => option.PriceDelta);
+        var price = PriceIn(channel) + options.Sum(option => option.PriceDelta);
         return price >= 0
             ? price
             : throw new DomainException($"Las opciones elegidas dejan '{Name}' con precio negativo.");

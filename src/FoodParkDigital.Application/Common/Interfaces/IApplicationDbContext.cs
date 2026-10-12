@@ -70,6 +70,8 @@ public interface IApplicationDbContext
     DbSet<MessagingOptOut> MessagingOptOuts { get; }
     DbSet<ProductOptionGroup> ProductOptionGroups { get; }
     DbSet<ProductOption> ProductOptions { get; }
+    DbSet<ProductPlatformPrice> ProductPlatformPrices { get; }
+    DbSet<ProductOptionPlatformPrice> ProductOptionPlatformPrices { get; }
     DbSet<OrderItemOption> OrderItemOptions { get; }
     DbSet<DiningTable> DiningTables { get; }
     DbSet<KitchenTicket> KitchenTickets { get; }

@@ -2,16 +2,19 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../../api/queries';
 import { apiRequest, type Schemas } from '../../api/typedClient';
+import { useAuth } from '../../hooks/useAuth';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
-import { OrderChannel, PlatformCommissionBase, type TenantProfileDto } from '../../types';
+import { OrderChannel, PlatformCommissionBase, TenantCapability, type TenantProfileDto } from '../../types';
 import { setBusinessTimeZone } from '../../utils/dates';
 import DeliveryPlatformsCard from './DeliveryPlatformsCard';
 
+vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
 vi.mock('../../hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: vi.fn() }));
@@ -84,9 +87,11 @@ function apiError(status: number, code: string, detail: string, errors?: Record<
 function renderCard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={queryClient}>
-      <DeliveryPlatformsCard />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <DeliveryPlatformsCard />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
   return queryClient;
 }
@@ -106,6 +111,8 @@ describe('DeliveryPlatformsCard', () => {
     setBusinessTimeZone('America/Mexico_City');
     vi.mocked(useToast).mockReturnValue(toast as unknown as ReturnType<typeof useToast>);
     vi.mocked(useConfirm).mockReturnValue({ confirm, prompt: vi.fn() });
+    // The owner, as in Configuración › Negocio.
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'TenantAdmin', permissions: [] } } as unknown as ReturnType<typeof useAuth>);
     vi.mocked(useTenant).mockReturnValue({
       tenant: { id: 't1', name: 'Cocina Lupita', slug: 'lupita', timeZone: 'America/Mexico_City' } as TenantProfileDto,
       capabilities: 0,
@@ -185,10 +192,31 @@ describe('DeliveryPlatformsCard', () => {
     expect(within(dialog).getByLabelText('IVA retenido (% del IVA del pedido)')).toHaveValue('50');
     expect(within(dialog).getByText(/^Las tasas por omisión son las de 2026 \(Ley de Ingresos de la Federación y Ley del IVA\)/))
       .toHaveClass('alert', 'alert-warning');
-    expect(within(dialog).getByText(/Por ahora los pedidos usan los precios de tu catálogo/)).toHaveClass('alert', 'alert-light', 'border');
+    // Without the catalog (a business with no products), where the prices are set is only named.
+    const prices = within(dialog).getByText(/^Los pedidos de Uber Eats se cobran con los precios que pongas en Catálogo › Precios en apps/);
+    expect(prices).toHaveClass('alert', 'alert-light', 'border');
+    expect(prices).toHaveTextContent('los productos que no tengan uno, con el de tu menú.');
+    expect(within(dialog).queryByRole('link', { name: 'Catálogo › Precios en apps' })).not.toBeInTheDocument();
     // One main action in the dialog.
     expect(within(dialog).getByRole('button', { name: 'Guardar' })).toHaveClass('btn-primary');
     expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toHaveClass('btn-light');
+  });
+
+  it('takes whoever manages the catalog to the prices of the platform from its terms', async () => {
+    vi.mocked(useTenant).mockReturnValue({
+      tenant: { id: 't1', name: 'Cocina Lupita', slug: 'lupita', timeZone: 'America/Mexico_City' } as TenantProfileDto,
+      capabilities: TenantCapability.Food,
+      isLoading: false,
+      refreshTenant: vi.fn(),
+    });
+    serve({ get: () => Promise.resolve(NONE_SAVED) });
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Configurar Rappi' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rappi' });
+
+    expect(within(dialog).getByRole('link', { name: 'Catálogo › Precios en apps' })).toHaveAttribute('href', '/platform-prices');
+    expect(within(dialog).getByText(/^Los pedidos de Rappi se cobran con los precios que pongas en/)).toBeInTheDocument();
   });
 
   it('asks for the commission of the contract before saving', async () => {

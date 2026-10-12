@@ -53,11 +53,18 @@ interface CartPanelProps {
   online: boolean;
   /** Registers the order of the platform without charging it. */
   onRegisterPlatformOrder: () => void;
+  /** The prices on screen are not yet those of where the sale comes from (the platform's app, or the menu). */
+  pricesPending: boolean;
+  /** Why the catalog of where the sale comes from did not load, if it did not. */
+  pricesError: string;
+  onRetryPrices: () => void;
 }
 
 /** The ticket of the sale: where it came from and where it goes, its lines, the customer, the totals and what to do with it. */
 export default function CartPanel(props: CartPanelProps) {
-  const { tabTarget, tabOrder, chatOrigin, cart, totals, submitting, platform } = props;
+  const { tabTarget, tabOrder, chatOrigin, cart, totals, submitting, platform, pricesPending } = props;
+  // Nothing is charged, registered or sent at prices that are about to change.
+  const blocked = cart.length === 0 || submitting || pricesPending;
   // A chat is a WhatsApp order and a tab goes to a table: neither comes from a platform's app.
   const showOrigin = !tabTarget && !chatOrigin && props.activePlatforms.length > 0;
   const platformName = platform ? getPlatformName(platform) : '';
@@ -159,6 +166,7 @@ export default function CartPanel(props: CartPanelProps) {
           <span>Total</span>
           <span className="ta-money">{formatMoney(totals.total)}</span>
         </div>
+        {platform && !pricesPending && <div className="small text-muted">Con tus precios de {platformName}</div>}
       </div>
 
       {platform && (platformCharged || !props.canCharge) && (
@@ -173,6 +181,17 @@ export default function CartPanel(props: CartPanelProps) {
         </div>
       )}
 
+      {pricesPending && cart.length > 0 && (props.pricesError ? (
+        // On a phone the ticket covers the catalog and its error: the ticket says it too.
+        <div className="alert alert-warning small py-2 mt-2 mb-0 d-flex align-items-center justify-content-between gap-2" role="status">
+          <span>{platform ? `No se cargaron tus precios de ${platformName}.` : 'No se cargaron los precios de tu menú.'}</span>
+          <button type="button" className="btn btn-sm btn-light" onClick={props.onRetryPrices}>Reintentar</button>
+        </div>
+      ) : (
+        <p className="small text-muted mt-2 mb-0" role="status">
+          {platform ? `Cargando tus precios de ${platformName}…` : 'Cargando los precios de tu menú…'}
+        </p>
+      ))}
       {props.saleError && !props.chargeOpen && <div className="alert alert-danger py-2 mt-2 mb-0">{props.saleError}</div>}
 
       {tabTarget ? (
@@ -181,7 +200,7 @@ export default function CartPanel(props: CartPanelProps) {
             type="button"
             className="btn btn-primary btn-touch btn-touch-lg"
             onClick={props.onSendToKitchen}
-            disabled={cart.length === 0 || submitting}
+            disabled={blocked}
           >
             <i className="ri-restaurant-2-line me-1" aria-hidden="true"></i>
             {submitting ? 'Enviando…' : `Enviar a cocina · ${formatMoney(totals.total)}`}
@@ -195,7 +214,7 @@ export default function CartPanel(props: CartPanelProps) {
             type="button"
             className="btn btn-primary btn-touch btn-touch-lg"
             onClick={props.onRegisterPlatformOrder}
-            disabled={cart.length === 0 || submitting || !props.online}
+            disabled={blocked || !props.online}
           >
             {submitting
               ? 'Registrando…'
@@ -206,7 +225,7 @@ export default function CartPanel(props: CartPanelProps) {
               type="button"
               className="btn btn-light btn-touch"
               onClick={props.onOpenCharge}
-              disabled={cart.length === 0 || submitting || !props.online}
+              disabled={blocked || !props.online}
             >
               Cobrar ahora
             </button>
@@ -218,7 +237,7 @@ export default function CartPanel(props: CartPanelProps) {
             type="button"
             className="btn btn-primary btn-touch btn-touch-lg"
             onClick={props.onOpenCharge}
-            disabled={cart.length === 0 || submitting}
+            disabled={blocked}
           >
             Cobrar {formatMoney(totals.total)} <span className="sell-kbd">F9</span>
           </button>
@@ -226,7 +245,7 @@ export default function CartPanel(props: CartPanelProps) {
             type="button"
             className="btn btn-light btn-touch"
             onClick={props.onSaveUnpaid}
-            disabled={cart.length === 0 || submitting}
+            disabled={blocked}
           >
             Guardar sin cobrar
           </button>
@@ -237,7 +256,7 @@ export default function CartPanel(props: CartPanelProps) {
             type="button"
             className="btn btn-primary btn-touch btn-touch-lg"
             onClick={props.onSaveUnpaid}
-            disabled={cart.length === 0 || submitting}
+            disabled={blocked}
           >
             {submitting ? 'Guardando…' : `Guardar pedido · ${formatMoney(totals.total)}`}
           </button>

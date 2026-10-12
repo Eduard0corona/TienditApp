@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Catalog.Queries;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Orders.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,6 +32,7 @@ public class ProductsController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
+        [FromQuery] OrderChannel? priceChannel = null,
         CancellationToken cancellationToken = default)
     {
         var result = await _mediator.Send(new GetProductsQuery
@@ -41,7 +43,8 @@ public class ProductsController : ControllerBase
             ItemType = itemType,
             Search = search,
             PageNumber = pageNumber,
-            PageSize = pageSize
+            PageSize = pageSize,
+            PriceChannel = priceChannel
         }, cancellationToken);
         return Ok(result);
     }
