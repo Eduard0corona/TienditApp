@@ -18,4 +18,11 @@ describe('SaleDetailsForm', () => {
     const ids = Array.from(document.querySelectorAll('[id]'), (element) => element.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it('names the notes for the kitchen in each copy of the ticket of a platform order', () => {
+    const form = <SaleDetailsForm details={NO_SALE_DETAILS} onChange={vi.fn()} open onToggle={vi.fn()} isFood phoneError="" forPlatform />;
+    render(<>{form}{form}</>);
+
+    expect(new Set(screen.getAllByLabelText('Notas para cocina')).size).toBe(2);
+  });
 });
