@@ -181,9 +181,10 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
 
 - **Datos:**
   - **Hooks** (en `api/queries.ts`):
-    - `useDeliveryPlatformChannels` lee las plataformas activas, sin tasas (`GET /delivery-platforms/channels`). Lo usan Vender y Pedidos.
+    - `useDeliveryPlatformChannels` lee las plataformas activas, sin tasas (`GET /delivery-platforms/channels`). Lo usan Vender, Pedidos y, desde la Fase 22F-2, Precios en apps.
     - `useDeliveryPlatforms` lee la configuración completa.
-    - `useSaveDeliveryPlatform` guarda una plataforma. Pone la respuesta en la caché e invalida `['delivery-platforms', 'channels']`, para que Vender y Pedidos se enteren de una plataforma activada o apagada.
+    - `useSaveDeliveryPlatform` guarda una plataforma. Pone la respuesta en la caché e invalida `['delivery-platforms', 'channels']`, para que Vender, Pedidos y Precios en apps se enteren de una plataforma activada o apagada.
+    - Desde la Fase 22F-2, `usePlatformPrices` y `useSavePlatformPrices` (en `api/platformPrices.ts`, fuera de `api/queries.ts` para que solo los cargue la pantalla de precios) leen y guardan los precios de una plataforma. Guardar invalida su lista (`['delivery-platforms', canal, 'prices']`) al terminar, con éxito o con error.
   - **Etiquetas:** `utils/labels.ts` tiene los nombres de los canales (`ORDER_CHANNEL_LABELS`, `getChannelLabel`), la lista `DELIVERY_PLATFORM_CHANNELS` y quién cobró (`getCollectedByLabel`).
   - **Ayudas:** `utils/deliveryPlatforms.ts` tiene `isDeliveryPlatform` y las ayudas de cada plataforma. Su normalización del folio es un espejo para la experiencia de uso; la regla es la del servidor.
 - **Vender:**
@@ -194,18 +195,26 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
     - Si cobra el negocio, la acción principal registra sin cobrar y, con permiso de cobro, «Cobrar ahora» abre el cobro sin propina. Antes revisa el folio.
     - En el teléfono, «Registrar» sin folio abre la hoja del ticket para mostrar el campo y su error.
     - F9 hace la acción principal de lo que está en pantalla, y nada mientras hay un diálogo de Vender abierto (cobrar, abrir la caja, una opción, un peso, ventas pendientes o la venta terminada): así no registra un pedido detrás del cobro de «Cobrar ahora».
-  - **Catálogo:** con una plataforma elegida se carga sin el filtro del horario (`useSellCatalog` con `includeOutOfSchedule`, que pide `onlyAvailableNow: false`) y esa carga no se guarda como catálogo sin conexión. Si falla por la red, tampoco cae al catálogo guardado (que trae el horario y quitaría del ticket lo que la app vendió fuera de él): marca el error, deja los productos y el ticket en pantalla y reintenta al volver la conexión. Una carga vieja se descarta, así que ir a una plataforma y volver rápido no deja el catálogo equivocado.
+  - **Catálogo:** con una plataforma elegida se carga sin el filtro del horario (`useSellCatalog` con `includeOutOfSchedule`, que pide `onlyAvailableNow: false`) y con los precios de su app (`priceChannel`, desde la Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices.md)). Esa carga no se guarda como catálogo sin conexión. Si falla por la red, tampoco cae al catálogo guardado (que trae el horario y quitaría del ticket lo que la app vendió fuera de él): marca el error, deja los productos y el ticket en pantalla y reintenta al volver la conexión. Una carga vieja se descarta, así que ir a una plataforma y volver rápido no deja el catálogo equivocado.
   - **Borrador:**
     - Guarda el canal, el folio y quién cobró. `describeSale` los incluye: otra plataforma, otro folio u otro cobrador es otra venta, con otra llave.
     - Al montarse, Vender lee el origen del borrador antes de la primera carga, así que un pedido de plataforma restaurado ya trae el catálogo completo y sus líneas no se pierden.
     - Si la plataforma del borrador ya no está activa, o la lista no carga, vuelve a Mostrador. Mientras la lista no se conoce (sin conexión espera), el selector ofrece la plataforma del borrador junto a Mostrador: el pedido se conserva tal cual y el cajero puede pasar la venta a Mostrador, y esa elección se respeta cuando el borrador se restaura.
   - **Cambios de origen:** elegir Mostrador limpia el folio y cambiar de plataforma lo conserva. Un cliente que llega por enlace (ficha o chat) regresa la venta a Mostrador, porque un pedido con teléfono nunca es de plataforma.
+  - **Precios de la app** (Fase 22F-2):
+    - Al elegir una plataforma o volver a Mostrador, el catálogo se recarga y `syncCart` recalcula el ticket con los precios nuevos, los de cada opción incluidos.
+    - `useSellCatalog` dice de quién son los precios en pantalla (`pricesFor`: la plataforma, o null para el menú). Mientras no son los del origen elegido (`pricesPending`), Vender no deja cobrar ni registrar, ni con F9.
+    - El ticket dice «Cargando tus precios de Rappi…» (o «Cargando los precios de tu menú…» al volver), y con ellos, «Con tus precios de Rappi» bajo el total.
+    - Los diálogos de opciones y de cantidad muestran y agregan el producto como lo trae el catálogo en ese momento: si los precios de la app llegan con un diálogo abierto, la línea los toma.
+    - La búsqueda en el servidor de un catálogo de más de 500 productos pide también `priceChannel`.
+    - Si el catálogo de la plataforma no carga, el ticket lo dice («No se cargaron tus precios de Rappi.») con «Reintentar», porque en el teléfono el ticket tapa el error del catálogo.
+    - El cliente no calcula ningún precio: los pone la API, y la venta rechaza un total distinto del suyo.
   - **Sin conexión:** no se encola. Las acciones se desactivan con «Sin conexión no se pueden registrar pedidos de plataforma ni se guardan solos: déjalo en pantalla y regístralo cuando vuelva la conexión.».
   - **Folio repetido:** ante un 409 `possible_duplicate_order`, `useConfirm` pregunta «¿Es otro pedido?». «Registrar de todos modos» reenvía la misma petición con la misma llave y `confirmPossibleDuplicate`. «Revisar» no guarda nada y deja la misma llave, así que un reintento vuelve a preguntar.
   - **Caja cerrada:** el aviso cambia solo si hay alguna plataforma activa.
   - **Al terminar:** `CompletedSaleModal` dice «Pedido ORD-000123 de Rappi registrado», ofrece «Imprimir para la bolsa» y no ofrece «Enviar por WhatsApp», porque no hay teléfono. Si cobra el negocio y quedó saldo, a quien puede cobrar le dice «Cóbralo en Pedidos cuando el repartidor te pague.» y a quien no, «La caja lo cobra desde Pedidos cuando el repartidor pague.»; la ayuda «cóbralo en la caja como siempre» del folio sale solo a quien puede cobrar.
 - **Ticket** (`SaleTicket` y `buildTicketText`):
-  - **Si cobró la plataforma:** sale en modo empaque, con «Rappi · Folio BC953», los productos sin precios ni totales (mientras no haya precio por plataforma, la bolsa no contradice la app) y «Pagado en la app de Rappi».
+  - **Si cobró la plataforma:** sale en modo empaque, con «Rappi · Folio BC953», los productos sin precios ni totales y «Pagado en la app de Rappi». La app ya le dio su recibo al cliente: la bolsa solo dice qué empacar, y no contradice a la app si un precio no se actualizó en Precios en apps.
   - **Si cobra el negocio:** sale el ticket normal con la línea del folio y, si hay saldo, «Cobrar al repartidor: $245.00» en lugar de «Saldo pendiente».
   - **Siempre:** con nombre, «Bolsa: …» reemplaza a «Cliente: …». Nunca imprime la comisión, las retenciones ni el neto.
 - **Pedidos:**
@@ -218,6 +227,7 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
   - **Anular un pedido de plataforma:** lleva su introducción y tres botones de motivo, que llenan el campo y se pueden editar. «Regresar los insumos al inventario» empieza apagado. La frase «Lo que cobró Rappi no sale de tu caja.» sale solo si el pedido tiene un pago «Plataforma»: en uno de DiDi que el repartidor pagó en efectivo, anular sí saca dinero de la caja.
 - **Cocina:** la tarjeta lleva `ChannelBadge`, el folio de la app en el `h4`, el `ORD-…` chico y «Bolsa: …» (oculto si es «Público en general»). Una comanda sin folio se ve como cualquier otra.
 - **Configuración › Negocio › Plataformas de reparto** (`DeliveryPlatformsCard`, después de los días especiales):
+  - **Aviso de precios** (Fase 22F-2): el formulario dice que los pedidos de la plataforma se cobran con los precios de Catálogo › Precios en apps, y los productos sin uno, con el del menú. El enlace sale a quien puede abrir Catálogo; a los demás, el mismo texto sin enlace.
   - **Filas:** una por plataforma, con su estado, el resumen de sus términos, el ejemplo que calcula el servidor con la tasa de IVA del negocio («Con un pedido de $1,000.00 con IVA al 16 % incluido…»; 8 % en la frontera) y quién la cambió. «Configurar» o «Editar» llevan el nombre en su `aria-label`.
   - **Formulario** (`DeliveryPlatformForm`): una plataforma nunca guardada abre con el interruptor encendido, porque configurarla es para recibir sus pedidos, y se puede apagar antes de guardar. El aviso al guardar depende del cambio: «quedó activa», «ya no aparece en Vender» o «guardada». Desactivar pide confirmación.
   - **Validación local:** solo para la experiencia de uso. Una comisión vacía dice «Escribe la comisión de tu contrato.» y un porcentaje que no se puede leer, el mensaje del servidor; acepta coma decimal. Los rangos los decide la API.
@@ -239,6 +249,25 @@ Pedidos de plataformas de reparto (Fase 22F, [ADR 0013](../adr/0013-delivery-pla
   - **Datos simulados por omisión:** sin plataformas activas, las tres sin configurar y las ventas por canal vacías.
   - **Escenas:** diez nuevas, con dieciséis capturas, con sus propias rutas simuladas, y doce de Mi negocio y Reportes que cambian a propósito por las tarjetas nuevas.
   - **Primera visita:** 175,868 de los 176,000 B del presupuesto.
+
+Catálogo › Precios en apps (`/platform-prices`, Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices.md)):
+
+- **Acceso:** pide el área de Catálogo (`ManageCatalog`), como los precios del menú, y está en las pestañas de Catálogo y en la búsqueda global («rappi», «uber eats», «didi food»…).
+- **Lista:**
+  - Lee hasta 500 productos en una sola petición (`pageSize` 500, el máximo de la API), cada uno con sus opciones debajo. Con más, avisa que los demás se cobran con el precio del menú.
+  - La búsqueda y la categoría filtran en el cliente, así que lo escrito no se pierde al buscar. La tabla muestra hasta 1,000 filas por página, con su propio desplazamiento (`DataTable`).
+  - Las columnas son «Tu menú» y «En Rappi»: una caja vacía muestra el precio del menú, que es el que cobra. En un teléfono, «Tu menú» va bajo el nombre y su columna se oculta, para que la caja quepa.
+  - La caja de una opción no pide el teclado decimal, porque el del iPhone no tiene signo de menos y una variante más barata lo lleva. Su nombre accesible lleva el grupo («Grande (Tamaño) de Latte en Rappi»), porque dos grupos pueden tener una opción con el mismo nombre.
+- **Plataforma:** la primera activa (Rappi mientras ninguna lo está); las apagadas dicen «(apagada)» y la página avisa que sus precios se usan cuando se active. El primer cambio la deja fija: si la lista de las activas cambia mientras tanto (otra persona activa o apaga una), lo escrito no pasa a otra.
+- **Edición (`platformPriceEdits.ts`):**
+  - Lo escrito vive en el estado de la página, por caja (`p:` y el producto, `o:` y la opción). Una caja que vuelve a mostrar el precio guardado no cuenta como cambio.
+  - `parseProductPrice` y `parseOptionDelta` aceptan lo que la API acepta (mayor a $0 y hasta $1,000,000; de −$100,000 a $100,000 con «-» o «−»; dos decimales). Una coma solo separa miles: «32,50» se marca en rojo en lugar de leerse como 3,250.
+  - Una caja que la API rechazaría se marca en rojo, su ayuda dice el límite y bloquea «Guardar cambios». Si está en otra categoría, la barra lo dice.
+  - Guardar manda solo lo que cambió: cada producto con su precio de ahora y solo sus opciones que cambiaron.
+  - «Calcular precios» (`raisePrices`) sube el precio del menú un porcentaje y lo redondea hacia arriba, en centavos enteros, sin errores de punto flotante. Llena las cajas vacías de la categoría elegida (o de todas, con «Todas»), y también las que ya tienen precio si se marca «También los que ya tienen precio». Nada se guarda hasta revisar.
+- **Cambios sin guardar:**
+  - La barra bajo la lista dice cuántos precios cambiaron. No está fija a la pantalla: la lista ya se desplaza en su propia caja, y una barra fija tapaba sus últimas filas (y la caja en la que se escribe) y, en el teléfono, quedaba bajo la barra de pestañas.
+  - Cambiar de plataforma o descartar pide confirmar, y cerrar o recargar la pestaña lo pregunta el navegador (`beforeunload`). Cambiar de pantalla dentro de la app no pregunta, porque `BrowserRouter` no permite detener una navegación.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

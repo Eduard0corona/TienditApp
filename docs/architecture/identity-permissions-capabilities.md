@@ -32,7 +32,8 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Campañas, plantillas, bajas y promoción rápida | `ManageCampaigns` | — |
 | Equipo, actividad del negocio y configuración | dueño o admin | — |
 | Plataformas de reparto con sus tasas: verlas y guardarlas (`GetDeliveryPlatformsQuery`, `SaveDeliveryPlatformCommand`, Fase 22F) | dueño o admin (`Manager`) | — |
-| Qué plataformas están activas, sin tasas (`GetDeliveryPlatformChannelsQuery`, para Vender, Pedidos y Reportes) | `ManageOrders` o `ViewReports` (`Permission(ManageOrders, ViewReports)`) | — |
+| Qué plataformas están activas, sin tasas (`GetDeliveryPlatformChannelsQuery`, para Vender, Pedidos, Reportes y, desde la Fase 22F-2, Precios en apps) | `ManageOrders`, `ViewReports` o `ManageCatalog` (`Permission(ManageOrders, ViewReports, ManageCatalog)`) | — |
+| Precios en las apps de las plataformas: la lista y guardarlos (`GetPlatformPriceListQuery`, `SavePlatformPricesCommand`, Fase 22F-2) | `ManageCatalog` (`Permission(ManageCatalog)`), como los precios del menú | — |
 | Ventas por canal y pedidos de una plataforma (`GetSalesByChannelQuery`, `GetDeliveryPlatformOrdersQuery`) | `ViewReports` (`Permission(ViewReports)`) | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
@@ -42,9 +43,15 @@ Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-order
 - **Las tasas de los contratos son de dueños y administradores.** Quien toma pedidos o lee reportes solo sabe qué plataformas están activas. La comisión de cada pedido solo sale en Reportes; `OrderDto`, el ticket, Cocina y el aviso en vivo nunca la llevan.
 - **La API lo prueba con personal real** (`CrossTenantDeliveryPlatformsSqlServerTests`):
   - cocina, solo reportes y solo catálogo reciben 403 en `GET` y `PUT /delivery-platforms`;
-  - cocina y solo reportes reciben 200 en `/channels`, y solo catálogo, 403;
+  - cocina, solo reportes y, desde la Fase 22F-2, solo catálogo reciben 200 en `/channels`;
   - solo reportes recibe 200 en los dos reportes nuevos, y cocina, 403.
 - **Sin capability ni módulo:** ningún caso de uso nuevo declara un módulo.
+
+Precios en las apps (Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices.md)):
+
+- **Los cambia quien cambia los precios del menú** (`ManageCatalog`): la lista y el guardado. Las tasas de los contratos siguen siendo de dueños y administradores.
+- **Los lee quien puede leer el catálogo:** `GET /products?priceChannel=` pide lo mismo que la lista de productos (catálogo, pedidos, inventario o agenda). Los precios de una app no son secretos: los ve cualquier cliente en ella.
+- **La API lo prueba con personal real** (`CrossTenantPlatformPricesSqlServerTests`): solo catálogo recibe 200 en la lista y en `/channels`, 204 en el guardado y 403 en las tasas; un cajero (`ManageOrders`) y solo reportes reciben 403 en la lista y el guardado; el cajero lee el catálogo con los precios de la plataforma.
 
 Un negocio siempre tiene un tipo de venta (productos, servicios o alimentos), como su plan: `TenantCapabilityRules.NormalizeCapabilities` completa el de su giro si su configuración no deja ninguno y `UpdateMyTenantCommand` no guarda módulos sin uno. Por eso ningún caso de uso exige "comercio".
 

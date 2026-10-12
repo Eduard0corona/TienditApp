@@ -31,6 +31,7 @@ Un pedido de Rappi, Uber Eats o DiDi Food entra por la app de la plataforma, y e
 - **Plataforma activa:** la plataforma debe estar activa en el negocio al registrar el pedido. Si no, responde 400 `business_rule` con «Rappi no está activa en tu negocio: actívala en Configuración › Negocio › Plataformas de reparto.».
 - **Con conexión:** se registra con conexión. Una venta capturada sin conexión (`CapturedOfflineAt`) se rechaza.
 - **Existencias y horario:** las existencias van en «vender y avisar» aunque el negocio bloquee, y no se exige el horario del producto, porque la app ya aceptó el pedido. Un producto apagado sí se rechaza.
+- **Precios:** desde la Fase 22F-2 se cobran los de la app de esa plataforma ([ADR 0014](../adr/0014-delivery-platform-prices.md)). Cada producto y cada opción sin precio propio en la app se cobra con el del menú, y cada línea copia el precio que cobró. Ver [precios en las apps](#precios-en-las-apps-de-las-plataformas-fase-22f-2).
 - **Lo que fija el registro:** al registrarse, el pedido copia los términos de la plataforma, su revisión y la comisión, las retenciones y el neto esperado calculados (`PlatformOrderDetail`, ver [finanzas](finance-payments-and-taxes.md#pedidos-de-plataformas-de-reparto-fase-22f)). Después no se le agregan productos.
 - **Pagos:** un pedido que cobró la plataforma no admite otros pagos. Lo que cobró se devuelve como «Plataforma», y nada más se devuelve así.
 - **Folio repetido:** con el mismo folio de la misma plataforma ya registrado ese día del negocio (desde la medianoche en su zona horaria), en un pedido que no está cancelado ni reembolsado por completo, la venta responde 409 `possible_duplicate_order`: «Hoy ya registraste un pedido de esta plataforma con el mismo folio. Si es otro pedido, confírmalo para registrarlo.». Con `confirmPossibleDuplicate` se registra. Un reintento con la misma llave de idempotencia devuelve el pedido ya creado, sin preguntar. Es un aviso: dos capturas del mismo folio en el mismo instante pasan las dos.
@@ -44,6 +45,22 @@ Un pedido de Rappi, Uber Eats o DiDi Food entra por la app de la plataforma, y e
   - el ISR retenido va de 0 % a 20 % y el IVA retenido de 0 % a 100 % del IVA del pedido, todos con hasta dos decimales.
 
   Cada cambio deja `DeliveryPlatformUpdated` en la bitácora, en el mismo guardado. Su metadata lleva el canal, los términos anteriores (vacíos la primera vez) y los nuevos, cada uno con el estado, las tasas, la base y la revisión. Una petición que no cambia nada no guarda ni registra, y desactivar no borra nada: los pedidos conservan su detalle.
+
+## Precios en las apps de las plataformas (Fase 22F-2)
+
+Cada negocio puede poner, en Catálogo › Precios en apps, lo que cobra en la app de cada plataforma ([ADR 0014](../adr/0014-delivery-platform-prices.md)). Las reglas viven en el agregado `Product`, cuyo rechazo el caso de uso devuelve como 400 `business_rule`; en el validador (400 `validation_failed`: el canal, de 1 a 500 productos, hasta 300 opciones por producto y nada repetido); y en el caso de uso:
+
+- **Qué se guarda:** el precio de un producto en una plataforma (`ProductPlatformPrice`) y lo que suma una opción en una plataforma (`ProductOptionPlatformPrice`). Uno por producto u opción y plataforma, solo en Rappi, Uber Eats y DiDi Food.
+- **Límites:** lo que suma una opción, los del menú: de −$100,000 a $100,000 (negativo para una variante más barata), con dos decimales como máximo. El precio de un producto, mayor a $0 y de hasta $1,000,000, con dos decimales como máximo: el tope y los decimales son propios de los precios en apps, porque el del menú solo pide mayor a 0.
+- **Dónde se usan:** solo en los pedidos de esa plataforma. Mostrador, WhatsApp, el menú en línea, las mesas y el chat cobran el precio del menú.
+- **Sin precio propio:** el producto o la opción se cobra en la app con el del menú. Guardar null quita el precio de la app.
+- **Servicios:** no llevan precio en las apps, porque un pedido de plataforma lleva solo productos.
+- **Oferta del menú:** el precio tachado (`CompareAtPrice`) es del menú; Vender no lo muestra en un producto con precio de la app.
+- **Quién los cambia:** quien cambia los precios del menú (`ManageCatalog`), sin bitácora, igual que el menú. Cada pedido copia sus precios, así que cambiarlos nunca reescribe un pedido.
+- **Guardado:** es todo o nada. Un producto ajeno o borrado, un servicio, una opción que ya no es del producto o un precio fuera de los límites rechaza el guardado completo con su mensaje. Las opciones que no se mandan no cambian. Un negocio sin el módulo de productos ni el de alimentos no guarda precios, y su lista sale vacía.
+- **Al mismo tiempo:** si otra persona guarda el primer precio del mismo producto u opción, o borra el producto o la opción, entre la lectura y el guardado, la API responde 409 `concurrency_conflict` y no guarda nada. Dos cambios de un precio que ya existía no chocan: gana el último, como en los precios del menú. Cualquier otra falla de la base es un error, no un conflicto.
+- **Opciones y productos:** una opción que se conserva en el editor de opciones conserva su precio en las apps. Una opción que se quita, o un producto que se borra, se lleva sus precios.
+- **Total:** la venta sigue rechazando un `ExpectedTotal` distinto del que calcula el servidor. Si un precio de la app cambia entre que Vender carga el catálogo y registra el pedido, la venta se rechaza y Vender recarga.
 
 ## Cancelación y trazabilidad
 
