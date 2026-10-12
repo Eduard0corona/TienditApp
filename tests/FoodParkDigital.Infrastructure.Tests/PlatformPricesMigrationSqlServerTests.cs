@@ -129,8 +129,9 @@ public class PlatformPricesMigrationSqlServerTests
         // Rolling back again does nothing.
         await MigrateAsync(database, BeforePrices);
 
-        // Forward again: the tables start empty, and the orders of the platforms sell at the menu's prices.
-        await MigrateAsync(database);
+        // Forward again (to this migration; later ones apply on top): the tables start empty, and the orders of the
+        // platforms sell at the menu's prices.
+        await MigrateAsync(database, Migration);
         await using (var context = database.CreateContext(tenant.Id))
         {
             var product = await LoadAsync(context, burger.Id);
