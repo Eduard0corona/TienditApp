@@ -103,6 +103,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? TableNumber { get; private set; }
     /// <summary>True when item prices already include IVA; false when IVA is added on top of them.</summary>
     public bool PricesIncludeTax { get; private set; }
+    /// <summary>
+    /// Where the order came from, fixed when the order is created and never changed: sales by channel, the order list
+    /// filter and the rules of the delivery platforms (no customer, no notices, the «Plataforma» payment, the order's
+    /// <see cref="PlatformDetail"/>) rely on it never moving.
+    /// </summary>
     public OrderChannel Channel { get; private set; }
     /// <summary>
     /// Branch where the sale was made, fixed when the order is created: reports by branch and the daily sales

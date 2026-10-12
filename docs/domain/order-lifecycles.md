@@ -113,6 +113,7 @@ Cada aviso de pedido (`order_confirmed`, `order_status_update`, `order_cancelled
 - Un pedido que espera al negocio (`Pending`, pedido en línea sin aceptación automática) no recibe "pedido confirmado" al llegar; el cliente recibe el aviso cuando el negocio lo confirma.
 - Los eventos guardados en el outbox antes de este cambio no traen `Status` y se leen como `Confirmed`, igual que los trataba el handler anterior.
 - La baja del cliente (BAJA) no detiene estos avisos (ver [mensajería](messaging.md#bajas)).
+- Un pedido de Rappi, Uber Eats o DiDi Food (Fase 22F) nunca recibe avisos, con cualquier política: `OrderNotificationRules` responde que no antes de revisarla, y el pedido no guarda teléfono. El cliente habla con la app de la plataforma.
 
 ## Cuentas abiertas por mesa (Fase 3)
 
@@ -142,7 +143,7 @@ stateDiagram-v2
 - En Mi negocio, "Menú en línea" tiene tres modos (`OnlineMenuMode`): apagado (por defecto), solo menú y menú con pedidos. El enlace es `/m/{slug}`; hay QR descargable, botón para compartir por WhatsApp y QR por mesa (`?mesa=Mesa 4`, que llega como mesa del pedido).
 - El cliente arma el pedido con opciones y lo envía con su nombre y teléfono. Llega como cualquier pedido de cliente (`CreatedByBusiness = false`, canal `Online`, ligado a su cliente temporal o registrado), en `Pending` para que el negocio lo confirme, o en `Confirmed` si el negocio acepta pedidos automáticamente (`AutoAcceptOrders`). La cocina lo ve como cualquier pedido de comida.
 - Mismas reglas de precio que en mostrador (`OrderLineBuilder`); el pedido se rechaza si el total cambió desde que el cliente lo vio, si un producto ya no está disponible o es un servicio.
-- Llega a la sucursal principal y solo mientras ahí haya una caja abierta, porque todo cobro entra a una caja: sin ella el menú se ve pero no recibe pedidos (`PublicMenuDto.OrdersPaused`, "Por ahora no estamos recibiendo pedidos en línea") y `PlacePublicOrderCommand` los rechaza. El pedido llega sin pago; al cobrarlo, el pago entra a la caja de quien cobra o a la única abierta de la sucursal.
+- Llega a la sucursal principal y solo mientras ahí haya una caja abierta, porque todo cobro que recibe el negocio entra a una caja (solo el pago «Plataforma» de un pedido de Rappi, Uber Eats o DiDi Food no entra, ver [pedidos de plataformas](#pedidos-de-plataformas-de-reparto-fase-22f)): sin ella el menú se ve pero no recibe pedidos (`PublicMenuDto.OrdersPaused`, "Por ahora no estamos recibiendo pedidos en línea") y `PlacePublicOrderCommand` los rechaza. El pedido llega sin pago; al cobrarlo, el pago entra a la caja de quien cobra o a la única abierta de la sucursal.
 - El cliente recibe el aviso por WhatsApp cuando el negocio confirma su pedido (o al llegar, si se acepta automáticamente), según la [política de avisos](#avisos-al-cliente-fase-4).
 - Horario (Fase 19, [ADR 0011](../adr/0011-opening-hours.md)):
   - Con horario capturado, fuera de él el menú se ve pero no recibe pedidos para recoger o a domicilio.
@@ -156,6 +157,22 @@ stateDiagram-v2
   - El rechazo dice por qué y cuándo vuelve: "Está cerrado por Navidad: abre mañana a las 9:00." (con motivo), "Hoy está cerrado: abre mañana a las 9:00." (sin motivo) o, por el horario, "Ahora está cerrado: abre mañana a las 9:00.", el de la Fase 19 a 0 y 1 días salvo en dos casos: una apertura a medianoche dice solo el día ("abre mañana", antes "abre mañana a las 0:00") y la hora de la una va en singular ("abre mañana a la 1:00", antes "a las 1:00"). Desde 2 días nombra la fecha: "abre el sábado 26 a las 9:00", "abre el martes 5 de enero a las 9:00".
   - `PublicMenuDto.OpeningHours` trae además las palabras que escribe el servidor (la etiqueta del chip, su detalle, el aviso mientras no recibe pedidos y el del próximo día especial), el horario de hoy y los días especiales de los próximos 31 días, con los días que le quedan a uno en curso. Es `null` solo sin horario de la semana y sin día especial hoy ni en esos 31 días.
 - Pendiente: pago en línea y entrega a domicilio con costo de envío.
+
+## Pedidos de plataformas de reparto (Fase 22F)
+
+Los pedidos de Rappi, Uber Eats y DiDi Food (canales 3, 4 y 5) entran por la app de la plataforma, y el negocio los registra en Vender con el folio de la app ([ADR 0013](../adr/0013-delivery-platform-orders.md); sus reglas están en [reglas de negocio](business-rules.md#pedidos-de-plataformas-de-reparto-fase-22f)).
+
+- **Mismas máquinas, sin estados nuevos.** Son pedidos `Retail` del negocio: siguen la máquina de alimentos o la de tienda según el giro, como una venta de mostrador. `ApplyBusinessDefaultStatus` los deja en `Confirmed` al crearse.
+- **Mismo cierre automático** (`CounterSaleClosing`, con `AutoCloseCounterSales`):
+  - **Cobró la plataforma:** el pedido nace pagado con el pago «Plataforma». Sin Cocina queda `Delivered` al registrarse; con Cocina, cuando la cocina lo marca `Ready`.
+  - **Cobra el negocio:** el pedido queda abierto con su saldo hasta que el repartidor paga y se cobra desde Pedidos, y entonces se cierra igual.
+- **Cocina:** el tablero los muestra como cualquier pedido de comida. `KitchenOrderDto` trae el canal y el folio de la app, que la tarjeta pone en grande.
+- **Anular:**
+  - **Flujo:** es el de siempre (`VoidOrderCommand`, sin cambios). Devuelve lo que queda de cada pago con su misma forma, y lo que cobró la plataforma vuelve como «Plataforma», sin caja abierta ni movimiento de caja. Después cancela si la máquina lo permite.
+  - **Estado:** un pedido ya entregado queda entregado y reembolsado por completo. Así queda una cancelación tardía de la plataforma hasta que exista la liquidación.
+  - **Insumos:** regresan solo si se pide. En un pedido de plataforma, «Regresar los insumos al inventario» empieza apagado en la pantalla; el valor por omisión del servidor no cambia.
+- **Reembolsar** no cambia el estado, como siempre. Si el pedido tiene un pago «Plataforma», el método es «Plataforma»; en cualquier otro pedido, ese método se rechaza.
+- **El canal no cambia** después de crear el pedido (`Order.Channel`), y a un pedido con su detalle no se le agregan productos.
 
 ## Variantes y extras (Fase 3)
 

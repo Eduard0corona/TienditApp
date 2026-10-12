@@ -72,6 +72,43 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **WebApi:** `BusinessTimeZonesHealthCheckTests` (Degraded cuando una zona cae en UTC, con un resolvedor inyectado), `HealthEndpointsTests` (`/health/ready` trae `"business-time-zones":"Healthy"` tal como lo busca la prueba de humo) y `SpanishModelBindingTests` (una fecha mal escrita en el cuerpo responde 400 en español).
   - **Cliente:** `SpecialDaysCard.test.tsx` (estados, sin próximos con Pasados, agregar, dos horarios, varios días, editar uno en curso, quitar, el aviso al guardar según lo que muestra el menú, los errores 400, 404, 409 y 422 que vuelven a pedir la lista y cierran el diálogo que ya no puede guardarse, uno de red que no la relee, la noche anterior con un día especial marcado, una sugerencia que llena el diálogo sin pedir nada y los nombres accesibles), `PublicMenuPage.test.tsx` (las palabras del servidor, la mesa en un día cerrado, sin horario de la semana, la línea de hoy sin nada que abrir y la respuesta anterior sin `todayDate`, que se ve igual que antes), `OpeningHoursCard.test.tsx` (los textos con días especiales y el aviso al guardar), `AiAgentSettings.test.tsx` (de dónde salen las respuestas de horario, con y sin horario de la semana), `dates.test.ts` (el 24 de diciembre sigue siendo el 24 en la zona de México) y `openingHours.test.ts` (sus casos anteriores, "a la 1:30" en la respuesta anterior, y los textos nuevos).
   - **Escenas visuales:** cuatro nuevas, "negocio, días especiales" y "negocio, día especial (diálogo)" en `caja-config.spec.ts`, y el menú cerrado por un día especial y con horario especial en `publico-cuenta-marco.spec.ts`. Los datos simulados compartidos responden la lista de días especiales, así que las escenas de Mi negocio cambian por la tarjeta nueva; los datos de las del menú público no traen `todayDate`, así que siguen el camino de antes.
+- Fase 22F, pedidos de Rappi, Uber Eats y DiDi Food ([ADR 0013](../adr/0013-delivery-platform-orders.md)):
+  - **Domain:**
+    - `PlatformTermsTests`: los rangos, los valores por omisión de 2026 y la igualdad sin importar la escala.
+    - `PlatformOrderNumberTests`: la normalización del folio, los 30 caracteres, los 60 antes de normalizar y la búsqueda.
+    - `PlatformOrderCalculatorTests`: los ejemplos 561.48, 574.41, −348.00, 191.25 y 406.14, el punto medio y los exentos.
+    - `OrderChannelRulesTests`: recorre todo el enum.
+    - `DeliveryPlatformSettingTests`: la revisión, sin cambios y el canal fijo.
+    - `PlatformOrderTests`: el constructor, `RegisterPlatformOrder` con las dos opciones de quién cobró, cada guarda y el cierre con y sin cocina.
+    - Ampliaciones: `OrderNotificationRulesTests` (los canales 3 a 5 nunca avisan, con las tres políticas), `CashSessionTests` (una transacción «Plataforma» se rechaza), `FractionalQuantityAndCfdiTests` (forma 31), `BranchTests` (`PlatformAmount`) y `OrderTaxTests` (`RecalculateTotals` ya no recorta lo cobrado).
+  - **Application:**
+    - `PlatformOrderFlowTests`, el registro: cobrado por la plataforma sin caja ni `ChargeOrders`, cobrado por el negocio al crear y después, plataforma inactiva, el validador, el producto fuera de horario o apagado, el servicio, la política `Block`, el folio repetido el mismo día del negocio (no al siguiente, ni con el anterior cancelado o reembolsado por completo) y el reintento con su folio.
+    - `PlatformOrderFlowTests`, lo demás: el detalle y Cocina, el evento y la bitácora, sin avisos con `AllOrders`, las campañas y la ficha.
+    - `OrderRefundTests`: la anulación sin caja, la entregada que queda reembolsada, los insumos solo si se piden y las reglas de método.
+    - `CashShiftTests`: los cinco casos del corte, con I5 como teoría sobre todo el enum. `PaymentNoDrawerTakes_ShouldBeRefused_WhateverTheMethod` sigue igual.
+    - `DailySalesReadModelTests`: `PlatformAmount` e I6.
+    - `GetSalesByChannelQueryTests`: I1, I2, I3, I7 e I8, la anulación otro día, el reembolso parcial, el negocio que cobra, las activas en cero, la sucursal, los módulos, el rango y el validador.
+    - `GetDeliveryPlatformOrdersQueryTests` y `GetDashboardMetricsQueryTests` (`PlatformCollected`).
+    - `DeliveryPlatformSettingsFlowTests`: los valores por omisión, crear, actualizar, sin cambios sin bitácora, `Stale`, 16/8/0, términos guardados fuera de los límites, dos negocios y `/channels` sin tasas.
+    - Otras: `PlatformPaymentValidatorTests`, `DtoMappingTests`, `OrderSearchTests` ("#bc 953" encuentra `BC953`), `FractionalSaleAndCfdiDraftTests` (forma 31, PUE y avisos, I9) y las cinco líneas nuevas de `UseCaseRulesTests`.
+  - **SQL Server:**
+    - `DeliveryPlatformsSqlServerTests`: la forma, las restricciones, la precisión, el índice único y las dos carreras del guardado.
+    - `DeliveryPlatformsMigrationSqlServerTests`: el error 50008, el rollback limpio y el contexto de la versión anterior (ver [migraciones](database-migrations.md)).
+    - `SaleTransactionSqlServerTests`: una sola transacción; un rechazo sin detalle y con el folio devuelto; el folio repetido con otra llave que avisa y nunca da 500.
+    - `SalesByChannelSqlServerTests`: la traducción del `GROUP BY`, las sumas condicionales con división decimal y `COUNT DISTINCT`, e I1 a I4, I7 e I8 contra las ventas por sucursal, Inicio y los cortes, con días guardados.
+    - Otras: `DtoProjectionSqlServerTests`, `DashboardMetricsSqlServerTests`, `CampaignAudienceSqlServerTests`, y `SalesSnapshotWorkerTests` y `OutboxTests` (un `OrderCreatedEvent` guardado antes se lee como de mostrador).
+  - **WebApi:**
+    - `PlatformOrdersSqlServerTests`: 409 `possible_duplicate_order` y 201 con la confirmación; 400 `business_rule` con la plataforma inactiva.
+    - `CrossTenantDeliveryPlatformsSqlServerTests`: dos negocios, la revisión vieja con 409, el personal con 403 y `/channels` para cocina y reportes, el pedido de una plataforma que solo activó el otro negocio, y las listas, búsquedas y reportes sin los pedidos del otro.
+    - `CrossTenantManagementSqlServerTests` suma las ventas por canal.
+  - **Cliente:**
+    - Utilidades: `labels.test.ts`, `deliveryPlatforms.test.ts`, `ticket.test.ts`, `cashCutText.test.ts` y `deliveryPlatformTerms.test.ts`.
+    - Componentes y pantallas: `ChannelBadge`, `PlatformOrderFields`, `sellDraft`, `SellPage` (las plataformas activas, el folio, la petición sin pagos ni caja, «Cobrar ahora» sin propina, sin conexión, el 409 con la misma llave, el catálogo sin horario y el regreso a Mostrador), `CompletedSaleModal`, `SaleTicket`, `OrdersList`, `RefundOrderModal` y `KitchenBoard`.
+    - Configuración, reportes, corte e Inicio: `DeliveryPlatformsCard`, `SalesByChannelCard` (con el diálogo y la semana pasada), `SalesByBranchCard`, `DailyCut`, `CashCutTicket` (sin filas de plataforma en el corte de un turno) y `Dashboard`.
+  - **Escenas visuales:**
+    - **Nuevas:** diez escenas con dieciséis capturas: Vender un pedido de Rappi en escritorio y teléfono, el pedido registrado, Pedidos por canal, el detalle, Cocina, Plataformas de reparto con el formulario, Ventas por canal con sus pedidos y el corte del día con plataforma.
+    - **Cambian a propósito:** doce escenas de Mi negocio y Reportes, por las tarjetas nuevas.
+    - **Resultado:** las 335 capturas pasaron dos corridas seguidas. Las nuevas no salen de la línea base de `master` hasta que la fase entre a `master`.
 
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 
