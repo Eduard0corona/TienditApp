@@ -33,6 +33,12 @@ public static class ApiErrorCodes
     public const string ConcurrencyConflict = "concurrency_conflict";
     /// <summary>409. The status changed meanwhile and the transition is no longer allowed.</summary>
     public const string InvalidStateTransition = "invalid_state_transition";
+    /// <summary>
+    /// 409. The business already registered today an order of the same delivery platform with the same folio. Short
+    /// folios repeat: the client asks, and sends the same order again (same idempotency key) with
+    /// <c>confirmPossibleDuplicate</c>.
+    /// </summary>
+    public const string PossibleDuplicateOrder = "possible_duplicate_order";
     /// <summary>429. Too many attempts; try again later.</summary>
     public const string TooManyRequests = "too_many_requests";
     /// <summary>500 and other server errors; <c>traceId</c> finds the log entry.</summary>

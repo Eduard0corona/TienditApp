@@ -1,6 +1,7 @@
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 
 namespace FoodParkDigital.Domain.Finance.Entities;
@@ -128,6 +129,9 @@ public class CashSession : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (Status != CashSessionStatus.Open)
             throw new DomainException("No se pueden registrar movimientos en una caja cerrada.");
+        // What a delivery platform charged in its app is settled by the platform: it never was in a drawer.
+        if (paymentMethod is { } method && !OrderPaymentMethodRules.EntersADrawer(method))
+            throw new DomainException(OrderPaymentMethodRules.NeverEntersADrawerMessage);
 
         var transaction = new CashTransaction(
             tenantId: TenantId,

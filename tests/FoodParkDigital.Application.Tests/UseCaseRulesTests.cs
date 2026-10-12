@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Customers.Queries;
+using FoodParkDigital.Application.DeliveryPlatforms;
 using FoodParkDigital.Application.Dining;
 using FoodParkDigital.Application.Finance.Commands;
 using FoodParkDigital.Application.Marketing.Commands;
@@ -56,6 +57,8 @@ public class UseCaseRulesTests
         // Reports, and the business's activity for owners and admins.
         { typeof(GetDashboardMetricsQuery), "Permission(ViewReports)" },
         { typeof(GetSalesByBranchQuery), "Permission(ViewReports)" },
+        { typeof(GetSalesByChannelQuery), "Permission(ViewReports)" },
+        { typeof(GetDeliveryPlatformOrdersQuery), "Permission(ViewReports)" },
         { typeof(GetAuditLogsQuery), "Manager" },
         // Configuration stays with owners and admins; every member reads where they work.
         { typeof(UpdateMyTenantCommand), "Manager" },
@@ -66,6 +69,11 @@ public class UseCaseRulesTests
         { typeof(AddSpecialDayCommand), "Manager" },
         { typeof(UpdateSpecialDayCommand), "Manager" },
         { typeof(RemoveSpecialDayCommand), "Manager" },
+        // The rates of the delivery platforms are for owners and admins; whoever sells or reads the reports learns only
+        // which platforms are on.
+        { typeof(GetDeliveryPlatformsQuery), "Manager" },
+        { typeof(SaveDeliveryPlatformCommand), "Manager" },
+        { typeof(GetDeliveryPlatformChannelsQuery), "Permission(ManageOrders, ViewReports)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

@@ -15,9 +15,27 @@ public class OrderNotificationService : IOrderNotificationService
         _hubContext = hubContext;
     }
 
-    public async Task NotifyOrderCreated(Guid tenantId, Guid orderId, string orderNumber, BusinessType businessType, decimal total, OrderStatus status)
+    public async Task NotifyOrderCreated(
+        Guid tenantId,
+        Guid orderId,
+        string orderNumber,
+        BusinessType businessType,
+        decimal total,
+        OrderStatus status,
+        OrderChannel channel,
+        string? externalOrderNumber)
     {
-        var payload = new { OrderId = orderId, OrderNumber = orderNumber, BusinessType = businessType.ToString(), Total = total, Status = status.ToString() };
+        // The folio of a platform's app identifies the order, not the customer: nothing personal goes out.
+        var payload = new
+        {
+            OrderId = orderId,
+            OrderNumber = orderNumber,
+            BusinessType = businessType.ToString(),
+            Total = total,
+            Status = status.ToString(),
+            Channel = channel.ToString(),
+            ExternalOrderNumber = externalOrderNumber
+        };
 
         await _hubContext.Clients
             .Group($"tenant_{tenantId}")

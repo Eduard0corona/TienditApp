@@ -2784,6 +2784,94 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("OrderStatusHistory", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.PlatformOrderDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CollectedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Commission")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("CommissionBase")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("CommissionPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("CommissionTax")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CommissionVatPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("ExpectedSettlement")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ExternalOrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("IsrWithheld")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("IsrWithholdingPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("OrderTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("RegisteredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("SettingsRevision")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("VatWithheld")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("VatWithholdingPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "RegisteredAt");
+
+                    b.HasIndex("TenantId", "Channel", "ExternalOrderNumber", "RegisteredAt");
+
+                    b.ToTable("PlatformOrderDetails", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_Amounts", "[OrderTotal] > 0 AND [Commission] >= 0 AND [CommissionTax] >= 0 AND [IsrWithheld] >= 0 AND [VatWithheld] >= 0");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_BusinessCollected", "[CollectedBy] = 0 OR ([IsrWithheld] = 0 AND [VatWithheld] = 0)");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_Channel", "[Channel] IN (3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_CollectedBy", "[CollectedBy] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_CommissionBase", "[CommissionBase] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_Number", "LEN([ExternalOrderNumber]) > 0");
+
+                            t.HasCheckConstraint("CK_PlatformOrderDetails_Percents", "[CommissionPercent] BETWEEN 0 AND 100 AND [CommissionVatPercent] BETWEEN 0 AND 100 AND [IsrWithholdingPercent] BETWEEN 0 AND 100 AND [VatWithholdingPercent] BETWEEN 0 AND 100");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderDetail", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2944,6 +3032,68 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "AssignedToUserId", "Status");
 
                     b.ToTable("ServiceOrderPieces", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Platforms.DeliveryPlatformSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CommissionBase")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("CommissionPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("CommissionVatPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("IsrWithholdingPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("VatWithholdingPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Channel")
+                        .IsUnique();
+
+                    b.ToTable("DeliveryPlatformSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DeliveryPlatformSettings_Channel", "[Channel] IN (3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_DeliveryPlatformSettings_CommissionBase", "[CommissionBase] IN (0, 1)");
+
+                            t.HasCheckConstraint("CK_DeliveryPlatformSettings_Percents", "[CommissionPercent] BETWEEN 0 AND 100 AND [CommissionVatPercent] BETWEEN 0 AND 100 AND [IsrWithholdingPercent] BETWEEN 0 AND 100 AND [VatWithholdingPercent] BETWEEN 0 AND 100");
+
+                            t.HasCheckConstraint("CK_DeliveryPlatformSettings_Revision", "[Revision] >= 1");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Purchasing.Entities.PurchaseOrder", b =>
@@ -3196,6 +3346,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("PaymentsCount")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("PlatformAmount")
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<decimal>("RefundsAmount")
                         .HasColumnType("decimal(18,2)");
@@ -4284,6 +4438,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.PlatformOrderDetail", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithOne("PlatformDetail")
+                        .HasForeignKey("FoodParkDigital.Domain.Orders.Entities.PlatformOrderDetail", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.ServiceOrderDetail", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", "Order")
@@ -4571,6 +4734,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("KitchenTickets");
 
                     b.Navigation("Payments");
+
+                    b.Navigation("PlatformDetail");
 
                     b.Navigation("Refunds");
 

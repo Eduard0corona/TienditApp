@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -20,7 +21,9 @@ public sealed record OrderRefundInput(
 
 /// <summary>
 /// Applies a refund to an order, the drawer and inventory, leaving everything to the caller's SaveChanges.
-/// Like a payment, every refund goes through a drawer, whatever its method: one no open drawer takes is refused.
+/// Like a payment, every refund of money the business received goes through a drawer, whatever its method: one
+/// no open drawer takes is refused. What a delivery platform charged goes back as «Plataforma» (the order decides
+/// the method, <see cref="Order.RegisterRefund"/>): no money leaves a drawer, so it needs none open.
 /// The requests that use it declare who may refund: <see cref="TenantPermission.ProcessRefunds"/>.
 /// </summary>
 public sealed class OrderRefundProcessor
@@ -76,7 +79,8 @@ public sealed class OrderRefundProcessor
         }
 
         // The order was changed in memory only: the caller does not save after a failure.
-        if (!await _orderCashService.RegisterOrderRefundAsync(order, refund, cancellationToken))
+        if (OrderPaymentMethodRules.EntersADrawer(refund.Method)
+            && !await _orderCashService.RegisterOrderRefundAsync(order, refund, cancellationToken))
             return Result.Failure<OrderRefund>(NoOpenDrawerMessage);
 
         if (refund.RestockItems)

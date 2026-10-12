@@ -133,6 +133,28 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             .Select(p => p.OrderId)
             .Distinct()
             .CountAsync(cancellationToken);
+        // The part of revenue the delivery platforms charged in their apps, minus what went back as «Plataforma»: the
+        // business has it to settle with each platform, not in its drawers.
+        var platformCharged = await _context.OrderPayments
+            .AsNoTracking()
+            .Where(p => p.TenantId == tenantId
+                && p.Method == OrderPaymentMethod.Platform
+                && p.PaidAt >= rangeFromUtc
+                && p.PaidAt <= rangeToUtc)
+            .Where(p => (canReadRetailOrders && p.Order.OrderType == OrderType.Retail)
+                || (canReadServiceOrders && p.Order.OrderType == OrderType.Service))
+            .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+        var platformGivenBack = await (
+                from refund in _context.OrderRefunds.AsNoTracking()
+                join order in _context.Orders.AsNoTracking() on refund.OrderId equals order.Id
+                where refund.TenantId == tenantId
+                    && refund.Method == OrderPaymentMethod.Platform
+                    && refund.RefundedAt >= rangeFromUtc
+                    && refund.RefundedAt <= rangeToUtc
+                    && ((canReadRetailOrders && order.OrderType == OrderType.Retail)
+                        || (canReadServiceOrders && order.OrderType == OrderType.Service))
+                select (decimal?)refund.Amount)
+            .SumAsync(cancellationToken) ?? 0m;
 
         var activeProducts = canReadRetailOrders
             ? await _context.Products
@@ -177,6 +199,7 @@ public class GetDashboardMetricsQueryHandler : IRequestHandler<GetDashboardMetri
             ActiveProducts = activeProducts,
             ActiveServices = activeServices,
             TotalRevenue = revenue,
+            PlatformCollected = platformCharged - platformGivenBack,
             PaidOrders = paidOrders,
             AverageOrderValue = paidOrders > 0 ? Math.Round(revenue / paidOrders, 2) : 0,
             OutstandingBalance = notCancelled.Sum(x => x.Owed),

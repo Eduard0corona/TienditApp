@@ -9,6 +9,10 @@ export interface OrderCreatedPayload {
   total: number;
   /** Status name the order was created in ("Pending" waits for the business to confirm it). */
   status?: string;
+  /** Channel name the order came from ("Counter", "WhatsApp", "Online", "Rappi", "UberEats", "DidiFood"). */
+  channel?: string;
+  /** The folio of the delivery platform's app; null for any other channel. Nothing personal travels with it. */
+  externalOrderNumber?: string | null;
 }
 
 export interface OrderStatusChangedPayload {

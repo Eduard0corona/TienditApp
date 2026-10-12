@@ -12,11 +12,38 @@
 - Una venta de mostrador pagada se cierra sola si el negocio mantiene `AutoCloseCounterSales` (ver [ciclos de vida](order-lifecycles.md)).
 - Una orden con dinero sin reembolsar no se puede cancelar: se reembolsa primero o se usa "Anular venta", que reembolsa y cancela en un paso. Cancelar cancela también sus piezas aceptadas o en progreso.
 - Un reembolso no puede superar lo cobrado y no devuelto ni devolver más unidades de las vendidas; pagos y líneas no se editan (ver [finanzas](finance-payments-and-taxes.md#reembolsos-y-anulaciones-fase-2)).
-- Cada orden guarda su canal (`Channel`): mostrador, WhatsApp (tomada desde un chat) o en línea (reservado para el menú público).
+- Cada orden guarda su canal (`Channel`): mostrador, WhatsApp (tomada desde un chat), en línea (reservado para el menú público) o, desde la Fase 22F, Rappi, Uber Eats y DiDi Food (ver [pedidos de plataformas](#pedidos-de-plataformas-de-reparto-fase-22f)). El canal no cambia después de crear la orden: los reportes por canal y las reglas de las plataformas dependen de eso.
 - Una orden admite como máximo 200 líneas, 10,000 unidades por línea y 500 piezas de servicio, además del `MaxQuantityPerOrder` de cada producto.
 - La creación enlaza la cuenta cuyo perfil tiene ese teléfono solo si esa cuenta lo confirmó por SMS (`PhoneNumberConfirmed` y su teléfono confirmado es el del perfil, `CustomerPhoneOwnershipRules`); si no, crea/usa cliente temporal. El teléfono es opcional solo en ventas de mostrador a público en general (sin cliente seleccionado o con el cliente "Publico en general"): la orden queda sin cliente, con nombre "Público en general" si no se captura otro, y no recibe avisos de WhatsApp. Un cliente con nombre y los pedidos del propio cliente siguen requiriéndolo. Un teléfono que no se puede normalizar a E.164 responde 400 con un mensaje en español (`PhoneNumberRules.InvalidPhoneMessage`) en lugar de un 500.
 - Las órdenes de un cliente temporal se vinculan a una cuenta solo cuando su dueño confirma el teléfono (desde el perfil con `ConfirmPhoneChangeCommand`, o con `ConfirmPhoneCommand` mientras la cuenta no tiene nada confirmado), en la misma transacción que la confirmación; el registro de cliente no las vincula ni manda código por SMS: la cuenta se activa con el enlace del correo.
 - Registrar un teléfono no lo aparta: si lo tiene un perfil no verificado, la cuenta nueva nace sin perfil. Al confirmar el teléfono, el perfil de quien lo confirmó toma el número (se crea o cambia de número) y el perfil no verificado lo pierde; su cuenta se conserva. Si otra cuenta ya lo confirmó, el registro se rechaza y una confirmación posterior no le quita el número.
+
+## Pedidos de plataformas de reparto (Fase 22F)
+
+Un pedido de Rappi, Uber Eats o DiDi Food entra por la app de la plataforma, y el negocio lo registra en Vender con el folio de la app ([ADR 0013](../adr/0013-delivery-platform-orders.md)). Las reglas viven en el agregado (`Order`, que responde 422 si alguien se las salta), en el validador de la venta (400, con sus mensajes) y en el caso de uso:
+
+- **Quién lo registra:** el negocio (`CreatedByBusiness`). El menú en línea y el chat nunca crean uno.
+- **Cliente:** no se liga a un cliente ni guarda teléfono, porque la app no los comparte. Solo lleva el nombre para la bolsa, y un teléfono o una mesa en blanco se guardan como nulos.
+- **Mesa, cuenta y propina:** no lleva mesa, no se abre como cuenta y no lleva propina, porque la de la app es del repartidor.
+- **Solo productos:** el tipo de pedido es `Retail`, sin `ServiceDetail` ni productos con unidad de servicio (hora, sesión o servicio).
+- **Folio:** es obligatorio. Se normaliza (sin espacios ni un `#` inicial, en mayúsculas) y lleva de 1 a 30 letras sin acento, números o guiones.
+- **Quién cobró:** la plataforma (por omisión) o el negocio. Si cobró la plataforma, la venta no trae pagos: el servidor registra el pago «Plataforma» por el total. Si cobra el negocio, se cobra por la caja, sin propina.
+- **Plataforma activa:** la plataforma debe estar activa en el negocio al registrar el pedido. Si no, responde 400 `business_rule` con «Rappi no está activa en tu negocio: actívala en Configuración › Negocio › Plataformas de reparto.».
+- **Con conexión:** se registra con conexión. Una venta capturada sin conexión (`CapturedOfflineAt`) se rechaza.
+- **Existencias y horario:** las existencias van en «vender y avisar» aunque el negocio bloquee, y no se exige el horario del producto, porque la app ya aceptó el pedido. Un producto apagado sí se rechaza.
+- **Lo que fija el registro:** al registrarse, el pedido copia los términos de la plataforma, su revisión y la comisión, las retenciones y el neto esperado calculados (`PlatformOrderDetail`, ver [finanzas](finance-payments-and-taxes.md#pedidos-de-plataformas-de-reparto-fase-22f)). Después no se le agregan productos.
+- **Pagos:** un pedido que cobró la plataforma no admite otros pagos. Lo que cobró se devuelve como «Plataforma», y nada más se devuelve así.
+- **Folio repetido:** con el mismo folio de la misma plataforma ya registrado ese día del negocio (desde la medianoche en su zona horaria), en un pedido que no está cancelado ni reembolsado por completo, la venta responde 409 `possible_duplicate_order`: «Hoy ya registraste un pedido de esta plataforma con el mismo folio. Si es otro pedido, confírmalo para registrarlo.». Con `confirmPossibleDuplicate` se registra. Un reintento con la misma llave de idempotencia devuelve el pedido ya creado, sin preguntar. Es un aviso: dos capturas del mismo folio en el mismo instante pasan las dos.
+- **Avisos y campañas:** nunca recibe avisos de WhatsApp, con cualquier política del negocio. Queda fuera de las campañas y de la ficha del cliente.
+- **Bitácora:** `OrderCreated` lleva en todos los pedidos el canal, el folio de la app y quién cobró; en los demás canales, los dos últimos van vacíos.
+- **Configuración por plataforma** (`DeliveryPlatformSetting`, Configuración › Negocio › Plataformas de reparto):
+  - una fila por negocio y plataforma;
+  - la cambian dueños y administradores, con la revisión que vieron (0 la primera vez); una revisión vieja responde 409 `concurrency_conflict`;
+  - la comisión va de 0 % a 60 % y es obligatoria: el servidor exige los siete campos del guardado y responde 400 `validation_failed` si falta alguno, en lugar de tomarlo como 0;
+  - el IVA de la comisión es de 16, 8 o 0 %;
+  - el ISR retenido va de 0 % a 20 % y el IVA retenido de 0 % a 100 % del IVA del pedido, todos con hasta dos decimales.
+
+  Cada cambio deja `DeliveryPlatformUpdated` en la bitácora, en el mismo guardado. Su metadata lleva el canal, los términos anteriores (vacíos la primera vez) y los nuevos, cada uno con el estado, las tasas, la base y la revisión. Una petición que no cambia nada no guarda ni registra, y desactivar no borra nada: los pedidos conservan su detalle.
 
 ## Cancelación y trazabilidad
 
@@ -41,7 +68,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Una caja cerrada no recibe movimientos y no puede cerrarse dos veces; el monto contado al cerrar no puede ser negativo.
 - El tipo de movimiento de caja define su signo; los importes capturados son positivos. Solo el efectivo forma parte del saldo esperado.
 - Cada cajero tiene como máximo una caja abierta por negocio; solo él o un administrador la cierra o le registra gastos y retiros. Un cierre con diferencia exige notas.
-- Todo cobro y todo reembolso, de cualquier método, entra a una caja abierta: la del cajero o, si no tiene, la única abierta de la sucursal de la venta. Sin una que lo tome se rechaza; guardar un pedido sin cobrar no la necesita. El menú en línea solo recibe pedidos mientras haya una caja abierta en la sucursal principal, adonde llegan.
+- Todo cobro que recibe el negocio, y todo reembolso de ese dinero, entra a una caja abierta, sea cual sea el método: la del cajero o, si no tiene, la única abierta de la sucursal de la venta. Sin una que lo tome se rechaza; guardar un pedido sin cobrar no la necesita. El menú en línea solo recibe pedidos mientras haya una caja abierta en la sucursal principal, adonde llegan. La excepción es el pago «Plataforma» (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)): lo cobró Rappi, Uber Eats o DiDi Food en su app, así que no entra a ninguna caja ni exige una abierta, y su reembolso tampoco.
 - El horario del negocio (`OpeningHours`) tiene hasta dos horarios por día. Un cierre igual o anterior a la apertura termina al día siguiente, y la misma hora en los dos es abierto las 24 horas. Solo el último horario de un día pasa de la medianoche, sin terminar después de que abre el día siguiente. Con horario, el menú en línea no recibe pedidos para recoger fuera de él; los de una mesa del negocio en uso, sí ([ADR 0011](../adr/0011-opening-hours.md)).
 - Los días especiales (Fase 21, [ADR 0012](../adr/0012-special-days.md)) cierran el negocio en una fecha o le dan otro horario (uno o dos, con las reglas de un día de la semana), con un motivo opcional que ven sus clientes: máximo 40 caracteres, en una sola línea. Se guarda una fila por fecha (`SpecialDay`), y las de un mismo periodo comparten la regla.
   - Un periodo dura de 1 a 92 días seguidos, empieza hoy o después en la hora del negocio y termina como mucho a 366 días. Un negocio tiene como máximo 120 fechas próximas (las pasadas no cuentan), y una fecha está en un solo periodo, también si dos personas guardan a la vez (índice único `(TenantId, Date)`).

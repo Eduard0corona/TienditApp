@@ -145,6 +145,9 @@ export const OrderChannel = {
   Counter: 0,
   WhatsApp: 1,
   Online: 2,
+  Rappi: 3,
+  UberEats: 4,
+  DidiFood: 5,
 } as const;
 export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
 
@@ -161,6 +164,7 @@ export const OrderPaymentMethod = {
   Transfer: 2,
   DigitalWallet: 3,
   Other: 4,
+  Platform: 5,
 } as const;
 export type OrderPaymentMethod = (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod];
 
@@ -191,6 +195,18 @@ export const OutgoingMessageStatus = {
   Cancelled: 4,
 } as const;
 export type OutgoingMessageStatus = (typeof OutgoingMessageStatus)[keyof typeof OutgoingMessageStatus];
+
+export const PlatformCollectedBy = {
+  Platform: 0,
+  Business: 1,
+} as const;
+export type PlatformCollectedBy = (typeof PlatformCollectedBy)[keyof typeof PlatformCollectedBy];
+
+export const PlatformCommissionBase = {
+  TotalWithTax: 0,
+  SubTotalWithoutTax: 1,
+} as const;
+export type PlatformCommissionBase = (typeof PlatformCommissionBase)[keyof typeof PlatformCommissionBase];
 
 export const ProductCatalogItemType = {
   Product: 0,

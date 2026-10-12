@@ -19,6 +19,7 @@ TienditApp soporta operación multi-tenant para negocios Food, Retail y Service.
 - Gestionar categorías, productos/servicios, horarios de disponibilidad e imágenes.
 - Crear órdenes retail/food y órdenes de servicio con piezas/checklist.
 - Registrar pagos parciales, sesiones/movimientos de caja y cortes.
+- Registrar en Vender los pedidos de Rappi, Uber Eats y DiDi Food con el folio de la app y quién cobró (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)). Incluye configurar la comisión y las retenciones de cada plataforma, ver lo que cobraron en el corte y en Inicio, y consultar las ventas por canal con el neto esperado de cada plataforma. No tiene capability ni módulo de plan: está en todos los planes, para cualquier negocio que venda productos.
 - Gestionar insumos, existencias, recetas, kardex, alertas y movimientos.
 - Gestionar proveedores, compras y recepciones parciales.
 - Registrar clientes por tenant, perfiles registrados y temporales.
@@ -29,4 +30,4 @@ TienditApp soporta operación multi-tenant para negocios Food, Retail y Service.
 
 ## Fuera de alcance comprobado
 
-No hay evidencia de CFDI, integración SAT, notas de crédito fiscales, motor fiscal mexicano, cuentas por cobrar completas, saldo a favor ni ledger de Wallet. `DigitalWallet` es un método de pago y un total de corte, no un monedero contable. No existe un dominio de suscripciones/churn; una categoría de plantilla llamada “Membresías” no constituye esa funcionalidad.
+No hay evidencia de CFDI, integración SAT, notas de crédito fiscales, motor fiscal mexicano, cuentas por cobrar completas, saldo a favor ni ledger de Wallet. `DigitalWallet` es un método de pago y un total de corte, no un monedero contable. No existe un dominio de suscripciones/churn; una categoría de plantilla llamada “Membresías” no constituye esa funcionalidad. Los pedidos de plataformas de reparto se capturan a mano: no hay integración con sus APIs ni liquidación o conciliación de sus depósitos.

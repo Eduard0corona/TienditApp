@@ -16,6 +16,9 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 - Una campaña se programa para ahora o hasta 90 días después. Al llegar su hora, el worker elige a los destinatarios en ese momento y encola un `OutgoingMessage` por cada uno en un solo guardado (todo o nada); la clave `campaign:{id}:{teléfono}` evita duplicados aunque dos instancias la inicien a la vez. Tope: 5,000 destinatarios por campaña.
 - Cancelar una campaña la marca cancelada; el worker cancela sus mensajes pendientes antes de enviarlos. Los enviados se conservan.
 - Una campaña termina cuando ninguno de sus mensajes queda pendiente. Su resultado se cuenta en SQL: enviados, entregados, leídos, fallidos, no enviados y cancelados.
+- Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
+  - Quien pide por Rappi, Uber Eats o DiDi Food es cliente de la plataforma: su pedido no guarda teléfono, así que nunca entra a una audiencia.
+  - Como defensa, las tres audiencias dejan fuera los pedidos de esos canales (`CampaignAudienceResolver`). `CampaignAudienceSqlServerTests` lo prueba en SQL Server con un teléfono puesto a mano en un pedido de Uber Eats.
 
 ## Recordatorios de citas
 
@@ -35,7 +38,7 @@ Fase 2. Todo sale por WhatsApp Cloud API con la configuración de cada negocio y
 
 - Un mensaje entrante que es solo "BAJA", "STOP", "ALTO" o "darme de baja" registra la baja del número y se responde con una confirmación; "ALTA" o "START" la revierte. No se usa la respuesta automática para esos mensajes. Frases como "quiero cancelar mi pedido" no cuentan.
 - El negocio también puede registrar o reactivar una baja a petición del cliente (permiso `ManageCampaigns` o `ManageCustomers`). Cada cambio se audita.
-- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) y de citas siguen llegando: el cliente los pidió al hacer el pedido o la cita, y la confirmación de la baja se lo dice. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador.
+- La baja aplica a campañas y recordatorios y se revisa al enviar cada mensaje. Los avisos de pedidos (confirmación, cambios de estado) y de citas siguen llegando: el cliente los pidió al hacer el pedido o la cita, y la confirmación de la baja se lo dice. Qué pedidos los reciben lo decide la [política de avisos del negocio](order-lifecycles.md#avisos-al-cliente-fase-4): por defecto, ninguna venta de mostrador. Un pedido de Rappi, Uber Eats o DiDi Food nunca los recibe, con cualquier política (Fase 22F).
 
 ## Chat y respuestas automáticas (Fase 4)
 

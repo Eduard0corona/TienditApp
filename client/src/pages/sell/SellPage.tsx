@@ -4,12 +4,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
-import { getApiErrorMessage } from '../../api/errors';
+import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
+import { useDeliveryPlatformChannels } from '../../api/queries';
 import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import PendingSalesModal from '../../components/sales/PendingSalesModal';
 import { useAuth } from '../../hooks/useAuth';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
@@ -22,6 +24,14 @@ import type { CreateOrderRequest, OrderDto, ProductDto } from '../../types';
 import { BusinessType, OrderChannel, OrderType, TenantCapability } from '../../types';
 import { getAccess } from '../../utils/access';
 import { formatDateTime } from '../../utils/dates';
+import {
+  PLATFORM_ONLY_PRODUCTS_MESSAGE,
+  getPlatformFolioProblem,
+  isDeliveryPlatform,
+  normalizePlatformFolio,
+  type DeliveryPlatform,
+} from '../../utils/deliveryPlatforms';
+import { getChannelLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import { estimateOrderTotals } from '../../utils/orderTotals';
 import { hasCapability } from '../../utils/tenantCapabilities';
@@ -36,6 +46,7 @@ import OptionsModal from './OptionsModal';
 import SellHeader from './SellHeader';
 import { describeSale, readSellDraft, writeSellDraft, type PendingCharge, type SellDraft } from './sellDraft';
 import {
+  COUNTER_ORIGIN,
   isPlausiblePhone,
   MAX_LINES,
   MAX_QUANTITY_PER_LINE,
@@ -75,6 +86,7 @@ export default function SellPage() {
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
   const toast = useToast();
+  const { confirm } = useConfirm();
   const access = getAccess(user, capabilities);
   const focus = useFocusMode();
   const canCharge = access.charge;
@@ -99,7 +111,19 @@ export default function SellPage() {
     finishTypingQuantity,
     updateLine,
   } = useSellCart(defaultTaxRate, warnTooManyLines);
-  const [details, setDetails] = useState<SaleDetails>(NO_SALE_DETAILS);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // A table's tab (new or a new round): read once; the sale then goes to the kitchen instead of being charged.
+  const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
+  // The sale being built starts where it came from: an order of a delivery platform brought back from the device sells
+  // from the whole catalog from its first load (its lines come back with it once the catalog is in).
+  const [details, setDetails] = useState<SaleDetails>(() => {
+    const draft = tabTarget ? null : readSellDraft(tenantId);
+    return draft && isDeliveryPlatform(draft.channel)
+      ? { ...NO_SALE_DETAILS, channel: draft.channel, externalOrderNumber: draft.externalOrderNumber, collectedBy: draft.collectedBy }
+      : NO_SALE_DETAILS;
+  });
+  // A folio left empty says so once a register was attempted, not while the cashier is still choosing products.
+  const [folioChecked, setFolioChecked] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
@@ -122,10 +146,7 @@ export default function SellPage() {
   const workingBranch = useWorkingBranch();
   // The sale is made where the cashier's drawer is; without one, at the branch this device works at.
   const saleBranchId = drawerBranch?.id ?? (workingBranch.hasSeveral ? workingBranch.branch?.id : undefined);
-  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  // A table's tab (new or a new round): read once; the sale then goes to the kitchen instead of being charged.
-  const [tabTarget] = useState<TabTarget | null>(() => readTabTarget(searchParams));
   const [tabOrder, setTabOrder] = useState<OrderDto | null>(null);
   const [choosing, setChoosing] = useState<OptionsRequest | null>(null);
   // Read once: the link fills the customer after the saved draft is restored. Only a link from a chat (with its
@@ -135,6 +156,8 @@ export default function SellPage() {
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [measure, setMeasure] = useState<MeasureRequest | null>(null);
   const draftLoadedFor = useRef('');
+  // The cashier chose where the sale comes from before the saved sale was brought back (see syncCart).
+  const originChosen = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   /** Keeps the ticket in line with the catalog just loaded; the first load brings back the sale being built. */
@@ -152,20 +175,31 @@ export default function SellPage() {
           if (!product || getSelectionError(product.optionGroups, optionIds)) return [];
           return [toCartLine(product, Math.min(line.quantity, MAX_QUANTITY_PER_LINE), line.notes, optionIds)];
         }));
+        // The cashier may have taken the sale to the counter before this first load (it waits without connection):
+        // that choice stays, as when going back to the counter at any other moment.
+        const toCounter = originChosen.current && isDeliveryPlatform(draft.channel);
         setDetails({
           customerName: draft.customerName,
           customerPhone: draft.customerPhone,
           tableNumber: draft.tableNumber,
           orderNotes: draft.orderNotes,
+          channel: draft.channel,
+          externalOrderNumber: draft.externalOrderNumber,
+          collectedBy: draft.collectedBy,
+          ...(toCounter ? COUNTER_ORIGIN : {}),
         });
-        setShowDetails(Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
+        // The name for the bag of a platform's order is in sight with its folio: behind the link there are only notes.
+        setShowDetails(isDeliveryPlatform(draft.channel) && !toCounter
+          ? Boolean(draft.orderNotes)
+          : Boolean(draft.customerName || draft.customerPhone || draft.tableNumber || draft.orderNotes));
         // A charge left on its way by a reload: the retry sends its key, unless the cart came back different.
         pendingCharge.current = draft.pendingCharge ?? null;
       }
       const customer = pendingCustomer.current;
       if (customer) {
         pendingCustomer.current = null;
-        setDetails((current) => ({ ...current, customerPhone: customer.phone, customerName: customer.name ?? '' }));
+        // A customer with a phone (from their card or a chat) is never an order of a platform: it is a counter sale.
+        setDetails((current) => ({ ...current, ...COUNTER_ORIGIN, customerPhone: customer.phone, customerName: customer.name ?? '' }));
         setShowDetails(true);
       }
       if (pendingChatOrigin.current) {
@@ -182,7 +216,29 @@ export default function SellPage() {
     }
   }, [setCart, tabTarget, tenantId, toCartLine]);
 
-  const catalog = useSellCatalog(tenantId, syncCart);
+  // Rappi, Uber Eats and DiDi Food as the business set them up: only the active ones are offered.
+  const platformChannels = useDeliveryPlatformChannels(access.sell);
+  const activePlatforms = useMemo(
+    () => (platformChannels.data ?? []).flatMap((row) => (row.isActive && isDeliveryPlatform(row.channel) ? [row.channel] : [])),
+    [platformChannels.data],
+  );
+  // A sale brought back from the device may come from a platform the business turned off since (or whose list did not
+  // load): once that is known, it goes back to the counter.
+  if (!platformChannels.isPending && isDeliveryPlatform(details.channel) && !activePlatforms.includes(details.channel)) {
+    setDetails((current) => ({ ...current, ...COUNTER_ORIGIN }));
+  }
+  // While the list is not known yet (without connection it waits), the platform of a sale brought back stays offered:
+  // its order is kept as it is, and the cashier can still take Vender back to the counter.
+  const offeredPlatforms = useMemo(
+    () => (platformChannels.isPending && activePlatforms.length === 0 && isDeliveryPlatform(details.channel)
+      ? [details.channel]
+      : activePlatforms),
+    [activePlatforms, details.channel, platformChannels.isPending],
+  );
+  // The platform whose app took the order on screen; a chat is a WhatsApp order and a tab goes to a table.
+  const platform: DeliveryPlatform | null = !tabTarget && !chatOrigin && isDeliveryPlatform(details.channel) ? details.channel : null;
+
+  const catalog = useSellCatalog(tenantId, syncCart, { includeOutOfSchedule: platform !== null });
   const { products } = catalog;
 
   useEffect(() => {
@@ -254,9 +310,14 @@ export default function SellPage() {
   // A weighed product counts as one article, whatever it weighs.
   const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
-  const phoneError = details.customerPhone.trim() && !isPlausiblePhone(details.customerPhone)
+  // An order of a platform never sends the phone: what is in the hidden field does not stop it.
+  const phoneError = !platform && details.customerPhone.trim() && !isPlausiblePhone(details.customerPhone)
     ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'
     : '';
+  // Quick feedback only: the server checks the folio, the platform and the products again.
+  const folioProblem = platform ? getPlatformFolioProblem(platform, details.externalOrderNumber) : '';
+  const platformProblem = platform && hasServices ? PLATFORM_ONLY_PRODUCTS_MESSAGE : folioProblem;
+  const folioError = folioProblem && (folioChecked || details.externalOrderNumber.trim()) ? folioProblem : '';
 
   const categoriesWithProducts = useMemo(() => {
     const used = new Set(products.map((product) => product.categoryId));
@@ -299,12 +360,22 @@ export default function SellPage() {
     addOne(product);
   }, [addOne, cart]);
 
+  // Every sale starts at the counter again: the next order of a platform is chosen as it comes.
   const clearSale = () => {
     pendingCharge.current = null;
     setCart([]);
     setDetails(NO_SALE_DETAILS);
     setShowDetails(false);
+    setFolioChecked(false);
     setSaleError('');
+  };
+
+  /** The counter or a platform: a counter sale carries no folio; another platform keeps the folio typed. */
+  const changeChannel = (channel: OrderChannel) => {
+    if (draftLoadedFor.current !== tenantId) originChosen.current = true;
+    setSaleError('');
+    setFolioChecked(false);
+    setDetails((current) => (isDeliveryPlatform(channel) ? { ...current, channel } : { ...current, ...COUNTER_ORIGIN }));
   };
 
   const handleSearchKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -326,7 +397,8 @@ export default function SellPage() {
     }
     if (visibleProducts.length === 0 && catalog.catalogTruncated) {
       try {
-        const { data } = await productsApi.getAll({ isAvailable: true, onlyAvailableNow: true, search: term, pageSize: 20 });
+        // An order of a platform sells what its app took, whatever the hours here.
+        const { data } = await productsApi.getAll({ isAvailable: true, onlyAvailableNow: !platform, search: term, pageSize: 20 });
         if (data.items.length === 1) {
           addProduct(data.items[0]);
           setSearch('');
@@ -351,6 +423,11 @@ export default function SellPage() {
       setShowDetails(true);
       return false;
     }
+    if (platformProblem) {
+      if (folioProblem) setFolioChecked(true);
+      setSaleError(platformProblem);
+      return false;
+    }
     return true;
   };
 
@@ -358,6 +435,12 @@ export default function SellPage() {
     // A table's round is sent to the kitchen and charged when the table leaves (Mesas). Without the charge
     // permission (a waiter) the order is saved for the cashier.
     if (cart.length === 0 || submitting || tabTarget || !canCharge) return;
+    // An order of a platform the courier pays now: its folio first, before taking the money.
+    if (platformProblem) {
+      if (folioProblem) setFolioChecked(true);
+      setSaleError(platformProblem);
+      return;
+    }
     setSaleError('');
     setCartOpenOnPhone(false);
     // Offline the sale waits on the device and its payments enter the drawer open when it is sent.
@@ -367,24 +450,14 @@ export default function SellPage() {
       return;
     }
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget, canCharge, cashClosed, online]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'F9') {
-        event.preventDefault();
-        openCharge();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openCharge]);
+  }, [cart.length, submitting, tabTarget, canCharge, platformProblem, folioProblem, cashClosed, online]);
 
   const buildOrderRequest = (): CreateOrderRequest => ({
     customerName: details.customerName.trim() || undefined,
-    customerPhone: details.customerPhone.trim() || undefined,
+    // The app of a platform shares neither the customer's phone nor a table.
+    customerPhone: platform ? undefined : details.customerPhone.trim() || undefined,
     customerNotes: details.orderNotes.trim() || undefined,
-    tableNumber: isFood ? details.tableNumber.trim() || undefined : undefined,
+    tableNumber: isFood && !platform ? details.tableNumber.trim() || undefined : undefined,
     // A service in the cart makes it a service order (pieces to track, if the service is trackable).
     orderType: hasServices ? OrderType.Service : OrderType.Retail,
     items: cart.map((line) => ({
@@ -394,7 +467,9 @@ export default function SellPage() {
       optionIds: line.optionIds.length > 0 ? line.optionIds : undefined,
     })),
     expectedTotal: totals.total,
-    channel: chatOrigin ? OrderChannel.WhatsApp : undefined,
+    channel: chatOrigin ? OrderChannel.WhatsApp : platform ?? undefined,
+    externalOrderNumber: platform ? normalizePlatformFolio(details.externalOrderNumber) : undefined,
+    collectedBy: platform ? details.collectedBy : undefined,
     branchId: saleBranchId,
   });
 
@@ -437,6 +512,29 @@ export default function SellPage() {
     }
   };
 
+  /**
+   * Sends the sale. A folio of a platform already registered today asks first: short folios repeat, so when it is
+   * another order it goes again with the same key, confirmed; null when the cashier goes to check instead.
+   */
+  const sendSale = async (request: CreateOrderRequest): Promise<OrderDto | null> => {
+    try {
+      const { data } = await ordersApi.create(request);
+      return data;
+    } catch (err: unknown) {
+      if (getApiErrorCode(err) !== 'possible_duplicate_order' || request.confirmPossibleDuplicate) throw err;
+      const confirmed = await confirm({
+        title: '¿Es otro pedido?',
+        message: `Hoy ya registraste un pedido de ${getChannelLabel(request.channel)} con el folio ${request.externalOrderNumber}. `
+          + 'Los folios cortos se repiten: si es otro pedido, regístralo; si no, búscalo en Pedidos.',
+        confirmLabel: 'Registrar de todos modos',
+        cancelLabel: 'Revisar',
+      });
+      if (!confirmed) return null;
+      const { data } = await ordersApi.create({ ...request, confirmPossibleDuplicate: true });
+      return data;
+    }
+  };
+
   const submitSale = async (charge: ChargeResult | null) => {
     if (!validateSale()) {
       setChargeOpen(false);
@@ -444,9 +542,10 @@ export default function SellPage() {
     }
     setSubmitting(true);
     setSaleError('');
-    // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid or a service
-    // (its pieces are picked up with the server's folio) need the server.
-    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices;
+    // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid, a service
+    // (its pieces are picked up with the server's folio) or an order of a platform (checked against today's folios)
+    // need the server.
+    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices && !platform;
     // The same key on a retry returns this sale instead of charging twice; another cart is another sale.
     const draft = toDraft(cart, details);
     const sale = describeSale(draft);
@@ -471,12 +570,18 @@ export default function SellPage() {
       return;
     }
     try {
-      const { data: order } = await ordersApi.create(request);
+      const order = await sendSale(request);
+      // Nothing was recorded: the cart stays, with its key, while the cashier checks Pedidos.
+      if (!order) return;
       const stockWarning = stockWarningMessage(order.stockWarnings);
       if (stockWarning) toast.warning(stockWarning, { title: STOCK_WARNING_TITLE });
       clearSale();
       setChargeOpen(false);
       if (charge) {
+        setCompletedSale({ order });
+      } else if (isDeliveryPlatform(order.channel)) {
+        // The ticket goes in the bag: the order of a platform always ends with it, charged or not.
+        setCartOpenOnPhone(false);
         setCompletedSale({ order });
       } else if (chatOrigin) {
         // From a chat the summary goes back to the customer, paid or not.
@@ -534,6 +639,40 @@ export default function SellPage() {
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
+  /**
+   * Registers the order of a platform without charging it: the platform charged it in its app (no drawer, no charge
+   * permission needed), or the courier pays the business later in Pedidos.
+   */
+  const registerPlatformOrder = () => {
+    if (cart.length === 0 || submitting || !online) return;
+    void submitSale(null);
+  };
+
+  /** On a phone the folio is typed in the ticket's sheet: when it is missing, the sheet opens to say so. */
+  const registerFromPhoneBar = () => {
+    if (validateSale()) registerPlatformOrder();
+    else setCartOpenOnPhone(true);
+  };
+
+  // F9 does the main action of the ticket: charge a counter sale, register an order of a platform. Not while a dialog of
+  // Vender is open (charging, opening the drawer, an option, a weight): there it would register past what is on screen.
+  // The ticket's sheet on a phone is not one of them: it is the ticket itself.
+  const dialogOpen = chargeOpen || showOpenDrawer || choosing !== null || measure !== null || showPendingSales || completedSale !== null;
+  const mainAction = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    mainAction.current = dialogOpen ? () => undefined : platform ? registerPlatformOrder : openCharge;
+  });
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'F9') {
+        event.preventDefault();
+        mainAction.current();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const cartPanel = (
     <CartPanel
       tabTarget={tabTarget}
@@ -562,6 +701,13 @@ export default function SellPage() {
       onSendToKitchen={() => void sendToKitchen()}
       onOpenCharge={openCharge}
       onSaveUnpaid={() => void submitSale(null)}
+      activePlatforms={offeredPlatforms}
+      platform={platform}
+      onChannelChange={changeChannel}
+      folioError={folioError}
+      hasServices={hasServices}
+      online={online}
+      onRegisterPlatformOrder={registerPlatformOrder}
     />
   );
 
@@ -595,7 +741,9 @@ export default function SellPage() {
         <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-0" role="status">
           <span>
             <i className="ri-safe-2-line me-1" aria-hidden="true"></i>
-            Tu caja está cerrada: ábrela para cobrar. Todo cobro se registra en una caja; sin ella solo puedes guardar pedidos.
+            {activePlatforms.length > 0
+              ? 'Tu caja está cerrada: ábrela para cobrar. Sin ella puedes guardar pedidos y registrar los que ya cobró una plataforma.'
+              : 'Tu caja está cerrada: ábrela para cobrar. Todo cobro se registra en una caja; sin ella solo puedes guardar pedidos.'}
           </span>
           <button type="button" className="btn btn-sm btn-warning" onClick={() => setShowOpenDrawer(true)}>
             Abrir caja
@@ -662,10 +810,12 @@ export default function SellPage() {
         <button
           type="button"
           className="btn btn-primary btn-touch"
-          onClick={tabTarget ? () => void sendToKitchen() : canCharge ? openCharge : () => void submitSale(null)}
-          disabled={cart.length === 0 || submitting}
+          onClick={tabTarget
+            ? () => void sendToKitchen()
+            : platform ? registerFromPhoneBar : canCharge ? openCharge : () => void submitSale(null)}
+          disabled={cart.length === 0 || submitting || (platform !== null && !online)}
         >
-          {tabTarget ? 'Enviar' : canCharge ? 'Cobrar' : 'Guardar'}
+          {tabTarget ? 'Enviar' : platform ? 'Registrar' : canCharge ? 'Cobrar' : 'Guardar'}
         </button>
       </div>
       <Offcanvas show={cartOpenOnPhone} onHide={() => setCartOpenOnPhone(false)} placement="bottom" className="sell-sheet" aria-labelledby={ticketTitleId}>
@@ -705,6 +855,8 @@ export default function SellPage() {
               amountDue={totals.total}
               submitting={submitting}
               error={saleError}
+              // The tip of a platform's order is in its app, for the courier.
+              allowTip={!platform}
               onSubmit={(charge) => void submitSale(charge)}
               onCancel={() => setChargeOpen(false)}
               uploadEvidence={async (file) => {
@@ -724,6 +876,7 @@ export default function SellPage() {
         logoUrl={tenant?.logoImages?.small ?? tenant?.logoUrl}
         chatOrigin={chatOrigin}
         canChat={access.chat}
+        canCharge={canCharge}
         hasKitchen={hasKitchen}
         onNewSale={startNewSale}
       />

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import SalesByBranchCard from '../../components/reports/SalesByBranchCard';
+import SalesByChannelCard from '../../components/reports/SalesByChannelCard';
 import { reportsApi } from '../../api/reportsApi';
 import { getPaymentMethodLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
@@ -118,6 +119,7 @@ export default function OperationalReports() {
           </div>
 
           <SalesByBranchCard />
+          <SalesByChannelCard />
 
           <div className="row mb-3">
             <div className="col-md-6">

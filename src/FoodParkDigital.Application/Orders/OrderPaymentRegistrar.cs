@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -23,8 +24,10 @@ public sealed record OrderPaymentInput(
 /// <summary>
 /// Registers payments on an order and in the open cash session: validates the evidence and the branch,
 /// stamps the server time and leaves everything to the caller's SaveChanges, so an order and its
-/// payments are stored together or not at all. Every charge enters a drawer, whatever its method: a
-/// payment no open drawer takes is refused, so none is left out of a cut.
+/// payments are stored together or not at all. Every charge the business receives enters a drawer, whatever
+/// its method: a payment no open drawer takes is refused, so none is left out of a cut. What a delivery
+/// platform charged in its app («Plataforma») is not received by the business: the order records it when it
+/// is created (<see cref="Order.RegisterPlatformOrder"/>), outside every drawer, and this registrar refuses it.
 /// </summary>
 public sealed class OrderPaymentRegistrar
 {
@@ -52,6 +55,10 @@ public sealed class OrderPaymentRegistrar
         OrderPaymentInput input,
         CancellationToken cancellationToken)
     {
+        // The validators refuse it first; this keeps a charge that no drawer takes out of every other path.
+        if (!OrderPaymentMethodRules.EntersADrawer(input.Method))
+            return Result.Failure<OrderPayment>(OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
+
         if (order.Status == OrderStatus.Cancelled)
             return Result.Failure<OrderPayment>("No se pueden registrar pagos en una orden cancelada.");
 

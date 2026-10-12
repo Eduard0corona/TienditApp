@@ -9,6 +9,7 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -16,7 +17,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
-/// <summary>Refunds compensate payments and lines without editing them, through the drawer and inventory.</summary>
+/// <summary>
+/// Refunds compensate payments and lines without editing them, through the drawer and inventory. What a delivery
+/// platform charged goes back as «Plataforma», outside every drawer.
+/// </summary>
 public class OrderRefundTests
 {
     [Fact]
@@ -213,6 +217,128 @@ public class OrderRefundTests
         Assert.Equal(OrderStatus.Cancelled, voided.Value.Status);
         // 10 tortillas consumed, 2 returned with the partial refund and 8 with the void: never more than consumed.
         Assert.Equal(100m, await OnHandAsync(fixture, tortilla.Id));
+    }
+
+    [Fact]
+    public async Task VoidOfAnOrderThePlatformCharged_ShouldGiveItBackOutsideEveryDrawer_AndCancelIt()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        // With a kitchen screen, the paid order waits in Confirmed until it is ready: still cancellable.
+        var tenant = await fixture.AddTenantAsync(
+            BusinessType.Food, TenantCapability.Food | TenantCapability.Kitchen, pricesIncludeTax: true);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 350m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        var sale = await SellPlatformOrderAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "152390", pack.Id));
+        Assert.Equal(OrderStatus.Confirmed, sale.Status);
+
+        // No drawer is open: what Rappi charged never entered one, and its refund takes nothing out of one.
+        var voided = await VoidHandler(fixture).Handle(
+            new VoidOrderCommand { OrderId = sale.Id, Reason = "Rappi lo canceló", RestockItems = false }, CancellationToken.None);
+
+        Assert.True(voided.IsSuccess, voided.Error);
+        Assert.Equal(OrderStatus.Cancelled, voided.Value.Status);
+        Assert.Equal(0m, voided.Value.NetPaidAmount);
+        var refund = Assert.Single(voided.Value.Refunds);
+        Assert.Equal((OrderPaymentMethod.Platform, 350m, "Rappi lo canceló"), (refund.Method, refund.Amount, refund.Reason));
+        Assert.Empty(await fixture.Context.CashTransactions.ToListAsync());
+        // The answer of the void keeps the folio of the app.
+        Assert.Equal("152390", voided.Value.PlatformOrder!.ExternalOrderNumber);
+    }
+
+    [Fact]
+    public async Task VoidOfADeliveredOrderOfAPlatform_ShouldLeaveItDelivered_AndFullyRefunded()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 350m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.UberEats);
+        var sale = await SellPlatformOrderAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.UberEats, "BC953", pack.Id));
+        Assert.Equal(OrderStatus.Delivered, sale.Status);
+
+        var voided = await VoidHandler(fixture).Handle(
+            new VoidOrderCommand { OrderId = sale.Id, Reason = "Lo registré dos veces" }, CancellationToken.None);
+
+        Assert.True(voided.IsSuccess, voided.Error);
+        Assert.Equal(OrderStatus.Delivered, voided.Value.Status);
+        Assert.Equal((350m, 350m, 0m), (voided.Value.PaidAmount, voided.Value.RefundedAmount, voided.Value.NetPaidAmount));
+        Assert.Equal(OrderPaymentMethod.Platform, Assert.Single(voided.Value.Refunds).Method);
+        Assert.Empty(await fixture.Context.CashTransactions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task VoidOfAnOrderOfAPlatform_ShouldGiveBackItsSupplies_OnlyWhenAsked()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(
+            BusinessType.Food, TenantCapability.Food | TenantCapability.Kitchen | TenantCapability.Inventory, pricesIncludeTax: true);
+        var taco = await fixture.AddProductAsync(tenant, "Taco", 25m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.DidiFood);
+        var location = await fixture.Context.InventoryLocations.SingleAsync();
+        var tortilla = new SupplyItem(tenant.Id, "Tortilla", UnitType.Unit);
+        var stock = new InventoryStock(tenant.Id, tortilla.Id, location.Id);
+        stock.ApplyMovement(100m, 1m, SalesTestFixture.Now);
+        fixture.Context.SupplyItems.Add(tortilla);
+        fixture.Context.InventoryStocks.Add(stock);
+        fixture.Context.ProductSupplyRequirements.Add(new ProductSupplyRequirement(tenant.Id, taco.Id, tortilla.Id, 2m));
+        await fixture.Context.SaveChangesAsync();
+        var inventory = new OrderInventoryService(fixture.Context, fixture.Clock, new FolioGenerator(fixture.Context), NullLogger<OrderInventoryService>.Instance);
+
+        var prepared = await SellPlatformOrderAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, "12", taco.Id, quantity: 5), inventory);
+        var notPrepared = await SellPlatformOrderAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, "13", taco.Id, quantity: 5), inventory);
+        Assert.Equal(80m, await OnHandAsync(fixture, tortilla.Id));
+
+        // DiDi cancelled once the food was made: the tortillas were used.
+        var lost = await VoidHandler(fixture, inventory).Handle(
+            new VoidOrderCommand { OrderId = prepared.Id, Reason = "DiDi lo canceló", RestockItems = false }, CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        Assert.Equal(80m, await OnHandAsync(fixture, tortilla.Id));
+        // Cancelled before the kitchen started: they go back.
+        var returned = await VoidHandler(fixture, inventory).Handle(
+            new VoidOrderCommand { OrderId = notPrepared.Id, Reason = "DiDi lo canceló", RestockItems = true }, CancellationToken.None);
+
+        Assert.True(lost.IsSuccess, lost.Error);
+        Assert.True(returned.IsSuccess, returned.Error);
+        Assert.Equal(OrderStatus.Cancelled, lost.Value.Status);
+        Assert.Equal(90m, await OnHandAsync(fixture, tortilla.Id));
+    }
+
+    [Fact]
+    public async Task RefundMethod_ShouldFollowWhoCharged()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 350m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        var drawer = await fixture.OpenCashSessionAsync(tenant);
+        var rappi = await SellPlatformOrderAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "152390", pack.Id));
+        var counter = await SellAsync(fixture, pack.Id, 1, (350m, OrderPaymentMethod.Cash));
+
+        // Cash out of the drawer for what Rappi charged, or «Plataforma» for what the drawer took: both refused.
+        var cashForRappi = await RefundHandler(fixture).Handle(Refund(rappi.Id, 100m), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        var platformForCounter = await RefundHandler(fixture).Handle(Refund(counter.Id, 100m, OrderPaymentMethod.Platform), CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        // Part of what Rappi charged, as «Plataforma»: recorded apart from the drawer.
+        var platformForRappi = await RefundHandler(fixture).Handle(Refund(rappi.Id, 100m, OrderPaymentMethod.Platform), CancellationToken.None);
+
+        Assert.Equal(PlatformOrderRules.PlatformChargedRefundMessage, cashForRappi.Error);
+        Assert.Equal(PlatformOrderRules.PlatformRefundOnlyOfPlatformMessage, platformForCounter.Error);
+        Assert.True(platformForRappi.IsSuccess, platformForRappi.Error);
+        Assert.Equal((100m, 250m), (platformForRappi.Value.RefundedAmount, platformForRappi.Value.NetPaidAmount));
+        Assert.Equal("152390", platformForRappi.Value.PlatformOrder!.ExternalOrderNumber);
+        Assert.Single(await fixture.Context.OrderRefunds.ToListAsync());
+        // Only the counter sale's cash is in the drawer.
+        var movement = Assert.Single(await fixture.Context.CashTransactions.Where(t => t.CashSessionId == drawer.Id).ToListAsync());
+        Assert.Equal((CashTransactionType.SalePayment, counter.Id), (movement.TransactionType, movement.OrderId));
+    }
+
+    private static async Task<Orders.DTOs.OrderDto> SellPlatformOrderAsync(
+        SalesTestFixture fixture, CreateOrderCommand command, IOrderInventoryService? inventory = null)
+    {
+        var result = await fixture.CreateOrderHandler(inventory).Handle(command, CancellationToken.None);
+        Assert.True(result.IsSuccess, result.Error);
+        fixture.Context.ChangeTracker.Clear();
+        return result.Value;
     }
 
     private static async Task<Orders.DTOs.OrderDto> SellAsync(

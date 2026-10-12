@@ -29,6 +29,8 @@ public class GetKitchenOrdersQueryHandler : IRequestHandler<GetKitchenOrdersQuer
         var orders = await _context.Orders
             .AsNoTracking()
             .Include(o => o.Items).ThenInclude(i => i.Options)
+            // The folio of a delivery platform's app, which the kitchen writes on the bag.
+            .Include(o => o.PlatformDetail)
             // Only food orders are tickets: a food business can also take service orders (repairs,
             // catering quotes), which follow their own board and must not show up as kitchen tickets.
             .Where(o => o.BusinessType == BusinessType.Food && o.OrderType == OrderType.Retail)

@@ -266,6 +266,7 @@ public sealed class CrossTenantManagementSqlServerTests
     {
         var summaryBefore = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/operational-summary");
         var salesBefore = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/sales-by-branch");
+        var channelsBefore = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/sales-by-channel");
 
         // Another business sells and gets paid.
         var c = await _api.SignUpAsync("reportes");
@@ -277,6 +278,8 @@ public sealed class CrossTenantManagementSqlServerTests
         Assert.Equal(total, summary.GetProperty("totalOrderPayments").GetDecimal());
         var sales = await c.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/sales-by-branch");
         Assert.Equal(total, sales.GetProperty("totals").GetProperty("paymentsAmount").GetDecimal());
+        var channels = await c.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/sales-by-channel");
+        Assert.Equal(total, channels.GetProperty("totals").GetProperty("paymentsAmount").GetDecimal());
 
         // ...and B's did not move, its branch included.
         var summaryAfter = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/operational-summary");
@@ -287,6 +290,11 @@ public sealed class CrossTenantManagementSqlServerTests
         var theirBranch = await BodyAsync(B.Client, $"/api/v1/reports/sales-by-branch?branchId={branch}");
         Assert.DoesNotContain(branch.ToString(), theirBranch);
         Assert.DoesNotContain(total.ToString(System.Globalization.CultureInfo.InvariantCulture), theirBranch);
+        var channelsAfter = await B.Client.GetFromJsonAsync<JsonElement>("/api/v1/reports/sales-by-channel");
+        Assert.Equal(channelsBefore.GetProperty("totals").GetRawText(), channelsAfter.GetProperty("totals").GetRawText());
+        var theirChannels = await BodyAsync(B.Client, $"/api/v1/reports/sales-by-channel?branchId={branch}");
+        Assert.DoesNotContain(total.ToString(System.Globalization.CultureInfo.InvariantCulture), theirChannels);
+        Assert.Equal(0m, JsonDocument.Parse(theirChannels).RootElement.GetProperty("totals").GetProperty("paymentsAmount").GetDecimal());
     }
 
     private static bool IsCustomerOfC(JsonElement sample)

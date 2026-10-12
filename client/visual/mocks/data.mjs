@@ -448,7 +448,10 @@ export function buildData() {
     // Same rule as GetKitchenOrdersQuery: food orders only (OrderType.Retail), before Ready.
     .filter((o) => o.businessType === 0 && o.orderType === 0 && [0, 1, 4, 2, 5].includes(o.status))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .map((o) => ({ id: o.id, orderNumber: o.orderNumber, status: o.status, customerName: o.customerName, tableNumber: o.tableNumber, customerNotes: o.customerNotes, createdAt: o.createdAt, items: o.items }));
+    .map((o) => ({
+      id: o.id, orderNumber: o.orderNumber, channel: o.channel ?? 0, externalOrderNumber: null, status: o.status,
+      customerName: o.customerName, tableNumber: o.tableNumber, customerNotes: o.customerNotes, createdAt: o.createdAt, items: o.items,
+    }));
 
   const nowMs = new Date(NOW_ISO).getTime();
   const boardPieces = [];

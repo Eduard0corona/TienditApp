@@ -4,8 +4,11 @@ using FoodParkDigital.Application.Finance.Queries;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -289,6 +292,163 @@ public class CashShiftTests
     }
 
     [Fact]
+    public async Task DailyCut_ShouldShowWhatThePlatformsCharged_OutsideTheDrawers()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, pack, tacos) = await FoodShopAsync(fixture);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        var drawer = (await OpenAsync(fixture, Ana, 500m)).Value;
+        fixture.CurrentUser.UserId = Ana;
+        await SellAsync(fixture, CashSale(tacos.Id, 1, 100m));
+        // Beto has no drawer: Rappi charged the order in its app.
+        fixture.CurrentUser.UserId = Beto;
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "BC953", pack.Id));
+
+        var cut = await CutAsync(fixture);
+        var shifts = await ShiftsAsync(fixture);
+
+        Assert.Equal((450m, 2), (cut.SalesPaymentsTotal, cut.SalesPaymentsCount));
+        Assert.Equal((350m, 1, 0m), (cut.PlatformTotal, cut.PlatformPaymentsCount, cut.PlatformRefundsTotal));
+        Assert.Equal((100m, 0m, 0m), (cut.CashTotal, cut.CardTotal, cut.OtherTotal));
+        // The drawers only saw the cash sale: what Rappi charged has no movement in any of them.
+        var movement = Assert.Single(await MovementsAsync(fixture, drawer.Id));
+        Assert.Equal(100m, movement.Amount);
+        Assert.Equal(100m, cut.NetCashOnlyFlow);
+        Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows), cut.NetCashOnlyFlow);
+        Assert.Equal(0m, shifts.Sum(s => s.NonCashInflows));
+        // The branch and the location where it was sold still count it.
+        Assert.Equal(450m, Assert.Single(cut.ByBranch).TotalAmount);
+        Assert.Equal(450m, Assert.Single(cut.ByLocation).TotalAmount);
+    }
+
+    public static TheoryData<OrderPaymentMethod> EveryPaymentMethod => new(Enum.GetValues<OrderPaymentMethod>());
+
+    /// <summary>I5: the buckets of the cut add up to what was charged, whatever the method, today's and any added later.</summary>
+    [Theory, MemberData(nameof(EveryPaymentMethod))]
+    public async Task DailyCut_MethodBuckets_ShouldAddUpToCharged_ForEveryMethod(OrderPaymentMethod method)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        await SeedPaidOrderAsync(fixture, tenant, method, 245m);
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Card, 10m);
+
+        var cut = await CutAsync(fixture);
+
+        Assert.Equal(255m, cut.SalesPaymentsTotal);
+        Assert.Equal(
+            cut.SalesPaymentsTotal,
+            cut.CashTotal + cut.CardTotal + cut.TransferTotal + cut.WalletTotal + cut.OtherTotal + cut.PlatformTotal);
+        var bucket = method switch
+        {
+            OrderPaymentMethod.Cash => cut.CashTotal,
+            OrderPaymentMethod.Card => cut.CardTotal - 10m,
+            OrderPaymentMethod.Transfer => cut.TransferTotal,
+            OrderPaymentMethod.DigitalWallet => cut.WalletTotal,
+            OrderPaymentMethod.Platform => cut.PlatformTotal,
+            _ => cut.OtherTotal
+        };
+        Assert.Equal(245m, bucket);
+    }
+
+    [Fact]
+    public async Task DailyCut_ByUser_ShouldLeaveOutWhatThePlatformsCharged()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        // Ana takes a cash sale and captures an order Rappi charged in its app; Beto takes a card sale.
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Cash, 100m, takenBy: "ana");
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Platform, 350m, takenBy: "ana");
+        await SeedPaidOrderAsync(fixture, tenant, OrderPaymentMethod.Card, 50m, takenBy: "beto");
+
+        var cut = await CutAsync(fixture);
+
+        // Ana never received what Rappi charged: her row has only the cash sale.
+        Assert.Equal([("ana", 1, 100m), ("beto", 1, 50m)], cut.ByUser.Select(u => (u.UserName, u.PaymentsCount, u.TotalAmount)));
+        Assert.Equal((500m, 350m), (cut.SalesPaymentsTotal, cut.PlatformTotal));
+        Assert.Equal(500m, Assert.Single(cut.ByBranch).TotalAmount);
+        Assert.Equal(500m, Assert.Single(cut.ByLocation).TotalAmount);
+    }
+
+    [Fact]
+    public async Task DailyCut_NetCashFlow_ShouldLeaveOutThePlatforms()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, pack, tacos) = await FoodShopAsync(fixture);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.DidiFood);
+        await OpenAsync(fixture, Ana, 500m);
+        fixture.CurrentUser.UserId = Ana;
+        await SellAsync(fixture, CashSale(tacos.Id, 1, 100m));
+        await SellAsync(fixture, new CreateOrderCommand
+        {
+            Items = [new CreateOrderItemDto { ProductId = tacos.Id, Quantity = 1 }],
+            Payments = [new CreateOrderPaymentDto { Amount = 100m, Method = OrderPaymentMethod.Card }]
+        });
+        // Charged by Rappi in its app, and by the business when DiDi's courier paid in cash.
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "BC953", pack.Id));
+        await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.DidiFood, "12", tacos.Id, collectedBy: PlatformCollectedBy.Business) with
+        {
+            Payments = [new CreateOrderPaymentDto { Amount = 100m, Method = OrderPaymentMethod.Cash }]
+        });
+
+        var cut = await CutAsync(fixture);
+        var shifts = await ShiftsAsync(fixture);
+
+        Assert.Equal((650m, 350m), (cut.SalesPaymentsTotal, cut.PlatformTotal));
+        // The money the business received is what its drawers saw: the cash and the card, not what Rappi will deposit.
+        Assert.Equal(300m, cut.NetCashFlow);
+        Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows + s.NonCashInflows), cut.NetCashFlow);
+        Assert.Equal(200m, cut.NetCashOnlyFlow);
+        Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows), cut.NetCashOnlyFlow);
+    }
+
+    [Fact]
+    public async Task DailyCut_PlatformRefunds_ShouldBeShownApart()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var (tenant, pack, tacos) = await FoodShopAsync(fixture);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        var main = await fixture.DefaultBranchAsync();
+        var norte = await fixture.AddBranchAsync(tenant, "Norte", "NTE");
+        await OpenAsync(fixture, Ana, 500m);
+        fixture.CurrentUser.UserId = Ana;
+        var counter = await SellAsync(fixture, CashSale(tacos.Id, 1, 100m));
+        var rappi = await SellAsync(fixture, SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "BC953", pack.Id));
+
+        // Rappi cancelled the order: the void gives back as «Plataforma» what it charged, from no drawer. Ana also gives
+        // 30 back in cash from hers.
+        var voided = await new VoidOrderCommandHandler(
+                fixture.Context, fixture.CurrentUser, new Finance.OrderCashService(fixture.Context, fixture.CurrentUser),
+                fixture.Clock, NoOpOrderInventoryService.Instance)
+            .Handle(new VoidOrderCommand { OrderId = rappi.Value.Id, Reason = "Rappi lo canceló", RestockItems = false }, CancellationToken.None);
+        Assert.True(voided.IsSuccess, voided.Error);
+        await RefundAsync(fixture, Ana, counter.Value.Id, 30m, OrderPaymentMethod.Cash);
+
+        var cut = await CutAsync(fixture);
+        var shifts = await ShiftsAsync(fixture);
+
+        Assert.Equal((350m, 350m), (cut.PlatformTotal, cut.PlatformRefundsTotal));
+        // Only the cash refund left a drawer: the platform's refund is no movement and no expense.
+        Assert.Equal((30m, 30m), (cut.ManualExpenseTotal, cut.CashManualExpenseTotal));
+        Assert.Equal((70m, 70m), (cut.NetCashFlow, cut.NetCashOnlyFlow));
+        Assert.Equal(shifts.Sum(s => s.Inflows - s.Outflows + s.NonCashInflows), cut.NetCashFlow);
+
+        // The filters of the payments: who gave it back, the branch of the order and the location of its «Plataforma» payment.
+        var location = (await fixture.Context.OrderPayments.AsNoTracking().SingleAsync(p => p.Method == OrderPaymentMethod.Platform)).InventoryLocationId;
+        var norteLocation = await fixture.Context.InventoryLocations.Where(l => l.BranchId == norte.Id).Select(l => l.Id).SingleAsync();
+        Assert.NotNull(location);
+        Assert.Equal(350m, (await CutAsync(fixture, new GetDailyCashCutQuery { UserName = "cajero" })).PlatformRefundsTotal);
+        Assert.Equal(0m, (await CutAsync(fixture, new GetDailyCashCutQuery { UserName = "otra" })).PlatformRefundsTotal);
+        Assert.Equal(350m, (await CutAsync(fixture, new GetDailyCashCutQuery { BranchId = main.Id })).PlatformRefundsTotal);
+        Assert.Equal(0m, (await CutAsync(fixture, new GetDailyCashCutQuery { BranchId = norte.Id })).PlatformRefundsTotal);
+        Assert.Equal(350m, (await CutAsync(fixture, new GetDailyCashCutQuery { InventoryLocationId = location })).PlatformRefundsTotal);
+        Assert.Equal(0m, (await CutAsync(fixture, new GetDailyCashCutQuery { InventoryLocationId = norteLocation })).PlatformRefundsTotal);
+        // Another day has neither the payment nor its refund.
+        var yesterday = await CutAsync(fixture, new GetDailyCashCutQuery { Date = new DateOnly(2026, 10, 3) });
+        Assert.Equal((0m, 0m), (yesterday.PlatformTotal, yesterday.PlatformRefundsTotal));
+    }
+
+    [Fact]
     public async Task CurrentDrawer_ShouldBeTheCashiersOwn()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -336,6 +496,69 @@ public class CashShiftTests
         // Without a branch, the only open drawer of the business stands in for hers.
         Assert.Equal(betoDrawer.Id, anywhere?.Id);
     }
+
+    /// <summary>A food business whose prices include IVA: a family pack of $350 and an order of tacos of $100.</summary>
+    private static async Task<(Tenant Tenant, Product Pack, Product Tacos)> FoodShopAsync(SalesTestFixture fixture)
+    {
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 350m);
+        var tacos = await fixture.AddProductAsync(tenant, "Orden de tacos", 100m);
+        return (tenant, pack, tacos);
+    }
+
+    /// <summary>
+    /// A paid order of the tenant in scope at the default branch, written through the aggregate with its payment taken by
+    /// <paramref name="takenBy"/> (the in-memory fixture stamps no author). «Plataforma» is only made by registering an
+    /// order of Rappi charged by the platform.
+    /// </summary>
+    private static async Task SeedPaidOrderAsync(
+        SalesTestFixture fixture, Tenant tenant, OrderPaymentMethod method, decimal amount, string? takenBy = null)
+    {
+        var branch = await fixture.DefaultBranchAsync();
+        var location = await fixture.Context.InventoryLocations.Where(l => l.BranchId == branch.Id).Select(l => l.Id).SingleAsync();
+        var isPlatform = method == OrderPaymentMethod.Platform;
+        var number = await fixture.Context.Orders.CountAsync() + 1;
+        var order = new Order(
+            tenant.Id, null, null, true, $"ORD-{number:000000}", BusinessType.Food, OrderType.Retail, "Público en general",
+            null, null, null, pricesIncludeTax: true, channel: isPlatform ? OrderChannel.Rappi : OrderChannel.Counter,
+            branchId: branch.Id);
+        order.AddItem(Guid.NewGuid(), "Paquete", 1, amount);
+        if (isPlatform)
+        {
+            var setting = await fixture.Context.DeliveryPlatformSettings.FirstOrDefaultAsync()
+                ?? await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+            order.RegisterPlatformOrder(setting, PlatformOrderNumber.From($"R{number}"), PlatformCollectedBy.Platform, SalesTestFixture.Now, location);
+        }
+        else
+        {
+            order.RegisterPayment(amount, method, SalesTestFixture.Now, location, null, null, null);
+        }
+
+        foreach (var payment in order.Payments)
+            payment.CreatedBy = takenBy;
+        fixture.Context.Orders.Add(order);
+        await fixture.Context.SaveChangesAsync();
+    }
+
+    /// <summary>Each request with a context of its own, as in the app.</summary>
+    private static async Task<Common.Models.Result<Application.Orders.DTOs.OrderDto>> SellAsync(SalesTestFixture fixture, CreateOrderCommand command)
+    {
+        var sale = await fixture.CreateOrderHandler().Handle(command, CancellationToken.None);
+        fixture.Context.ChangeTracker.Clear();
+        Assert.True(sale.IsSuccess, sale.Error);
+        return sale;
+    }
+
+    private static Task<DailyCashCutDto> CutAsync(SalesTestFixture fixture, GetDailyCashCutQuery? query = null)
+    {
+        fixture.Context.ChangeTracker.Clear();
+        return new GetDailyCashCutQueryHandler(fixture.Context, fixture.TenantService, fixture.Clock)
+            .Handle(query ?? new GetDailyCashCutQuery(), CancellationToken.None);
+    }
+
+    private static async Task<List<CashSessionDto>> ShiftsAsync(SalesTestFixture fixture)
+        => (await new GetCashSessionsQueryHandler(fixture.Context, fixture.CurrentUser)
+            .Handle(new GetCashSessionsQuery(), CancellationToken.None)).Items;
 
     private static Task<CashSessionDto?> CurrentAsync(SalesTestFixture fixture, Guid? branchId)
         => new GetCurrentCashSessionQueryHandler(fixture.Context, fixture.CurrentUser)

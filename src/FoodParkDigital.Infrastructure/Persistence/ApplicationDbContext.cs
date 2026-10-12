@@ -14,6 +14,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -165,6 +166,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderPayment> OrderPayments => Set<OrderPayment>();
     public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
     public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
+    public DbSet<PlatformOrderDetail> PlatformOrderDetails => Set<PlatformOrderDetail>();
+    public DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings => Set<DeliveryPlatformSetting>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();

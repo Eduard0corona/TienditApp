@@ -74,6 +74,14 @@ describe('CashCutTicket', () => {
       .toHaveClass('text-nowrap');
   });
 
+  it('keeps the platforms off the ticket of a drawer: what they charge never enters one', () => {
+    render(<CashCutTicket session={session()} movements={[]} />);
+
+    // Out of the drawer it shows only what went through it (card, transfer, wallet): a «Plataforma» payment has no movement.
+    expect(screen.getByText('Tarjeta y otros (fuera de caja)').closest('.ta-ticket-row')).toHaveTextContent('$1,397.80');
+    expect(screen.queryByText(/Plataforma/)).toBeNull();
+  });
+
   it('lets the note break inside the ticket', () => {
     render(<CashCutTicket session={session({ closingNotes: 'Faltaron monedas de cambio' })} movements={[]} />);
 

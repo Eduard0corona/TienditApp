@@ -1,6 +1,7 @@
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 
 namespace FoodParkDigital.Domain.Tests;
@@ -90,6 +91,49 @@ public class CashSessionTests
     public void IsManualTransactionType_ShouldOnlyAllowDrawerMovements(CashTransactionType type, bool expected)
     {
         Assert.Equal(expected, CashSession.IsManualTransactionType(type));
+    }
+
+    [Theory]
+    [InlineData(OrderPaymentMethod.Cash, true)]
+    [InlineData(OrderPaymentMethod.Card, true)]
+    [InlineData(OrderPaymentMethod.Transfer, true)]
+    [InlineData(OrderPaymentMethod.DigitalWallet, true)]
+    [InlineData(OrderPaymentMethod.Other, true)]
+    [InlineData(OrderPaymentMethod.Platform, false)]
+    public void OnlyWhatAPlatformCharged_ShouldStayOutOfTheDrawers(OrderPaymentMethod method, bool entersADrawer)
+    {
+        Assert.Equal(entersADrawer, OrderPaymentMethodRules.EntersADrawer(method));
+        // Added at the end of the enum: stored payments keep their method.
+        Assert.Equal(5, (int)OrderPaymentMethod.Platform);
+    }
+
+    [Theory]
+    [InlineData(CashTransactionType.SalePayment)]
+    [InlineData(CashTransactionType.Tip)]
+    [InlineData(CashTransactionType.Refund)]
+    [InlineData(CashTransactionType.Deposit)]
+    public void WhatAPlatformCharged_ShouldNeverEnterADrawer(CashTransactionType type)
+    {
+        var session = NewSession(openingAmount: 100m);
+
+        var error = Assert.Throws<DomainException>(
+            () => session.RegisterTransaction(type, 350m, Now, OrderPaymentMethod.Platform));
+
+        Assert.Equal(OrderPaymentMethodRules.NeverEntersADrawerMessage, error.Message);
+        Assert.Empty(session.Transactions);
+        Assert.Equal(0, session.Revision);
+        Assert.Equal(100m, session.ExpectedBalance);
+    }
+
+    [Fact]
+    public void EveryOtherMethod_ShouldStillEnterTheDrawer()
+    {
+        var session = NewSession(openingAmount: 0m);
+
+        foreach (var method in Enum.GetValues<OrderPaymentMethod>().Where(OrderPaymentMethodRules.EntersADrawer))
+            session.RegisterTransaction(CashTransactionType.SalePayment, 10m, Now, method);
+
+        Assert.Equal(Enum.GetValues<OrderPaymentMethod>().Length - 1, session.Transactions.Count);
     }
 
     private static CashSession NewSession(decimal openingAmount) =>
