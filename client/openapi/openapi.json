@@ -17309,7 +17309,8 @@
       },
       "PlatformOptionPriceRequest": {
         "required": [
-          "optionId"
+          "optionId",
+          "priceDelta"
         ],
         "type": "object",
         "properties": {
@@ -17547,6 +17548,7 @@
       },
       "PlatformProductPriceRequest": {
         "required": [
+          "price",
           "productId"
         ],
         "type": "object",

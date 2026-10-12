@@ -149,6 +149,11 @@ public sealed class CrossTenantPlatformPricesSqlServerTests
         // Without the price, nothing is read as «back to the menu»: it has to be said with null.
         var withoutPrice = await owner.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi/prices", new { products = new[] { new { productId = burger } } });
         var thirdDecimal = await owner.Client.PutAsJsonAsync("/api/v1/delivery-platforms/Rappi/prices", Prices((burger, 20.005m)));
+        // A null in a list ([JsonRequired] does not look inside one) is a bad request, not an error of the server.
+        var nullProduct = await owner.Client.PutAsync("/api/v1/delivery-platforms/Rappi/prices",
+            new StringContent("{\"products\":[null]}", System.Text.Encoding.UTF8, "application/json"));
+        var nullOption = await owner.Client.PutAsync("/api/v1/delivery-platforms/Rappi/prices",
+            new StringContent($"{{\"products\":[{{\"productId\":\"{burger}\",\"price\":20,\"options\":[null]}}]}}", System.Text.Encoding.UTF8, "application/json"));
 
         foreach (var response in new[] { counter, counterList, whatsAppCatalog })
             await AssertValidationAsync(response, DeliveryPlatformSettingMessage);
@@ -156,6 +161,13 @@ public sealed class CrossTenantPlatformPricesSqlServerTests
         Assert.Equal(ApiErrorCodes.ValidationFailed, JsonDocument.Parse(await withoutPrice.Content.ReadAsStringAsync()).RootElement.GetProperty("code").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, thirdDecimal.StatusCode);
         Assert.Contains("'Hamburguesa' en Rappi", await thirdDecimal.Content.ReadAsStringAsync());
+        foreach (var response in new[] { nullProduct, nullOption })
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal((ApiErrorCodes.ValidationFailed, PlatformPriceErrors.EmptyItem),
+                (problem.GetProperty("code").GetString(), problem.GetProperty("detail").GetString()));
+        }
         Assert.Equal(0, await _api.QueryAsync(owner.TenantId, db => db.ProductPlatformPrices.CountAsync()));
 
         // Null goes back to the menu's price.

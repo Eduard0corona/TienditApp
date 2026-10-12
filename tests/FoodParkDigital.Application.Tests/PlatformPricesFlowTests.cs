@@ -191,6 +191,29 @@ public class PlatformPricesFlowTests
         Assert.False(validator.Validate(new SavePlatformPricesCommand(OrderChannel.Rappi,
             [new PlatformProductPriceInput(product, 10m, [new PlatformOptionPriceInput(option, 1m), new PlatformOptionPriceInput(option, 2m)])])).IsValid);
         Assert.False(validator.Validate(new SavePlatformPricesCommand(OrderChannel.Rappi, [Price(Guid.Empty)])).IsValid);
+        // A null in a list, past the binder: refused with its message, never a null reference.
+        Assert.Contains(validator.Validate(new SavePlatformPricesCommand(OrderChannel.Rappi, [null!])).Errors,
+            error => error.ErrorMessage == PlatformPriceErrors.EmptyItem);
+        Assert.Contains(validator.Validate(new SavePlatformPricesCommand(OrderChannel.Rappi, [new PlatformProductPriceInput(product, 10m, [null!])])).Errors,
+            error => error.ErrorMessage == PlatformPriceErrors.EmptyItem);
+    }
+
+    [Fact]
+    public async Task Save_ShouldBeRefused_WithoutTheProductsOrTheFoodModule_AsTheListIs()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var shop = await ShopAsync(fixture);
+        fixture.TenantService.SetTenant(shop.Tenant.Id);
+        // The business keeps its products but now offers services only.
+        (await fixture.Context.TenantSettings.SingleAsync()).UpdateCapabilities(TenantCapability.Service);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+
+        var result = await SaveAsync(fixture, OrderChannel.Rappi, new PlatformProductPriceInput(shop.Soda.Id, 32m, null));
+
+        Assert.Equal(PlatformPriceErrors.NoProducts, result.Error);
+        Assert.Empty(await fixture.Context.ProductPlatformPrices.ToListAsync());
+        Assert.Empty((await ListAsync(fixture, OrderChannel.Rappi)).Items);
     }
 
     [Fact]
@@ -310,7 +333,7 @@ public class PlatformPricesFlowTests
     /// <summary>Each request with a context of its own, as in the app.</summary>
     private static async Task<Result> SaveAsync(SalesTestFixture fixture, OrderChannel channel, params PlatformProductPriceInput[] products)
     {
-        var result = await new SavePlatformPricesCommandHandler(fixture.Context)
+        var result = await new SavePlatformPricesCommandHandler(fixture.Context, fixture.TenantService)
             .Handle(new SavePlatformPricesCommand(channel, products), CancellationToken.None);
         fixture.Context.ChangeTracker.Clear();
         return result;

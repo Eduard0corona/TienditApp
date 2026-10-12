@@ -93,6 +93,10 @@ public class DeliveryPlatformsController : ControllerBase
         [FromBody] SavePlatformPricesRequest request,
         CancellationToken cancellationToken)
     {
+        // [JsonRequired] does not look inside a list: a null item gets here, and is refused like any other bad request.
+        if (request.Products.Any(product => product is null || product.Options?.Any(option => option is null) == true))
+            return this.ApiError(StatusCodes.Status400BadRequest, PlatformPriceErrors.EmptyItem, ApiErrorCodes.ValidationFailed);
+
         var result = await _mediator.Send(new SavePlatformPricesCommand(
             channel,
             request.Products

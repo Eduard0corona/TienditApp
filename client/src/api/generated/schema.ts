@@ -10509,7 +10509,7 @@ export interface components {
             /** Format: uuid */
             optionId: string;
             /** Format: double */
-            priceDelta?: number | null;
+            priceDelta: number | null;
         };
         PlatformOverviewDto: {
             /** Format: int32 */
@@ -10585,7 +10585,7 @@ export interface components {
             /** Format: uuid */
             productId: string;
             /** Format: double */
-            price?: number | null;
+            price: number | null;
             options?: components["schemas"]["PlatformOptionPriceRequest"][] | null;
         };
         PlatformReasonRequest: {

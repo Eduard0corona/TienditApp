@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.DeliveryPlatforms;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -12,7 +14,8 @@ namespace FoodParkDigital.Infrastructure.Tests;
 /// <summary>
 /// The prices of products and options in the apps of the delivery platforms (Fase 22F-2): their checks keep every row one
 /// the domain could write, one price per product (or option) and platform, the prices go with their product or option,
-/// keep their cents and stay in their business.
+/// keep their cents and stay in their business. A save that someone else's save gets ahead of is undone whole and answered
+/// stale; any other failure is an error, not a conflict.
 /// </summary>
 public class ProductPlatformPricesSqlServerTests
 {
@@ -215,6 +218,69 @@ public class ProductPlatformPricesSqlServerTests
         }
     }
 
+    [SqlServerFact]
+    public async Task FirstPrice_SavedMeanwhile_ShouldKeepTheOther_AndAnswerThisSaveStale()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var burger = await SeedBurgerAsync(database, tenant.Id);
+        // Someone saves the burger's first price in Rappi after this save read there was none, and before it writes.
+        await using var racing = database.CreateProductionLikeContext(Tenant(tenant.Id), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext(tenant.Id);
+                (await LoadAsync(other, burger.Id)).SetPlatformPrice(OrderChannel.Rappi, 119m);
+                await other.SaveChangesAsync();
+            }));
+
+        var result = await SaveAsync(racing, tenant.Id, new PlatformProductPriceInput(burger.Id, 125m, null));
+
+        // The unique index keeps the other one; this save is undone whole.
+        Assert.Equal(DeliveryPlatformErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        Assert.Equal(119m, (await context.ProductPlatformPrices.SingleAsync()).Price);
+    }
+
+    [SqlServerFact]
+    public async Task Save_OfAProductDeletedMeanwhile_ShouldBeStale()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var burger = await SeedBurgerAsync(database, tenant.Id);
+        await using var racing = database.CreateProductionLikeContext(Tenant(tenant.Id), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext(tenant.Id);
+                other.Products.Remove(await other.Products.SingleAsync(p => p.Id == burger.Id));
+                await other.SaveChangesAsync();
+            }));
+
+        var result = await SaveAsync(racing, tenant.Id, new PlatformProductPriceInput(burger.Id, 125m, null));
+
+        Assert.Equal(DeliveryPlatformErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        Assert.Equal(0, await context.ProductPlatformPrices.CountAsync());
+    }
+
+    [SqlServerFact]
+    public async Task Save_ThatFailsForAnotherReason_ShouldNotPassForSomeoneElsesSave()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var burger = await SeedBurgerAsync(database, tenant.Id);
+        // A check that no longer agrees with the domain (made stricter by hand here): an error to log, not a conflict.
+        await using (var schema = database.CreateContext())
+        {
+            await schema.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE [ProductPlatformPrices] DROP CONSTRAINT [CK_ProductPlatformPrices_Price]; "
+                + "ALTER TABLE [ProductPlatformPrices] ADD CONSTRAINT [CK_ProductPlatformPrices_Price] CHECK ([Price] > 200);");
+        }
+
+        await using var context = database.CreateContext(tenant.Id);
+        await Assert.ThrowsAsync<DbUpdateException>(() => SaveAsync(context, tenant.Id, new PlatformProductPriceInput(burger.Id, 125m, null)));
+        Assert.Equal(0, await context.ProductPlatformPrices.CountAsync());
+    }
+
     private static async Task<(Tenant Tenant, Tenant Other)> SeedAsync(SqlServerTestDatabase database)
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
@@ -250,6 +316,18 @@ public class ProductPlatformPricesSqlServerTests
             .Include(p => p.PlatformPrices)
             .Include(p => p.OptionGroups).ThenInclude(g => g.Options).ThenInclude(o => o.PlatformPrices)
             .SingleAsync(p => p.Id == productId);
+
+    private static Task<FoodParkDigital.Application.Common.Models.Result> SaveAsync(
+        ApplicationDbContext context, Guid tenantId, params PlatformProductPriceInput[] products)
+        => new SavePlatformPricesCommandHandler(context, Tenant(tenantId))
+            .Handle(new SavePlatformPricesCommand(OrderChannel.Rappi, products), CancellationToken.None);
+
+    private static ICurrentTenantService Tenant(Guid tenantId)
+    {
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        tenant.SetTenant(tenantId);
+        return tenant;
+    }
 
     private static ProductOption Option(Product product, string name)
         => product.OptionGroups.SelectMany(g => g.Options).Single(o => o.Name == name);
