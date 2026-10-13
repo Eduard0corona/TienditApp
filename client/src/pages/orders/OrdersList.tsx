@@ -81,6 +81,14 @@ function chargedByPlatform(order: OrderDto): boolean {
   return isDeliveryPlatform(order.channel) && order.platformOrder?.collectedBy === PlatformCollectedBy.Platform;
 }
 
+/** Sent out with the courier and not delivered yet (Fase 22D). */
+function isOnTheWay(order: OrderDto): boolean {
+  return !!order.delivery?.dispatchedAt
+    && order.status !== OrderStatusConst.Delivered
+    && order.status !== OrderStatusConst.Completed
+    && order.status !== OrderStatusConst.Cancelled;
+}
+
 /** A payment's method; what a platform charged reads with the folio of its app: «Plataforma · BC953». */
 function getPaymentMethodText(order: OrderDto, payment: OrderDto['payments'][number]): string {
   const label = getPaymentMethodLabel(payment.method);
@@ -175,7 +183,7 @@ export default function OrdersList() {
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundError, setRefundError] = useState('');
   const [cardFor, setCardFor] = useState<{ phone: string; name: string } | null>(null);
-  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onConnected } = useOrderSignalR();
+  const { onOrderCreated, onOrderStatusChanged, onOrderCancelled, onOrderUpdated, onConnected } = useOrderSignalR();
   const latestRequestRef = useRef(0);
   // Orders placed by customers (online menu) wait in Pending for the business: they ring on this device.
   const chime = useArrivalChime('tienditapp:orders-sound');
@@ -309,6 +317,8 @@ export default function OrdersList() {
       setRealtimeMessage(`Pedido cancelado${payload.reason ? `: ${payload.reason}` : ''}`);
       scheduleReload(payload.orderId);
     });
+    // The trip written down or the order sent out with the courier (Fase 22D): read again, without a message.
+    const updatedOff = onOrderUpdated((payload) => scheduleReload(payload.orderId));
     // Events sent while the connection was down are lost: every (re)connection reloads.
     const connectedOff = onConnected(() => scheduleReload());
 
@@ -317,9 +327,10 @@ export default function OrdersList() {
       createdOff();
       changedOff();
       cancelledOff();
+      updatedOff();
       connectedOff();
     };
-  }, [loadOrders, onConnected, onOrderCancelled, onOrderCreated, onOrderStatusChanged, refreshSelectedOrder]);
+  }, [loadOrders, onConnected, onOrderCancelled, onOrderCreated, onOrderStatusChanged, onOrderUpdated, refreshSelectedOrder]);
 
   const openPaymentModal = (order: OrderDto) => {
     setPaymentOrder(order);
@@ -655,6 +666,7 @@ export default function OrdersList() {
                           <span className="badge mt-1 text-bg-light border">
                             <i className="ri-e-bike-2-line me-1" aria-hidden="true"></i>A domicilio
                           </span>
+                          {isOnTheWay(order) && <span className="badge mt-1 ms-1 text-bg-info">En camino</span>}
                         </div>
                       )}
                       {isDeliveryPlatform(order.channel) && (
@@ -684,7 +696,9 @@ export default function OrdersList() {
                     <td className="text-end fw-semibold">
                       <div className="ta-money">{formatMoney(order.total)}</div>
                       <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>
-                        {order.balance > 0
+                        {order.delivery?.awaitsCourierCash
+                          ? `Lo debe Paquetenvia ${formatMoney(order.balance)}`
+                          : order.balance > 0
                           ? `Por cobrar ${formatMoney(order.balance)}`
                           : chargedByPlatform(order)
                             ? `Cobró ${getCollectedByLabel(PlatformCollectedBy.Platform, order.channel)}`
@@ -803,9 +817,9 @@ export default function OrdersList() {
                 key={selectedOrder.id}
                 order={selectedOrder}
                 canManage={canSell}
-                onSaved={async () => {
+                onSaved={async (change) => {
                   await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]);
-                  toast.success('Envío guardado.');
+                  toast.success(change === 'dispatch' ? 'Salida guardada.' : 'Envío guardado.');
                 }}
               />
 

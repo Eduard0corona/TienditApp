@@ -44,6 +44,7 @@ import {
   normalizePostalCode,
   notCoveredMessage,
 } from '../../utils/homeDelivery';
+import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
 import { estimateOrderTotals } from '../../utils/orderTotals';
 import { isPostalCode } from '../../utils/postalCodes';
 import { hasCapability } from '../../utils/tenantCapabilities';
@@ -363,7 +364,7 @@ export default function SellPage() {
     : totals.productsTotal !== null && !meetsMinimum(deliveryZone, totals.productsTotal)
       ? belowMinimumMessage(deliveryPostalCode, deliveryZone.minimumOrder)
       : !delivery.addressLine.trim() ? ADDRESS_LINE_REQUIRED_MESSAGE
-      : '';
+      : paysWithProblem(delivery.paysWith ?? '', totals.total);
   // Said once the cashier wrote a whole postal code, not while typing it (what is wrong with the zones, right away).
   const deliveryHint = delivery && (zonesProblem || isPostalCode(deliveryPostalCode)) ? deliveryProblem : '';
   // An order of a platform never sends the phone: what is in the hidden field does not stop it.
@@ -520,6 +521,10 @@ export default function SellPage() {
     setChargeOpen(true);
   }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, deliveryProblem, cashClosed, online]);
 
+  // «Paga con» goes only as an amount; anything else was refused before sending.
+  const paysWithTyped = delivery ? parsePaysWith(delivery.paysWith ?? '') : null;
+  const payingWith = typeof paysWithTyped === 'number' ? paysWithTyped : null;
+
   const buildOrderRequest = (): CreateOrderRequest => ({
     customerName: details.customerName.trim() || undefined,
     // The app of a platform shares neither the customer's phone nor a table.
@@ -545,6 +550,7 @@ export default function SellPage() {
         postalCode: normalizePostalCode(delivery.postalCode),
         addressLine: delivery.addressLine.trim(),
         references: delivery.references.trim() || undefined,
+        paysWith: payingWith ?? undefined,
       }
       : undefined,
   });

@@ -1577,6 +1577,15 @@ export interface OrderDeliveryDto {
   trackingUrl?: string | null;
   shipmentRegisteredAt?: string | null;
   shipmentRegisteredBy?: string | null;
+  /** The bill the customer pays the courier with, for the change (Fase 22D). */
+  paysWith?: number | null;
+  /** When it went out with the courier; none while it waits. */
+  dispatchedAt?: string | null;
+  dispatchedBy?: string | null;
+  /** What the courier collects in cash: the balance when it went out; none when it collects nothing. */
+  cashToCollect?: number | null;
+  /** Delivered for the courier to collect and not paid yet: the courier owes the order's balance. */
+  awaitsCourierCash: boolean;
 }
 
 export { DeliveryCourier } from '../api/generated/enums';
@@ -1586,6 +1595,20 @@ export interface OrderDeliveryInput {
   postalCode: string;
   addressLine: string;
   references?: string;
+  /** The bill the customer will pay the courier with, for the change (Fase 22D); it covers the total. */
+  paysWith?: number;
+}
+
+/** The order goes out with the courier (Fase 22D): the trip, and whether the courier collects the balance in cash. */
+export interface DispatchOrderRequest {
+  courier: DeliveryCourier;
+  /** As typed: the server normalizes it like the folio of a platform. */
+  folio: string;
+  /** https only. */
+  trackingUrl?: string;
+  collectsCash: boolean;
+  /** Only when the courier collects: the bill the customer pays with. */
+  paysWith?: number;
 }
 
 export interface RegisterCourierShipmentRequest {
@@ -1664,6 +1687,7 @@ export { PlatformCommissionBase } from '../api/generated/enums';
 export { PlatformSettlementStatus } from '../api/generated/enums';
 
 export { PlatformSettlementAdjustmentKind } from '../api/generated/enums';
+export { CourierSettlementAdjustmentKind } from '../api/generated/enums';
 
 export interface CustomerCardDto {
   phone?: string;

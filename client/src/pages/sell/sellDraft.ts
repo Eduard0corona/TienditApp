@@ -43,6 +43,8 @@ export interface SellDraftDelivery {
   postalCode: string;
   addressLine: string;
   references: string;
+  /** «Paga con», as typed (Fase 22D). */
+  paysWith?: string;
 }
 
 const storageKey = (tenantId: string) => `tienditapp.sell.draft.v1.${tenantId}`;
@@ -62,7 +64,13 @@ export function describeSale(draft: SellDraft): string {
   }
   // Another address is another order: its zone, minimum and fee can differ.
   if (draft.delivery) {
-    sale.push(['delivery', ...[draft.delivery.postalCode, draft.delivery.addressLine, draft.delivery.references].map((value) => value.trim())]);
+    const paysWith = draft.delivery.paysWith?.trim();
+    // Only when typed: a sale described before «paga con» existed keeps the same description (and its pending charge).
+    sale.push([
+      'delivery',
+      ...[draft.delivery.postalCode, draft.delivery.addressLine, draft.delivery.references].map((value) => value.trim()),
+      ...(paysWith ? [paysWith] : []),
+    ]);
   }
   return JSON.stringify(sale);
 }
@@ -102,11 +110,12 @@ export function readSellDraft(tenantId: string): SellDraft | null {
 
 function readDelivery(value: unknown): SellDraftDelivery | undefined {
   if (!value || typeof value !== 'object') return undefined;
-  const { postalCode, addressLine, references } = value as Partial<SellDraftDelivery>;
+  const { postalCode, addressLine, references, paysWith } = value as Partial<SellDraftDelivery>;
   return {
     postalCode: typeof postalCode === 'string' ? postalCode : '',
     addressLine: typeof addressLine === 'string' ? addressLine : '',
     references: typeof references === 'string' ? references : '',
+    paysWith: typeof paysWith === 'string' ? paysWith : '',
   };
 }
 

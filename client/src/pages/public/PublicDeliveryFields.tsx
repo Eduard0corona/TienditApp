@@ -5,11 +5,15 @@ import {
   describeDeliveryTerms,
   type DeliveryTerms,
 } from '../../utils/homeDelivery';
+import { changeFor, parsePaysWith, paysWithProblem } from '../../utils/courierCash';
+import { formatMoney } from '../../utils/money';
 
 export interface PublicDeliveryAddress {
   postalCode: string;
   addressLine: string;
   references: string;
+  /** The bill the customer will pay the courier with, as typed (Fase 22D). */
+  paysWith: string;
 }
 
 interface PublicDeliveryFieldsProps {
@@ -27,17 +31,22 @@ interface PublicDeliveryFieldsProps {
   problem: string;
   /** The fee goes like the prices of the business: «más IVA» when they do not include it. */
   pricesIncludeTax: boolean;
+  /** What the order adds up to with its delivery, once its fee is known: the change of «¿con cuánto pagas?». */
+  total: number | null;
 }
 
 /**
  * How the customer of the online menu gets the order (Fase 22C): to their address, with the postal code the business's
- * zones are checked by, or picked up. What the delivery costs is the server's answer for that postal code.
+ * zones are checked by, or picked up. What the delivery costs is the server's answer for that postal code. To the address,
+ * the customer may say what they pay with, for the courier's change (Fase 22D).
  */
 export default function PublicDeliveryFields({
-  required, toAddress, onToAddressChange, address, onAddressChange, terms, checking, problem, pricesIncludeTax,
+  required, toAddress, onToAddressChange, address, onAddressChange, terms, checking, problem, pricesIncludeTax, total,
 }: PublicDeliveryFieldsProps) {
   const id = useId();
   const delivering = required || toAddress;
+  const paysWithIssue = total === null ? '' : paysWithProblem(address.paysWith, total);
+  const bill = parsePaysWith(address.paysWith);
 
   return (
     <div className="mb-3">
@@ -104,6 +113,24 @@ export default function PublicDeliveryFields({
               value={address.references}
               onChange={(event) => onAddressChange({ references: event.target.value })}
             />
+          </div>
+          <div className="col-6 col-sm-4">
+            <label className="form-label small mb-1" htmlFor={`${id}-pays-with`}>¿Con cuánto pagas? (opcional)</label>
+            <input
+              id={`${id}-pays-with`}
+              className={`form-control ${paysWithIssue ? 'is-invalid' : ''}`}
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="$"
+              value={address.paysWith}
+              onChange={(event) => onAddressChange({ paysWith: event.target.value })}
+              aria-describedby={`${id}-change`}
+            />
+          </div>
+          <div id={`${id}-change`} className="col-6 col-sm-8 small align-self-end pb-2">
+            {paysWithIssue ? <span className="text-danger">{paysWithIssue}</span>
+              : typeof bill === 'number' && total !== null ? <>Tu cambio: <span className="ta-money">{formatMoney(changeFor(bill, total))}</span></>
+              : <span className="text-muted">Si pagas en efectivo, el repartidor lleva tu cambio.</span>}
           </div>
           <div id={`${id}-quote`} className="col-12 small" role="status">
             {checking ? <span className="text-muted">Revisando si llegamos…</span>

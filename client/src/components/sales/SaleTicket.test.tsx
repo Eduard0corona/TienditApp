@@ -121,7 +121,7 @@ describe('SaleTicket of an order of a delivery platform', () => {
       total: 110,
       delivery: {
         postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: 'Portón verde', zoneName: 'Ruta interna 2',
-        fee: 35, feeTaxRate: 16, courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234',
+        fee: 35, feeTaxRate: 16, courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234', awaitsCourierCash: false,
       },
     }} />);
 
@@ -133,5 +133,20 @@ describe('SaleTicket of an order of a delivery platform', () => {
     expect(screen.getByText('Envío a domicilio').nextSibling).toHaveTextContent('$35.00');
     // The zone is the business's own name for it: it is not printed.
     expect(ticket).not.toHaveTextContent('Ruta interna');
+  });
+
+  it('prints what the courier collects, with the customer\'s bill and the change', () => {
+    render(<SaleTicket businessName="Fonda Lupita" order={{
+      ...order,
+      total: 110,
+      balance: 110,
+      delivery: {
+        postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', zoneName: 'Centro', fee: 35, feeTaxRate: 16,
+        courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234', awaitsCourierCash: false,
+        dispatchedAt: '2026-10-13T19:05:00Z', cashToCollect: 110, paysWith: 200,
+      },
+    }} />);
+
+    expect(screen.getByLabelText('Ticket ORD-000007')).toHaveTextContent('Cobrar $110.00 · paga con $200.00 · cambio $90.00');
   });
 });

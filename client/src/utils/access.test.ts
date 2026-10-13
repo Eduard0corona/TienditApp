@@ -43,6 +43,13 @@ describe('getAccess', () => {
     expect(cookWhoSells.sell).toBe(true);
   });
 
+  it('lets settle a courier only whoever handles the cash and charges orders, as the API asks', () => {
+    expect(getAccess(user('STAFF', ['ManageCash', 'ChargeOrders']), FOOD_WITH_KITCHEN).settleCouriers).toBe(true);
+    expect(getAccess(user('STAFF', ['ManageCash']), FOOD_WITH_KITCHEN).settleCouriers).toBe(false);
+    expect(getAccess(user('STAFF', ['ManageOrders', 'ChargeOrders']), FOOD_WITH_KITCHEN).settleCouriers).toBe(false);
+    expect(getAccess(user('TENANT_ADMIN'), FOOD_WITH_KITCHEN).settleCouriers).toBe(true);
+  });
+
   it('needs the module as well as the permission', () => {
     const withoutKitchen = getAccess(user('STAFF', ['ManageServiceBoard', 'ManageInventory']), TenantCapability.Retail);
 

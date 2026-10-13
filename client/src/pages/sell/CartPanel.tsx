@@ -124,6 +124,7 @@ export default function CartPanel(props: CartPanelProps) {
           disabled={submitting}
           online={props.online}
           pricesIncludeTax={props.pricesIncludeTax}
+          total={totals.total}
         />
       )}
       {platform && (

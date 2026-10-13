@@ -6,13 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ordersApi } from '../../api/ordersApi';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
-import type { OrderCreatedPayload } from '../../hooks/useOrderSignalR';
+import type { OrderCreatedPayload, OrderUpdatedPayload } from '../../hooks/useOrderSignalR';
 import { useTenant } from '../../hooks/useTenant';
-import { OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, TenantCapability, type OrderDto } from '../../types';
+import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, TenantCapability, type OrderDto } from '../../types';
 import OrdersList from './OrdersList';
 
 // The handler the list gives SignalR for new orders, to play an event as the hub would.
-const realtime = vi.hoisted(() => ({ created: undefined as ((payload: OrderCreatedPayload) => void) | undefined }));
+const realtime = vi.hoisted(() => ({
+  created: undefined as ((payload: OrderCreatedPayload) => void) | undefined,
+  updated: undefined as ((payload: OrderUpdatedPayload) => void) | undefined,
+}));
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTenant', () => ({ useTenant: vi.fn() }));
@@ -27,9 +30,13 @@ vi.mock('../../hooks/useOrderSignalR', () => {
     realtime.created = callback;
     return () => undefined;
   };
+  const onOrderUpdated = (callback: (payload: OrderUpdatedPayload) => void) => {
+    realtime.updated = callback;
+    return () => undefined;
+  };
   return {
     useOrderSignalR: () => ({
-      onOrderCreated, onOrderStatusChanged: subscribe, onOrderCancelled: subscribe, onConnected: subscribe,
+      onOrderCreated, onOrderStatusChanged: subscribe, onOrderCancelled: subscribe, onOrderUpdated, onConnected: subscribe,
     }),
   };
 });
@@ -279,5 +286,34 @@ describe('OrdersList', () => {
     }));
 
     expect(screen.getByRole('status')).toHaveTextContent('Nuevo pedido ORD-000126 de Rappi (folio BC953)');
+  });
+
+  it('marks an order on its way with the courier, and what Paquetenvia owes of one delivered', async () => {
+    const delivery = {
+      postalCode: '72000', addressLine: 'Av. Reforma 123', zoneName: 'Centro', fee: 35, feeTaxRate: 16,
+      courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1', dispatchedAt: '2026-10-13T19:05:00Z', cashToCollect: 275, awaitsCourierCash: false,
+    };
+    renderOrders(TenantCapability.Food, [
+      order({ id: 'd1', orderNumber: 'ORD-000201', status: 1, total: 275, paidAmount: 0, balance: 275, delivery }),
+      order({ id: 'd2', orderNumber: 'ORD-000202', status: 6, total: 275, paidAmount: 0, balance: 275, delivery: { ...delivery, awaitsCourierCash: true } }),
+    ]);
+
+    const onTheWay = (await screen.findByText('ORD-000201')).closest('tr')!;
+    const delivered = screen.getByText('ORD-000202').closest('tr')!;
+    expect(within(onTheWay).getByText('En camino')).toBeInTheDocument();
+    expect(within(onTheWay).getByText(/Por cobrar/)).toHaveTextContent('$275.00');
+    expect(within(delivered).queryByText('En camino')).not.toBeInTheDocument();
+    expect(within(delivered).getByText(/Lo debe Paquetenvia/)).toHaveTextContent('$275.00');
+  });
+
+  it('reads the orders again when one goes out with the courier', async () => {
+    renderOrders(TenantCapability.Food);
+    await screen.findByText('ORD-000001');
+    const reads = vi.mocked(ordersApi.getAll).mock.calls.length;
+
+    act(() => realtime.updated?.({ orderId: 'o1' }));
+
+    await waitFor(() => expect(vi.mocked(ordersApi.getAll).mock.calls.length).toBeGreaterThan(reads), { timeout: 3000 });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
