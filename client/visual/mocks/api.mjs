@@ -345,6 +345,10 @@ function buildRoutes(data, token) {
     ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
     // Nor any delivery zone: Vender offers no «A domicilio» (Configuración › Zonas de entrega answers its own).
     ['GET', /^\/delivery-zones$/, () => ok([])],
+    // Nor has a courier collected anything (Fase 22D): Caja shows no Repartidores tab.
+    ['GET', /^\/courier-settlements\/receivable$/, () => ok(data.courierReceivables ?? [{
+      courier: 1, owedOrders: 0, owedAmount: 0, oldestDispatchedAt: null, onTheWayOrders: 0, onTheWayAmount: 0, lastSettledAt: null,
+    }])],
     ['GET', /^\/delivery-platforms$/, () => ok(unconfiguredPlatforms())],
     ['GET', /^\/delivery-platforms\/([345])\/prices$/, (m, q) => ok(paginate(platformPriceList(data, m[1]), q, 100))],
     ['PUT', /^\/delivery-platforms\/([345])\/prices$/, (m, q, body) => {

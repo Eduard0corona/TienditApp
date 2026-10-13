@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
 import {
+  COURIER_ORDERS_DATA,
   CUSTOMER_PROFILE,
   DELIVERY_ORDERS_DATA,
   DELIVERY_ROUTES,
@@ -397,6 +398,47 @@ test.describe('A domicilio', () => {
     await open(page, '/kitchen');
     await expect(page.getByText('A domicilio')).toBeVisible();
     await snapPage(page, 'cocina-a-domicilio');
+  });
+
+  test('Vender a domicilio con «paga con» y su cambio', async ({ page }) => {
+    await open(page, '/sell');
+    await fillDeliveryTicket(page);
+    const ticket = page.getByRole('complementary', { name: 'Ticket de la venta' });
+    await sendToRoma(ticket);
+    await ticket.getByLabel('Paga con (opcional)').fill('500');
+    await expect(ticket.getByText('Cambio:')).toBeVisible();
+    await snapPage(page, 'vender-a-domicilio-paga-con');
+  });
+
+  test.describe('Con Paquetenvia', () => {
+    // Fase 22D: besides the two above, an order on its way that Paquetenvia collects and one it delivered and owes.
+    test.use({ prepareData: COURIER_ORDERS_DATA });
+
+    test('Salió a entregar, cobrando en efectivo con «paga con»', async ({ page }) => {
+      await open(page, '/orders');
+      const detail = await openOrder(page, 'Diego Hernández');
+      await detail.getByRole('button', { name: 'Salió a entregar' }).click();
+      await detail.getByLabel('Folio de Paquetenvia').fill('pq 48230');
+      await detail.getByLabel('Paga con (opcional)').fill('500');
+      await expect(detail.getByText('Cambio:')).toBeVisible();
+      await snapDialog(page, 'pedidos-salio-a-entregar');
+      await detail.getByRole('button', { name: 'Salió a entregar' }).click();
+      await expect(detail.getByText('En camino')).toBeVisible();
+      await snapDialog(page, 'pedidos-en-camino');
+    });
+
+    test('Pedidos en camino y por liquidar', async ({ page }) => {
+      await open(page, '/orders');
+      await expect(page.getByText(/Lo debe Paquetenvia/)).toBeVisible();
+      await snapPage(page, 'pedidos-con-paquetenvia');
+    });
+
+    test('Pedido entregado que debe Paquetenvia', async ({ page }) => {
+      await open(page, '/orders');
+      const detail = await openOrder(page, 'Andrés Morales');
+      await expect(detail.getByText(/Paquetenvia te debe/)).toBeVisible();
+      await snapDialog(page, 'pedidos-debe-paquetenvia');
+    });
   });
 });
 

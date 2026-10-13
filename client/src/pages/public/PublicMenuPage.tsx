@@ -34,6 +34,7 @@ import {
 } from '../../utils/productOptions';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
+import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
 import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDeliveryFields';
 import './PublicMenuPage.css';
 
@@ -66,7 +67,7 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
   return (product.optionGroups ?? []) as ProductOptionGroupDto[];
 }
 
-const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '' };
+const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '', paysWith: '' };
 
 /**
  * The public menu of a business (/m/:slug), without signing in: the catalog the business published and, when
@@ -145,8 +146,11 @@ export default function PublicMenuPage() {
     : terms && totals.productsTotal !== null && !meetsMinimum(terms, totals.productsTotal)
       ? belowMinimumMessage(postalCode, terms.minimumOrder)
       : '';
+  // «¿Con cuánto pagas?» covers the total with its delivery, once its fee is known.
+  const paysWithIssue = delivering && terms ? paysWithProblem(address.paysWith, totals.total) : '';
+  const paysWithTyped = parsePaysWith(address.paysWith);
   // To an address the order waits for the server's answer for the postal code.
-  const deliveryBlocked = delivering && (checkingQuote || !terms || deliveryProblem !== '');
+  const deliveryBlocked = delivering && (checkingQuote || !terms || deliveryProblem !== '' || paysWithIssue !== '');
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const categories = data?.categories ?? [];
   const visible = category === 'all' ? categories : categories.filter((item) => item.id === category);
@@ -215,7 +219,12 @@ export default function PublicMenuPage() {
         notes: notes.trim() || null,
         tableLabel: tableLabel || null,
         delivery: delivering
-          ? { postalCode, addressLine: address.addressLine.trim(), references: address.references.trim() || null }
+          ? {
+            postalCode,
+            addressLine: address.addressLine.trim(),
+            references: address.references.trim() || null,
+            paysWith: typeof paysWithTyped === 'number' ? paysWithTyped : null,
+          }
           : undefined,
         items: lines.map((line) => ({
           productId: line.product.id,
@@ -543,6 +552,7 @@ export default function PublicMenuPage() {
                 checking={checkingQuote}
                 problem={deliveryProblem}
                 pricesIncludeTax={data.pricesIncludeTax}
+                total={terms ? totals.total : null}
               />
             )}
             {totals.fee !== null && totals.productsTotal !== null && (

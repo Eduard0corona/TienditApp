@@ -18,7 +18,8 @@ public sealed class OrderRealtimeNotifications :
     INotificationHandler<ServiceOrderPieceStatusChangedEvent>,
     INotificationHandler<TabRoundSentEvent>,
     INotificationHandler<KitchenTicketChangedEvent>,
-    INotificationHandler<TabItemCancelledEvent>
+    INotificationHandler<TabItemCancelledEvent>,
+    INotificationHandler<OrderDeliveryUpdatedEvent>
 {
     private readonly IApplicationDbContext _context;
     private readonly IOrderNotificationService _notificationService;
@@ -77,6 +78,10 @@ public sealed class OrderRealtimeNotifications :
             notification.TenantId,
             notification.OrderId,
             notification.Round));
+
+    // The trip written down or the order sent out with the courier: Pedidos reads the order again.
+    public Task Handle(OrderDeliveryUpdatedEvent notification, CancellationToken cancellationToken)
+        => NotifyAsync(notification, () => _notificationService.NotifyOrderUpdated(notification.TenantId, notification.OrderId));
 
     public Task Handle(ServiceOrderPieceStatusChangedEvent notification, CancellationToken cancellationToken)
         => NotifyAsync(notification, async () =>

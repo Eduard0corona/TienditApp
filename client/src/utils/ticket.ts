@@ -1,4 +1,5 @@
 import { PlatformCollectedBy, type OrderDto } from '../types';
+import { changeFor, stillToCollect } from './courierCash';
 import { getPlatformName, isDeliveryPlatform } from './deliveryPlatforms';
 import { DELIVERY_COURIER_LABELS, getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
@@ -66,9 +67,11 @@ export interface TicketDelivery {
   fee: number;
   /** "Paquetenvia · Folio PQ1234", once the trip is written down. */
   courier: string | null;
+  /** "Cobrar $275.00 · paga con $500.00 · cambio $225.00": what the courier collects, while the order owes it (Fase 22D). */
+  collection: string | null;
 }
 
-export function getTicketDelivery(order: Pick<OrderDto, 'delivery'>): TicketDelivery | null {
+export function getTicketDelivery(order: Pick<OrderDto, 'delivery'> & Partial<Pick<OrderDto, 'balance'>>): TicketDelivery | null {
   const delivery = order.delivery;
   if (!delivery) return null;
   return {
@@ -78,7 +81,25 @@ export function getTicketDelivery(order: Pick<OrderDto, 'delivery'>): TicketDeli
     courier: delivery.courier != null && delivery.courierFolio
       ? `${DELIVERY_COURIER_LABELS[delivery.courier]} · Folio ${delivery.courierFolio}`
       : null,
+    collection: describeTicketCollection(delivery, order.balance ?? 0),
   };
+}
+
+/**
+ * What the courier collects: what it was sent out to collect (less if part was paid meanwhile) or, before it goes out, the
+ * balance with the customer's bill. Nothing once the order is paid.
+ */
+function describeTicketCollection(delivery: NonNullable<OrderDto['delivery']>, balance: number): string | null {
+  if (balance <= 0) return null;
+  const toCollect = delivery.cashToCollect != null
+    ? stillToCollect(delivery.cashToCollect, balance)
+    : !delivery.dispatchedAt && delivery.paysWith != null ? balance : null;
+  if (toCollect == null) return null;
+  const parts = [`Cobrar ${formatMoney(toCollect)}`];
+  if (delivery.paysWith != null) {
+    parts.push(`paga con ${formatMoney(delivery.paysWith)}`, `cambio ${formatMoney(changeFor(delivery.paysWith, toCollect))}`);
+  }
+  return parts.join(' · ');
 }
 
 /** "$35.00", or "Gratis" when the zone delivered it free. */
@@ -152,6 +173,7 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
     ...(delivery ? [`*A domicilio:* ${delivery.address}`] : []),
     ...(delivery?.references ? [`Referencias: ${delivery.references}`] : []),
     ...(delivery?.courier ? [delivery.courier] : []),
+    ...(delivery?.collection ? [`*${delivery.collection}*`] : []),
     ...(extras.provisional ? ['_Folio provisional: venta registrada sin conexión._'] : []),
     '',
     ...billedItems(order).map((item) => {

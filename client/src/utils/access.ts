@@ -24,6 +24,8 @@ export interface Access {
   sell: boolean;
   /** Register payments (in Vender, Pedidos and Mesas): ManageOrders + ChargeOrders. A waiter leaves them for the cashier. */
   charge: boolean;
+  /** Settle what a courier collected (Caja › Repartidores): ManageCash + ChargeOrders, as the server asks. */
+  settleCouriers: boolean;
   /** Kitchen board: ManageServiceBoard + Kitchen module. */
   kitchen: boolean;
   /** Tables and open tabs: ManageOrders + Food module. */
@@ -84,6 +86,7 @@ export function getAccess(user: UserProfileDto | null, capabilities: number | nu
     orders: commerce && can('ManageOrders'),
     sell: commerce && can('ManageOrders'),
     charge: commerce && can('ManageOrders') && can('ChargeOrders'),
+    settleCouriers: commerce && can('ManageCash') && can('ChargeOrders'),
     kitchen: hasCapability(capabilities, TenantCapability.Kitchen) && can('ManageServiceBoard'),
     tables: hasCapability(capabilities, TenantCapability.Food) && can('ManageOrders'),
     serviceBoard: hasCapability(capabilities, TenantCapability.Service) && can('ManageServiceBoard'),

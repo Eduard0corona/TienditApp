@@ -32,7 +32,7 @@ interface SaleRequest {
   items?: SaleItemRequest[];
   payments?: SalePaymentRequest[];
   /** Sent to the customer's address (Fase 22C): the zone that reaches its postal code charges its fee. */
-  delivery?: { postalCode: string; addressLine: string; references?: string };
+  delivery?: { postalCode: string; addressLine: string; references?: string; paysWith?: number };
 }
 
 /** A delivery zone of the business as GET /delivery-zones answers it. */
@@ -181,6 +181,7 @@ function createSale(data: DemoData, body: SaleRequest) {
         postalCode: body.delivery.postalCode, addressLine: body.delivery.addressLine, references: body.delivery.references ?? null,
         zoneName: zone.name, fee: money(feeCents), feeTaxRate: data.tenant.defaultTaxRate,
         courier: null, courierFolio: null, trackingUrl: null, shipmentRegisteredAt: null, shipmentRegisteredBy: null,
+        paysWith: body.delivery.paysWith ?? null, dispatchedAt: null, dispatchedBy: null, cashToCollect: null, awaitsCourierCash: false,
       }
       : null,
   };
@@ -259,8 +260,29 @@ const deliveryRoutes: ExtraRoutes = (data, helpers) => [
     });
     return { status: 204, json: null };
   }],
+  // Fase 22D: the order goes out with the courier, who collects its balance in cash or nothing.
+  ['PUT', /^\/orders\/([^/]+)\/delivery\/dispatch$/, (match, _query, body: DispatchBody) => {
+    const order = data.orders.find((candidate: { id: string }) => candidate.id === match[1]);
+    Object.assign(order.delivery ?? {}, {
+      courier: body.courier, courierFolio: normalizeFolio(body.folio), trackingUrl: body.trackingUrl ?? null,
+      shipmentRegisteredAt: order.delivery?.shipmentRegisteredAt ?? NOW_ISO,
+      shipmentRegisteredBy: order.delivery?.shipmentRegisteredBy ?? 'mariana.ortiz@cafelaesquina.mx',
+      dispatchedAt: order.delivery?.dispatchedAt ?? NOW_ISO, dispatchedBy: order.delivery?.dispatchedBy ?? 'mariana.ortiz@cafelaesquina.mx',
+      cashToCollect: body.collectsCash ? order.balance : null, paysWith: body.collectsCash ? body.paysWith ?? null : null,
+    });
+    return { status: 204, json: null };
+  }],
   ...sellRoutes(data, helpers),
 ];
+
+/** What «Salió a entregar» sends (DispatchOrderRequest). */
+interface DispatchBody {
+  courier: number;
+  folio: string;
+  trackingUrl?: string;
+  collectsCash: boolean;
+  paysWith?: number;
+}
 
 export const DELIVERY_ROUTES = asOption(deliveryRoutes);
 
@@ -297,6 +319,38 @@ function withDeliveryOrders(data: DemoData) {
 }
 
 export const DELIVERY_ORDERS_DATA = asOption(withDeliveryOrders);
+
+/**
+ * Fase 22D, on top of the two orders above: molletes to Roma on their way with Paquetenvia, who collects $225 and takes
+ * the change of $500, and tortas to Condesa it delivered and still owes ($215). Added in these scenes only.
+ */
+function withCourierOrders(data: DemoData) {
+  withDeliveryOrders(data);
+  const product = (name: string) => data.products.find((candidate: { name: string }) => candidate.name === name).id;
+  const onTheWay = createSale(data, {
+    customerName: 'Valeria Torres', customerPhone: '5545678901',
+    items: [{ productId: product('Molletes con pico de gallo'), quantity: 2 }, { productId: product('Café americano'), quantity: 2 }],
+    delivery: { postalCode: '06700', addressLine: 'Orizaba 87, Roma Norte', paysWith: 500 },
+  });
+  Object.assign(onTheWay, { status: 3, allowedTransitions: [6, 99], createdAt: at(12, 35) });
+  Object.assign(onTheWay.delivery!, {
+    courier: 1, courierFolio: 'PQ48219', trackingUrl: 'https://paquetenvia.mx/rastreo/PQ48219',
+    shipmentRegisteredAt: at(13, 0), shipmentRegisteredBy: 'lucia.navarro@cafelaesquina.mx',
+    dispatchedAt: at(13, 12), dispatchedBy: 'lucia.navarro@cafelaesquina.mx', cashToCollect: onTheWay.balance,
+  });
+  const owed = createSale(data, {
+    customerName: 'Andrés Morales', customerPhone: '5556789012',
+    items: [{ productId: product('Torta de jamón'), quantity: 2 }, { productId: product('Agua de jamaica'), quantity: 1 }],
+    delivery: { postalCode: '06140', addressLine: 'Tamaulipas 66, Condesa' },
+  });
+  Object.assign(owed, { status: 6, allowedTransitions: [], canCancel: false, createdAt: at(12, 55) });
+  Object.assign(owed.delivery!, {
+    courier: 1, courierFolio: 'PQ48197', shipmentRegisteredAt: at(13, 0), shipmentRegisteredBy: 'lucia.navarro@cafelaesquina.mx',
+    dispatchedAt: at(13, 2), dispatchedBy: 'lucia.navarro@cafelaesquina.mx', cashToCollect: owed.balance, awaitsCourierCash: true,
+  });
+}
+
+export const COURIER_ORDERS_DATA = asOption(withCourierOrders);
 
 /** A customer account (Mis pedidos): no business, only its own orders. */
 export const CUSTOMER_PROFILE = {

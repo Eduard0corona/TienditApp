@@ -626,7 +626,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// worked out once, after the products and before any payment, and never changes: it is what the customer agreed to.
     /// </summary>
     /// <param name="feeRate">The IVA rate of the business: a delivery service, not the rate of a dish.</param>
-    public OrderDelivery ArrangeDelivery(DeliveryAddress address, DeliveryZone zone, VatRate feeRate)
+    /// <param name="paysWith">The bill the customer will pay the courier with, for the change (Fase 22D); it covers the total.</param>
+    public OrderDelivery ArrangeDelivery(DeliveryAddress address, DeliveryZone zone, VatRate feeRate, decimal? paysWith = null)
     {
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(zone);
@@ -651,9 +652,26 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (!zone.MeetsMinimum(productsTotal))
             throw new DomainException(HomeDeliveryRules.BelowMinimumMessage(address.PostalCode, zone.MinimumOrder));
 
-        Delivery = new OrderDelivery(TenantId, Id, address, zone.Name, zone.FeeFor(productsTotal), feeRate);
+        var delivery = new OrderDelivery(TenantId, Id, address, zone.Name, zone.FeeFor(productsTotal), feeRate);
+        Delivery = delivery;
         RecalculateTotals();
-        return Delivery;
+        if (paysWith is { } bill)
+        {
+            // Checked against the total with its delivery; refused, the order is left as it was.
+            var refusal = !HomeDeliveryRules.IsPaysWith(bill) ? HomeDeliveryRules.PaysWithMessage
+                : bill < Total ? HomeDeliveryRules.PaysWithNotEnoughMessage(bill, Total)
+                : null;
+            if (refusal is not null)
+            {
+                Delivery = null;
+                RecalculateTotals();
+                throw new DomainException(refusal);
+            }
+
+            delivery.SetPaysWith(bill);
+        }
+
+        return delivery;
     }
 
     /// <summary>
@@ -673,8 +691,69 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         // The order changes with its trip, so its version catches a cancellation saved meanwhile.
         UpdatedAt = registeredAt;
+        AddDomainEvent(new OrderDeliveryUpdatedEvent(Id, TenantId, WentOut: false));
         return true;
     }
+
+    /// <summary>
+    /// The order goes out with the courier (Fase 22D): its trip is written down (or corrected) and, when the courier collects
+    /// the order in cash, what it collects is the balance now, with the bill the customer pays with (it must cover it). While
+    /// it is on its way it may be corrected; the first time is kept as when it went out, and only then the customer hears of
+    /// it. An order goes out once confirmed and until it is delivered. False when nothing changes.
+    /// </summary>
+    public bool Dispatch(
+        CourierShipment shipment,
+        bool collectsCash,
+        decimal? paysWith,
+        DateTimeOffset dispatchedAt,
+        string? dispatchedBy)
+    {
+        ArgumentNullException.ThrowIfNull(shipment);
+        if (Delivery is null)
+            throw new DomainException(HomeDeliveryRules.NotADeliveryMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException(HomeDeliveryRules.CancelledMessage);
+        if (Status == OrderStatus.Pending)
+            throw new DomainException(HomeDeliveryRules.NotConfirmedMessage);
+        if (Status is OrderStatus.Delivered or OrderStatus.Completed)
+            throw new DomainException(HomeDeliveryRules.AlreadyDeliveredMessage);
+
+        decimal? cashToCollect = null;
+        if (collectsCash)
+        {
+            if (Balance <= 0)
+                throw new DomainException(HomeDeliveryRules.NothingToCollectMessage);
+            cashToCollect = Balance;
+            if (paysWith is { } bill)
+            {
+                if (!HomeDeliveryRules.IsPaysWith(bill))
+                    throw new DomainException(HomeDeliveryRules.PaysWithMessage);
+                if (bill < Balance)
+                    throw new DomainException(HomeDeliveryRules.PaysWithNotEnoughMessage(bill, Balance));
+            }
+        }
+        else if (paysWith is not null)
+        {
+            throw new DomainException(HomeDeliveryRules.PaysWithNeedsCashMessage);
+        }
+
+        var wentOut = !Delivery.IsDispatched;
+        var tripChanged = Delivery.RegisterShipment(shipment, dispatchedAt, dispatchedBy);
+        var dispatchChanged = Delivery.Dispatch(cashToCollect, collectsCash ? paysWith : null, dispatchedAt, dispatchedBy);
+        if (!tripChanged && !dispatchChanged)
+            return false;
+
+        // The order changes with its delivery, so its version catches a cancellation or a payment saved meanwhile.
+        UpdatedAt = dispatchedAt;
+        AddDomainEvent(new OrderDeliveryUpdatedEvent(Id, TenantId, wentOut));
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the courier owes the business this order (Fase 22D): it went out for the courier to collect it in cash, it was
+    /// delivered and the business has not been paid all of it. A settlement of the courier pays the rest.
+    /// </summary>
+    public bool AwaitsCourierCash => Delivery?.CashToCollect is not null && Status == OrderStatus.Delivered && Balance > 0;
 
     public OrderPayment RegisterPayment(
         decimal amount,

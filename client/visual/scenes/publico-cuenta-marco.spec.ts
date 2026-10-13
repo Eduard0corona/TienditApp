@@ -363,6 +363,16 @@ test.describe('Menú público a domicilio', () => {
     await snapScreen(page, 'menu-publico-carrito-a-domicilio-telefono');
   });
 
+  test('menú público carrito a domicilio con cuánto paga', async ({ page }) => {
+    const cart = await cartToRoma(page);
+    await cart.getByLabel('Código postal').fill('06140');
+    await expect(cart.getByText('Envío $45.00')).toBeVisible();
+    await cart.getByLabel('Dirección').fill('Ámsterdam 210, Condesa');
+    await cart.getByLabel('¿Con cuánto pagas? (opcional)').fill('200');
+    await expect(cart.getByText('Tu cambio:')).toBeVisible();
+    await snapScreen(page, 'menu-publico-carrito-paga-con-telefono');
+  });
+
   test('menú público pedido a domicilio enviado', async ({ page }) => {
     const cart = await cartToRoma(page);
     await cart.getByLabel('Código postal').fill('06140');

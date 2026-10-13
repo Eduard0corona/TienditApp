@@ -101,6 +101,15 @@ public class OrderDeliveryDto
     public string? TrackingUrl { get; set; }
     public DateTimeOffset? ShipmentRegisteredAt { get; set; }
     public string? ShipmentRegisteredBy { get; set; }
+    /// <summary>The bill the customer pays the courier with, for the change (Fase 22D).</summary>
+    public decimal? PaysWith { get; set; }
+    /// <summary>When it went out with the courier; none while it waits.</summary>
+    public DateTimeOffset? DispatchedAt { get; set; }
+    public string? DispatchedBy { get; set; }
+    /// <summary>What the courier collects in cash: the balance when it went out; none when nothing.</summary>
+    public decimal? CashToCollect { get; set; }
+    /// <summary>Delivered for the courier to collect and not yet paid: the courier owes the balance.</summary>
+    public bool AwaitsCourierCash { get; set; }
 }
 
 public class KitchenTicketSummaryDto

@@ -461,9 +461,43 @@ describe('PublicMenuPage', () => {
       expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
         expectedTotal: 145,
         tableLabel: null,
-        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: null },
+        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: null, paysWith: null },
       }));
       expect(await screen.findByText(/Incluye envío de/)).toHaveTextContent('Incluye envío de $35.00');
+    });
+
+    it('asks what the customer pays with, for the courier\'s change, and waits for a bill that covers the total', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true, deliveryOnly: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => quoted(postalCode));
+      api.placeOrder.mockResolvedValue({
+        orderNumber: 'ORD-8', total: 145, deliveryFee: 35, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+      } as never);
+
+      renderPage();
+      const cart = await openCart();
+      const send = within(cart).getByRole('button', { name: /^Enviar pedido/ });
+      await userEvent.type(within(cart).getByLabelText('Código postal'), '72000');
+      await within(cart).findByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $100.00');
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.type(within(cart).getByLabelText('Dirección'), 'Av. Reforma 123, Centro');
+      const bill = within(cart).getByLabelText('¿Con cuánto pagas? (opcional)');
+
+      await userEvent.type(bill, '100');
+      expect(within(cart).getByText('Con $100.00 no alcanza: hay que cobrar $145.00.')).toBeInTheDocument();
+      expect(bill).toHaveAttribute('aria-invalid', 'true');
+      expect(send).toBeDisabled();
+
+      await userEvent.clear(bill);
+      await userEvent.type(bill, '200');
+      expect(within(cart).getByText(/Tu cambio:/)).toHaveTextContent('$55.00');
+      expect(bill).toHaveAttribute('aria-invalid', 'false');
+      await userEvent.click(send);
+
+      expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        expectedTotal: 145,
+        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: null, paysWith: 200 },
+      }));
     });
 
     it('says where it does not deliver, or the minimum, and sends nothing', async () => {

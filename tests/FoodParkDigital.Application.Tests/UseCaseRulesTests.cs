@@ -5,6 +5,7 @@ using FoodParkDigital.Application.Catalog.Commands;
 using FoodParkDigital.Application.Catalog.Queries;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Couriers;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Customers.Queries;
 using FoodParkDigital.Application.DeliveryPlatforms;
@@ -19,6 +20,7 @@ using FoodParkDigital.Application.Reports.Queries;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.Queries;
 using FoodParkDigital.Application.WhatsApp.Commands;
+using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
 
@@ -87,6 +89,14 @@ public class UseCaseRulesTests
         { typeof(UpdatePlatformSettlementCommand), "Manager" },
         { typeof(ClosePlatformSettlementCommand), "Manager" },
         { typeof(VoidPlatformSettlementCommand), "Manager" },
+        // The courier and the cash it collects (Fase 22D): whoever takes the orders sends one out with it; whoever handles the
+        // cash reads what the couriers owe and settles it, charging the orders in their own drawer (ManageCash as well).
+        { typeof(DispatchOrderCommand), "Permission(ManageOrders)" },
+        { typeof(GetCourierReceivablesQuery), "Permission(ManageCash)" },
+        { typeof(GetPendingCourierOrdersQuery), "Permission(ManageCash)" },
+        { typeof(GetCourierSettlementsQuery), "Permission(ManageCash)" },
+        { typeof(GetCourierSettlementQuery), "Permission(ManageCash)" },
+        { typeof(CreateCourierSettlementCommand), "Permission(ChargeOrders)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },
@@ -110,6 +120,15 @@ public class UseCaseRulesTests
     public void Job_ShouldDeclareWhoMayDoIt(Type request, string expected)
     {
         Assert.Equal(expected, Describe(request));
+    }
+
+    [Fact]
+    public void CourierSettlement_ShouldAlsoNeedTheDrawer_SinceTheCashEntersIt()
+    {
+        var settlement = new CreateCourierSettlementCommand(
+            DeliveryCourier.Paquetenvia, OrderPaymentMethod.Cash, 0m, [], 0m, [], null, null);
+
+        Assert.Equal([TenantPermission.ManageCash], settlement.RequiredPermissions());
     }
 
     [Fact]

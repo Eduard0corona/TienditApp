@@ -413,6 +413,103 @@ function deliveryZones() {
 }
 
 export const CAJA_ROUTES = asOption(cashRoutes);
+
+/** An order Paquetenvia collects (CourierOrderDto). */
+const courierOrder = (orderId: string, orderNumber: string, customerName: string, folio: string, dispatchedAt: string, amount: number,
+  status: number, paysWith: number | null = null) => ({
+  orderId, orderNumber, customerName, courierFolio: folio, dispatchedAt, status, cashToCollect: amount, paysWith, balance: amount,
+});
+
+/**
+ * Fase 22D, Caja › Repartidores: Paquetenvia owes two orders it delivered today ($395), carries one on its way ($225, paid
+ * with $500) and was settled yesterday and the day before. Kept in the data, so a settlement changes what is owed.
+ */
+function withCourierCash(data: DemoData) {
+  completeCashData(data);
+  data.courierOwed = [
+    courierOrder('pq-1', 'ORD-000331', 'Andrés Morales', 'PQ48197', at(12, 5), 215, 6),
+    courierOrder('pq-2', 'ORD-000336', 'Fernanda Ruiz', 'PQ48205', at(12, 40), 180, 6),
+  ];
+  data.courierOnTheWay = [courierOrder('pq-3', 'ORD-000341', 'Valeria Torres', 'PQ48219', at(13, 12), 225, 3, 500)];
+  data.courierSettlements = [
+    {
+      id: 'liq-2', courier: 1, settledAt: at(22, 10, -1), settledBy: 'lucia.navarro@cafelaesquina.mx', method: 0,
+      handedAmount: 485, ordersTotal: 530, adjustmentsTotal: -45, orderCount: 3, reference: null, notes: null,
+    },
+    {
+      id: 'liq-1', courier: 1, settledAt: at(21, 40, -2), settledBy: 'mariana.ortiz@cafelaesquina.mx', method: 2,
+      handedAmount: 312, ordersTotal: 342, adjustmentsTotal: -30, orderCount: 2, reference: 'SPEI 88123', notes: null,
+    },
+  ];
+  data.courierDetails = {
+    'liq-2': {
+      settlement: data.courierSettlements[0],
+      orders: [
+        { orderId: 'o-1', orderNumber: 'ORD-000318', customerName: 'Sofía Ramírez', courierFolio: 'PQ48160', amount: 210 },
+        { orderId: 'o-2', orderNumber: 'ORD-000321', customerName: 'Diego Hernández', courierFolio: 'PQ48168', amount: 175 },
+        { orderId: 'o-3', orderNumber: 'ORD-000325', customerName: 'Luis Ortega', courierFolio: 'PQ48177', amount: 145 },
+      ],
+      adjustments: [
+        { position: 1, kind: 1, description: null, amount: -35 },
+        { position: 2, kind: 2, description: '3 cobros', amount: -10 },
+      ],
+    },
+  };
+  refreshReceivable(data);
+}
+
+/** What Paquetenvia owes and carries, from the orders in the data. */
+function refreshReceivable(data: DemoData) {
+  const sum = (orders: Array<{ balance: number }>) => orders.reduce((total, order) => total + order.balance, 0);
+  data.courierReceivables = [{
+    courier: 1,
+    owedOrders: data.courierOwed.length,
+    owedAmount: sum(data.courierOwed),
+    oldestDispatchedAt: data.courierOwed[0]?.dispatchedAt ?? null,
+    onTheWayOrders: data.courierOnTheWay.length,
+    onTheWayAmount: sum(data.courierOnTheWay),
+    lastSettledAt: data.courierSettlements[0]?.settledAt ?? null,
+  }];
+}
+
+/** Caja with what the couriers owe: the shared receivable reads `data.courierReceivables`. */
+const courierRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/courier-settlements\/pending-orders$/, () => helpers.ok({ owed: data.courierOwed, onTheWay: data.courierOnTheWay, truncated: false })],
+  ['GET', /^\/courier-settlements$/, (_match, query) => helpers.ok(helpers.paginate(data.courierSettlements, query, 10))],
+  // A settlement by its id, as the API's {id:guid} (never «receivable» nor «pending-orders», answered above and in the shared mocks).
+  ['GET', /^\/courier-settlements\/(liq-[^/]+)$/, (match) => helpers.ok(data.courierDetails[match[1]])],
+  ['POST', /^\/courier-settlements$/, (_match, _query, body: { orderIds: string[]; handedAmount: number; method: number;
+    adjustments: Array<{ kind: number; description: string | null; amount: number }>; reference: string | null; notes: string | null }) => {
+    const paid = data.courierOwed.filter((order: { orderId: string }) => body.orderIds.includes(order.orderId));
+    const settlement = {
+      id: 'liq-3', courier: 1, settledAt: '2026-10-04T19:25:00.000Z', settledBy: 'mariana.ortiz@cafelaesquina.mx', method: body.method,
+      handedAmount: body.handedAmount, ordersTotal: paid.reduce((total: number, order: { balance: number }) => total + order.balance, 0),
+      adjustmentsTotal: body.adjustments.reduce((total, adjustment) => total + adjustment.amount, 0), orderCount: paid.length,
+      reference: body.reference, notes: body.notes,
+    };
+    const detail = {
+      settlement,
+      orders: paid.map((order: { orderId: string; orderNumber: string; customerName: string; courierFolio: string; balance: number }) => ({
+        orderId: order.orderId, orderNumber: order.orderNumber, customerName: order.customerName, courierFolio: order.courierFolio, amount: order.balance,
+      })),
+      adjustments: body.adjustments.map((adjustment, index) => ({ position: index + 1, ...adjustment })),
+    };
+    data.courierOwed = data.courierOwed.filter((order: { orderId: string }) => !body.orderIds.includes(order.orderId));
+    data.courierSettlements.unshift(settlement);
+    data.courierDetails[settlement.id] = detail;
+    refreshReceivable(data);
+    return { status: 201, json: detail };
+  }],
+  ...cashRoutes(data, helpers),
+];
+
+export const REPARTIDORES_ROUTES = asOption(courierRoutes);
+export const REPARTIDORES_DATA = asOption(withCourierCash);
+/** The same, for whoever has not opened a drawer of their own today. */
+export const REPARTIDORES_SIN_CAJA_DATA = asOption((data: DemoData) => {
+  withCourierCash(data);
+  withoutDrawer(data);
+});
 /** A business that has not set up any delivery zone yet. */
 export const SIN_ZONAS_DATA = asOption((data: DemoData) => {
   completeCashData(data);

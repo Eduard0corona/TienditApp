@@ -18,6 +18,8 @@ public record OrderDeliveryInput
     public string PostalCode { get; init; } = string.Empty;
     public string AddressLine { get; init; } = string.Empty;
     public string? References { get; init; }
+    /// <summary>The bill the customer will pay the courier with, for the change (Fase 22D); it covers the total.</summary>
+    public decimal? PaysWith { get; init; }
 }
 
 public class OrderDeliveryInputValidator : AbstractValidator<OrderDeliveryInput>
@@ -35,6 +37,9 @@ public class OrderDeliveryInputValidator : AbstractValidator<OrderDeliveryInput>
         RuleFor(x => x.References)
             .Must(references => references is null || references.Trim().Length <= DeliveryAddress.MaxReferencesLength)
             .WithMessage(DeliveryAddress.ReferencesTooLongMessage);
+        RuleFor(x => x.PaysWith)
+            .Must(paysWith => paysWith is null || HomeDeliveryRules.IsPaysWith(paysWith.Value))
+            .WithMessage(HomeDeliveryRules.PaysWithMessage);
     }
 }
 
@@ -72,7 +77,7 @@ internal static class HomeDeliveryPlacement
             if (zone is null)
                 return HomeDeliveryRules.NotCoveredMessage(address.PostalCode);
 
-            order.ArrangeDelivery(address, zone, VatRate.Of(feeTaxRate));
+            order.ArrangeDelivery(address, zone, VatRate.Of(feeTaxRate), input.PaysWith);
             return null;
         }
         catch (DomainException ex)

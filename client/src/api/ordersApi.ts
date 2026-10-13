@@ -4,6 +4,7 @@ import type {
   CancelTabItemRequest,
   CreateOrderItemRequest,
   CreateOrderRequest,
+  DispatchOrderRequest,
   OrderChannel,
   OrderDto,
   OrderStatus,
@@ -43,6 +44,10 @@ export const ordersApi = {
   /** Writes down (or corrects) the courier's trip of an order sent to an address: its folio and, optionally, its link. */
   registerCourierShipment: (id: string, request: RegisterCourierShipmentRequest) =>
     api.put(`/orders/${id}/delivery/shipment`, request),
+
+  /** The order goes out with the courier, collecting the balance in cash or not; corrected while it is on its way. */
+  dispatch: (id: string, request: DispatchOrderRequest) =>
+    api.put(`/orders/${id}/delivery/dispatch`, request),
 
   /** Cancels an order; what it consumed goes back to the stock unless `restockItems` is false. */
   cancel: (id: string, reason?: string, restockItems?: boolean) =>

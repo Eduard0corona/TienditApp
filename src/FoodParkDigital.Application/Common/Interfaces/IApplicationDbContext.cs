@@ -12,6 +12,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
@@ -51,6 +52,9 @@ public interface IApplicationDbContext
     DbSet<PlatformSettlement> PlatformSettlements { get; }
     DbSet<PlatformSettlementOrder> PlatformSettlementOrders { get; }
     DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments { get; }
+    DbSet<CourierSettlement> CourierSettlements { get; }
+    DbSet<CourierSettlementOrder> CourierSettlementOrders { get; }
+    DbSet<CourierSettlementAdjustment> CourierSettlementAdjustments { get; }
     DbSet<DeliveryZone> DeliveryZones { get; }
     DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }

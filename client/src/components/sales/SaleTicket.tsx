@@ -55,6 +55,7 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
             <div className="small">{delivery.address}</div>
             {delivery.references && <div className="small">Ref.: {delivery.references}</div>}
             {delivery.courier && <div className="small fw-bold">{delivery.courier}</div>}
+            {delivery.collection && <div className="small fw-bold">{delivery.collection}</div>}
           </div>
         )}
       </div>

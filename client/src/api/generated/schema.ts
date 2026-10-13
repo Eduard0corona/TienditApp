@@ -2370,6 +2370,189 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/courier-settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    courier?: components["schemas"]["DeliveryCourier"];
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CourierSettlementDtoPaginatedList"];
+                        "application/json": components["schemas"]["CourierSettlementDtoPaginatedList"];
+                        "text/json": components["schemas"]["CourierSettlementDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateCourierSettlementRequest"];
+                    "text/json": components["schemas"]["CreateCourierSettlementRequest"];
+                    "application/*+json": components["schemas"]["CreateCourierSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CourierSettlementDetailDto"];
+                        "application/json": components["schemas"]["CourierSettlementDetailDto"];
+                        "text/json": components["schemas"]["CourierSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier-settlements/receivable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CourierReceivableDto"][];
+                        "application/json": components["schemas"]["CourierReceivableDto"][];
+                        "text/json": components["schemas"]["CourierReceivableDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier-settlements/pending-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    courier?: components["schemas"]["DeliveryCourier"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PendingCourierOrdersDto"];
+                        "application/json": components["schemas"]["PendingCourierOrdersDto"];
+                        "text/json": components["schemas"]["PendingCourierOrdersDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier-settlements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CourierSettlementDetailDto"];
+                        "application/json": components["schemas"]["CourierSettlementDetailDto"];
+                        "text/json": components["schemas"]["CourierSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/customers": {
         parameters: {
             query?: never;
@@ -5562,6 +5745,47 @@ export interface paths {
                     "application/json": components["schemas"]["RegisterCourierShipmentRequest"];
                     "text/json": components["schemas"]["RegisterCourierShipmentRequest"];
                     "application/*+json": components["schemas"]["RegisterCourierShipmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/delivery/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["DispatchOrderRequest"];
+                    "text/json": components["schemas"]["DispatchOrderRequest"];
+                    "application/*+json": components["schemas"]["DispatchOrderRequest"];
                 };
             };
             responses: {
@@ -9528,6 +9752,100 @@ export interface components {
             readonly hasPreviousPage: boolean;
             readonly hasNextPage: boolean;
         };
+        CourierOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            customerName: string;
+            courierFolio?: string | null;
+            /** Format: date-time */
+            dispatchedAt: string;
+            status: components["schemas"]["OrderStatus"];
+            /** Format: double */
+            cashToCollect: number;
+            /** Format: double */
+            paysWith?: number | null;
+            /** Format: double */
+            balance: number;
+        };
+        CourierReceivableDto: {
+            courier: components["schemas"]["DeliveryCourier"];
+            /** Format: int32 */
+            owedOrders: number;
+            /** Format: double */
+            owedAmount: number;
+            /** Format: date-time */
+            oldestDispatchedAt?: string | null;
+            /** Format: int32 */
+            onTheWayOrders: number;
+            /** Format: double */
+            onTheWayAmount: number;
+            /** Format: date-time */
+            lastSettledAt?: string | null;
+        };
+        CourierSettlementAdjustmentDto: {
+            /** Format: int32 */
+            position: number;
+            kind: components["schemas"]["CourierSettlementAdjustmentKind"];
+            description?: string | null;
+            /** Format: double */
+            amount: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        CourierSettlementAdjustmentKind: 1 | 2 | 3 | 99;
+        CourierSettlementAdjustmentRequest: {
+            kind: components["schemas"]["CourierSettlementAdjustmentKind"];
+            description?: string | null;
+            /** Format: double */
+            amount: number;
+        };
+        CourierSettlementDetailDto: {
+            settlement: components["schemas"]["CourierSettlementDto"];
+            orders: components["schemas"]["CourierSettlementOrderDto"][];
+            adjustments: components["schemas"]["CourierSettlementAdjustmentDto"][];
+        };
+        CourierSettlementDto: {
+            /** Format: uuid */
+            id: string;
+            courier: components["schemas"]["DeliveryCourier"];
+            /** Format: date-time */
+            settledAt: string;
+            settledBy?: string | null;
+            method: components["schemas"]["OrderPaymentMethod"];
+            /** Format: double */
+            handedAmount: number;
+            /** Format: double */
+            ordersTotal: number;
+            /** Format: double */
+            adjustmentsTotal: number;
+            /** Format: int32 */
+            orderCount: number;
+            reference?: string | null;
+            notes?: string | null;
+        };
+        CourierSettlementDtoPaginatedList: {
+            items: components["schemas"]["CourierSettlementDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        CourierSettlementOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            customerName: string;
+            courierFolio?: string | null;
+            /** Format: double */
+            amount: number;
+        };
         CreateAiAgentCommand: {
             name: string;
             role: string;
@@ -9604,6 +9922,18 @@ export interface components {
             description?: string | null;
             /** Format: int32 */
             sortOrder: number;
+        };
+        CreateCourierSettlementRequest: {
+            courier: components["schemas"]["DeliveryCourier"];
+            method: components["schemas"]["OrderPaymentMethod"];
+            /** Format: double */
+            handedAmount: number;
+            orderIds: string[];
+            /** Format: double */
+            ordersTotal: number;
+            adjustments: components["schemas"]["CourierSettlementAdjustmentRequest"][];
+            reference?: string | null;
+            notes?: string | null;
         };
         CreateCustomerCommand: {
             name: string;
@@ -10198,6 +10528,14 @@ export interface components {
             code: string;
             useRecoveryCode: boolean;
         };
+        DispatchOrderRequest: {
+            courier: components["schemas"]["DeliveryCourier"];
+            folio: string;
+            trackingUrl?: string | null;
+            collectsCash: boolean;
+            /** Format: double */
+            paysWith?: number | null;
+        };
         EmployeeDto: {
             /** Format: uuid */
             tenantUserId: string;
@@ -10788,11 +11126,21 @@ export interface components {
             /** Format: date-time */
             shipmentRegisteredAt?: string | null;
             shipmentRegisteredBy?: string | null;
+            /** Format: double */
+            paysWith?: number | null;
+            /** Format: date-time */
+            dispatchedAt?: string | null;
+            dispatchedBy?: string | null;
+            /** Format: double */
+            cashToCollect?: number | null;
+            awaitsCourierCash: boolean;
         };
         OrderDeliveryInput: {
             postalCode: string;
             addressLine: string;
             references?: string | null;
+            /** Format: double */
+            paysWith?: number | null;
         };
         OrderDto: {
             /** Format: uuid */
@@ -11061,6 +11409,11 @@ export interface components {
             otpTemplateName: string;
             otpTemplateLanguageCode: string;
             hasAccessToken: boolean;
+        };
+        PendingCourierOrdersDto: {
+            owed: components["schemas"]["CourierOrderDto"][];
+            onTheWay: components["schemas"]["CourierOrderDto"][];
+            truncated: boolean;
         };
         PendingPlatformOrdersDto: {
             orders: components["schemas"]["PlatformSettlementOrderDto"][];

@@ -2722,6 +2722,224 @@
         }
       }
     },
+    "/api/v1/courier-settlements": {
+      "get": {
+        "tags": [
+          "CourierSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "courier",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/DeliveryCourier"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CourierSettlements"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCourierSettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCourierSettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCourierSettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courier-settlements/receivable": {
+      "get": {
+        "tags": [
+          "CourierSettlements"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CourierReceivableDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CourierReceivableDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CourierReceivableDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courier-settlements/pending-orders": {
+      "get": {
+        "tags": [
+          "CourierSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "courier",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/DeliveryCourier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingCourierOrdersDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingCourierOrdersDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingCourierOrdersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courier-settlements/{id}": {
+      "get": {
+        "tags": [
+          "CourierSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourierSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/customers": {
       "get": {
         "tags": [
@@ -6769,6 +6987,48 @@
             "application/*+json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{id}/delivery/dispatch": {
+      "put": {
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchOrderRequest"
               }
             }
           }
@@ -12925,6 +13185,316 @@
         },
         "additionalProperties": false
       },
+      "CourierOrderDto": {
+        "required": [
+          "balance",
+          "cashToCollect",
+          "customerName",
+          "dispatchedAt",
+          "orderId",
+          "orderNumber",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "courierFolio": {
+            "type": "string",
+            "nullable": true
+          },
+          "dispatchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "cashToCollect": {
+            "type": "number",
+            "format": "double"
+          },
+          "paysWith": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "balance": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierReceivableDto": {
+        "required": [
+          "courier",
+          "onTheWayAmount",
+          "onTheWayOrders",
+          "owedAmount",
+          "owedOrders"
+        ],
+        "type": "object",
+        "properties": {
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "owedOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "owedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "oldestDispatchedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "onTheWayOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "onTheWayAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "lastSettledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierSettlementAdjustmentDto": {
+        "required": [
+          "amount",
+          "kind",
+          "position"
+        ],
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CourierSettlementAdjustmentKind"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierSettlementAdjustmentKind": {
+        "enum": [
+          1,
+          2,
+          3,
+          99
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "TripFee",
+          "CollectionFee",
+          "Shortage",
+          "Other"
+        ]
+      },
+      "CourierSettlementAdjustmentRequest": {
+        "required": [
+          "amount",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/CourierSettlementAdjustmentKind"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierSettlementDetailDto": {
+        "required": [
+          "adjustments",
+          "orders",
+          "settlement"
+        ],
+        "type": "object",
+        "properties": {
+          "settlement": {
+            "$ref": "#/components/schemas/CourierSettlementDto"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourierSettlementOrderDto"
+            }
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourierSettlementAdjustmentDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierSettlementDto": {
+        "required": [
+          "adjustmentsTotal",
+          "courier",
+          "handedAmount",
+          "id",
+          "method",
+          "orderCount",
+          "ordersTotal",
+          "settledAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "settledBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "handedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "ordersTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "adjustmentsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "orderCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierSettlementDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourierSettlementDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CourierSettlementOrderDto": {
+        "required": [
+          "amount",
+          "customerName",
+          "orderId",
+          "orderNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "courierFolio": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateAiAgentCommand": {
         "required": [
           "askForAddress",
@@ -13195,6 +13765,55 @@
           "sortOrder": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateCourierSettlementRequest": {
+        "required": [
+          "adjustments",
+          "courier",
+          "handedAmount",
+          "method",
+          "orderIds",
+          "ordersTotal"
+        ],
+        "type": "object",
+        "properties": {
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "method": {
+            "$ref": "#/components/schemas/OrderPaymentMethod"
+          },
+          "handedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "orderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "ordersTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourierSettlementAdjustmentRequest"
+            }
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -15165,6 +15784,35 @@
           },
           "useRecoveryCode": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DispatchOrderRequest": {
+        "required": [
+          "collectsCash",
+          "courier",
+          "folio"
+        ],
+        "type": "object",
+        "properties": {
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "trackingUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "collectsCash": {
+            "type": "boolean"
+          },
+          "paysWith": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17141,6 +17789,7 @@
       "OrderDeliveryDto": {
         "required": [
           "addressLine",
+          "awaitsCourierCash",
           "fee",
           "feeTaxRate",
           "postalCode",
@@ -17188,6 +17837,28 @@
           "shipmentRegisteredBy": {
             "type": "string",
             "nullable": true
+          },
+          "paysWith": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "dispatchedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dispatchedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "cashToCollect": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "awaitsCourierCash": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -17207,6 +17878,11 @@
           },
           "references": {
             "type": "string",
+            "nullable": true
+          },
+          "paysWith": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
@@ -18109,6 +18785,32 @@
             "type": "string"
           },
           "hasAccessToken": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PendingCourierOrdersDto": {
+        "required": [
+          "onTheWay",
+          "owed",
+          "truncated"
+        ],
+        "type": "object",
+        "properties": {
+          "owed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourierOrderDto"
+            }
+          },
+          "onTheWay": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CourierOrderDto"
+            }
+          },
+          "truncated": {
             "type": "boolean"
           }
         },

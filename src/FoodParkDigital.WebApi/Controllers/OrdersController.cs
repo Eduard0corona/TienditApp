@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -191,6 +192,21 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(
             new RegisterCourierShipmentCommand(id, request.Courier, request.Folio, request.TrackingUrl), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// The order goes out with the courier (Fase 22D): the trip and, when the courier collects it in cash, the bill the
+    /// customer pays with. Corrected while it is on its way; the customer hears «En camino» the first time.
+    /// </summary>
+    [HttpPut("{id:guid}/delivery/dispatch")]
+    public async Task<IActionResult> Dispatch(Guid id, [FromBody] DispatchOrderRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new DispatchOrderCommand(id, request.Courier, request.Folio, request.TrackingUrl, request.CollectsCash, request.PaysWith),
+            cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return NoContent();
@@ -398,6 +414,20 @@ public class CancelTabItemRequest
     public string Reason { get; init; } = string.Empty;
     /// <summary>The kitchen did not prepare it: its supplies go back to stock. Otherwise they were lost.</summary>
     public bool ReturnToStock { get; init; } = true;
+}
+
+public class DispatchOrderRequest
+{
+    public DeliveryCourier Courier { get; init; } = DeliveryCourier.Paquetenvia;
+    /// <summary>The folio of the trip in the courier's app.</summary>
+    public string Folio { get; init; } = string.Empty;
+    /// <summary>The https link that follows the trip, if the courier gave one.</summary>
+    public string? TrackingUrl { get; init; }
+    /// <summary>The courier collects the balance from the customer, in cash. Required: nobody's silence means it collects nothing.</summary>
+    [JsonRequired]
+    public bool CollectsCash { get; init; }
+    /// <summary>The bill the customer pays with, for the change; only when the courier collects.</summary>
+    public decimal? PaysWith { get; init; }
 }
 
 public class RegisterCourierShipmentRequest

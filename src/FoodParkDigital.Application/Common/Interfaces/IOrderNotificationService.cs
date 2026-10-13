@@ -21,6 +21,8 @@ public interface IOrderNotificationService
     Task NotifyOrderCancelled(Guid tenantId, Guid orderId, OrderStatus previousStatus, string? reason);
     /// <summary>A round of an open tab was sent or moved in the kitchen (kitchen board and dining room refresh).</summary>
     Task NotifyKitchenTicketsChanged(Guid tenantId, Guid orderId, int round);
+    /// <summary>Something else of the order changed, such as its delivery (Fase 22D): the screens that show it read it again.</summary>
+    Task NotifyOrderUpdated(Guid tenantId, Guid orderId);
     Task NotifyServiceBoardPieceUpdated(
         Guid tenantId,
         Guid orderId,

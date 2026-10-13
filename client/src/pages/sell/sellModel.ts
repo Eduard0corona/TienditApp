@@ -110,6 +110,8 @@ export interface SaleDelivery {
   postalCode: string;
   addressLine: string;
   references: string;
+  /** The bill the customer will pay the courier with, as typed (Fase 22D); missing in drafts from before. */
+  paysWith?: string;
 }
 
 export const NO_DELIVERY_ADDRESS: SaleDelivery = { postalCode: '', addressLine: '', references: '' };

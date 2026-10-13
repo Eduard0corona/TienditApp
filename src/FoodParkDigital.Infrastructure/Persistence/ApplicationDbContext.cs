@@ -15,6 +15,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
@@ -173,6 +174,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<PlatformSettlement> PlatformSettlements => Set<PlatformSettlement>();
     public DbSet<PlatformSettlementOrder> PlatformSettlementOrders => Set<PlatformSettlementOrder>();
     public DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments => Set<PlatformSettlementAdjustment>();
+    public DbSet<CourierSettlement> CourierSettlements => Set<CourierSettlement>();
+    public DbSet<CourierSettlementOrder> CourierSettlementOrders => Set<CourierSettlementOrder>();
+    public DbSet<CourierSettlementAdjustment> CourierSettlementAdjustments => Set<CourierSettlementAdjustment>();
     public DbSet<DeliveryZone> DeliveryZones => Set<DeliveryZone>();
     public DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes => Set<DeliveryZonePostalCode>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();

@@ -5,6 +5,8 @@ import {
   describeDeliveryTerms,
   type DeliveryZoneTerms,
 } from '../../utils/homeDelivery';
+import { changeFor, parsePaysWith, paysWithProblem } from '../../utils/courierCash';
+import { formatMoney } from '../../utils/money';
 import { NO_DELIVERY_ADDRESS, type SaleDelivery } from './sellModel';
 
 interface DeliveryOrderFieldsProps {
@@ -20,18 +22,24 @@ interface DeliveryOrderFieldsProps {
   online: boolean;
   /** The fee goes like the prices of the business: «más IVA» when they do not include it. */
   pricesIncludeTax: boolean;
+  /** What the order adds up to with its fee, for the change of «paga con». */
+  total: number;
 }
 
 /**
  * Vender's switch for an order that goes to the customer's address (Fase 22C), with the postal code its zone is found
- * by, the address and references. The zone's fee and minimum show as typed; the server charges them.
+ * by, the address and references, and the bill the customer will pay the courier with, for the change (Fase 22D). The
+ * zone's fee and minimum show as typed; the server charges them.
  */
 export default function DeliveryOrderFields({
-  delivery, onChange, zone, problem, disabled, online, pricesIncludeTax,
+  delivery, onChange, zone, problem, disabled, online, pricesIncludeTax, total,
 }: DeliveryOrderFieldsProps) {
   // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
   const id = useId();
   const update = (changes: Partial<SaleDelivery>) => onChange({ ...(delivery ?? NO_DELIVERY_ADDRESS), ...changes });
+  const paysWithText = delivery?.paysWith ?? '';
+  const paysWithIssue = paysWithProblem(paysWithText, total);
+  const bill = parsePaysWith(paysWithText);
 
   return (
     <div className="mb-2">
@@ -90,6 +98,26 @@ export default function DeliveryOrderFields({
                 disabled={disabled}
                 onChange={(event) => update({ references: event.target.value })}
               />
+            </div>
+            <div className="col-5">
+              <label className="form-label small mb-1" htmlFor={`${id}-pays-with`}>Paga con (opcional)</label>
+              <input
+                id={`${id}-pays-with`}
+                className={`form-control ${paysWithIssue ? 'is-invalid' : ''}`}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="$"
+                value={paysWithText}
+                disabled={disabled}
+                onChange={(event) => update({ paysWith: event.target.value })}
+                aria-invalid={!!paysWithIssue}
+                aria-describedby={`${id}-change`}
+              />
+            </div>
+            <div id={`${id}-change`} className="col-7 small align-self-end pb-2">
+              {paysWithIssue ? <span className="text-danger">{paysWithIssue}</span>
+                : typeof bill === 'number' ? <>Cambio: <span className="ta-money">{formatMoney(changeFor(bill, total))}</span></>
+                : <span className="text-muted">Si paga en efectivo al repartidor.</span>}
             </div>
             <div id={`${id}-zone`} className="col-12 small" role="status">
               {problem ? <span className="text-danger">{problem}</span>

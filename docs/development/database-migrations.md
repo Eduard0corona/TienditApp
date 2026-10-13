@@ -79,6 +79,13 @@ Migraciones recientes con notas operativas:
   - El pedido carga su entrega siempre (`AutoInclude`): su envío es parte del total.
   - La versión anterior (`master` con la Fase 22B) no conoce la tabla y cobra un pedido a domicilio por el total guardado, envío incluido (`OrderDeliveriesSqlServerTests`).
   - Su `Down` se detiene con el error 50013 mientras haya pedidos a domicilio: se perderían su dirección y su envío. Sin ellos, borra la tabla.
+- Fase 22D: `AddCourierSettlements` agrega la salida a entregar y las liquidaciones del repartidor ([ADR 0019](../adr/0019-courier-cash-on-delivery.md)).
+  - `OrderDeliveries` gana cuatro columnas con nulos: `PaysWith` `decimal(18,2)`, `DispatchedAt`, `DispatchedBy` y `CashToCollect` `decimal(18,2)`, con tres CHECK: `_PaysWith` (nulo o de $0.01 a $100,000), `_Dispatch` (salió solo con repartidor) y `_CashToCollect` (nulo, o positivo y solo si salió).
+  - `CourierSettlements` (repartidor, caja, método, lo entregado, los totales, referencia, notas, cuándo y quién), con CHECK de repartidor, método (efectivo o transferencia), entregado no negativo y que cuadre (entregado = pedidos + ajustes); llave a `CashSessions` sin cascada.
+  - `CourierSettlementOrders` (una línea por pedido, monto positivo) con llave a `Orders` sin cascada e índice único `IX_CourierSettlementOrders_OrderId`: un pedido se liquida una vez.
+  - `CourierSettlementAdjustments` (posición, motivo, descripción y monto), con CHECK: motivo conocido, monto distinto de cero y negativo salvo «Otro», y «Otro» con descripción.
+  - La versión anterior (`master` con la Fase 22C) no conoce las columnas ni las tablas (`CourierSettlementsSqlServerTests`).
+  - Su `Down` se detiene con el error 50014 mientras haya pedidos que salieron o con «paga con», o liquidaciones. El chequeo va en un `EXEC`: SQL Server compila el lote entero, y una columna ya borrada rompería aun la rama que no corre. Sin ellos, quita lo que agregó, y el `rollback.sql` se puede ejecutar otra vez.
 
 ## Reglas
 

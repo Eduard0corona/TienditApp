@@ -93,7 +93,8 @@ describe('sellDraft', () => {
     const toAddress: SellDraft = { ...draft, delivery };
 
     writeSellDraft('t1', toAddress);
-    expect(readSellDraft('t1')?.delivery).toEqual(delivery);
+    // A draft from before «paga con» reads it empty.
+    expect(readSellDraft('t1')?.delivery).toEqual({ ...delivery, paysWith: '' });
     // A counter sale saved before, or with a delivery that is not one, reads without it.
     expect(describeSale({ ...draft, delivery: null })).toBe(describeSale(draft));
     expect(describeSale(toAddress)).not.toBe(describeSale(draft));
@@ -101,8 +102,21 @@ describe('sellDraft', () => {
     expect(describeSale({ ...toAddress, delivery: { ...delivery, postalCode: '72005' } })).not.toBe(describeSale(toAddress));
 
     writeSellDraft('t1', { ...draft, lines: [], customerName: '', delivery: { postalCode: '', addressLine: '', references: '' } });
-    expect(readSellDraft('t1')?.delivery).toEqual({ postalCode: '', addressLine: '', references: '' });
+    expect(readSellDraft('t1')?.delivery).toEqual({ postalCode: '', addressLine: '', references: '', paysWith: '' });
     window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify({ ...draft, delivery: 'Reforma' }));
     expect(readSellDraft('t1')?.delivery).toBeUndefined();
+  });
+
+  it('keeps «paga con», tells another bill apart, and describes a sale without one as before', () => {
+    const delivery = { postalCode: '72000', addressLine: 'Av. Reforma 123', references: '' };
+    const toAddress: SellDraft = { ...draft, delivery };
+
+    writeSellDraft('t1', { ...toAddress, delivery: { ...delivery, paysWith: '500' } });
+
+    expect(readSellDraft('t1')?.delivery?.paysWith).toBe('500');
+    expect(describeSale({ ...toAddress, delivery: { ...delivery, paysWith: ' ' } })).toBe(describeSale(toAddress));
+    expect(describeSale({ ...toAddress, delivery: { ...delivery, paysWith: '500' } })).not.toBe(describeSale(toAddress));
+    expect(describeSale({ ...toAddress, delivery: { ...delivery, paysWith: '500' } }))
+      .not.toBe(describeSale({ ...toAddress, delivery: { ...delivery, paysWith: '1000' } }));
   });
 });

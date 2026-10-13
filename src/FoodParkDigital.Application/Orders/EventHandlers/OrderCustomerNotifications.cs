@@ -22,7 +22,8 @@ public sealed class OrderCustomerNotifications :
     IOutboxEventHandler<OrderCreatedEvent>,
     IOutboxEventHandler<OrderStatusChangedEvent>,
     IOutboxEventHandler<OrderCancelledEvent>,
-    IOutboxEventHandler<ServiceOrderPieceStatusChangedEvent>
+    IOutboxEventHandler<ServiceOrderPieceStatusChangedEvent>,
+    IOutboxEventHandler<OrderDeliveryUpdatedEvent>
 {
     private const string Language = "es_MX";
 
@@ -113,6 +114,31 @@ public sealed class OrderCustomerNotifications :
             order.CustomerPhone,
             "order_status_update",
             [order.OrderNumber, $"{piece.ItemName}: {statusLabel}"],
+            domainEvent.OrderId,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// The order went out with the courier (Fase 22D): «En camino», with the courier's link when there is one, through the
+    /// same template as a change of state. Only the first time, and not when it was delivered or cancelled before the
+    /// message left.
+    /// </summary>
+    public async Task HandleAsync(OrderDeliveryUpdatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
+    {
+        if (!domainEvent.WentOut)
+            return;
+
+        var order = await FindOrderAsync(domainEvent.OrderId, includePieces: false, cancellationToken);
+        if (order?.CustomerPhone is null || order.Delivery is not { IsDispatched: true } delivery
+            || order.Status is OrderStatus.Delivered or OrderStatus.Completed or OrderStatus.Cancelled
+            || !await ShouldNotifyAsync(order, cancellationToken))
+            return;
+
+        await SendAsync(
+            domainEvent.TenantId,
+            order.CustomerPhone,
+            "order_status_update",
+            [order.OrderNumber, OrderStatusLabels.OnTheWayNotice(delivery.TrackingUrl)],
             domainEvent.OrderId,
             cancellationToken);
     }

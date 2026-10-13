@@ -1095,6 +1095,37 @@ describe('SellPage with a platform order and no connection', () => {
       }));
     });
 
+    it('takes the bill the customer pays the courier with, for the change, and refuses one that does not cover the total', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+      giveZones([{ name: 'Centro', fee: 35, minimumOrder: 0, freeDeliveryFrom: 400, postalCodes: ['72000'] }]);
+      vi.mocked(ordersApi.create).mockResolvedValue({ data: { orderNumber: 'ORD-000010', stockWarnings: [] } } as never);
+      renderAt('/sell');
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+      await userEvent.click(await ticket().findByRole('switch', { name: 'A domicilio' }));
+      await userEvent.type(ticket().getByLabelText('Código postal'), '72000');
+      await userEvent.type(ticket().getByLabelText('Dirección'), 'Av. Reforma 123, Centro');
+      const bill = ticket().getByLabelText('Paga con (opcional)');
+      await userEvent.type(bill, '50');
+
+      expect(ticket().getAllByText('Con $50.00 no alcanza: hay que cobrar $85.00.').length).toBeGreaterThan(0);
+      expect(bill).toHaveAttribute('aria-invalid', 'true');
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+      expect(ordersApi.create).not.toHaveBeenCalled();
+
+      await userEvent.clear(bill);
+      await userEvent.type(bill, '100');
+      expect(ticket().getByText(/Cambio:/)).toHaveTextContent('$15.00');
+      expect(bill).toHaveAttribute('aria-invalid', 'false');
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+      expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+        expectedTotal: 85,
+        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: undefined, paysWith: 100 },
+      }));
+    });
+
     it('says where no zone delivers or what the minimum is, and sends nothing', async () => {
       signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
       giveZones([
@@ -1150,7 +1181,8 @@ describe('SellPage with a platform order and no connection', () => {
       await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
       expect(ordersApi.create).not.toHaveBeenCalled();
       expect(ticket().getByText(zonesError, { selector: '.alert' })).toBeInTheDocument();
-      expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').delivery).toEqual(delivery);
+      // A draft from before «paga con» comes back with it empty.
+      expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').delivery).toEqual({ ...delivery, paysWith: '' });
     });
   });
 });

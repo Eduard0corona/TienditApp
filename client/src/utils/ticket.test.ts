@@ -127,7 +127,7 @@ describe('ticket of an order of a delivery platform', () => {
       total: 110,
       delivery: {
         postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: 'Portón verde', zoneName: 'Centro',
-        fee: 35, feeTaxRate: 16, courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234',
+        fee: 35, feeTaxRate: 16, courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234', awaitsCourierCash: false,
       },
     };
 
@@ -138,8 +138,34 @@ describe('ticket of an order of a delivery platform', () => {
     expect(text).toContain('Paquetenvia · Folio PQ1234');
     expect(text).toContain('Envío a domicilio  $35.00');
     expect(getTicketDelivery({ delivery: { ...delivered.delivery!, fee: 0, courier: null, courierFolio: null } }))
-      .toEqual({ address: 'Av. Reforma 123, Centro · CP 72000', references: 'Portón verde', fee: 0, courier: null });
+      .toEqual({ address: 'Av. Reforma 123, Centro · CP 72000', references: 'Portón verde', fee: 0, courier: null, collection: null });
     expect(getTicketDelivery({ delivery: null })).toBeNull();
     expect(buildTicketText(tab([line({})]), { businessName: 'Fonda Lupita' })).not.toContain('domicilio');
+  });
+
+  it('prints what the courier collects with the customer\'s bill and the change, while the order owes it', () => {
+    const base: OrderDto = {
+      ...tab([line({ id: 'i1' })]),
+      customerName: 'Ana',
+      total: 275,
+      balance: 275,
+      delivery: {
+        postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', zoneName: 'Centro', fee: 35, feeTaxRate: 16, awaitsCourierCash: false,
+      },
+    };
+    const plain = (text: string | null | undefined) => text?.replace(/\u00a0/g, ' ') ?? null;
+
+    // Before it leaves, the bill the customer said they pay with; once out, what the courier was sent to collect.
+    expect(plain(getTicketDelivery({ ...base, delivery: { ...base.delivery!, paysWith: 500 } })?.collection))
+      .toBe('Cobrar $275.00 · paga con $500.00 · cambio $225.00');
+    const sentOut = { ...base, delivery: { ...base.delivery!, paysWith: 300, dispatchedAt: '2026-10-13T19:05:00Z', cashToCollect: 275 } };
+    expect(plain(getTicketDelivery(sentOut)?.collection)).toBe('Cobrar $275.00 · paga con $300.00 · cambio $25.00');
+    expect(plain(buildTicketText(sentOut, { businessName: 'Fonda Lupita' }))).toContain('*Cobrar $275.00 · paga con $300.00 · cambio $25.00*');
+    // Part paid by transfer meanwhile: it collects what is still owed, with more change.
+    expect(plain(getTicketDelivery({ ...sentOut, balance: 75 })?.collection)).toBe('Cobrar $75.00 · paga con $300.00 · cambio $225.00');
+    // Nothing to collect: no bill said, sent out collecting nothing, or paid.
+    expect(getTicketDelivery(base)?.collection).toBeNull();
+    expect(getTicketDelivery({ ...base, delivery: { ...base.delivery!, paysWith: 500, dispatchedAt: '2026-10-13T19:05:00Z' } })?.collection).toBeNull();
+    expect(getTicketDelivery({ ...sentOut, balance: 0 })?.collection).toBeNull();
   });
 });
