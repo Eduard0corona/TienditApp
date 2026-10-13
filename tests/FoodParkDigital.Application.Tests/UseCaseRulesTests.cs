@@ -126,7 +126,7 @@ public class UseCaseRulesTests
     public void CourierSettlement_ShouldAlsoNeedTheDrawer_SinceTheCashEntersIt()
     {
         var settlement = new CreateCourierSettlementCommand(
-            DeliveryCourier.Paquetenvia, OrderPaymentMethod.Cash, 0m, [], [], null, null);
+            DeliveryCourier.Paquetenvia, OrderPaymentMethod.Cash, 0m, [], 0m, [], null, null);
 
         Assert.Equal([TenantPermission.ManageCash], settlement.RequiredPermissions());
     }

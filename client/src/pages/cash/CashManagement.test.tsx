@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { courierKeys } from '../../api/courierSettlements';
 import { apiRequest } from '../../api/typedClient';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -24,13 +25,16 @@ const receivable = (patch: Record<string, unknown> = {}) => ({
   courier: DeliveryCourier.Paquetenvia, owedOrders: 0, owedAmount: 0, onTheWayOrders: 0, onTheWayAmount: 0, lastSettledAt: null, ...patch,
 });
 
-function renderCash(permissions: string[], receivables: unknown[]) {
+/** With `alreadyRead`, what the couriers owe is in the cache from the first render: nothing left to wait for. */
+function renderCash(permissions: string[], receivables: unknown[], alreadyRead = false) {
   vi.mocked(useAuth).mockReturnValue({ user: { id: 'u1', role: 'STAFF', permissions } } as unknown as ReturnType<typeof useAuth>);
   vi.mocked(useTenant).mockReturnValue({ capabilities: TenantCapability.Food } as unknown as ReturnType<typeof useTenant>);
   vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) =>
     path === '/api/v1/courier-settlements/receivable' ? Promise.resolve(receivables) : Promise.reject(new Error(path))) as unknown as typeof apiRequest);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (alreadyRead) client.setQueryData(courierKeys.receivables, receivables);
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/cash']}>
         <CashManagement />
       </MemoryRouter>
@@ -58,10 +62,9 @@ describe('CashManagement', () => {
   });
 
   it('leaves Repartidores out while no courier collected anything', async () => {
-    renderCash(['ManageCash', 'ChargeOrders'], [receivable()]);
+    renderCash(['ManageCash', 'ChargeOrders'], [receivable()], true);
 
     expect(await screen.findByText('Mi caja abierta')).toBeInTheDocument();
-    await vi.waitFor(() => expect(apiRequest).toHaveBeenCalled());
     expect(screen.queryByRole('tab', { name: 'Repartidores' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('tab')).toHaveLength(3);
   });

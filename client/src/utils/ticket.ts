@@ -1,5 +1,5 @@
 import { PlatformCollectedBy, type OrderDto } from '../types';
-import { changeFor } from './courierCash';
+import { changeFor, stillToCollect } from './courierCash';
 import { getPlatformName, isDeliveryPlatform } from './deliveryPlatforms';
 import { DELIVERY_COURIER_LABELS, getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
@@ -86,12 +86,14 @@ export function getTicketDelivery(order: Pick<OrderDto, 'delivery'> & Partial<Pi
 }
 
 /**
- * What the courier collects: what it was sent out to collect or, before it goes out, the balance with the customer's bill.
- * Nothing once the order is paid.
+ * What the courier collects: what it was sent out to collect (less if part was paid meanwhile) or, before it goes out, the
+ * balance with the customer's bill. Nothing once the order is paid.
  */
 function describeTicketCollection(delivery: NonNullable<OrderDto['delivery']>, balance: number): string | null {
   if (balance <= 0) return null;
-  const toCollect = delivery.cashToCollect ?? (!delivery.dispatchedAt && delivery.paysWith != null ? balance : null);
+  const toCollect = delivery.cashToCollect != null
+    ? stillToCollect(delivery.cashToCollect, balance)
+    : !delivery.dispatchedAt && delivery.paysWith != null ? balance : null;
   if (toCollect == null) return null;
   const parts = [`Cobrar ${formatMoney(toCollect)}`];
   if (delivery.paysWith != null) {

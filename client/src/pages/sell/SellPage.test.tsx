@@ -1110,12 +1110,14 @@ describe('SellPage with a platform order and no connection', () => {
       await userEvent.type(bill, '50');
 
       expect(ticket().getAllByText('Con $50.00 no alcanza: hay que cobrar $85.00.').length).toBeGreaterThan(0);
+      expect(bill).toHaveAttribute('aria-invalid', 'true');
       await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
       expect(ordersApi.create).not.toHaveBeenCalled();
 
       await userEvent.clear(bill);
       await userEvent.type(bill, '100');
       expect(ticket().getByText(/Cambio:/)).toHaveTextContent('$15.00');
+      expect(bill).toHaveAttribute('aria-invalid', 'false');
       await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
 
       expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({

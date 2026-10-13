@@ -3,7 +3,7 @@ import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { useCreateCourierSettlement, type CourierOrder, type CourierSettlementDetail } from '../../api/courierSettlements';
 import { CourierSettlementAdjustmentKind, DeliveryCourier, OrderPaymentMethod } from '../../types';
-import { formatTime } from '../../utils/dates';
+import { formatDateTime } from '../../utils/dates';
 import { DELIVERY_COURIER_LABELS } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import {
@@ -111,7 +111,7 @@ export default function CourierSettlementModal({ courier, owed, truncated, onClo
                     <span className="fw-semibold">{order.orderNumber}</span>
                     <span>{order.customerName}</span>
                     {order.courierFolio && <span className="text-muted">folio {order.courierFolio}</span>}
-                    <span className="text-muted">salió {formatTime(order.dispatchedAt)}</span>
+                    <span className="text-muted">salió {formatDateTime(order.dispatchedAt)}</span>
                     <span className="ms-auto ta-money">{formatMoney(order.balance)}</span>
                   </label>
                 </li>

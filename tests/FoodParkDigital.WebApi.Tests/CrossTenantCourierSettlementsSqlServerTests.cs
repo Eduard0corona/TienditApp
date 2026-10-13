@@ -76,6 +76,9 @@ public sealed class CrossTenantCourierSettlementsSqlServerTests
         var refused = await theirs.Client.PostAsJsonAsync(Settlements, Settlement(65m, [orderId], []));
         Assert.Equal((HttpStatusCode.Conflict, ApiErrorCodes.Conflict, CourierSettlementErrors.NotOwed),
             (refused.StatusCode, Problem(await refused.Content.ReadAsStringAsync()).Code, Problem(await refused.Content.ReadAsStringAsync()).Detail));
+        // A screen that saw another balance is told to reload instead of charging what it did not show.
+        var stale = await mine.Client.PostAsJsonAsync(Settlements, Settlement(50m, [orderId], [new { kind = 1, amount = -10m }]) with { ordersTotal = 60m });
+        Assert.Equal((HttpStatusCode.Conflict, CourierSettlementErrors.NotOwed), (stale.StatusCode, Problem(await stale.Content.ReadAsStringAsync()).Detail));
         var response = await mine.Client.PostAsJsonAsync(Settlements, Settlement(55m, [orderId], [new { kind = 1, amount = -10m }]));
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var created = (await TwoBusinessesApi.ReadAsync(response)).GetProperty("settlement");
@@ -163,9 +166,9 @@ public sealed class CrossTenantCourierSettlementsSqlServerTests
         await DeliverAsync(owner.Client, orderId);
 
         var nullAdjustment = await owner.Client.PostAsync(Settlements, new StringContent(
-            $"{{\"courier\":1,\"method\":0,\"handedAmount\":65,\"orderIds\":[\"{orderId}\"],\"adjustments\":[null]}}",
+            $"{{\"courier\":1,\"method\":0,\"handedAmount\":65,\"orderIds\":[\"{orderId}\"],\"ordersTotal\":65,\"adjustments\":[null]}}",
             System.Text.Encoding.UTF8, "application/json"));
-        var withoutHanded = await owner.Client.PostAsJsonAsync(Settlements, new { courier = 1, method = 0, orderIds = new[] { orderId }, adjustments = Array.Empty<object>() });
+        var withoutHanded = await owner.Client.PostAsJsonAsync(Settlements, new { courier = 1, method = 0, orderIds = new[] { orderId }, ordersTotal = 65m, adjustments = Array.Empty<object>() });
         var byCard = await owner.Client.PostAsJsonAsync(Settlements, Settlement(65m, [orderId], []) with { method = 1 });
         var unbalanced = await owner.Client.PostAsJsonAsync(Settlements, Settlement(60m, [orderId], []));
 
@@ -218,10 +221,10 @@ public sealed class CrossTenantCourierSettlementsSqlServerTests
     private static object Dispatch(string folio, bool collectsCash, decimal? paysWith = null)
         => new { courier = 1, folio, trackingUrl = (string?)null, collectsCash, paysWith };
 
-    private sealed record SettlementBody(int courier, int method, decimal handedAmount, Guid[] orderIds, object[] adjustments, string? reference);
+    private sealed record SettlementBody(int courier, int method, decimal handedAmount, Guid[] orderIds, decimal ordersTotal, object[] adjustments, string? reference);
 
     private static SettlementBody Settlement(decimal handedAmount, Guid[] orderIds, object[] adjustments)
-        => new(1, 0, handedAmount, orderIds, adjustments, "Corte");
+        => new(1, 0, handedAmount, orderIds, 65m * orderIds.Length, adjustments, "Corte");
 
     /// <summary>A member of the owner's team with the permissions given, signed in with its own password.</summary>
     private async Task<HttpClient> EmployeeAsync(SignedUp owner, params string[] permissions)

@@ -343,10 +343,10 @@ function withCourierOrders(data: DemoData) {
     items: [{ productId: product('Torta de jamón'), quantity: 2 }, { productId: product('Agua de jamaica'), quantity: 1 }],
     delivery: { postalCode: '06140', addressLine: 'Tamaulipas 66, Condesa' },
   });
-  Object.assign(owed, { status: 6, allowedTransitions: [], canCancel: false, createdAt: at(11, 40) });
+  Object.assign(owed, { status: 6, allowedTransitions: [], canCancel: false, createdAt: at(12, 55) });
   Object.assign(owed.delivery!, {
-    courier: 1, courierFolio: 'PQ48197', shipmentRegisteredAt: at(11, 55), shipmentRegisteredBy: 'lucia.navarro@cafelaesquina.mx',
-    dispatchedAt: at(12, 5), dispatchedBy: 'lucia.navarro@cafelaesquina.mx', cashToCollect: owed.balance, awaitsCourierCash: true,
+    courier: 1, courierFolio: 'PQ48197', shipmentRegisteredAt: at(13, 0), shipmentRegisteredBy: 'lucia.navarro@cafelaesquina.mx',
+    dispatchedAt: at(13, 2), dispatchedBy: 'lucia.navarro@cafelaesquina.mx', cashToCollect: owed.balance, awaitsCourierCash: true,
   });
 }
 

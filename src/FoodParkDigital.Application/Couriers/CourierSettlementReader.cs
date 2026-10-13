@@ -22,12 +22,13 @@ internal static class CourierSettlementReader
             && o.Total > o.PaidAmount
             && !context.CourierSettlementOrders.Any(line => line.OrderId == o.Id));
 
-    /// <summary>On its way for the courier to collect: neither delivered nor cancelled yet.</summary>
+    /// <summary>On its way for the courier to collect: neither delivered nor cancelled yet, nor paid meanwhile.</summary>
     public static IQueryable<Order> OnTheWay(IApplicationDbContext context, DeliveryCourier courier)
         => context.Orders.Where(o => o.Delivery != null
             && o.Delivery.Courier == courier
             && o.Delivery.DispatchedAt != null
             && o.Delivery.CashToCollect != null
+            && o.Total > o.PaidAmount
             && o.Status != OrderStatus.Delivered
             && o.Status != OrderStatus.Completed
             && o.Status != OrderStatus.Cancelled);

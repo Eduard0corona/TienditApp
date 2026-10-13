@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { getApiErrorMessage } from '../../api/errors';
 import { ordersApi } from '../../api/ordersApi';
 import { DeliveryCourier, OrderStatus, type OrderDto } from '../../types';
-import { changeFor, describeCollection } from '../../utils/courierCash';
+import { changeFor, describeCollection, stillToCollect } from '../../utils/courierCash';
 import { formatTime } from '../../utils/dates';
 import { DELIVERY_COURIER_LABELS } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
@@ -42,6 +42,9 @@ export default function OrderDeliveryPanel({ order, canManage, onSaved }: OrderD
   const onTheWay = dispatched && !closed && !cancelled;
   // It goes out once confirmed and until it is delivered.
   const canSendOut = canManage && !cancelled && !closed && order.status !== OrderStatus.Pending;
+  // On its way it collects what is still owed (less if part was paid meanwhile); once it is back, what it went out to collect.
+  const toCollect = delivery.cashToCollect == null ? null
+    : onTheWay ? stillToCollect(delivery.cashToCollect, order.balance) : delivery.cashToCollect;
 
   const startShipment = () => {
     setFolio(delivery.courierFolio ?? '');
@@ -106,9 +109,9 @@ export default function OrderDeliveryPanel({ order, canManage, onSaved }: OrderD
       {dispatched && editing === null && (
         <p className="mb-2 small">
           Salió a las {formatTime(delivery.dispatchedAt)}{delivery.dispatchedBy ? ` (${delivery.dispatchedBy})` : ''}.{' '}
-          {delivery.cashToCollect != null
-            ? <span className="ta-money">{describeCollection(delivery.cashToCollect, delivery.paysWith)}</span>
-            : 'El repartidor no cobra nada.'}
+          {toCollect == null ? 'El repartidor no cobra nada.'
+            : toCollect === 0 ? 'Ya está pagado: el repartidor no cobra nada.'
+              : <span className="ta-money">{describeCollection(toCollect, delivery.paysWith)}</span>}
         </p>
       )}
 

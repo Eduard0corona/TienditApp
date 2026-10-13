@@ -68,6 +68,7 @@ describe('courierSettlementForm', () => {
       method: OrderPaymentMethod.Transfer,
       handedAmount: 230,
       orderIds: ['a'],
+      ordersTotal: 275,
       adjustments: [{ kind: CourierSettlementAdjustmentKind.TripFee, description: null, amount: -45 }],
       reference: 'SPEI 1',
       notes: null,

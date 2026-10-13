@@ -9920,6 +9920,8 @@ export interface components {
             /** Format: double */
             handedAmount: number;
             orderIds: string[];
+            /** Format: double */
+            ordersTotal: number;
             adjustments: components["schemas"]["CourierSettlementAdjustmentRequest"][];
             reference?: string | null;
             notes?: string | null;

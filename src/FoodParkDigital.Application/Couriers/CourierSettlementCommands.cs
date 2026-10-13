@@ -2,10 +2,13 @@ using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
+using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -22,9 +25,6 @@ public static class CourierSettlementErrors
     public const string NotOwed =
         "Un pedido de la lista ya no se le debe al repartidor (alguien lo cobró, lo liquidó o cambió): lee otra vez la lista.";
     public const string Stale = "Alguien registró un cobro al mismo tiempo: lee otra vez lo que debe el repartidor.";
-
-    /// <summary>The orders read are no longer what the courier owes: 409, read the list again.</summary>
-    public static bool IsConflict(string? error) => error is NotOwed or Stale;
 }
 
 /// <summary>
@@ -34,12 +34,17 @@ public static class CourierSettlementErrors
 /// and moving the cash of a drawer are both needed.
 /// </summary>
 /// <param name="Method">How the courier handed it over: cash, or a transfer.</param>
+/// <param name="OrdersTotal">
+/// What the orders owed when the person read them: if one was charged meanwhile it owes less, and the settlement is not
+/// what the person saw (409, read the list again).
+/// </param>
 [RequiresPermission(TenantPermission.ChargeOrders)]
 public record CreateCourierSettlementCommand(
     DeliveryCourier Courier,
     OrderPaymentMethod Method,
     decimal HandedAmount,
     IReadOnlyList<Guid> OrderIds,
+    decimal OrdersTotal,
     IReadOnlyList<CourierSettlementAdjustmentInput> Adjustments,
     string? Reference,
     string? Notes) : IRequest<Result<CourierSettlementDetailDto>>, IRequiresContentPermissions
@@ -66,6 +71,7 @@ public class CreateCourierSettlementCommandValidator : AbstractValidator<CreateC
             .Must(adjustments => adjustments.Count <= CourierSettlement.MaxAdjustments)
             .WithMessage(CourierSettlement.TooManyAdjustmentsMessage)
             .Must(adjustments => adjustments.All(a => a is not null)).WithMessage(CourierSettlement.AdjustmentKindMessage);
+        RuleFor(x => x.OrdersTotal).GreaterThanOrEqualTo(0m).WithMessage(CourierSettlement.OrderAmountMessage);
         RuleFor(x => x.Reference).MaximumLength(CourierSettlement.MaxReferenceLength + 20)
             .WithMessage(CourierSettlement.ReferenceTooLongMessage);
         RuleFor(x => x.Notes).MaximumLength(CourierSettlement.MaxNotesLength + 20)
@@ -81,20 +87,17 @@ public class CreateCourierSettlementCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IOrderCashService _orderCashService;
     private readonly IDateTimeProvider _clock;
 
     public CreateCourierSettlementCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         ICurrentUserService currentUserService,
-        IOrderCashService orderCashService,
         IDateTimeProvider clock)
     {
         _context = context;
         _tenantService = tenantService;
         _currentUserService = currentUserService;
-        _orderCashService = orderCashService;
         _clock = clock;
     }
 
@@ -119,7 +122,9 @@ public class CreateCourierSettlementCommandHandler
         var alreadySettled = await _context.CourierSettlementOrders
             .AnyAsync(line => request.OrderIds.Contains(line.OrderId), cancellationToken);
         if (orders.Count != request.OrderIds.Count || alreadySettled
-            || orders.Any(o => o.Delivery?.Courier != request.Courier || !o.AwaitsCourierCash))
+            || orders.Any(o => o.Delivery?.Courier != request.Courier || !o.AwaitsCourierCash)
+            // A balance only goes down: a charge registered since the list was read shows in its total.
+            || orders.Sum(o => o.Balance) != request.OrdersTotal)
             return Result.Failure<CourierSettlementDetailDto>(CourierSettlementErrors.NotOwed);
 
         var now = _clock.UtcNow;
@@ -140,8 +145,8 @@ public class CreateCourierSettlementCommandHandler
             return Result.Failure<CourierSettlementDetailDto>(ex.Message);
         }
 
-        // Each order is paid with what it owed, in this drawer (the registrar picks the cashier's own first).
-        var registrar = new OrderPaymentRegistrar(_context, _orderCashService, _clock);
+        // Each order is paid with what it owed, in this drawer, already loaded: never once more for each order.
+        var registrar = new OrderPaymentRegistrar(_context, new OwnDrawer(drawer), _clock);
         foreach (var line in lines)
         {
             var order = orders.Single(o => o.Id == line.OrderId);
@@ -228,4 +233,17 @@ public class CreateCourierSettlementCommandHandler
         => await _context.CourierSettlementOrders
             .AsNoTracking()
             .AnyAsync(line => orderIds.Contains(line.OrderId), cancellationToken);
+
+    /// <summary>The drawer of whoever receives the cash takes every payment of the settlement.</summary>
+    private sealed class OwnDrawer(CashSession drawer) : IOrderCashService
+    {
+        public Task<bool> RegisterOrderPaymentAsync(Order order, OrderPayment payment, CancellationToken cancellationToken)
+        {
+            OrderCashService.RecordPayment(drawer, order, payment);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)
+            => throw new NotSupportedException("A settlement only charges orders.");
+    }
 }

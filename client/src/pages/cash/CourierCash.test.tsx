@@ -21,10 +21,11 @@ const owedOrder = (orderId: string, orderNumber: string, balance: number, folio:
 
 const RECEIVABLE: CourierReceivable = {
   courier: DeliveryCourier.Paquetenvia, owedOrders: 2, owedAmount: 550, oldestDispatchedAt: '2026-10-13T19:05:00Z',
-  onTheWayOrders: 1, onTheWayAmount: 120, lastSettledAt: '2026-10-12T23:00:00Z',
+  onTheWayOrders: 1, onTheWayAmount: 100, lastSettledAt: '2026-10-12T23:00:00Z',
 };
 const OWED = [owedOrder('o1', 'ORD-000201', 275, 'PQ1'), owedOrder('o2', 'ORD-000202', 275, 'PQ2')];
-const ON_THE_WAY: CourierOrder = { ...owedOrder('o3', 'ORD-000203', 120, 'PQ3'), status: OrderStatus.Confirmed, paysWith: 200 };
+// It went out to collect $120.00 and $20.00 was paid by transfer meanwhile: it collects $100.00.
+const ON_THE_WAY: CourierOrder = { ...owedOrder('o3', 'ORD-000203', 120, 'PQ3'), status: OrderStatus.Confirmed, paysWith: 200, balance: 100 };
 const SETTLEMENT: CourierSettlement = {
   id: 's1', courier: DeliveryCourier.Paquetenvia, settledAt: '2026-10-12T23:00:00Z', settledBy: 'Mariana', method: OrderPaymentMethod.Cash,
   handedAmount: 485, ordersTotal: 530, adjustmentsTotal: -45, orderCount: 2, reference: null, notes: null,
@@ -76,8 +77,8 @@ describe('CourierCash', () => {
     const card = (await screen.findByRole('heading', { name: 'Paquetenvia' })).closest('section')!;
     expect(within(card).getByText('Te debe').nextElementSibling).toHaveTextContent('$550.00');
     expect(within(card).getByText(/2 pedidos entregados/)).toBeInTheDocument();
-    expect(within(card).getByText('En camino').nextElementSibling).toHaveTextContent('$120.00');
-    expect(screen.getByText(/ORD-000203/).closest('li')).toHaveTextContent('Cobra $120.00 · paga con $200.00 · cambio $80.00');
+    expect(within(card).getByText('En camino').nextElementSibling).toHaveTextContent('$100.00');
+    expect(screen.getByText(/ORD-000203/).closest('li')).toHaveTextContent('Cobra $100.00 · paga con $200.00 · cambio $100.00');
     const owed = screen.getByRole('heading', { name: 'Pedidos que debe' }).closest('section')!;
     expect(within(owed).getAllByRole('row')).toHaveLength(3);
     expect(within(owed).getByText('PQ2')).toBeInTheDocument();
@@ -137,6 +138,7 @@ describe('CourierCash', () => {
       method: OrderPaymentMethod.Transfer,
       handedAmount: 225,
       orderIds: ['o1'],
+      ordersTotal: 275,
       adjustments: [
         { kind: CourierSettlementAdjustmentKind.TripFee, description: null, amount: -45 },
         { kind: CourierSettlementAdjustmentKind.Shortage, description: null, amount: -5 },

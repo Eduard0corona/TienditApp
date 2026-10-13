@@ -55,8 +55,9 @@ public class CourierSettlementsController : ControllerBase
 
     /// <summary>
     /// The courier hands over the cash: each order is paid in the drawer of whoever receives it and the adjustments enter it
-    /// as movements. What was handed over must add up to the cent. An order that is no longer owed (charged, settled or
-    /// changed meanwhile) answers 409 <c>conflict</c>; a charge saved at the same time, 409 <c>concurrency_conflict</c>.
+    /// as movements. What was handed over must add up to the cent. An order that is no longer owed, or owes other than
+    /// when it was read (charged, settled or changed meanwhile), answers 409 <c>conflict</c>; a charge saved at the same
+    /// time, 409 <c>concurrency_conflict</c>.
     /// </summary>
     [HttpPost]
     [ProducesResponseType<CourierSettlementDetailDto>(StatusCodes.Status201Created)]
@@ -72,6 +73,7 @@ public class CourierSettlementsController : ControllerBase
             request.Method,
             request.HandedAmount,
             request.OrderIds,
+            request.OrdersTotal,
             request.Adjustments
                 .Select(adjustment => new CourierSettlementAdjustmentInput(adjustment.Kind, adjustment.Description, adjustment.Amount))
                 .ToList(),
@@ -91,14 +93,15 @@ public class CourierSettlementsController : ControllerBase
 }
 
 /// <summary>
-/// What the courier hands over: how, how much, the orders it pays and the adjustments. Everything but the reference and the
-/// notes is required, so nothing is read as 0 that nobody wrote.
+/// What the courier hands over: how, how much, the orders it pays (with what they owed when they were read) and the
+/// adjustments. Everything but the reference and the notes is required, so nothing is read as 0 that nobody wrote.
 /// </summary>
 public record CreateCourierSettlementRequest(
     [property: JsonRequired] DeliveryCourier Courier,
     [property: JsonRequired] OrderPaymentMethod Method,
     [property: JsonRequired] decimal HandedAmount,
     [property: JsonRequired] IReadOnlyList<Guid> OrderIds,
+    [property: JsonRequired] decimal OrdersTotal,
     [property: JsonRequired] IReadOnlyList<CourierSettlementAdjustmentRequest> Adjustments,
     string? Reference,
     string? Notes);

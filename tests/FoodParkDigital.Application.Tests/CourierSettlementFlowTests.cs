@@ -5,7 +5,6 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Couriers;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Delivery;
-using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.OnlineMenu;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
@@ -372,6 +371,14 @@ public class CourierSettlementFlowTests
         Assert.Equal(CourierSettlementErrors.NotOwed, (await SettleAsync(fixture, Settlement(550m, [owed.Id, chargedAtTheCounter.Id]))).Error);
         Assert.Equal(CourierSettlementErrors.NotOwed, (await SettleAsync(fixture, Settlement(515m, [owed.Id, notADelivery.Value.Id]))).Error);
         Assert.Equal(CourierSettlementErrors.NotOwed, (await SettleAsync(fixture, Settlement(275m, [owed.Id, Guid.NewGuid()]))).Error);
+        // The list read said $275; someone charged $75 meanwhile: the settlement is not the one the person saw.
+        var partly = await OwedOrderAsync(fixture, tacos, "PQ4");
+        var transfer = await fixture.AddPaymentHandler().Handle(
+            new AddOrderPaymentCommand { OrderId = partly.Id, Amount = 75m, Method = OrderPaymentMethod.Transfer }, CancellationToken.None);
+        Assert.True(transfer.IsSuccess, transfer.Error);
+        fixture.Context.ChangeTracker.Clear();
+        paymentsBefore = await fixture.Context.CashTransactions.CountAsync();
+        Assert.Equal(CourierSettlementErrors.NotOwed, (await SettleAsync(fixture, Settlement(275m, [partly.Id]))).Error);
         Assert.Equal(CourierSettlement.DoesNotBalanceMessage(240m, 230m), (await SettleAsync(fixture, Settlement(
             240m, [owed.Id], [new CourierSettlementAdjustmentInput(CourierSettlementAdjustmentKind.TripFee, null, -45m)]))).Error);
         Assert.Equal(CourierSettlement.DeductionMessage, (await SettleAsync(fixture, Settlement(
@@ -509,9 +516,12 @@ public class CourierSettlementFlowTests
         Delivery = new OrderDeliveryInput { PostalCode = "72000", AddressLine = Address, PaysWith = paysWith }
     };
 
+    /// <param name="ordersTotal">What the orders owed when read: $275 each (two tacos with the delivery) unless said.</param>
     private static CreateCourierSettlementCommand Settlement(
-        decimal handedAmount, IReadOnlyList<Guid> orderIds, IReadOnlyList<CourierSettlementAdjustmentInput>? adjustments = null)
-        => new(DeliveryCourier.Paquetenvia, OrderPaymentMethod.Cash, handedAmount, orderIds, adjustments ?? [], null, null);
+        decimal handedAmount, IReadOnlyList<Guid> orderIds, IReadOnlyList<CourierSettlementAdjustmentInput>? adjustments = null,
+        decimal? ordersTotal = null)
+        => new(DeliveryCourier.Paquetenvia, OrderPaymentMethod.Cash, handedAmount, orderIds, ordersTotal ?? 275m * orderIds.Count,
+            adjustments ?? [], null, null);
 
     /// <summary>Sold in Vender, sent out with the courier collecting it all and delivered: what the courier owes.</summary>
     private static async Task<OrderDto> OwedOrderAsync(SalesTestFixture fixture, Product product, string folio, decimal quantity = 2)
@@ -558,8 +568,7 @@ public class CourierSettlementFlowTests
     {
         try
         {
-            return await new CreateCourierSettlementCommandHandler(
-                    fixture.Context, fixture.TenantService, fixture.CurrentUser, new OrderCashService(fixture.Context, fixture.CurrentUser), fixture.Clock)
+            return await new CreateCourierSettlementCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock)
                 .Handle(command, CancellationToken.None);
         }
         finally

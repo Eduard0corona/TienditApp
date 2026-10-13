@@ -190,6 +190,19 @@ describe('OrderDeliveryPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('El pedido ya se entregó.');
   });
 
+  it('collects what is still owed when part was paid while it goes, and nothing once paid', () => {
+    const onTheWay = order({
+      courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234', paysWith: 500,
+      dispatchedAt: '2026-10-13T19:05:00Z', cashToCollect: 275,
+    });
+    const { rerender } = render(<OrderDeliveryPanel order={{ ...onTheWay, paidAmount: 200, balance: 75 }} canManage onSaved={vi.fn()} />);
+    expect(screen.getByText(/Cobra \$75.00/)).toHaveTextContent('Cobra $75.00 · paga con $500.00 · cambio $425.00');
+
+    rerender(<OrderDeliveryPanel order={{ ...onTheWay, paidAmount: 275, balance: 0 }} canManage onSaved={vi.fn()} />);
+    expect(screen.getByText(/Salió a las/)).toHaveTextContent('Ya está pagado: el repartidor no cobra nada.');
+    expect(screen.queryByText(/Cobra \$/)).not.toBeInTheDocument();
+  });
+
   it('tells what Paquetenvia owes once delivered, and offers no way out for a delivered or pending order', () => {
     const delivered = order({
       courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234',

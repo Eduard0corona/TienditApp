@@ -485,11 +485,13 @@ describe('PublicMenuPage', () => {
 
       await userEvent.type(bill, '100');
       expect(within(cart).getByText('Con $100.00 no alcanza: hay que cobrar $145.00.')).toBeInTheDocument();
+      expect(bill).toHaveAttribute('aria-invalid', 'true');
       expect(send).toBeDisabled();
 
       await userEvent.clear(bill);
       await userEvent.type(bill, '200');
       expect(within(cart).getByText(/Tu cambio:/)).toHaveTextContent('$55.00');
+      expect(bill).toHaveAttribute('aria-invalid', 'false');
       await userEvent.click(send);
 
       expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({

@@ -13757,7 +13757,8 @@
           "courier",
           "handedAmount",
           "method",
-          "orderIds"
+          "orderIds",
+          "ordersTotal"
         ],
         "type": "object",
         "properties": {
@@ -13777,6 +13778,10 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "ordersTotal": {
+            "type": "number",
+            "format": "double"
           },
           "adjustments": {
             "type": "array",

@@ -352,7 +352,7 @@ test.describe('Repartidores', () => {
     await openCouriers(page);
     await page.getByRole('button', { name: 'Liquidar a Paquetenvia' }).click();
     const settling = await dialog(page, 'Liquidar a Paquetenvia');
-    await settling.getByLabel('Entregó').fill('355');
+    await settling.getByLabel('Entregó', { exact: true }).fill('355');
     await settling.getByRole('button', { name: 'Agregar ajuste' }).click();
     await settling.getByLabel('Motivo del ajuste 1').selectOption({ label: 'Viaje' });
     await settling.getByLabel('Importe del ajuste 1').fill('35');

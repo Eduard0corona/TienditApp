@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PAYS_WITH_MESSAGE, changeFor, describeCollection, parsePaysWith, paysWithProblem } from './courierCash';
+import { PAYS_WITH_MESSAGE, changeFor, describeCollection, parsePaysWith, paysWithProblem, stillToCollect } from './courierCash';
 
 const plain = (text: string) => text.replace(/\u00a0/g, ' ');
 
@@ -27,5 +27,12 @@ describe('courierCash', () => {
     expect(changeFor(200, 275)).toBe(0);
     expect(plain(describeCollection(275, 500))).toBe('Cobra $275.00 · paga con $500.00 · cambio $225.00');
     expect(plain(describeCollection(275))).toBe('Cobra $275.00');
+  });
+
+  it('collects what is still owed: less if part was paid meanwhile, nothing once paid', () => {
+    expect(stillToCollect(275, 275)).toBe(275);
+    expect(stillToCollect(275, 75.1)).toBe(75.1);
+    expect(stillToCollect(275, 0)).toBe(0);
+    expect(stillToCollect(275, -5)).toBe(0);
   });
 });

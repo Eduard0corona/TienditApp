@@ -12,8 +12,8 @@ import { useCurrentCashSession } from '../../api/queries';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useToast } from '../../hooks/useToast';
 import { DeliveryCourier, OrderPaymentMethod } from '../../types';
-import { describeCollection } from '../../utils/courierCash';
-import { formatDateTime, formatTime } from '../../utils/dates';
+import { describeCollection, stillToCollect } from '../../utils/courierCash';
+import { formatDateTime } from '../../utils/dates';
 import { DELIVERY_COURIER_LABELS } from '../../utils/labels';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
 import CourierSettlementModal from './CourierSettlementModal';
@@ -139,8 +139,8 @@ export default function CourierCash({ canSettle, onOpenDrawer }: CourierCashProp
           <ul className="list-unstyled small">
             {onTheWay.map((order) => (
               <li key={order.orderId} className="mb-1">
-                <span className="fw-semibold">{order.orderNumber}</span> · {order.customerName} · salió {formatTime(order.dispatchedAt)} ·{' '}
-                <span className="ta-money">{describeCollection(order.cashToCollect, order.paysWith)}</span>
+                <span className="fw-semibold">{order.orderNumber}</span> · {order.customerName} · salió {formatDateTime(order.dispatchedAt)} ·{' '}
+                <span className="ta-money">{describeCollection(stillToCollect(order.cashToCollect, order.balance), order.paysWith)}</span>
               </li>
             ))}
           </ul>

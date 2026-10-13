@@ -22,6 +22,16 @@ public class OrderCashService : IOrderCashService
         if (session is null)
             return false;
 
+        RecordPayment(session, order, payment);
+        return true;
+    }
+
+    /// <summary>
+    /// A payment of an order as movements of a drawer already chosen (a courier's settlement uses the drawer of whoever
+    /// receives the cash): the sale and, apart, its tip.
+    /// </summary>
+    public static void RecordPayment(Domain.Finance.Entities.CashSession session, Order order, OrderPayment payment)
+    {
         session.RegisterTransaction(
             transactionType: CashTransactionType.SalePayment,
             amount: payment.Amount,
@@ -44,8 +54,6 @@ public class OrderCashService : IOrderCashService
                 reference: payment.Reference ?? order.OrderNumber,
                 notes: "Propina");
         }
-
-        return true;
     }
 
     public async Task<bool> RegisterOrderRefundAsync(Order order, OrderRefund refund, CancellationToken cancellationToken)

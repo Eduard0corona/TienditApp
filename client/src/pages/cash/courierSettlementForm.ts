@@ -132,6 +132,8 @@ export function toBody(
     method,
     handedAmount: handed,
     orderIds: orders.map((order) => order.orderId),
+    // What these orders owed on screen: if a balance changed meanwhile, the server refuses instead of charging another amount.
+    ordersTotal: orders.reduce((sum, order) => sum + toCents(order.balance), 0) / 100,
     adjustments: rows.map((row) => ({
       kind: row.kind as CourierSettlementAdjustmentKind,
       description: row.description.trim() || null,

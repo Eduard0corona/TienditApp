@@ -56,9 +56,10 @@ ORDER BY [Tabla], [Tipo], [Nombre];
 
 -- 4. Después de desplegar, y antes de volver a la versión anterior o de rollback.sql:
 --    a. los pedidos a domicilio que salieron con el repartidor o dijeron con cuánto pagan, por
---       estado ([Estado]: 0 pendiente, 1 confirmado, 2 en preparación, 3 listo, 6 entregado,
---       99 cancelado; de 1 a 3 van en camino): cuántos cobra el repartidor, cuánto cobra, cuántos
---       debe todavía (entregados, con saldo y sin liquidar) y cuánto;
+--       estado ([Estado]: 0 pendiente, 1 confirmado, 2 en preparación, 3 listo, 4 aceptado,
+--       5 en proceso, 6 entregado, 7 completado, 99 cancelado; de 1 a 5 van en camino): cuántos
+--       cobra el repartidor, cuánto cobra, cuántos debe todavía (entregados, con saldo y sin
+--       liquidar) y cuánto;
 --    b. las liquidaciones de repartidor por negocio: cuántas, cuánto entregaron y cuánto sumaron sus
 --       ajustes.
 --    Con alguna fila en cualquiera de las dos, rollback.sql se detiene (error 50014) sin cambiar nada.

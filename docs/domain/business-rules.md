@@ -137,12 +137,12 @@ El pedido sale con Paquetenvia, que puede cobrar en efectivo al cliente, y lo qu
   - Se corrige mientras va en camino; la primera salida queda como la hora en que salió. Guardar lo mismo no registra nada.
   - La bitácora `OrderDispatched` guarda repartidor, folio, si hay enlace, lo que cobra, con cuánto paga y si fue corrección; nunca el enlace ni la dirección.
 - **«En camino»:** la primera salida avisa al cliente por WhatsApp, con el enlace si lo hay. No avisa una corrección ni un pedido que se entregó o canceló antes.
-- **Lo que debe el repartidor:** el saldo de los pedidos que entregó cobrando y que nadie liquidó ni cobró. Si el cliente pagó una parte por otro medio, debe el resto. Lo que va en camino todavía no se debe.
+- **Lo que debe el repartidor:** el saldo de los pedidos que entregó cobrando y que nadie liquidó ni cobró. Si el cliente pagó una parte por otro medio, debe el resto. Lo que va en camino todavía no se debe; ahí cobra lo que salió a cobrar o, si se pagó una parte mientras tanto, el saldo («Ya está pagado: el repartidor no cobra nada.» si se pagó todo).
 - **Liquidación** (Caja › Repartidores):
   - Se eligen los pedidos que entrega (hasta 200), lo que entregó y cómo (efectivo o transferencia), y los ajustes (hasta 50): viaje, comisión por cobrar y faltante se descuentan; «Otro» descuenta o suma y necesita descripción (hasta 200 caracteres).
   - Lo entregado debe ser los pedidos más los ajustes, al centavo; si no: «Entregó $500.00 y los pedidos con sus ajustes dan $505.00: la diferencia debe ser $0.00. Registra lo que falta como un ajuste.».
   - Cada pedido se cobra con su saldo en la caja propia y abierta de quien recibe; cada ajuste entra a esa caja como gasto (descuento) o depósito (suma) con el mismo método.
-  - Un pedido se liquida una vez. Una liquidación no se anula ni se edita: se corrige con un reembolso o un movimiento de caja.
+  - Un pedido se liquida una vez, con el saldo que se vio: si alguien lo cobró, lo liquidó o pagó una parte mientras tanto: «Un pedido de la lista ya no se le debe al repartidor (alguien lo cobró, lo liquidó o cambió): lee otra vez la lista.». Una liquidación no se anula ni se edita: se corrige con un reembolso o un movimiento de caja.
   - La bitácora `CourierSettlementRegistered` guarda repartidor, método, montos, pedidos y ajustes, sin direcciones.
 
 ## Cancelación y trazabilidad

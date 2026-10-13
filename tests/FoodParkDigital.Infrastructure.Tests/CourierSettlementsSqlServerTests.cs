@@ -111,7 +111,7 @@ public class CourierSettlementsSqlServerTests
     }
 
     [SqlServerFact]
-    public async Task Order_ShouldBeSettledOnce_EvenBySettlementsSavedAtTheSameTime()
+    public async Task Order_ShouldBeSettledOnce_ByTheIndex_EvenWhenTheAppMissedTheFirstSettlement()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         var (tenant, _) = await SeedAsync(database);

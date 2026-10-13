@@ -110,6 +110,7 @@ export default function DeliveryOrderFields({
                 value={paysWithText}
                 disabled={disabled}
                 onChange={(event) => update({ paysWith: event.target.value })}
+                aria-invalid={!!paysWithIssue}
                 aria-describedby={`${id}-change`}
               />
             </div>

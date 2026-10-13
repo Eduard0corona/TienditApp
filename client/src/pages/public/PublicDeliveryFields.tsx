@@ -124,6 +124,7 @@ export default function PublicDeliveryFields({
               placeholder="$"
               value={address.paysWith}
               onChange={(event) => onAddressChange({ paysWith: event.target.value })}
+              aria-invalid={!!paysWithIssue}
               aria-describedby={`${id}-change`}
             />
           </div>

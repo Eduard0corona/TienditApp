@@ -161,6 +161,8 @@ describe('ticket of an order of a delivery platform', () => {
     const sentOut = { ...base, delivery: { ...base.delivery!, paysWith: 300, dispatchedAt: '2026-10-13T19:05:00Z', cashToCollect: 275 } };
     expect(plain(getTicketDelivery(sentOut)?.collection)).toBe('Cobrar $275.00 · paga con $300.00 · cambio $25.00');
     expect(plain(buildTicketText(sentOut, { businessName: 'Fonda Lupita' }))).toContain('*Cobrar $275.00 · paga con $300.00 · cambio $25.00*');
+    // Part paid by transfer meanwhile: it collects what is still owed, with more change.
+    expect(plain(getTicketDelivery({ ...sentOut, balance: 75 })?.collection)).toBe('Cobrar $75.00 · paga con $300.00 · cambio $225.00');
     // Nothing to collect: no bill said, sent out collecting nothing, or paid.
     expect(getTicketDelivery(base)?.collection).toBeNull();
     expect(getTicketDelivery({ ...base, delivery: { ...base.delivery!, paysWith: 500, dispatchedAt: '2026-10-13T19:05:00Z' } })?.collection).toBeNull();

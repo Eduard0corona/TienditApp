@@ -459,7 +459,8 @@ function refreshReceivable(data: DemoData) {
 const courierRoutes: ExtraRoutes = (data, helpers) => [
   ['GET', /^\/courier-settlements\/pending-orders$/, () => helpers.ok({ owed: data.courierOwed, onTheWay: data.courierOnTheWay, truncated: false })],
   ['GET', /^\/courier-settlements$/, (_match, query) => helpers.ok(helpers.paginate(data.courierSettlements, query, 10))],
-  ['GET', /^\/courier-settlements\/([^/]+)$/, (match) => helpers.ok(data.courierDetails[match[1]])],
+  // A settlement by its id, as the API's {id:guid} (never «receivable» nor «pending-orders», answered above and in the shared mocks).
+  ['GET', /^\/courier-settlements\/(liq-[^/]+)$/, (match) => helpers.ok(data.courierDetails[match[1]])],
   ['POST', /^\/courier-settlements$/, (_match, _query, body: { orderIds: string[]; handedAmount: number; method: number;
     adjustments: Array<{ kind: number; description: string | null; amount: number }>; reference: string | null; notes: string | null }) => {
     const paid = data.courierOwed.filter((order: { orderId: string }) => body.orderIds.includes(order.orderId));

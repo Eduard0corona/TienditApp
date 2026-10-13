@@ -33,6 +33,14 @@ export function changeFor(paysWith: number, toCollect: number): number {
   return Math.max(0, toCents(paysWith) - toCents(toCollect)) / 100;
 }
 
+/**
+ * What the courier still collects of what it went out to collect: less if part was paid meanwhile (a transfer), nothing once
+ * the order is paid. Mirrors the API (what it owes is the balance, Order.AwaitsCourierCash).
+ */
+export function stillToCollect(cashToCollect: number, balance: number): number {
+  return Math.max(0, Math.min(toCents(cashToCollect), toCents(balance))) / 100;
+}
+
 /** «Cobra $275.00 · paga con $500.00 · cambio $225.00», or without the bill when there is none. */
 export function describeCollection(toCollect: number, paysWith?: number | null): string {
   const parts = [`Cobra ${formatMoney(toCollect)}`];

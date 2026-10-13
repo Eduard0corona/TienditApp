@@ -13,6 +13,7 @@ public class CourierReceivableDto
     public DateTimeOffset? OldestDispatchedAt { get; set; }
     /// <summary>Orders on their way that it will collect.</summary>
     public int OnTheWayOrders { get; set; }
+    /// <summary>What it still collects of them: what it went out to collect, or the balance when part was paid meanwhile.</summary>
     public decimal OnTheWayAmount { get; set; }
     public DateTimeOffset? LastSettledAt { get; set; }
 }
