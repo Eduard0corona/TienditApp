@@ -28,13 +28,28 @@ public class DeliveryZoneTests
         var zone = new DeliveryZone(TenantId, Fields(postalCodes: ["72000", "72005"]));
         var kept = zone.PostalCodes.Single(code => code.PostalCode == "72000");
 
-        zone.Update(Fields("Centro y Angelópolis", fee: 45m, postalCodes: ["72000", "72830"]));
+        Assert.Equal(1, zone.Revision);
+        Assert.True(zone.Update(Fields("Centro y Angelópolis", fee: 45m, postalCodes: ["72000", "72830"])));
 
+        Assert.Equal(2, zone.Revision);
         Assert.Equal("Centro y Angelópolis", zone.Name);
         Assert.Equal(45m, zone.Fee);
         Assert.Equal(["72000", "72830"], zone.PostalCodes.Select(code => code.PostalCode));
         // The same row, not a new one: only what changed reaches the database.
         Assert.Same(kept, zone.PostalCodes.Single(code => code.PostalCode == "72000"));
+    }
+
+    [Fact]
+    public void Update_WithWhatTheZoneAlreadyHas_ShouldChangeNothing_NotEvenTheRevision()
+    {
+        var zone = new DeliveryZone(TenantId, Fields(" Centro", fee: 35m, freeDeliveryFrom: 400m, postalCodes: ["72005", "72000"]));
+
+        Assert.False(zone.Update(Fields("Centro ", fee: 35.00m, freeDeliveryFrom: 400m, postalCodes: ["72000", " 72005", "72000"])));
+        Assert.Equal(1, zone.Revision);
+
+        // Turning it off is a change like any other.
+        Assert.True(zone.Update(Fields("Centro", fee: 35m, freeDeliveryFrom: 400m, postalCodes: ["72000", "72005"], isActive: false)));
+        Assert.Equal(2, zone.Revision);
     }
 
     [Theory]

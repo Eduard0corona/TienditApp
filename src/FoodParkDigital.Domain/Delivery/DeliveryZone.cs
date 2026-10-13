@@ -43,7 +43,8 @@ public class DeliveryZone : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(TenantRequiredMessage);
 
         TenantId = tenantId;
-        Apply(fields);
+        Apply(Normalize(fields));
+        Revision = 1;
     }
 
     public Guid TenantId { get; private set; }
@@ -61,11 +62,26 @@ public class DeliveryZone : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>An inactive zone keeps its postal codes but reaches none of them.</summary>
     public bool IsActive { get; private set; }
 
+    /// <summary>Starts at 1 and goes up by one with every change; a change made over an older one is refused.</summary>
+    public int Revision { get; private set; }
+
     /// <summary>In numeric order, whatever order the database read them in.</summary>
     public IReadOnlyCollection<DeliveryZonePostalCode> PostalCodes
         => _postalCodes.OrderBy(code => code.PostalCode, StringComparer.Ordinal).ToList().AsReadOnly();
 
-    public void Update(DeliveryZoneFields fields) => Apply(fields);
+    /// <summary>Takes <paramref name="fields"/>; false, and nothing changes, when they are what the zone already has.</summary>
+    public bool Update(DeliveryZoneFields fields)
+    {
+        var zone = Normalize(fields);
+        if (zone.Name == Name && zone.Fee == Fee && zone.MinimumOrder == MinimumOrder
+            && zone.FreeDeliveryFrom == FreeDeliveryFrom && zone.IsActive == IsActive
+            && zone.PostalCodes.SetEquals(_postalCodes.Select(existing => existing.PostalCode)))
+            return false;
+
+        Apply(zone);
+        Revision++;
+        return true;
+    }
 
     /// <summary>Whether it delivers to <paramref name="postalCode"/> now: active and with that postal code.</summary>
     public bool Covers(string? postalCode)
@@ -90,7 +106,7 @@ public class DeliveryZone : AuditableEntity, ITenantScoped, IAggregateRoot
     public static string NotAPostalCodeMessage(string written)
         => string.Create(CultureInfo.InvariantCulture, $"«{written}» no es un código postal: lleva 5 dígitos.");
 
-    private void Apply(DeliveryZoneFields fields)
+    private static Normalized Normalize(DeliveryZoneFields fields)
     {
         ArgumentNullException.ThrowIfNull(fields);
 
@@ -123,20 +139,28 @@ public class DeliveryZone : AuditableEntity, ITenantScoped, IAggregateRoot
         if (postalCodes.Count > MaxPostalCodes)
             throw new DomainException(TooManyPostalCodesMessage);
 
-        Name = name;
-        Fee = fields.Fee;
-        MinimumOrder = fields.MinimumOrder;
-        FreeDeliveryFrom = fields.FreeDeliveryFrom;
-        IsActive = fields.IsActive;
+        return new Normalized(name, fields.Fee, fields.MinimumOrder, fields.FreeDeliveryFrom, fields.IsActive, postalCodes);
+    }
+
+    private void Apply(Normalized zone)
+    {
+        Name = zone.Name;
+        Fee = zone.Fee;
+        MinimumOrder = zone.MinimumOrder;
+        FreeDeliveryFrom = zone.FreeDeliveryFrom;
+        IsActive = zone.IsActive;
 
         // The ones it keeps stay as they are; only the ones taken out go and only the new ones come in.
-        _postalCodes.RemoveAll(existing => !postalCodes.Contains(existing.PostalCode));
-        foreach (var code in postalCodes.Where(code => _postalCodes.All(existing => existing.PostalCode != code)))
+        _postalCodes.RemoveAll(existing => !zone.PostalCodes.Contains(existing.PostalCode));
+        foreach (var code in zone.PostalCodes.Where(code => _postalCodes.All(existing => existing.PostalCode != code)))
             _postalCodes.Add(new DeliveryZonePostalCode(TenantId, Id, code));
     }
 
     private static bool IsAmount(decimal amount, decimal max, bool allowZero)
         => (allowZero ? amount >= 0 : amount > 0) && amount <= max && decimal.Round(amount, 2) == amount;
+
+    private sealed record Normalized(
+        string Name, decimal Fee, decimal MinimumOrder, decimal? FreeDeliveryFrom, bool IsActive, SortedSet<string> PostalCodes);
 }
 
 /// <summary>What a zone is made of, as the business writes it: the postal codes in any order, repeated or with spaces.</summary>

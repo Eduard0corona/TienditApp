@@ -7,14 +7,14 @@ SET NOCOUNT ON;
 
 -- 1. Antes: últimas migraciones aplicadas. Con master desplegado (la Fase 22A), la más reciente es
 --    20261012204959_AddBranchServiceMode. Si es anterior, revisa primero el verify.sql de su carpeta:
---    apply.sql también aplica las que falten. Después: 20261013001425_AddDeliveryZones.
+--    apply.sql también aplica las que falten. Después: 20261013002425_AddDeliveryZones.
 SELECT TOP (5) [MigrationId], [ProductVersion]
 FROM [__EFMigrationsHistory]
 ORDER BY [MigrationId] DESC;
 
 -- 2. Después: las columnas de [DeliveryZones] y [DeliveryZonePostalCodes]: los montos en
---    decimal(18,2), el nombre en nvarchar(60) ([Largo] va en bytes: 120), el código postal en
---    varchar(5), y nulos solo en [FreeDeliveryFrom], [CreatedBy], [UpdatedAt] y [UpdatedBy]. Antes de
+--    decimal(18,2), el nombre en nvarchar(60) ([Largo] va en bytes: 120), la revisión en int, el
+--    código postal en varchar(5), y nulos solo en [FreeDeliveryFrom], [CreatedBy], [UpdatedAt] y [UpdatedBy]. Antes de
 --    aplicar y después de rollback.sql: ninguna fila.
 SELECT
     OBJECT_NAME(c.[object_id]) AS [Tabla],
@@ -29,8 +29,8 @@ INNER JOIN sys.types t ON t.[user_type_id] = c.[user_type_id]
 WHERE c.[object_id] IN (OBJECT_ID(N'dbo.DeliveryZones'), OBJECT_ID(N'dbo.DeliveryZonePostalCodes'))
 ORDER BY [Tabla], c.[column_id];
 
--- 3. Después: las restricciones CHECK, tres de [DeliveryZones] (_Fee, _FreeDeliveryFrom y
---    _MinimumOrder) y una de [DeliveryZonePostalCodes] (_PostalCode); la llave
+-- 3. Después: las restricciones CHECK, cuatro de [DeliveryZones] (_Fee, _FreeDeliveryFrom,
+--    _MinimumOrder y _Revision) y una de [DeliveryZonePostalCodes] (_PostalCode); la llave
 --    FK_DeliveryZonePostalCodes_DeliveryZones_DeliveryZoneId en cascada (CASCADE); y los índices: las
 --    dos llaves primarias, IX_DeliveryZonePostalCodes_TenantId_PostalCode ([Unico] 1),
 --    IX_DeliveryZonePostalCodes_DeliveryZoneId e IX_DeliveryZones_TenantId_Name. SQL Server muestra

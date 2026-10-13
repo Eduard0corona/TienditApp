@@ -1,8 +1,8 @@
 ﻿-- =====================================================================================
--- TienditApp (FoodParkDigital): revierte la Fase 22B, 20261013001425_AddDeliveryZones,
+-- TienditApp (FoodParkDigital): revierte la Fase 22B, 20261013002425_AddDeliveryZones,
 -- hasta la migración anterior, 20261012204959_AddBranchServiceMode.
 -- Generado el 2026-10-13 con `dotnet ef migrations script
--- 20261013001425_AddDeliveryZones 20261012204959_AddBranchServiceMode
+-- 20261013002425_AddDeliveryZones 20261012204959_AddBranchServiceMode
 -- --idempotent` (EF Core 10.0.12). Debajo del bloque SET, el contenido es el que genera EF.
 --
 -- Se detiene sin cambiar nada (error 50012; con -b, sqlcmd termina ahí) si hay zonas de entrega
@@ -28,7 +28,7 @@ GO
 BEGIN TRANSACTION;
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
 
@@ -39,7 +39,7 @@ END;
 
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     DROP TABLE [DeliveryZonePostalCodes];
@@ -47,7 +47,7 @@ END;
 
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     DROP TABLE [DeliveryZones];
@@ -55,11 +55,11 @@ END;
 
 IF EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     DELETE FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones';
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones';
 END;
 
 COMMIT;

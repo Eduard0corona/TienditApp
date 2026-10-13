@@ -1,8 +1,11 @@
 using FoodParkDigital.Application.Common;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Delivery;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.AiAgents.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -15,7 +18,8 @@ namespace FoodParkDigital.Application.AiAgents;
 /// There is no language model behind it, so it never promises what it cannot do: orders go through the online menu
 /// or a person of the team. A question about the hours gets the real ones, special days included, read as the public
 /// menu reads them; a question about where it is, when its main branch only delivers, gets that it has no premises to
-/// visit. No reply carries the address of a branch.
+/// visit; and a question about delivering, when it has delivery zones, gets whether they reach the postal code written
+/// and what they charge (or a request to write one). No reply carries the address of a branch.
 /// </summary>
 public class AiAgentAutoReplyService : IAiAgentAutoReplyService
 {
@@ -44,6 +48,16 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
     // «Mi dirección es…», «te paso mi ubicación»: the customer gives theirs, often for a delivery, and does not ask where
     // the business is.
     private static readonly string[] CustomerAddressKeywords = ["mi direccion", "mi ubicacion"];
+
+    // Whether and where it delivers: with a postal code, its zones say if it reaches it and what it charges.
+    private static readonly string[] DeliveryKeywords =
+    [
+        "envio", "envios", "envian", "envias", "mandan", "domicilio", "entregan", "entregas", "reparten", "reparto",
+        "costo de envio", "codigo postal", "cp", "zona", "zonas", "colonia"
+    ];
+
+    // What may come around a postal code written alone: «72000», «CP 72000», «mi código postal es el 72000».
+    private static readonly HashSet<string> PostalCodeFillerWords = ["mi", "es", "el", "cp", "codigo", "postal", "c", "p"];
 
     // Without hours to tell, the description the business wrote answers both.
     private static readonly string[] InformationKeywords = [.. HoursKeywords, .. LocationKeywords];
@@ -108,7 +122,12 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         var locationAsked = AutoReplyKeywords.ContainsAny(words, LocationKeywords)
             && !AutoReplyKeywords.ContainsAny(words, CustomerAddressKeywords);
         var deliveryOnly = locationAsked && await TryReadDeliveryOnlyAsync(tenantId, cancellationToken);
-        var context = hoursAsked || catalog || deliveryOnly ? await TryReadContextAsync(tenantId, hoursAsked, cancellationToken) : null;
+        var coverage = AutoReplyKeywords.ContainsAny(words, DeliveryKeywords) || IsOnlyAPostalCode(words)
+            ? await TryReadCoverageAsync(tenantId, words.FirstOrDefault(DeliveryZone.IsPostalCode), cancellationToken)
+            : null;
+        var context = hoursAsked || catalog || deliveryOnly || coverage is not null
+            ? await TryReadContextAsync(tenantId, hoursAsked, cancellationToken)
+            : null;
 
         // The hours first, when there is something to say about them; the texts of the business go around them.
         if (hoursAsked && context?.Hours is { } hours && BusinessHoursText.ForChat(hours) is { } hoursText)
@@ -119,6 +138,7 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
             reply.System(hoursText);
             if (deliveryOnly)
                 reply.System(DeliveryOnlyText);
+            reply.System(coverage);
             // Without weekly hours there is no week to tell: the description may say how the business attends.
             if (locationAsked || !hours.HasWeeklyHours)
                 reply.Owner(agent.BusinessDescription);
@@ -130,14 +150,19 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
             return reply.Compose();
         }
 
-        // Where it is, for a business without premises: there is nowhere to come, the food goes to the customer. A
-        // greeting or a catalog question in the same message goes around it, as around the hours.
-        if (deliveryOnly)
+        // Where it is, for a business without premises: there is nowhere to come, the food goes to the customer. Whether
+        // it delivers to a postal code, from its zones. A greeting or a catalog question in the same message goes around
+        // them, as around the hours.
+        if (deliveryOnly || coverage is not null)
         {
             var reply = new AutoReplyComposer();
             if (greeting)
                 reply.Owner(agent.WelcomeMessage);
-            reply.System(DeliveryOnlyText).Owner(agent.BusinessDescription);
+            if (deliveryOnly)
+                reply.System(DeliveryOnlyText);
+            reply.System(coverage);
+            if (locationAsked)
+                reply.Owner(agent.BusinessDescription);
             if (catalog)
                 reply.Owner(agent.BusinessProductsAndServices);
             reply.System(Invitation(context, catalog, hoursReply: false));
@@ -168,6 +193,54 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
 
         return agent.FallbackMessage;
     }
+
+    /// <summary>
+    /// What the business answers about delivering: whether its zones reach <paramref name="postalCode"/> and what they
+    /// charge, or, without one, to write it. Null when it has no active zone (the reply goes on as before them) or when
+    /// they could not be read, which is logged.
+    /// </summary>
+    private async Task<string?> TryReadCoverageAsync(Guid tenantId, string? postalCode, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!await DeliveryZoneLookup.AnyActiveAsync(_context, tenantId, cancellationToken))
+                return null;
+            if (postalCode is null)
+                return AskForPostalCodeText;
+
+            var zone = await DeliveryZoneLookup.FindAsync(_context, tenantId, postalCode, cancellationToken);
+            return zone is null ? NotCoveredText(postalCode) : CoveredText(postalCode, zone);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Tenant id only: never the customer's phone, text or postal code.
+            _logger.LogError(ex, "Delivery zones for the automatic reply failed for tenant {TenantId}", tenantId);
+            return null;
+        }
+    }
+
+    public const string AskForPostalCodeText =
+        "Sí hacemos entregas a domicilio. Escríbenos tu código postal y te decimos si llegamos y cuánto cuesta el envío.";
+
+    public static string NotCoveredText(string postalCode) => $"Por ahora no llegamos al {postalCode}.";
+
+    /// <summary>«Sí llegamos al 72000: el envío cuesta $35.00. Pedido mínimo de $150.00. Envío gratis en pedidos desde $400.00.»</summary>
+    public static string CoveredText(string postalCode, DeliveryZoneCoverage zone)
+    {
+        var text = zone.Fee == 0
+            ? $"Sí llegamos al {postalCode}: el envío es gratis."
+            : $"Sí llegamos al {postalCode}: el envío cuesta {OrderStatusLabels.FormatMoney(zone.Fee)}.";
+        if (zone.MinimumOrder > 0)
+            text += $" Pedido mínimo de {OrderStatusLabels.FormatMoney(zone.MinimumOrder)}.";
+        if (zone.FreeDeliveryFrom is { } freeFrom)
+            text += $" Envío gratis en pedidos desde {OrderStatusLabels.FormatMoney(freeFrom)}.";
+        return text;
+    }
+
+    /// <summary>A postal code written alone, maybe with «CP» or «mi código postal es el» around it.</summary>
+    private static bool IsOnlyAPostalCode(IReadOnlyList<string> words)
+        => words.Count(DeliveryZone.IsPostalCode) == 1
+            && words.All(word => DeliveryZone.IsPostalCode(word) || PostalCodeFillerWords.Contains(word));
 
     /// <summary>
     /// Whether the main branch of the business only delivers. A failure is logged and the reply goes on as for a

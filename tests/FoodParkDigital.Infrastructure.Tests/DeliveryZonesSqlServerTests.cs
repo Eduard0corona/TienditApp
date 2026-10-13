@@ -19,7 +19,7 @@ namespace FoodParkDigital.Infrastructure.Tests;
 public class DeliveryZonesSqlServerTests
 {
     private const string BeforeDeliveryZones = "20261012204959_AddBranchServiceMode";
-    private const string Migration = "20261013001425_AddDeliveryZones";
+    private const string Migration = "20261013002425_AddDeliveryZones";
 
     [SqlServerFact]
     public async Task Tables_ShouldHaveTheirIndexesAndKeys()
@@ -136,18 +136,19 @@ public class DeliveryZonesSqlServerTests
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         var (tenant, _) = await SeedAsync(database);
-        (decimal Fee, decimal Minimum, decimal? FreeFrom, string PostalCode)[] rows =
+        (decimal Fee, decimal Minimum, decimal? FreeFrom, int Revision, string PostalCode)[] rows =
         [
-            (-1m, 0m, null, "72000"),
-            (10_000.01m, 0m, null, "72000"),
-            (35m, -0.01m, null, "72000"),
-            (35m, 100_000.01m, null, "72000"),
-            (35m, 0m, 0m, "72000"),
-            (35m, 0m, 100_000.01m, "72000"),
-            (0m, 0m, 400m, "72000"),
-            (35m, 0m, null, "7200"),
-            (35m, 0m, null, "7200a"),
-            (35m, 0m, null, "7200 "),
+            (-1m, 0m, null, 1, "72000"),
+            (10_000.01m, 0m, null, 1, "72000"),
+            (35m, -0.01m, null, 1, "72000"),
+            (35m, 100_000.01m, null, 1, "72000"),
+            (35m, 0m, 0m, 1, "72000"),
+            (35m, 0m, 100_000.01m, 1, "72000"),
+            (0m, 0m, 400m, 1, "72000"),
+            (35m, 0m, null, 0, "72000"),
+            (35m, 0m, null, 1, "7200"),
+            (35m, 0m, null, 1, "7200a"),
+            (35m, 0m, null, 1, "7200 "),
         ];
         await using var context = database.CreateContext();
 
@@ -157,8 +158,8 @@ public class DeliveryZonesSqlServerTests
             var error = await Assert.ThrowsAsync<SqlException>(async () =>
             {
                 await context.Database.ExecuteSqlInterpolatedAsync($"""
-                    INSERT INTO [DeliveryZones] ([Id], [TenantId], [Name], [Fee], [MinimumOrder], [FreeDeliveryFrom], [IsActive], [CreatedAt])
-                    VALUES ({zoneId}, {tenant.Id}, N'Centro', {row.Fee}, {row.Minimum}, {row.FreeFrom}, 1, SYSDATETIMEOFFSET())
+                    INSERT INTO [DeliveryZones] ([Id], [TenantId], [Name], [Fee], [MinimumOrder], [FreeDeliveryFrom], [IsActive], [Revision], [CreatedAt])
+                    VALUES ({zoneId}, {tenant.Id}, N'Centro', {row.Fee}, {row.Minimum}, {row.FreeFrom}, 1, {row.Revision}, SYSDATETIMEOFFSET())
                     """);
                 await context.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO [DeliveryZonePostalCodes] ([Id], [TenantId], [DeliveryZoneId], [PostalCode])

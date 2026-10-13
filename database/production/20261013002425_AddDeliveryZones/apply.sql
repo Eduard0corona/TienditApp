@@ -1,15 +1,16 @@
 ﻿-- =====================================================================================
 -- TienditApp (FoodParkDigital): migraciones para producción (SQL Server / Azure SQL).
--- Generado el 2026-10-13 con `dotnet ef migrations script 0 20261013001425_AddDeliveryZones --idempotent`
+-- Generado el 2026-10-13 con `dotnet ef migrations script 0 20261013002425_AddDeliveryZones --idempotent`
 -- (EF Core 10.0.12) desde la rama claude/amazing-babbage-175ks9 (Fase 22B, sobre master con la Fase 22A).
 -- Debajo del bloque SET, el contenido es el que genera EF, sin cambios.
 --
 -- Idempotente: cada migración se aplica solo si falta en [__EFMigrationsHistory]. En una base que
 -- ya tiene 20261012204959_AddBranchServiceMode (lo que exige master hoy) solo ejecuta
--- 20261013001425_AddDeliveryZones, las zonas de entrega por código postal:
+-- 20261013002425_AddDeliveryZones, las zonas de entrega por código postal:
 --   - crea [DeliveryZones]: nombre, costo de envío, pedido mínimo, «envío gratis desde» (montos en
---     decimal(18,2)) y si está activa, con tres restricciones CHECK (CK_DeliveryZones_Fee,
---     _MinimumOrder y _FreeDeliveryFrom) y el índice IX_DeliveryZones_TenantId_Name;
+--     decimal(18,2)), si está activa y su revisión (para no pisar el cambio de otra persona), con
+--     cuatro restricciones CHECK (CK_DeliveryZones_Fee, _MinimumOrder, _FreeDeliveryFrom y
+--     _Revision) y el índice IX_DeliveryZones_TenantId_Name;
 --   - crea [DeliveryZonePostalCodes]: los códigos postales de cada zona (varchar(5), cinco dígitos,
 --     CK_DeliveryZonePostalCodes_PostalCode), con la llave a su zona en cascada, el índice único
 --     IX_DeliveryZonePostalCodes_TenantId_PostalCode (un código postal en una sola zona del
@@ -5893,7 +5894,7 @@ GO
 BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     CREATE TABLE [DeliveryZones] (
@@ -5904,6 +5905,7 @@ BEGIN
         [MinimumOrder] decimal(18,2) NOT NULL,
         [FreeDeliveryFrom] decimal(18,2) NULL,
         [IsActive] bit NOT NULL,
+        [Revision] int NOT NULL,
         [CreatedAt] datetimeoffset NOT NULL,
         [CreatedBy] nvarchar(max) NULL,
         [UpdatedAt] datetimeoffset NULL,
@@ -5911,13 +5913,14 @@ BEGIN
         CONSTRAINT [PK_DeliveryZones] PRIMARY KEY ([Id]),
         CONSTRAINT [CK_DeliveryZones_Fee] CHECK ([Fee] >= 0 AND [Fee] <= 10000),
         CONSTRAINT [CK_DeliveryZones_FreeDeliveryFrom] CHECK ([FreeDeliveryFrom] IS NULL OR ([FreeDeliveryFrom] > 0 AND [FreeDeliveryFrom] <= 100000 AND [Fee] > 0)),
-        CONSTRAINT [CK_DeliveryZones_MinimumOrder] CHECK ([MinimumOrder] >= 0 AND [MinimumOrder] <= 100000)
+        CONSTRAINT [CK_DeliveryZones_MinimumOrder] CHECK ([MinimumOrder] >= 0 AND [MinimumOrder] <= 100000),
+        CONSTRAINT [CK_DeliveryZones_Revision] CHECK ([Revision] >= 1)
     );
 END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     CREATE TABLE [DeliveryZonePostalCodes] (
@@ -5933,7 +5936,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     CREATE INDEX [IX_DeliveryZonePostalCodes_DeliveryZoneId] ON [DeliveryZonePostalCodes] ([DeliveryZoneId]);
@@ -5941,7 +5944,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     CREATE UNIQUE INDEX [IX_DeliveryZonePostalCodes_TenantId_PostalCode] ON [DeliveryZonePostalCodes] ([TenantId], [PostalCode]);
@@ -5949,7 +5952,7 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     CREATE INDEX [IX_DeliveryZones_TenantId_Name] ON [DeliveryZones] ([TenantId], [Name]);
@@ -5957,11 +5960,11 @@ END;
 
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20261013001425_AddDeliveryZones'
+    WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261013001425_AddDeliveryZones', N'10.0.12');
+    VALUES (N'20261013002425_AddDeliveryZones', N'10.0.12');
 END;
 
 COMMIT;

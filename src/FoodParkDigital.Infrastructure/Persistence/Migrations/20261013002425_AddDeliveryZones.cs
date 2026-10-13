@@ -22,6 +22,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     MinimumOrder = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     FreeDeliveryFrom = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
+                    Revision = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
@@ -33,6 +34,7 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     table.CheckConstraint("CK_DeliveryZones_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
                     table.CheckConstraint("CK_DeliveryZones_FreeDeliveryFrom", "[FreeDeliveryFrom] IS NULL OR ([FreeDeliveryFrom] > 0 AND [FreeDeliveryFrom] <= 100000 AND [Fee] > 0)");
                     table.CheckConstraint("CK_DeliveryZones_MinimumOrder", "[MinimumOrder] >= 0 AND [MinimumOrder] <= 100000");
+                    table.CheckConstraint("CK_DeliveryZones_Revision", "[Revision] >= 1");
                 });
 
             migrationBuilder.CreateTable(

@@ -17,6 +17,7 @@ public class DeliveryZoneConfiguration : IEntityTypeConfiguration<DeliveryZone>
             table.HasCheckConstraint(
                 "CK_DeliveryZones_FreeDeliveryFrom",
                 "[FreeDeliveryFrom] IS NULL OR ([FreeDeliveryFrom] > 0 AND [FreeDeliveryFrom] <= 100000 AND [Fee] > 0)");
+            table.HasCheckConstraint("CK_DeliveryZones_Revision", "[Revision] >= 1");
         });
         builder.HasKey(x => x.Id);
 
@@ -26,6 +27,7 @@ public class DeliveryZoneConfiguration : IEntityTypeConfiguration<DeliveryZone>
         builder.Property(x => x.MinimumOrder).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(x => x.FreeDeliveryFrom).HasColumnType("decimal(18,2)");
         builder.Property(x => x.IsActive).IsRequired();
+        builder.Property(x => x.Revision).IsConcurrencyToken();
 
         // The list, by name.
         builder.HasIndex(x => new { x.TenantId, x.Name });

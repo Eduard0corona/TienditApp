@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261013001425_AddDeliveryZones")]
+    [Migration("20261013002425_AddDeliveryZones")]
     partial class AddDeliveryZones
     {
         /// <inheritdoc />
@@ -1071,6 +1071,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("nvarchar(60)");
 
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1091,6 +1095,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_DeliveryZones_FreeDeliveryFrom", "[FreeDeliveryFrom] IS NULL OR ([FreeDeliveryFrom] > 0 AND [FreeDeliveryFrom] <= 100000 AND [Fee] > 0)");
 
                             t.HasCheckConstraint("CK_DeliveryZones_MinimumOrder", "[MinimumOrder] >= 0 AND [MinimumOrder] <= 100000");
+
+                            t.HasCheckConstraint("CK_DeliveryZones_Revision", "[Revision] >= 1");
                         });
                 });
 
