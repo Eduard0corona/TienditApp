@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitForElementToBeRemoved, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -29,6 +29,8 @@ describe('ConfirmProvider', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
 
     expect(onAnswer).toHaveBeenCalledWith(true);
+    // The dialog closes with a transition: the test ends once it has, or its timer would fire after the page is gone.
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'));
   });
 
   it('names the prompt after its title too', async () => {
@@ -41,5 +43,6 @@ describe('ConfirmProvider', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
 
     expect(onAnswer).toHaveBeenCalledWith('Merma');
+    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'));
   });
 });
