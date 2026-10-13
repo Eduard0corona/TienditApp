@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
@@ -147,7 +147,7 @@ describe('AppointmentsList', () => {
     expect(vi.mocked(appointmentsApi.create).mock.calls[0][0].visit)
       .toEqual({ postalCode: '72000', addressLine: 'Av. Juárez 123', references: undefined });
     // The form closes with a transition: the test ends once it has.
-    await waitForElementToBeRemoved(() => screen.queryByRole('dialog'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('keeps what was agreed at the same address, and says the customer hears of a new place', async () => {
