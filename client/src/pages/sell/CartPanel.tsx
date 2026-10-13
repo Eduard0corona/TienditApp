@@ -2,13 +2,16 @@ import { Link } from 'react-router-dom';
 import type { OrderChannel, OrderDto } from '../../types';
 import { PlatformCollectedBy } from '../../types';
 import { getPlatformName, type DeliveryPlatform } from '../../utils/deliveryPlatforms';
+import type { DeliveryZoneTerms } from '../../utils/homeDelivery';
 import { formatMoney } from '../../utils/money';
 import { getVatLabel, type OrderTotalsEstimate } from '../../utils/orderTotals';
+import { formatDeliveryFee } from '../../utils/ticket';
 import CartLines from './CartLines';
+import DeliveryOrderFields from './DeliveryOrderFields';
 import PlatformOrderFields from './PlatformOrderFields';
 import PlatformOriginPicker from './PlatformOriginPicker';
 import SaleDetailsForm from './SaleDetailsForm';
-import type { CartLine, ChatOrigin, SaleDetails, TabTarget } from './sellModel';
+import type { CartLine, ChatOrigin, SaleDelivery, SaleDetails, TabTarget } from './sellModel';
 
 interface CartPanelProps {
   /** A table's tab: the sale goes to the kitchen instead of being charged. */
@@ -30,8 +33,8 @@ interface CartPanelProps {
   onToggleDetails: () => void;
   isFood: boolean;
   phoneError: string;
-  /** Estimated on the device; the server computes the final total. */
-  totals: OrderTotalsEstimate;
+  /** Estimated on the device; the server computes the final total. With a delivery, its fee is one more concept. */
+  totals: OrderTotalsEstimate & { productsTotal: number | null; fee: number | null };
   pricesIncludeTax: boolean;
   saleError: string;
   /** The charge dialog shows its own error. */
@@ -53,6 +56,14 @@ interface CartPanelProps {
   online: boolean;
   /** Registers the order of the platform without charging it. */
   onRegisterPlatformOrder: () => void;
+  /** The business has active delivery zones and the order can go to an address (not a tab, a platform or services). */
+  deliveryOffered: boolean;
+  /** Where the order goes, or null when it does not go to an address. */
+  delivery: SaleDelivery | null;
+  onDeliveryChange: (delivery: SaleDelivery | null) => void;
+  /** The active zone that reaches the postal code written. */
+  deliveryZone: DeliveryZoneTerms | null;
+  deliveryProblem: string;
   /** The prices on screen are not yet those of where the sale comes from (the platform's app, or the menu). */
   pricesPending: boolean;
   /** Why the catalog of where the sale comes from did not load, if it did not. */
@@ -104,6 +115,16 @@ export default function CartPanel(props: CartPanelProps) {
           disabled={submitting}
         />
       )}
+      {props.deliveryOffered && (
+        <DeliveryOrderFields
+          delivery={props.delivery}
+          onChange={props.onDeliveryChange}
+          zone={props.deliveryZone}
+          problem={props.deliveryProblem}
+          disabled={submitting}
+          online={props.online}
+        />
+      )}
       {platform && (
         <PlatformOrderFields
           platform={platform}
@@ -147,9 +168,16 @@ export default function CartPanel(props: CartPanelProps) {
         isFood={props.isFood}
         phoneError={props.phoneError}
         forPlatform={platform !== null}
+        toAddress={props.delivery !== null}
       />
 
       <div className="sell-totals">
+        {totals.fee !== null && (
+          <div className="d-flex justify-content-between">
+            <span>Envío a domicilio</span>
+            <span className="ta-money">{formatDeliveryFee(totals.fee)}</span>
+          </div>
+        )}
         {!props.pricesIncludeTax && (
           <div className="d-flex justify-content-between">
             <span>Subtotal</span>

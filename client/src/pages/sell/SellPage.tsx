@@ -6,6 +6,7 @@ import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { useDeliveryPlatformChannels } from '../../api/queries';
+import { useDeliveryZones } from '../../api/deliveryZones';
 import { useFocusMode } from '../../components/layout/focusMode';
 import OpenDrawerModal from '../../components/cash/OpenDrawerModal';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
@@ -33,7 +34,17 @@ import {
 } from '../../utils/deliveryPlatforms';
 import { getChannelLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
+import {
+  ADDRESS_LINE_REQUIRED_MESSAGE,
+  belowMinimumMessage,
+  estimateDeliveryTotals,
+  findDeliveryZone,
+  meetsMinimum,
+  normalizePostalCode,
+  notCoveredMessage,
+} from '../../utils/homeDelivery';
 import { estimateOrderTotals } from '../../utils/orderTotals';
+import { isPostalCode } from '../../utils/postalCodes';
 import { hasCapability } from '../../utils/tenantCapabilities';
 import { allowsFractions } from '../../utils/units';
 import { getSelectionError, hasOptions } from '../../utils/productOptions';
@@ -120,7 +131,7 @@ export default function SellPage() {
     const draft = tabTarget ? null : readSellDraft(tenantId);
     return draft && isDeliveryPlatform(draft.channel)
       ? { ...NO_SALE_DETAILS, channel: draft.channel, externalOrderNumber: draft.externalOrderNumber, collectedBy: draft.collectedBy }
-      : NO_SALE_DETAILS;
+      : { ...NO_SALE_DETAILS, delivery: draft?.delivery ?? null };
   });
   // A folio left empty says so once a register was attempted, not while the cashier is still choosing products.
   const [folioChecked, setFolioChecked] = useState(false);
@@ -186,6 +197,7 @@ export default function SellPage() {
           channel: draft.channel,
           externalOrderNumber: draft.externalOrderNumber,
           collectedBy: draft.collectedBy,
+          delivery: draft.delivery ?? null,
           ...(toCounter ? COUNTER_ORIGIN : {}),
         });
         // The name for the bag of a platform's order is in sight with its folio: behind the link there are only notes.
@@ -308,21 +320,39 @@ export default function SellPage() {
     saveDraft(draft);
   }, [cart, details, saveDraft]);
 
-  const totals = useMemo(
-    () => estimateOrderTotals(
-      cart.map((line) => ({
-        unitPrice: line.unitPrice,
-        quantity: line.quantity,
-        ratePercent: line.ratePercent,
-        isExempt: line.isExempt,
-      })),
-      pricesIncludeTax,
-    ),
-    [cart, pricesIncludeTax],
-  );
   // A weighed product counts as one article, whatever it weighs.
   const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
+
+  // To the customer's address (Fase 22C): with the active zones of the business, never for a tab, a platform or services.
+  const zones = useDeliveryZones(access.sell && !tabTarget);
+  const activeZones = useMemo(() => (zones.data ?? []).filter((zone) => zone.isActive), [zones.data]);
+  const deliveryOffered = !tabTarget && !platform && !hasServices && activeZones.length > 0;
+  const delivery = deliveryOffered ? details.delivery : null;
+  const deliveryZone = delivery ? findDeliveryZone(activeZones, delivery.postalCode) : null;
+
+  const totals = useMemo(() => {
+    const lines = cart.map((line) => ({
+      unitPrice: line.unitPrice,
+      quantity: line.quantity,
+      ratePercent: line.ratePercent,
+      isExempt: line.isExempt,
+    }));
+    return deliveryZone
+      ? estimateDeliveryTotals(lines, pricesIncludeTax, deliveryZone, defaultTaxRate)
+      : { ...estimateOrderTotals(lines, pricesIncludeTax), productsTotal: null, fee: null };
+  }, [cart, pricesIncludeTax, deliveryZone, defaultTaxRate]);
+  // Quick feedback only: the server finds the zone, checks its minimum and charges its fee.
+  const deliveryPostalCode = delivery ? normalizePostalCode(delivery.postalCode) : '';
+  const deliveryProblem = !delivery ? ''
+    : !isPostalCode(deliveryPostalCode) ? 'Escribe el código postal de la entrega (5 dígitos).'
+    : !deliveryZone ? notCoveredMessage(deliveryPostalCode)
+    : totals.productsTotal !== null && !meetsMinimum(deliveryZone, totals.productsTotal)
+      ? belowMinimumMessage(deliveryPostalCode, deliveryZone.minimumOrder)
+      : !delivery.addressLine.trim() ? ADDRESS_LINE_REQUIRED_MESSAGE
+      : '';
+  // Said once the cashier wrote a whole postal code, not while typing it.
+  const deliveryHint = delivery && isPostalCode(deliveryPostalCode) ? deliveryProblem : '';
   // An order of a platform never sends the phone: what is in the hidden field does not stop it.
   const phoneError = !platform && details.customerPhone.trim() && !isPlausiblePhone(details.customerPhone)
     ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'
@@ -388,7 +418,8 @@ export default function SellPage() {
     if (draftLoadedFor.current !== tenantId) originChosen.current = true;
     setSaleError('');
     setFolioChecked(false);
-    setDetails((current) => (isDeliveryPlatform(channel) ? { ...current, channel } : { ...current, ...COUNTER_ORIGIN }));
+    // An order of a platform is taken by its courier: it never goes to an address of the business's zones.
+    setDetails((current) => (isDeliveryPlatform(channel) ? { ...current, channel, delivery: null } : { ...current, ...COUNTER_ORIGIN }));
   };
 
   const handleSearchKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -443,6 +474,10 @@ export default function SellPage() {
       setSaleError(platformProblem);
       return false;
     }
+    if (deliveryProblem) {
+      setSaleError(deliveryProblem);
+      return false;
+    }
     return true;
   };
 
@@ -456,6 +491,11 @@ export default function SellPage() {
       setSaleError(platformProblem);
       return;
     }
+    // The address first, before taking the money: the zone decides what it costs.
+    if (deliveryProblem) {
+      setSaleError(deliveryProblem);
+      return;
+    }
     setSaleError('');
     setCartOpenOnPhone(false);
     // Offline the sale waits on the device and its payments enter the drawer open when it is sent.
@@ -465,14 +505,15 @@ export default function SellPage() {
       return;
     }
     setChargeOpen(true);
-  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, cashClosed, online]);
+  }, [cart.length, submitting, tabTarget, canCharge, pricesPending, platformProblem, folioProblem, deliveryProblem, cashClosed, online]);
 
   const buildOrderRequest = (): CreateOrderRequest => ({
     customerName: details.customerName.trim() || undefined,
     // The app of a platform shares neither the customer's phone nor a table.
     customerPhone: platform ? undefined : details.customerPhone.trim() || undefined,
     customerNotes: details.orderNotes.trim() || undefined,
-    tableNumber: isFood && !platform ? details.tableNumber.trim() || undefined : undefined,
+    // An order sent to an address has no table: the address says where it goes.
+    tableNumber: isFood && !platform && !delivery ? details.tableNumber.trim() || undefined : undefined,
     // A service in the cart makes it a service order (pieces to track, if the service is trackable).
     orderType: hasServices ? OrderType.Service : OrderType.Retail,
     items: cart.map((line) => ({
@@ -486,6 +527,13 @@ export default function SellPage() {
     externalOrderNumber: platform ? normalizePlatformFolio(details.externalOrderNumber) : undefined,
     collectedBy: platform ? details.collectedBy : undefined,
     branchId: saleBranchId,
+    delivery: delivery
+      ? {
+        postalCode: normalizePostalCode(delivery.postalCode),
+        addressLine: delivery.addressLine.trim(),
+        references: delivery.references.trim() || undefined,
+      }
+      : undefined,
   });
 
   /** Keeps a charged sale on the device when the connection is down; it is sent with its key when it comes back. */
@@ -560,7 +608,7 @@ export default function SellPage() {
     // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid, a service
     // (its pieces are picked up with the server's folio) or an order of a platform (checked against today's folios)
     // need the server.
-    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices && !platform;
+    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices && !platform && !delivery;
     // The same key on a retry returns this sale instead of charging twice; another cart is another sale.
     const draft = toDraft(cart, details);
     const sale = describeSale(draft);
@@ -723,6 +771,14 @@ export default function SellPage() {
       hasServices={hasServices}
       online={online}
       onRegisterPlatformOrder={registerPlatformOrder}
+      deliveryOffered={deliveryOffered}
+      delivery={delivery}
+      onDeliveryChange={(next) => {
+        setSaleError('');
+        setDetails((current) => ({ ...current, delivery: next }));
+      }}
+      deliveryZone={deliveryZone}
+      deliveryProblem={deliveryHint}
       pricesPending={pricesPending}
       pricesError={catalog.loadError}
       onRetryPrices={() => void catalog.reload()}

@@ -6,9 +6,11 @@ import { getVatLabel } from '../../utils/orderTotals';
 import {
   billedItems,
   chargedPrice,
+  formatDeliveryFee,
   formatTicketDate,
   formatTicketQuantity,
   getTicketCustomerName,
+  getTicketDelivery,
   getTicketPaymentTotals,
   getTicketPlatform,
   type TicketExtras,
@@ -21,7 +23,8 @@ interface SaleTicketProps extends TicketExtras {
 /**
  * Customer ticket: what was bought, the IVA breakdown computed by the server and how it was paid. An order of a
  * delivery platform carries its folio and the name for the bag; when the platform charged it, the ticket packs the bag
- * with the products and no prices. Never its commission, withholdings or net.
+ * with the products and no prices. Never its commission, withholdings or net. An order sent to the customer's address
+ * carries where it goes, the courier's folio and its delivery as one more line, already in the total.
  */
 export default function SaleTicket({ order, businessName, logoUrl, provisional }: SaleTicketProps) {
   const taxLines = order.taxBreakdown.filter((line) => line.taxAmount > 0);
@@ -29,6 +32,7 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
   const customerName = getTicketCustomerName(order);
   const platform = getTicketPlatform(order);
   const packing = platform?.packing ?? false;
+  const delivery = getTicketDelivery(order);
   // Without connection the logo may not load: the ticket goes on with the name only.
   const [failedLogo, setFailedLogo] = useState<string | null>(null);
 
@@ -45,6 +49,14 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
         <div className="small">{formatTicketDate(order.createdAt)}</div>
         {order.tableNumber && <div className="small">Mesa/Ref.: {order.tableNumber}</div>}
         {customerName && <div className="small">{platform ? 'Bolsa' : 'Cliente'}: {customerName}</div>}
+        {delivery && (
+          <div className="mt-1">
+            <div className="fw-bold">A domicilio</div>
+            <div className="small">{delivery.address}</div>
+            {delivery.references && <div className="small">Ref.: {delivery.references}</div>}
+            {delivery.courier && <div className="small fw-bold">{delivery.courier}</div>}
+          </div>
+        )}
       </div>
 
       <table className="ta-ticket-lines">
@@ -62,6 +74,13 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
               {!packing && <td className="text-end align-top ta-money">{formatMoney(chargedPrice(item))}</td>}
             </tr>
           ))}
+          {delivery && (
+            <tr>
+              <td></td>
+              <td className="w-100">Envío a domicilio</td>
+              <td className="text-end align-top ta-money">{formatDeliveryFee(delivery.fee)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
 

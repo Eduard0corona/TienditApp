@@ -45,7 +45,7 @@ function wordsInCode(): Map<string, string> {
  */
 const NOT_CLASSES = new Set([
   'available', 'bottom', 'code', 'content', 'dark', 'day', 'function', 'logo', 'new', 'number', 'off', 'pointer',
-  'string', 'token',
+  'string', 'token', 'url',
 ]);
 
 describe('classes the app takes from Hyper', () => {

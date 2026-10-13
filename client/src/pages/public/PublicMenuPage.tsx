@@ -16,7 +16,16 @@ import {
   describeSpecialDay,
   describeTodayHours,
 } from '../../utils/openingHours';
+import {
+  belowMinimumMessage,
+  estimateDeliveryTotals,
+  meetsMinimum,
+  normalizePostalCode,
+  notCoveredMessage,
+  type DeliveryTerms,
+} from '../../utils/homeDelivery';
 import { estimateOrderTotals, resolveProductVat } from '../../utils/orderTotals';
+import { isPostalCode } from '../../utils/postalCodes';
 import {
   getLineKey,
   getOptionsLabel,
@@ -25,6 +34,7 @@ import {
 } from '../../utils/productOptions';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
+import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDeliveryFields';
 import './PublicMenuPage.css';
 
 interface MenuLine {
@@ -56,11 +66,14 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
   return (product.optionGroups ?? []) as ProductOptionGroupDto[];
 }
 
+const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '' };
+
 /**
  * The public menu of a business (/m/:slug), without signing in: the catalog the business published and, when
  * it takes orders, a cart that sends the order with the customer's name and phone. A table QR adds ?mesa=.
  * Its header says whether the business is open now (the API works it out in the business's time and writes the words),
- * its hours of the week, its special days ahead and its address with a map.
+ * its hours of the week, its special days ahead and its address with a map. A business with delivery zones takes the
+ * order to the customer's address: the server says what it charges to their postal code, and the total adds it.
  */
 export default function PublicMenuPage() {
   const optionsTitleId = useId();
@@ -93,15 +106,47 @@ export default function PublicMenuPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState<PublicOrderReceipt | null>(null);
+  const [toAddress, setToAddress] = useState(false);
+  const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
 
-  const totals = useMemo(() => estimateOrderTotals(
-    lines.map((line) => ({
+  // At one of its tables the customer is already there; a kitchen without premises with zones only delivers.
+  const deliveryOffered = !!data?.deliveryAvailable && !atTable;
+  const deliveryRequired = deliveryOffered && !!data?.deliveryOnly;
+  const delivering = deliveryOffered && (deliveryRequired || toAddress);
+  const postalCode = normalizePostalCode(address.postalCode);
+  const quote = useQuery({
+    queryKey: ['public-delivery-quote', slug, postalCode],
+    queryFn: () => publicMenuApi.getDeliveryQuote(slug, postalCode),
+    enabled: delivering && isPostalCode(postalCode),
+    retry: false,
+    staleTime: 60_000,
+  });
+  const covered = delivering && isPostalCode(postalCode) && quote.data?.covered ? quote.data : null;
+  const terms = useMemo<DeliveryTerms | null>(() => (covered
+    ? { fee: covered.fee ?? 0, minimumOrder: covered.minimumOrder ?? 0, freeDeliveryFrom: covered.freeDeliveryFrom }
+    : null), [covered]);
+
+  const totals = useMemo(() => {
+    const totalsLines = lines.map((line) => ({
       unitPrice: line.unitPrice,
       quantity: line.quantity,
       ...resolveProductVat(line.product, data?.defaultTaxRate ?? 16),
-    })),
-    data?.pricesIncludeTax ?? true,
-  ), [data, lines]);
+    }));
+    const pricesIncludeTax = data?.pricesIncludeTax ?? true;
+    return terms
+      ? estimateDeliveryTotals(totalsLines, pricesIncludeTax, terms, data?.defaultTaxRate ?? 16)
+      : { ...estimateOrderTotals(totalsLines, pricesIncludeTax), productsTotal: null, fee: null };
+  }, [data, lines, terms]);
+  const checkingQuote = delivering && isPostalCode(postalCode) && quote.isFetching;
+  const deliveryProblem = !delivering || checkingQuote ? ''
+    : !isPostalCode(postalCode) ? (postalCode ? 'El código postal lleva 5 dígitos.' : '')
+    : quote.isError ? getApiErrorMessage(quote.error, 'No pudimos revisar tu código postal. Intenta de nuevo.')
+    : quote.data && !quote.data.covered ? notCoveredMessage(postalCode)
+    : terms && totals.productsTotal !== null && !meetsMinimum(terms, totals.productsTotal)
+      ? belowMinimumMessage(postalCode, terms.minimumOrder)
+      : '';
+  // To an address the order waits for the server's answer for the postal code.
+  const deliveryBlocked = delivering && (checkingQuote || !terms || deliveryProblem !== '');
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const categories = data?.categories ?? [];
   const visible = category === 'all' ? categories : categories.filter((item) => item.id === category);
@@ -160,7 +205,7 @@ export default function PublicMenuPage() {
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (lines.length === 0 || sending) return;
+    if (lines.length === 0 || sending || deliveryBlocked) return;
     setSending(true);
     setError('');
     try {
@@ -169,6 +214,9 @@ export default function PublicMenuPage() {
         customerPhone: phone.trim(),
         notes: notes.trim() || null,
         tableLabel: tableLabel || null,
+        delivery: delivering
+          ? { postalCode, addressLine: address.addressLine.trim(), references: address.references.trim() || null }
+          : undefined,
         items: lines.map((line) => ({
           productId: line.product.id,
           quantity: line.quantity,
@@ -236,6 +284,11 @@ export default function PublicMenuPage() {
           <i className="ri-checkbox-circle-fill text-success" aria-hidden="true"></i>
           <h1 className="h4">¡Pedido enviado!</h1>
           <p className="mb-1">Folio <strong>{receipt.orderNumber}</strong> · Total <strong className="ta-money">{formatMoney(receipt.total)}</strong></p>
+          {receipt.deliveryFee != null && (
+            <p className="mb-1 small">
+              {receipt.deliveryFee > 0 ? <>Incluye envío de <span className="ta-money">{formatMoney(receipt.deliveryFee)}</span></> : 'Envío gratis'}
+            </p>
+          )}
           <p className="text-muted">
             {receipt.confirmed
               ? `${receipt.businessName} ya lo está preparando.`
@@ -279,7 +332,7 @@ export default function PublicMenuPage() {
         )}
       </header>
 
-      {(hours || data.address || data.deliveryOnly) && (
+      {(hours || data.address || data.deliveryOnly || deliveryOffered) && (
         <section className="pm-info" aria-label="Horario y ubicación">
           {hours && !hoursOpen && (
             <p className="pm-today">
@@ -322,6 +375,12 @@ export default function PublicMenuPage() {
             <p className="pm-address">
               <i className="ri-e-bike-2-line" aria-hidden="true"></i>
               <span className="flex-grow-1">Solo a domicilio: no tenemos local para visitar.</span>
+            </p>
+          )}
+          {deliveryOffered && !data.deliveryOnly && (
+            <p className="pm-address">
+              <i className="ri-e-bike-2-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">También a domicilio: al pedir te decimos si llegamos a tu código postal.</span>
             </p>
           )}
           {data.address && !data.deliveryOnly && (
@@ -473,6 +532,29 @@ export default function PublicMenuPage() {
                 </li>
               ))}
             </ul>
+            {deliveryOffered && (
+              <PublicDeliveryFields
+                required={deliveryRequired}
+                toAddress={toAddress}
+                onToAddressChange={setToAddress}
+                address={address}
+                onAddressChange={(changes) => setAddress((current) => ({ ...current, ...changes }))}
+                terms={terms}
+                checking={checkingQuote}
+                problem={deliveryProblem}
+              />
+            )}
+            {totals.fee !== null && (
+              <>
+                <div className="d-flex justify-content-between small">
+                  <span>Productos</span><span className="ta-money">{formatMoney(totals.productsTotal ?? 0)}</span>
+                </div>
+                <div className="d-flex justify-content-between small">
+                  <span>Envío a domicilio</span>
+                  <span className="ta-money">{totals.fee > 0 ? formatMoney(totals.fee) : 'Gratis'}</span>
+                </div>
+              </>
+            )}
             <div className="d-flex justify-content-between fs-5 mb-3">
               <span>Total</span><strong className="ta-money">{formatMoney(totals.total)}</strong>
             </div>
@@ -494,7 +576,7 @@ export default function PublicMenuPage() {
               </div>
             </div>
             {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
-            <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || lines.length === 0}>
+            <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || lines.length === 0 || deliveryBlocked}>
               {sending ? 'Enviando…' : `Enviar pedido · ${formatMoney(totals.total)}`}
             </button>
             <p className="small text-muted mt-2 mb-0">
