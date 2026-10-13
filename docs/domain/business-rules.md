@@ -99,7 +99,7 @@ Una cocina sin local no publica su dirección ([ADR 0016](../adr/0016-delivery-o
 A dónde entrega el negocio y cuánto cobra por llevar, por código postal ([ADR 0017](../adr/0017-delivery-zones.md)).
 
 - **Cada zona** (`DeliveryZone`) lleva:
-  - nombre;
+  - nombre, uno por zona en el negocio, sin distinguir mayúsculas;
   - de 1 a 300 códigos postales de cinco dígitos;
   - costo de envío, de $0 a $10,000;
   - pedido mínimo, de $0 a $100,000; $0 es sin mínimo;
@@ -107,9 +107,9 @@ A dónde entrega el negocio y cuánto cobra por llevar, por código postal ([ADR
   - si está activa.
 
   Un negocio tiene hasta 30 zonas.
-- **Un código postal, una zona:** no puede estar en dos zonas del mismo negocio, activas o no. Agregarlo a otra zona se rechaza diciendo cuál lo tiene, también cuando dos guardados lo agregan al mismo tiempo. Otro negocio puede tener el mismo código postal.
+- **Un código postal, una zona:** no puede estar en dos zonas del mismo negocio, activas o no. Agregarlo a otra zona se rechaza diciendo cuál lo tiene, también cuando dos guardados lo agregan al mismo tiempo. Lo mismo con el nombre. Otro negocio puede tener el mismo nombre y el mismo código postal.
 - **Montos:** lo que paga el cliente, con IVA incluido. El mínimo y el envío gratis se comparan con el total de productos, sin el envío.
-- **Quién las cambia:** dueños y administradores, con la revisión que vieron. Un guardado sobre una revisión vieja es 409 `concurrency_conflict`. Guardar sin cambios no registra nada. Todo el equipo puede leerlas.
+- **Quién las cambia:** dueños y administradores, con la revisión que vieron. Un guardado sobre una revisión vieja, o de una zona que alguien borró, es 409 `concurrency_conflict`, en el orden en que la base escriba las filas. Guardar sin cambios no registra nada. Todo el equipo puede leerlas.
 - **Bitácora:** `DeliveryZoneCreated`, `DeliveryZoneUpdated` y `DeliveryZoneDeleted` guardan lo que cobra la zona y cuántos códigos postales tiene, antes y después, nunca cuáles.
 - **Dónde se usan:** en las respuestas automáticas de WhatsApp ([mensajería](messaging.md)). Una zona desactivada no llega a ninguno de sus códigos postales. El pedido a domicilio con el envío cobrado llega en la Fase 22C.
 

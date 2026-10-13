@@ -43,7 +43,7 @@ Se usa una base SQL Server compartida. `ApplicationDbContext` recorre el modelo 
   - **`verify.sql`:** la consulta 5 de `20261012145908_AddPlatformSettlements` comprueba que ninguna fila de pedido ni de ajuste tenga otro negocio que su liquidación, y que ninguna fila de pedido apunte a un pedido de otro negocio.
   - **Suite entre negocios** (`CrossTenantPlatformSettlementsSqlServerTests`): con el encabezado de otro negocio, un dueño no ve, guarda, cierra ni anula una liquidación ajena (404). Su lista, sus pedidos pendientes y lo que le deben no traen nada del otro, y su liquidación con un pedido ajeno se rechaza. `PlatformSettlementsSqlServerTests` comprueba que cada liquidación se queda en su negocio.
 - Zonas de entrega (Fase 22B, [ADR 0017](../adr/0017-delivery-zones.md)):
-  - `DeliveryZone` y `DeliveryZonePostalCode` son `ITenantScoped` con su `TenantId`. El índice único `(TenantId, PostalCode)` deja que dos negocios tengan el mismo código postal.
+  - `DeliveryZone` y `DeliveryZonePostalCode` son `ITenantScoped` con su `TenantId`. Los índices únicos `(TenantId, PostalCode)` y `(TenantId, Name)` dejan que dos negocios tengan el mismo código postal y el mismo nombre de zona.
   - Los casos de uso filtran por el negocio actual además del filtro global, y una zona de otro negocio es 404.
   - La respuesta automática lee las zonas del negocio al que llegó el mensaje (`TenantId` explícito), sin un `IgnoreQueryFilters()` nuevo.
   - `CrossTenantDeliveryZonesSqlServerTests` comprueba sobre la API real que otro negocio no lee, guarda ni borra las zonas, ni con el encabezado del negocio.

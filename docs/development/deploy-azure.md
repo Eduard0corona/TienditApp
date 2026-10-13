@@ -306,7 +306,7 @@ La Fase 22A trae una migración, [`database/production/20261012204959_AddBranchS
 La Fase 22B trae una migración, [`database/production/20261013002425_AddDeliveryZones`](../../database/production/20261013002425_AddDeliveryZones). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0017](../adr/0017-delivery-zones.md)).
 
 - **La migración:**
-  - **Qué agrega:** dos tablas nuevas y vacías, `DeliveryZones` y `DeliveryZonePostalCodes`, con sus restricciones, la llave en cascada y el índice único de los códigos postales del negocio. No toca otras tablas.
+  - **Qué agrega:** dos tablas nuevas y vacías, `DeliveryZones` y `DeliveryZonePostalCodes`, con sus restricciones, la llave en cascada y los índices únicos de los nombres y de los códigos postales del negocio. No toca otras tablas.
   - **Cuándo cambia algo:** cuando un dueño o administrador agrega una zona en Configuración › Zonas de entrega. Desde ese momento, las respuestas automáticas contestan si llegan a un código postal y cuánto cuesta el envío.
   - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, la llave y los índices. Su consulta 4 cuenta las zonas (ninguna hasta desplegar) y la 5 (consistencia) debe quedar vacía siempre.
 - **Mientras se publica:** la versión de `master` (Fase 22A) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.

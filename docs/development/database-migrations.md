@@ -61,6 +61,7 @@ Migraciones recientes con notas operativas:
   - `DeliveryZones`:
     - montos en `decimal(18,2)`: costo, pedido mínimo y «envío gratis desde» (con nulos);
     - si está activa y su revisión, que es token de concurrencia;
+    - índice único `(TenantId, Name)`: un nombre por zona en el negocio, sin distinguir mayúsculas (la intercalación de la base);
     - cuatro restricciones CHECK: `_Fee` (0 a 10,000), `_MinimumOrder` (0 a 100,000), `_FreeDeliveryFrom` (nulo, o más de 0 y hasta 100,000 con costo mayor a 0) y `_Revision` (1 o más).
   - `DeliveryZonePostalCodes`:
     - `varchar(5)` de cinco dígitos (`CK_DeliveryZonePostalCodes_PostalCode`);
@@ -258,6 +259,7 @@ En CI lo prueban:
 Los de `20261013002425_AddDeliveryZones` se probaron igual (SQL Server 2022, Docker), con el `sqlcmd` clásico y `-b`. La base se creó con `dotnet ef database update` en `20261012204959_AddBranchServiceMode`, como producción con `master` en la Fase 22A, y tenía dos negocios. El ensayo:
 - el `verify.sql` mostró `AddBranchServiceMode` como última migración, sin las tablas;
 - el `apply.sql` creó las dos tablas con sus columnas, restricciones, llave e índices. Repetirlo con la caché de planes vacía no cambió ningún objeto ni el historial;
+- una segunda zona llamada «centro», junto a «Centro», se rechazó con el error 2601;
 - con una zona de dos códigos postales, la consulta 4 la contó, y el `rollback.sql` se detuvo con el error 50012 sin cambiar ningún objeto, el historial ni las filas;
 - sin zonas, el `rollback.sql` regresó la base a `AddBranchServiceMode`. Otras dos veces, con la caché vacía, no hizo nada, y el `verify.sql` corrió también sin las tablas;
 - aplicar de nuevo, dos veces, dejó las tablas vacías.
@@ -266,10 +268,15 @@ En CI lo prueban:
 - `DeliveryZonesSqlServerTests`:
   - los índices y la llave en cascada;
   - que una zona se guarde con sus centavos y sus códigos postales, solo en su negocio;
-  - que un código postal no se repita en el negocio (error 2601) y otro negocio sí pueda tenerlo;
+  - que un código postal no se repita en el negocio (error 2601) y otro negocio sí pueda tenerlo; lo mismo con el nombre, sin distinguir mayúsculas;
   - que guardar conserve las filas de los códigos postales que siguen y borrar la zona se lleve los suyos;
   - que cada restricción CHECK rechace una fila que el dominio no escribe;
-  - que revertir se detenga con el error 50012 mientras haya zonas y, sin ellas, borre solo las dos tablas, otra vez no haga nada y aplicar de nuevo las deje vacías.
+  - que revertir se detenga con el error 50012 mientras haya zonas y, sin ellas, borre solo las dos tablas, otra vez no haga nada y aplicar de nuevo las deje vacías;
+  - con los casos de uso y otro guardado justo antes del suyo (`SavedMeanwhile`):
+    - guardar una zona a la que alguien agregó el mismo código postal, o que alguien borró, es la revisión vieja (409), aunque la base lo diga con el índice único o la llave;
+    - el código postal o el nombre que otra zona tomó se rechaza con su nombre, al crear y al guardar;
+    - borrar una zona que alguien guardó es la revisión vieja;
+    - un error de otra causa no pasa por conflicto: se lanza.
 - `CrossTenantDeliveryZonesSqlServerTests`: sobre la API real, que otro negocio no lea, guarde ni borre las zonas, el 409 con una revisión vieja, el código postal de otra zona rechazado con su nombre y que el equipo lea mientras solo dueños y administradores cambian.
 
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación. Cuando basta un cambio de datos acotado, lleva además un `repair.sql` idempotente que lista lo que cambia, como `20261005_StorageUrlsOutsideTheirFolder`.

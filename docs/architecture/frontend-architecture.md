@@ -317,12 +317,12 @@ Zonas de entrega (Fase 22B, [ADR 0017](../adr/0017-delivery-zones.md)):
   - «envío gratis desde»;
   - el estado.
 
-  Las acciones dicen con texto lo que hacen y nombran la zona: «Editar», «Desactivar» o «Activar» y «Eliminar». Desactivar y eliminar piden confirmación y mandan la revisión leída. La búsqueda encuentra por nombre o por el principio de un código postal.
+  Las acciones dicen con texto lo que hacen y nombran la zona: «Editar», «Desactivar» o «Activar» y «Eliminar». Desactivar y eliminar piden confirmación y mandan la revisión leída. Mientras se guarda un cambio, las acciones de todas las zonas se apagan: un segundo clic con la misma revisión se rechazaría como cambio de otra persona. La búsqueda encuentra por nombre o por el principio de un código postal.
 - **Diálogo:** nombre, costo de envío, pedido mínimo (opcional), «envío gratis desde» (opcional), los códigos postales en un `textarea` (separados por comas, espacios o renglones) y si está activa.
   - `parsePostalCodes` (`utils/postalCodes.ts`) los lee igual que el servidor: cada uno una vez, en orden. Cuenta los que lleva y marca los que no tienen cinco dígitos.
-  - Antes de guardar dice lo mismo que el servidor rechazaría, con su texto: montos fuera de rango, envío gratis con envío $0, un código postal mal escrito, ninguno o más de 300.
-  - Lo que el servidor rechace (un código postal de otra zona, 409 de una revisión vieja) se muestra en el diálogo.
-- **Probar un código postal:** con zonas guardadas, sobre la lista leída, dice qué zona lo tiene y qué cobra, si está desactivada o si ninguna llega. Es lo que contestarían las respuestas automáticas.
+  - Antes de guardar dice lo mismo que el servidor rechazaría, con su texto: el nombre de otra zona (sin distinguir mayúsculas), montos fuera de rango, envío gratis con envío $0, un código postal mal escrito, ninguno o más de 300.
+  - Lo que el servidor rechace (un código postal o un nombre de otra zona) se muestra en el diálogo. Con un 409 o un 404 (alguien más la guardó o la borró), guardar otra vez fallaría igual: el diálogo se cierra con un aviso y la zona se abre otra vez desde la lista, ya leída de nuevo.
+- **Probar un código postal:** con zonas guardadas, sobre la lista leída, dice qué zona lo tiene y qué cobra, si está desactivada o si ninguna llega. Es lo que contestarían las respuestas automáticas. Si ninguna zona está activa, avisa que mientras tanto las respuestas no hablan de entregas.
 - **Datos:** `useDeliveryZones`, `useSaveDeliveryZone` y `useDeleteDeliveryZone` en `api/deliveryZones.ts`, fuera de `queries.ts`, con su propia llave (`['delivery-zones']`); guardar y borrar la leen otra vez.
 - **Primera visita:** suma 155 B (de 176,327 a 176,482 B, contra `master` en `3e69f32`): la entrada del menú de Configuración y la ruta. La pantalla baja aparte (3.7 kB con gzip). El presupuesto (176,700 B) no cambia.
 
