@@ -1,4 +1,4 @@
-import { OrderChannel } from '../types';
+import { DeliveryCourier, OrderChannel } from '../types';
 import type {
   OrderPaymentMethod,
   OrderStatus,
@@ -58,6 +58,11 @@ const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
   DigitalWallet: 3,
   Other: 4,
   Platform: 5,
+};
+
+/** The couriers a business asks for the trip of an order sent to an address (Fase 22C). */
+export const DELIVERY_COURIER_LABELS: Record<DeliveryCourier, string> = {
+  [DeliveryCourier.Paquetenvia]: 'Paquetenvia',
 };
 
 /** Where the order came from, as the server names each channel (OrderChannelRules.DisplayName). */

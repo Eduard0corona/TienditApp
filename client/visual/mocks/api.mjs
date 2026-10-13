@@ -343,6 +343,8 @@ function buildRoutes(data, token) {
     // The demo business set up no delivery platform: Vender and Pedidos look as they do without them, and Mi negocio
     // offers the three to configure.
     ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
+    // Nor any delivery zone: Vender offers no «A domicilio» (Configuración › Zonas de entrega answers its own).
+    ['GET', /^\/delivery-zones$/, () => ok([])],
     ['GET', /^\/delivery-platforms$/, () => ok(unconfiguredPlatforms())],
     ['GET', /^\/delivery-platforms\/([345])\/prices$/, (m, q) => ok(paginate(platformPriceList(data, m[1]), q, 100))],
     ['PUT', /^\/delivery-platforms\/([345])\/prices$/, (m, q, body) => {

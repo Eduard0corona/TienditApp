@@ -12,6 +12,7 @@ import PublicMenuPage from './PublicMenuPage';
 vi.mock('../../api/publicMenuApi', () => ({
   publicMenuApi: {
     getMenu: vi.fn(),
+    getDeliveryQuote: vi.fn(),
     placeOrder: vi.fn(),
   },
 }));
@@ -410,5 +411,108 @@ describe('PublicMenuPage', () => {
     expect(container.querySelector('details')).toBeNull();
     expect(container.querySelector('.pm-hours-toggle')).toBeNull();
     expect(screen.getByRole('region', { name: 'Horario y ubicación' })).toContainElement(today);
+  });
+
+  describe('a domicilio', () => {
+    const quoted = (postalCode: string, covered = true) => ({
+      postalCode,
+      covered,
+      fee: covered ? 35 : null,
+      minimumOrder: covered ? 100 : null,
+      freeDeliveryFrom: covered ? 400 : null,
+    });
+
+    async function openCart(quantity = 2) {
+      for (let i = 0; i < quantity; i++) {
+        await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      }
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      return screen.getByRole('dialog', { name: 'Tu pedido' });
+    }
+
+    it('takes the order to the address with what the business charges to its postal code', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => quoted(postalCode));
+      api.placeOrder.mockResolvedValue({
+        orderNumber: 'ORD-7', total: 145, deliveryFee: 35, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+      } as never);
+
+      renderPage();
+      expect(await screen.findByText(/También a domicilio/)).toBeInTheDocument();
+      const cart = await openCart();
+      const send = within(cart).getByRole('button', { name: /^Enviar pedido/ });
+
+      // Picked up by default: the products alone.
+      expect(within(cart).getByRole('radio', { name: 'Paso por él' })).toHaveAttribute('aria-checked', 'true');
+      expect(send).toHaveTextContent('$110.00');
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+      expect(send).toBeDisabled();
+      await userEvent.type(within(cart).getByLabelText('Código postal'), '72000');
+      expect(await within(cart).findByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $100.00')).toBeInTheDocument();
+      expect(api.getDeliveryQuote).toHaveBeenCalledWith('cafe-luna', '72000');
+      expect(within(cart).getByText('Envío a domicilio').nextSibling).toHaveTextContent('$35.00');
+      expect(send).toHaveTextContent('$145.00');
+
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.type(within(cart).getByLabelText('Dirección'), 'Av. Reforma 123, Centro');
+      await userEvent.click(send);
+
+      expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        expectedTotal: 145,
+        tableLabel: null,
+        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: null },
+      }));
+      expect(await screen.findByText(/Incluye envío de/)).toHaveTextContent('Incluye envío de $35.00');
+    });
+
+    it('says where it does not deliver, or the minimum, and sends nothing', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true, deliveryOnly: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => quoted(postalCode, postalCode === '72000'));
+
+      renderPage();
+      const cart = await openCart(1);
+
+      // A kitchen without premises only delivers: no choice to make.
+      expect(within(cart).queryByRole('radio')).not.toBeInTheDocument();
+      expect(within(cart).getByText('Te lo llevamos a domicilio.')).toBeInTheDocument();
+      const postalCode = within(cart).getByLabelText('Código postal');
+      await userEvent.type(postalCode, '72999');
+      expect(await within(cart).findByText('Por ahora no llegamos al 72999.')).toBeInTheDocument();
+      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toBeDisabled();
+
+      await userEvent.clear(postalCode);
+      await userEvent.type(postalCode, '72000');
+      expect(await within(cart).findByText('El pedido mínimo para el 72000 es de $100.00.')).toBeInTheDocument();
+      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toBeDisabled();
+      expect(api.placeOrder).not.toHaveBeenCalled();
+    });
+
+    it('adds the IVA of the fee for a business whose prices do not include it, and the rows add up', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true, pricesIncludeTax: false }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => quoted(postalCode));
+
+      renderPage();
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+      await userEvent.type(within(cart).getByLabelText('Código postal'), '72000');
+
+      expect(await within(cart).findByText('Envío $35.00 más IVA · gratis desde $400.00 · pedido mínimo $100.00')).toBeInTheDocument();
+      // $110 + 16 % = $127.60 in products and $35 + 16 % = $40.60 of delivery: $168.20.
+      expect(within(cart).getByText('Productos').nextSibling).toHaveTextContent('$127.60');
+      expect(within(cart).getByText('Envío a domicilio').nextSibling).toHaveTextContent('$40.60');
+      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toHaveTextContent('$168.20');
+    });
+
+    it('offers no delivery at a table', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
+
+      renderPage('/m/cafe-luna?mesa=Mesa%204');
+      const cart = await openCart(1);
+
+      expect(within(cart).queryByLabelText('Código postal')).not.toBeInTheDocument();
+      expect(within(cart).queryByRole('radio', { name: 'A domicilio' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/También a domicilio/)).not.toBeInTheDocument();
+    });
   });
 });

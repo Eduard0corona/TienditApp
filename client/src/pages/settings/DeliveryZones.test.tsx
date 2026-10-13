@@ -14,6 +14,8 @@ vi.mock('../../hooks/useToast', () => ({ useToast: () => toast }));
 vi.mock('../../components/layout/SectionTabs', () => ({ default: () => null }));
 const confirm = vi.fn();
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
+const tenant = { pricesIncludeTax: true };
+vi.mock('../../hooks/useTenant', () => ({ useTenant: () => ({ tenant }) }));
 
 type Zone = Schemas['DeliveryZoneDto'];
 
@@ -43,7 +45,7 @@ function apiError(status: number, code: string, detail: string): AxiosError {
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/settings/delivery-zones']}>
         <DeliveryZones />
@@ -56,6 +58,18 @@ describe('DeliveryZones', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     confirm.mockResolvedValue(true);
+    tenant.pricesIncludeTax = true;
+  });
+
+  it('says the amounts go like the prices of the business: with IVA included, or before IVA', async () => {
+    serve([CENTRO]);
+    const { unmount } = renderPage();
+    expect(await screen.findByText(/Los montos son lo que paga tu cliente, con IVA incluido\./)).toBeInTheDocument();
+    unmount();
+
+    tenant.pricesIncludeTax = false;
+    renderPage();
+    expect(await screen.findByText(/El envío va como tus precios, antes de IVA: el pedido le suma el IVA\./)).toBeInTheDocument();
   });
 
   it('lists each zone with what it charges and its first postal codes', async () => {

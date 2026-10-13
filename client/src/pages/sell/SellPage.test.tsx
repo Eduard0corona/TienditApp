@@ -149,6 +149,15 @@ function givePlatforms(rows: Array<{ channel: OrderChannel; isActive: boolean }>
     Promise.resolve(path === '/api/v1/delivery-platforms/channels' ? rows : undefined)) as unknown as typeof apiRequest);
 }
 
+/** The delivery zones of the business too (GET /delivery-zones), besides its platforms. */
+function giveZones(zones: Array<{ name: string; fee: number; minimumOrder: number; freeDeliveryFrom?: number | null; postalCodes: string[]; isActive?: boolean }>) {
+  vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => Promise.resolve(
+    path === '/api/v1/delivery-zones'
+      ? zones.map((zone, index) => ({ id: `z${index}`, revision: 1, isActive: true, freeDeliveryFrom: null, ...zone }))
+      : path === '/api/v1/delivery-platforms/channels' ? [] : undefined,
+  )) as unknown as typeof apiRequest);
+}
+
 /** The ticket on a wide screen (on a phone the same panel opens in a sheet). */
 function ticket() {
   return within(screen.getByRole('complementary', { name: 'Ticket de la venta' }));
@@ -1055,5 +1064,93 @@ describe('SellPage with a platform order and no connection', () => {
       channel: OrderChannel.Counter,
       externalOrderNumber: '',
     }));
+  });
+
+  describe('a domicilio', () => {
+    it('sends the order to the address with the fee of the zone that reaches its postal code', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+      giveZones([{ name: 'Centro', fee: 35, minimumOrder: 0, freeDeliveryFrom: 400, postalCodes: ['72000'] }]);
+      vi.mocked(ordersApi.create).mockResolvedValue({ data: { orderNumber: 'ORD-000009', stockWarnings: [] } } as never);
+      renderAt('/sell');
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Taco/ }));
+      await userEvent.click(await ticket().findByRole('switch', { name: 'A domicilio' }));
+      await userEvent.type(ticket().getByLabelText('Código postal'), '72000');
+      await userEvent.type(ticket().getByLabelText('Dirección'), 'Av. Reforma 123, Centro');
+      await userEvent.type(ticket().getByLabelText('Referencias (opcional)'), 'Portón verde');
+
+      expect(ticket().getByText('Centro · Envío $35.00 · gratis desde $400.00')).toBeInTheDocument();
+      expect(ticket().getByText('Envío a domicilio').nextSibling).toHaveTextContent('$35.00');
+      // The address says where it goes: no table.
+      await userEvent.click(ticket().getByRole('button', { name: 'Cliente y notas (opcional)' }));
+      expect(ticket().queryByLabelText('Mesa o referencia')).not.toBeInTheDocument();
+
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+      expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+        expectedTotal: 85,
+        tableNumber: undefined,
+        delivery: { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: 'Portón verde' },
+      }));
+    });
+
+    it('says where no zone delivers or what the minimum is, and sends nothing', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+      giveZones([
+        { name: 'Centro', fee: 35, minimumOrder: 100, postalCodes: ['72000'] },
+        { name: 'Norte', fee: 45, minimumOrder: 0, postalCodes: ['72100'], isActive: false },
+      ]);
+      renderAt('/sell');
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+      await userEvent.click(await ticket().findByRole('switch', { name: 'A domicilio' }));
+      const postalCode = ticket().getByLabelText('Código postal');
+      await userEvent.type(postalCode, '72100');
+      expect(ticket().getByText('Por ahora no llegamos al 72100.')).toBeInTheDocument();
+
+      await userEvent.clear(postalCode);
+      await userEvent.type(postalCode, '72000');
+      await userEvent.type(ticket().getByLabelText('Dirección'), 'Av. Reforma 123');
+      expect(ticket().getByText('El pedido mínimo para el 72000 es de $100.00.')).toBeInTheDocument();
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+      expect(ordersApi.create).not.toHaveBeenCalled();
+      expect(ticket().getByText('El pedido mínimo para el 72000 es de $100.00.', { selector: '.alert' })).toBeInTheDocument();
+    });
+
+    it('offers no delivery without active zones, nor for an order of a platform', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+      giveZones([{ name: 'Norte', fee: 45, minimumOrder: 0, postalCodes: ['72100'], isActive: false }]);
+      renderAt('/sell');
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
+      expect(ticket().queryByRole('switch', { name: 'A domicilio' })).not.toBeInTheDocument();
+    });
+
+    it('keeps a delivery brought back with the sale while the zones cannot be read, and says why instead of sending it', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+      const delivery = { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: '' };
+      window.localStorage.setItem(draftKey, JSON.stringify({
+        lines: [{ productId: 'taco', quantity: 2, notes: '' }],
+        customerName: '', customerPhone: '', tableNumber: '', orderNotes: '',
+        channel: OrderChannel.Counter, externalOrderNumber: '', collectedBy: PlatformCollectedBy.Platform, delivery,
+      }));
+      vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => (path === '/api/v1/delivery-zones'
+        ? Promise.reject(new AxiosError('Request failed', 'ERR_BAD_RESPONSE'))
+        : Promise.resolve(path === '/api/v1/delivery-platforms/channels' ? [] : undefined))) as unknown as typeof apiRequest);
+      renderAt('/sell');
+
+      const zonesError = 'No se pudieron leer tus zonas de entrega: intenta de nuevo o quita «A domicilio».';
+      expect(await ticket().findByText(zonesError)).toBeInTheDocument();
+      // The address is still there, with its switch, so the cashier can take it off or try again.
+      expect(ticket().getByRole('switch', { name: 'A domicilio' })).toBeChecked();
+      expect(ticket().getByLabelText('Dirección')).toHaveValue('Av. Reforma 123, Centro');
+
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+      expect(ordersApi.create).not.toHaveBeenCalled();
+      expect(ticket().getByText(zonesError, { selector: '.alert' })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').delivery).toEqual(delivery);
+    });
   });
 });

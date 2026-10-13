@@ -46,6 +46,7 @@ public interface IApplicationDbContext
     DbSet<OrderRefund> OrderRefunds { get; }
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
     DbSet<PlatformOrderDetail> PlatformOrderDetails { get; }
+    DbSet<OrderDelivery> OrderDeliveries { get; }
     DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings { get; }
     DbSet<PlatformSettlement> PlatformSettlements { get; }
     DbSet<PlatformSettlementOrder> PlatformSettlementOrders { get; }

@@ -1,9 +1,11 @@
 using System.Globalization;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Orders.Taxes;
@@ -148,6 +150,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <summary>The order came from Rappi, Uber Eats or DiDi Food. It depends on the channel, which is always loaded.</summary>
     public bool IsDeliveryPlatformOrder => OrderChannelRules.IsDeliveryPlatform(Channel);
 
+    /// <summary>
+    /// Where the order goes and what its delivery charges (<see cref="ArrangeDelivery"/>); none for an order picked up or
+    /// served. Always loaded with the order: its fee is part of the total.
+    /// </summary>
+    public OrderDelivery? Delivery { get; private set; }
+
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
     public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
@@ -197,6 +205,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         // Its commission and expected settlement were calculated on the total it was registered with.
         if (PlatformDetail is not null)
             throw new DomainException(PlatformOrderRules.NoItemsAfterRegisteredMessage);
+        // Its fee (and the minimum it reached) were worked out with the products it had.
+        if (Delivery is not null)
+            throw new DomainException(HomeDeliveryRules.NoItemsAfterArrangedMessage);
 
         _items.Add(new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General, fiscal, options, TenantId));
         RecalculateTotals();
@@ -214,6 +225,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (IsDeliveryPlatformOrder)
             throw new DomainException(PlatformOrderRules.NoTabMessage);
+        if (Delivery is not null)
+            throw new DomainException(HomeDeliveryRules.NotForTabsMessage);
         if (IsTab || Status != OrderStatus.Pending)
             throw new DomainException("Solo un pedido nuevo puede abrirse como cuenta.");
         if (OrderType != OrderType.Retail)
@@ -433,8 +446,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <returns>True when the order was closed.</returns>
     public bool CloseIfPaidCounterSale(IOrderStateMachine stateMachine, bool waitsForKitchen, string? performedBy)
     {
-        // A tab can be paid round by round and keep ordering: it closes only when the table leaves (CloseTab).
-        if (!CreatedByBusiness || IsTab || _items.Count == 0 || Balance > 0)
+        // A tab can be paid round by round and keep ordering: it closes only when the table leaves (CloseTab). An order
+        // that goes to the customer's address leaves after the kitchen: ready is not delivered, someone marks it.
+        if (!CreatedByBusiness || IsTab || Delivery is not null || _items.Count == 0 || Balance > 0)
             return false;
 
         OrderStatus closedStatus;
@@ -532,7 +546,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         AddDomainEvent(new OrderCreatedEvent(
             Id, TenantId, OrderNumber, BusinessType, Total, Status, Channel,
-            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy));
+            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee));
     }
 
     public void LinkToCustomerUser(Guid userId)
@@ -603,6 +617,63 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         }
 
         return PlatformDetail;
+    }
+
+    /// <summary>
+    /// Sends a new order to the customer's address: the zone must reach its postal code (and be active) and the products
+    /// must reach the zone's minimum. The delivery charges what the zone charges for those products (nothing from its
+    /// «envío gratis desde»), with the order's tax policy and <paramref name="feeRate"/>, and enters the total. It is
+    /// worked out once, after the products and before any payment, and never changes: it is what the customer agreed to.
+    /// </summary>
+    /// <param name="feeRate">The IVA rate of the business: a delivery service, not the rate of a dish.</param>
+    public OrderDelivery ArrangeDelivery(DeliveryAddress address, DeliveryZone zone, VatRate feeRate)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        ArgumentNullException.ThrowIfNull(zone);
+        if (Delivery is not null)
+            throw new DomainException(HomeDeliveryRules.AlreadyArrangedMessage);
+        if (Status != OrderStatus.Pending)
+            throw new DomainException(HomeDeliveryRules.OnlyNewOrdersMessage);
+        if (IsDeliveryPlatformOrder)
+            throw new DomainException(HomeDeliveryRules.NotForPlatformsMessage);
+        if (IsTab)
+            throw new DomainException(HomeDeliveryRules.NotForTabsMessage);
+        if (OrderType != OrderType.Retail)
+            throw new DomainException(HomeDeliveryRules.OnlyProductsMessage);
+        if (_items.Count == 0)
+            throw new DomainException(HomeDeliveryRules.NeedsProductsMessage);
+        if (_payments.Count > 0)
+            throw new DomainException(HomeDeliveryRules.BeforeAnyPaymentMessage);
+        if (zone.TenantId != TenantId || !zone.Covers(address.PostalCode))
+            throw new DomainException(HomeDeliveryRules.NotCoveredMessage(address.PostalCode));
+
+        var productsTotal = ProductsTotal;
+        if (!zone.MeetsMinimum(productsTotal))
+            throw new DomainException(HomeDeliveryRules.BelowMinimumMessage(address.PostalCode, zone.MinimumOrder));
+
+        Delivery = new OrderDelivery(TenantId, Id, address, zone.Name, zone.FeeFor(productsTotal), feeRate);
+        RecalculateTotals();
+        return Delivery;
+    }
+
+    /// <summary>
+    /// Writes down (or corrects) the courier's trip of an order that goes to the customer's address. False when it is
+    /// the one already written. A cancelled order no longer goes out.
+    /// </summary>
+    public bool RegisterCourierShipment(CourierShipment shipment, DateTimeOffset registeredAt, string? registeredBy)
+    {
+        ArgumentNullException.ThrowIfNull(shipment);
+        if (Delivery is null)
+            throw new DomainException(HomeDeliveryRules.NotADeliveryMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException(HomeDeliveryRules.CancelledMessage);
+
+        if (!Delivery.RegisterShipment(shipment, registeredAt, registeredBy))
+            return false;
+
+        // The order changes with its trip, so its version catches a cancellation saved meanwhile.
+        UpdatedAt = registeredAt;
+        return true;
     }
 
     public OrderPayment RegisterPayment(
@@ -703,12 +774,26 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public IReadOnlyList<OrderTaxLine> GetTaxBreakdown() => Breakdown(item => item.ChargedPrice);
 
+    /// <summary>
+    /// What the products charge, as the customer pays them, without the delivery: what a zone's minimum and «envío gratis
+    /// desde» are compared with.
+    /// </summary>
+    public decimal ProductsTotal
+        => OrderTaxCalculator.Calculate(PricesIncludeTax, ItemAmounts(item => item.ChargedPrice)).Sum(line => line.Total);
+
+    /// <summary>The products and, for an order that goes to the customer's address, its delivery: one more concept.</summary>
     private IReadOnlyList<OrderTaxLine> Breakdown(Func<OrderItem, decimal> chargedPrice)
-        => OrderTaxCalculator.Calculate(
-            PricesIncludeTax,
-            _items
-                .Where(item => item.CancelledQuantity < item.Quantity)
-                .Select(item => new TaxableAmount(chargedPrice(item), item.VatRate)));
+    {
+        var amounts = ItemAmounts(chargedPrice);
+        if (Delivery is { Fee: > 0 } delivery)
+            amounts = amounts.Append(new TaxableAmount(delivery.Fee, delivery.FeeVatRate));
+        return OrderTaxCalculator.Calculate(PricesIncludeTax, amounts);
+    }
+
+    private IEnumerable<TaxableAmount> ItemAmounts(Func<OrderItem, decimal> chargedPrice)
+        => _items
+            .Where(item => item.CancelledQuantity < item.Quantity)
+            .Select(item => new TaxableAmount(chargedPrice(item), item.VatRate));
 
     private (decimal SubTotal, decimal Tax) ComputeTotals(Func<OrderItem, decimal> chargedPrice)
     {
@@ -719,7 +804,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string TotalBelowPaidMessage = "El total no puede quedar por debajo de lo cobrado.";
 
     /// <summary>
-    /// Totals from the items. What was charged is never trimmed to fit a lower total: payments and drawers would no
+    /// Totals from the items and the delivery. What was charged is never trimmed to fit a lower total: payments and drawers would no
     /// longer add up. No path lowers a charged total today (a dish already paid is refunded instead of cancelled).
     /// </summary>
     private void RecalculateTotals()

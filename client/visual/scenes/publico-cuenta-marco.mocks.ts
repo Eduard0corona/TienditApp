@@ -152,13 +152,35 @@ function publicMenu(data: DemoData, slug: string, table: string | null) {
       currency: 'MXN', pricesIncludeTax: data.tenant.pricesIncludeTax, defaultTaxRate: data.tenant.defaultTaxRate,
       acceptsOrders, ordersPaused: !acceptsOrders, theme: data.tenant.theme, address: mainBranchAddress(data),
       deliveryOnly: mainBranch(data).serviceMode === DELIVERY_ONLY, openingHours: hours, categories,
+      deliveryAvailable: acceptsOrders && !!data.menuDelivery,
     },
+  };
+}
+
+/**
+ * What the delivery to a postal code costs (PublicDeliveryQuoteDto): Roma and Condesa, never the name of the zone, and
+ * nothing to any other postal code.
+ */
+function deliveryQuote(postalCode: string) {
+  const zones = [
+    { postalCodes: ['06700', '06760'], fee: 35, minimumOrder: 150, freeDeliveryFrom: 400 },
+    { postalCodes: ['06140'], fee: 45, minimumOrder: 0, freeDeliveryFrom: null },
+  ];
+  const zone = zones.find((candidate) => candidate.postalCodes.includes(postalCode));
+  return {
+    postalCode, covered: !!zone, fee: zone?.fee ?? null, minimumOrder: zone?.minimumOrder ?? null,
+    freeDeliveryFrom: zone?.freeDeliveryFrom ?? null,
   };
 }
 
 /** The main branch only delivers: a kitchen without premises, whose address the menu never shows. */
 const mainBranchDeliveryOnly: PrepareData = (data) => {
   mainBranch(data).serviceMode = DELIVERY_ONLY;
+};
+
+/** The business delivers to Roma and Condesa: the menu offers «A domicilio». */
+const menuDelivers: PrepareData = (data) => {
+  data.menuDelivery = true;
 };
 
 /** The menu closed by its hours. */
@@ -195,6 +217,14 @@ const twoFactorAccount: PrepareData = (data) => {
 /** The public menu, sign-in and recovery answers, and the edge states of the frame (each off unless a scene sets it). */
 const publicRoutes: ExtraRoutes = (data, { ok }) => [
   ['GET', /^\/public\/menu\/([^/]+)$/, (match, query) => publicMenu(data, decodeURIComponent(match[1]), query.get('table'))],
+  ['GET', /^\/public\/menu\/([^/]+)\/delivery-quote$/, (_match, query) => ok(deliveryQuote(query.get('postalCode') ?? ''))],
+  // An order sent to an address: its receipt says what the delivery charged.
+  ['POST', /^\/public\/menu\/([^/]+)\/orders$/, (_match, _query, body: { expectedTotal?: number; delivery?: { postalCode: string } }) => (body?.delivery
+    ? ok({
+      orderNumber: 'ORD-000360', total: body.expectedTotal ?? 0, deliveryFee: deliveryQuote(body.delivery.postalCode).fee,
+      confirmed: false, businessName: data.tenant.name, contactPhone: '5512345678',
+    })
+    : undefined)],
   ['POST', /^\/auth\/login$/, () => (data.twoFactor
     ? ok({ requiresTwoFactor: true, twoFactorChallengeToken: 'desafio-visual', userId: data.USER_ID })
     : undefined)],
@@ -223,6 +253,7 @@ const publicRoutes: ExtraRoutes = (data, { ok }) => [
 export const PUBLICO_ROUTES = asOption(publicRoutes);
 export const PRINCIPAL_SOLO_A_DOMICILIO = asOption(mainBranchDeliveryOnly);
 export const MENU_CERRADO = asOption(menuClosed);
+export const MENU_A_DOMICILIO = asOption(menuDelivers);
 export const MENU_CIERRE_ESPECIAL = asOption(menuSpecialClosing);
 export const MENU_HORARIO_ESPECIAL = asOption(menuSpecialHours);
 export const NEGOCIO_SUSPENDIDO = asOption(suspendedBusiness);

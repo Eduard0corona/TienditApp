@@ -168,6 +168,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<OrderRefund> OrderRefunds => Set<OrderRefund>();
     public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
     public DbSet<PlatformOrderDetail> PlatformOrderDetails => Set<PlatformOrderDetail>();
+    public DbSet<OrderDelivery> OrderDeliveries => Set<OrderDelivery>();
     public DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings => Set<DeliveryPlatformSetting>();
     public DbSet<PlatformSettlement> PlatformSettlements => Set<PlatformSettlement>();
     public DbSet<PlatformSettlementOrder> PlatformSettlementOrders => Set<PlatformSettlementOrder>();

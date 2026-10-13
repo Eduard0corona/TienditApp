@@ -9,6 +9,7 @@ import type {
   CashTransactionType,
   CfdiTaxObject,
   DayOfWeek,
+  DeliveryCourier,
   InsufficientStockPolicy,
   InventoryMovementReason,
   InventoryMovementType,
@@ -1520,6 +1521,8 @@ export interface OrderDto {
   channel?: OrderChannel;
   /** An order of Rappi, Uber Eats or DiDi Food: the folio of its app and who charged it (never its commission). */
   platformOrder?: OrderPlatformDto | null;
+  /** An order sent to the customer's address: where, the zone, what it charged and the courier's trip. */
+  delivery?: OrderDeliveryDto | null;
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */
@@ -1556,6 +1559,41 @@ export interface OrderPlatformDto {
   externalOrderNumber: string;
   /** The platform, in its app, or the business, when the courier pays on pickup. */
   collectedBy: PlatformCollectedBy;
+}
+
+/** Where an order goes and what it charged for it (Fase 22C); the fee is in the order's total and IVA breakdown. */
+export interface OrderDeliveryDto {
+  postalCode: string;
+  addressLine: string;
+  references?: string | null;
+  /** The zone that reached the postal code, as it was named then. */
+  zoneName: string;
+  /** 0 when the delivery was free. */
+  fee: number;
+  feeTaxRate: number;
+  /** The courier the business asked for the trip (Paquetenvia), with its folio and link. */
+  courier?: DeliveryCourier | null;
+  courierFolio?: string | null;
+  trackingUrl?: string | null;
+  shipmentRegisteredAt?: string | null;
+  shipmentRegisteredBy?: string | null;
+}
+
+export { DeliveryCourier } from '../api/generated/enums';
+
+/** Where a new order goes: the postal code its zone is found by, the address and how to find it. */
+export interface OrderDeliveryInput {
+  postalCode: string;
+  addressLine: string;
+  references?: string;
+}
+
+export interface RegisterCourierShipmentRequest {
+  courier: DeliveryCourier;
+  /** As typed: the server normalizes it like the folio of a platform. */
+  folio: string;
+  /** https only. */
+  trackingUrl?: string;
 }
 
 export interface OrderRefundDto {
@@ -1687,6 +1725,8 @@ export interface CreateOrderRequest {
   idempotencyKey?: string;
   /** When the device captured it without connection. */
   capturedOfflineAt?: string;
+  /** Sent to the customer's address: the zone that reaches the postal code charges its fee (never offline or for a tab). */
+  delivery?: OrderDeliveryInput;
 }
 
 export interface CreateOrderPaymentRequest {
@@ -1789,6 +1829,8 @@ export interface KitchenOrderDto {
   channel?: OrderChannel;
   /** The folio of the delivery platform's app, written on the bag; null for any other channel. */
   externalOrderNumber?: string | null;
+  /** It goes out to the customer's address (never where: the kitchen only packs it). */
+  isDelivery?: boolean;
   status: OrderStatus;
   customerName: string;
   tableNumber?: string;

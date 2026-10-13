@@ -31,9 +31,13 @@ public class DtoMappingTests
     public void Order_ShouldMapTheSame_InMemoryAndForSql(int seed)
     {
         var order = new EntityFiller(maxDepth: 3, seed).Create<Order>();
+        Assert.NotNull(order.Delivery);
 
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
         EntityFiller.Set(order, nameof(Order.ServiceDetail), null);
+        Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+        // An order that does not go to an address (Fase 22C).
+        EntityFiller.Set(order, nameof(Order.Delivery), null);
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
     }
 
@@ -126,6 +130,11 @@ public class DtoMappingTests
         Assert.Equal((order.Id, OrderChannel.UberEats, folio), (platform.Id, platform.Channel, platform.ExternalOrderNumber));
         Assert.Equal(OrderChannel.Counter, counter.Channel);
         Assert.Null(counter.ExternalOrderNumber);
+        // The kitchen knows an order goes out to an address, never where (Fase 22C).
+        Assert.True(counter.IsDelivery);
+        EntityFiller.Set(order, nameof(Order.Delivery), null);
+        Assert.False(order.ToKitchenDto().IsDelivery);
+        Assert.DoesNotContain("AddressLine", System.Text.Json.JsonSerializer.Serialize(counter));
     }
 
     [Fact]

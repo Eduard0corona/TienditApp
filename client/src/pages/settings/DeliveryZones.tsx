@@ -10,6 +10,7 @@ import {
 } from '../../api/deliveryZones';
 import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { formatMoney, parseMoneyInput } from '../../utils/money';
 import { isPostalCode, parsePostalCodes } from '../../utils/postalCodes';
@@ -90,6 +91,8 @@ export default function DeliveryZones() {
   const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
+  // The fee is charged like the prices of the business: with IVA included, or IVA added on top (ADR 0018).
+  const pricesIncludeTax = useTenant().tenant?.pricesIncludeTax ?? true;
   const zones = useDeliveryZones();
   const save = useSaveDeliveryZone();
   const remove = useDeleteDeliveryZone();
@@ -231,8 +234,11 @@ export default function DeliveryZones() {
       <div className="card">
         <div className="card-body">
           <p className="text-muted mb-3">
-            Los códigos postales a los que entregas y lo que cobras por llevar. Tus respuestas automáticas de WhatsApp ya los
-            usan para decir si llegas y cuánto cuesta el envío. Los montos son lo que paga tu cliente, con IVA incluido.
+            Los códigos postales a los que entregas y lo que cobras por llevar. Tus respuestas automáticas de WhatsApp los usan
+            para decir si llegas y cuánto cuesta el envío, y el menú en línea y Vender para cobrarlo en el pedido a domicilio.{' '}
+            {pricesIncludeTax
+              ? 'Los montos son lo que paga tu cliente, con IVA incluido.'
+              : 'El envío va como tus precios, antes de IVA: el pedido le suma el IVA. El pedido mínimo y el envío gratis se comparan con lo que paga tu cliente en productos, con IVA.'}
           </p>
 
           {list.length > 0 && (

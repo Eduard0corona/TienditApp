@@ -4,6 +4,7 @@ import { SIZES, dialog, open, settle, snap } from '../helpers';
 import {
   CON_DOS_PASOS,
   INICIO_CON_ERROR,
+  MENU_A_DOMICILIO,
   MENU_CERRADO,
   MENU_CIERRE_ESPECIAL,
   MENU_HORARIO_ESPECIAL,
@@ -311,6 +312,68 @@ test.describe('Menú público fuera de horario', () => {
     await expect(page.getByText('Pedido para Mesa 4')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Agregar Latte' })).toBeVisible();
     await snap(page, 'menu-publico-mesa-telefono');
+  });
+});
+
+test.describe('Menú público a domicilio', () => {
+  test.use({ signedIn: false, prepareData: MENU_A_DOMICILIO });
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+  });
+
+  /** Two conchas and an americano, to Roma Norte: the server says what it charges to 06700. */
+  async function cartToRoma(page: Page) {
+    await open(page, '/m/cafe-la-esquina');
+    await page.getByRole('button', { name: 'Agregar Café americano' }).click();
+    await page.getByRole('button', { name: 'Agregar Concha de vainilla' }).click();
+    await page.getByRole('button', { name: 'Agregar Concha de vainilla' }).click();
+    await page.getByRole('button', { name: /^Ver pedido · 3 · / }).click();
+    const cart = await dialog(page, 'Tu pedido');
+    await cart.getByRole('radio', { name: 'A domicilio' }).click();
+    await cart.getByLabel('Código postal').fill('06700');
+    // The server answered for 06700: the delivery enters the total.
+    await expect(cart.getByText('Envío a domicilio')).toBeVisible();
+    return cart;
+  }
+
+  test('menú público que también entrega a domicilio', async ({ page }) => {
+    await open(page, '/m/cafe-la-esquina');
+    await expect(page.getByText('También a domicilio: al pedir te decimos si llegamos a tu código postal.')).toBeVisible();
+    await snap(page, 'menu-publico-tambien-a-domicilio-telefono');
+  });
+
+  test('menú público carrito a domicilio por debajo del mínimo', async ({ page }) => {
+    const cart = await cartToRoma(page);
+    await expect(cart.getByText('El pedido mínimo para el 06700 es de $150.00.')).toBeVisible();
+    await snapScreen(page, 'menu-publico-carrito-a-domicilio-minimo-telefono');
+  });
+
+  test('menú público carrito a domicilio', async ({ page }) => {
+    const cart = await cartToRoma(page);
+    await page.keyboard.press('Escape');
+    await expect(cart).toBeHidden();
+    // Enough for the minimum: three lattes more.
+    for (let latte = 0; latte < 3; latte += 1) await addLatte(page);
+    await page.getByRole('button', { name: /^Ver pedido · 6 · / }).click();
+    const full = await dialog(page, 'Tu pedido');
+    await full.getByLabel('Dirección').fill('Colima 145, depto. 3, Roma Norte');
+    await full.getByLabel('Referencias (opcional)').fill('Portón negro, timbre 3');
+    await expect(full.getByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00')).toBeVisible();
+    await expect(full.getByRole('button', { name: /^Enviar pedido · / })).toBeEnabled();
+    await snapScreen(page, 'menu-publico-carrito-a-domicilio-telefono');
+  });
+
+  test('menú público pedido a domicilio enviado', async ({ page }) => {
+    const cart = await cartToRoma(page);
+    await cart.getByLabel('Código postal').fill('06140');
+    await expect(cart.getByText('Envío $45.00')).toBeVisible();
+    await cart.getByLabel('Dirección').fill('Ámsterdam 210, Condesa');
+    await cart.getByLabel('Tu nombre').fill('Valeria Morales');
+    await cart.getByLabel('Teléfono (WhatsApp)').fill('55 2210 7765');
+    await cart.getByRole('button', { name: /^Enviar pedido · / }).click();
+    await expect(page.getByRole('heading', { name: '¡Pedido enviado!' })).toBeVisible();
+    await expect(page.getByText('Incluye envío de $45.00')).toBeVisible();
+    await snap(page, 'menu-publico-pedido-a-domicilio-enviado-telefono');
   });
 });
 

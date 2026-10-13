@@ -126,7 +126,8 @@ public sealed class OrderCustomerNotifications :
             .Select(s => (OrderNotificationPolicy?)s.OrderNotificationPolicy)
             .FirstOrDefaultAsync(cancellationToken) ?? OrderNotificationPolicy.RemoteAndServices;
 
-        return OrderNotificationRules.ShouldNotifyCustomer(policy, order.CreatedByBusiness, order.Channel, order.OrderType);
+        return OrderNotificationRules.ShouldNotifyCustomer(
+            policy, order.CreatedByBusiness, order.Channel, order.OrderType, homeDelivery: order.Delivery is not null);
     }
 
     private Task<Order?> FindOrderAsync(Guid orderId, bool includePieces, CancellationToken cancellationToken)

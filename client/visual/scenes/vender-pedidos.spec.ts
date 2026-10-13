@@ -1,7 +1,15 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap } from '../helpers';
-import { CUSTOMER_PROFILE, RAPPI_ORDERS_DATA, RAPPI_PRICES_DATA, RAPPI_ROUTES, SELL_ROUTES } from './vender-pedidos.mocks';
+import {
+  CUSTOMER_PROFILE,
+  DELIVERY_ORDERS_DATA,
+  DELIVERY_ROUTES,
+  RAPPI_ORDERS_DATA,
+  RAPPI_PRICES_DATA,
+  RAPPI_ROUTES,
+  SELL_ROUTES,
+} from './vender-pedidos.mocks';
 
 // Selling and following orders: Vender, Mesas, Pedidos, Orden detallada, Cocina and a customer's Mis pedidos, and the
 // orders of a delivery platform (Rappi) through all of them.
@@ -310,6 +318,85 @@ test.describe('Pedidos de Rappi', () => {
       await expect(page.getByRole('heading', { name: '152395' })).toBeVisible();
       await snapPage(page, 'cocina-rappi');
     });
+  });
+});
+
+test.describe('A domicilio', () => {
+  // Café La Esquina delivers to Roma ($35, from $150, free from $400) and Condesa ($45); two orders of today went out.
+  test.use({ extraRoutes: DELIVERY_ROUTES, prepareData: DELIVERY_ORDERS_DATA });
+
+  /** Sent to Roma Norte, as the cashier types the address. */
+  async function sendToRoma(ticket: Locator) {
+    await ticket.getByRole('switch', { name: 'A domicilio' }).check();
+    await ticket.getByLabel('Código postal').fill('06700');
+    await ticket.getByLabel('Dirección').fill('Colima 145, depto. 3, Roma Norte');
+    await ticket.getByLabel('Referencias (opcional)').fill('Portón negro, timbre 3');
+    await expect(ticket.getByText('Roma · Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00')).toBeVisible();
+  }
+
+  /** Two tortas and an americano: $175.00, above the minimum of Roma. */
+  async function fillDeliveryTicket(page: Page) {
+    await tapProduct(page, 'Torta de jamón', 2);
+    await tapProduct(page, 'Café americano');
+  }
+
+  /** Opens the detail of an order from its folio in the list. */
+  async function openOrder(page: Page, customer: string) {
+    const row = page.getByRole('row').filter({ hasText: customer });
+    const folio = (await row.getByRole('button', { name: /^ORD-\d+$/ }).textContent()) ?? '';
+    await row.getByRole('button', { name: folio, exact: true }).click();
+    return dialog(page, `Pedido ${folio}`);
+  }
+
+  test('Vender a domicilio', async ({ page }) => {
+    await open(page, '/sell');
+    await fillDeliveryTicket(page);
+    await sendToRoma(page.getByRole('complementary', { name: 'Ticket de la venta' }));
+    await snapPage(page, 'vender-a-domicilio-escritorio');
+  });
+
+  test('Vender a domicilio en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/sell');
+    await fillDeliveryTicket(page);
+    await page.getByRole('button', { name: /artículos · / }).click();
+    const sheet = await dialog(page, 'Ticket');
+    await sendToRoma(sheet);
+    await snapDialog(page, 'vender-a-domicilio-telefono');
+  });
+
+  test('Venta a domicilio cobrada con su ticket', async ({ page }) => {
+    await open(page, '/sell');
+    await fillDeliveryTicket(page);
+    await sendToRoma(page.getByRole('complementary', { name: 'Ticket de la venta' }));
+    const sale = await charge(page, '300');
+    await expect(sale.getByText('Envío a domicilio')).toBeVisible();
+    await snapDialog(page, 'vender-a-domicilio-cobrada');
+  });
+
+  test('Detalle de un pedido a domicilio con su envío de Paquetenvia', async ({ page }) => {
+    await open(page, '/orders');
+    const detail = await openOrder(page, 'Sofía Ramírez');
+    await expect(detail.getByRole('link', { name: 'Seguir envío' })).toBeVisible();
+    await snapDialog(page, 'pedidos-detalle-a-domicilio');
+  });
+
+  test('Registrar el envío de Paquetenvia', async ({ page }) => {
+    await open(page, '/orders');
+    const detail = await openOrder(page, 'Diego Hernández');
+    await detail.getByRole('button', { name: 'Registrar envío de Paquetenvia' }).click();
+    await detail.getByLabel('Folio de Paquetenvia').fill('pq 48230');
+    await detail.getByLabel('Enlace para seguirlo (opcional)').fill('https://paquetenvia.mx/rastreo/PQ48230');
+    await snapDialog(page, 'pedidos-registrar-paquetenvia');
+    await detail.getByRole('button', { name: 'Guardar envío' }).click();
+    await expect(detail.getByText('folio PQ48230')).toBeVisible();
+    await snapDialog(page, 'pedidos-paquetenvia-registrado');
+  });
+
+  test('Cocina con un pedido a domicilio', async ({ page }) => {
+    await open(page, '/kitchen');
+    await expect(page.getByText('A domicilio')).toBeVisible();
+    await snapPage(page, 'cocina-a-domicilio');
   });
 });
 

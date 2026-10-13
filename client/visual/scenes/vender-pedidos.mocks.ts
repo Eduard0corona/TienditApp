@@ -31,6 +31,20 @@ interface SaleRequest {
   collectedBy?: number;
   items?: SaleItemRequest[];
   payments?: SalePaymentRequest[];
+  /** Sent to the customer's address (Fase 22C): the zone that reaches its postal code charges its fee. */
+  delivery?: { postalCode: string; addressLine: string; references?: string };
+}
+
+/** A delivery zone of the business as GET /delivery-zones answers it. */
+interface DeliveryZone {
+  id: string;
+  name: string;
+  fee: number;
+  minimumOrder: number;
+  freeDeliveryFrom: number | null;
+  isActive: boolean;
+  revision: number;
+  postalCodes: string[];
 }
 
 // OrderChannel and OrderPaymentMethod as the contract numbers them.
@@ -94,24 +108,35 @@ function createSale(data: DemoData, body: SaleRequest) {
     };
   });
 
-  // One tax line per rate, as OrderTaxCalculator groups them.
+  // One tax line per rate, as OrderTaxCalculator groups them; the delivery fee is one more amount at the business's rate.
   const pricesIncludeTax: boolean = data.tenant.pricesIncludeTax;
-  const groups = new Map<string, { ratePercent: number; isExempt: boolean; amountCents: number }>();
-  for (const item of items) {
-    const key = item.isTaxExempt ? 'exempt' : String(item.taxRate);
-    const group = groups.get(key) ?? { ratePercent: item.taxRate, isExempt: item.isTaxExempt, amountCents: 0 };
-    group.amountCents += cents(item.totalPrice);
-    groups.set(key, group);
-  }
-  const taxBreakdown = [...groups.values()]
-    .map((group) => {
-      const basisPoints = Math.round(group.ratePercent * 100);
-      const taxCents = group.isExempt || basisPoints === 0 ? 0
-        : halfEven(group.amountCents * basisPoints, pricesIncludeTax ? 10_000 + basisPoints : 10_000);
-      const baseCents = pricesIncludeTax ? group.amountCents - taxCents : group.amountCents;
-      return { ratePercent: group.ratePercent, isExempt: group.isExempt, taxableBase: money(baseCents), taxAmount: money(taxCents), total: money(baseCents + taxCents) };
-    })
-    .sort((a, b) => Number(a.isExempt) - Number(b.isExempt) || b.ratePercent - a.ratePercent);
+  const breakdownOf = (amounts: Array<{ taxRate: number; isTaxExempt: boolean; cents: number }>) => {
+    const groups = new Map<string, { ratePercent: number; isExempt: boolean; amountCents: number }>();
+    for (const amount of amounts) {
+      const key = amount.isTaxExempt ? 'exempt' : String(amount.taxRate);
+      const group = groups.get(key) ?? { ratePercent: amount.taxRate, isExempt: amount.isTaxExempt, amountCents: 0 };
+      group.amountCents += amount.cents;
+      groups.set(key, group);
+    }
+    return [...groups.values()]
+      .map((group) => {
+        const basisPoints = Math.round(group.ratePercent * 100);
+        const taxCents = group.isExempt || basisPoints === 0 ? 0
+          : halfEven(group.amountCents * basisPoints, pricesIncludeTax ? 10_000 + basisPoints : 10_000);
+        const baseCents = pricesIncludeTax ? group.amountCents - taxCents : group.amountCents;
+        return { ratePercent: group.ratePercent, isExempt: group.isExempt, taxableBase: money(baseCents), taxAmount: money(taxCents), total: money(baseCents + taxCents) };
+      })
+      .sort((a, b) => Number(a.isExempt) - Number(b.isExempt) || b.ratePercent - a.ratePercent);
+  };
+  const itemAmounts = items.map((item) => ({ taxRate: item.taxRate, isTaxExempt: item.isTaxExempt, cents: cents(item.totalPrice) }));
+  const productsCents = breakdownOf(itemAmounts).reduce((sum, line) => sum + cents(line.total), 0);
+  const zone = body.delivery
+    ? deliveryZonesOf(data).find((candidate) => candidate.isActive && candidate.postalCodes.includes(body.delivery!.postalCode))
+    : undefined;
+  const feeCents = zone ? (zone.freeDeliveryFrom !== null && productsCents >= cents(zone.freeDeliveryFrom) ? 0 : cents(zone.fee)) : 0;
+  const taxBreakdown = breakdownOf(feeCents > 0
+    ? [...itemAmounts, { taxRate: data.tenant.defaultTaxRate, isTaxExempt: false, cents: feeCents }]
+    : itemAmounts);
   const subTotalCents = taxBreakdown.reduce((sum, line) => sum + cents(line.taxableBase), 0);
   const taxCents = taxBreakdown.reduce((sum, line) => sum + cents(line.taxAmount), 0);
   const totalCents = subTotalCents + taxCents;
@@ -138,7 +163,8 @@ function createSale(data: DemoData, body: SaleRequest) {
   const paidCents = payments.reduce((sum, payment) => sum + cents(payment.amount), 0);
   const isService = body.orderType === 1;
   const paid = items.length > 0 && paidCents >= totalCents;
-  const status = paid && data.tenant.autoCloseCounterSales ? (isService ? 7 : 6) : 1;
+  // An order sent to an address leaves after the kitchen: paid, it is not closed yet.
+  const status = paid && data.tenant.autoCloseCounterSales && !zone ? (isService ? 7 : 6) : 1;
 
   const order = {
     id, orderNumber, createdByBusiness: true, businessType: data.tenant.businessType, orderType: body.orderType ?? 0, status,
@@ -150,6 +176,13 @@ function createSale(data: DemoData, body: SaleRequest) {
     createdAt: NOW_ISO, items, statusHistory: [], servicePieces: [], payments, refunds: [], itemCancellations: [],
     isTab: false, isOpenTab: false, kitchenTickets: [], stockWarnings: [],
     platformOrder: isPlatform ? { externalOrderNumber: body.externalOrderNumber ?? '', collectedBy } : null,
+    delivery: zone && body.delivery
+      ? {
+        postalCode: body.delivery.postalCode, addressLine: body.delivery.addressLine, references: body.delivery.references ?? null,
+        zoneName: zone.name, fee: money(feeCents), feeTaxRate: data.tenant.defaultTaxRate,
+        courier: null, courierFolio: null, trackingUrl: null, shipmentRegisteredAt: null, shipmentRegisteredBy: null,
+      }
+      : null,
   };
   data.orders.unshift(order);
   return order;
@@ -199,6 +232,71 @@ function withRappiOrders(data: DemoData) {
 }
 
 export const RAPPI_ORDERS_DATA = asOption(withRappiOrders);
+
+/**
+ * The delivery zones of Café La Esquina (Fase 22B): Roma with a minimum of $150 and free delivery from $400, and
+ * Condesa without a minimum. Kept in the data, so a sale and the zones listed agree.
+ */
+function deliveryZonesOf(data: DemoData): DeliveryZone[] {
+  data.vpZones ??= [
+    { id: 'zona-roma', name: 'Roma', fee: 35, minimumOrder: 150, freeDeliveryFrom: 400, isActive: true, revision: 1, postalCodes: ['06700', '06760'] },
+    { id: 'zona-condesa', name: 'Condesa', fee: 45, minimumOrder: 0, freeDeliveryFrom: null, isActive: true, revision: 1, postalCodes: ['06140'] },
+  ];
+  return data.vpZones;
+}
+
+/** Normalizes a folio as the server does (PlatformOrderNumber): without # or spaces, in upper case. */
+const normalizeFolio = (folio: string) => folio.trim().replace(/^#/, '').replace(/\s+/g, '').toUpperCase();
+
+/** Vender and Pedidos of a business with delivery zones: «A domicilio» in the ticket and the trip of Paquetenvia. */
+const deliveryRoutes: ExtraRoutes = (data, helpers) => [
+  ['GET', /^\/delivery-zones$/, () => helpers.ok(deliveryZonesOf(data))],
+  ['PUT', /^\/orders\/([^/]+)\/delivery\/shipment$/, (match, _query, body: { courier: number; folio: string; trackingUrl?: string }) => {
+    const order = data.orders.find((candidate: { id: string }) => candidate.id === match[1]);
+    Object.assign(order.delivery ?? {}, {
+      courier: body.courier, courierFolio: normalizeFolio(body.folio), trackingUrl: body.trackingUrl ?? null,
+      shipmentRegisteredAt: NOW_ISO, shipmentRegisteredBy: 'mariana.ortiz@cafelaesquina.mx',
+    });
+    return { status: 204, json: null };
+  }],
+  ...sellRoutes(data, helpers),
+];
+
+export const DELIVERY_ROUTES = asOption(deliveryRoutes);
+
+/**
+ * Two orders of today sent to an address: chilaquiles to Roma, whose trip is already in Paquetenvia, and tortas to
+ * Condesa, still without a courier and in the kitchen. Added in these scenes only.
+ */
+function withDeliveryOrders(data: DemoData) {
+  const product = (name: string) => data.products.find((candidate: { name: string }) => candidate.name === name).id;
+  const roma = createSale(data, {
+    customerName: 'Sofía Ramírez', customerPhone: '5523456789',
+    items: [{ productId: product('Chilaquiles verdes'), quantity: 2 }, { productId: product('Café americano'), quantity: 2 }],
+    delivery: { postalCode: '06700', addressLine: 'Colima 145, depto. 3, Roma Norte', references: 'Portón negro, timbre 3' },
+  });
+  // Paid by card when it was taken, and in the kitchen.
+  roma.payments = [{
+    id: `${roma.id}-pago-1`, amount: roma.total, method: 1, paidAt: at(12, 50), reference: null, notes: null, tip: 0, cashReceived: null, change: 0,
+  }];
+  Object.assign(roma, { paidAmount: roma.total, balance: 0, netPaidAmount: roma.total, canCancel: false, status: 2, allowedTransitions: [3], createdAt: at(12, 50) });
+  Object.assign(roma.delivery!, {
+    courier: 1, courierFolio: 'PQ48213', trackingUrl: 'https://paquetenvia.mx/rastreo/PQ48213',
+    shipmentRegisteredAt: at(13, 5), shipmentRegisteredBy: 'lucia.navarro@cafelaesquina.mx',
+  });
+  const condesa = createSale(data, {
+    customerName: 'Diego Hernández', customerPhone: '5534567890',
+    items: [{ productId: product('Torta de jamón'), quantity: 2 }, { productId: product('Agua de jamaica'), quantity: 2 }],
+    delivery: { postalCode: '06140', addressLine: 'Ámsterdam 210, Condesa' },
+  });
+  Object.assign(condesa, { createdAt: at(13, 10) });
+  data.kitchenOrders.push({
+    id: condesa.id, orderNumber: condesa.orderNumber, channel: 0, externalOrderNumber: null, isDelivery: true, status: condesa.status,
+    customerName: condesa.customerName, tableNumber: null, customerNotes: null, createdAt: condesa.createdAt, items: condesa.items,
+  });
+}
+
+export const DELIVERY_ORDERS_DATA = asOption(withDeliveryOrders);
 
 /** A customer account (Mis pedidos): no business, only its own orders. */
 export const CUSTOMER_PROFILE = {

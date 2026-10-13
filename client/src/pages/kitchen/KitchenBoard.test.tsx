@@ -119,5 +119,18 @@ describe('KitchenBoard', () => {
     const counter = within(card('ORD-000125'));
     expect(counter.getByText('Cliente:')).toBeInTheDocument();
     expect(counter.queryByText('Rappi')).not.toBeInTheDocument();
+    expect(counter.queryByText('A domicilio')).not.toBeInTheDocument();
+  });
+
+  it('marks an order that goes to the customer\'s address, without saying where', async () => {
+    vi.mocked(kitchenApi.getOrders).mockResolvedValue({
+      data: [{ ...order('d1', 'ORD-000126', OrderStatus.Confirmed), channel: OrderChannel.Online, isDelivery: true, customerName: 'Ana' }],
+    } as Awaited<ReturnType<typeof kitchenApi.getOrders>>);
+    renderBoard();
+
+    await screen.findByRole('heading', { name: 'ORD-000126' });
+    const delivery = within(card('ORD-000126'));
+    expect(delivery.getByText('A domicilio')).toHaveClass('badge');
+    expect(delivery.getByText('Cliente:').parentElement).toHaveTextContent('Cliente: Ana');
   });
 });

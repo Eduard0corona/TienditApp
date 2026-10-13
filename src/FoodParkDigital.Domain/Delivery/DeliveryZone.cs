@@ -6,9 +6,10 @@ namespace FoodParkDigital.Domain.Delivery;
 
 /// <summary>
 /// Where a business delivers and what it charges for it: a name, the postal codes it reaches, its delivery fee, the
-/// smallest order it takes there and, optionally, from what order on the delivery is free. Amounts are what the customer
-/// pays, tax included, and the minimum and the free delivery compare against the products of the order as the customer
-/// sees them. A postal code belongs to one zone of the business at most (the database keeps it so too).
+/// smallest order it takes there and, optionally, from what order on the delivery is free. The fee is charged like the
+/// prices of the business: with IVA included when they include it, with IVA added when they do not (ADR 0018); the
+/// minimum and the free delivery compare against the products of the order as the customer pays them, with IVA. A postal
+/// code belongs to one zone of the business at most (the database keeps it so too).
 /// </summary>
 public class DeliveryZone : AuditableEntity, ITenantScoped, IAggregateRoot
 {
@@ -50,7 +51,7 @@ public class DeliveryZone : AuditableEntity, ITenantScoped, IAggregateRoot
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = string.Empty;
 
-    /// <summary>What the customer pays for the delivery, tax included; 0 when it is free.</summary>
+    /// <summary>What the delivery costs, as the prices of the business are written (with or without IVA); 0 when it is free.</summary>
     public decimal Fee { get; private set; }
 
     /// <summary>The smallest order, in products, it delivers here; 0 when there is none.</summary>

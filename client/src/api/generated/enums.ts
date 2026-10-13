@@ -86,6 +86,11 @@ export const DayOfWeek = {
 } as const;
 export type DayOfWeek = (typeof DayOfWeek)[keyof typeof DayOfWeek];
 
+export const DeliveryCourier = {
+  Paquetenvia: 1,
+} as const;
+export type DeliveryCourier = (typeof DeliveryCourier)[keyof typeof DeliveryCourier];
+
 export const InsufficientStockPolicy = {
   Block: 0,
   Warn: 1,

@@ -6738,6 +6738,48 @@
         }
       }
     },
+    "/api/v1/orders/{id}/delivery/shipment": {
+      "put": {
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/orders/{id}/cancel": {
       "put": {
         "tags": [
@@ -8526,6 +8568,52 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicMenuDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/delivery-quote": {
+      "get": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeliveryQuoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeliveryQuoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeliveryQuoteDto"
                 }
               }
             }
@@ -12244,6 +12332,7 @@
         "required": [
           "amount",
           "description",
+          "isDeliveryFee",
           "orderItemId",
           "productCode",
           "quantity",
@@ -12256,6 +12345,9 @@
           "orderItemId": {
             "type": "string",
             "format": "uuid"
+          },
+          "isDeliveryFee": {
+            "type": "boolean"
           },
           "productCode": {
             "type": "string"
@@ -13454,6 +13546,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryInput"
           }
         },
         "additionalProperties": false
@@ -14723,6 +14818,16 @@
           "Thursday",
           "Friday",
           "Saturday"
+        ]
+      },
+      "DeliveryCourier": {
+        "enum": [
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Paquetenvia"
         ]
       },
       "DeliveryPlatformChannelDto": {
@@ -16103,6 +16208,7 @@
           "createdAt",
           "customerName",
           "id",
+          "isDelivery",
           "items",
           "orderNumber",
           "status"
@@ -16122,6 +16228,9 @@
           "externalOrderNumber": {
             "type": "string",
             "nullable": true
+          },
+          "isDelivery": {
+            "type": "boolean"
           },
           "status": {
             "$ref": "#/components/schemas/OrderStatus"
@@ -17007,6 +17116,80 @@
           "DidiFood"
         ]
       },
+      "OrderDeliveryDto": {
+        "required": [
+          "addressLine",
+          "fee",
+          "feeTaxRate",
+          "postalCode",
+          "zoneName"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          },
+          "feeTaxRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "courierFolio": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackingUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "shipmentRegisteredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "shipmentRegisteredBy": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderDeliveryInput": {
+        "required": [
+          "addressLine",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "OrderDto": {
         "required": [
           "allowedTransitions",
@@ -17095,6 +17278,9 @@
           },
           "platformOrder": {
             "$ref": "#/components/schemas/OrderPlatformDto"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryDto"
           },
           "branchId": {
             "type": "string",
@@ -17962,6 +18148,9 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryInput"
           }
         },
         "additionalProperties": false
@@ -19428,6 +19617,37 @@
         },
         "additionalProperties": false
       },
+      "PublicDeliveryQuoteDto": {
+        "required": [
+          "covered",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "covered": {
+            "type": "boolean"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "minimumOrder": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "freeDeliveryFrom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicMenuCategoryDto": {
         "required": [
           "id",
@@ -19459,6 +19679,7 @@
           "categories",
           "currency",
           "defaultTaxRate",
+          "deliveryAvailable",
           "deliveryOnly",
           "ordersPaused",
           "pricesIncludeTax",
@@ -19505,6 +19726,9 @@
             "nullable": true
           },
           "deliveryOnly": {
+            "type": "boolean"
+          },
+          "deliveryAvailable": {
             "type": "boolean"
           },
           "openingHours": {
@@ -19690,6 +19914,11 @@
           "total": {
             "type": "number",
             "format": "double"
+          },
+          "deliveryFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           },
           "confirmed": {
             "type": "boolean"
@@ -20151,6 +20380,26 @@
             "nullable": true
           },
           "state": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegisterCourierShipmentRequest": {
+        "required": [
+          "courier",
+          "folio"
+        ],
+        "type": "object",
+        "properties": {
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "trackingUrl": {
             "type": "string",
             "nullable": true
           }

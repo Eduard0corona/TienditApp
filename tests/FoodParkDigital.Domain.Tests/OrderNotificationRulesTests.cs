@@ -26,6 +26,16 @@ public class OrderNotificationRulesTests
     }
 
     [Fact]
+    public void OrderTakenAtTheCounter_ForTheCustomersAddress_ShouldMessageTheCustomer_WhoWaitsAtHome()
+    {
+        Assert.True(OrderNotificationRules.ShouldNotifyCustomer(
+            OrderNotificationPolicy.RemoteAndServices, true, OrderChannel.Counter, OrderType.Retail, homeDelivery: true));
+        Assert.False(OrderNotificationRules.IsCounterSale(true, OrderChannel.Counter, OrderType.Retail, homeDelivery: true));
+        Assert.False(OrderNotificationRules.ShouldNotifyCustomer(
+            OrderNotificationPolicy.Off, true, OrderChannel.Counter, OrderType.Retail, homeDelivery: true));
+    }
+
+    [Fact]
     public void AllOrdersAndOff_ShouldNotDependOnWhereTheOrderCameFrom()
     {
         Assert.True(OrderNotificationRules.ShouldNotifyCustomer(

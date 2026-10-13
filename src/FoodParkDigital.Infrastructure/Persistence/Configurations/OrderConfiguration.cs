@@ -81,6 +81,14 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey<PlatformOrderDetail>(d => d.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Where the order goes and what its delivery charges. Always loaded with the order (unlike PlatformDetail): its
+        // fee is part of the total, so an order changed without it would recalculate a total without the delivery.
+        builder.HasOne(o => o.Delivery)
+            .WithOne()
+            .HasForeignKey<OrderDelivery>(d => d.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.Delivery).AutoInclude();
+
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(o => o.CustomerUserId)
