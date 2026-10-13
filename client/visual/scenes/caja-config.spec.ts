@@ -528,7 +528,8 @@ test.describe('Zonas de entrega', () => {
     // What the automatic replies would answer: the zone that has it and what it charges.
     await open(page, '/settings/delivery-zones');
     await page.getByLabel('Probar un código postal').fill('06700');
-    await expect(page.getByRole('status')).toHaveText(/Sí llegas al 06700 con «Roma y Condesa»/);
+    // The page has another status too (the notice of the plan): the one of the probe says the postal code.
+    await expect(page.getByRole('status').filter({ hasText: '06700' })).toHaveText(/Sí llegas al 06700 con «Roma y Condesa»/);
     await snap(page, 'zonas-entrega-probar-escritorio');
   });
 
