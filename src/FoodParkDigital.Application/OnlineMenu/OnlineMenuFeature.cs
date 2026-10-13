@@ -115,10 +115,15 @@ public class PublicMenuDto
     /// <summary>The colors the business picked: its customers see the menu with them.</summary>
     public BusinessTheme Theme { get; set; }
     /// <summary>
-    /// Where the main branch is, in one line, to show it and open it in a map; null without a street. Never the fiscal
-    /// address of the business.
+    /// Where the main branch is, in one line, to show it and open it in a map; null without a street or when the branch
+    /// only delivers. Never the fiscal address of the business.
     /// </summary>
     public string? Address { get; set; }
+    /// <summary>
+    /// The main branch only delivers: it has no premises to visit, and its address (<see cref="Address"/> stays null) is
+    /// never published.
+    /// </summary>
+    public bool DeliveryOnly { get; set; }
     /// <summary>
     /// Its hours and whether it is open now. Null when the business has no hours and no special day today or in the
     /// next 31 days.
@@ -348,7 +353,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             .ToDictionary(g => g.Key, g => g.ToList());
         // Online orders arrive at the default branch, and only while a drawer is open there (see PlacePublicOrderCommand).
         // It is also the address customers see: where the business sells, never its fiscal address, which is often the
-        // owner's home.
+        // owner's home; and none when that branch only delivers.
         var mainBranch = await _context.Branches
             .AsNoTracking()
             .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && b.IsDefault, cancellationToken);
@@ -374,7 +379,8 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             AcceptsOrders = acceptsOrders,
             OrdersPaused = ordersOn && !acceptsOrders,
             Theme = settings.Theme,
-            Address = AddressText.OneLine(mainBranch),
+            Address = AddressText.ForCustomers(mainBranch),
+            DeliveryOnly = mainBranch is { KeepsAddressPrivate: true },
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))

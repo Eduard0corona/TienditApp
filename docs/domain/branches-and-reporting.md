@@ -7,6 +7,10 @@
 - No se puede desactivar una sucursal con cajas abiertas. Un negocio tiene máximo 50 sucursales.
 - Las altas de negocio (`RegisterBusinessCommand`, `CreateTenantCommand`) y los datos semilla crean la "Sucursal principal" (`PRINCIPAL`) y le asignan el almacén principal.
 - `GET /api/v1/branches` lo lee cualquier miembro activo del negocio (`RequiresTenantMember`), sin depender del módulo de inventario; crear, editar, activar y marcar principal es de dueños y administradores (`RequiresTenantManager`). La pantalla está en Configuración › Sucursales.
+- Desde la Fase 22A cada sucursal dice cómo atiende (`ServiceMode`, [ADR 0016](../adr/0016-delivery-only-branches.md)): «Local abierto al público» (`Premises`, lo que eran todas) o «Solo a domicilio, sin local» (`DeliveryOnly`).
+  - La que solo entrega guarda su dirección para el equipo: si es la principal, el menú en línea no la muestra y dice «Solo a domicilio», y la respuesta automática a «¿dónde están?» dice que no hay local para visitar.
+  - Al crear o guardar sin `serviceMode`, una sucursal nueva tiene local y una guardada conserva el que tenía. La columna tiene `DEFAULT 0` y la restricción `CK_Branches_ServiceMode`.
+  - El alta con el giro «Comida a domicilio» crea la principal solo a domicilio; cambiar el giro después no toca las sucursales.
 
 ## Qué pertenece a una sucursal
 

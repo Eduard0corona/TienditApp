@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 
 namespace FoodParkDigital.Application.Branches;
 
@@ -20,6 +21,8 @@ public class BranchDto
     public string? ContactPhone { get; set; }
     public bool IsDefault { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Whether customers come to it or it only delivers, keeping its address private.</summary>
+    public BranchServiceMode ServiceMode { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
@@ -39,6 +42,7 @@ public class BranchDto
         ContactPhone = x.ContactPhone,
         IsDefault = x.IsDefault,
         IsActive = x.IsActive,
+        ServiceMode = x.ServiceMode,
         CreatedAt = x.CreatedAt,
         UpdatedAt = x.UpdatedAt
     };

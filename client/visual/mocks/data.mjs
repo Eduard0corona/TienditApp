@@ -207,7 +207,8 @@ export function buildData() {
     id: uuid(`loc:${key}`), name, code, description: extra.description,
     addressLine1: extra.address, addressLine2: extra.address2, city: 'Ciudad de México', state: 'Ciudad de México',
     country: 'México', postalCode: extra.postalCode, contactName: extra.contactName, contactPhone: extra.contactPhone,
-    isDefault: !!extra.isDefault, isActive: extra.isActive ?? true, createdAt: extra.createdAt ?? '2026-02-12T16:30:00.000Z',
+    isDefault: !!extra.isDefault, isActive: extra.isActive ?? true, serviceMode: extra.serviceMode ?? 0,
+    createdAt: extra.createdAt ?? '2026-02-12T16:30:00.000Z',
   });
   const locations = [
     loc('roma', 'Sucursal Roma Norte', 'ROMA', { description: 'Sucursal principal y cocina', address: 'Av. Álvaro Obregón 182, Local 3', address2: 'Col. Roma Norte', postalCode: '06700', contactName: 'Mariana Ortiz', contactPhone: '55 5264 1180', isDefault: true }),

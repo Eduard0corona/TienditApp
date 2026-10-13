@@ -1,4 +1,7 @@
 import { asOption, type DemoData, type SceneOptions } from '../fixtures';
+
+// BranchServiceMode as the contract numbers it.
+const DELIVERY_ONLY = 1;
 import { at } from '../mocks/data.mjs';
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
@@ -371,6 +374,11 @@ function withPlatformInTheCut(data: DemoData) {
 
 export const CAJA_ROUTES = asOption(cashRoutes);
 export const CAJA_DATA = asOption(completeCashData);
+/** The drawers of the file, with the main branch delivering only: the address of a kitchen without premises stays private. */
+export const PRINCIPAL_SOLO_A_DOMICILIO_DATA = asOption((data: DemoData) => {
+  completeCashData(data);
+  data.locations.find((location: { isDefault: boolean }) => location.isDefault).serviceMode = DELIVERY_ONLY;
+});
 export const SIN_CAJA_DATA = asOption(withoutDrawer);
 export const NEGOCIO_DATA = asOption(businessProfile);
 export const MENU_EN_LINEA_DATA = asOption(businessWithOnlineMenu);

@@ -9,6 +9,7 @@ import {
   MENU_EN_LINEA_DATA,
   NEGOCIO_DATA,
   PLATAFORMAS_ROUTES,
+  PRINCIPAL_SOLO_A_DOMICILIO_DATA,
   SIN_CAJA_DATA,
   SUPER_ADMIN_PROFILE,
   VENTAS_POR_CANAL_ROUTES,
@@ -472,6 +473,26 @@ test.describe('Sucursales', () => {
     const editing = await dialog(page, 'Editar Sucursal Roma Norte');
     await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
     await snapDialog(page, 'sucursales-editar-principal-dialogo-telefono');
+  });
+
+  test('sucursales, la principal solo a domicilio', async ({ page }) => {
+    // Chosen in the form: the notice says the menu keeps its address private.
+    await open(page, '/branches');
+    await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
+    const editing = await dialog(page, 'Editar Sucursal Roma Norte');
+    await editing.getByRole('radio', { name: 'Solo a domicilio, sin local' }).check();
+    await expect(editing.getByText('Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección.')).toBeVisible();
+    await snapDialog(page, 'sucursales-principal-solo-a-domicilio-dialogo');
+  });
+
+  test.describe('con la principal solo a domicilio', () => {
+    test.use({ prepareData: PRINCIPAL_SOLO_A_DOMICILIO_DATA });
+
+    test('sucursales, lista con la principal solo a domicilio', async ({ page }) => {
+      await open(page, '/branches');
+      await expect(page.getByText('Solo a domicilio', { exact: true })).toBeVisible();
+      await snap(page, 'sucursales-solo-a-domicilio-escritorio');
+    });
   });
 
   test('sucursales, nueva sucursal', async ({ page }) => {

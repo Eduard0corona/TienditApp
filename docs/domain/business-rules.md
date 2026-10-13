@@ -85,6 +85,15 @@ Cada depósito de Rappi, Uber Eats o DiDi Food se concilia en Reportes › Liqui
 - **Quién:** la leen quienes leen los reportes (`ViewReports`); la abren, guardan, cierran y anulan dueños y administradores.
 - **No es caja:** un depósito no es un movimiento de caja, y Ventas por canal, Inicio y el corte siguen en base caja. La liquidación redondea por pedido y Ventas por canal por fila, así que pueden diferir por centavos.
 
+## Sucursal solo a domicilio (Fase 22A)
+
+Una cocina sin local no publica su dirección ([ADR 0016](../adr/0016-delivery-only-branches.md)). Cada sucursal dice cómo atiende (`Branch.ServiceMode`): «Local abierto al público» o «Solo a domicilio, sin local».
+
+- **Qué se publica:** con la sucursal principal solo a domicilio, el menú en línea no lleva su dirección (`AddressText.ForCustomers`) y avisa que es solo a domicilio, y la respuesta automática a «¿dónde están?» (también con un saludo, una pregunta de precios o el horario en el mismo mensaje) dice que no hay local para visitar, con la descripción del negocio y el menú si está prendido. «Mi dirección» o «mi ubicación» no preguntan dónde está el negocio. Ninguna respuesta automática lleva la dirección de una sucursal.
+- **Quién la ve:** el equipo, en Configuración › Sucursales y en el almacén de la sucursal, que la copia al crearse.
+- **Guardado:** dueños y administradores. Sin `serviceMode`, una nueva tiene local y una guardada conserva el que tenía; un valor desconocido es 400 `validation_failed` (`Elige cómo atiende la sucursal.`).
+- **Giro:** el alta con «Comida a domicilio» crea la principal solo a domicilio. La guía de inicio, como a todo negocio de comida, ofrece la plantilla «Comida a domicilio». Cambiar el giro después no cambia ninguna sucursal.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

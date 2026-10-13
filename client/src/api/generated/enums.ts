@@ -11,6 +11,12 @@ export const AppointmentStatus = {
 } as const;
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus];
 
+export const BranchServiceMode = {
+  Premises: 0,
+  DeliveryOnly: 1,
+} as const;
+export type BranchServiceMode = (typeof BranchServiceMode)[keyof typeof BranchServiceMode];
+
 export const BusinessTheme = {
   Nopal: 0,
   Talavera: 1,

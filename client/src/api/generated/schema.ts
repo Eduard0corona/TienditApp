@@ -8887,6 +8887,7 @@ export interface components {
             contactPhone?: string | null;
             isDefault: boolean;
             isActive: boolean;
+            serviceMode: components["schemas"]["BranchServiceMode"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -8898,6 +8899,11 @@ export interface components {
             branchName: string;
             figures: components["schemas"]["SalesFiguresDto"];
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        BranchServiceMode: 0 | 1;
         /**
          * Format: int32
          * @enum {integer}
@@ -9352,6 +9358,7 @@ export interface components {
             postalCode?: string | null;
             contactName?: string | null;
             contactPhone?: string | null;
+            serviceMode?: components["schemas"]["BranchServiceMode"];
             isDefault: boolean;
         };
         CreateBusinessCommand: {
@@ -11274,6 +11281,7 @@ export interface components {
             ordersPaused: boolean;
             theme: components["schemas"]["BusinessTheme"];
             address?: string | null;
+            deliveryOnly: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
@@ -12119,6 +12127,7 @@ export interface components {
             postalCode?: string | null;
             contactName?: string | null;
             contactPhone?: string | null;
+            serviceMode?: components["schemas"]["BranchServiceMode"];
             /** Format: uuid */
             id: string;
         };

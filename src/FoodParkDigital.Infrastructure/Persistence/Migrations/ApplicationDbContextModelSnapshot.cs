@@ -500,6 +500,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<int>("ServiceMode")
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("State")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
@@ -525,7 +529,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "IsActive");
 
-                    b.ToTable("Branches", (string)null);
+                    b.ToTable("Branches", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Catalog.Entities.Category", b =>

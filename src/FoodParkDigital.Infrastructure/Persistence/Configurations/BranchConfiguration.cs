@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Reporting.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -9,7 +10,8 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
 {
     public void Configure(EntityTypeBuilder<Branch> builder)
     {
-        builder.ToTable("Branches");
+        builder.ToTable("Branches", table =>
+            table.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)"));
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
@@ -26,6 +28,13 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
         builder.Property(x => x.ContactPhone).HasMaxLength(30);
         builder.Property(x => x.IsDefault).IsRequired();
         builder.Property(x => x.IsActive).IsRequired();
+        // EF always writes it; the default fills the branches the previous version adds while this one is published
+        // (it knows only branches with premises).
+        builder.Property(x => x.ServiceMode)
+            .HasConversion<int>()
+            .HasDefaultValue(BranchServiceMode.Premises)
+            .ValueGeneratedNever()
+            .IsRequired();
 
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.IsActive });

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Customers.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -29,8 +30,9 @@ public static class BusinessProvisioning
 
     /// <summary>
     /// Adds the business with its settings (prices with IVA included and the modules of its type), the general
-    /// public customer, the default branch with its warehouse and, when the platform has a plan for new
-    /// businesses, its trial. The caller saves, inside its transaction.
+    /// public customer, the default branch with its warehouse (delivery only for a kitchen without premises, see
+    /// <see cref="BusinessIndustries"/>) and, when the platform has a plan for new businesses, its trial. The caller
+    /// saves, inside its transaction.
     /// </summary>
     public static async Task<TenantSettings> AddAsync(
         IApplicationDbContext context,
@@ -44,7 +46,9 @@ public static class BusinessProvisioning
             tenant.Id,
             TenantCapabilityDefaults.FromBusinessType(tenant.BusinessType),
             pricesIncludeTax: true);
-        var defaultBranch = Branch.CreateDefault(tenant.Id);
+        var defaultBranch = Branch.CreateDefault(
+            tenant.Id,
+            BusinessIndustries.OnlyDelivers(tenant.Industry) ? BranchServiceMode.DeliveryOnly : BranchServiceMode.Premises);
 
         context.Tenants.Add(tenant);
         context.TenantSettings.Add(settings);

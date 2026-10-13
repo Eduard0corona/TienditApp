@@ -11,7 +11,7 @@ Además, el job `Migrations` de `.github/workflows/ci.yml` aplica las migracione
 1. Crea con `dotnet ef database update` una base en `PRODUCTION_BASELINE`, una migración que producción ya tiene (idealmente la última; hoy `20261004165450_AddOfflineSaleIdempotency`, la de la Fase 3).
 2. Le aplica con el `sqlcmd` clásico y `-b` el mismo contenido que un `apply.sql`: el bloque `SET` de los scripts de producción y la salida de `dotnet ef migrations script --idempotent`.
 3. Lo ejecuta otra vez con la caché de planes vacía y falla si cambia el historial o algún objeto. Así SQL Server vuelve a compilar todos los lotes, incluidos los que salta, como en una ejecución posterior en producción: un lote viejo que nombra una columna que una migración nueva borró falla ahí.
-4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE`, lo ejecuta otra vez (no debe cambiar nada: cada lote tiene que compilar aunque ya no existan las columnas que nombra) y aplica el script de nuevo.
+4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE`, lo ejecuta otra vez con la caché de planes vacía (no debe cambiar nada: cada lote tiene que compilar aunque ya no existan las columnas que nombra; sin vaciarla, SQL Server reutiliza los planes de la primera vez y el error no aparece) y aplica el script de nuevo.
 5. Crea otra base vacía con `dotnet ef database update`, como se crea una base nueva.
 
 La contraseña de SA se genera en el job y el runner la enmascara en los logs. Cuando producción avance, sube `PRODUCTION_BASELINE`; un valor más viejo solo prueba más migraciones. Si el job falla, sus scripts quedan como artefacto `migration-scripts` de la ejecución.
@@ -53,6 +53,10 @@ Migraciones recientes con notas operativas:
   - Los topes de política (31 días, $10,000,000 depositados, $1,000,000 por ajuste, 2,000 pedidos y 100 ajustes) viven en el dominio y se pueden relajar sin migración.
   - La versión anterior (`master` con la Fase 22F-2) no conoce las tablas y sigue registrando y reembolsando pedidos sobre ellas, también uno liquidado: el reembolso no borra el pedido, así que la llave sin cascada no le estorba.
   - Su `Down` se detiene con el error 50010 si hay alguna liquidación guardada: la bitácora no guarda qué pedidos lleva cada una (solo cuántos) ni nada de una abierta. Sin liquidaciones, borra las tres tablas.
+- Fase 22A: `AddBranchServiceMode` agrega a `Branches` cómo atiende cada sucursal ([ADR 0016](../adr/0016-delivery-only-branches.md)).
+  - `Branches.ServiceMode`: `int`, sin nulos y 0 por omisión (0 local abierto al público, 1 solo a domicilio), con la restricción `CK_Branches_ServiceMode` (`IN (0, 1)`). EF siempre escribe el valor; el de la base llena las sucursales que agregue la versión anterior, que solo conoce locales. Todas las que ya existen quedan en 0.
+  - La versión anterior (`master` con la Fase 22G) no conoce la columna y sigue agregando y editando sucursales sobre ella sin cambiarla. Pero trata todas como locales: con una principal solo a domicilio, vuelve a publicar su dirección en el menú en línea.
+  - Su `Down` se detiene con el error 50011 si hay alguna sucursal solo a domicilio, por esa misma razón. Sin ellas, borra la restricción y la columna.
 
 ## Reglas
 
@@ -227,6 +231,18 @@ Los de `20261012145908_AddPlatformSettlements` se probaron igual (SQL Server 202
 En CI lo prueban:
 - `PlatformSettlementsSqlServerTests`: los nueve índices de las tres tablas, con los dos únicos filtrados, y sus tres llaves; que una liquidación se guarde con sus pedidos y ajustes sin perder centavos, solo en su negocio; que guardar quite los pedidos que salen y reemplace los ajustes, que vuelven en el orden en que se escribieron; que el índice rechace una segunda abierta de una plataforma en un negocio y la deje en otro, y un pedido en dos liquidaciones vigentes hasta que la suya se anula; que una edición con una revisión vieja falle con `DbUpdateConcurrencyException`; que un pedido liquidado no se borre y la liquidación se lleve sus filas; que cada restricción CHECK rechace un `INSERT` que el dominio no escribe; y que los casos de uso respondan «Alguien más modificó…», y no un error, cuando otra liquidación se abre o toma un pedido mientras se guarda una, o cuando el mismo guardado llega dos veces;
 - `PlatformSettlementsMigrationSqlServerTests`: que un contexto de la versión anterior reembolse un pedido liquidado y la liquidación se quede; que revertir se detenga con el error 50010 sin cambios mientras haya una liquidación; y que sin ellas revertir borre solo lo que agregó.
+
+Los de `20261012204959_AddBranchServiceMode` se probaron igual (SQL Server 2022, Docker), con el `sqlcmd` clásico y `-b`. La base se creó con `dotnet ef database update` en `20261012145908_AddPlatformSettlements`, como producción con `master` en la Fase 22G. Tenía dos negocios con tres sucursales, dos de ellas principales:
+- el `verify.sql` mostró `AddPlatformSettlements` como última migración, sin la columna;
+- el `apply.sql` agregó la columna (`int`, sin nulos, con su `DEFAULT ((0))`) y su restricción CHECK, con las tres sucursales en 0. Repetirlo no cambió ningún objeto ni el historial;
+- la restricción rechazó con el error 547 un `INSERT` con el modo 2 y un `UPDATE` al −1, y una sucursal agregada sin la columna, como la versión anterior, quedó en 0;
+- con la principal de un negocio solo a domicilio, la consulta 3 la contó aparte y la listó con su negocio, su `Slug`, su nombre y si tiene calle, y el `rollback.sql` se detuvo con el error 50011 sin cambiar ningún objeto, el historial ni las filas;
+- de vuelta a local, el `rollback.sql` regresó la base a `AddPlatformSettlements` con el mismo esquema de antes de aplicar, y repetirlo no hizo nada. Aplicar de nuevo, dos veces, dejó el mismo esquema que en una base nueva con el script aplicado una vez (SQL Server nombra al azar la restricción `DEFAULT`, así que solo cambia ese nombre);
+- la primera versión de la guarda del `Down` nombraba `[ServiceMode]` en el mismo lote: ejecutado otra vez con la caché de planes vacía, ese `rollback.sql` fallaba con el error 207 (`Invalid column name 'ServiceMode'`). Ahora la revisión corre con `EXEC` y solo mientras la columna existe (`COL_LENGTH`). El nuevo se detuvo con el 50011, regresó la base y, otras dos veces con la caché vacía, no hizo nada; el `verify.sql` también corrió sobre la base sin la columna. Lo mismo con el paso del CI: desde `AddOfflineSaleIdempotency`, aplicar, revertir, revertir otra vez con la caché vacía y aplicar de nuevo terminó sin errores.
+
+En CI lo prueban:
+- `BranchServiceModeMigrationSqlServerTests`: que un contexto de la versión anterior, sin la columna, agregue una sucursal (queda en 0) y edite una solo a domicilio sin cambiarla; que la restricción CHECK rechace un modo que el dominio no escribe; que revertir se detenga con el error 50011 sin cambios mientras haya una sucursal solo a domicilio; y que sin ellas revertir borre solo la columna y su restricción, otra vez no haga nada y aplicar de nuevo deje todas en 0;
+- `PublicMenuDeliveryOnlySqlServerTests`: sobre la API real, que el menú de una principal solo a domicilio no traiga la calle, que un guardado sin el campo la mantenga así y que de vuelta a local la dirección se publique.
 
 Las reparaciones de datos sin cambio de esquema van en `database/production/data-repair/<fecha>_<Nombre>/`, con un `verify.sql` de solo lectura y un `README.md` con el procedimiento. Cuando la corrección debe pasar por las reglas del dominio, como compensar inventario, no hay `apply.sql`: se registra desde la aplicación. Cuando basta un cambio de datos acotado, lleva además un `repair.sql` idempotente que lista lo que cambia, como `20261005_StorageUrlsOutsideTheirFolder`.
 
