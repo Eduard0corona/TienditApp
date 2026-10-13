@@ -797,6 +797,12 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Fecha:</strong> {toLocalDateTime(selectedOrder.createdAt)}</p>
                   <p className="mb-1"><strong>Artículos:</strong> {selectedOrderTotalItems}</p>
                   <p className="mb-1"><strong>Total:</strong> <span className="ta-money">{formatMoney(selectedOrder.total)}</span></p>
+                  {selectedOrder.visitCharge && (
+                    <p className="mb-1 small">
+                      Incluye el cargo por visita a domicilio ({selectedOrder.visitCharge.zoneName}):{' '}
+                      <span className="ta-money">{formatMoney(selectedOrder.visitCharge.fee)}</span>
+                    </p>
+                  )}
                   {selectedOrder.taxBreakdown.filter((line) => line.taxAmount > 0).map((line) => (
                     <p className="mb-1 small text-muted" key={`${line.ratePercent}-${line.isExempt}`}>
                       {selectedOrder.pricesIncludeTax ? 'Incluye ' : ''}{getVatLabel(line)}: {formatMoney(line.taxAmount)}

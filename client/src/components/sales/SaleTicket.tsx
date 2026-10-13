@@ -11,6 +11,7 @@ import {
   formatTicketQuantity,
   getTicketCustomerName,
   getTicketDelivery,
+  getTicketVisitCharge,
   getTicketPaymentTotals,
   getTicketPlatform,
   type TicketExtras,
@@ -33,6 +34,7 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
   const platform = getTicketPlatform(order);
   const packing = platform?.packing ?? false;
   const delivery = getTicketDelivery(order);
+  const visitCharge = getTicketVisitCharge(order);
   // Without connection the logo may not load: the ticket goes on with the name only.
   const [failedLogo, setFailedLogo] = useState<string | null>(null);
 
@@ -80,6 +82,13 @@ export default function SaleTicket({ order, businessName, logoUrl, provisional }
               <td></td>
               <td className="w-100">Envío a domicilio</td>
               <td className="text-end align-top ta-money">{formatDeliveryFee(delivery.fee)}</td>
+            </tr>
+          )}
+          {visitCharge !== null && (
+            <tr>
+              <td></td>
+              <td className="w-100">Cargo por visita</td>
+              <td className="text-end align-top ta-money">{formatMoney(visitCharge)}</td>
             </tr>
           )}
         </tbody>

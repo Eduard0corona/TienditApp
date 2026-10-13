@@ -1119,6 +1119,27 @@ export interface AppointmentDto {
   endAt: string;
   status: AppointmentStatus;
   notes?: string;
+  /** Where it happens when it is at the customer's address (Fase 22E); null when they come to the business. */
+  visit?: AppointmentVisitDto | null;
+  /** The sale it was charged with; null until it is charged. */
+  saleOrderId?: string | null;
+}
+
+/** The customer's address of an appointment at their home, its zone and the charge for the visit agreed then. */
+export interface AppointmentVisitDto {
+  postalCode: string;
+  addressLine: string;
+  references?: string | null;
+  zoneName: string;
+  /** With the business's tax policy, like its prices; 0 when the zone charges nothing. */
+  fee: number;
+}
+
+/** Where an appointment at the customer's address happens, as typed: the server finds its zone. */
+export interface AppointmentVisitInput {
+  postalCode: string;
+  addressLine: string;
+  references?: string;
 }
 
 export interface CreateAppointmentRequest {
@@ -1132,6 +1153,8 @@ export interface CreateAppointmentRequest {
   startAt: string;
   endAt: string;
   notes?: string;
+  /** At the customer's address; null (or missing) when the customer comes to the business. */
+  visit?: AppointmentVisitInput | null;
 }
 
 // ==================== Reports ====================
@@ -1531,6 +1554,8 @@ export interface OrderDto {
   platformOrder?: OrderPlatformDto | null;
   /** An order sent to the customer's address: where, the zone, what it charged and the courier's trip. */
   delivery?: OrderDeliveryDto | null;
+  /** The sale of an appointment at the customer's address: what it charged for the visit (Fase 22E). */
+  visitCharge?: OrderVisitChargeDto | null;
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */
@@ -1567,6 +1592,14 @@ export interface OrderPlatformDto {
   externalOrderNumber: string;
   /** The platform, in its app, or the business, when the courier pays on pickup. */
   collectedBy: PlatformCollectedBy;
+}
+
+/** What the sale of an appointment at the customer's address charged for the visit; in the total and IVA breakdown. */
+export interface OrderVisitChargeDto {
+  appointmentId: string;
+  zoneName: string;
+  fee: number;
+  feeTaxRate: number;
 }
 
 /** Where an order goes and what it charged for it (Fase 22C); the fee is in the order's total and IVA breakdown. */
@@ -1759,6 +1792,8 @@ export interface CreateOrderRequest {
   capturedOfflineAt?: string;
   /** Sent to the customer's address: the zone that reaches the postal code charges its fee (never offline or for a tab). */
   delivery?: OrderDeliveryInput;
+  /** The appointment of the agenda this sale charges (Fase 22E): done with it, and its visit charge in the total. */
+  appointmentId?: string;
 }
 
 export interface CreateOrderPaymentRequest {

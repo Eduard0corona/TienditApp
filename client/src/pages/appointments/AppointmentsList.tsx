@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
 import { appointmentsApi } from '../../api/appointmentsApi';
 import { employeesApi } from '../../api/employeesApi';
+import { quoteVisit } from '../../api/homeVisits';
 import { productsApi } from '../../api/productsApi';
 import type {
   AppointmentDto,
@@ -15,8 +17,21 @@ import type {
 } from '../../types';
 import { AppointmentStatus as AppointmentStatusConst } from '../../types';
 import { getApiErrorMessage } from '../../api/errors';
+import { useAuth } from '../../hooks/useAuth';
+import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { getAccess } from '../../utils/access';
 import { formatInBusinessZone } from '../../utils/dates';
+import {
+  VISIT_ADDRESS_LINE_REQUIRED_MESSAGE,
+  VISIT_POSTAL_CODE_REQUIRED_MESSAGE,
+  describeVisitPlace,
+} from '../../utils/homeVisits';
+import { isPostalCode } from '../../utils/postalCodes';
+import AppointmentVisitFields, { type VisitFieldsState, type VisitQuoteView } from './AppointmentVisitFields';
+import { isSameAddress } from './appointmentVisit';
+import { canBeCharged, isClosed, statusBadge, statusLabel } from './appointmentStatus';
+import VisitRoute from './VisitRoute';
 
 const COLUMNS = [
   { header: 'Cliente' },
@@ -39,9 +54,12 @@ const EMPTY_PAGINATED = {
 const OTHER_SERVICE = 'other';
 const DEFAULT_DURATION_MINUTES = 60;
 
-type View = 'upcoming' | 'history';
+type View = 'upcoming' | 'history' | 'route';
 
-interface FormState {
+/** Where the appointments listed happen: '' all, 'home' at the customer's address, 'business' at the business. */
+type PlaceFilter = '' | 'home' | 'business';
+
+interface FormState extends VisitFieldsState {
   customerName: string;
   customerPhone: string;
   serviceProductId: string;
@@ -61,7 +79,14 @@ const buildForm = (): FormState => ({
   startAt: '',
   endAt: '',
   notes: '',
+  atHome: false,
+  postalCode: '',
+  addressLine: '',
+  references: '',
 });
+
+/** The answer of the server for a postal code: the zone and the charge, or why it does not go there. */
+type QuoteAnswer = { postalCode: string } & ({ zoneName: string; fee: number } | { message: string });
 
 /** "2026-10-05T10:30" for a datetime-local input, in the device's time. */
 function toInputDateTime(value: string | Date): string {
@@ -85,34 +110,6 @@ function startOfToday(): Date {
   return today;
 }
 
-const statusLabel = (status: AppointmentStatus) => {
-  switch (status) {
-    case AppointmentStatusConst.Scheduled: return 'Programada';
-    case AppointmentStatusConst.Confirmed: return 'Confirmada';
-    case AppointmentStatusConst.InService: return 'En servicio';
-    case AppointmentStatusConst.Completed: return 'Completada';
-    case AppointmentStatusConst.NoShow: return 'No asistió';
-    case AppointmentStatusConst.Cancelled: return 'Cancelada';
-    default: return String(status);
-  }
-};
-
-const statusBadge = (status: AppointmentStatus) => {
-  switch (status) {
-    case AppointmentStatusConst.Completed: return 'bg-success';
-    case AppointmentStatusConst.Confirmed: return 'ta-chip-confirmed';
-    case AppointmentStatusConst.InService: return 'bg-info';
-    case AppointmentStatusConst.NoShow: return 'bg-warning text-dark';
-    case AppointmentStatusConst.Cancelled: return 'bg-danger';
-    default: return 'bg-secondary';
-  }
-};
-
-const isClosed = (status: AppointmentStatus) =>
-  status === AppointmentStatusConst.Completed
-  || status === AppointmentStatusConst.NoShow
-  || status === AppointmentStatusConst.Cancelled;
-
 function formatSlot(item: AppointmentDto): string {
   const start = new Date(item.startAt);
   const end = new Date(item.endAt);
@@ -128,10 +125,17 @@ function formatSlot(item: AppointmentDto): string {
 export default function AppointmentsList() {
   const titleId = useId();
   const toast = useToast();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { tenant, capabilities } = useTenant();
+  // «Cobrar» opens Vender with the appointment: only for whoever sells.
+  const canSell = getAccess(user, capabilities).sell;
+  const pricesIncludeTax = tenant?.pricesIncludeTax ?? false;
   const [data, setData] = useState<PaginatedList<AppointmentDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('upcoming');
   const [statusFilter, setStatusFilter] = useState('');
+  const [placeFilter, setPlaceFilter] = useState<PlaceFilter>('');
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState('');
@@ -144,8 +148,11 @@ export default function AppointmentsList() {
   const [form, setForm] = useState<FormState>(buildForm());
   const [services, setServices] = useState<ProductDto[]>([]);
   const [staff, setStaff] = useState<EmployeeDto[]>([]);
+  const [quoteAnswer, setQuoteAnswer] = useState<QuoteAnswer | null>(null);
 
   const loadData = useCallback(async () => {
+    // The route reads its own day.
+    if (view === 'route') return;
     setLoading(true);
     try {
       // Upcoming opens with today, the soonest first; history reads from the newest back.
@@ -154,6 +161,7 @@ export default function AppointmentsList() {
         search?: string;
         fromDate?: string;
         toDate?: string;
+        homeVisit?: boolean;
         pageNumber: number;
         pageSize: number;
       } = view === 'upcoming'
@@ -161,6 +169,7 @@ export default function AppointmentsList() {
         : { pageNumber, pageSize, toDate: new Date().toISOString() };
       if (statusFilter !== '') params.status = Number(statusFilter) as AppointmentStatus;
       if (search) params.search = search;
+      if (placeFilter !== '') params.homeVisit = placeFilter === 'home';
       const { data } = await appointmentsApi.getAll(params);
       setData(data);
     } catch (err: unknown) {
@@ -168,15 +177,15 @@ export default function AppointmentsList() {
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, pageSize, search, statusFilter, view]);
+  }, [pageNumber, pageSize, placeFilter, search, statusFilter, view]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
-  // The catalog's services and the active team, for the form.
+  // The catalog's services and the active team, for the form and the route.
   useEffect(() => {
-    if (!showModal || (services.length > 0 && staff.length > 0)) return;
+    if ((!showModal && view !== 'route') || (services.length > 0 && staff.length > 0)) return;
     let cancelled = false;
     Promise.all([
       productsApi.getAll({ itemType: 'Service', isAvailable: true, pageSize: 200 }).catch(() => null),
@@ -189,7 +198,32 @@ export default function AppointmentsList() {
     return () => {
       cancelled = true;
     };
-  }, [showModal, services.length, staff.length]);
+  }, [showModal, view, services.length, staff.length]);
+
+  // What a visit to the postal code typed charges: asked once the five digits are there.
+  const typedPostalCode = form.postalCode.trim();
+  const shouldQuote = showModal && form.atHome && isPostalCode(typedPostalCode);
+  useEffect(() => {
+    if (!shouldQuote) return;
+    const controller = new AbortController();
+    quoteVisit(typedPostalCode, controller.signal)
+      .then((quote) => setQuoteAnswer({ postalCode: typedPostalCode, zoneName: quote.zoneName, fee: quote.fee }))
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setQuoteAnswer({ postalCode: typedPostalCode, message: getApiErrorMessage(err, 'No se pudo consultar la zona.') });
+        }
+      });
+    return () => controller.abort();
+  }, [shouldQuote, typedPostalCode]);
+
+  // At the same address an appointment keeps what was agreed; another one is quoted again.
+  const agreed = editing?.visit && form.atHome && isSameAddress(editing.visit, form) ? editing.visit : null;
+  const quoteView: VisitQuoteView = agreed
+    ? { kind: 'agreed', zoneName: agreed.zoneName, fee: agreed.fee }
+    : !shouldQuote ? { kind: 'none' }
+    : quoteAnswer?.postalCode !== typedPostalCode ? { kind: 'loading' }
+    : 'message' in quoteAnswer ? { kind: 'refused', message: quoteAnswer.message }
+    : { kind: 'quoted', zoneName: quoteAnswer.zoneName, fee: quoteAnswer.fee };
 
   const serviceById = useMemo(() => new Map(services.map((service) => [service.id, service])), [services]);
 
@@ -211,6 +245,10 @@ export default function AppointmentsList() {
       startAt: toInputDateTime(item.startAt),
       endAt: toInputDateTime(item.endAt),
       notes: item.notes ?? '',
+      atHome: Boolean(item.visit),
+      postalCode: item.visit?.postalCode ?? '',
+      addressLine: item.visit?.addressLine ?? '',
+      references: item.visit?.references ?? '',
     });
     setFormError('');
     setShowModal(true);
@@ -252,6 +290,14 @@ export default function AppointmentsList() {
       setFormError('Indica el inicio y un fin posterior al inicio.');
       return;
     }
+    if (form.atHome && !isPostalCode(form.postalCode.trim())) {
+      setFormError(VISIT_POSTAL_CODE_REQUIRED_MESSAGE);
+      return;
+    }
+    if (form.atHome && !form.addressLine.trim()) {
+      setFormError(VISIT_ADDRESS_LINE_REQUIRED_MESSAGE);
+      return;
+    }
 
     const payload: CreateAppointmentRequest = {
       customerName: form.customerName.trim(),
@@ -262,13 +308,18 @@ export default function AppointmentsList() {
       startAt: new Date(form.startAt).toISOString(),
       endAt: new Date(form.endAt).toISOString(),
       notes: form.notes.trim() || undefined,
+      // The server finds the zone and sets the charge (at the same address it keeps the one agreed).
+      visit: form.atHome
+        ? { postalCode: form.postalCode.trim(), addressLine: form.addressLine.trim(), references: form.references.trim() || undefined }
+        : null,
     };
 
     try {
       setSaving(true);
       if (editing) {
         await appointmentsApi.update(editing.id, payload);
-        toast.success(sameMinute(editing.startAt, payload.startAt) ? 'Cita actualizada.' : 'Cita reprogramada: el cliente recibe el aviso.');
+        const moved = !sameMinute(editing.startAt, payload.startAt) || (editing.visit?.postalCode ?? null) !== (payload.visit?.postalCode ?? null);
+        toast.success(moved ? 'Cita reprogramada: el cliente recibe el aviso.' : 'Cita actualizada.');
       } else {
         await appointmentsApi.create(payload);
         toast.success('Cita registrada.');
@@ -293,6 +344,29 @@ export default function AppointmentsList() {
     }
   };
 
+  const chooseView = (next: View) => {
+    setView(next);
+    setPageNumber(1);
+  };
+
+  const charge = (appointmentId: string) => navigate(`/sell?appointment=${encodeURIComponent(appointmentId)}`);
+
+  const viewPicker = (
+    <div className="btn-group btn-group-sm" role="group" aria-label="Qué citas ver">
+      {([['upcoming', 'Próximas'], ['history', 'Anteriores'], ['route', 'Ruta del día']] as const).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          className={`btn ${view === value ? 'btn-primary' : 'btn-light'}`}
+          aria-pressed={view === value}
+          onClick={() => chooseView(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <>
       <PageTitle title="Agenda" />
@@ -306,6 +380,17 @@ export default function AppointmentsList() {
 
       <div className="card">
         <div className="card-body">
+          {view === 'route' ? (
+            <>
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                {viewPicker}
+                <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>
+                  <i className="ri-add-line me-1" aria-hidden="true"></i>Nueva cita
+                </button>
+              </div>
+              <VisitRoute staff={staff} pricesIncludeTax={pricesIncludeTax} canCharge={canSell} onCharge={charge} />
+            </>
+          ) : (
           <DataTable
             data={data.items}
             columns={COLUMNS}
@@ -315,24 +400,22 @@ export default function AppointmentsList() {
             searchPlaceholder="Cliente, teléfono, servicio o persona"
             filters={(
               <>
-                <div className="btn-group btn-group-sm" role="group" aria-label="Qué citas ver">
-                  <button
-                    type="button"
-                    className={`btn ${view === 'upcoming' ? 'btn-primary' : 'btn-light'}`}
-                    aria-pressed={view === 'upcoming'}
-                    onClick={() => { setView('upcoming'); setPageNumber(1); }}
+                {viewPicker}
+                <DataTableFilter label="Dónde" htmlFor="appointments-place">
+                  <select
+                    id="appointments-place"
+                    className="form-select form-select-sm"
+                    value={placeFilter}
+                    onChange={(e) => {
+                      setPlaceFilter(e.target.value as PlaceFilter);
+                      setPageNumber(1);
+                    }}
                   >
-                    Próximas
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${view === 'history' ? 'btn-primary' : 'btn-light'}`}
-                    aria-pressed={view === 'history'}
-                    onClick={() => { setView('history'); setPageNumber(1); }}
-                  >
-                    Anteriores
-                  </button>
-                </div>
+                    <option value="">Todas</option>
+                    <option value="business">En el negocio</option>
+                    <option value="home">A domicilio</option>
+                  </select>
+                </DataTableFilter>
                 <DataTableFilter label="Estado" htmlFor="appointments-status">
                   <select
                     id="appointments-status"
@@ -383,13 +466,27 @@ export default function AppointmentsList() {
                   <div>{item.serviceName}</div>
                   <div className="text-muted small">{item.staffName || 'Sin asignar'}</div>
                 </td>
-                <td>{formatSlot(item)}</td>
+                <td>
+                  <div>{formatSlot(item)}</div>
+                  {item.visit && <div className="text-muted small">{describeVisitPlace(item.visit)}</div>}
+                </td>
                 <td className="text-center">
                   <span className={`badge ${statusBadge(item.status)}`}>{statusLabel(item.status)}</span>
                 </td>
                 <td className="text-center">
                   {isClosed(item.status) ? (
-                    <span className="text-muted small">Cerrada</span>
+                    canSell && canBeCharged(item) ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => charge(item.id)}
+                        aria-label={`Cobrar la cita de ${item.customerName}`}
+                      >
+                        Cobrar
+                      </button>
+                    ) : (
+                      <span className="text-muted small">{item.saleOrderId ? 'Cobrada' : 'Cerrada'}</span>
+                    )
                   ) : (
                     <div className="d-flex gap-1 justify-content-center">
                       <select
@@ -414,12 +511,23 @@ export default function AppointmentsList() {
                       >
                         Editar
                       </button>
+                      {canSell && canBeCharged(item) && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-light"
+                          onClick={() => charge(item.id)}
+                          aria-label={`Cobrar la cita de ${item.customerName}`}
+                        >
+                          Cobrar
+                        </button>
+                      )}
                     </div>
                   )}
                 </td>
               </>
             )}
           />
+          )}
         </div>
       </div>
 
@@ -465,6 +573,13 @@ export default function AppointmentsList() {
                 ))}
               </select>
             </div>
+            <AppointmentVisitFields
+              value={form}
+              onChange={(changes) => setForm((x) => ({ ...x, ...changes }))}
+              quote={quoteView}
+              pricesIncludeTax={pricesIncludeTax}
+              disabled={saving}
+            />
             <div className="col-md-6 mb-2">
               <label className="form-label" htmlFor="appointment-start">Inicio *</label>
               <input id="appointment-start" type="datetime-local" className="form-control" value={form.startAt} onChange={(e) => changeStart(e.target.value)} />
@@ -480,6 +595,10 @@ export default function AppointmentsList() {
           </div>
           {editing && form.startAt && !sameMinute(editing.startAt, form.startAt) && (
             <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo horario.</div>
+          )}
+          {editing && sameMinute(editing.startAt, form.startAt || editing.startAt)
+            && (editing.visit?.postalCode ?? '') !== (form.atHome ? form.postalCode.trim() : '') && (
+            <div className="alert alert-info py-2 small mt-3 mb-0">Al guardar, el cliente recibe por WhatsApp el nuevo lugar.</div>
           )}
           {formError && <div className="alert alert-danger mt-3 mb-0" role="alert">{formError}</div>}
         </Modal.Body>
