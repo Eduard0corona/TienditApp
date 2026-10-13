@@ -2,6 +2,7 @@
 
 - Estado: Aceptada
 - Fecha: 2026-10-13
+- Enmendada: punto 3 por el [ADR 0018](0018-home-delivery-orders.md): el envío sigue la política de IVA del pedido.
 
 ## Contexto
 

@@ -108,10 +108,23 @@ A dónde entrega el negocio y cuánto cobra por llevar, por código postal ([ADR
 
   Un negocio tiene hasta 30 zonas.
 - **Un código postal, una zona:** no puede estar en dos zonas del mismo negocio, activas o no. Agregarlo a otra zona se rechaza diciendo cuál lo tiene, también cuando dos guardados lo agregan al mismo tiempo. Lo mismo con el nombre. Otro negocio puede tener el mismo nombre y el mismo código postal.
-- **Montos:** lo que paga el cliente, con IVA incluido. El mínimo y el envío gratis se comparan con el total de productos, sin el envío.
+- **Montos:** el envío va como los precios del negocio: con IVA incluido si los precios lo incluyen (lo de omisión) y con el IVA sumado si no ([ADR 0018](../adr/0018-home-delivery-orders.md), que enmienda el 0017). El mínimo y el envío gratis se comparan con lo que paga el cliente en productos (con IVA), sin el envío.
 - **Quién las cambia:** dueños y administradores, con la revisión que vieron. Un guardado sobre una revisión vieja, o de una zona que alguien borró, es 409 `concurrency_conflict`, en el orden en que la base escriba las filas. Guardar sin cambios no registra nada. Todo el equipo puede leerlas.
 - **Bitácora:** `DeliveryZoneCreated`, `DeliveryZoneUpdated` y `DeliveryZoneDeleted` guardan lo que cobra la zona y cuántos códigos postales tiene, antes y después, nunca cuáles.
-- **Dónde se usan:** en las respuestas automáticas de WhatsApp ([mensajería](messaging.md)). Una zona desactivada no llega a ninguno de sus códigos postales. El pedido a domicilio con el envío cobrado llega en la Fase 22C.
+- **Dónde se usan:** en las respuestas automáticas de WhatsApp ([mensajería](messaging.md)) y en el pedido a domicilio (Fase 22C). Una zona desactivada no llega a ninguno de sus códigos postales.
+
+## Pedido a domicilio (Fase 22C)
+
+El pedido sabe a dónde va y cobra el envío de su zona ([ADR 0018](../adr/0018-home-delivery-orders.md)).
+
+- **Qué guarda** (`OrderDelivery`, uno por pedido): código postal, dirección (hasta 300 caracteres), referencias (hasta 500, opcionales), el nombre de la zona que llegó, el envío cobrado ($0 si fue gratis) y su tasa de IVA, y el viaje del repartidor cuando se anota.
+- **Cuándo:** solo al crear un pedido de productos, desde Vender o el menú en línea, antes de cualquier pago o estado. Nunca un pedido de Rappi, Uber Eats o DiDi (su repartidor lo lleva), una cuenta de mesa, un servicio, uno con mesa o uno capturado sin conexión. Después no toma más productos ni se vuelve cuenta.
+- **La zona:** la activa del negocio que llega al código postal. Si ninguna llega: «Por ahora no llegamos al 72999.». Si los productos no alcanzan su mínimo: «El pedido mínimo para el 72000 es de $150.00.». El envío es el de la zona, o $0 desde su «envío gratis desde», y queda fijo en el pedido.
+- **El envío en el total:** un concepto más, con la tasa por omisión del negocio y la política de IVA del pedido. Entra al desglose de IVA, al total, a lo que se cobra y al borrador de CFDI como «Envío a domicilio» (78102203, E48, con un aviso para confirmarlo con el contador).
+- **Cierre:** un pedido a domicilio pagado no se cierra solo como una venta de mostrador: alguien lo marca entregado.
+- **Menú en línea:** ofrece «A domicilio» mientras toma pedidos y hay alguna zona activa; el cliente cotiza su código postal sin ver el nombre de la zona. En una mesa no se ofrece. Una cocina sin local con zonas exige la dirección; sin zonas, sus pedidos llegan como antes.
+- **Paquetenvia:** quien toma los pedidos anota o corrige el folio del viaje y su enlace `https` (opcional) en Pedidos, no en un pedido cancelado. Anotar el mismo viaje otra vez no registra nada.
+- **Bitácora:** `OrderCreated` dice si va a domicilio y cuánto cobró de envío, nunca la dirección; `OrderCourierShipmentRegistered` guarda repartidor, folio anterior y nuevo y si hay enlace, nunca el enlace.
 
 ## Cancelación y trazabilidad
 

@@ -69,6 +69,16 @@ Migraciones recientes con notas operativas:
     - índice único `(TenantId, PostalCode)`: un código postal en una sola zona del negocio.
   - La versión anterior (`master` con la Fase 22A) no conoce las tablas: ninguna de sus consultas las toca.
   - Su `Down` se detiene con el error 50012 mientras haya zonas guardadas. Sin ellas, borra las dos tablas. Una tabla ya borrada compila igual (resolución diferida de nombres), así que el `rollback.sql` se puede ejecutar otra vez.
+- Fase 22C: `AddOrderDeliveries` crea la tabla de los pedidos a domicilio ([ADR 0018](../adr/0018-home-delivery-orders.md)).
+  - `OrderDeliveries`, una fila por pedido:
+    - `PostalCode` `varchar(5)`, `AddressLine` `nvarchar(300)`, `References` `nvarchar(500)` (con nulos) y `ZoneName` `nvarchar(60)`;
+    - `Fee` `decimal(18,2)` y `FeeTaxRate` `decimal(5,2)`;
+    - el viaje, con nulos: `Courier` (`int`), `CourierFolio` (`varchar(30)`), `TrackingUrl` (`nvarchar(500)`), `ShipmentRegisteredAt` y `ShipmentRegisteredBy`;
+    - llave a `Orders` en cascada e índice único `IX_OrderDeliveries_OrderId`: una entrega por pedido;
+    - seis CHECK: `_PostalCode` (cinco dígitos), `_AddressLine` (no vacía), `_Fee` (0 a 10,000), `_FeeTaxRate` (0 a 100), `_TrackingUrl` (nulo o `https://` con algo después) y `_Shipment` (el viaje completo o nada: sin repartidor no hay folio, enlace ni fecha; con Paquetenvia, folio y fecha). Cada columna de la segunda rama lleva `IS NOT NULL`: un CHECK deja pasar lo desconocido.
+  - El pedido carga su entrega siempre (`AutoInclude`): su envío es parte del total.
+  - La versión anterior (`master` con la Fase 22B) no conoce la tabla y cobra un pedido a domicilio por el total guardado, envío incluido (`OrderDeliveriesSqlServerTests`).
+  - Su `Down` se detiene con el error 50013 mientras haya pedidos a domicilio: se perderían su dirección y su envío. Sin ellos, borra la tabla.
 
 ## Reglas
 
