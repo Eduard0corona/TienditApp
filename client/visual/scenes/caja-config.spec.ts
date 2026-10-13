@@ -11,6 +11,7 @@ import {
   PLATAFORMAS_ROUTES,
   PRINCIPAL_SOLO_A_DOMICILIO_DATA,
   SIN_CAJA_DATA,
+  SIN_ZONAS_DATA,
   SUPER_ADMIN_PROFILE,
   VENTAS_POR_CANAL_ROUTES,
 } from './caja-config.mocks';
@@ -100,6 +101,12 @@ for (const look of LOOKS) {
       await open(page, '/branches');
       await expect(page.getByRole('button', { name: 'Editar Kiosko Parque México' })).toBeVisible();
       await snap(page, `sucursales-${look.suffix}`);
+    });
+
+    test(`zonas de entrega ${look.suffix}`, async ({ page }) => {
+      await open(page, '/settings/delivery-zones');
+      await expect(page.getByRole('button', { name: 'Editar Roma y Condesa' })).toBeVisible();
+      await snap(page, `zonas-entrega-${look.suffix}`);
     });
 
     test(`equipo ${look.suffix}`, async ({ page }) => {
@@ -512,6 +519,44 @@ test.describe('Sucursales', () => {
       const editing = await dialog(page, 'Editar Sucursal Roma Norte');
       await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
       await snapDialog(page, 'sucursales-editar-principal-dialogo-oscuro');
+    });
+  });
+});
+
+test.describe('Zonas de entrega', () => {
+  test('zonas de entrega, probar un código postal', async ({ page }) => {
+    // What the automatic replies would answer: the zone that has it and what it charges.
+    await open(page, '/settings/delivery-zones');
+    await page.getByLabel('Probar un código postal').fill('06700');
+    // The page has another status too (the notice of the plan): the one of the probe says the postal code.
+    await expect(page.getByRole('status').filter({ hasText: '06700' })).toHaveText(/Sí llegas al 06700 con «Roma y Condesa»/);
+    await snap(page, 'zonas-entrega-probar-escritorio');
+  });
+
+  test('zonas de entrega, editar una zona', async ({ page }) => {
+    await open(page, '/settings/delivery-zones');
+    await page.getByRole('button', { name: 'Editar Roma y Condesa' }).click();
+    const editing = await dialog(page, 'Editar Roma y Condesa');
+    await expect(editing.getByText('4 códigos postales.')).toBeVisible();
+    await snapDialog(page, 'zonas-entrega-editar-dialogo');
+  });
+
+  test('zonas de entrega, nueva zona en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/settings/delivery-zones');
+    await page.getByRole('button', { name: 'Nueva zona' }).click();
+    const creating = await dialog(page, 'Nueva zona de entrega');
+    await expect(creating.getByRole('button', { name: 'Agregar zona' })).toBeVisible();
+    await snapDialog(page, 'zonas-entrega-nueva-dialogo-telefono');
+  });
+
+  test.describe('sin zonas', () => {
+    test.use({ prepareData: SIN_ZONAS_DATA });
+
+    test('zonas de entrega, sin zonas', async ({ page }) => {
+      await open(page, '/settings/delivery-zones');
+      await expect(page.getByText(/Todavía no tienes zonas de entrega/)).toBeVisible();
+      await snap(page, 'zonas-entrega-vacio-escritorio');
     });
   });
 });

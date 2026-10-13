@@ -25,6 +25,7 @@ const ServicesList = lazy(() => import('./pages/services/ServicesList'));
 const ServiceBoard = lazy(() => import('./pages/services/ServiceBoard'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
 const BranchesList = lazy(() => import('./pages/branches/BranchesList'));
+const DeliveryZones = lazy(() => import('./pages/settings/DeliveryZones'));
 const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
@@ -173,6 +174,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="businessSettings">
                     <BranchesList />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/settings/delivery-zones"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <DeliveryZones />
                   </AccessRoute>
                 )}
               />

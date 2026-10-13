@@ -37,6 +37,8 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Ventas por canal y pedidos de una plataforma (`GetSalesByChannelQuery`, `GetDeliveryPlatformOrdersQuery`) | `ViewReports` (`Permission(ViewReports)`) | — |
 | Liquidaciones de las plataformas: la lista, una liquidación, los pedidos pendientes de un periodo y lo que debe cada plataforma (`GetPlatformSettlementsQuery`, `GetPlatformSettlementQuery`, `GetPendingPlatformOrdersQuery`, `GetPlatformReceivablesQuery`, Fase 22G) | `ViewReports` (`Permission(ViewReports)`), como Ventas por canal | — |
 | Abrir, guardar, cerrar y anular una liquidación (`CreatePlatformSettlementCommand`, `UpdatePlatformSettlementCommand`, `ClosePlatformSettlementCommand`, `VoidPlatformSettlementCommand`, Fase 22G) | dueño o admin (`Manager`), como las tasas de las plataformas | — |
+| Zonas de entrega: la lista (`GetDeliveryZonesQuery`, Fase 22B) | cualquier miembro (`Member`): quien toma un pedido necesita saber a dónde se entrega | — |
+| Agregar, guardar y borrar una zona de entrega (`CreateDeliveryZoneCommand`, `UpdateDeliveryZoneCommand`, `DeleteDeliveryZoneCommand`, Fase 22B) | dueño o admin (`Manager`) | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
 

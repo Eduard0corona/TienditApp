@@ -301,6 +301,19 @@ La Fase 22A trae una migración, [`database/production/20261012204959_AddBranchS
 - **Volver a la versión anterior:** funciona sin tocar la base, pero esa versión trata todas las sucursales como locales: **vuelve a publicar la dirección de una principal solo a domicilio** en el menú en línea. Antes de volver, la consulta 3 del `verify.sql` dice cuáles hay; cámbiala a local y borra su calle, o acepta que se publique.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50011, sin cambiar nada, mientras haya una sucursal solo a domicilio, por la misma razón. Sin ellas, borra la restricción y la columna, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Zonas de entrega (Fase 22B)
+
+La Fase 22B trae una migración, [`database/production/20261013002425_AddDeliveryZones`](../../database/production/20261013002425_AddDeliveryZones). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0017](../adr/0017-delivery-zones.md)).
+
+- **La migración:**
+  - **Qué agrega:** dos tablas nuevas y vacías, `DeliveryZones` y `DeliveryZonePostalCodes`, con sus restricciones, la llave en cascada y los índices únicos de los nombres y de los códigos postales del negocio. No toca otras tablas.
+  - **Cuándo cambia algo:** cuando un dueño o administrador agrega una zona en Configuración › Zonas de entrega. Desde ese momento, las respuestas automáticas contestan si llegan a un código postal y cuánto cuesta el envío.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, la llave y los índices. Su consulta 4 cuenta las zonas (ninguna hasta desplegar) y la 5 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22A) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `GET`, `POST`, `PUT /{id}` y `DELETE /{id}?revision=` en `/api/v1/delivery-zones`, con `DeliveryZoneDto` y `SaveDeliveryZoneRequest`. Nada se quita ni cambia de nombre.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, y las zonas se quedan sin usarse. Sus respuestas automáticas vuelven a no saber de zonas.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50012, sin cambiar nada, mientras haya zonas guardadas: se perderían, y la bitácora no guarda sus códigos postales. Sin ellas, borra las dos tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

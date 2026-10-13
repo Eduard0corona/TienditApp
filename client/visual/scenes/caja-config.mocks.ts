@@ -150,6 +150,7 @@ const cashRoutes: ExtraRoutes = (data, { ok, paginate }) => {
   const { sessions, movements } = shiftHistory(today, roma, coyoacan);
   const todayId = today?.id;
   return [
+    ['GET', /^\/delivery-zones$/, () => ok(data.deliveryZones ?? deliveryZones())],
     ['GET', /^\/cash\/sessions$/, (_match, query) => {
       let rows = sessions;
       const from = query.get('fromDate');
@@ -372,7 +373,34 @@ function withPlatformInTheCut(data: DemoData) {
   }
 }
 
+/**
+ * The delivery zones of Café La Esquina (Configuración › Zonas de entrega): Roma and Condesa with a minimum and free
+ * delivery from $400, Juárez and Cuauhtémoc without a minimum, and Del Valle turned off, with more postal codes than a
+ * row shows.
+ */
+function deliveryZones() {
+  return [
+    {
+      id: 'zone-roma', name: 'Roma y Condesa', fee: 35, minimumOrder: 150, freeDeliveryFrom: 400, isActive: true, revision: 2,
+      postalCodes: ['06100', '06140', '06700', '06760'],
+    },
+    {
+      id: 'zone-juarez', name: 'Juárez y Cuauhtémoc', fee: 45, minimumOrder: 0, freeDeliveryFrom: null, isActive: true, revision: 1,
+      postalCodes: ['06500', '06600'],
+    },
+    {
+      id: 'zone-del-valle', name: 'Del Valle y Narvarte', fee: 60, minimumOrder: 250, freeDeliveryFrom: null, isActive: false, revision: 3,
+      postalCodes: ['03020', '03023', '03100', '03103', '03104', '03300'],
+    },
+  ];
+}
+
 export const CAJA_ROUTES = asOption(cashRoutes);
+/** A business that has not set up any delivery zone yet. */
+export const SIN_ZONAS_DATA = asOption((data: DemoData) => {
+  completeCashData(data);
+  data.deliveryZones = [];
+});
 export const CAJA_DATA = asOption(completeCashData);
 /** The drawers of the file, with the main branch delivering only: the address of a kitchen without premises stays private. */
 export const PRINCIPAL_SOLO_A_DOMICILIO_DATA = asOption((data: DemoData) => {
