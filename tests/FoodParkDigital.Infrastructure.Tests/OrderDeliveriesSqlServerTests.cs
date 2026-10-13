@@ -185,12 +185,20 @@ public class OrderDeliveriesSqlServerTests
         await using var database = SqlServerTestDatabase.CreateEmpty();
         await MigrateAsync(database, Migration);
         var (tenant, _) = await SeedAsync(database);
-        await SeedDeliveryOrderAsync(database, tenant.Id);
+        // The database stops at this migration: the app of this version (Fase 22C) writes and reads it.
+        await using (var context = CreateVersionOfOrderDeliveries(database, tenant.Id))
+        {
+            var order = NewOrder(tenant.Id);
+            var zone = new DeliveryZone(tenant.Id, new DeliveryZoneFields("Centro", 35m, 0m, null, ["72000"]));
+            order.ArrangeDelivery(DeliveryAddress.From("72000", "Av. Juárez 123, Col. Centro", "Portón negro"), zone, VatRate.General);
+            context.Orders.Add(order);
+            await context.SaveChangesAsync();
+        }
 
         var error = await Assert.ThrowsAsync<SqlException>(() => MigrateAsync(database, BeforeOrderDeliveries));
         Assert.Equal(50013, error.Number);
         Assert.Contains("orders sent to an address", error.Message);
-        await using (var context = database.CreateContext(tenant.Id))
+        await using (var context = CreateVersionOfOrderDeliveries(database, tenant.Id))
         {
             Assert.Equal(Migration, await LatestMigrationAsync(context));
             Assert.Single(await context.OrderDeliveries.ToListAsync());
@@ -210,7 +218,7 @@ public class OrderDeliveriesSqlServerTests
         // Rolling back again does nothing, and forward again the table is back, empty.
         await MigrateAsync(database, BeforeOrderDeliveries);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = CreateVersionOfOrderDeliveries(database, tenant.Id);
         Assert.Empty(await forward.OrderDeliveries.ToListAsync());
     }
 
@@ -274,6 +282,28 @@ public class OrderDeliveriesSqlServerTests
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.Ignore<OrderDelivery>();
+        }
+    }
+
+    private static VersionOfOrderDeliveriesContext CreateVersionOfOrderDeliveries(SqlServerTestDatabase database, Guid tenantId)
+        => database.CreateContext(tenantId, (options, tenant, mediator) => new VersionOfOrderDeliveriesContext(options, tenant, mediator));
+
+    /// <summary>The app of Fase 22C: deliveries without what went out with the courier (Fase 22D), and no settlements.</summary>
+    private sealed class VersionOfOrderDeliveriesContext(
+        DbContextOptions<ApplicationDbContext> options,
+        ICurrentTenantService tenantService,
+        IMediator mediator) : ApplicationDbContext(options, tenantService, mediator)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<CourierSettlementAdjustment>();
+            modelBuilder.Ignore<CourierSettlementOrder>();
+            modelBuilder.Ignore<CourierSettlement>();
+            modelBuilder.Entity<OrderDelivery>().Ignore(d => d.PaysWith);
+            modelBuilder.Entity<OrderDelivery>().Ignore(d => d.DispatchedAt);
+            modelBuilder.Entity<OrderDelivery>().Ignore(d => d.DispatchedBy);
+            modelBuilder.Entity<OrderDelivery>().Ignore(d => d.CashToCollect);
         }
     }
 

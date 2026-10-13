@@ -29,6 +29,11 @@ public class OrderDeliveryConfiguration : IEntityTypeConfiguration<OrderDelivery
                 + "AND [ShipmentRegisteredAt] IS NOT NULL)");
             table.HasCheckConstraint(
                 "CK_OrderDeliveries_TrackingUrl", "[TrackingUrl] IS NULL OR [TrackingUrl] LIKE 'https://_%'");
+            // Fase 22D: a bill above zero; an order goes out with its trip, and the courier collects only what went out.
+            table.HasCheckConstraint("CK_OrderDeliveries_PaysWith", "[PaysWith] IS NULL OR ([PaysWith] > 0 AND [PaysWith] <= 100000)");
+            table.HasCheckConstraint("CK_OrderDeliveries_Dispatch", "[DispatchedAt] IS NULL OR [Courier] IS NOT NULL");
+            table.HasCheckConstraint(
+                "CK_OrderDeliveries_CashToCollect", "[CashToCollect] IS NULL OR ([CashToCollect] > 0 AND [DispatchedAt] IS NOT NULL)");
         });
         builder.HasKey(x => x.Id);
 
@@ -44,7 +49,11 @@ public class OrderDeliveryConfiguration : IEntityTypeConfiguration<OrderDelivery
         builder.Property(x => x.CourierFolio).HasMaxLength(PlatformOrderNumber.MaxLength).IsUnicode(false);
         builder.Property(x => x.TrackingUrl).HasMaxLength(CourierShipment.MaxTrackingUrlLength);
         builder.Property(x => x.ShipmentRegisteredBy).HasMaxLength(256);
+        builder.Property(x => x.PaysWith).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.DispatchedBy).HasMaxLength(256);
+        builder.Property(x => x.CashToCollect).HasColumnType("decimal(18,2)");
         builder.Ignore(x => x.FeeVatRate);
+        builder.Ignore(x => x.IsDispatched);
 
         // One delivery per order (the relationship lives in OrderConfiguration).
         builder.HasIndex(x => x.OrderId).IsUnique();
