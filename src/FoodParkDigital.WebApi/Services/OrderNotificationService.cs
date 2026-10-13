@@ -69,6 +69,15 @@ public class OrderNotificationService : IOrderNotificationService
             .SendAsync("KitchenTicketsChanged", payload);
     }
 
+    public async Task NotifyOrderUpdated(Guid tenantId, Guid orderId)
+    {
+        var payload = new { OrderId = orderId };
+
+        await _hubContext.Clients
+            .Group($"tenant_{tenantId}")
+            .SendAsync("OrderUpdated", payload);
+    }
+
     public async Task NotifyServiceBoardPieceUpdated(
         Guid tenantId,
         Guid orderId,

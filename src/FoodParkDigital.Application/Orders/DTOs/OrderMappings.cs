@@ -44,7 +44,12 @@ public static class OrderMappings
             CourierFolio = order.Delivery.CourierFolio,
             TrackingUrl = order.Delivery.TrackingUrl,
             ShipmentRegisteredAt = order.Delivery.ShipmentRegisteredAt,
-            ShipmentRegisteredBy = order.Delivery.ShipmentRegisteredBy
+            ShipmentRegisteredBy = order.Delivery.ShipmentRegisteredBy,
+            PaysWith = order.Delivery.PaysWith,
+            DispatchedAt = order.Delivery.DispatchedAt,
+            DispatchedBy = order.Delivery.DispatchedBy,
+            CashToCollect = order.Delivery.CashToCollect,
+            AwaitsCourierCash = order.AwaitsCourierCash
         },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,
@@ -252,7 +257,14 @@ public static class OrderMappings
             CourierFolio = order.Delivery.CourierFolio,
             TrackingUrl = order.Delivery.TrackingUrl,
             ShipmentRegisteredAt = order.Delivery.ShipmentRegisteredAt,
-            ShipmentRegisteredBy = order.Delivery.ShipmentRegisteredBy
+            ShipmentRegisteredBy = order.Delivery.ShipmentRegisteredBy,
+            PaysWith = order.Delivery.PaysWith,
+            DispatchedAt = order.Delivery.DispatchedAt,
+            DispatchedBy = order.Delivery.DispatchedBy,
+            CashToCollect = order.Delivery.CashToCollect,
+            // Order.AwaitsCourierCash, written out so the database reads it.
+            AwaitsCourierCash = order.Delivery.CashToCollect != null && order.Status == OrderStatus.Delivered
+                && order.Total > order.PaidAmount
         },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,

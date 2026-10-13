@@ -75,6 +75,14 @@ export const CfdiTaxObject = {
 } as const;
 export type CfdiTaxObject = (typeof CfdiTaxObject)[keyof typeof CfdiTaxObject];
 
+export const CourierSettlementAdjustmentKind = {
+  TripFee: 1,
+  CollectionFee: 2,
+  Shortage: 3,
+  Other: 99,
+} as const;
+export type CourierSettlementAdjustmentKind = (typeof CourierSettlementAdjustmentKind)[keyof typeof CourierSettlementAdjustmentKind];
+
 export const DayOfWeek = {
   Sunday: 0,
   Monday: 1,
