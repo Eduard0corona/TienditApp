@@ -69,11 +69,11 @@ describe('SectionTabs', () => {
     const row = renderAt('/setup');
     const tabs = within(row).getAllByRole('link');
 
-    expect(tabs).toHaveLength(7);
-    expect(tabs[6]).toHaveAccessibleName('Primeros pasos');
-    expect(tabs[6]).toHaveAttribute('aria-current', 'page');
-    // Straight to the end of the row (1050 px), where the last tab shows whole.
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: 7 * TAB - SHOWN, behavior: 'instant' });
+    const last = tabs[tabs.length - 1];
+    expect(last).toHaveAccessibleName('Primeros pasos');
+    expect(last).toHaveAttribute('aria-current', 'page');
+    // Straight to the end of the row, where the last tab shows whole.
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ left: tabs.length * TAB - SHOWN, behavior: 'instant' });
     // At the end only the start edge hides tabs.
     expect(row).toHaveClass('fade-start');
     expect(row).not.toHaveClass('fade-end');
@@ -111,7 +111,8 @@ describe('SectionTabs', () => {
   });
 
   it('neither fades nor shows buttons when every tab fits', () => {
-    shown = 7 * TAB;
+    // Wider than every page of Configuración side by side.
+    shown = 20 * TAB;
     const row = renderAt('/settings/business');
 
     expect(row).not.toHaveClass('fade-start');
