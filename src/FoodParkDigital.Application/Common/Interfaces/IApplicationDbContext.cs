@@ -5,12 +5,14 @@ using FoodParkDigital.Domain.Billing.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Messaging.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Purchasing.Entities;
 using FoodParkDigital.Domain.Reporting.Entities;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -27,6 +29,7 @@ public interface IApplicationDbContext
     DbSet<Tenant> Tenants { get; }
     DbSet<TenantUser> TenantUsers { get; }
     DbSet<TenantSettings> TenantSettings { get; }
+    DbSet<SpecialDay> SpecialDays { get; }
     DbSet<WhatsAppConfig> WhatsAppConfigs { get; }
     DbSet<WhatsAppConversation> WhatsAppConversations { get; }
     DbSet<WhatsAppMessage> WhatsAppMessages { get; }
@@ -42,6 +45,14 @@ public interface IApplicationDbContext
     DbSet<OrderPayment> OrderPayments { get; }
     DbSet<OrderRefund> OrderRefunds { get; }
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
+    DbSet<PlatformOrderDetail> PlatformOrderDetails { get; }
+    DbSet<OrderDelivery> OrderDeliveries { get; }
+    DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings { get; }
+    DbSet<PlatformSettlement> PlatformSettlements { get; }
+    DbSet<PlatformSettlementOrder> PlatformSettlementOrders { get; }
+    DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments { get; }
+    DbSet<DeliveryZone> DeliveryZones { get; }
+    DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }
     DbSet<Supplier> Suppliers { get; }
@@ -66,6 +77,8 @@ public interface IApplicationDbContext
     DbSet<MessagingOptOut> MessagingOptOuts { get; }
     DbSet<ProductOptionGroup> ProductOptionGroups { get; }
     DbSet<ProductOption> ProductOptions { get; }
+    DbSet<ProductPlatformPrice> ProductPlatformPrices { get; }
+    DbSet<ProductOptionPlatformPrice> ProductOptionPlatformPrices { get; }
     DbSet<OrderItemOption> OrderItemOptions { get; }
     DbSet<DiningTable> DiningTables { get; }
     DbSet<KitchenTicket> KitchenTickets { get; }

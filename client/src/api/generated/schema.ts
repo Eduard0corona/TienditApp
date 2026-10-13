@@ -2844,6 +2844,322 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/delivery-platforms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformsDto"];
+                        "application/json": components["schemas"]["DeliveryPlatformsDto"];
+                        "text/json": components["schemas"]["DeliveryPlatformsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-platforms/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformChannelDto"][];
+                        "application/json": components["schemas"]["DeliveryPlatformChannelDto"][];
+                        "text/json": components["schemas"]["DeliveryPlatformChannelDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-platforms/{channel}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    channel: components["schemas"]["OrderChannel"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveDeliveryPlatformRequest"];
+                    "text/json": components["schemas"]["SaveDeliveryPlatformRequest"];
+                    "application/*+json": components["schemas"]["SaveDeliveryPlatformRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformsDto"];
+                        "application/json": components["schemas"]["DeliveryPlatformsDto"];
+                        "text/json": components["schemas"]["DeliveryPlatformsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-platforms/{channel}/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    channel: components["schemas"]["OrderChannel"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformPriceItemDtoPaginatedList"];
+                        "application/json": components["schemas"]["PlatformPriceItemDtoPaginatedList"];
+                        "text/json": components["schemas"]["PlatformPriceItemDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    channel: components["schemas"]["OrderChannel"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SavePlatformPricesRequest"];
+                    "text/json": components["schemas"]["SavePlatformPricesRequest"];
+                    "application/*+json": components["schemas"]["SavePlatformPricesRequest"];
+                };
+            };
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryZoneDto"][];
+                        "application/json": components["schemas"]["DeliveryZoneDto"][];
+                        "text/json": components["schemas"]["DeliveryZoneDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "text/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "application/*+json": components["schemas"]["SaveDeliveryZoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryZoneDto"];
+                        "application/json": components["schemas"]["DeliveryZoneDto"];
+                        "text/json": components["schemas"]["DeliveryZoneDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-zones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "text/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "application/*+json": components["schemas"]["SaveDeliveryZoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryZoneDto"];
+                        "application/json": components["schemas"]["DeliveryZoneDto"];
+                        "text/json": components["schemas"]["DeliveryZoneDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: {
+                    revision?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees": {
         parameters: {
             query?: never;
@@ -5224,6 +5540,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/delivery/shipment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RegisterCourierShipmentRequest"];
+                    "text/json": components["schemas"]["RegisterCourierShipmentRequest"];
+                    "application/*+json": components["schemas"]["RegisterCourierShipmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/cancel": {
         parameters: {
             query?: never;
@@ -5999,6 +6356,312 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform-settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    status?: components["schemas"]["PlatformSettlementStatus"];
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDtoPaginatedList"];
+                        "application/json": components["schemas"]["PlatformSettlementDtoPaginatedList"];
+                        "text/json": components["schemas"]["PlatformSettlementDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreatePlatformSettlementRequest"];
+                    "text/json": components["schemas"]["CreatePlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["CreatePlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/receivable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformReceivableDto"][];
+                        "application/json": components["schemas"]["PlatformReceivableDto"][];
+                        "text/json": components["schemas"]["PlatformReceivableDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/pending-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PendingPlatformOrdersDto"];
+                        "application/json": components["schemas"]["PendingPlatformOrdersDto"];
+                        "text/json": components["schemas"]["PendingPlatformOrdersDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdatePlatformSettlementRequest"];
+                    "text/json": components["schemas"]["UpdatePlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["UpdatePlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ClosePlatformSettlementRequest"];
+                    "text/json": components["schemas"]["ClosePlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["ClosePlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-settlements/{id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["VoidPlatformSettlementRequest"];
+                    "text/json": components["schemas"]["VoidPlatformSettlementRequest"];
+                    "application/*+json": components["schemas"]["VoidPlatformSettlementRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PlatformSettlementDetailDto"];
+                        "application/json": components["schemas"]["PlatformSettlementDetailDto"];
+                        "text/json": components["schemas"]["PlatformSettlementDetailDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/products": {
         parameters: {
             query?: never;
@@ -6016,6 +6679,7 @@ export interface paths {
                     search?: string;
                     pageNumber?: number;
                     pageSize?: number;
+                    priceChannel?: components["schemas"]["OrderChannel"];
                 };
                 header?: never;
                 path?: never;
@@ -6323,6 +6987,47 @@ export interface paths {
                         "text/plain": components["schemas"]["PublicMenuDto"];
                         "application/json": components["schemas"]["PublicMenuDto"];
                         "text/json": components["schemas"]["PublicMenuDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/delivery-quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    postalCode?: string;
+                };
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicDeliveryQuoteDto"];
+                        "application/json": components["schemas"]["PublicDeliveryQuoteDto"];
+                        "text/json": components["schemas"]["PublicDeliveryQuoteDto"];
                     };
                 };
             };
@@ -6728,6 +7433,92 @@ export interface paths {
                         "text/plain": components["schemas"]["SalesByBranchReportDto"];
                         "application/json": components["schemas"]["SalesByBranchReportDto"];
                         "text/json": components["schemas"]["SalesByBranchReportDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/sales-by-channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    to?: string;
+                    branchId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SalesByChannelReportDto"];
+                        "application/json": components["schemas"]["SalesByChannelReportDto"];
+                        "text/json": components["schemas"]["SalesByChannelReportDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/delivery-platform-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    channel?: components["schemas"]["OrderChannel"];
+                    from?: string;
+                    to?: string;
+                    branchId?: string;
+                    search?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryPlatformOrderDtoPaginatedList"];
+                        "application/json": components["schemas"]["DeliveryPlatformOrderDtoPaginatedList"];
+                        "text/json": components["schemas"]["DeliveryPlatformOrderDtoPaginatedList"];
                     };
                 };
             };
@@ -7535,6 +8326,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/special-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveSpecialDayRequest"];
+                    "text/json": components["schemas"]["SaveSpecialDayRequest"];
+                    "application/*+json": components["schemas"]["SaveSpecialDayRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/my-tenant/special-days/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateSpecialDayRequest"];
+                    "text/json": components["schemas"]["UpdateSpecialDayRequest"];
+                    "application/*+json": components["schemas"]["UpdateSpecialDayRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: {
+                    revision?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["SpecialDaysDto"];
+                        "application/json": components["schemas"]["SpecialDaysDto"];
+                        "text/json": components["schemas"]["SpecialDaysDto"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/my-tenant/theme": {
         parameters: {
             query?: never;
@@ -8033,6 +8958,13 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
+            /**
+             * Format: double
+             * @default 0
+             */
+            tip: number;
+            /** Format: double */
+            cashReceived?: number | null;
         };
         AddTabRoundRequest: {
             items: components["schemas"]["CreateOrderItemDto"][];
@@ -8174,6 +9106,7 @@ export interface components {
             contactPhone?: string | null;
             isDefault: boolean;
             isActive: boolean;
+            serviceMode: components["schemas"]["BranchServiceMode"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -8185,6 +9118,11 @@ export interface components {
             branchName: string;
             figures: components["schemas"]["SalesFiguresDto"];
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        BranchServiceMode: 0 | 1;
         /**
          * Format: int32
          * @enum {integer}
@@ -8283,6 +9221,7 @@ export interface components {
         CampaignStatus: 0 | 1 | 2 | 3;
         CancelOrderRequest: {
             reason?: string | null;
+            restockItems?: boolean | null;
         };
         CancelTabItemRequest: {
             /** Format: uuid */
@@ -8421,6 +9360,7 @@ export interface components {
         CfdiConceptDto: {
             /** Format: uuid */
             orderItemId: string;
+            isDeliveryFee: boolean;
             productCode: string;
             unitCode: string;
             description: string;
@@ -8495,6 +9435,32 @@ export interface components {
             password: string;
             phoneNumber: string;
         };
+        ChannelSalesDto: {
+            channel?: components["schemas"]["OrderChannel"];
+            isDeliveryPlatform: boolean;
+            /** Format: int32 */
+            paidOrders: number;
+            /** Format: double */
+            paymentsAmount: number;
+            /** Format: double */
+            refundsAmount: number;
+            /** Format: double */
+            netSales: number;
+            /** Format: double */
+            platformCollected: number;
+            /** Format: double */
+            businessCollected: number;
+            /** Format: double */
+            commission: number;
+            /** Format: double */
+            commissionTax: number;
+            /** Format: double */
+            isrWithheld: number;
+            /** Format: double */
+            vatWithheld: number;
+            /** Format: double */
+            expectedSettlement: number;
+        };
         ChatMessageDto: {
             /** Format: uuid */
             id: string;
@@ -8522,6 +9488,10 @@ export interface components {
             closingAmount: number;
             notes?: string | null;
             cashCount?: components["schemas"]["CashCountLineDto"][] | null;
+        };
+        ClosePlatformSettlementRequest: {
+            /** Format: int32 */
+            revision: number;
         };
         ClosePurchaseOrderRequest: {
             reason?: string | null;
@@ -8610,6 +9580,7 @@ export interface components {
             postalCode?: string | null;
             contactName?: string | null;
             contactPhone?: string | null;
+            serviceMode?: components["schemas"]["BranchServiceMode"];
             isDefault: boolean;
         };
         CreateBusinessCommand: {
@@ -8722,6 +9693,10 @@ export interface components {
             /** Format: double */
             expectedTotal?: number | null;
             channel: components["schemas"]["OrderChannel"];
+            externalOrderNumber?: string | null;
+            collectedBy?: components["schemas"]["PlatformCollectedBy"];
+            /** @default false */
+            confirmPossibleDuplicate: boolean;
             openTab: boolean;
             /** Format: uuid */
             diningTableId?: string | null;
@@ -8731,6 +9706,7 @@ export interface components {
             idempotencyKey?: string | null;
             /** Format: date-time */
             capturedOfflineAt?: string | null;
+            delivery?: components["schemas"]["OrderDeliveryInput"];
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -8773,6 +9749,21 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isDefaultForNewBusinesses: boolean;
+        };
+        CreatePlatformSettlementRequest: {
+            channel: components["schemas"]["OrderChannel"];
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            /** Format: date */
+            depositedOn: string;
+            /** Format: double */
+            depositedAmount: number;
+            reference?: string | null;
+            notes?: string | null;
+            orderIds: string[];
+            adjustments: components["schemas"]["PlatformSettlementAdjustmentRequest"][];
         };
         CreateProductCommand: {
             /** Format: uuid */
@@ -9027,6 +10018,12 @@ export interface components {
             /** Format: double */
             otherTotal: number;
             /** Format: double */
+            platformTotal: number;
+            /** Format: int32 */
+            platformPaymentsCount: number;
+            /** Format: double */
+            platformRefundsTotal: number;
+            /** Format: double */
             tipsTotal: number;
             /** Format: double */
             cashTipsTotal: number;
@@ -9084,6 +10081,8 @@ export interface components {
             /** Format: double */
             totalRevenue: number;
             /** Format: double */
+            platformCollected: number;
+            /** Format: double */
             averageOrderValue: number;
             /** Format: int32 */
             paidOrders: number;
@@ -9101,6 +10100,84 @@ export interface components {
          * @enum {integer}
          */
         DayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        DeliveryCourier: 1;
+        DeliveryPlatformChannelDto: {
+            channel: components["schemas"]["OrderChannel"];
+            isActive: boolean;
+        };
+        DeliveryPlatformDto: {
+            channel: components["schemas"]["OrderChannel"];
+            isConfigured: boolean;
+            isActive: boolean;
+            /** Format: double */
+            commissionPercent?: number | null;
+            commissionBase: components["schemas"]["PlatformCommissionBase"];
+            /** Format: double */
+            commissionVatPercent: number;
+            /** Format: double */
+            isrWithholdingPercent: number;
+            /** Format: double */
+            vatWithholdingPercent: number;
+            /** Format: int32 */
+            revision: number;
+            /** Format: date-time */
+            changedAt?: string | null;
+            changedBy?: string | null;
+            example?: components["schemas"]["PlatformSettlementExampleDto"];
+        };
+        DeliveryPlatformOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            externalOrderNumber: string;
+            /** Format: date-time */
+            registeredAt: string;
+            status: components["schemas"]["OrderStatus"];
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            commissionAndTax: number;
+            /** Format: double */
+            withheld: number;
+            /** Format: double */
+            expectedSettlement: number;
+            /** Format: double */
+            refundedAmount: number;
+        };
+        DeliveryPlatformOrderDtoPaginatedList: {
+            items: components["schemas"]["DeliveryPlatformOrderDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        DeliveryPlatformsDto: {
+            platforms: components["schemas"]["DeliveryPlatformDto"][];
+        };
+        DeliveryZoneDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            minimumOrder: number;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
+            isActive: boolean;
+            /** Format: int32 */
+            revision: number;
+            postalCodes: string[];
+        };
         DiningRoomDto: {
             tables: components["schemas"]["DiningTableDto"][];
             tabsWithoutTable: components["schemas"]["OpenTabSummaryDto"][];
@@ -9181,6 +10258,14 @@ export interface components {
         };
         ForgotPasswordCommand: {
             email: string;
+        };
+        HolidaySuggestionDto: {
+            /** Format: date */
+            date: string;
+            name: string;
+            statutory: boolean;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings: components["schemas"]["SpecialOpeningDto"][];
         };
         InstallCategoryTemplateResultDto: {
             templateId: string;
@@ -9421,6 +10506,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             orderNumber: string;
+            channel: components["schemas"]["OrderChannel"];
+            externalOrderNumber?: string | null;
+            isDelivery: boolean;
             status: components["schemas"]["OrderStatus"];
             customerName: string;
             tableNumber?: string | null;
@@ -9684,7 +10772,28 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderChannel: 0 | 1 | 2;
+        OrderChannel: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderDeliveryDto: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+            zoneName: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            feeTaxRate: number;
+            courier?: components["schemas"]["DeliveryCourier"];
+            courierFolio?: string | null;
+            trackingUrl?: string | null;
+            /** Format: date-time */
+            shipmentRegisteredAt?: string | null;
+            shipmentRegisteredBy?: string | null;
+        };
+        OrderDeliveryInput: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+        };
         OrderDto: {
             /** Format: uuid */
             id: string;
@@ -9703,6 +10812,8 @@ export interface components {
             tableNumber?: string | null;
             pricesIncludeTax: boolean;
             channel: components["schemas"]["OrderChannel"];
+            platformOrder?: components["schemas"]["OrderPlatformDto"];
+            delivery?: components["schemas"]["OrderDeliveryDto"];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -9840,7 +10951,11 @@ export interface components {
          * Format: int32
          * @enum {integer}
          */
-        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4;
+        OrderPaymentMethod: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderPlatformDto: {
+            externalOrderNumber: string;
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+        };
         OrderRefundDto: {
             /** Format: uuid */
             id: string;
@@ -9947,6 +11062,12 @@ export interface components {
             otpTemplateLanguageCode: string;
             hasAccessToken: boolean;
         };
+        PendingPlatformOrdersDto: {
+            orders: components["schemas"]["PlatformSettlementOrderDto"][];
+            truncated: boolean;
+            /** Format: uuid */
+            openSettlementId?: string | null;
+        };
         PlacePublicOrderRequest: {
             customerName: string;
             customerPhone: string;
@@ -9955,6 +11076,7 @@ export interface components {
             items: components["schemas"]["CreateOrderItemDto"][];
             /** Format: double */
             expectedTotal?: number | null;
+            delivery?: components["schemas"]["OrderDeliveryInput"];
         };
         PlanDto: {
             /** Format: uuid */
@@ -9978,6 +11100,22 @@ export interface components {
             sortOrder: number;
             /** Format: int32 */
             tenantsCount: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformCollectedBy: 0 | 1;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformCommissionBase: 0 | 1;
+        PlatformOptionPriceRequest: {
+            /** Format: uuid */
+            optionId: string;
+            /** Format: double */
+            priceDelta: number | null;
         };
         PlatformOverviewDto: {
             /** Format: int32 */
@@ -10007,9 +11145,180 @@ export interface components {
             /** Format: int32 */
             trialsEndingIn7Days: number;
         };
+        PlatformPriceItemDto: {
+            /** Format: uuid */
+            productId: string;
+            name: string;
+            /** Format: uuid */
+            categoryId: string;
+            categoryName: string;
+            unit?: components["schemas"]["UnitType"];
+            isAvailable: boolean;
+            /** Format: double */
+            menuPrice: number;
+            /** Format: double */
+            platformPrice?: number | null;
+            optionGroups: components["schemas"]["PlatformPriceOptionGroupDto"][];
+        };
+        PlatformPriceItemDtoPaginatedList: {
+            items: components["schemas"]["PlatformPriceItemDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        PlatformPriceOptionDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            isAvailable: boolean;
+            /** Format: double */
+            menuPriceDelta: number;
+            /** Format: double */
+            platformPriceDelta?: number | null;
+        };
+        PlatformPriceOptionGroupDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            options: components["schemas"]["PlatformPriceOptionDto"][];
+        };
+        PlatformProductPriceRequest: {
+            /** Format: uuid */
+            productId: string;
+            /** Format: double */
+            price: number | null;
+            options?: components["schemas"]["PlatformOptionPriceRequest"][] | null;
+        };
         PlatformReasonRequest: {
             reason: string;
         };
+        PlatformReceivableDto: {
+            channel: components["schemas"]["OrderChannel"];
+            isActive: boolean;
+            /** Format: int32 */
+            pendingOrders: number;
+            /** Format: double */
+            pendingAmount: number;
+            /** Format: date */
+            oldestPendingOn?: string | null;
+            /** Format: uuid */
+            openSettlementId?: string | null;
+            /** Format: date */
+            settledThrough?: string | null;
+        };
+        PlatformSettlementAdjustmentDto: {
+            kind: components["schemas"]["PlatformSettlementAdjustmentKind"];
+            description?: string | null;
+            /** Format: double */
+            amount: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformSettlementAdjustmentKind: 1 | 2 | 3 | 4 | 5 | 99;
+        PlatformSettlementAdjustmentRequest: {
+            kind: components["schemas"]["PlatformSettlementAdjustmentKind"];
+            description?: string | null;
+            /** Format: double */
+            amount: number;
+        };
+        PlatformSettlementDetailDto: {
+            settlement: components["schemas"]["PlatformSettlementDto"];
+            orders: components["schemas"]["PlatformSettlementOrderDto"][];
+            adjustments: components["schemas"]["PlatformSettlementAdjustmentDto"][];
+            candidates: components["schemas"]["PlatformSettlementOrderDto"][];
+            candidatesTruncated: boolean;
+        };
+        PlatformSettlementDto: {
+            /** Format: uuid */
+            id: string;
+            channel: components["schemas"]["OrderChannel"];
+            status: components["schemas"]["PlatformSettlementStatus"];
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            /** Format: date */
+            depositedOn: string;
+            /** Format: double */
+            depositedAmount: number;
+            reference?: string | null;
+            notes?: string | null;
+            /** Format: double */
+            ordersTotal: number;
+            /** Format: double */
+            adjustmentsTotal: number;
+            /** Format: double */
+            expectedDeposit: number;
+            /** Format: double */
+            difference: number;
+            /** Format: int32 */
+            orderCount: number;
+            /** Format: int32 */
+            revision: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closedAt?: string | null;
+            /** Format: date-time */
+            voidedAt?: string | null;
+            voidReason?: string | null;
+        };
+        PlatformSettlementDtoPaginatedList: {
+            items: components["schemas"]["PlatformSettlementDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        PlatformSettlementExampleDto: {
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            orderVatPercent: number;
+            /** Format: double */
+            commissionAndTax: number;
+            /** Format: double */
+            withheld: number;
+            /** Format: double */
+            expectedSettlement: number;
+        };
+        PlatformSettlementOrderDto: {
+            /** Format: uuid */
+            orderId: string;
+            orderNumber: string;
+            externalOrderNumber: string;
+            /** Format: date-time */
+            registeredAt: string;
+            /** Format: date */
+            registeredOn: string;
+            inPeriod: boolean;
+            status: components["schemas"]["OrderStatus"];
+            collectedBy: components["schemas"]["PlatformCollectedBy"];
+            /** Format: double */
+            orderTotal: number;
+            /** Format: double */
+            refundedAmount: number;
+            /** Format: double */
+            expectedNet: number;
+            /** Format: double */
+            currentExpectedNet: number;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        PlatformSettlementStatus: 0 | 1 | 99;
         PlatformTenantDto: {
             /** Format: uuid */
             tenantId: string;
@@ -10213,6 +11522,24 @@ export interface components {
             /** Format: double */
             onHand: number;
         };
+        PublicDayHoursDto: {
+            /** Format: date */
+            date: string;
+            closed: boolean;
+            special: boolean;
+            openings: components["schemas"]["SpecialOpeningDto"][];
+            reason?: string | null;
+        };
+        PublicDeliveryQuoteDto: {
+            postalCode: string;
+            covered: boolean;
+            /** Format: double */
+            fee?: number | null;
+            /** Format: double */
+            minimumOrder?: number | null;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
+        };
         PublicMenuCategoryDto: {
             /** Format: uuid */
             id: string;
@@ -10232,6 +11559,8 @@ export interface components {
             ordersPaused: boolean;
             theme: components["schemas"]["BusinessTheme"];
             address?: string | null;
+            deliveryOnly: boolean;
+            deliveryAvailable: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
@@ -10264,14 +11593,39 @@ export interface components {
             opensAt?: string | null;
             /** Format: int32 */
             opensInDays?: number | null;
+            /** Format: date */
+            todayDate?: string | null;
+            hasWeeklyHours?: boolean | null;
+            statusLabel?: string | null;
+            statusDetail?: string | null;
+            closedNotice?: string | null;
+            upcomingNotice?: string | null;
+            closedBySpecialDay?: boolean | null;
+            todayHours?: components["schemas"]["PublicDayHoursDto"];
+            /** Format: date */
+            opensOn?: string | null;
+            /** Format: date */
+            closesOn?: string | null;
+            specialDays?: components["schemas"]["PublicSpecialDayDto"][] | null;
         };
         PublicOrderReceiptDto: {
             orderNumber: string;
             /** Format: double */
             total: number;
+            /** Format: double */
+            deliveryFee?: number | null;
             confirmed: boolean;
             businessName: string;
             contactPhone?: string | null;
+        };
+        PublicSpecialDayDto: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings: components["schemas"]["SpecialOpeningDto"][];
+            reason?: string | null;
         };
         PurchaseOrderDto: {
             /** Format: uuid */
@@ -10398,6 +11752,11 @@ export interface components {
             city?: string | null;
             state?: string | null;
         };
+        RegisterCourierShipmentRequest: {
+            courier: components["schemas"]["DeliveryCourier"];
+            folio: string;
+            trackingUrl?: string | null;
+        };
         RegisterCustomerCommand: {
             email: string;
             password: string;
@@ -10448,6 +11807,14 @@ export interface components {
             /** Format: int32 */
             liveDays: number;
         };
+        SalesByChannelReportDto: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            channels: components["schemas"]["ChannelSalesDto"][];
+            totals: components["schemas"]["ChannelSalesDto"];
+        };
         SalesFiguresDto: {
             /** Format: int32 */
             ordersCreated: number;
@@ -10467,6 +11834,8 @@ export interface components {
             walletAmount: number;
             /** Format: double */
             otherAmount: number;
+            /** Format: double */
+            platformAmount: number;
             /** Format: int32 */
             refundsCount: number;
             /** Format: double */
@@ -10475,6 +11844,45 @@ export interface components {
             netSales: number;
             /** Format: double */
             averageTicket: number;
+        };
+        SaveDeliveryPlatformRequest: {
+            /** Format: int32 */
+            revision: number;
+            isActive: boolean;
+            /** Format: double */
+            commissionPercent: number;
+            commissionBase: components["schemas"]["PlatformCommissionBase"];
+            /** Format: double */
+            commissionVatPercent: number;
+            /** Format: double */
+            isrWithholdingPercent: number;
+            /** Format: double */
+            vatWithholdingPercent: number;
+        };
+        SaveDeliveryZoneRequest: {
+            name: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            minimumOrder: number;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
+            postalCodes: string[];
+            isActive: boolean;
+            /** Format: int32 */
+            revision: number;
+        };
+        SavePlatformPricesRequest: {
+            products: components["schemas"]["PlatformProductPriceRequest"][];
+        };
+        SaveSpecialDayRequest: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to?: string | null;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings?: components["schemas"]["SpecialOpeningDto"][] | null;
+            reason?: string | null;
         };
         SendChatMessageCommand: {
             phoneNumber: string;
@@ -10630,6 +12038,47 @@ export interface components {
         };
         SetProductOptionGroupsRequest: {
             groups: components["schemas"]["ProductOptionGroupInput"][];
+        };
+        SpecialDayDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings: components["schemas"]["SpecialOpeningDto"][];
+            reason?: string | null;
+            /** Format: int32 */
+            revision: number;
+            inProgress: boolean;
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        SpecialDayKind: 0 | 1;
+        SpecialDaysDto: {
+            /** Format: date */
+            today: string;
+            hasWeeklyHours: boolean;
+            upcoming: components["schemas"]["SpecialDayDto"][];
+            past: components["schemas"]["SpecialDayDto"][];
+            suggestions: components["schemas"]["HolidaySuggestionDto"][];
+            /** Format: int32 */
+            upcomingDates: number;
+            /** Format: int32 */
+            maxUpcomingDates: number;
+            /** Format: int32 */
+            maxDaysPerPeriod: number;
+            /** Format: int32 */
+            maxDaysAhead: number;
+            /** Format: int32 */
+            maxReasonLength: number;
+        };
+        SpecialOpeningDto: {
+            opens: string;
+            closes: string;
         };
         StarterCatalogDto: {
             id: string;
@@ -10977,6 +12426,7 @@ export interface components {
             postalCode?: string | null;
             contactName?: string | null;
             contactPhone?: string | null;
+            serviceMode?: components["schemas"]["BranchServiceMode"];
             /** Format: uuid */
             id: string;
         };
@@ -11107,6 +12557,22 @@ export interface components {
             id: string;
             isActive: boolean;
         };
+        UpdatePlatformSettlementRequest: {
+            /** Format: int32 */
+            revision: number;
+            /** Format: date */
+            periodFrom: string;
+            /** Format: date */
+            periodTo: string;
+            /** Format: date */
+            depositedOn: string;
+            /** Format: double */
+            depositedAmount: number;
+            reference?: string | null;
+            notes?: string | null;
+            orderIds: string[];
+            adjustments: components["schemas"]["PlatformSettlementAdjustmentRequest"][];
+        };
         UpdateProductCommand: {
             /** Format: uuid */
             id: string;
@@ -11156,6 +12622,17 @@ export interface components {
         };
         UpdateServiceOrderPieceStatusRequest: {
             newStatus: components["schemas"]["ServiceOrderPieceStatus"];
+        };
+        UpdateSpecialDayRequest: {
+            /** Format: int32 */
+            revision: number;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to?: string | null;
+            kind: components["schemas"]["SpecialDayKind"];
+            openings?: components["schemas"]["SpecialOpeningDto"][] | null;
+            reason?: string | null;
         };
         UpdateSupplierCommand: {
             /** Format: uuid */
@@ -11279,6 +12756,11 @@ export interface components {
         VoidOrderRequest: {
             reason: string;
             restockItems: boolean;
+        };
+        VoidPlatformSettlementRequest: {
+            /** Format: int32 */
+            revision: number;
+            reason: string;
         };
         WhatsAppConfigDto: {
             /** Format: uuid */

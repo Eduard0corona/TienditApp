@@ -408,7 +408,7 @@ export default function ServiceBoard() {
                               {piece.notifyCustomer ? 'Notifica al cliente' : 'Sin notificación'}
                             </span>
                             {piece.assignedToUserId ? (
-                              <span className="badge bg-primary-subtle text-primary">
+                              <span className="badge bg-primary-subtle text-primary-emphasis">
                                 Asignada: {piece.assignedToName || 'Empleado'}
                               </span>
                             ) : (

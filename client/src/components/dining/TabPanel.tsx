@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -43,6 +43,7 @@ const ROUND_STATUS: Record<number, { label: string; className: string }> = {
 
 /** An open tab: its rounds, what is paid and what is left, and the actions of the table. */
 export default function TabPanel({ orderId, freeTables, businessName, logoUrl, onClose }: TabPanelProps) {
+  const titleId = useId();
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -127,9 +128,9 @@ export default function TabPanel({ orderId, freeTables, businessName, logoUrl, o
   const cancellationsOf = (item: OrderItemDto) => order?.itemCancellations?.filter((c) => c.orderItemId === item.id) ?? [];
 
   return (
-    <Modal show onHide={onClose} centered size="lg" fullscreen="md-down" scrollable>
+    <Modal show onHide={onClose} centered size="lg" fullscreen="md-down" scrollable aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">
+        <Modal.Title id={titleId} as="h2" className="h5">
           {order ? `${order.tableNumber || order.customerName} · ${order.orderNumber}` : 'Cuenta'}
         </Modal.Title>
       </Modal.Header>

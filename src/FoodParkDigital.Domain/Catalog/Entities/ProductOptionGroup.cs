@@ -1,5 +1,7 @@
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Exceptions;
+using FoodParkDigital.Domain.Orders;
+using FoodParkDigital.Domain.Orders.Enums;
 
 namespace FoodParkDigital.Domain.Catalog.Entities;
 
@@ -85,6 +87,8 @@ public class ProductOption : BaseEntity, ITenantScoped
     public const int MaxNameLength = 80;
     public const decimal MaxPriceDelta = 100_000m;
 
+    private readonly List<ProductOptionPlatformPrice> _platformPrices = new();
+
     private ProductOption() { }
 
     internal ProductOption(Guid tenantId, Guid groupId)
@@ -99,6 +103,40 @@ public class ProductOption : BaseEntity, ITenantScoped
     public decimal PriceDelta { get; private set; }
     public bool IsAvailable { get; private set; } = true;
     public int SortOrder { get; private set; }
+
+    /// <summary>What the option adds in the app of each delivery platform where the business set it apart from the menu.</summary>
+    public IReadOnlyCollection<ProductOptionPlatformPrice> PlatformPrices => _platformPrices.AsReadOnly();
+
+    /// <summary>
+    /// What the option adds in a sales channel: in the app of a delivery platform, what the business set for it there (what
+    /// it adds in the menu when it set nothing); everywhere else, what it adds in the menu.
+    /// </summary>
+    public decimal PriceDeltaIn(OrderChannel channel) => OrderChannelRules.IsDeliveryPlatform(channel)
+        ? _platformPrices.FirstOrDefault(price => price.Channel == channel)?.PriceDelta ?? PriceDelta
+        : PriceDelta;
+
+    /// <summary>What the option adds in the app of a delivery platform; null goes back to what it adds in the menu.</summary>
+    internal void SetPlatformPriceDelta(OrderChannel channel, decimal? priceDelta)
+    {
+        var current = _platformPrices.FirstOrDefault(price => price.Channel == channel);
+        if (priceDelta is not { } delta)
+        {
+            if (current is not null)
+                _platformPrices.Remove(current);
+            return;
+        }
+
+        if (!ProductOptionPlatformPrice.IsValid(delta))
+        {
+            throw new DomainException(
+                $"El precio de '{Name}' en {OrderChannelRules.DisplayName(channel)} admite dos decimales y no puede pasar de {MaxPriceDelta:N0}.");
+        }
+
+        if (current is null)
+            _platformPrices.Add(new ProductOptionPlatformPrice(TenantId, Id, channel, delta));
+        else
+            current.Change(delta);
+    }
 
     internal void Apply(ProductOptionDefinition definition, int sortOrder)
     {

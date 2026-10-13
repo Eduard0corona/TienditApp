@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
@@ -67,6 +67,7 @@ const UNIT_OPTIONS: Array<{ value: UnitType; label: string }> = [
 ];
 
 export default function ServicesList() {
+  const titleId = useId();
   const { tenant } = useTenant();
   const { confirm } = useConfirm();
   const [data, setData] = useState<PaginatedList<ProductDto>>({
@@ -424,9 +425,9 @@ export default function ServicesList() {
         </div>
       </div>
 
-      <Modal show={showModal} onHide={closeModal} centered>
+      <Modal show={showModal} onHide={closeModal} centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
-          <Modal.Title>{editingService ? 'Editar servicio' : 'Nuevo servicio'}</Modal.Title>
+          <Modal.Title id={titleId}>{editingService ? 'Editar servicio' : 'Nuevo servicio'}</Modal.Title>
         </Modal.Header>
         <form onSubmit={handleSubmit(onSubmit)}>
           <Modal.Body>

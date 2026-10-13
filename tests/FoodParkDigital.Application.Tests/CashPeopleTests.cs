@@ -170,6 +170,33 @@ public class CashPeopleTests
         Assert.Equal(0, outsider.SalesPaymentsCount);
     }
 
+    [Fact]
+    public async Task DailyCut_ShouldFindWhatAMemberGaveBackAsPlatform_ByTheirName()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: true);
+        var pack = await fixture.AddProductAsync(tenant, "Paquete familiar", 350m);
+        await fixture.AddDeliveryPlatformAsync(tenant, OrderChannel.Rappi);
+        var mariana = await AddMemberAsync(fixture, tenant.Id, "Mariana", "Ortiz", "mariana@cafe.test");
+        await OpenAsync(fixture, mariana);
+        var rappi = await fixture.CreateOrderHandler().Handle(
+            SalesTestFixture.PlatformOrder(OrderChannel.Rappi, "BC953", pack.Id), CancellationToken.None);
+        Assert.True(rappi.IsSuccess, rappi.Error);
+        fixture.Context.ChangeTracker.Clear();
+
+        // Rappi cancelled it: Mariana voids it and the refund keeps her user, as every refund does.
+        var voided = await new VoidOrderCommandHandler(
+                fixture.Context, fixture.CurrentUser, new Finance.OrderCashService(fixture.Context, fixture.CurrentUser),
+                fixture.Clock, NoOpOrderInventoryService.Instance)
+            .Handle(new VoidOrderCommand { OrderId = rappi.Value.Id, Reason = "Rappi lo canceló", RestockItems = false }, CancellationToken.None);
+        Assert.True(voided.IsSuccess, voided.Error);
+        fixture.Context.ChangeTracker.Clear();
+
+        Assert.Equal(350m, (await CutAsync(fixture, "Mariana Ortiz")).PlatformRefundsTotal);
+        Assert.Equal(350m, (await CutAsync(fixture, "mariana@cafe.test")).PlatformRefundsTotal);
+        Assert.Equal(0m, (await CutAsync(fixture, "Carlos Rivas")).PlatformRefundsTotal);
+    }
+
     private static async Task<Guid> AddMemberAsync(SalesTestFixture fixture, Guid tenantId, string firstName, string lastName, string email)
     {
         var userId = await AddUserAsync(fixture, firstName, lastName, email);

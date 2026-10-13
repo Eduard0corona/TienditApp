@@ -7,12 +7,13 @@
 | Endpoint | Qué revisa | Uso |
 | --- | --- | --- |
 | `GET /health/live` | Nada: responde 200 mientras el proceso corre. | Reinicio del proceso. |
-| `GET /health/ready` | Conexión a la base (`database`) y colas en segundo plano (`background-queues`). | Health check de App Service, balanceador y alertas. |
+| `GET /health/ready` | Conexión a la base (`database`), colas en segundo plano (`background-queues`) y zonas horarias de los negocios (`business-time-zones`, Fase 21). | Health check de App Service, balanceador, alertas y prueba de humo. |
 | `GET /health/schema` | Que la base tenga todas las migraciones de esta versión (`database-schema`). | Prueba de humo del despliegue (Fase 7). |
 
-- Los tres son anónimos y solo devuelven estados (`{"status":"Healthy","checks":{...}}`), sin mensajes de error ni datos.
+- Los tres son anónimos y solo devuelven estados y el commit de la versión que responde (`{"status":"Healthy","checks":{...},"commit":"<sha>"}`), sin mensajes de error ni datos. El commit sale de la versión del ensamblado (`BuildInfo`): el SDK le agrega el de git, y el despliegue fija el que publica. La prueba de humo lo compara para saber qué versión contestó; un build sin commit responde `null`.
 - `database-schema` queda **Unhealthy** (503) cuando falta en la base una migración de esta versión: producción no migra al arrancar y alguien publicó antes de aplicar su `apply.sql`. El log nombra la migración que falta. No forma parte de `/health/ready` a propósito: un esquema atrasado hace fallar el despliegue (o detiene el swap del slot), no saca de rotación a todas las instancias.
 - `background-queues` queda **Degraded** (sigue respondiendo 200) cuando el outbox o la bandeja del webhook apartaron trabajo en las últimas 24 horas, o cuando hay trabajo pendiente con más de 15 minutos de retraso (workers detenidos o atorados).
+- `business-time-zones` (Fase 21, `BusinessTimeZonesHealthCheck`) queda **Degraded** (sigue respondiendo 200) cuando una zona que un negocio puede elegir (`BusinessTimeZones.Supported`) cae en UTC en ese servidor, y también si el chequeo mismo falla: las zonas nunca sacan una instancia de rotación. Sin los datos de zonas horarias del sistema, `TenantDateTimeResolver` usa UTC sin avisar, y el horario, los días especiales y las fechas de esos negocios se correrían de cinco a ocho horas, sin el cambio de horario de Tijuana y Matamoros. No usa la base. El log nombra las zonas que faltan. `TimeZoneDataTests` revisa lo mismo, pero solo en el servidor de CI; este chequeo lo revisa donde corre la app, y la prueba de humo del despliegue exige `"business-time-zones":"Healthy"` en `/health/ready`, así que un servidor sin esos datos hace fallar el despliegue (con el slot de staging, la versión no llega a producción) en lugar de pasar sin que nadie lo note.
 - Sin base de datos, `/health/ready` responde 503.
 - En App Service: Configuración → Health check → ruta `/health/ready`.
 
@@ -26,6 +27,8 @@ Se exporta solo si hay destino configurado:
 Sin ninguno de los dos no se registra OpenTelemetry. Los logs salen por Serilog a la consola (log stream de App Service) y, con destino, Serilog también se los entrega al proveedor de logs de OpenTelemetry (`writeToProviders`), así llegan junto con trazas y métricas (Fase 4). Los proveedores de logging predeterminados se quitan para no duplicar la consola.
 
 Nivel de los errores de las peticiones (Fase 10): `GlobalExceptionHandlerMiddleware` registra los rechazos esperados (400 de validación, 401, 403, 404, 409 de concurrencia y 422 de regla de negocio) como advertencia, sin la traza de pila ("Request rejected with {StatusCode} {ErrorType}"), y solo los 500 como error con la excepción ("Unhandled exception"). Una alerta sobre logs de nivel error mide entonces fallas de la app, no datos inválidos; la de 5xx por negocio de abajo usa `requests` y no cambia. El envío de códigos por SMS que piden las pantallas sin sesión corre en el outbox desde la Fase 11 (`VerificationCodeRequestedHandler`): un fallo del proveedor aparece como el de cualquier evento ("Outbox handler {Handler} failed", advertencia con reintento; tras 8 intentos, error "was set aside" y la métrica `tienditapp.outbox.messages` con `dead_lettered`), sin teléfono ni código; una solicitud que llegó tarde (más de 10 minutos) es la advertencia "A verification code asked for at ... was not sent: too late". Una petición que su cliente abandonó (una lectura que se detuvo, Fase 11) se registra como Information "Request stopped: its client disconnected" con el código 499, fuera de los errores y de la alerta de 5xx.
+
+Respuestas automáticas de WhatsApp (Fase 21): si el horario de una respuesta no se puede leer, se registra como error "Business hours for the automatic reply failed for tenant {TenantId}" (con la excepción, sin teléfono ni texto) y el cliente recibe la respuesta de antes del horario; cuenta en las alertas de errores.
 
 ### Etiqueta por negocio
 

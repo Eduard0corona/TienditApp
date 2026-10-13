@@ -63,6 +63,7 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Productos', path: '/products', icon: 'ri-shopping-bag-line', area: 'catalog', keywords: 'catálogo precios menú' },
           { label: 'Servicios', path: '/services', icon: 'ri-service-line', area: 'catalog', capability: TenantCapability.Service, exact: true, keywords: 'catálogo de servicios' },
           { label: 'Categorías', path: '/categories', icon: 'ri-list-check-2', area: 'catalog' },
+          { label: 'Precios en apps', path: '/platform-prices', icon: 'ri-takeaway-line', area: 'catalog', keywords: 'rappi uber eats didi food reparto precio en la app' },
         ],
       },
       // Inventario has one row of tabs (supplies, stock, movements…); buying from suppliers is its own section.
@@ -83,13 +84,22 @@ export const NAV_GROUPS: NavGroup[] = [
           { label: 'Campañas', path: '/campaigns', icon: 'ri-megaphone-line', area: 'campaigns', keywords: 'promociones mensajes masivos whatsapp recordatorios de citas plantillas bajas' },
         ],
       },
-      { label: 'Reportes', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', keywords: 'utilidad ventas del mes' },
+      {
+        label: 'Reportes',
+        icon: 'ri-bar-chart-box-line',
+        pages: [
+          // Exact: Liquidaciones hangs from its path.
+          { label: 'Ventas', path: '/reports', icon: 'ri-bar-chart-box-line', area: 'reports', exact: true, keywords: 'reportes utilidad ventas del mes' },
+          { label: 'Liquidaciones', path: '/reports/settlements', icon: 'ri-bank-line', area: 'reports', keywords: 'depósitos rappi uber eats didi food conciliación por cobrar' },
+        ],
+      },
       {
         label: 'Configuración',
         icon: 'ri-settings-3-line',
         pages: [
           { label: 'Negocio', path: '/settings/business', icon: 'ri-store-2-line', area: 'businessSettings', keywords: 'mi negocio empresa datos fiscales horarios iva impuestos tickets módulos plan logotipo' },
           { label: 'Sucursales', path: '/branches', icon: 'ri-store-3-line', area: 'businessSettings', keywords: 'tiendas locales puntos de venta matriz' },
+          { label: 'Zonas de entrega', path: '/settings/delivery-zones', icon: 'ri-map-pin-range-line', area: 'businessSettings', keywords: 'envío a domicilio código postal costo de envío reparto colonias cobertura' },
           { label: 'Equipo y permisos', path: '/employees', icon: 'ri-user-settings-line', area: 'employees', keywords: 'equipo empleados usuarios roles invitaciones' },
           { label: 'WhatsApp', path: '/settings/whatsapp', icon: 'ri-whatsapp-line', area: 'whatsAppSettings' },
           { label: 'Respuestas automáticas', path: '/ai-agent', icon: 'ri-robot-2-line', area: 'aiAgent', keywords: 'agente ia bot' },

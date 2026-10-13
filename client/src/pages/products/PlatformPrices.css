@@ -1,0 +1,27 @@
+/* Precios en apps: the box of each price lines up at the end of its column. */
+.platform-price-input {
+  min-width: 6.5rem;
+  max-width: 9rem;
+  margin-left: auto;
+}
+
+/* An option sits a step in, under its product. */
+.datatable-table td.platform-price-option {
+  padding-left: 1.75rem;
+}
+
+/*
+ * What changed, and how to keep or drop it, right under the list. Not sticky: the list already scrolls inside its own box,
+ * and a bar fixed to the bottom of the screen covered its last rows (and the box being typed in) and, on a phone, went
+ * under the tab bar.
+ */
+.platform-prices-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0 0.25rem;
+  border-top: 1px solid var(--ct-border-color);
+}

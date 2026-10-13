@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Application.Orders.Queries;
@@ -156,7 +157,12 @@ public class OrdersController : ControllerBase
     {
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
-            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        {
+            // The same folio of the same platform again today: the client confirms and sends it again.
+            return result.Error == PlatformOrderErrors.PossibleDuplicate
+                ? this.ApiError(StatusCodes.Status409Conflict, result.Error, ApiErrorCodes.PossibleDuplicateOrder)
+                : this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        }
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
@@ -178,13 +184,26 @@ public class OrdersController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Writes down (or corrects) the Paquetenvia trip of an order that goes to the customer's address.</summary>
+    [HttpPut("{id:guid}/delivery/shipment")]
+    public async Task<IActionResult> RegisterCourierShipment(
+        Guid id, [FromBody] RegisterCourierShipmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new RegisterCourierShipmentCommand(id, request.Courier, request.Folio, request.TrackingUrl), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new CancelOrderCommand
         {
             OrderId = id,
-            Reason = request?.Reason
+            Reason = request?.Reason,
+            RestockItems = request?.RestockItems ?? true
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -202,7 +221,9 @@ public class OrdersController : ControllerBase
             InventoryLocationId = request.InventoryLocationId,
             EvidenceUrl = request.EvidenceUrl,
             Reference = request.Reference,
-            Notes = request.Notes
+            Notes = request.Notes,
+            Tip = request.Tip,
+            CashReceived = request.CashReceived
         }, cancellationToken);
 
         if (result.IsFailure)
@@ -317,6 +338,9 @@ public record UpdateOrderStatusRequest
 public record CancelOrderRequest
 {
     public string? Reason { get; init; }
+
+    /// <summary>Whether what the order consumed goes back to the stock; true when left out.</summary>
+    public bool? RestockItems { get; init; }
 }
 
 public record AddOrderPaymentRequest
@@ -327,6 +351,11 @@ public record AddOrderPaymentRequest
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
+    /// <summary>On top of the amount, for the team: not part of the sale or its balance. 0 when not sent.</summary>
+    [System.ComponentModel.DefaultValue(0)]
+    public decimal Tip { get; init; }
+    /// <summary>What the customer handed over in cash, to keep the change with the payment.</summary>
+    public decimal? CashReceived { get; init; }
 }
 
 public record UpdateServiceOrderPieceStatusRequest
@@ -369,4 +398,13 @@ public class CancelTabItemRequest
     public string Reason { get; init; } = string.Empty;
     /// <summary>The kitchen did not prepare it: its supplies go back to stock. Otherwise they were lost.</summary>
     public bool ReturnToStock { get; init; } = true;
+}
+
+public class RegisterCourierShipmentRequest
+{
+    public DeliveryCourier Courier { get; init; } = DeliveryCourier.Paquetenvia;
+    /// <summary>The folio of the trip in the courier's app.</summary>
+    public string Folio { get; init; } = string.Empty;
+    /// <summary>The https link that follows the trip, if the courier gave one.</summary>
+    public string? TrackingUrl { get; init; }
 }

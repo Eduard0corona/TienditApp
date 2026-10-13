@@ -1,14 +1,19 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { SIZES, dialog, open, snap } from '../helpers';
+import { SIZES, dialog, open, settle, snap, snapElement } from '../helpers';
 import {
   CAJA_DATA,
   CAJA_ROUTES,
   CASHIER_PROFILE,
+  CORTE_CON_PLATAFORMA_DATA,
   MENU_EN_LINEA_DATA,
   NEGOCIO_DATA,
+  PLATAFORMAS_ROUTES,
+  PRINCIPAL_SOLO_A_DOMICILIO_DATA,
   SIN_CAJA_DATA,
+  SIN_ZONAS_DATA,
   SUPER_ADMIN_PROFILE,
+  VENTAS_POR_CANAL_ROUTES,
 } from './caja-config.mocks';
 
 // Caja, Reportes, Auditoría and Configuración (Mi negocio, WhatsApp, Sucursales, Equipo, Perfil, Plataforma, Planes and
@@ -47,10 +52,23 @@ async function openCashTab(page: Page, name: string, loaded: Locator) {
   await expect(loaded).toBeVisible();
 }
 
+/** Scrolls a dialog taller than the screen to its end, for a shot of what is below. */
+async function scrollToEnd(panel: Locator) {
+  await panel.evaluate((root) => {
+    for (const element of [root, ...root.querySelectorAll('*')]) element.scrollTop = element.scrollHeight;
+  });
+}
+
 /** The row of a shift in the history, by what sets it apart (its difference, its branch). */
 function shiftRow(page: Page, text: string) {
   return page.getByRole('row').filter({ hasText: text });
 }
+
+/**
+ * The detail of Carlos's closed shift, titled with his name; the baseline's build titles it with his email when it is
+ * from before the API sent names.
+ */
+const CARLOS_SHIFT = /^Turno de (Carlos Méndez|carlos\.mendez@cafelaesquina\.mx)/;
 
 for (const look of LOOKS) {
   test.describe(`Caja y configuración ${look.suffix}`, () => {
@@ -89,6 +107,12 @@ for (const look of LOOKS) {
       await open(page, '/branches');
       await expect(page.getByRole('button', { name: 'Editar Kiosko Parque México' })).toBeVisible();
       await snap(page, `sucursales-${look.suffix}`);
+    });
+
+    test(`zonas de entrega ${look.suffix}`, async ({ page }) => {
+      await open(page, '/settings/delivery-zones');
+      await expect(page.getByRole('button', { name: 'Editar Roma y Condesa' })).toBeVisible();
+      await snap(page, `zonas-entrega-${look.suffix}`);
     });
 
     test(`equipo ${look.suffix}`, async ({ page }) => {
@@ -142,14 +166,14 @@ test.describe('Caja', () => {
   test('caja, registrar movimiento', async ({ page }) => {
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Gasto, retiro o depósito' }).click();
-    await expect(await dialog(page)).toContainText('Registrar movimiento');
+    await dialog(page, 'Registrar movimiento');
     await snapDialog(page, 'caja-movimiento-dialogo');
   });
 
   test('caja, cerrar caja', async ({ page }) => {
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    await expect(await dialog(page)).toContainText('Efectivo esperado');
+    await expect(await dialog(page, 'Cerrar caja')).toContainText('Efectivo esperado');
     await snapDialog(page, 'caja-cerrar-dialogo');
   });
 
@@ -157,7 +181,7 @@ test.describe('Caja', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    await expect(await dialog(page)).toContainText('Efectivo esperado');
+    await expect(await dialog(page, 'Cerrar caja')).toContainText('Efectivo esperado');
     await snapDialog(page, 'caja-cerrar-dialogo-telefono');
   });
 
@@ -165,7 +189,7 @@ test.describe('Caja', () => {
     // A count that does not match: the difference shows and the note becomes required before closing.
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    const closing = await dialog(page);
+    const closing = await dialog(page, 'Cerrar caja');
     await closing.getByLabel('$500.00').fill('3');
     await closing.getByLabel('$200.00').fill('2');
     await expect(closing.getByText('Para cerrar con diferencia escribe qué pasó.')).toBeVisible();
@@ -175,7 +199,7 @@ test.describe('Caja', () => {
   test('caja cerrada con su corte', async ({ page }) => {
     await open(page, '/cash');
     await page.getByRole('button', { name: 'Cerrar caja' }).click();
-    const closing = await dialog(page);
+    const closing = await dialog(page, 'Cerrar caja');
     await closing.getByRole('button', { name: 'Escribir el total' }).click();
     await closing.getByLabel('Efectivo contado').fill('1800');
     await closing.getByLabel('Notas (explica la diferencia)').fill('Faltaron monedas de cambio');
@@ -224,7 +248,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Faltan $50.00').getByRole('button').click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, CARLOS_SHIFT);
     // Its movements load after the dialog opens.
     await expect(detail.getByText('Hielo (6 bolsas)')).toBeVisible();
     await snapDialog(page, 'caja-turno-detalle-dialogo');
@@ -234,7 +258,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Faltan $50.00').getByRole('button').click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, CARLOS_SHIFT);
     await expect(detail.getByText('Hielo (6 bolsas)')).toBeVisible();
     await printCut(page, detail.getByRole('button', { name: 'Imprimir corte' }));
     await snap(page, 'caja-turno-corte-impreso');
@@ -245,7 +269,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Sucursal Coyoacán').filter({ hasText: 'En curso' }).getByRole('button').click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, CARLOS_SHIFT);
     await expect(detail.getByText('Pago de pan')).toBeVisible();
     await expect(detail.getByRole('button', { name: 'Cerrar esta caja' })).toBeVisible();
     await snapDialog(page, 'caja-turno-abierto-otro-dialogo');
@@ -271,13 +295,28 @@ test.describe('Caja', () => {
     await snap(page, 'caja-corte-del-dia-impreso');
   });
 
+  test.describe('con plataforma', () => {
+    // Rappi charged three orders in its app and gave one back: in "Cobrado", apart from the drawers, and in the printed cut.
+    test.use({ prepareData: CORTE_CON_PLATAFORMA_DATA });
+
+    test('caja, corte del día con plataforma', async ({ page }) => {
+      await open(page, '/cash');
+      await openCashTab(page, 'Corte del día', page.getByText('Lo cobró la plataforma: no entra a la caja'));
+      await expect(page.getByText('Devuelto: $350.00')).toBeVisible();
+      await snap(page, 'caja-corte-del-dia-plataforma');
+
+      await printCut(page, page.getByRole('button', { name: 'Imprimir corte del día' }));
+      await snap(page, 'caja-corte-del-dia-plataforma-impreso');
+    });
+  });
+
   test.describe('oscuro', () => {
     test.use({ colorMode: 'dark' });
 
     test('caja, cerrar caja en oscuro', async ({ page }) => {
       await open(page, '/cash');
       await page.getByRole('button', { name: 'Cerrar caja' }).click();
-      await expect(await dialog(page)).toContainText('Efectivo esperado');
+      await expect(await dialog(page, 'Cerrar caja')).toContainText('Efectivo esperado');
       await snapDialog(page, 'caja-cerrar-dialogo-oscuro');
     });
 
@@ -306,6 +345,28 @@ test.describe('Mi negocio', () => {
     await page.getByRole('button', { name: 'Editar negocio' }).click();
     await expect(page.getByLabel('Calle')).toHaveValue('Av. Álvaro Obregón');
     await snap(page, 'negocio-editar-telefono');
+  });
+
+  test('negocio, días especiales', async ({ page }) => {
+    // The special days ahead, every suggested holiday and the past ones, open.
+    await open(page, '/settings/business');
+    await expect(page.getByRole('list', { name: 'Próximos días especiales' })).toContainText('Vie 25 dic');
+    await page.getByRole('button', { name: 'Ver 1 más' }).click();
+    await expect(page.getByRole('button', { name: 'Agregar Año Nuevo, viernes 1 de enero' })).toBeVisible();
+    await page.getByText('Pasados (últimos 90 días)').click();
+    await expect(page.getByRole('list', { name: 'Días especiales pasados' })).toBeVisible();
+    await snap(page, 'negocio-dias-especiales');
+  });
+
+  test('negocio, día especial (diálogo)', async ({ page }) => {
+    // A suggested holiday opens the dialog filled in: Fin de año closes at 18:00, from the Thursday hours.
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/settings/business');
+    await page.getByRole('button', { name: 'Agregar Fin de año, jueves 31 de diciembre' }).click();
+    const form = await dialog(page, 'Nuevo día especial');
+    await expect(form.getByLabel('Motivo (opcional)')).toHaveValue('Fin de año');
+    await expect(form.getByText('Tus clientes verán: 7:00 a 18:00 · Fin de año')).toBeVisible();
+    await snapDialog(page, 'negocio-dia-especial-dialogo-telefono');
   });
 
   test('negocio, vista previa de un tema', async ({ page }) => {
@@ -341,6 +402,55 @@ test.describe('Mi negocio', () => {
   });
 });
 
+test.describe('Plataformas de reparto', () => {
+  // Rappi takes orders, Uber Eats is turned off and DiDi Food was never set up.
+  test.use({ extraRoutes: PLATAFORMAS_ROUTES, prepareData: NEGOCIO_DATA });
+
+  test('negocio, plataformas de reparto', async ({ page }) => {
+    await open(page, '/settings/business');
+    const card = page.getByRole('region', { name: 'Plataformas de reparto' });
+    await expect(card.getByText(
+      'Con un pedido de $1,000.00 con IVA al 16 % incluido cobrado por Rappi: comisión e IVA $348.00, retenciones $90.52, te deposita $561.48.',
+    )).toBeVisible();
+    await snapElement(card, 'negocio-plataformas');
+
+    await card.getByRole('button', { name: 'Editar Rappi' }).click();
+    const form = await dialog(page, 'Rappi');
+    await expect(form.getByLabel('Comisión (%)')).toHaveValue('30');
+    await snapDialog(page, 'negocio-plataforma-dialogo');
+
+    // Below, the fiscal notice and the one about the prices in the app, with its link to Catálogo › Precios en apps.
+    await scrollToEnd(form);
+    await expect(form.getByRole('link', { name: 'Catálogo › Precios en apps' })).toBeVisible();
+    await snapDialog(page, 'negocio-plataforma-dialogo-final');
+  });
+
+  test('negocio, plataforma de reparto en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/settings/business');
+    await page.getByRole('button', { name: 'Configurar DiDi Food' }).click();
+    const form = await dialog(page, 'DiDi Food');
+    await expect(form.getByRole('switch', { name: 'Recibo pedidos de DiDi Food' })).toBeChecked();
+    await snapDialog(page, 'negocio-plataforma-dialogo-telefono');
+  });
+});
+
+test.describe('Ventas por canal', () => {
+  test.use({ extraRoutes: VENTAS_POR_CANAL_ROUTES });
+
+  test('reportes, ventas por canal', async ({ page }) => {
+    await open(page, '/reports');
+    const card = page.getByRole('region', { name: 'Ventas por canal' });
+    await expect(card.getByText('De Rappi cobraste tú $350.00: su comisión e IVA se descuentan de tu depósito.')).toBeVisible();
+    await snapElement(card, 'reportes-ventas-por-canal');
+
+    await card.getByRole('button', { name: 'Ver pedidos de Rappi' }).click();
+    const orders = await dialog(page, 'Pedidos de Rappi · 1 al 4 oct.');
+    await expect(orders.getByRole('cell', { name: '152412' })).toBeVisible();
+    await snapDialog(page, 'reportes-pedidos-de-rappi');
+  });
+});
+
 test.describe('Sin acceso a Mi negocio', () => {
   // Configuring the business is for owners and admins: a cashier who opens it lands on their own screen (Vender).
   test.use({ profile: CASHIER_PROFILE });
@@ -364,7 +474,7 @@ test.describe('Sucursales', () => {
     // The main branch's address is the one the online menu shows: its form says so.
     await open(page, '/branches');
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar Sucursal Roma Norte');
     await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
     await snapDialog(page, 'sucursales-editar-principal-dialogo');
   });
@@ -373,15 +483,35 @@ test.describe('Sucursales', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/branches');
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar Sucursal Roma Norte');
     await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
     await snapDialog(page, 'sucursales-editar-principal-dialogo-telefono');
+  });
+
+  test('sucursales, la principal solo a domicilio', async ({ page }) => {
+    // Chosen in the form: the notice says the menu keeps its address private.
+    await open(page, '/branches');
+    await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
+    const editing = await dialog(page, 'Editar Sucursal Roma Norte');
+    await editing.getByRole('radio', { name: 'Solo a domicilio, sin local' }).check();
+    await expect(editing.getByText('Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección.')).toBeVisible();
+    await snapDialog(page, 'sucursales-principal-solo-a-domicilio-dialogo');
+  });
+
+  test.describe('con la principal solo a domicilio', () => {
+    test.use({ prepareData: PRINCIPAL_SOLO_A_DOMICILIO_DATA });
+
+    test('sucursales, lista con la principal solo a domicilio', async ({ page }) => {
+      await open(page, '/branches');
+      await expect(page.getByText('Solo a domicilio', { exact: true })).toBeVisible();
+      await snap(page, 'sucursales-solo-a-domicilio-escritorio');
+    });
   });
 
   test('sucursales, nueva sucursal', async ({ page }) => {
     await open(page, '/branches');
     await page.getByRole('button', { name: 'Nueva sucursal' }).click();
-    const creating = await dialog(page);
+    const creating = await dialog(page, 'Nueva sucursal');
     await expect(creating.getByRole('button', { name: 'Crear sucursal' })).toBeVisible();
     await snapDialog(page, 'sucursales-nueva-dialogo');
   });
@@ -392,9 +522,47 @@ test.describe('Sucursales', () => {
     test('sucursales, editar la principal en oscuro', async ({ page }) => {
       await open(page, '/branches');
       await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-      const editing = await dialog(page);
+      const editing = await dialog(page, 'Editar Sucursal Roma Norte');
       await expect(editing.getByText('La dirección de la sucursal principal se muestra en tu menú en línea')).toBeVisible();
       await snapDialog(page, 'sucursales-editar-principal-dialogo-oscuro');
+    });
+  });
+});
+
+test.describe('Zonas de entrega', () => {
+  test('zonas de entrega, probar un código postal', async ({ page }) => {
+    // What the automatic replies would answer: the zone that has it and what it charges.
+    await open(page, '/settings/delivery-zones');
+    await page.getByLabel('Probar un código postal').fill('06700');
+    // The page has another status too (the notice of the plan): the one of the probe says the postal code.
+    await expect(page.getByRole('status').filter({ hasText: '06700' })).toHaveText(/Sí llegas al 06700 con «Roma y Condesa»/);
+    await snap(page, 'zonas-entrega-probar-escritorio');
+  });
+
+  test('zonas de entrega, editar una zona', async ({ page }) => {
+    await open(page, '/settings/delivery-zones');
+    await page.getByRole('button', { name: 'Editar Roma y Condesa' }).click();
+    const editing = await dialog(page, 'Editar Roma y Condesa');
+    await expect(editing.getByText('4 códigos postales.')).toBeVisible();
+    await snapDialog(page, 'zonas-entrega-editar-dialogo');
+  });
+
+  test('zonas de entrega, nueva zona en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await open(page, '/settings/delivery-zones');
+    await page.getByRole('button', { name: 'Nueva zona' }).click();
+    const creating = await dialog(page, 'Nueva zona de entrega');
+    await expect(creating.getByRole('button', { name: 'Agregar zona' })).toBeVisible();
+    await snapDialog(page, 'zonas-entrega-nueva-dialogo-telefono');
+  });
+
+  test.describe('sin zonas', () => {
+    test.use({ prepareData: SIN_ZONAS_DATA });
+
+    test('zonas de entrega, sin zonas', async ({ page }) => {
+      await open(page, '/settings/delivery-zones');
+      await expect(page.getByText(/Todavía no tienes zonas de entrega/)).toBeVisible();
+      await snap(page, 'zonas-entrega-vacio-escritorio');
     });
   });
 });
@@ -403,7 +571,7 @@ test.describe('Equipo', () => {
   test('equipo, invitar persona', async ({ page }) => {
     await open(page, '/employees');
     await page.getByRole('button', { name: 'Invitar persona' }).click();
-    const inviting = await dialog(page);
+    const inviting = await dialog(page, 'Invitar persona');
     await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
     await snapDialog(page, 'equipo-invitar-dialogo');
   });
@@ -412,7 +580,7 @@ test.describe('Equipo', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/employees');
     await page.getByRole('button', { name: 'Invitar persona' }).click();
-    const inviting = await dialog(page);
+    const inviting = await dialog(page, 'Invitar persona');
     await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
     await snapDialog(page, 'equipo-invitar-dialogo-telefono');
   });
@@ -421,7 +589,7 @@ test.describe('Equipo', () => {
     // A cashier: their role preset and the permissions it brings.
     await open(page, '/employees');
     await page.getByRole('button', { name: 'Editar a Carlos Méndez' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Carlos Méndez');
     await expect(editing.getByRole('button', { name: 'Guardar cambios' })).toBeVisible();
     await snapDialog(page, 'equipo-editar-dialogo');
   });
@@ -432,9 +600,86 @@ test.describe('Equipo', () => {
     test('equipo, invitar persona en oscuro', async ({ page }) => {
       await open(page, '/employees');
       await page.getByRole('button', { name: 'Invitar persona' }).click();
-      const inviting = await dialog(page);
+      const inviting = await dialog(page, 'Invitar persona');
       await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
       await snapDialog(page, 'equipo-invitar-dialogo-oscuro');
+    });
+  });
+});
+
+// The tabs of Configuración when they do not fit (SectionTabs): the edge that hides tabs fades and, with a mouse, has a
+// button that slides the row a page, and the open page's tab shows as it loads. 1280 px with the menu open is a common
+// laptop; at the tablet's 1024 px the condensed menu still leaves too little room. A touch screen slides the row with a
+// finger: the fade, no buttons.
+test.describe('Pestañas que no caben', () => {
+  const LAPTOP = { width: 1280, height: 800 };
+  const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Configuración' }).getByRole('link', { name });
+  // The row cuts the last pixel of each tab's underline (1 of 44 px): a whole tab is 95% in view, a cut one far less.
+  const whole = (locator: Locator) => expect(locator).toBeInViewport({ ratio: 0.95 });
+  // The buttons stay out of the accessibility tree (the tabs are all there): they are found by their title.
+  const next = (page: Page) => page.getByTitle('Ver las pestañas siguientes');
+  const previous = (page: Page) => page.getByTitle('Ver las pestañas anteriores');
+
+  test('pestañas que no caben, con el mouse', async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await open(page, '/employees');
+    await expect(next(page)).toBeVisible();
+    await expect(previous(page)).toHaveCount(0);
+    await snap(page, 'pestanas-no-caben', { fullPage: false });
+  });
+
+  test('pestañas que no caben, la abierta se ve al cargar', async ({ page }) => {
+    // On master Seguridad y actividad is cut at this size: the row now slides to it, with tabs hidden on both sides.
+    await page.setViewportSize(SIZES.tablet);
+    await open(page, '/audit');
+    await whole(tab(page, 'Seguridad y actividad'));
+    await expect(previous(page)).toBeVisible();
+    await expect(next(page)).toBeVisible();
+    await snap(page, 'pestanas-abierta-al-cargar', { fullPage: false });
+  });
+
+  test('pestañas que no caben, puntero sobre el botón', async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await open(page, '/employees');
+    await next(page).hover();
+    await settle(page);
+    await expect(page).toHaveScreenshot('pestanas-puntero-boton.png');
+  });
+
+  test('pestañas que no caben, después del botón', async ({ page }) => {
+    // Without motion the row lands at once: a smooth slide would be caught halfway.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize(LAPTOP);
+    await open(page, '/employees');
+    await next(page).click();
+    await expect(previous(page)).toBeVisible();
+    await expect(next(page)).toHaveCount(0);
+    await whole(tab(page, 'Primeros pasos'));
+    await snap(page, 'pestanas-despues-del-boton', { fullPage: false });
+  });
+
+  test.describe('oscuro', () => {
+    test.use({ colorMode: 'dark' });
+
+    test('pestañas que no caben en oscuro', async ({ page }) => {
+      await page.setViewportSize(LAPTOP);
+      await open(page, '/audit');
+      await whole(tab(page, 'Seguridad y actividad'));
+      await expect(previous(page)).toBeVisible();
+      await expect(next(page)).toBeVisible();
+      await snap(page, 'pestanas-no-caben-oscuro', { fullPage: false });
+    });
+  });
+
+  test.describe('en un teléfono táctil', () => {
+    test.use({ hasTouch: true });
+
+    test('pestañas que no caben en un teléfono táctil', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/employees');
+      await whole(tab(page, 'Equipo y permisos'));
+      await expect(next(page)).toBeHidden();
+      await snap(page, 'pestanas-telefono-tactil', { fullPage: false });
     });
   });
 });

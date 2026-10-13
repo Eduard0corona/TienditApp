@@ -57,6 +57,13 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(p => p.OptionGroups).UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        // What it costs in the app of each delivery platform, owned by the product.
+        builder.HasMany(p => p.PlatformPrices)
+            .WithOne()
+            .HasForeignKey(price => price.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(p => p.PlatformPrices).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Computed properties ignored by EF
         builder.Ignore(p => p.HasDiscount);
 

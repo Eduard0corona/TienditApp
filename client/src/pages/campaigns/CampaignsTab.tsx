@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { messagingApi } from '../../api/messagingApi';
 import { getApiErrorMessage } from '../../api/errors';
@@ -55,6 +55,7 @@ function progressText(campaign: CampaignDto): string {
 }
 
 export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: () => void }) {
+  const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
   const [page, setPage] = useState(1);
@@ -237,10 +238,10 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
       </div>
 
       {draft && (
-        <Modal show onHide={() => !busy && setDraft(null)} centered size="lg" fullscreen="sm-down">
+        <Modal show onHide={() => !busy && setDraft(null)} centered size="lg" fullscreen="sm-down" aria-labelledby={titleId}>
           <form onSubmit={(event) => void submit(event)}>
             <Modal.Header closeButton={!busy}>
-              <Modal.Title as="h2" className="h5">Nueva campaña</Modal.Title>
+              <Modal.Title id={titleId} as="h2" className="h5">Nueva campaña</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               {templates.length === 0 ? (
@@ -378,15 +379,16 @@ export default function CampaignsTab({ onCreateTemplate }: { onCreateTemplate: (
 }
 
 function CampaignDetail({ campaign, onClose }: { campaign: CampaignDto; onClose: () => void }) {
+  const titleId = useId();
   const [page, setPage] = useState(1);
   const query = useCampaignMessages(campaign.id, page);
   const messages = query.data;
   const error = query.error ? getApiErrorMessage(query.error, 'No se pudieron cargar los mensajes.') : '';
 
   return (
-    <Modal show onHide={onClose} centered size="lg" fullscreen="sm-down">
+    <Modal show onHide={onClose} centered size="lg" fullscreen="sm-down" aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title as="h2" className="h5">{campaign.name}</Modal.Title>
+        <Modal.Title id={titleId} as="h2" className="h5">{campaign.name}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <p className="mb-1"><span className={CAMPAIGN_STATUS[campaign.status].className}>{CAMPAIGN_STATUS[campaign.status].label}</span></p>

@@ -31,6 +31,41 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Chat de WhatsApp | `ManageWhatsApp` | — |
 | Campañas, plantillas, bajas y promoción rápida | `ManageCampaigns` | — |
 | Equipo, actividad del negocio y configuración | dueño o admin | — |
+| Plataformas de reparto con sus tasas: verlas y guardarlas (`GetDeliveryPlatformsQuery`, `SaveDeliveryPlatformCommand`, Fase 22F) | dueño o admin (`Manager`) | — |
+| Qué plataformas están activas, sin tasas (`GetDeliveryPlatformChannelsQuery`, para Vender, Pedidos, Reportes y, desde la Fase 22F-2, Precios en apps) | `ManageOrders`, `ViewReports` o `ManageCatalog` (`Permission(ManageOrders, ViewReports, ManageCatalog)`) | — |
+| Precios en las apps de las plataformas: la lista y guardarlos (`GetPlatformPriceListQuery`, `SavePlatformPricesCommand`, Fase 22F-2) | `ManageCatalog` (`Permission(ManageCatalog)`), como los precios del menú | — |
+| Ventas por canal y pedidos de una plataforma (`GetSalesByChannelQuery`, `GetDeliveryPlatformOrdersQuery`) | `ViewReports` (`Permission(ViewReports)`) | — |
+| Liquidaciones de las plataformas: la lista, una liquidación, los pedidos pendientes de un periodo y lo que debe cada plataforma (`GetPlatformSettlementsQuery`, `GetPlatformSettlementQuery`, `GetPendingPlatformOrdersQuery`, `GetPlatformReceivablesQuery`, Fase 22G) | `ViewReports` (`Permission(ViewReports)`), como Ventas por canal | — |
+| Abrir, guardar, cerrar y anular una liquidación (`CreatePlatformSettlementCommand`, `UpdatePlatformSettlementCommand`, `ClosePlatformSettlementCommand`, `VoidPlatformSettlementCommand`, Fase 22G) | dueño o admin (`Manager`), como las tasas de las plataformas | — |
+| Zonas de entrega: la lista (`GetDeliveryZonesQuery`, Fase 22B) | cualquier miembro (`Member`): quien toma un pedido necesita saber a dónde se entrega | — |
+| Agregar, guardar y borrar una zona de entrega (`CreateDeliveryZoneCommand`, `UpdateDeliveryZoneCommand`, `DeleteDeliveryZoneCommand`, Fase 22B) | dueño o admin (`Manager`) | — |
+| Anotar o corregir el viaje de Paquetenvia de un pedido a domicilio (`RegisterCourierShipmentCommand`, Fase 22C) | `ManageOrders` | — |
+| Cotizar el envío a un código postal en el menú público (`GetPublicDeliveryQuoteQuery`, Fase 22C) | anónimo (`[AllowAnonymousRequest]`), con el límite `public-menu`; sin el nombre de la zona | — |
+
+Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
+
+- **Registrar uno es tomar un pedido** (`CreateOrderCommand`, `ManageOrders`). Si lo cobró la plataforma, la venta no trae pagos y no pide `ChargeOrders`: el servidor registra el pago «Plataforma» y nadie maneja ese dinero. Una cuenta de cocina con `ManageOrders` puede capturar el pedido de la tableta.
+- **Si cobra el negocio, cobrarlo pide `ChargeOrders`,** como cualquier cobro, al registrarlo o después.
+- **Las tasas de los contratos son de dueños y administradores.** Quien toma pedidos o lee reportes solo sabe qué plataformas están activas. La comisión de cada pedido solo sale en Reportes; `OrderDto`, el ticket, Cocina y el aviso en vivo nunca la llevan.
+- **La API lo prueba con personal real** (`CrossTenantDeliveryPlatformsSqlServerTests`):
+  - cocina, solo reportes y solo catálogo reciben 403 en `GET` y `PUT /delivery-platforms`;
+  - cocina, solo reportes y, desde la Fase 22F-2, solo catálogo reciben 200 en `/channels`;
+  - solo reportes recibe 200 en los dos reportes nuevos, y cocina, 403.
+- **Sin capability ni módulo:** ningún caso de uso nuevo declara un módulo.
+
+Precios en las apps (Fase 22F-2, [ADR 0014](../adr/0014-delivery-platform-prices.md)):
+
+- **Los cambia quien cambia los precios del menú** (`ManageCatalog`): la lista y el guardado. Las tasas de los contratos siguen siendo de dueños y administradores.
+- **Los lee quien puede leer el catálogo:** `GET /products?priceChannel=` pide lo mismo que la lista de productos (catálogo, pedidos, inventario o agenda). Los precios de una app no son secretos: los ve cualquier cliente en ella.
+- **La API lo prueba con personal real** (`CrossTenantPlatformPricesSqlServerTests`): solo catálogo recibe 200 en la lista y en `/channels`, 204 en el guardado y 403 en las tasas; un cajero (`ManageOrders`) y solo reportes reciben 403 en la lista y el guardado; el cajero lee el catálogo con los precios de la plataforma.
+
+Liquidaciones de las plataformas (Fase 22G, [ADR 0015](../adr/0015-delivery-platform-settlements.md)):
+
+- **Las lee quien lee los reportes** (`ViewReports`): la lista, el detalle, los pedidos pendientes y lo que debe cada plataforma. En Ventas por canal ya veía la comisión y el neto de cada pedido.
+- **Las cambian dueños y administradores:** abrir, guardar, cerrar y anular, como los términos de cada plataforma. Cerrar y anular quedan en la bitácora (`PlatformSettlementClosed` y `PlatformSettlementVoided`) en el mismo guardado.
+- **En el cliente**, Reportes › Liquidaciones se abre con el área `reports`, y sus botones de cambio salen solo a `access.isAdmin`; a los demás, la liquidación se ve como está. La API decide igual.
+- **La API lo prueba con personal real** (`CrossTenantPlatformSettlementsSqlServerTests`): solo reportes recibe 200 en las cuatro lecturas y 403 en abrir, guardar, cerrar y anular; un cajero (`ManageOrders`) recibe 403 en todo.
+- **Sin capability ni módulo:** ningún caso de uso nuevo declara un módulo.
 
 Un negocio siempre tiene un tipo de venta (productos, servicios o alimentos), como su plan: `TenantCapabilityRules.NormalizeCapabilities` completa el de su giro si su configuración no deja ninguno y `UpdateMyTenantCommand` no guarda módulos sin uno. Por eso ningún caso de uso exige "comercio".
 
@@ -70,7 +105,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 | `[AllowAnonymousRequest("motivo")]` | Flujos públicos (inicio de sesión, registro, confirmaciones) y lo que envía el sistema sin usuario (webhook). |
 
 - `[RequiresCapability(X)]` se combina con la regla anterior y aplica a todos, también al administrador de plataforma: un módulo apagado está apagado.
-- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (147) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
+- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (237 con la Fase 22C) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
 - `CurrentAccessContext` lee una vez por petición la membresía, permisos y módulos; `TenantResolutionMiddleware` le pasa lo que ya consultó.
 - `ForbiddenAccessException` responde 403 con un mensaje en español.
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).
@@ -100,7 +135,7 @@ Una persona puede ser dueña de un negocio y empleada en otro, con una sola cuen
 - **Invitaciones en lugar de contraseñas inventadas.** `CreateEmployeeCommand` crea la cuenta sin contraseña y una membresía `Invited`; la respuesta trae `InvitationUrl` (`/aceptar-invitacion?userId=…&token=…`) para copiarla o mandarla por WhatsApp, y el mismo enlace sale por correo cuando está configurado. El token es de un proveedor propio de Identity (`InvitationTokenProvider`, 7 días): no sirve para restablecer una contraseña, y elegir la contraseña cambia el security stamp, así que el enlace sirve una vez. `GET /auth/invitation` muestra quién invitó y el correo con que se entrará; `POST /auth/accept-invitation` fija la contraseña, confirma el correo, activa todas las invitaciones pendientes de la cuenta e inicia sesión. Una cuenta que ya existe se une con su contraseña sin cambios; una cuenta de cliente no se agrega al equipo.
 - **Asientos del plan.** Una invitación pendiente ocupa su lugar (`SubscriptionRules.CheckUserLimitAsync` cuenta activos e invitados). Cancelar una invitación es desactivar la membresía; reactivar a alguien que nunca eligió contraseña le devuelve la invitación (`Invited`), no un acceso que no puede usar. `POST /employees/{id}/resend-invitation` da un enlace nuevo mientras espera.
 - **Roles con nombre.** `GET /employees/role-presets`: Gerente (administra), Cajero, Mesero, Cocina y Técnico. Elegir uno llena los permisos; cambiar cualquiera lo vuelve "Personalizado" (cuenta `STAFF`). Lo guardado son siempre los permisos.
-- **Cobrar es su propio permiso.** `AddOrderPaymentCommand` y el comprobante de pago exigen `ChargeOrders`; `CreateOrderCommand` lo exige solo si trae pagos (`IRequiresContentPermissions`, que `AuthorizationBehavior` revisa después de la regla del caso de uso). Un mesero guarda el pedido y la caja lo cobra; la app oculta "Cobrar" sin el permiso. La migración `AddChargePermissionAndSmsCooldown` agrega `ChargeOrders` a quien tenía `ManageOrders` guardado (salvo cuentas de cocina), así nadie pierde lo que hoy hace.
+- **Cobrar es su propio permiso.** `AddOrderPaymentCommand` y el comprobante de pago exigen `ChargeOrders`; `CreateOrderCommand` lo exige solo si trae pagos (`IRequiresContentPermissions`, que `AuthorizationBehavior` revisa después de la regla del caso de uso). Un mesero guarda el pedido y la caja lo cobra; la app oculta "Cobrar" sin el permiso. Desde la Fase 22F, un pedido que cobró la plataforma no trae pagos, así que no pide `ChargeOrders` (ver arriba). La migración `AddChargePermissionAndSmsCooldown` agrega `ChargeOrders` a quien tenía `ManageOrders` guardado (salvo cuentas de cocina), así nadie pierde lo que hoy hace.
 - **"Sin acceso" explícito.** En crear y editar, `Permissions = null` toma los del rol y una lista vacía guarda `None` (sin acceso). `ManageEmployees` ya no se ofrece al personal: quien administra permisos podría darse todos.
 - **El teléfono es de la persona.** Recupera la contraseña por SMS, así que el admin ya no lo cambia (`UpdateEmployeeCommand` no tiene teléfono) y el perfil tampoco lo cambia directo: `POST /auth/profile/phone` pide la contraseña y manda un código al número nuevo; `POST /auth/profile/phone/confirm` lo confirma (y mueve el perfil de cliente al número nuevo). La confirmación anónima de `/confirm-phone` solo vale para una cuenta que se está registrando (con contraseña y sin nada confirmado); ahí mismo `POST /auth/change-unconfirmed-phone` corrige un número mal escrito con la contraseña. El nombre de una cuenta que usa otro negocio solo lo cambia la persona.
 - **Recuperar por SMS.** `POST /auth/forgot-password/sms` (correo de la cuenta) manda un código al teléfono confirmado y responde igual exista o no; desde la Fase 11 solo guarda la solicitud en el outbox y `VerificationCodeRequestedHandler` busca la cuenta y envía el código después de responder (lo mismo el reenvío de la confirmación del teléfono). `POST /auth/reset-password/sms` cambia la contraseña con el código y cierra las sesiones abiertas.

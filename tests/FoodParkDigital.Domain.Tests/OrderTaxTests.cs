@@ -132,6 +132,32 @@ public class OrderTaxTests
         Assert.Equal(VatRate.Exempt, VatRate.ForProduct(null, productIsExempt: true, defaultPercent: 16m));
     }
 
+    [Fact]
+    public void Totals_ShouldNeverTrimWhatWasCharged_ButRefuseToGoBelowIt()
+    {
+        // No path lowers a charged total today (a paid dish of a tab is refunded, not cancelled); if one did, the
+        // payments and the drawers would stop adding up, so the order refuses instead of trimming PaidAmount.
+        var error = Assert.Throws<DomainException>(() => Order.EnsureCoversWhatWasCharged(total: 99.99m, paidAmount: 100m));
+        Assert.Equal(Order.TotalBelowPaidMessage, error.Message);
+        Assert.Equal("El total no puede quedar por debajo de lo cobrado.", Order.TotalBelowPaidMessage);
+        Order.EnsureCoversWhatWasCharged(total: 100m, paidAmount: 100m);
+        Order.EnsureCoversWhatWasCharged(total: 100m, paidAmount: 0m);
+    }
+
+    [Fact]
+    public void Totals_ShouldKeepWhatWasCharged_WhenTheOrderGrows()
+    {
+        var order = NewOrder(pricesIncludeTax: true);
+        order.AddItem(Guid.NewGuid(), "Comida", 1, 116m);
+        order.RegisterPayment(116m, OrderPaymentMethod.Cash, DateTimeOffset.UtcNow, null, null, null, null);
+
+        order.AddItem(Guid.NewGuid(), "Postre", 1, 58m);
+
+        Assert.Equal(174m, order.Total);
+        Assert.Equal(116m, order.PaidAmount);
+        Assert.Equal(58m, order.Balance);
+    }
+
     private static Order NewOrder(bool pricesIncludeTax) => new(
         tenantId: Guid.NewGuid(),
         customerUserId: null,

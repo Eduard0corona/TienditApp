@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -8,8 +8,24 @@ import PhotoOrInitial from '../../components/common/PhotoOrInitial';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import type { ProductOptionGroupDto } from '../../types';
 import { formatMoney } from '../../utils/money';
-import { WEEK, dayLabel, describeDay, describeOpeningStatus } from '../../utils/openingHours';
+import {
+  WEEK,
+  dayLabel,
+  describeDay,
+  describeOpeningStatus,
+  describeSpecialDay,
+  describeTodayHours,
+} from '../../utils/openingHours';
+import {
+  belowMinimumMessage,
+  estimateDeliveryTotals,
+  meetsMinimum,
+  normalizePostalCode,
+  notCoveredMessage,
+  type DeliveryTerms,
+} from '../../utils/homeDelivery';
 import { estimateOrderTotals, resolveProductVat } from '../../utils/orderTotals';
+import { isPostalCode } from '../../utils/postalCodes';
 import {
   getLineKey,
   getOptionsLabel,
@@ -18,6 +34,7 @@ import {
 } from '../../utils/productOptions';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
+import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDeliveryFields';
 import './PublicMenuPage.css';
 
 interface MenuLine {
@@ -49,13 +66,18 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
   return (product.optionGroups ?? []) as ProductOptionGroupDto[];
 }
 
+const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '' };
+
 /**
  * The public menu of a business (/m/:slug), without signing in: the catalog the business published and, when
  * it takes orders, a cart that sends the order with the customer's name and phone. A table QR adds ?mesa=.
- * Its header says whether the business is open now (the API works it out in the business's time), its hours of
- * the week and its address with a map.
+ * Its header says whether the business is open now (the API works it out in the business's time and writes the words),
+ * its hours of the week, its special days ahead and its address with a map. A business with delivery zones takes the
+ * order to the customer's address: the server says what it charges to their postal code, and the total adds it.
  */
 export default function PublicMenuPage() {
+  const optionsTitleId = useId();
+  const cartTitleId = useId();
   const { slug = '' } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
   const tableLabel = searchParams.get('mesa')?.trim().slice(0, 50) || '';
@@ -84,15 +106,47 @@ export default function PublicMenuPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [receipt, setReceipt] = useState<PublicOrderReceipt | null>(null);
+  const [toAddress, setToAddress] = useState(false);
+  const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
 
-  const totals = useMemo(() => estimateOrderTotals(
-    lines.map((line) => ({
+  // At one of its tables the customer is already there; a kitchen without premises with zones only delivers.
+  const deliveryOffered = !!data?.deliveryAvailable && !atTable;
+  const deliveryRequired = deliveryOffered && !!data?.deliveryOnly;
+  const delivering = deliveryOffered && (deliveryRequired || toAddress);
+  const postalCode = normalizePostalCode(address.postalCode);
+  const quote = useQuery({
+    queryKey: ['public-delivery-quote', slug, postalCode],
+    queryFn: () => publicMenuApi.getDeliveryQuote(slug, postalCode),
+    enabled: delivering && isPostalCode(postalCode),
+    retry: false,
+    staleTime: 60_000,
+  });
+  const covered = delivering && isPostalCode(postalCode) && quote.data?.covered ? quote.data : null;
+  const terms = useMemo<DeliveryTerms | null>(() => (covered
+    ? { fee: covered.fee ?? 0, minimumOrder: covered.minimumOrder ?? 0, freeDeliveryFrom: covered.freeDeliveryFrom }
+    : null), [covered]);
+
+  const totals = useMemo(() => {
+    const totalsLines = lines.map((line) => ({
       unitPrice: line.unitPrice,
       quantity: line.quantity,
       ...resolveProductVat(line.product, data?.defaultTaxRate ?? 16),
-    })),
-    data?.pricesIncludeTax ?? true,
-  ), [data, lines]);
+    }));
+    const pricesIncludeTax = data?.pricesIncludeTax ?? true;
+    return terms
+      ? estimateDeliveryTotals(totalsLines, pricesIncludeTax, terms, data?.defaultTaxRate ?? 16)
+      : { ...estimateOrderTotals(totalsLines, pricesIncludeTax), productsTotal: null, fee: null };
+  }, [data, lines, terms]);
+  const checkingQuote = delivering && isPostalCode(postalCode) && quote.isFetching;
+  const deliveryProblem = !delivering || checkingQuote ? ''
+    : !isPostalCode(postalCode) ? (postalCode ? 'El código postal lleva 5 dígitos.' : '')
+    : quote.isError ? getApiErrorMessage(quote.error, 'No pudimos revisar tu código postal. Intenta de nuevo.')
+    : quote.data && !quote.data.covered ? notCoveredMessage(postalCode)
+    : terms && totals.productsTotal !== null && !meetsMinimum(terms, totals.productsTotal)
+      ? belowMinimumMessage(postalCode, terms.minimumOrder)
+      : '';
+  // To an address the order waits for the server's answer for the postal code.
+  const deliveryBlocked = delivering && (checkingQuote || !terms || deliveryProblem !== '');
   const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
   const categories = data?.categories ?? [];
   const visible = category === 'all' ? categories : categories.filter((item) => item.id === category);
@@ -151,7 +205,7 @@ export default function PublicMenuPage() {
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (lines.length === 0 || sending) return;
+    if (lines.length === 0 || sending || deliveryBlocked) return;
     setSending(true);
     setError('');
     try {
@@ -160,6 +214,9 @@ export default function PublicMenuPage() {
         customerPhone: phone.trim(),
         notes: notes.trim() || null,
         tableLabel: tableLabel || null,
+        delivery: delivering
+          ? { postalCode, addressLine: address.addressLine.trim(), references: address.references.trim() || null }
+          : undefined,
         items: lines.map((line) => ({
           productId: line.product.id,
           quantity: line.quantity,
@@ -196,9 +253,26 @@ export default function PublicMenuPage() {
 
   const contact = whatsAppUrl(data.contactPhone, `Hola ${data.businessName}, vi su menú en línea.`);
   const hours = data.openingHours;
-  const status = hours ? describeOpeningStatus(hours) : null;
-  // Paused while it is closed: its hours say when to come back (at one of its tables the API takes the order anyway).
-  const closedByHours = data.ordersPaused && status?.isOpen === false;
+  // The API writes what the menu says about its hours (todayDate tells); an older one sends only the times.
+  const fromServer = hours?.todayDate != null;
+  const legacyStatus = hours && !fromServer ? describeOpeningStatus(hours) : null;
+  // Without weekly hours and without a special day today there is no status to show (statusLabel is null).
+  const status = hours && fromServer
+    ? (hours.statusLabel ? { isOpen: hours.isOpen, label: hours.statusLabel, detail: hours.statusDetail ?? null } : null)
+    : legacyStatus;
+  // Paused while it is closed: its hours say when to come back (at one of its tables the API takes the order outside
+  // its hours, but not on a special day it closes).
+  const closedByHours = data.ordersPaused && hours?.isOpen === false;
+  const closedNotice = hours && fromServer
+    ? hours.closedNotice
+    : `Fuera de horario no recibimos pedidos en línea${legacyStatus?.when ? `: vuelve ${legacyStatus.when}` : ''}. Mientras, puedes ver el menú.`;
+  const today = hours?.todayHours;
+  const specialDays = hours?.specialDays ?? [];
+  const hoursSummary = !hours ? null
+    : !fromServer ? `Hoy: ${describeDay(hours.intervals, hours.today)}`
+    : today ? `Hoy: ${describeTodayHours(today)}` : 'Días especiales';
+  // Without weekly hours and without special days ahead (a special day today alone) there is nothing to open.
+  const hoursOpen = !!hours && (hours.intervals.length > 0 || specialDays.length > 0);
   // Once a product has a photo, the others show their initial so the names line up; without photos, only text.
   const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
 
@@ -210,6 +284,11 @@ export default function PublicMenuPage() {
           <i className="ri-checkbox-circle-fill text-success" aria-hidden="true"></i>
           <h1 className="h4">¡Pedido enviado!</h1>
           <p className="mb-1">Folio <strong>{receipt.orderNumber}</strong> · Total <strong className="ta-money">{formatMoney(receipt.total)}</strong></p>
+          {receipt.deliveryFee != null && (
+            <p className="mb-1 small">
+              {receipt.deliveryFee > 0 ? <>Incluye envío de <span className="ta-money">{formatMoney(receipt.deliveryFee)}</span></> : 'Envío gratis'}
+            </p>
+          )}
           <p className="text-muted">
             {receipt.confirmed
               ? `${receipt.businessName} ya lo está preparando.`
@@ -253,26 +332,58 @@ export default function PublicMenuPage() {
         )}
       </header>
 
-      {(hours || data.address) && (
+      {(hours || data.address || data.deliveryOnly || deliveryOffered) && (
         <section className="pm-info" aria-label="Horario y ubicación">
-          {hours && (
+          {hours && !hoursOpen && (
+            <p className="pm-today">
+              <i className="ri-time-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">{hoursSummary}</span>
+            </p>
+          )}
+          {hours && hoursOpen && (
             <details className="pm-hours">
               <summary>
                 <i className="ri-time-line" aria-hidden="true"></i>
-                <span className="flex-grow-1">Hoy: {describeDay(hours.intervals, hours.today)}</span>
+                <span className="flex-grow-1">{hoursSummary}</span>
                 <i className="ri-arrow-down-s-line pm-hours-toggle" aria-hidden="true"></i>
               </summary>
-              <ul className="pm-week list-unstyled" aria-label="Horario de la semana">
-                {WEEK.map((day) => (
-                  <li key={day} aria-current={day === hours.today ? 'date' : undefined}>
-                    <span>{dayLabel(day)}</span>
-                    <span>{describeDay(hours.intervals, day)}</span>
-                  </li>
-                ))}
-              </ul>
+              {hours.intervals.length > 0 && (
+                <ul className="pm-week list-unstyled" aria-label="Horario de la semana">
+                  {WEEK.map((day) => (
+                    <li key={day} aria-current={day === hours.today ? 'date' : undefined}>
+                      <span>{dayLabel(day)}</span>
+                      <span>{describeDay(hours.intervals, day)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {specialDays.length > 0 && (
+                <ul className="pm-special-days list-unstyled" aria-label="Días especiales">
+                  {specialDays.map((day) => <li key={day.from}>{describeSpecialDay(day)}</li>)}
+                </ul>
+              )}
             </details>
           )}
-          {data.address && (
+          {hours?.upcomingNotice && (
+            <p className="pm-upcoming text-muted">
+              <i className="ri-calendar-event-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">{hours.upcomingNotice}</span>
+            </p>
+          )}
+          {/* A kitchen without premises: the food goes to the customer, and the server sends no address. */}
+          {data.deliveryOnly && (
+            <p className="pm-address">
+              <i className="ri-e-bike-2-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">Solo a domicilio: no tenemos local para visitar.</span>
+            </p>
+          )}
+          {deliveryOffered && !data.deliveryOnly && (
+            <p className="pm-address">
+              <i className="ri-e-bike-2-line" aria-hidden="true"></i>
+              <span className="flex-grow-1">También a domicilio: al pedir te decimos si llegamos a tu código postal.</span>
+            </p>
+          )}
+          {data.address && !data.deliveryOnly && (
             <p className="pm-address">
               <i className="ri-map-pin-line" aria-hidden="true"></i>
               <span className="flex-grow-1">{data.address}</span>
@@ -282,11 +393,8 @@ export default function PublicMenuPage() {
         </section>
       )}
 
-      {closedByHours ? (
-        <div className="alert alert-info mx-3 mt-3 mb-0" role="status">
-          Fuera de horario no recibimos pedidos en línea{status?.when ? `: vuelve ${status.when}` : ''}. Mientras, puedes ver
-          el menú.
-        </div>
+      {closedByHours && closedNotice ? (
+        <div className="alert alert-info mx-3 mt-3 mb-0" role="status">{closedNotice}</div>
       ) : data.ordersPaused && (
         <div className="alert alert-warning mx-3 mt-3 mb-0" role="status">
           Por ahora no estamos recibiendo pedidos en línea. Puedes ver el menú y volver más tarde.
@@ -345,11 +453,11 @@ export default function PublicMenuPage() {
         </div>
       )}
 
-      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down">
+      <Modal show={!!choosing} onHide={() => setChoosing(null)} centered scrollable fullscreen="sm-down" aria-labelledby={optionsTitleId}>
         {choosing && (
           <>
             <Modal.Header closeButton>
-              <Modal.Title as="h2" className="h5">{choosing.product.name}</Modal.Title>
+              <Modal.Title id={optionsTitleId} as="h2" className="h5">{choosing.product.name}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               {groupsOf(choosing.product).map((group) => (
@@ -402,9 +510,9 @@ export default function PublicMenuPage() {
         )}
       </Modal>
 
-      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="bottom" className="pm-sheet">
+      <Offcanvas show={cartOpen} onHide={() => setCartOpen(false)} placement="bottom" className="pm-sheet" aria-labelledby={cartTitleId}>
         <Offcanvas.Header closeButton>
-          <Offcanvas.Title as="h2" className="h5">Tu pedido</Offcanvas.Title>
+          <Offcanvas.Title id={cartTitleId} as="h2" className="h5">Tu pedido</Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body>
           <form onSubmit={(event) => void send(event)}>
@@ -424,6 +532,33 @@ export default function PublicMenuPage() {
                 </li>
               ))}
             </ul>
+            {deliveryOffered && (
+              <PublicDeliveryFields
+                required={deliveryRequired}
+                toAddress={toAddress}
+                onToAddressChange={setToAddress}
+                address={address}
+                onAddressChange={(changes) => setAddress((current) => ({ ...current, ...changes }))}
+                terms={terms}
+                checking={checkingQuote}
+                problem={deliveryProblem}
+                pricesIncludeTax={data.pricesIncludeTax}
+              />
+            )}
+            {totals.fee !== null && totals.productsTotal !== null && (
+              <>
+                {/* What the customer pays for each, with IVA, so the two add up to the total. */}
+                <div className="d-flex justify-content-between small">
+                  <span>Productos</span><span className="ta-money">{formatMoney(totals.productsTotal)}</span>
+                </div>
+                <div className="d-flex justify-content-between small">
+                  <span>Envío a domicilio</span>
+                  <span className="ta-money">
+                    {totals.fee > 0 ? formatMoney(Math.round((totals.total - totals.productsTotal) * 100) / 100) : 'Gratis'}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="d-flex justify-content-between fs-5 mb-3">
               <span>Total</span><strong className="ta-money">{formatMoney(totals.total)}</strong>
             </div>
@@ -445,7 +580,7 @@ export default function PublicMenuPage() {
               </div>
             </div>
             {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
-            <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || lines.length === 0}>
+            <button type="submit" className="btn btn-primary btn-touch btn-touch-lg w-100 mt-3" disabled={sending || lines.length === 0 || deliveryBlocked}>
               {sending ? 'Enviando…' : `Enviar pedido · ${formatMoney(totals.total)}`}
             </button>
             <p className="small text-muted mt-2 mb-0">

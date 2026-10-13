@@ -71,8 +71,10 @@ jobs:
           dotnet build FoodParkDigital.sln --no-restore --configuration Release
           dotnet test FoodParkDigital.sln --no-build --configuration Release
 
+      # The commit goes into the informational version ("1.0.0+<sha>"): the health endpoints name it and the smoke tests
+      # compare it, so an instance of the previous version does not pass when only the backend changed.
       - name: Publish backend
-        run: dotnet publish src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj -c Release -o ${{ github.workspace }}/publish
+        run: dotnet publish src/FoodParkDigital.WebApi/FoodParkDigital.WebApi.csproj -c Release -o ${{ github.workspace }}/publish -p:SourceRevisionId=${{ github.sha }}
 
       # The script that index.html loads carries the build's hash: the smoke tests look for it.
       - name: Verify publish output
@@ -120,10 +122,10 @@ jobs:
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: ${{ github.workspace }}/webapp.zip
 
-      # The deployment is done when the app (or the slot) answers with this version: ready (database reachable), with
-      # every migration of this version in the database (a missing apply.sql stops it here) and serving the index.html
-      # just built. SMOKE_TEST_URL (a repository variable) overrides the production address, for a custom domain; a slot
-      # is checked at its own address.
+      # The deployment is done when the app (or the slot) answers with this version: naming this commit, ready (database
+      # reachable), with every migration of this version in the database (a missing apply.sql stops it here) and serving
+      # the index.html just built. SMOKE_TEST_URL (a repository variable) overrides the production address, for a custom
+      # domain; a slot is checked at its own address.
       - name: Smoke test
         env:
           APP_URL: ${{ (vars.AZURE_WEBAPP_SLOT == '' && vars.SMOKE_TEST_URL) || steps.deploy-oidc.outputs.webapp-url || steps.deploy-profile.outputs.webapp-url }}
@@ -132,7 +134,7 @@ jobs:
             echo "::warning::The deployment gave no URL and SMOKE_TEST_URL is not set: smoke test skipped."
             exit 0
           fi
-          bash .github/scripts/smoke-test.sh "$APP_URL" "${{ steps.publish-output.outputs.client-script }}"
+          bash .github/scripts/smoke-test.sh "$APP_URL" "${{ steps.publish-output.outputs.client-script }}" "${{ github.sha }}"
 
   # Only with a staging slot. The `production` environment holds the approval: with required reviewers in its settings,
   # the swap waits for one of them. The OIDC subject of this job is the environment
@@ -174,4 +176,4 @@ jobs:
           APP_URL: ${{ vars.SMOKE_TEST_URL }}
         run: |
           url="${APP_URL:-https://$(az webapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "$APP_NAME" --query defaultHostName --output tsv)}"
-          bash .github/scripts/smoke-test.sh "$url" "${{ needs.build-and-deploy.outputs.client-script }}"
+          bash .github/scripts/smoke-test.sh "$url" "${{ needs.build-and-deploy.outputs.client-script }}" "${{ github.sha }}"

@@ -1,9 +1,12 @@
 using System.Globalization;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.Events;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Orders.Taxes;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -38,6 +41,25 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         OrderChannel channel = OrderChannel.Counter,
         Guid? branchId = null)
     {
+        // An order of a delivery platform comes in through the platform's app: the business registers it, and the
+        // app shares neither the customer nor their phone. Blank phone and table are stored as none.
+        if (OrderChannelRules.IsDeliveryPlatform(channel))
+        {
+            if (!createdByBusiness)
+                throw new DomainException(PlatformOrderRules.RegisteredByBusinessMessage);
+            if (customerUserId.HasValue || temporaryCustomerId.HasValue)
+                throw new DomainException(PlatformOrderRules.NoCustomerMessage);
+            if (!string.IsNullOrWhiteSpace(customerPhone))
+                throw new DomainException(PlatformOrderRules.NoPhoneMessage);
+            if (!string.IsNullOrWhiteSpace(tableNumber))
+                throw new DomainException(PlatformOrderRules.NoTableMessage);
+            if (orderType != OrderType.Retail)
+                throw new DomainException(PlatformOrderRules.OnlyProductsMessage);
+
+            customerPhone = null;
+            tableNumber = null;
+        }
+
         TenantId = tenantId;
         BranchId = branchId;
         CustomerUserId = customerUserId;
@@ -61,7 +83,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         TableNumber = tableNumber;
         // The business policy at the time of the sale: later changes to it never alter this order.
         PricesIncludeTax = pricesIncludeTax;
-        Channel = Enum.IsDefined(channel) ? channel : throw new DomainException("El canal del pedido no es válido.");
+        Channel = Enum.IsDefined(channel) ? channel : throw new DomainException(OrderChannelRules.InvalidChannelMessage);
 
         var stateMachine = OrderStateMachineFactory.Create(businessType, orderType);
         Status = stateMachine.GetInitialStatus();
@@ -83,6 +105,11 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? TableNumber { get; private set; }
     /// <summary>True when item prices already include IVA; false when IVA is added on top of them.</summary>
     public bool PricesIncludeTax { get; private set; }
+    /// <summary>
+    /// Where the order came from, fixed when the order is created and never changed: sales by channel, the order list
+    /// filter and the rules of the delivery platforms (no customer, no notices, the «Plataforma» payment, the order's
+    /// <see cref="PlatformDetail"/>) rely on it never moving.
+    /// </summary>
     public OrderChannel Channel { get; private set; }
     /// <summary>
     /// Branch where the sale was made, fixed when the order is created: reports by branch and the daily sales
@@ -113,6 +140,21 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public string? CancellationReason { get; private set; }
     public byte[] Version { get; private set; } = null!;
     public ServiceOrderDetail? ServiceDetail { get; private set; }
+
+    /// <summary>
+    /// The folio, the terms and the amounts an order of a delivery platform was registered with
+    /// (<see cref="RegisterPlatformOrder"/>); none for any other channel. Loaded only when a query includes it.
+    /// </summary>
+    public PlatformOrderDetail? PlatformDetail { get; private set; }
+
+    /// <summary>The order came from Rappi, Uber Eats or DiDi Food. It depends on the channel, which is always loaded.</summary>
+    public bool IsDeliveryPlatformOrder => OrderChannelRules.IsDeliveryPlatform(Channel);
+
+    /// <summary>
+    /// Where the order goes and what its delivery charges (<see cref="ArrangeDelivery"/>); none for an order picked up or
+    /// served. Always loaded with the order: its fee is part of the total.
+    /// </summary>
+    public OrderDelivery? Delivery { get; private set; }
 
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
@@ -160,6 +202,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (Status != OrderStatus.Pending)
             throw new DomainException("Solo se agregan productos a un pedido pendiente.");
+        // Its commission and expected settlement were calculated on the total it was registered with.
+        if (PlatformDetail is not null)
+            throw new DomainException(PlatformOrderRules.NoItemsAfterRegisteredMessage);
+        // Its fee (and the minimum it reached) were worked out with the products it had.
+        if (Delivery is not null)
+            throw new DomainException(HomeDeliveryRules.NoItemsAfterArrangedMessage);
 
         _items.Add(new OrderItem(Id, productId, productName, quantity, unitPrice, notes, vatRate ?? VatRate.General, fiscal, options, TenantId));
         RecalculateTotals();
@@ -175,6 +223,10 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public void OpenAsTab(Guid? diningTableId, string? tableName, DateTimeOffset sentAt, string? sentBy)
     {
+        if (IsDeliveryPlatformOrder)
+            throw new DomainException(PlatformOrderRules.NoTabMessage);
+        if (Delivery is not null)
+            throw new DomainException(HomeDeliveryRules.NotForTabsMessage);
         if (IsTab || Status != OrderStatus.Pending)
             throw new DomainException("Solo un pedido nuevo puede abrirse como cuenta.");
         if (OrderType != OrderType.Retail)
@@ -394,8 +446,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// <returns>True when the order was closed.</returns>
     public bool CloseIfPaidCounterSale(IOrderStateMachine stateMachine, bool waitsForKitchen, string? performedBy)
     {
-        // A tab can be paid round by round and keep ordering: it closes only when the table leaves (CloseTab).
-        if (!CreatedByBusiness || IsTab || _items.Count == 0 || Balance > 0)
+        // A tab can be paid round by round and keep ordering: it closes only when the table leaves (CloseTab). An order
+        // that goes to the customer's address leaves after the kitchen: ready is not delivered, someone marks it.
+        if (!CreatedByBusiness || IsTab || Delivery is not null || _items.Count == 0 || Balance > 0)
             return false;
 
         OrderStatus closedStatus;
@@ -488,14 +541,139 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     {
         if (string.IsNullOrEmpty(OrderNumber))
             throw new DomainException("El pedido no tiene folio.");
+        if (IsDeliveryPlatformOrder && PlatformDetail is null)
+            throw new DomainException(PlatformOrderRules.MissingFolioMessage);
 
-        AddDomainEvent(new OrderCreatedEvent(Id, TenantId, OrderNumber, BusinessType, Total, Status));
+        AddDomainEvent(new OrderCreatedEvent(
+            Id, TenantId, OrderNumber, BusinessType, Total, Status, Channel,
+            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee));
     }
 
     public void LinkToCustomerUser(Guid userId)
     {
+        if (IsDeliveryPlatformOrder)
+            throw new DomainException(PlatformOrderRules.NoCustomerMessage);
+
         CustomerUserId = userId;
         TemporaryCustomerId = null;
+    }
+
+    /// <summary>
+    /// Registers a new order of a delivery platform: copies the platform's terms and the amounts calculated from them
+    /// (commission, its IVA, withholdings and expected settlement) into the order's <see cref="PlatformDetail"/>. When
+    /// the platform charged the customer, the order is paid then: a «Plataforma» payment for the total, stamped at
+    /// <paramref name="registeredAt"/>, which never enters a drawer. When the business charges (the courier pays on
+    /// pickup), it is charged later like any other order.
+    /// </summary>
+    /// <param name="setting">The platform's settings in the business, which must be active.</param>
+    /// <param name="number">The folio of the platform's app, stored as the payment's reference too.</param>
+    /// <param name="registeredAt">The server's time: the detail and the payment share it.</param>
+    /// <param name="inventoryLocationId">Stock location of the branch, recorded on the payment like any other.</param>
+    public PlatformOrderDetail RegisterPlatformOrder(
+        DeliveryPlatformSetting setting,
+        PlatformOrderNumber number,
+        PlatformCollectedBy collectedBy,
+        DateTimeOffset registeredAt,
+        Guid? inventoryLocationId)
+    {
+        ArgumentNullException.ThrowIfNull(setting);
+        ArgumentNullException.ThrowIfNull(number);
+        if (!IsDeliveryPlatformOrder)
+            throw new DomainException(PlatformOrderRules.OnlyPlatformChannelsMessage);
+        if (PlatformDetail is not null)
+            throw new DomainException(PlatformOrderRules.AlreadyRegisteredMessage);
+        if (_items.Count == 0 || Total <= 0)
+            throw new DomainException(PlatformOrderRules.NeedsAProductMessage);
+        if (_payments.Count > 0)
+            throw new DomainException(PlatformOrderRules.BeforeAnyPaymentMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException(PlatformOrderRules.CancelledMessage);
+        if (setting.TenantId != TenantId || setting.Channel != Channel)
+            throw new DomainException(PlatformOrderRules.SettingOfAnotherPlatformMessage);
+        if (!setting.IsActive)
+            throw new DomainException(PlatformOrderRules.NotActiveMessage(Channel));
+
+        var terms = setting.Terms;
+        var amounts = PlatformOrderCalculator.Calculate(terms, collectedBy, SubTotal, Total, GetTaxBreakdown());
+        PlatformDetail = new PlatformOrderDetail(
+            TenantId, Id, Channel, number, collectedBy, setting.Revision, terms, Total, amounts, registeredAt);
+
+        if (collectedBy == PlatformCollectedBy.Platform)
+        {
+            // The only way a «Plataforma» payment is made: RegisterPayment refuses the method.
+            _payments.Add(new OrderPayment(
+                tenantId: TenantId,
+                orderId: Id,
+                amount: Total,
+                method: OrderPaymentMethod.Platform,
+                paidAt: registeredAt,
+                inventoryLocationId: inventoryLocationId,
+                evidenceUrl: null,
+                reference: number.Value,
+                notes: null,
+                tip: 0,
+                cashReceived: null));
+            PaidAmount = Total;
+        }
+
+        return PlatformDetail;
+    }
+
+    /// <summary>
+    /// Sends a new order to the customer's address: the zone must reach its postal code (and be active) and the products
+    /// must reach the zone's minimum. The delivery charges what the zone charges for those products (nothing from its
+    /// «envío gratis desde»), with the order's tax policy and <paramref name="feeRate"/>, and enters the total. It is
+    /// worked out once, after the products and before any payment, and never changes: it is what the customer agreed to.
+    /// </summary>
+    /// <param name="feeRate">The IVA rate of the business: a delivery service, not the rate of a dish.</param>
+    public OrderDelivery ArrangeDelivery(DeliveryAddress address, DeliveryZone zone, VatRate feeRate)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        ArgumentNullException.ThrowIfNull(zone);
+        if (Delivery is not null)
+            throw new DomainException(HomeDeliveryRules.AlreadyArrangedMessage);
+        if (Status != OrderStatus.Pending)
+            throw new DomainException(HomeDeliveryRules.OnlyNewOrdersMessage);
+        if (IsDeliveryPlatformOrder)
+            throw new DomainException(HomeDeliveryRules.NotForPlatformsMessage);
+        if (IsTab)
+            throw new DomainException(HomeDeliveryRules.NotForTabsMessage);
+        if (OrderType != OrderType.Retail)
+            throw new DomainException(HomeDeliveryRules.OnlyProductsMessage);
+        if (_items.Count == 0)
+            throw new DomainException(HomeDeliveryRules.NeedsProductsMessage);
+        if (_payments.Count > 0)
+            throw new DomainException(HomeDeliveryRules.BeforeAnyPaymentMessage);
+        if (zone.TenantId != TenantId || !zone.Covers(address.PostalCode))
+            throw new DomainException(HomeDeliveryRules.NotCoveredMessage(address.PostalCode));
+
+        var productsTotal = ProductsTotal;
+        if (!zone.MeetsMinimum(productsTotal))
+            throw new DomainException(HomeDeliveryRules.BelowMinimumMessage(address.PostalCode, zone.MinimumOrder));
+
+        Delivery = new OrderDelivery(TenantId, Id, address, zone.Name, zone.FeeFor(productsTotal), feeRate);
+        RecalculateTotals();
+        return Delivery;
+    }
+
+    /// <summary>
+    /// Writes down (or corrects) the courier's trip of an order that goes to the customer's address. False when it is
+    /// the one already written. A cancelled order no longer goes out.
+    /// </summary>
+    public bool RegisterCourierShipment(CourierShipment shipment, DateTimeOffset registeredAt, string? registeredBy)
+    {
+        ArgumentNullException.ThrowIfNull(shipment);
+        if (Delivery is null)
+            throw new DomainException(HomeDeliveryRules.NotADeliveryMessage);
+        if (Status == OrderStatus.Cancelled)
+            throw new DomainException(HomeDeliveryRules.CancelledMessage);
+
+        if (!Delivery.RegisterShipment(shipment, registeredAt, registeredBy))
+            return false;
+
+        // The order changes with its trip, so its version catches a cancellation saved meanwhile.
+        UpdatedAt = registeredAt;
+        return true;
     }
 
     public OrderPayment RegisterPayment(
@@ -509,6 +687,15 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         decimal tip = 0,
         decimal? cashReceived = null)
     {
+        // What a delivery platform charged is registered with the order (RegisterPlatformOrder), and is all it gets.
+        // These rules depend on the channel and the payments, always loaded, never on the platform detail.
+        if (method == OrderPaymentMethod.Platform)
+            throw new DomainException(OrderPaymentMethodRules.PlatformOnlyOnCreationMessage);
+        if (_payments.Any(p => p.Method == OrderPaymentMethod.Platform))
+            throw new DomainException(PlatformOrderRules.PlatformChargedMessage);
+        if (tip > 0 && IsDeliveryPlatformOrder)
+            throw new DomainException(PlatformOrderRules.NoTipMessage);
+
         var payment = new OrderPayment(
             tenantId: TenantId,
             orderId: Id,
@@ -557,6 +744,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException("La orden está cancelada: no tiene pagos que reembolsar.");
         if (amount > NetPaidAmount)
             throw new DomainException("El reembolso no puede ser mayor a lo que se pagó y no se ha reembolsado.");
+        // What a platform charged goes back as «Plataforma», outside every drawer, and only that does.
+        var platformCharged = _payments.Any(p => p.Method == OrderPaymentMethod.Platform);
+        if (method == OrderPaymentMethod.Platform && !platformCharged)
+            throw new DomainException(PlatformOrderRules.PlatformRefundOnlyOfPlatformMessage);
+        if (method != OrderPaymentMethod.Platform && platformCharged)
+            throw new DomainException(PlatformOrderRules.PlatformChargedRefundMessage);
 
         var refund = new OrderRefund(
             TenantId, Id, amount, method, reason, refundedAt, refundedBy, inventoryLocationId, reference, restockItems);
@@ -581,12 +774,26 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public IReadOnlyList<OrderTaxLine> GetTaxBreakdown() => Breakdown(item => item.ChargedPrice);
 
+    /// <summary>
+    /// What the products charge, as the customer pays them, without the delivery: what a zone's minimum and «envío gratis
+    /// desde» are compared with.
+    /// </summary>
+    public decimal ProductsTotal
+        => OrderTaxCalculator.Calculate(PricesIncludeTax, ItemAmounts(item => item.ChargedPrice)).Sum(line => line.Total);
+
+    /// <summary>The products and, for an order that goes to the customer's address, its delivery: one more concept.</summary>
     private IReadOnlyList<OrderTaxLine> Breakdown(Func<OrderItem, decimal> chargedPrice)
-        => OrderTaxCalculator.Calculate(
-            PricesIncludeTax,
-            _items
-                .Where(item => item.CancelledQuantity < item.Quantity)
-                .Select(item => new TaxableAmount(chargedPrice(item), item.VatRate)));
+    {
+        var amounts = ItemAmounts(chargedPrice);
+        if (Delivery is { Fee: > 0 } delivery)
+            amounts = amounts.Append(new TaxableAmount(delivery.Fee, delivery.FeeVatRate));
+        return OrderTaxCalculator.Calculate(PricesIncludeTax, amounts);
+    }
+
+    private IEnumerable<TaxableAmount> ItemAmounts(Func<OrderItem, decimal> chargedPrice)
+        => _items
+            .Where(item => item.CancelledQuantity < item.Quantity)
+            .Select(item => new TaxableAmount(chargedPrice(item), item.VatRate));
 
     private (decimal SubTotal, decimal Tax) ComputeTotals(Func<OrderItem, decimal> chargedPrice)
     {
@@ -594,11 +801,24 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         return (breakdown.Sum(line => line.TaxableBase), breakdown.Sum(line => line.TaxAmount));
     }
 
+    public const string TotalBelowPaidMessage = "El total no puede quedar por debajo de lo cobrado.";
+
+    /// <summary>
+    /// Totals from the items and the delivery. What was charged is never trimmed to fit a lower total: payments and drawers would no
+    /// longer add up. No path lowers a charged total today (a dish already paid is refunded instead of cancelled).
+    /// </summary>
     private void RecalculateTotals()
     {
-        (SubTotal, Tax) = ComputeTotals(item => item.ChargedPrice);
-        Total = SubTotal + Tax;
-        if (PaidAmount > Total)
-            PaidAmount = Total;
+        var (subTotal, tax) = ComputeTotals(item => item.ChargedPrice);
+        EnsureCoversWhatWasCharged(subTotal + tax, PaidAmount);
+        SubTotal = subTotal;
+        Tax = tax;
+        Total = subTotal + tax;
+    }
+
+    internal static void EnsureCoversWhatWasCharged(decimal total, decimal paidAmount)
+    {
+        if (paidAmount > total)
+            throw new DomainException(TotalBelowPaidMessage);
     }
 }

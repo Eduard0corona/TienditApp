@@ -31,9 +31,13 @@ public class DtoMappingTests
     public void Order_ShouldMapTheSame_InMemoryAndForSql(int seed)
     {
         var order = new EntityFiller(maxDepth: 3, seed).Create<Order>();
+        Assert.NotNull(order.Delivery);
 
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
         EntityFiller.Set(order, nameof(Order.ServiceDetail), null);
+        Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+        // An order that does not go to an address (Fase 22C).
+        EntityFiller.Set(order, nameof(Order.Delivery), null);
         Same(order.ToDto(), Project(order, OrderMappings.AsDto));
     }
 
@@ -86,6 +90,51 @@ public class DtoMappingTests
         Assert.Empty(dto.AllowedTransitions);
         EntityFiller.Set(order, nameof(Order.Status), OrderStatus.Delivered);
         Assert.False(Project(order, OrderMappings.AsDto).IsOpenTab);
+    }
+
+    [Theory, MemberData(nameof(Seeds))]
+    public void OrderOfAPlatform_ShouldShowItsFolioAndWhoCharged_InMemoryAndForSql_NeverItsCommission(int seed)
+    {
+        var order = new EntityFiller(maxDepth: 3, seed).Create<Order>();
+        EntityFiller.Set(order, nameof(Order.Channel), OrderChannel.Rappi);
+        var detail = order.PlatformDetail!;
+
+        var dto = order.ToDto();
+        Same(dto, Project(order, OrderMappings.AsDto));
+        Assert.Equal(detail.ExternalOrderNumber, dto.PlatformOrder!.ExternalOrderNumber);
+        Assert.Equal(detail.CollectedBy, dto.PlatformOrder.CollectedBy);
+        // The commission, the withholdings and the expected settlement are for the reports, not for every screen.
+        var json = JsonSerializer.Serialize(dto);
+        Assert.DoesNotContain("Commission", json);
+        Assert.DoesNotContain("Withheld", json);
+        Assert.DoesNotContain("ExpectedSettlement", json);
+
+        // Any other order has no platform.
+        EntityFiller.Set(order, nameof(Order.PlatformDetail), null);
+        Same(order.ToDto(), Project(order, OrderMappings.AsDto));
+        Assert.Null(order.ToDto().PlatformOrder);
+    }
+
+    [Fact]
+    public void KitchenOrder_ShouldCarryTheChannelAndTheFolioOfTheApp()
+    {
+        var order = new EntityFiller(maxDepth: 3).Create<Order>();
+        EntityFiller.Set(order, nameof(Order.Channel), OrderChannel.UberEats);
+        var folio = order.PlatformDetail!.ExternalOrderNumber;
+
+        var platform = order.ToKitchenDto();
+        EntityFiller.Set(order, nameof(Order.Channel), OrderChannel.Counter);
+        EntityFiller.Set(order, nameof(Order.PlatformDetail), null);
+        var counter = order.ToKitchenDto();
+
+        Assert.Equal((order.Id, OrderChannel.UberEats, folio), (platform.Id, platform.Channel, platform.ExternalOrderNumber));
+        Assert.Equal(OrderChannel.Counter, counter.Channel);
+        Assert.Null(counter.ExternalOrderNumber);
+        // The kitchen knows an order goes out to an address, never where (Fase 22C).
+        Assert.True(counter.IsDelivery);
+        EntityFiller.Set(order, nameof(Order.Delivery), null);
+        Assert.False(order.ToKitchenDto().IsDelivery);
+        Assert.DoesNotContain("AddressLine", System.Text.Json.JsonSerializer.Serialize(counter));
     }
 
     [Fact]

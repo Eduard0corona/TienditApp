@@ -20,15 +20,19 @@ const MyOrders = lazy(() => import('./pages/account/MyOrders'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
+const PlatformPrices = lazy(() => import('./pages/products/PlatformPrices'));
 const ServicesList = lazy(() => import('./pages/services/ServicesList'));
 const ServiceBoard = lazy(() => import('./pages/services/ServiceBoard'));
 const InventoryManagement = lazy(() => import('./pages/inventory/InventoryManagement'));
 const BranchesList = lazy(() => import('./pages/branches/BranchesList'));
+const DeliveryZones = lazy(() => import('./pages/settings/DeliveryZones'));
 const SuppliersList = lazy(() => import('./pages/suppliers/SuppliersList'));
 const PurchaseOrdersList = lazy(() => import('./pages/purchases/PurchaseOrdersList'));
 const CashManagement = lazy(() => import('./pages/cash/CashManagement'));
 const AppointmentsList = lazy(() => import('./pages/appointments/AppointmentsList'));
 const OperationalReports = lazy(() => import('./pages/reports/OperationalReports'));
+const PlatformSettlements = lazy(() => import('./pages/reports/PlatformSettlements'));
+const PlatformSettlementPage = lazy(() => import('./pages/reports/PlatformSettlementPage'));
 const KitchenBoard = lazy(() => import('./pages/kitchen/KitchenBoard'));
 const AuditLogs = lazy(() => import('./pages/audit/AuditLogs'));
 const PlatformConsole = lazy(() => import('./pages/platform/PlatformConsole'));
@@ -134,6 +138,14 @@ export default function App() {
                 )}
               />
               <Route
+                path="/platform-prices"
+                element={(
+                  <AccessRoute area="catalog">
+                    <PlatformPrices />
+                  </AccessRoute>
+                )}
+              />
+              <Route
                 path="/services"
                 element={(
                   <AccessRoute area="catalog">
@@ -162,6 +174,14 @@ export default function App() {
                 element={(
                   <AccessRoute area="businessSettings">
                     <BranchesList />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/settings/delivery-zones"
+                element={(
+                  <AccessRoute area="businessSettings">
+                    <DeliveryZones />
                   </AccessRoute>
                 )}
               />
@@ -202,6 +222,22 @@ export default function App() {
                 element={(
                   <AccessRoute area="reports">
                     <OperationalReports />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/settlements"
+                element={(
+                  <AccessRoute area="reports">
+                    <PlatformSettlements />
+                  </AccessRoute>
+                )}
+              />
+              <Route
+                path="/reports/settlements/:id"
+                element={(
+                  <AccessRoute area="reports">
+                    <PlatformSettlementPage />
                   </AccessRoute>
                 )}
               />

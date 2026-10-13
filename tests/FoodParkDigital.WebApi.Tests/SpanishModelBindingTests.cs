@@ -1,11 +1,15 @@
+using System.Text;
 using System.Text.Json;
+using FoodParkDigital.WebApi.Controllers;
 using FoodParkDigital.WebApi.Errors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.WebApi.Tests;
 
@@ -41,6 +45,33 @@ public class SpanishModelBindingTests
         Assert.Equal("El campo Phone es obligatorio.", Assert.Single(problem.Errors["Phone"]));
         Assert.Equal("La cantidad debe ser mayor a cero.", Assert.Single(problem.Errors["Quantity"]));
         Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
+    }
+
+    [Fact]
+    public async Task DateWrittenAnotherWay_ShouldAnswerInSpanish_WithoutTypeNames()
+    {
+        // A date in a body (special days) reads only as yyyy-MM-dd; the JSON reader's error is the one the API answers.
+        var http = new DefaultHttpContext();
+        http.Request.ContentType = "application/json";
+        http.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes("""{"from":"24/12/2026","kind":0}"""));
+        var modelState = new ModelStateDictionary();
+        var formatter = new SystemTextJsonInputFormatter(
+            new JsonOptions { AllowInputFormatterExceptionMessages = false }, NullLogger<SystemTextJsonInputFormatter>.Instance);
+
+        var read = await formatter.ReadAsync(new InputFormatterContext(
+            http, "request", modelState, new EmptyModelMetadataProvider().GetMetadataForType(typeof(SaveSpecialDayRequest)),
+            (stream, encoding) => new StreamReader(stream, encoding)));
+        var problem = Problem(SpanishModelBinding.InvalidModelStateResponse(new ActionContext(http, new RouteData(), new ActionDescriptor
+        {
+            Parameters = [new() { Name = "request", BindingInfo = new BindingInfo { BindingSource = BindingSource.Body } }]
+        }, modelState)));
+
+        Assert.True(read.HasError);
+        Assert.Equal(SpanishModelBinding.InvalidFormatMessage, Assert.Single(problem.Errors["$.from"]));
+        Assert.Equal(SpanishModelBinding.InvalidFormatMessage, problem.Detail);
+        Assert.Equal("validation_failed", problem.Extensions["code"]);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
+        Assert.DoesNotContain("DateOnly", JsonSerializer.Serialize(problem));
     }
 
     [Fact]

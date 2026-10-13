@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
+import ChannelBadge from '../../components/common/ChannelBadge';
 import StatusChip from '../../components/common/StatusChip';
 import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePanel';
 import SaleTicket from '../../components/sales/SaleTicket';
 import RefundOrderModal from '../../components/orders/RefundOrderModal';
 import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
+import OrderDeliveryPanel from '../../components/orders/OrderDeliveryPanel';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
-import { queryKeys } from '../../api/queries';
+import { queryKeys, useDeliveryPlatformChannels } from '../../api/queries';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
 import { getServicePriorityLabel, parseChecklist, parsePhotos } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
@@ -23,8 +25,10 @@ import { useToast } from '../../hooks/useToast';
 import type { OrderDto, OrderStatus, OrderType, PaginatedList, RefundOrderRequest, VoidOrderRequest } from '../../types';
 import {
   OrderChannel,
+  OrderPaymentMethod,
   OrderStatus as OrderStatusConst,
   OrderType as OrderTypeConst,
+  PlatformCollectedBy,
   TenantCapability,
 } from '../../types';
 import { toPrivateFilePath } from '../../utils/privateFiles';
@@ -35,9 +39,14 @@ import { hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities'
 import { formatMoney } from '../../utils/money';
 import { getVatLabel } from '../../utils/orderTotals';
 import { buildTicketText, buildWhatsAppTicketUrl, formatCancelled, printTicket } from '../../utils/ticket';
+import { isDeliveryPlatform } from '../../utils/deliveryPlatforms';
 import {
+  DELIVERY_PLATFORM_CHANNELS,
+  ORDER_CHANNEL_LABELS,
   ORDER_TYPE_LABELS,
   SERVICE_PIECE_STATUS_LABELS,
+  getChannelLabel,
+  getCollectedByLabel,
   getOrderStatusLabel,
   getPaymentMethodLabel,
 } from '../../utils/labels';
@@ -56,12 +65,29 @@ const ORDER_TYPE_STATUS_OPTIONS: Record<OrderType, Array<{ value: OrderStatus; l
   [OrderTypeConst.Service]: toStatusOptions([0, 4, 5, 7, 99]),
 };
 
-// Where the order came from; the counter is the usual one and carries no badge in the list.
-const CHANNEL_OPTIONS = [
-  { value: OrderChannel.Counter, label: 'Mostrador' },
-  { value: OrderChannel.WhatsApp, label: 'WhatsApp' },
-  { value: OrderChannel.Online, label: 'En línea' },
-];
+// Where the order came from; the counter is the usual one and carries no badge in the list. The delivery platforms are
+// offered once the business set one up (active or not: its orders stay to be found).
+const OWN_CHANNELS: OrderChannel[] = [OrderChannel.Counter, OrderChannel.WhatsApp, OrderChannel.Online];
+
+function getChannelOptions(withPlatforms: boolean) {
+  return [...OWN_CHANNELS, ...(withPlatforms ? DELIVERY_PLATFORM_CHANNELS : [])].map((value) => ({
+    value,
+    label: ORDER_CHANNEL_LABELS[value],
+  }));
+}
+
+/** The platform charged the order in its app: nothing is left to collect from the courier. */
+function chargedByPlatform(order: OrderDto): boolean {
+  return isDeliveryPlatform(order.channel) && order.platformOrder?.collectedBy === PlatformCollectedBy.Platform;
+}
+
+/** A payment's method; what a platform charged reads with the folio of its app: «Plataforma · BC953». */
+function getPaymentMethodText(order: OrderDto, payment: OrderDto['payments'][number]): string {
+  const label = getPaymentMethodLabel(payment.method);
+  if (payment.method !== OrderPaymentMethod.Platform) return label;
+  const folio = order.platformOrder?.externalOrderNumber ?? payment.reference;
+  return folio ? `${label} · ${folio}` : label;
+}
 
 /** The kinds of order of the business, by the rule the server lists them with: sales (products or food), services or both (both while unknown). */
 function getOrderTypes(capabilities: number | null): OrderType[] {
@@ -105,6 +131,9 @@ function getStatusLabel(status: OrderStatus): string {
 const EVENT_RELOAD_DELAY_MS = 400;
 
 export default function OrdersList() {
+  const detailTitleId = useId();
+  const paymentTitleId = useId();
+  const receiptTitleId = useId();
   const queryClient = useQueryClient();
   const today = getBusinessToday();
   const [searchParams] = useSearchParams();
@@ -156,7 +185,7 @@ export default function OrdersList() {
   }, [chime.play]);
   const { user } = useAuth();
   const { tenant, capabilities } = useTenant();
-  const { prompt } = useConfirm();
+  const { confirm, prompt } = useConfirm();
   const toast = useToast();
   // Selling, charging, changing status and cancelling are counter actions (OrdersController); kitchen
   // roles can read orders but move food orders from the kitchen board. Refunds also need ProcessRefunds.
@@ -164,6 +193,8 @@ export default function OrdersList() {
   const canSell = access.sell;
   const canCharge = access.charge;
   const canRefund = access.refunds;
+  const platformChannels = useDeliveryPlatformChannels(access.orders);
+  const channelOptions = useMemo(() => getChannelOptions((platformChannels.data?.length ?? 0) > 0), [platformChannels.data]);
   // The kind of each order says something only while the list mixes sales and services.
   const orderTypes = getOrderTypes(capabilities);
   const mixesOrderTypes = orderTypes.length > 1;
@@ -186,6 +217,7 @@ export default function OrdersList() {
   );
 
   const selectedNetPaid = selectedOrder ? (selectedOrder.netPaidAmount ?? selectedOrder.paidAmount) : 0;
+  const selectedPlatform = selectedOrder && isDeliveryPlatform(selectedOrder.channel) ? selectedOrder.channel : null;
   const canRefundSelected = canRefund && selectedNetPaid > 0;
   const selectedOrderTotalItems = useMemo(
     // A weighed line counts as one article.
@@ -258,7 +290,10 @@ export default function OrdersList() {
       if (orderId && orderId === selectedOrderIdRef.current) void refreshSelectedOrder(orderId).catch(() => undefined);
     };
     const createdOff = onOrderCreated((payload) => {
-      if (payload.status === 'Pending') {
+      if (payload.externalOrderNumber) {
+        // An order of a delivery platform, registered by the team: named by its platform and its folio.
+        setRealtimeMessage(`Nuevo pedido ${payload.orderNumber} de ${getChannelLabel(payload.channel)} (folio ${payload.externalOrderNumber})`);
+      } else if (payload.status === 'Pending') {
         setRealtimeMessage(`Nuevo pedido por confirmar: ${payload.orderNumber}`);
         playChimeRef.current();
       } else {
@@ -326,11 +361,21 @@ export default function OrdersList() {
       danger: true,
     });
     if (reason === null) return;
+    // A platform's app often cancels once the food is cooked: then its supplies were used, and nothing goes back unless
+    // the person says the food was never made (as when voiding one).
+    const restockItems = isDeliveryPlatform(order.channel)
+      ? await confirm({
+        title: '¿Regresar los insumos al inventario?',
+        message: 'Solo si la comida no se preparó. Si ya estaba lista, los insumos ya se usaron.',
+        confirmLabel: 'Sí, regresarlos',
+        cancelLabel: 'No, ya se preparó',
+      })
+      : undefined;
 
     setStatusSubmitting(true);
     setStatusError('');
     try {
-      await ordersApi.cancel(order.id, reason || undefined);
+      await ordersApi.cancel(order.id, reason || undefined, restockItems);
       void queryClient.invalidateQueries({ queryKey: queryKeys.attention });
       await Promise.all([loadOrders(), refreshSelectedOrder(order.id)]);
       toast.success(`Pedido ${order.orderNumber} cancelado.`);
@@ -512,7 +557,7 @@ export default function OrdersList() {
                         }}
                       >
                         <option value="">Todos</option>
-                        {CHANNEL_OPTIONS.map((channel) => (
+                        {channelOptions.map((channel) => (
                           <option key={channel.value} value={channel.value}>
                             {channel.label}
                           </option>
@@ -605,6 +650,21 @@ export default function OrdersList() {
                           <span className="badge mt-1 bg-primary-subtle text-primary-emphasis">En línea</span>
                         </div>
                       )}
+                      {order.delivery && (
+                        <div>
+                          <span className="badge mt-1 text-bg-light border">
+                            <i className="ri-e-bike-2-line me-1" aria-hidden="true"></i>A domicilio
+                          </span>
+                        </div>
+                      )}
+                      {isDeliveryPlatform(order.channel) && (
+                        <div>
+                          <ChannelBadge channel={order.channel} className="mt-1" />
+                          {order.platformOrder && (
+                            <small className="d-block text-muted">Folio {order.platformOrder.externalOrderNumber}</small>
+                          )}
+                        </div>
+                      )}
                     </td>
                     {showTypeColumn && (
                       <td className="text-center">
@@ -624,7 +684,11 @@ export default function OrdersList() {
                     <td className="text-end fw-semibold">
                       <div className="ta-money">{formatMoney(order.total)}</div>
                       <small className={`d-block ${order.balance > 0 ? 'text-danger' : 'text-success'}`}>
-                        {order.balance > 0 ? `Por cobrar ${formatMoney(order.balance)}` : 'Pagado'}
+                        {order.balance > 0
+                          ? `Por cobrar ${formatMoney(order.balance)}`
+                          : chargedByPlatform(order)
+                            ? `Cobró ${getCollectedByLabel(PlatformCollectedBy.Platform, order.channel)}`
+                            : 'Pagado'}
                       </small>
                       {(order.refundedAmount ?? 0) > 0 && (
                         <small className="d-block text-warning">Reembolsado {formatMoney(order.refundedAmount ?? 0)}</small>
@@ -667,9 +731,10 @@ export default function OrdersList() {
         }}
         size="lg"
         centered
+        aria-labelledby={detailTitleId}
       >
         <Modal.Header closeButton>
-          <Modal.Title>Pedido {selectedOrder?.orderNumber}</Modal.Title>
+          <Modal.Title id={detailTitleId}>Pedido {selectedOrder?.orderNumber}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {selectedOrder && (
@@ -680,7 +745,7 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Tipo:</strong> {ORDER_TYPE_LABELS[selectedOrder.orderType]}</p>
                   <p className="mb-1">
                     <strong>Cliente:</strong> {selectedOrder.customerName}
-                    {selectedOrder.customerPhone && (
+                    {selectedOrder.customerPhone && !selectedPlatform && (
                       <button
                         type="button"
                         className="btn btn-link btn-sm p-0 ms-2 align-baseline"
@@ -690,8 +755,28 @@ export default function OrdersList() {
                       </button>
                     )}
                   </p>
-                  <p className="mb-1"><strong>Teléfono:</strong> {selectedOrder.customerPhone || '-'}</p>
-                  <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
+                  {selectedPlatform ? (
+                    // The app of a platform shares neither the customer's phone nor a table: where it came from instead.
+                    <>
+                      <p className="mb-1">
+                        <strong>Origen:</strong> {getChannelLabel(selectedPlatform)}
+                        {selectedOrder.platformOrder && <> · folio {selectedOrder.platformOrder.externalOrderNumber}</>}
+                      </p>
+                      {selectedOrder.platformOrder && (
+                        <p className="mb-1">
+                          <strong>Cobró:</strong>{' '}
+                          {selectedOrder.platformOrder.collectedBy === PlatformCollectedBy.Business
+                            ? 'el negocio'
+                            : getCollectedByLabel(PlatformCollectedBy.Platform, selectedPlatform)}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="mb-1"><strong>Teléfono:</strong> {selectedOrder.customerPhone || '-'}</p>
+                      <p className="mb-1"><strong>Mesa:</strong> {selectedOrder.tableNumber || '-'}</p>
+                    </>
+                  )}
                 </div>
                 <div className="col-md-6">
                   <p className="mb-1"><strong>Estado:</strong> <StatusChip status={selectedOrder.status} /></p>
@@ -713,6 +798,16 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Por cobrar:</strong> <span className="ta-money">{formatMoney(selectedOrder.balance)}</span></p>
                 </div>
               </div>
+
+              <OrderDeliveryPanel
+                key={selectedOrder.id}
+                order={selectedOrder}
+                canManage={canSell}
+                onSaved={async () => {
+                  await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]);
+                  toast.success('Envío guardado.');
+                }}
+              />
 
               {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel))
                 || (canCharge && selectedOrder.balance > 0)
@@ -981,8 +1076,9 @@ export default function OrdersList() {
                         {selectedOrder.payments.map((payment) => (
                           <tr key={payment.id}>
                             <td>{toLocalDateTime(payment.paidAt)}</td>
-                            <td>{getPaymentMethodLabel(payment.method)}</td>
-                            <td>{payment.reference || '-'}</td>
+                            <td>{getPaymentMethodText(selectedOrder, payment)}</td>
+                            {/* The folio of what the platform charged is its reference: it already reads with the method. */}
+                            <td>{(payment.method === OrderPaymentMethod.Platform ? '' : payment.reference) || '-'}</td>
                             <td>
                               {toPrivateFilePath(payment.evidenceUrl) ? (
                                 <PrivateFileLink path={toPrivateFilePath(payment.evidenceUrl)!}>Ver</PrivateFileLink>
@@ -1081,9 +1177,9 @@ export default function OrdersList() {
         />
       ))}
 
-      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down">
+      <Modal show={!!paymentOrder} onHide={closePaymentModal} centered size="lg" fullscreen="sm-down" aria-labelledby={paymentTitleId}>
         <Modal.Header closeButton={!paymentSubmitting}>
-          <Modal.Title as="h2" className="h5">
+          <Modal.Title id={paymentTitleId} as="h2" className="h5">
             Cobrar {paymentOrder?.orderNumber}
             <span className="d-block small text-muted fw-normal">{paymentOrder?.customerName}</span>
           </Modal.Title>
@@ -1094,6 +1190,8 @@ export default function OrdersList() {
               amountDue={paymentOrder.balance}
               allowPartial
               confirmLabel="Registrar"
+              // The tip of a platform's order is in its app, for the courier.
+              allowTip={!isDeliveryPlatform(paymentOrder.channel)}
               submitting={paymentSubmitting}
               error={paymentError}
               onSubmit={(charge) => void handleAddPayment(charge)}
@@ -1107,9 +1205,9 @@ export default function OrdersList() {
         </Modal.Body>
       </Modal>
 
-      <Modal show={!!paidReceipt} onHide={() => setPaidReceipt(null)} centered fullscreen="sm-down">
+      <Modal show={!!paidReceipt} onHide={() => setPaidReceipt(null)} centered fullscreen="sm-down" aria-labelledby={receiptTitleId}>
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">
+          <Modal.Title id={receiptTitleId} as="h2" className="h5">
             <i className="ri-checkbox-circle-fill text-success me-1" aria-hidden="true"></i>
             Pago registrado en {paidReceipt?.order.orderNumber}
           </Modal.Title>
@@ -1135,7 +1233,8 @@ export default function OrdersList() {
           <button type="button" className="btn btn-light btn-touch" onClick={printTicket}>
             <i className="ri-printer-line me-1" aria-hidden="true"></i>Imprimir
           </button>
-          {paidReceipt && (
+          {/* An order of a platform has no phone to send its ticket to. */}
+          {paidReceipt && !isDeliveryPlatform(paidReceipt.order.channel) && (
             <a
               className="btn btn-light btn-touch"
               href={buildWhatsAppTicketUrl(

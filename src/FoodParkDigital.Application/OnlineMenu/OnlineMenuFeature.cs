@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using FoodParkDigital.Application.Catalog.DTOs;
 using FoodParkDigital.Application.Common.Interfaces;
@@ -6,16 +7,19 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
+using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.StateMachines;
-using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -106,25 +110,49 @@ public class PublicMenuDto
     /// <summary>The menu takes orders now; otherwise it only shows the catalog.</summary>
     public bool AcceptsOrders { get; set; }
     /// <summary>
-    /// The business takes online orders, but not right now: it is outside its hours (<see cref="OpeningHours"/> says
-    /// when it opens) or the branch they arrive at has no open drawer to charge them in.
+    /// The business takes online orders, but not right now: it is closed, outside its hours or on a special day
+    /// (<see cref="OpeningHours"/> says why and when it opens), or the branch they arrive at has no open drawer to
+    /// charge them in.
     /// </summary>
     public bool OrdersPaused { get; set; }
     /// <summary>The colors the business picked: its customers see the menu with them.</summary>
     public BusinessTheme Theme { get; set; }
     /// <summary>
-    /// Where the main branch is, in one line, to show it and open it in a map; null without a street. Never the fiscal
-    /// address of the business.
+    /// Where the main branch is, in one line, to show it and open it in a map; null without a street or when the branch
+    /// only delivers. Never the fiscal address of the business.
     /// </summary>
     public string? Address { get; set; }
-    /// <summary>Its hours and whether it is open now; null while the business has no hours.</summary>
+    /// <summary>
+    /// The main branch only delivers: it has no premises to visit, and its address (<see cref="Address"/> stays null) is
+    /// never published.
+    /// </summary>
+    public bool DeliveryOnly { get; set; }
+    /// <summary>
+    /// The menu takes orders to an address (Fase 22C): it takes orders and the business has an active delivery zone. The
+    /// customer writes a postal code (GetPublicDeliveryQuoteQuery says whether it is reached and what it costs). Without a
+    /// premises (<see cref="DeliveryOnly"/>) it is the only way to order, except from a table.
+    /// </summary>
+    public bool DeliveryAvailable { get; set; }
+    /// <summary>
+    /// Its hours and whether it is open now. Null when the business has no hours and no special day today or in the
+    /// next 31 days.
+    /// </summary>
     public PublicOpeningHoursDto? OpeningHours { get; set; }
     public List<PublicMenuCategoryDto> Categories { get; set; } = new();
 }
 
-/// <summary>The hours of the business on its public menu, worked out in its own time zone.</summary>
+/// <summary>
+/// The hours of the business on its public menu, worked out in its own time zone: its weekly hours with its special
+/// days on top. The server writes the words (<see cref="StatusLabel"/>, <see cref="StatusDetail"/> and the notices);
+/// an API that does not send <see cref="TodayDate"/> left them to the client.
+/// </summary>
 public class PublicOpeningHoursDto
 {
+    /// <summary>How far ahead <see cref="SpecialDays"/> looks, and how many it lists at most.</summary>
+    public const int SpecialDaysAhead = 31;
+    public const int MaxSpecialDays = 5;
+
+    /// <summary>The weekly hours; empty when the business has only special days.</summary>
     public List<OpeningIntervalDto> Intervals { get; set; } = new();
     /// <summary>Today in the business, for "Hoy" in the hours.</summary>
     public DayOfWeek Today { get; set; }
@@ -135,17 +163,118 @@ public class PublicOpeningHoursDto
     /// <summary>While closed: when it opens next ("09:00") and in how many days (0 today, 1 tomorrow).</summary>
     public string? OpensAt { get; set; }
     public int? OpensInDays { get; set; }
+    /// <summary>Today in the business. The words below come from the server when it is present.</summary>
+    public DateOnly? TodayDate { get; set; }
+    public bool? HasWeeklyHours { get; set; }
+    /// <summary>
+    /// For the chip: "Abierto", "Abierto las 24 horas" or "Cerrado". Null without weekly hours and without a special day
+    /// today: there is nothing to say then.
+    /// </summary>
+    public string? StatusLabel { get; set; }
+    /// <summary>After the chip: "cierra a las 18:00 por Nochebuena", "por Navidad · abre el sábado 26 a las 9:00".</summary>
+    public string? StatusDetail { get; set; }
+    /// <summary>While closed and taking no orders: why, when to come back, and that the menu can still be seen.</summary>
+    public string? ClosedNotice { get; set; }
+    /// <summary>The next special day within a week, in one line: "El viernes 25 cerramos por Navidad."</summary>
+    public string? UpcomingNotice { get; set; }
+    /// <summary>
+    /// Closed by a closed special day (today's, or yesterday's while the night it took away would still run): not even
+    /// a customer at a table orders.
+    /// </summary>
+    public bool? ClosedBySpecialDay { get; set; }
+    /// <summary>The openings that start today, its special day's or its weekday's; null when <see cref="StatusLabel"/> is.</summary>
+    public PublicDayHoursDto? TodayHours { get; set; }
+    /// <summary>The dates of <see cref="OpensAt"/> and <see cref="ClosesAt"/>.</summary>
+    public DateOnly? OpensOn { get; set; }
+    public DateOnly? ClosesOn { get; set; }
+    /// <summary>
+    /// The special days of the next 31 days (at most 5), by first date. One under way that lasts after today starts
+    /// today, with the days it has left; today alone is <see cref="TodayHours"/>.
+    /// </summary>
+    public List<PublicSpecialDayDto>? SpecialDays { get; set; }
 
-    public static PublicOpeningHoursDto From(OpeningHours hours, OpeningStatus status, DateTime localNow) => new()
+    /// <summary>
+    /// Null without weekly hours and without a special day today or in the next 31 days: such a business closes only on
+    /// its special days, so this hides no closing (and the order still asks the whole schedule).
+    /// </summary>
+    /// <param name="seatedOverride">The business is closed, but the customer at one of its tables still orders.</param>
+    public static PublicOpeningHoursDto? From(BusinessHoursNow hours, bool seatedOverride)
     {
-        Intervals = hours.ToDtos(),
-        Today = localNow.DayOfWeek,
-        IsOpen = status.IsOpen,
-        ClosesAt = status.ClosesAt?.ToString(OpeningHoursMappings.TimeFormat, System.Globalization.CultureInfo.InvariantCulture),
-        ClosesInDays = status.ClosesAt is { } closes ? (closes.Date - localNow.Date).Days : null,
-        OpensAt = status.OpensAt?.ToString(OpeningHoursMappings.TimeFormat, System.Globalization.CultureInfo.InvariantCulture),
-        OpensInDays = status.OpensAt is { } opens ? (opens.Date - localNow.Date).Days : null
-    };
+        var specialDays = hours.FromTodayWithin(SpecialDaysAhead)
+            .Where(period => period.To > hours.Today)
+            .Take(MaxSpecialDays)
+            .Select(period => new PublicSpecialDayDto
+            {
+                From = period.From,
+                To = period.To,
+                Kind = period.Rule.Kind,
+                Openings = period.Rule.Openings.ToDtos(),
+                Reason = period.Rule.Reason
+            })
+            .ToList();
+        var mayWordStatus = BusinessHoursText.MayWordStatus(hours);
+        if (!mayWordStatus && specialDays.Count == 0)
+            return null;
+
+        var status = hours.Status;
+        var today = hours.Today;
+        var todayOpenings = hours.Schedule.OpeningsOn(today);
+        return new PublicOpeningHoursDto
+        {
+            Intervals = hours.Weekly?.ToDtos() ?? new(),
+            Today = today.DayOfWeek,
+            IsOpen = status.IsOpen,
+            ClosesAt = status.ClosesAt?.ToString(OpeningHoursMappings.TimeFormat, CultureInfo.InvariantCulture),
+            ClosesInDays = status.ClosesAt is { } closes ? DateOnly.FromDateTime(closes).DayNumber - today.DayNumber : null,
+            OpensAt = status.OpensAt?.ToString(OpeningHoursMappings.TimeFormat, CultureInfo.InvariantCulture),
+            OpensInDays = status.OpensAt is { } opens ? DateOnly.FromDateTime(opens).DayNumber - today.DayNumber : null,
+            TodayDate = today,
+            HasWeeklyHours = hours.HasWeeklyHours,
+            StatusLabel = BusinessHoursText.StatusLabel(hours),
+            StatusDetail = BusinessHoursText.StatusDetail(hours, seatedOverride),
+            ClosedNotice = BusinessHoursText.ClosedNotice(hours, seatedOverride),
+            UpcomingNotice = BusinessHoursText.UpcomingNotice(hours),
+            ClosedBySpecialDay = status.ClosedBySpecialDay,
+            TodayHours = mayWordStatus
+                ? new PublicDayHoursDto
+                {
+                    Date = today,
+                    Closed = todayOpenings.Count == 0,
+                    Special = status.TodaySpecial is not null,
+                    Openings = todayOpenings.ToDtos(),
+                    Reason = status.TodaySpecial?.Reason
+                }
+                : null,
+            OpensOn = status.OpensAt is { } opensOn ? DateOnly.FromDateTime(opensOn) : null,
+            ClosesOn = status.ClosesAt is { } closesOn ? DateOnly.FromDateTime(closesOn) : null,
+            SpecialDays = specialDays
+        };
+    }
+}
+
+/// <summary>The hours of the business's today on its public menu: its special day's, or else its weekday's.</summary>
+public class PublicDayHoursDto
+{
+    public DateOnly Date { get; set; }
+    /// <summary>No opening starts today (one that started yesterday may still run past midnight).</summary>
+    public bool Closed { get; set; }
+    /// <summary>Today is a special day: its hours replace the weekly ones.</summary>
+    public bool Special { get; set; }
+    public List<SpecialOpeningDto> Openings { get; set; } = new();
+    /// <summary>Why, on a special day ("Navidad").</summary>
+    public string? Reason { get; set; }
+}
+
+/// <summary>A special day ahead on the public menu: one date, or consecutive dates with one rule.</summary>
+public class PublicSpecialDayDto
+{
+    public DateOnly From { get; set; }
+    /// <summary>The last date; the same as <see cref="From"/> for one day.</summary>
+    public DateOnly To { get; set; }
+    public SpecialDayKind Kind { get; set; }
+    /// <summary>One or two with special hours; none when closed.</summary>
+    public List<SpecialOpeningDto> Openings { get; set; } = new();
+    public string? Reason { get; set; }
 }
 
 public class PublicMenuCategoryDto
@@ -179,7 +308,7 @@ public class PublicMenuProductDto
 /// </summary>
 /// <param name="Table">
 /// The table of the QR the customer opened it from. At a table of the business the customer is already seated, and
-/// orders arrive outside the hours.
+/// orders arrive outside the hours (not on a closed special day, see <see cref="PublicOrderRules"/>).
 /// </param>
 [AllowAnonymousRequest("Menú público del negocio: solo el catálogo que el negocio decidió publicar.")]
 public record GetPublicMenuQuery(string Slug, string? Table = null) : IRequest<PublicMenuDto?>;
@@ -208,10 +337,10 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
         // A public request has no tenant: the catalog queries below are scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
         var settings = tenant.Settings;
-        var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(settings.TimeZone)).DateTime;
-        var localTime = localNow.TimeOfDay;
-        var openingStatus = settings.OpeningHours?.StatusAt(localNow);
-        var closedByHours = openingStatus is { IsOpen: false };
+        var utcNow = _dateTimeProvider.UtcNow;
+        var localTime = TenantDateTimeResolver.LocalNow(utcNow, settings.TimeZone).TimeOfDay;
+        var hours = await BusinessHours.ReadAsync(_context, tenant.Id, settings.OpeningHours, settings.TimeZone, utcNow, cancellationToken);
+        var closed = hours is { Status.IsOpen: false };
 
         var categories = await _context.Categories
             .AsNoTracking()
@@ -233,16 +362,19 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             .ToDictionary(g => g.Key, g => g.ToList());
         // Online orders arrive at the default branch, and only while a drawer is open there (see PlacePublicOrderCommand).
         // It is also the address customers see: where the business sells, never its fiscal address, which is often the
-        // owner's home.
+        // owner's home; and none when that branch only delivers.
         var mainBranch = await _context.Branches
             .AsNoTracking()
             .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && b.IsDefault, cancellationToken);
         var ordersOn = settings.OnlineMenuMode == OnlineMenuMode.Orders;
         var drawerOpen = ordersOn && await OrderCashService.HasOpenDrawerAtBranchAsync(
             _context, tenant.Id, mainBranch?.Id, cancellationToken);
-        // Closed by its hours, it takes no pickup or delivery orders; a customer at one of its tables still orders.
+        // Closed, it takes no pickup or delivery orders; a customer at one of its tables still orders, except on a closed
+        // special day.
         var acceptsOrders = drawerOpen
-            && (!closedByHours || await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken));
+            && (!closed
+                || (PublicOrderRules.TableOverridesClosure(hours!.Status)
+                    && await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken)));
 
         return new PublicMenuDto
         {
@@ -256,8 +388,10 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             AcceptsOrders = acceptsOrders,
             OrdersPaused = ordersOn && !acceptsOrders,
             Theme = settings.Theme,
-            Address = AddressText.OneLine(mainBranch),
-            OpeningHours = settings.OpeningHours is null ? null : PublicOpeningHoursDto.From(settings.OpeningHours, openingStatus!, localNow),
+            Address = AddressText.ForCustomers(mainBranch),
+            DeliveryOnly = mainBranch is { KeepsAddressPrivate: true },
+            DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
+            OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
                 .Select(c => new PublicMenuCategoryDto
@@ -303,6 +437,8 @@ public class PublicOrderReceiptDto
 {
     public string OrderNumber { get; set; } = null!;
     public decimal Total { get; set; }
+    /// <summary>What the delivery charged, inside <see cref="Total"/>; null for an order picked up or served.</summary>
+    public decimal? DeliveryFee { get; set; }
     /// <summary>True when the business accepts online orders without confirming each one.</summary>
     public bool Confirmed { get; set; }
     public string BusinessName { get; set; } = null!;
@@ -322,6 +458,11 @@ public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>,
     public List<CreateOrderItemDto> Items { get; init; } = new();
     /// <summary>Total the customer saw; the order is rejected if a price changed meanwhile.</summary>
     public decimal? ExpectedTotal { get; init; }
+    /// <summary>
+    /// Where the order goes (Fase 22C): a zone of the business must reach the postal code and the products its minimum;
+    /// its fee is in the total. Never with a table.
+    /// </summary>
+    public OrderDeliveryInput? Delivery { get; init; }
 }
 
 public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrderCommand>
@@ -342,6 +483,11 @@ public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrd
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ExpectedTotal).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedTotal.HasValue);
+        When(x => x.Delivery is not null, () =>
+        {
+            RuleFor(x => x.Delivery!).SetValidator(new OrderDeliveryInputValidator());
+            RuleFor(x => x.TableLabel).Empty().WithMessage(PlacePublicOrderCommandHandler.TableNotDeliveredMessage);
+        });
     }
 }
 
@@ -350,6 +496,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     /// <summary>Orders a phone may leave waiting for the business to confirm them (spam guard).</summary>
     public const int MaxPendingPerPhone = 3;
     public const string OrdersPausedMessage = "Por ahora este negocio no está recibiendo pedidos en línea. Intenta más tarde.";
+    public const string TableNotDeliveredMessage = "Un pedido para tu mesa no se manda a domicilio.";
+    public const string DeliveryRequiredMessage = "Este negocio solo entrega a domicilio: escribe a dónde te lo llevamos.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -389,21 +537,30 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         // A public request has no tenant: everything below is scoped to the business of the slug.
         _tenantService.SetTenant(tenant.Id);
 
-        // Outside its hours the business takes no pickup or delivery orders; a customer at one of its tables is already there.
-        if (tenant.Settings.OpeningHours is { } hours)
-        {
-            var localNow = TimeZoneInfo.ConvertTime(_dateTimeProvider.UtcNow, TenantDateTimeResolver.Resolve(tenant.Settings.TimeZone)).DateTime;
-            var status = hours.StatusAt(localNow);
-            if (!status.IsOpen && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
-                return Result.Failure<PublicOrderReceiptDto>(OpeningHoursText.ClosedMessage(status, localNow));
-        }
+        // Closed, the business takes no pickup or delivery orders; a customer at one of its tables is already there,
+        // except on a closed special day. The same rule as the menu (GetPublicMenuQuery).
+        var now = _dateTimeProvider.UtcNow;
+        var hours = await BusinessHours.ReadAsync(
+            _context, tenant.Id, tenant.Settings.OpeningHours, tenant.Settings.TimeZone, now, cancellationToken);
+        if (hours is { Status.IsOpen: false }
+            && (!PublicOrderRules.TableOverridesClosure(hours.Status)
+                || !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken)))
+            return Result.Failure<PublicOrderReceiptDto>(BusinessHoursText.ClosedMessage(hours));
 
         // Online orders arrive at the default branch of the business, and only while a drawer is open there.
         var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
         if (!await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken))
             return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
 
-        var now = _dateTimeProvider.UtcNow;
+        // A kitchen without premises that delivers has nowhere to pick an order up: it goes to an address, or to a table
+        // of the business in use (anyone can type a table into the link). Without delivery zones, orders arrive as before
+        // and the business arranges it (Fase 22C).
+        if (request.Delivery is null
+            && await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
+            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken)
+            && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
+            return Result.Failure<PublicOrderReceiptDto>(DeliveryRequiredMessage);
+
         // Until the business confirms or cancels them, a phone cannot keep piling up orders.
         var waiting = await _context.Orders.CountAsync(o => o.Channel == OrderChannel.Online
             && o.CustomerPhone == phone
@@ -412,7 +569,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             return Result.Failure<PublicOrderReceiptDto>("Ya tienes pedidos esperando confirmación. Espera a que el negocio los confirme.");
 
         var settings = await TenantSalesSettings.ReadAsync(_context, tenant.Id, cancellationToken);
-        var localTimeOfDay = TenantDateTimeResolver.GetLocalTimeOfDay(now, TenantDateTimeResolver.Resolve(settings.TimeZone));
+        var localTimeOfDay = TenantDateTimeResolver.LocalNow(now, settings.TimeZone).TimeOfDay;
         var customer = await _customerLookupService.ResolveForOrderAsync(
             tenant.Id, phone, request.CustomerName.Trim(), CustomerPhoneOwnershipRules.DefaultCountry, cancellationToken);
 
@@ -446,6 +603,15 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             order.AddItem(built.Value.Line);
         }
 
+        // To the customer's address: the zone's minimum and fee, on the products, before the total is compared.
+        if (request.Delivery is not null)
+        {
+            var deliveryError = await HomeDeliveryPlacement.ArrangeAsync(
+                _context, order, request.Delivery, settings.DefaultTaxRate, cancellationToken);
+            if (deliveryError is not null)
+                return Result.Failure<PublicOrderReceiptDto>(deliveryError);
+        }
+
         if (request.ExpectedTotal.HasValue && request.ExpectedTotal.Value != order.Total)
         {
             return Result.Failure<PublicOrderReceiptDto>(
@@ -475,6 +641,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         {
             OrderNumber = order.OrderNumber,
             Total = order.Total,
+            DeliveryFee = order.Delivery?.Fee,
             Confirmed = accepted,
             BusinessName = tenant.Name,
             ContactPhone = tenant.ContactPhone

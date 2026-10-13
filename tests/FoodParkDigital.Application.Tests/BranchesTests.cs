@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
@@ -58,6 +59,50 @@ public class BranchesTests
         Assert.True(norte.Value.IsDefault);
         Assert.Empty(await host.QueryAsync(db => db.InventoryLocations.ToListAsync()));
         Assert.Single(await host.QueryAsync(db => db.Branches.Where(b => b.IsDefault).ToListAsync()));
+    }
+
+    [Fact]
+    public async Task Branch_ShouldBeAddedAsDeliveryOnly_AndKeepIt_WhenASaveDoesNotSayHowItServes()
+    {
+        await using var host = await SqliteTestHost.CreateAsync();
+        await SeedTenantAsync(host, TenantCapability.Food);
+
+        var kitchen = await CreateAsync(host, new CreateBranchCommand
+        {
+            Name = "Cocina", Code = "COC", AddressLine1 = "Privada Los Pinos 8", ServiceMode = BranchServiceMode.DeliveryOnly
+        });
+        var centro = await CreateAsync(host, new CreateBranchCommand { Name = "Centro", Code = "CEN" });
+        Assert.True(kitchen.IsSuccess, kitchen.Error);
+        Assert.Equal(BranchServiceMode.DeliveryOnly, kitchen.Value.ServiceMode);
+        // Without saying how it serves, a new branch has premises, as before.
+        Assert.Equal(BranchServiceMode.Premises, centro.Value.ServiceMode);
+
+        // A screen that does not know the field (an old tab) never turns the kitchen into premises with a public address.
+        var renamed = await UpdateAsync(host, new UpdateBranchCommand
+        {
+            Id = kitchen.Value.Id, Name = "Cocina norte", Code = "COC", AddressLine1 = "Privada Los Pinos 8"
+        });
+        Assert.True(renamed.IsSuccess, renamed.Error);
+        Assert.Equal(("Cocina norte", BranchServiceMode.DeliveryOnly), (renamed.Value.Name, renamed.Value.ServiceMode));
+
+        var opened = await UpdateAsync(host, new UpdateBranchCommand
+        {
+            Id = kitchen.Value.Id, Name = "Cocina norte", Code = "COC", ServiceMode = BranchServiceMode.Premises
+        });
+        Assert.Equal(BranchServiceMode.Premises, opened.Value.ServiceMode);
+        Assert.Equal(BranchServiceMode.Premises, (await host.QueryAsync(db => db.Branches.SingleAsync(b => b.Code == "COC"))).ServiceMode);
+    }
+
+    [Fact]
+    public void BranchCommands_ShouldRefuseAServiceModeTheyDoNotKnow()
+    {
+        var create = new CreateBranchCommandValidator().Validate(
+            new CreateBranchCommand { Name = "Cocina", Code = "COC", ServiceMode = (BranchServiceMode)7 });
+        var update = new UpdateBranchCommandValidator().Validate(
+            new UpdateBranchCommand { Id = Guid.NewGuid(), Name = "Cocina", Code = "COC", ServiceMode = (BranchServiceMode)7 });
+
+        Assert.Equal(Branch.ServiceModeMessage, Assert.Single(create.Errors).ErrorMessage);
+        Assert.Equal(Branch.ServiceModeMessage, Assert.Single(update.Errors).ErrorMessage);
     }
 
     [Fact]
@@ -259,6 +304,9 @@ public class BranchesTests
 
     private static Task<Result<BranchDto>> CreateAsync(SqliteTestHost host, CreateBranchCommand command)
         => host.HandleAsync<CreateBranchCommandHandler, Result<BranchDto>>(handler => handler.Handle(command, CancellationToken.None));
+
+    private static Task<Result<BranchDto>> UpdateAsync(SqliteTestHost host, UpdateBranchCommand command)
+        => host.HandleAsync<UpdateBranchCommandHandler, Result<BranchDto>>(handler => handler.Handle(command, CancellationToken.None));
 
     private static Task<Result> SetActiveAsync(SqliteTestHost host, Guid id, bool isActive)
         => host.HandleAsync<SetBranchActiveCommandHandler, Result>(

@@ -5,6 +5,7 @@ import type {
   PaginatedList,
   CreateProductRequest,
   UpdateProductRequest,
+  OrderChannel,
 } from '../types';
 
 export interface ProductOptionInput {
@@ -32,6 +33,11 @@ export const productsApi = {
     search?: string;
     pageNumber?: number;
     pageSize?: number;
+    /**
+     * A delivery platform whose prices the products come with (an order of Rappi, Uber Eats or DiDi Food in Vender): the
+     * price the business set in its app for each product and option, the menu's where it set none.
+     */
+    priceChannel?: OrderChannel;
   }) =>
     api.get<PaginatedList<ProductDto>>('/products', { params }),
 

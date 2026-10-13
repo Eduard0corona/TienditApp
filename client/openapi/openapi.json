@@ -3346,6 +3346,399 @@
         }
       }
     },
+    "/api/v1/delivery-platforms": {
+      "get": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-platforms/channels": {
+      "get": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryPlatformChannelDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryPlatformChannelDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryPlatformChannelDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-platforms/{channel}": {
+      "put": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryPlatformRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryPlatformRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryPlatformRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-platforms/{channel}/prices": {
+      "get": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPriceItemDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPriceItemDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformPriceItemDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DeliveryPlatforms"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlatformPricesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlatformPricesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePlatformPricesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-zones": {
+      "get": {
+        "tags": [
+          "DeliveryZones"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryZoneDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryZoneDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryZoneDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DeliveryZones"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryZoneRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryZoneRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryZoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryZoneDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryZoneDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryZoneDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-zones/{id}": {
+      "put": {
+        "tags": [
+          "DeliveryZones"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryZoneRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryZoneRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDeliveryZoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryZoneDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryZoneDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryZoneDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DeliveryZones"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/employees": {
       "get": {
         "tags": [
@@ -6345,6 +6738,48 @@
         }
       }
     },
+    "/api/v1/orders/{id}/delivery/shipment": {
+      "put": {
+        "tags": [
+          "Orders"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCourierShipmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/orders/{id}/cancel": {
       "put": {
         "tags": [
@@ -7237,6 +7672,429 @@
         }
       }
     },
+    "/api/v1/platform-settlements": {
+      "get": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PlatformSettlementStatus"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformSettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformSettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformSettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-settlements/receivable": {
+      "get": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformReceivableDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformReceivableDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformReceivableDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-settlements/pending-orders": {
+      "get": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingPlatformOrdersDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingPlatformOrdersDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingPlatformOrdersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-settlements/{id}": {
+      "get": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformSettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformSettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformSettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-settlements/{id}/close": {
+      "post": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePlatformSettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePlatformSettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePlatformSettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform-settlements/{id}/void": {
+      "post": {
+        "tags": [
+          "PlatformSettlements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidPlatformSettlementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidPlatformSettlementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoidPlatformSettlementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettlementDetailDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products": {
       "get": {
         "tags": [
@@ -7296,6 +8154,13 @@
               "type": "integer",
               "format": "int32",
               "default": 20
+            }
+          },
+          {
+            "name": "priceChannel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
             }
           }
         ],
@@ -7703,6 +8568,52 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicMenuDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/menu/{slug}/delivery-quote": {
+      "get": {
+        "tags": [
+          "PublicMenu"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeliveryQuoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeliveryQuoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDeliveryQuoteDto"
                 }
               }
             }
@@ -8234,6 +9145,148 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SalesByBranchReportDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/sales-by-channel": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByChannelReportDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByChannelReportDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesByChannelReportDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/delivery-platform-orders": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/OrderChannel"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "branchId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformOrderDtoPaginatedList"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformOrderDtoPaginatedList"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryPlatformOrderDtoPaginatedList"
                 }
               }
             }
@@ -9182,6 +10235,186 @@
         }
       }
     },
+    "/api/v1/auth/my-tenant/special-days": {
+      "get": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpecialDayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpecialDayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpecialDayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/my-tenant/special-days/{id}": {
+      "put": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecialDayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecialDayRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecialDayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialDaysDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/my-tenant/theme": {
       "put": {
         "tags": [
@@ -9772,6 +11005,16 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "tip": {
+            "type": "number",
+            "format": "double",
+            "default": 0
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10229,7 +11472,8 @@
           "id",
           "isActive",
           "isDefault",
-          "name"
+          "name",
+          "serviceMode"
         ],
         "type": "object",
         "properties": {
@@ -10285,6 +11529,9 @@
           "isActive": {
             "type": "boolean"
           },
+          "serviceMode": {
+            "$ref": "#/components/schemas/BranchServiceMode"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -10317,6 +11564,18 @@
           }
         },
         "additionalProperties": false
+      },
+      "BranchServiceMode": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Premises",
+          "DeliveryOnly"
+        ]
       },
       "BusinessTheme": {
         "enum": [
@@ -10633,6 +11892,10 @@
         "properties": {
           "reason": {
             "type": "string",
+            "nullable": true
+          },
+          "restockItems": {
+            "type": "boolean",
             "nullable": true
           }
         },
@@ -11087,6 +12350,7 @@
         "required": [
           "amount",
           "description",
+          "isDeliveryFee",
           "orderItemId",
           "productCode",
           "quantity",
@@ -11099,6 +12363,9 @@
           "orderItemId": {
             "type": "string",
             "format": "uuid"
+          },
+          "isDeliveryFee": {
+            "type": "boolean"
           },
           "productCode": {
             "type": "string"
@@ -11350,6 +12617,76 @@
         },
         "additionalProperties": false
       },
+      "ChannelSalesDto": {
+        "required": [
+          "businessCollected",
+          "commission",
+          "commissionTax",
+          "expectedSettlement",
+          "isDeliveryPlatform",
+          "isrWithheld",
+          "netSales",
+          "paidOrders",
+          "paymentsAmount",
+          "platformCollected",
+          "refundsAmount",
+          "vatWithheld"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isDeliveryPlatform": {
+            "type": "boolean"
+          },
+          "paidOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundsAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "netSales": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformCollected": {
+            "type": "number",
+            "format": "double"
+          },
+          "businessCollected": {
+            "type": "number",
+            "format": "double"
+          },
+          "commission": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatWithheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedSettlement": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatMessageDto": {
         "required": [
           "body",
@@ -11447,6 +12784,19 @@
               "$ref": "#/components/schemas/CashCountLineDto"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClosePlatformSettlementRequest": {
+        "required": [
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -11766,6 +13116,9 @@
           "contactPhone": {
             "type": "string",
             "nullable": true
+          },
+          "serviceMode": {
+            "$ref": "#/components/schemas/BranchServiceMode"
           },
           "isDefault": {
             "type": "boolean"
@@ -12178,6 +13531,17 @@
           "channel": {
             "$ref": "#/components/schemas/OrderChannel"
           },
+          "externalOrderNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          },
+          "confirmPossibleDuplicate": {
+            "type": "boolean",
+            "default": false
+          },
           "openTab": {
             "type": "boolean"
           },
@@ -12200,6 +13564,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryInput"
           }
         },
         "additionalProperties": false
@@ -12327,6 +13694,61 @@
           },
           "isDefaultForNewBusinesses": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatePlatformSettlementRequest": {
+        "required": [
+          "adjustments",
+          "channel",
+          "depositedAmount",
+          "depositedOn",
+          "orderIds",
+          "periodFrom",
+          "periodTo"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "depositedOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "depositedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "orderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementAdjustmentRequest"
+            }
           }
         },
         "additionalProperties": false
@@ -13149,6 +14571,9 @@
           "netCashFlow",
           "netCashOnlyFlow",
           "otherTotal",
+          "platformPaymentsCount",
+          "platformRefundsTotal",
+          "platformTotal",
           "salesPaymentsCount",
           "salesPaymentsTotal",
           "tipsTotal",
@@ -13186,6 +14611,18 @@
             "format": "double"
           },
           "otherTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformPaymentsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "platformRefundsTotal": {
             "type": "number",
             "format": "double"
           },
@@ -13292,6 +14729,7 @@
           "outstandingBalance",
           "paidOrders",
           "pendingOrders",
+          "platformCollected",
           "rangeFrom",
           "rangeTo",
           "topSellingItems",
@@ -13343,6 +14781,10 @@
             "format": "int32"
           },
           "totalRevenue": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformCollected": {
             "type": "number",
             "format": "double"
           },
@@ -13399,6 +14841,257 @@
           "Friday",
           "Saturday"
         ]
+      },
+      "DeliveryCourier": {
+        "enum": [
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Paquetenvia"
+        ]
+      },
+      "DeliveryPlatformChannelDto": {
+        "required": [
+          "channel",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformDto": {
+        "required": [
+          "channel",
+          "commissionBase",
+          "commissionVatPercent",
+          "isActive",
+          "isConfigured",
+          "isrWithholdingPercent",
+          "revision",
+          "vatWithholdingPercent"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isConfigured": {
+            "type": "boolean"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "commissionPercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "commissionBase": {
+            "$ref": "#/components/schemas/PlatformCommissionBase"
+          },
+          "commissionVatPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "changedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "example": {
+            "$ref": "#/components/schemas/PlatformSettlementExampleDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformOrderDto": {
+        "required": [
+          "collectedBy",
+          "commissionAndTax",
+          "expectedSettlement",
+          "externalOrderNumber",
+          "orderId",
+          "orderNumber",
+          "orderTotal",
+          "refundedAmount",
+          "registeredAt",
+          "status",
+          "withheld"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "externalOrderNumber": {
+            "type": "string"
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          },
+          "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionAndTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "withheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedSettlement": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundedAmount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformOrderDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryPlatformOrderDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryPlatformsDto": {
+        "required": [
+          "platforms"
+        ],
+        "type": "object",
+        "properties": {
+          "platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryPlatformDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryZoneDto": {
+        "required": [
+          "fee",
+          "id",
+          "isActive",
+          "minimumOrder",
+          "name",
+          "postalCodes",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          },
+          "minimumOrder": {
+            "type": "number",
+            "format": "double"
+          },
+          "freeDeliveryFrom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "DiningRoomDto": {
         "required": [
@@ -13708,6 +15401,38 @@
         "properties": {
           "email": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HolidaySuggestionDto": {
+        "required": [
+          "date",
+          "kind",
+          "name",
+          "openings",
+          "statutory"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "name": {
+            "type": "string"
+          },
+          "statutory": {
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
           }
         },
         "additionalProperties": false
@@ -14501,9 +16226,11 @@
       },
       "KitchenOrderDto": {
         "required": [
+          "channel",
           "createdAt",
           "customerName",
           "id",
+          "isDelivery",
           "items",
           "orderNumber",
           "status"
@@ -14516,6 +16243,16 @@
           },
           "orderNumber": {
             "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "externalOrderNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDelivery": {
+            "type": "boolean"
           },
           "status": {
             "$ref": "#/components/schemas/OrderStatus"
@@ -15385,15 +17122,95 @@
         "enum": [
           0,
           1,
-          2
+          2,
+          3,
+          4,
+          5
         ],
         "type": "integer",
         "format": "int32",
         "x-enum-varnames": [
           "Counter",
           "WhatsApp",
-          "Online"
+          "Online",
+          "Rappi",
+          "UberEats",
+          "DidiFood"
         ]
+      },
+      "OrderDeliveryDto": {
+        "required": [
+          "addressLine",
+          "fee",
+          "feeTaxRate",
+          "postalCode",
+          "zoneName"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          },
+          "feeTaxRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "courierFolio": {
+            "type": "string",
+            "nullable": true
+          },
+          "trackingUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "shipmentRegisteredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "shipmentRegisteredBy": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderDeliveryInput": {
+        "required": [
+          "addressLine",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "OrderDto": {
         "required": [
@@ -15480,6 +17297,12 @@
           },
           "channel": {
             "$ref": "#/components/schemas/OrderChannel"
+          },
+          "platformOrder": {
+            "$ref": "#/components/schemas/OrderPlatformDto"
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryDto"
           },
           "branchId": {
             "type": "string",
@@ -15906,7 +17729,8 @@
           1,
           2,
           3,
-          4
+          4,
+          5
         ],
         "type": "integer",
         "format": "int32",
@@ -15915,8 +17739,25 @@
           "Card",
           "Transfer",
           "DigitalWallet",
-          "Other"
+          "Other",
+          "Platform"
         ]
+      },
+      "OrderPlatformDto": {
+        "required": [
+          "collectedBy",
+          "externalOrderNumber"
+        ],
+        "type": "object",
+        "properties": {
+          "externalOrderNumber": {
+            "type": "string"
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          }
+        },
+        "additionalProperties": false
       },
       "OrderRefundDto": {
         "required": [
@@ -16273,6 +18114,30 @@
         },
         "additionalProperties": false
       },
+      "PendingPlatformOrdersDto": {
+        "required": [
+          "orders",
+          "truncated"
+        ],
+        "type": "object",
+        "properties": {
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementOrderDto"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "openSettlementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PlacePublicOrderRequest": {
         "required": [
           "customerName",
@@ -16305,6 +18170,9 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/OrderDeliveryInput"
           }
         },
         "additionalProperties": false
@@ -16376,6 +18244,49 @@
           "tenantsCount": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformCollectedBy": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Platform",
+          "Business"
+        ]
+      },
+      "PlatformCommissionBase": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "TotalWithTax",
+          "SubTotalWithoutTax"
+        ]
+      },
+      "PlatformOptionPriceRequest": {
+        "required": [
+          "optionId",
+          "priceDelta"
+        ],
+        "type": "object",
+        "properties": {
+          "optionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "priceDelta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -16453,6 +18364,179 @@
         },
         "additionalProperties": false
       },
+      "PlatformPriceItemDto": {
+        "required": [
+          "categoryId",
+          "categoryName",
+          "isAvailable",
+          "menuPrice",
+          "name",
+          "optionGroups",
+          "productId"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "categoryName": {
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "isAvailable": {
+            "type": "boolean"
+          },
+          "menuPrice": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformPrice": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "optionGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformPriceOptionGroupDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceItemDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformPriceItemDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceOptionDto": {
+        "required": [
+          "id",
+          "isAvailable",
+          "menuPriceDelta",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "isAvailable": {
+            "type": "boolean"
+          },
+          "menuPriceDelta": {
+            "type": "number",
+            "format": "double"
+          },
+          "platformPriceDelta": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformPriceOptionGroupDto": {
+        "required": [
+          "id",
+          "name",
+          "options"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformPriceOptionDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformProductPriceRequest": {
+        "required": [
+          "price",
+          "productId"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "price": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformOptionPriceRequest"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PlatformReasonRequest": {
         "required": [
           "reason"
@@ -16464,6 +18548,396 @@
           }
         },
         "additionalProperties": false
+      },
+      "PlatformReceivableDto": {
+        "required": [
+          "channel",
+          "isActive",
+          "pendingAmount",
+          "pendingOrders"
+        ],
+        "type": "object",
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "pendingOrders": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pendingAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "oldestPendingOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "openSettlementId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "settledThrough": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementAdjustmentDto": {
+        "required": [
+          "amount",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PlatformSettlementAdjustmentKind"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementAdjustmentKind": {
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          99
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Promotion",
+          "Claim",
+          "Cancellation",
+          "Fee",
+          "PreviousBalance",
+          "Other"
+        ]
+      },
+      "PlatformSettlementAdjustmentRequest": {
+        "required": [
+          "amount",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PlatformSettlementAdjustmentKind"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementDetailDto": {
+        "required": [
+          "adjustments",
+          "candidates",
+          "candidatesTruncated",
+          "orders",
+          "settlement"
+        ],
+        "type": "object",
+        "properties": {
+          "settlement": {
+            "$ref": "#/components/schemas/PlatformSettlementDto"
+          },
+          "orders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementOrderDto"
+            }
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementAdjustmentDto"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementOrderDto"
+            }
+          },
+          "candidatesTruncated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementDto": {
+        "required": [
+          "adjustmentsTotal",
+          "channel",
+          "createdAt",
+          "depositedAmount",
+          "depositedOn",
+          "difference",
+          "expectedDeposit",
+          "id",
+          "orderCount",
+          "ordersTotal",
+          "periodFrom",
+          "periodTo",
+          "revision",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/OrderChannel"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlatformSettlementStatus"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "depositedOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "depositedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "ordersTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "adjustmentsTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedDeposit": {
+            "type": "number",
+            "format": "double"
+          },
+          "difference": {
+            "type": "number",
+            "format": "double"
+          },
+          "orderCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "closedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "voidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "voidReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementExampleDto": {
+        "required": [
+          "commissionAndTax",
+          "expectedSettlement",
+          "orderTotal",
+          "orderVatPercent",
+          "withheld"
+        ],
+        "type": "object",
+        "properties": {
+          "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "orderVatPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionAndTax": {
+            "type": "number",
+            "format": "double"
+          },
+          "withheld": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedSettlement": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementOrderDto": {
+        "required": [
+          "collectedBy",
+          "currentExpectedNet",
+          "expectedNet",
+          "externalOrderNumber",
+          "inPeriod",
+          "orderId",
+          "orderNumber",
+          "orderTotal",
+          "refundedAmount",
+          "registeredAt",
+          "registeredOn",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "externalOrderNumber": {
+            "type": "string"
+          },
+          "registeredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "registeredOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "inPeriod": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "collectedBy": {
+            "$ref": "#/components/schemas/PlatformCollectedBy"
+          },
+          "orderTotal": {
+            "type": "number",
+            "format": "double"
+          },
+          "refundedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "expectedNet": {
+            "type": "number",
+            "format": "double"
+          },
+          "currentExpectedNet": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlatformSettlementStatus": {
+        "enum": [
+          0,
+          1,
+          99
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Open",
+          "Closed",
+          "Voided"
+        ]
       },
       "PlatformTenantDto": {
         "required": [
@@ -17133,6 +19607,69 @@
         },
         "additionalProperties": false
       },
+      "PublicDayHoursDto": {
+        "required": [
+          "closed",
+          "date",
+          "openings",
+          "special"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "special": {
+            "type": "boolean"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDeliveryQuoteDto": {
+        "required": [
+          "covered",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "covered": {
+            "type": "boolean"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "minimumOrder": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "freeDeliveryFrom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicMenuCategoryDto": {
         "required": [
           "id",
@@ -17164,6 +19701,8 @@
           "categories",
           "currency",
           "defaultTaxRate",
+          "deliveryAvailable",
+          "deliveryOnly",
           "ordersPaused",
           "pricesIncludeTax",
           "slug",
@@ -17207,6 +19746,12 @@
           "address": {
             "type": "string",
             "nullable": true
+          },
+          "deliveryOnly": {
+            "type": "boolean"
+          },
+          "deliveryAvailable": {
+            "type": "boolean"
           },
           "openingHours": {
             "$ref": "#/components/schemas/PublicOpeningHoursDto"
@@ -17323,6 +19868,55 @@
             "type": "integer",
             "format": "int32",
             "nullable": true
+          },
+          "todayDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "hasWeeklyHours": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "statusLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusDetail": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "upcomingNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedBySpecialDay": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "todayHours": {
+            "$ref": "#/components/schemas/PublicDayHoursDto"
+          },
+          "opensOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "closesOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "specialDays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicSpecialDayDto"
+            },
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17343,6 +19937,11 @@
             "type": "number",
             "format": "double"
           },
+          "deliveryFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "confirmed": {
             "type": "boolean"
           },
@@ -17350,6 +19949,39 @@
             "type": "string"
           },
           "contactPhone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicSpecialDayDto": {
+        "required": [
+          "from",
+          "kind",
+          "openings",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          },
+          "reason": {
             "type": "string",
             "nullable": true
           }
@@ -17776,6 +20408,26 @@
         },
         "additionalProperties": false
       },
+      "RegisterCourierShipmentRequest": {
+        "required": [
+          "courier",
+          "folio"
+        ],
+        "type": "object",
+        "properties": {
+          "courier": {
+            "$ref": "#/components/schemas/DeliveryCourier"
+          },
+          "folio": {
+            "type": "string"
+          },
+          "trackingUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "RegisterCustomerCommand": {
         "required": [
           "email",
@@ -17959,6 +20611,35 @@
         },
         "additionalProperties": false
       },
+      "SalesByChannelReportDto": {
+        "required": [
+          "channels",
+          "from",
+          "to",
+          "totals"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChannelSalesDto"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ChannelSalesDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "SalesFiguresDto": {
         "required": [
           "averageTicket",
@@ -17970,6 +20651,7 @@
           "paidOrders",
           "paymentsAmount",
           "paymentsCount",
+          "platformAmount",
           "refundsAmount",
           "refundsCount",
           "transferAmount",
@@ -18013,6 +20695,10 @@
             "type": "number",
             "format": "double"
           },
+          "platformAmount": {
+            "type": "number",
+            "format": "double"
+          },
           "refundsCount": {
             "type": "integer",
             "format": "int32"
@@ -18028,6 +20714,138 @@
           "averageTicket": {
             "type": "number",
             "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveDeliveryPlatformRequest": {
+        "required": [
+          "commissionBase",
+          "commissionPercent",
+          "commissionVatPercent",
+          "isActive",
+          "isrWithholdingPercent",
+          "revision",
+          "vatWithholdingPercent"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "commissionPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "commissionBase": {
+            "$ref": "#/components/schemas/PlatformCommissionBase"
+          },
+          "commissionVatPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "isrWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          },
+          "vatWithholdingPercent": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveDeliveryZoneRequest": {
+        "required": [
+          "fee",
+          "isActive",
+          "minimumOrder",
+          "name",
+          "postalCodes",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          },
+          "minimumOrder": {
+            "type": "number",
+            "format": "double"
+          },
+          "freeDeliveryFrom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavePlatformPricesRequest": {
+        "required": [
+          "products"
+        ],
+        "type": "object",
+        "properties": {
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformProductPriceRequest"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveSpecialDayRequest": {
+        "required": [
+          "from",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            },
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -18576,6 +21394,144 @@
             "items": {
               "$ref": "#/components/schemas/ProductOptionGroupInput"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpecialDayDto": {
+        "required": [
+          "from",
+          "id",
+          "inProgress",
+          "kind",
+          "openings",
+          "revision",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            }
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "inProgress": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpecialDayKind": {
+        "enum": [
+          0,
+          1
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Closed",
+          "SpecialHours"
+        ]
+      },
+      "SpecialDaysDto": {
+        "required": [
+          "hasWeeklyHours",
+          "maxDaysAhead",
+          "maxDaysPerPeriod",
+          "maxReasonLength",
+          "maxUpcomingDates",
+          "past",
+          "suggestions",
+          "today",
+          "upcoming",
+          "upcomingDates"
+        ],
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "format": "date"
+          },
+          "hasWeeklyHours": {
+            "type": "boolean"
+          },
+          "upcoming": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialDayDto"
+            }
+          },
+          "past": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialDayDto"
+            }
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HolidaySuggestionDto"
+            }
+          },
+          "upcomingDates": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxUpcomingDates": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxDaysPerPeriod": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxDaysAhead": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxReasonLength": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SpecialOpeningDto": {
+        "required": [
+          "closes",
+          "opens"
+        ],
+        "type": "object",
+        "properties": {
+          "opens": {
+            "type": "string"
+          },
+          "closes": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -19810,6 +22766,9 @@
             "type": "string",
             "nullable": true
           },
+          "serviceMode": {
+            "$ref": "#/components/schemas/BranchServiceMode"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -20278,6 +23237,62 @@
         },
         "additionalProperties": false
       },
+      "UpdatePlatformSettlementRequest": {
+        "required": [
+          "adjustments",
+          "depositedAmount",
+          "depositedOn",
+          "orderIds",
+          "periodFrom",
+          "periodTo",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "periodFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodTo": {
+            "type": "string",
+            "format": "date"
+          },
+          "depositedOn": {
+            "type": "string",
+            "format": "date"
+          },
+          "depositedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "orderIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformSettlementAdjustmentRequest"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateProductCommand": {
         "required": [
           "categoryId",
@@ -20435,6 +23450,44 @@
         "properties": {
           "newStatus": {
             "$ref": "#/components/schemas/ServiceOrderPieceStatus"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSpecialDayRequest": {
+        "required": [
+          "from",
+          "kind",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "from": {
+            "type": "string",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpecialDayKind"
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialOpeningDto"
+            },
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -20883,6 +23936,23 @@
           },
           "restockItems": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VoidPlatformSettlementRequest": {
+        "required": [
+          "reason",
+          "revision"
+        ],
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reason": {
+            "type": "string"
           }
         },
         "additionalProperties": false

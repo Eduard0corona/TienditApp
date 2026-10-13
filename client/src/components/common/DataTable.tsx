@@ -36,6 +36,8 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   /** Text already in the search box: a search that came in the link, or the one the page kept while another tab was open. */
   initialSearch?: string;
+  /** The longest search the API takes: the box does not let more be typed. */
+  searchMaxLength?: number;
   /** The screen's own filters, in the same bar as the search box (each one a `DataTableFilter`). */
   filters?: ReactNode;
   /** The action of the list (Nuevo producto) or a control of the screen, at the end of that bar. */
@@ -66,6 +68,7 @@ export default function DataTable<T>({
   pageSizeOptions = DEFAULT_PAGE_SIZES,
   searchPlaceholder = 'Buscar…',
   initialSearch = '',
+  searchMaxLength,
   filters,
   toolbarEnd,
 }: DataTableProps<T>) {
@@ -102,17 +105,16 @@ export default function DataTable<T>({
   }, [data, search, searchFilter, searchesOnServer]);
 
   // Pagination values
-  const page = isServerSide ? serverSide.page : clientPage;
   const pageSize = isServerSide ? serverSide.pageSize : clientPageSize;
+  const totalCount = isServerSide ? serverSide.totalCount : filteredData.length;
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  // Fewer rows than before (a filter of the screen, rows that left) show the last page that still has some.
+  const page = isServerSide ? serverSide.page : Math.min(clientPage, totalPages);
 
   // Display data: server-side already paginated, client-side needs slicing
   const displayData = isServerSide
     ? filteredData
     : filteredData.slice((page - 1) * pageSize, page * pageSize);
-
-  // Totals for info text and pagination
-  const totalCount = isServerSide ? serverSide.totalCount : filteredData.length;
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   const startEntry = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
   const endEntry = Math.min(page * pageSize, totalCount);
@@ -171,6 +173,7 @@ export default function DataTable<T>({
               className="form-control form-control-sm"
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
+              maxLength={searchMaxLength}
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
             />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INDUSTRY_OPTIONS, matchIndustry } from './industries';
+import { HOME_DELIVERY_INDUSTRY, INDUSTRY_OPTIONS, matchIndustry } from './industries';
 
 describe('industries', () => {
   it('finds the option of a giro saved with capitals on every word', () => {
@@ -26,5 +26,11 @@ describe('industries', () => {
     for (const option of INDUSTRY_OPTIONS) {
       expect(option.slice(1)).toBe(option.slice(1).toLowerCase());
     }
+  });
+
+  it('offers the giro of a kitchen that only delivers, written as the server reads it', () => {
+    expect(HOME_DELIVERY_INDUSTRY).toBe('Comida a domicilio');
+    expect(INDUSTRY_OPTIONS).toContain(HOME_DELIVERY_INDUSTRY);
+    expect(matchIndustry('comida a domicilio')).toBe(HOME_DELIVERY_INDUSTRY);
   });
 });

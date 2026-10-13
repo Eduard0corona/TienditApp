@@ -1,5 +1,6 @@
-import type { OrderDto } from '../types';
-import { getPaymentMethodLabel } from './labels';
+import { PlatformCollectedBy, type OrderDto } from '../types';
+import { getPlatformName, isDeliveryPlatform } from './deliveryPlatforms';
+import { DELIVERY_COURIER_LABELS, getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
 import { getVatLabel } from './orderTotals';
 import { describeItem } from './productOptions';
@@ -32,6 +33,62 @@ export function getTicketPaymentTotals(order: OrderDto): TicketPaymentTotals {
     cashReceived: sumCents((payment) => payment.cashReceived),
     change: sumCents((payment) => payment.change),
   };
+}
+
+/** How the ticket of an order of a delivery platform reads. Its commission, withholdings and net never print. */
+export interface TicketPlatform {
+  /** "Rappi". */
+  name: string;
+  /** The folio of the platform's app, to match the bag with the courier. */
+  folio: string;
+  /**
+   * The platform charged in its app: the ticket packs the bag, with the products and no prices or totals, so it never
+   * contradicts what the app charged (until each platform has its own prices).
+   */
+  packing: boolean;
+}
+
+export function getTicketPlatform(order: OrderDto): TicketPlatform | null {
+  if (!isDeliveryPlatform(order.channel) || !order.platformOrder) return null;
+  return {
+    name: getPlatformName(order.channel),
+    folio: order.platformOrder.externalOrderNumber,
+    packing: order.platformOrder.collectedBy === PlatformCollectedBy.Platform,
+  };
+}
+
+/** How the ticket of an order sent to the customer's address reads: where it goes, what it charged and the courier's folio. */
+export interface TicketDelivery {
+  /** "Av. Reforma 123, Centro · CP 72000". */
+  address: string;
+  references: string | null;
+  /** What the order charged for the delivery, in its total: 0 when it was free. */
+  fee: number;
+  /** "Paquetenvia · Folio PQ1234", once the trip is written down. */
+  courier: string | null;
+}
+
+export function getTicketDelivery(order: Pick<OrderDto, 'delivery'>): TicketDelivery | null {
+  const delivery = order.delivery;
+  if (!delivery) return null;
+  return {
+    address: `${delivery.addressLine} · CP ${delivery.postalCode}`,
+    references: delivery.references || null,
+    fee: delivery.fee,
+    courier: delivery.courier != null && delivery.courierFolio
+      ? `${DELIVERY_COURIER_LABELS[delivery.courier]} · Folio ${delivery.courierFolio}`
+      : null,
+  };
+}
+
+/** "$35.00", or "Gratis" when the zone delivered it free. */
+export function formatDeliveryFee(fee: number): string {
+  return fee > 0 ? formatMoney(fee) : 'Gratis';
+}
+
+/** The name on the order (or on the bag, for an order of a platform), unless it is the general public's. */
+export function getTicketCustomerName(order: Pick<OrderDto, 'customerName'>): string | null {
+  return order.customerName && order.customerName !== 'Público en general' ? order.customerName : null;
 }
 
 type OrderLine = OrderDto['items'][number];
@@ -79,19 +136,37 @@ export function formatTicketDate(value: string): string {
   });
 }
 
-/** Ticket as plain text, for WhatsApp or any app that shares text. */
+/**
+ * Ticket as plain text, for WhatsApp or any app that shares text. An order of a platform says its folio and the name
+ * for the bag; when the platform charged it, it lists the products without prices.
+ */
 export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
+  const platform = getTicketPlatform(order);
+  const bagName = platform ? getTicketCustomerName(order) : null;
+  const delivery = getTicketDelivery(order);
   const lines: string[] = [
     `*${extras.businessName}*`,
     `Ticket ${order.orderNumber} · ${formatTicketDate(order.createdAt)}`,
+    ...(platform ? [`*${platform.name} · Folio ${platform.folio}*`] : []),
+    ...(bagName ? [`Bolsa: ${bagName}`] : []),
+    ...(delivery ? [`*A domicilio:* ${delivery.address}`] : []),
+    ...(delivery?.references ? [`Referencias: ${delivery.references}`] : []),
+    ...(delivery?.courier ? [delivery.courier] : []),
     ...(extras.provisional ? ['_Folio provisional: venta registrada sin conexión._'] : []),
     '',
     ...billedItems(order).map((item) => {
       const note = item.notes ? `\n   _${item.notes}_` : '';
-      return `${formatTicketQuantity(item)} ${describeItem(item)}  ${formatMoney(chargedPrice(item))}${note}`;
+      const price = platform?.packing ? '' : `  ${formatMoney(chargedPrice(item))}`;
+      return `${formatTicketQuantity(item)} ${describeItem(item)}${price}${note}`;
     }),
+    ...(delivery ? [`Envío a domicilio  ${formatDeliveryFee(delivery.fee)}`] : []),
     '',
   ];
+
+  if (platform?.packing) {
+    lines.push(`Pagado en la app de ${platform.name}`, '', '¡Gracias por tu compra!');
+    return lines.join('\n');
+  }
 
   if (order.pricesIncludeTax) {
     lines.push(`*Total: ${formatMoney(order.total)}*`);
@@ -114,7 +189,10 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
     if (cashReceived > 0) lines.push(`Efectivo recibido: ${formatMoney(cashReceived)}`);
     if (change > 0) lines.push(`Cambio: ${formatMoney(change)}`);
   }
-  if (order.balance > 0) lines.push(`Saldo pendiente: ${formatMoney(order.balance)}`);
+  if (order.balance > 0) {
+    // What the business still collects of an order of a platform comes from the courier.
+    lines.push(platform ? `*Cobrar al repartidor: ${formatMoney(order.balance)}*` : `Saldo pendiente: ${formatMoney(order.balance)}`);
+  }
 
   lines.push('', '¡Gracias por tu compra!');
   return lines.join('\n');

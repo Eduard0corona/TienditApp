@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Finance.DTOs;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Finance.Enums;
+using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -101,7 +102,10 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
 
         var people = await CashPeople.ResolveAsync(_context, paymentRows.Select(x => x.CreatedBy), [], cancellationToken);
+        // What a delivery platform charged in its app went into no cashier's drawer: whoever captured the order did not
+        // receive that money, so it is shown on its own row and not in theirs.
         var byUser = paymentRows
+            .Where(x => OrderPaymentMethodRules.EntersADrawer(x.Method))
             .GroupBy(x => string.IsNullOrWhiteSpace(x.CreatedBy) ? "Sistema" : x.CreatedBy!)
             .Select(x => new DailyCashCutByUserDto
             {
@@ -153,9 +157,37 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         var walletTotal = paymentRows
             .Where(x => x.Method == OrderPaymentMethod.DigitalWallet)
             .Sum(x => x.Amount);
+        // Every method that has no bucket of its own, so the buckets always add up to what was charged.
         var otherTotal = paymentRows
-            .Where(x => x.Method == OrderPaymentMethod.Other)
+            .Where(x => x.Method is not (OrderPaymentMethod.Cash or OrderPaymentMethod.Card or OrderPaymentMethod.Transfer
+                or OrderPaymentMethod.DigitalWallet or OrderPaymentMethod.Platform))
             .Sum(x => x.Amount);
+        var platformRows = paymentRows
+            .Where(x => x.Method == OrderPaymentMethod.Platform)
+            .ToList();
+        var platformTotal = platformRows.Sum(x => x.Amount);
+
+        // What went back as «Plataforma» (an order a platform charged and then cancelled): it never left a drawer and
+        // has no cash movement, so it is shown apart, with the filters of the payments.
+        var platformRefunds = _context.OrderRefunds
+            .AsNoTracking()
+            .Where(x => x.Method == OrderPaymentMethod.Platform && x.RefundedAt >= startUtc && x.RefundedAt <= endUtc);
+
+        if (request.InventoryLocationId is { } refundLocationId)
+        {
+            platformRefunds = platformRefunds.Where(x => _context.OrderPayments.Any(payment =>
+                payment.OrderId == x.OrderId
+                && payment.Method == OrderPaymentMethod.Platform
+                && payment.InventoryLocationId == refundLocationId));
+        }
+
+        if (request.BranchId is { } refundBranchId)
+            platformRefunds = platformRefunds.Where(x => _context.Orders.Any(order => order.Id == x.OrderId && order.BranchId == refundBranchId));
+
+        if (!string.IsNullOrWhiteSpace(userNameFilter))
+            platformRefunds = platformRefunds.Where(x => x.RefundedBy == userNameFilter || (userCalled != null && x.RefundedBy == userCalled));
+
+        var platformRefundsTotal = await platformRefunds.SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
 
         var manualTransactions = _context.CashTransactions
             .AsNoTracking()
@@ -202,7 +234,9 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
         // Tips are not sales, but they are money received: in the drawer when paid in cash.
         var tipsTotal = paymentRows.Sum(x => x.Tip);
         var cashTipsTotal = paymentRows.Where(x => x.Method == OrderPaymentMethod.Cash).Sum(x => x.Tip);
-        var netCashFlow = salesPaymentsTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
+        // The business has not received what a platform charged (it deposits it later, minus its commission), and its
+        // refunds move no drawer either: both stay out, so the money of the day stays symmetric.
+        var netCashFlow = salesPaymentsTotal - platformTotal + tipsTotal + manualIncomeTotal - manualExpenseTotal;
         var netCashOnlyFlow = cashTotal + cashTipsTotal + cashManualIncomeTotal - cashManualExpenseTotal;
 
         return new DailyCashCutDto
@@ -215,6 +249,9 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             TransferTotal = transferTotal,
             WalletTotal = walletTotal,
             OtherTotal = otherTotal,
+            PlatformTotal = platformTotal,
+            PlatformPaymentsCount = platformRows.Count,
+            PlatformRefundsTotal = platformRefundsTotal,
             TipsTotal = tipsTotal,
             CashTipsTotal = cashTipsTotal,
             ManualIncomeTotal = manualIncomeTotal,

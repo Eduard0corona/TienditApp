@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
@@ -10,6 +10,7 @@ import { formatMoney } from '../../utils/money';
 
 /** The sales charged without connection that have not reached the server, with what to do about each one. */
 export default function PendingSalesModal({ onClose }: { onClose: () => void }) {
+  const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
   const online = useOnlineStatus();
@@ -46,9 +47,9 @@ export default function PendingSalesModal({ onClose }: { onClose: () => void }) 
   };
 
   return (
-    <Modal show onHide={onClose} centered scrollable>
+    <Modal show onHide={onClose} centered scrollable aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title>Ventas sin enviar</Modal.Title>
+        <Modal.Title id={titleId}>Ventas sin enviar</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <p className="small text-muted">

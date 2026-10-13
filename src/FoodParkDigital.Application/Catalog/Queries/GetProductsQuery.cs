@@ -4,8 +4,12 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.DeliveryPlatforms;
 using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Orders;
+using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
@@ -28,6 +32,11 @@ public record GetProductsQuery : IRequest<PaginatedList<ProductDto>>
     public ProductCatalogItemType? ItemType { get; init; }
     /// <summary>Name, SKU or barcode (a scanned code matches its product exactly).</summary>
     public string? Search { get; init; }
+    /// <summary>
+    /// A delivery platform whose prices the products come with, for an order of Rappi, Uber Eats or DiDi Food in Vender:
+    /// each product and option at the price the business set in the platform's app, and at the menu's where it set none.
+    /// </summary>
+    public OrderChannel? PriceChannel { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -37,6 +46,9 @@ public class GetProductsQueryValidator : AbstractValidator<GetProductsQuery>
     public GetProductsQueryValidator()
     {
         RuleFor(x => x.Search).MaximumLength(100);
+        RuleFor(x => x.PriceChannel)
+            .Must(channel => channel is null || OrderChannelRules.IsDeliveryPlatform(channel.Value))
+            .WithMessage(DeliveryPlatformSetting.NotADeliveryPlatformMessage);
     }
 }
 
@@ -152,6 +164,8 @@ public class GetProductsQueryHandler : IRequestHandler<GetProductsQuery, Paginat
         var page = await PaginatedList<ProductDto>.CreateAsync(
             projectedQuery, request.PageNumber, request.PageSize, cancellationToken);
         await ProductStockReader.ApplyAsync(_context, page.Items, cancellationToken);
+        if (request.PriceChannel is { } priceChannel)
+            await ProductPlatformPriceReader.ApplyAsync(_context, page.Items, priceChannel, cancellationToken);
         return page;
     }
 }

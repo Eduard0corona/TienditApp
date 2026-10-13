@@ -26,7 +26,8 @@ Un color libre que elige el dueño no garantiza nada de eso. Además tendría qu
    - los enlaces sobre las tarjetas y sobre la página;
    - el texto de lo elegido sobre su fondo;
    - el texto general sobre la página;
-   - el acento como texto (botones con contorno, textos en el color del negocio) sobre las tarjetas y la página en claro, y sobre las tres superficies de la app en oscuro, igual que los enlaces.
+   - el acento como texto (botones con contorno, textos en el color del negocio) sobre las tarjetas y la página en claro, y sobre las tres superficies de la app en oscuro, igual que los enlaces;
+   - desde la Fase 20F, el anillo de foco del teclado (el acento) con 3:1 en cada superficie donde puede quedar, y el texto del modo oscuro con AA sobre el tinte de lo elegido.
 
    Nopal conserva los colores claros con los que salió TienditApp. En oscuro, su acento pasó de `#2fb386` al verde claro de sus enlaces (`#5fd0a8`): el anterior pasaba como borde (3:1) pero no como texto.
 2. **El negocio guarda cuál, el cliente sabe cómo se ve.**
@@ -51,5 +52,5 @@ Un color libre que elige el dueño no garantiza nada de eso. Además tendría qu
 
 - **Lo que logra:** los dueños personalizan su app y su menú en un clic, con vista previa en toda la app antes de guardar, sin poder elegir una combinación ilegible. Los colores de estado y el modo oscuro quedaron accesibles para todos los negocios, también para quien no cambie de tema.
 - **Lo que limita:** un negocio con un color de marca exacto (un Pantone propio) no puede usarlo todavía. Si se pide, el siguiente paso es un color libre que el servidor y el cliente validen generando la paleta como lo hace hoy el script de la Fase 16, rechazando los que no alcancen AA en los dos modos.
-- **Lo que queda pendiente:** Hyper sigue cargado debajo (`app.min.css`, 436 KB; `vendor.min.css` salió en la Fase 20B) y algunos componentes compilan sus colores. `theme.css` los cubre uno por uno; retirarlo es la siguiente limpieza de UI.
+- **Lo que queda pendiente:** algunos componentes compilan sus colores y `theme.css` los cubre uno por uno. Hyper salió en la Fase 20E y Bootstrap se compila desde Sass: esos componentes pueden compilarse leyendo las variables CSS del tema (por ejemplo, las variantes de botón con `var(--ta-accent)`) en lugar de que `theme.css` los cubra uno por uno.
 - **Reversibilidad:** quitar la columna `TenantSettings.Theme` (`rollback.sql`) solo pierde la elección; todos vuelven a Nopal.

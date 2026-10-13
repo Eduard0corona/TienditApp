@@ -9,6 +9,7 @@ import type {
   CashTransactionType,
   CfdiTaxObject,
   DayOfWeek,
+  DeliveryCourier,
   InsufficientStockPolicy,
   InventoryMovementReason,
   InventoryMovementType,
@@ -22,6 +23,7 @@ import type {
   OrderStatus,
   OrderType,
   OutgoingMessageStatus,
+  PlatformCollectedBy,
   PurchaseOrderStatus,
   ServiceOrderPieceStatus,
   TenantCapability,
@@ -329,6 +331,12 @@ export { BusinessType } from '../api/generated/enums';
 
 export { TenantCapability } from '../api/generated/enums';
 
+/**
+ * Same numbers as Domain.Branches.Enums.BranchServiceMode: a branch customers come to, or one that only delivers and
+ * keeps its address for the team.
+ */
+export { BranchServiceMode } from '../api/generated/enums';
+
 export interface RegisterBusinessRequest {
   email: string;
   password: string;
@@ -371,6 +379,9 @@ export { BusinessTheme } from '../api/generated/enums';
 
 /** Same numbers as .NET's System.DayOfWeek: Sunday is 0. The hours of a business use it. */
 export { DayOfWeek } from '../api/generated/enums';
+
+/** Same numbers as Domain.Tenants.Enums.SpecialDayKind: a special day closes the business or opens it with other hours. */
+export { SpecialDayKind } from '../api/generated/enums';
 
 /**
  * Same numbers as Domain.Tenants.Enums.OrderNotificationPolicy. RemoteAndServices (the default) messages orders
@@ -1036,14 +1047,20 @@ export interface DailyCashCutDto {
   cardTotal: number;
   transferTotal: number;
   walletTotal: number;
+  /** Every method without a bucket of its own: the buckets always add up to salesPaymentsTotal. */
   otherTotal: number;
+  /** What the delivery platforms charged in their apps («Plataforma»): in no drawer and in no cashier's row. */
+  platformTotal?: number;
+  platformPaymentsCount?: number;
+  /** What went back as «Plataforma» in the day: no drawer gave it. */
+  platformRefundsTotal?: number;
   /** Deposits, expenses, withdrawals and refunds of the day, whatever their method. */
   manualIncomeTotal: number;
   manualExpenseTotal: number;
   /** The part of those movements made in cash: only it enters or leaves the drawers. */
   cashManualIncomeTotal: number;
   cashManualExpenseTotal: number;
-  /** All the money of the day, of any method: a card refund lowers it. */
+  /** All the money the business received in the day, of any method (a card refund lowers it), without what the platforms charged. */
   netCashFlow: number;
   /** Cash payments plus cash manual income minus cash manual expenses: the net change of the drawers. */
   netCashOnlyFlow: number;
@@ -1510,6 +1527,10 @@ export interface OrderDto {
   total: number;
   taxBreakdown: OrderTaxLineDto[];
   channel?: OrderChannel;
+  /** An order of Rappi, Uber Eats or DiDi Food: the folio of its app and who charged it (never its commission). */
+  platformOrder?: OrderPlatformDto | null;
+  /** An order sent to the customer's address: where, the zone, what it charged and the courier's trip. */
+  delivery?: OrderDeliveryDto | null;
   paidAmount: number;
   balance: number;
   /** Money given back; payments are never edited. */
@@ -1539,6 +1560,48 @@ export interface OrderDto {
   stockWarnings?: string[];
   /** When the device captured it without connection; it reached the server later. */
   capturedOfflineAt?: string | null;
+}
+
+export interface OrderPlatformDto {
+  /** The folio the platform's app shows for the order. */
+  externalOrderNumber: string;
+  /** The platform, in its app, or the business, when the courier pays on pickup. */
+  collectedBy: PlatformCollectedBy;
+}
+
+/** Where an order goes and what it charged for it (Fase 22C); the fee is in the order's total and IVA breakdown. */
+export interface OrderDeliveryDto {
+  postalCode: string;
+  addressLine: string;
+  references?: string | null;
+  /** The zone that reached the postal code, as it was named then. */
+  zoneName: string;
+  /** 0 when the delivery was free. */
+  fee: number;
+  feeTaxRate: number;
+  /** The courier the business asked for the trip (Paquetenvia), with its folio and link. */
+  courier?: DeliveryCourier | null;
+  courierFolio?: string | null;
+  trackingUrl?: string | null;
+  shipmentRegisteredAt?: string | null;
+  shipmentRegisteredBy?: string | null;
+}
+
+export { DeliveryCourier } from '../api/generated/enums';
+
+/** Where a new order goes: the postal code its zone is found by, the address and how to find it. */
+export interface OrderDeliveryInput {
+  postalCode: string;
+  addressLine: string;
+  references?: string;
+}
+
+export interface RegisterCourierShipmentRequest {
+  courier: DeliveryCourier;
+  /** As typed: the server normalizes it like the folio of a platform. */
+  folio: string;
+  /** https only. */
+  trackingUrl?: string;
 }
 
 export interface OrderRefundDto {
@@ -1602,6 +1665,14 @@ export interface CreateOrderItemRequest {
 
 export { OrderChannel } from '../api/generated/enums';
 
+export { PlatformCollectedBy } from '../api/generated/enums';
+
+export { PlatformCommissionBase } from '../api/generated/enums';
+
+export { PlatformSettlementStatus } from '../api/generated/enums';
+
+export { PlatformSettlementAdjustmentKind } from '../api/generated/enums';
+
 export interface CustomerCardDto {
   phone?: string;
   name?: string;
@@ -1645,8 +1716,14 @@ export interface CreateOrderRequest {
   payments?: CreateOrderPaymentRequest[];
   /** Total shown to the customer; the API rejects the sale if a price changed meanwhile. */
   expectedTotal?: number;
-  /** Counter (default) or WhatsApp when the order is taken from a chat. */
+  /** Counter (default), WhatsApp when the order is taken from a chat, or Rappi, Uber Eats or DiDi Food. */
   channel?: OrderChannel;
+  /** The folio the delivery platform's app shows for the order (Rappi, Uber Eats or DiDi Food only). */
+  externalOrderNumber?: string;
+  /** Who charged an order of a delivery platform: the platform when omitted, or the business. */
+  collectedBy?: PlatformCollectedBy;
+  /** Registers it although today there is an order of the same platform with the same folio (409 possible_duplicate_order). */
+  confirmPossibleDuplicate?: boolean;
   /** Opens the order as a tab: its items are the first round sent to the kitchen. */
   openTab?: boolean;
   diningTableId?: string;
@@ -1656,6 +1733,8 @@ export interface CreateOrderRequest {
   idempotencyKey?: string;
   /** When the device captured it without connection. */
   capturedOfflineAt?: string;
+  /** Sent to the customer's address: the zone that reaches the postal code charges its fee (never offline or for a tab). */
+  delivery?: OrderDeliveryInput;
 }
 
 export interface CreateOrderPaymentRequest {
@@ -1739,6 +1818,8 @@ export interface DashboardMetricsDto {
   activeServices: number;
   /** Payments registered in the range, whatever the status of their orders. */
   totalRevenue: number;
+  /** The part of totalRevenue the delivery platforms charged in their apps, minus what went back as «Plataforma». */
+  platformCollected?: number;
   /** Revenue divided by the orders that received those payments. */
   averageOrderValue: number;
   paidOrders: number;
@@ -1752,6 +1833,12 @@ export interface DashboardMetricsDto {
 export interface KitchenOrderDto {
   id: string;
   orderNumber: string;
+  /** Where the order came from: an order of a delivery platform is packed for its courier. */
+  channel?: OrderChannel;
+  /** The folio of the delivery platform's app, written on the bag; null for any other channel. */
+  externalOrderNumber?: string | null;
+  /** It goes out to the customer's address (never where: the kitchen only packs it). */
+  isDelivery?: boolean;
   status: OrderStatus;
   customerName: string;
   tableNumber?: string;

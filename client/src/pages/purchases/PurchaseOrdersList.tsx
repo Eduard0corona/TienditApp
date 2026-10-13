@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import PageTitle from '../../components/common/PageTitle';
 import DataTable, { DataTableFilter } from '../../components/common/DataTable';
@@ -78,6 +78,7 @@ const buildForm = (): FormState => ({
 });
 
 export default function PurchaseOrdersList() {
+  const titleId = useId();
   const [orders, setOrders] = useState<PaginatedList<PurchaseOrderDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
   const [pageNumber, setPageNumber] = useState(1);
@@ -340,9 +341,9 @@ export default function PurchaseOrdersList() {
         onChanged={loadOrders}
       />
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered>
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered aria-labelledby={titleId}>
         <Modal.Header closeButton>
-          <Modal.Title>Nueva compra</Modal.Title>
+          <Modal.Title id={titleId}>Nueva compra</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row">

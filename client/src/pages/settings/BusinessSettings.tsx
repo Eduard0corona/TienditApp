@@ -1,15 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
 import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
+import SpecialDaysCard from '../../components/settings/SpecialDaysCard';
+import DeliveryPlatformsCard from '../../components/settings/DeliveryPlatformsCard';
 import ThemeCard from '../../components/settings/ThemeCard';
 import SubscriptionCard from '../../components/settings/SubscriptionCard';
 import { useMySubscription } from '../../hooks/useMySubscription';
 import { tenantApi } from '../../api/tenantApi';
+import { queryKeys, useSpecialDays } from '../../api/queries';
 import { TenantCapability } from '../../types';
 import { useTenant } from '../../hooks/useTenant';
 import type { UpdateTenantRequest, TenantProfileDto } from '../../types';
@@ -17,7 +21,7 @@ import { BUSINESS_TYPE_LABELS } from '../../utils/labels';
 import { getApiErrorMessage } from '../../api/errors';
 import { COMMERCE_CAPABILITIES, hasAnyCapability } from '../../utils/tenantCapabilities';
 import { formatInBusinessZone, BUSINESS_TIME_ZONES, DEFAULT_TIME_ZONE } from '../../utils/dates';
-import { INDUSTRY_OPTIONS, matchIndustry } from '../../utils/industries';
+import { HOME_DELIVERY_INDUSTRY, INDUSTRY_OPTIONS, matchIndustry } from '../../utils/industries';
 
 
 const TAX_REGIME_OPTIONS = [
@@ -83,7 +87,10 @@ const CAPABILITY_PRESETS = [
 ];
 
 export default function BusinessSettings() {
-  const { refreshTenant } = useTenant();
+  const { tenant: activeTenant, refreshTenant } = useTenant();
+  const queryClient = useQueryClient();
+  // Its special days: removing the weekly hours says what is left of them, and saving the hours renews its suggestions.
+  const specialDays = useSpecialDays(!!activeTenant);
   const [capabilities, setCapabilities] = useState<number>(0);
   const subscription = useMySubscription();
   // Modules the plan lets the business turn on; null without plan (no limits).
@@ -102,6 +109,7 @@ export default function BusinessSettings() {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<UpdateTenantRequest>();
 
@@ -208,6 +216,8 @@ export default function BusinessSettings() {
   // A giro written by hand stays among the options, so saving the form does not erase it.
   const savedIndustry = matchIndustry(tenant?.industry);
   const industryOptions = savedIndustry && !INDUSTRY_OPTIONS.includes(savedIndustry) ? [...INDUSTRY_OPTIONS, savedIndustry] : INDUSTRY_OPTIONS;
+  // The giro changes no branch: each one says in Sucursales whether customers come to it.
+  const homeDelivery = watch('industry') === HOME_DELIVERY_INDUSTRY;
 
   const formatAddress = () => {
     const parts = [
@@ -319,7 +329,12 @@ export default function BusinessSettings() {
       <SubscriptionCard />
       <SalesPolicyCard />
       <OnlineMenuCard />
-      <OpeningHoursCard />
+      <OpeningHoursCard
+        upcomingSpecialDays={specialDays.data?.upcoming.length ?? 0}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: queryKeys.specialDays })}
+      />
+      <SpecialDaysCard />
+      <DeliveryPlatformsCard />
       <ThemeCard />
 
       <div className="row">
@@ -373,12 +388,19 @@ export default function BusinessSettings() {
                   </div>
                   <div className="mb-3">
                     <label htmlFor="businesssettings-giro-del-negocio" className="form-label">Giro del negocio</label>
-                    <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}>
+                    <select id="businesssettings-giro-del-negocio" className="form-select" {...register('industry')}
+                      aria-describedby={homeDelivery ? 'business-home-delivery-hint' : undefined}>
                       <option value="">Seleccionar...</option>
                       {industryOptions.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>
+                    {homeDelivery && (
+                      <div id="business-home-delivery-hint" className="form-text">
+                        Después de guardar, marca como «Solo a domicilio» en Configuración › Sucursales las que no tienen
+                        local: su dirección no se muestra en tu menú en línea.
+                      </div>
+                    )}
                   </div>
                   <div className="mb-3">
                     <div className="form-label d-block">Módulos habilitados</div>
@@ -604,7 +626,7 @@ export default function BusinessSettings() {
               </h4>
               <p className="text-muted small mb-3">
                 Para tus facturas; no se muestra en tu menú en línea. Ahí va la dirección de tu{' '}
-                <Link to="/branches">sucursal principal</Link>.
+                <Link to="/branches">sucursal principal</Link>, si atiende en un local.
               </p>
 
               {editMode ? (

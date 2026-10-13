@@ -65,7 +65,7 @@ public class GetCategoryTemplatesQueryHandler : IRequestHandler<GetCategoryTempl
                 return "laundry";
             if (industryNormalized.Contains("barber"))
                 return "barber";
-            if (industryNormalized.Contains("alimento") || industryNormalized.Contains("restaurant"))
+            if (industryNormalized.Contains("alimento") || industryNormalized.Contains("restaurant") || industryNormalized.Contains("comida"))
                 return "food";
         }
 

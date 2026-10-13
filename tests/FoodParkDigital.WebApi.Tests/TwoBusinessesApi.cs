@@ -187,6 +187,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         return client;
     }
 
+    /// <summary>A client without a session: a customer on the public menu.</summary>
+    public HttpClient AnonymousClient() => _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+
     /// <summary>Signs the session out, like the app does: with its refresh cookie.</summary>
     public async Task<HttpResponseMessage> SignOutAsync(SignedUp account)
     {

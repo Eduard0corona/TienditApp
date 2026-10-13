@@ -14,6 +14,14 @@ interface DailyCutProps {
   branches: Branch[];
 }
 
+interface Figure {
+  label: string;
+  value: number;
+  detail?: string;
+  /** A second line under the detail. */
+  note?: string;
+}
+
 /** Payments of a day by method, user and branch, for every drawer of the business. */
 export default function DailyCut({ branches }: DailyCutProps) {
   const { tenant } = useTenant();
@@ -43,6 +51,27 @@ export default function DailyCut({ branches }: DailyCutProps) {
     void load();
   }, [load]);
 
+  const platformTotal = cut?.platformTotal ?? 0;
+  const platformRefundsTotal = cut?.platformRefundsTotal ?? 0;
+  const figures: Figure[] = !cut ? [] : [
+    { label: 'Cobrado', value: cut.salesPaymentsTotal, detail: `${cut.salesPaymentsCount} pagos` },
+    { label: 'Efectivo', value: cut.cashTotal },
+    { label: 'Tarjeta', value: cut.cardTotal },
+    { label: 'Transferencia', value: cut.transferTotal },
+    { label: 'Otros', value: getOtherMethodsTotal(cut) },
+    // What the delivery platforms charged in their apps: part of "Cobrado", in no drawer, settled by each platform.
+    ...(platformTotal > 0 || platformRefundsTotal > 0
+      ? [{
+        label: 'Plataformas',
+        value: platformTotal,
+        detail: 'Lo cobró la plataforma: no entra a la caja',
+        note: platformRefundsTotal > 0 ? `Devuelto: ${formatMoney(platformRefundsTotal)}` : undefined,
+      }]
+      : []),
+    { label: 'Neto en efectivo', value: cut.netCashOnlyFlow, detail: cut.cashTipsTotal > 0 ? 'Efectivo + propinas + depósitos − gastos' : 'Efectivo + depósitos − gastos' },
+    // Tips are for the team: apart from what was sold.
+    ...(cut.tipsTotal > 0 ? [{ label: 'Propinas', value: cut.tipsTotal, detail: `${formatMoney(cut.cashTipsTotal)} en efectivo` }] : []),
+  ];
   const dateLabel = date ? formatCalendarDate(date, { dateStyle: 'long' }) : 'Hoy';
   const scopeLabel = (branchId ? branches.find((branch) => branch.id === branchId)?.name ?? 'Sucursal' : 'Todas las sucursales')
     + (userName.trim() ? ` · ${userName.trim()}` : '');
@@ -78,22 +107,12 @@ export default function DailyCut({ branches }: DailyCutProps) {
         ) : (
           <>
             <div className="row g-3 mb-3">
-              {[
-                { label: 'Cobrado', value: cut.salesPaymentsTotal, detail: `${cut.salesPaymentsCount} pagos` },
-                { label: 'Efectivo', value: cut.cashTotal },
-                { label: 'Tarjeta', value: cut.cardTotal },
-                { label: 'Transferencia', value: cut.transferTotal },
-                { label: 'Otros', value: getOtherMethodsTotal(cut) },
-                { label: 'Neto en efectivo', value: cut.netCashOnlyFlow, detail: cut.cashTipsTotal > 0 ? 'Efectivo + propinas + depósitos − gastos' : 'Efectivo + depósitos − gastos' },
-                // Tips are for the team: apart from what was sold.
-                ...(cut.tipsTotal > 0
-                  ? [{ label: 'Propinas', value: cut.tipsTotal, detail: `${formatMoney(cut.cashTipsTotal)} en efectivo` }]
-                  : []),
-              ].map((kpi) => (
+              {figures.map((kpi) => (
                 <div key={kpi.label} className="col-6 col-lg-2">
                   <div className="text-muted small">{kpi.label}</div>
                   <div className="fw-bold ta-money">{formatMoney(kpi.value)}</div>
                   {kpi.detail && <div className="small text-muted">{kpi.detail}</div>}
+                  {kpi.note && <div className="small text-muted">{kpi.note}</div>}
                 </div>
               ))}
             </div>

@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B y 22C, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -51,7 +51,7 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
 - Resuelto en la Fase 14: Inicio ya no carga en memoria las órdenes y pagos del rango. Los ingresos salen del resumen diario de los reportes (`DailySalesSnapshot` para los días cerrados y sumas en la base para el resto) y lo demás de agregados en SQL; las cifras son las mismas que antes (`DashboardMetricsSqlServerTests` las compara con el cálculo anterior). El rango son días completos del negocio, así que el último segundo del día, que el filtro de la pantalla dejaba fuera, ahora cuenta; un periodo abarca hasta 366 días.
 - Desde la Fase 12 una consulta que incluye colecciones las lee en sentencias separadas (`SplitQuery` por defecto). Fuera de una transacción, esas sentencias pueden ver un cambio hecho entre una y otra; las escrituras se protegen con los tokens de concurrencia, no con lo leído.
 - `client/README.md` sigue siendo template genérico.
-- Todo cobro y reembolso exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos).
+- Todo cobro que recibe el negocio, y todo reembolso de ese dinero, exige una caja abierta que lo tome, así que ya no se guardan pagos sin movimiento de caja (los guardados antes siguen fuera de los turnos). Desde la Fase 22F la excepción es el pago «Plataforma»: lo cobró Rappi, Uber Eats o DiDi Food en su app, así que no entra a ninguna caja, y su reembolso tampoco ([ADR 0013](../adr/0013-delivery-platform-orders.md)). El corte del día lo muestra aparte.
 - “AI Agent” conserva campos de modelo/temperatura/memoria aunque la implementación es por palabras clave, lo que puede inducir a error.
 - Un negocio sin plan (todos los anteriores a la Fase 3) puede activar cualquier módulo desde `PUT /auth/my-tenant`; con plan, solo los incluidos.
 - Las actions fijadas por SHA y las imágenes de Docker fijadas por digest no se actualizan solas: no hay Dependabot, y los procedimientos están en [despliegue](../development/deploy-azure.md#columnas-borradas-imágenes-por-digest-y-cobertura-de-la-suite-fase-13). Una imagen fijada no recibe los parches de seguridad de su etiqueta hasta que alguien cambia el digest.
@@ -61,7 +61,7 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - Modo oscuro: tiene fondo oscuro (antes la página se quedaba clara detrás de tarjetas oscuras), con alertas, chips, chat de WhatsApp y fichas en versión oscura.
   - Consistencia: Cobrar usa el color principal en Vender, Mesas y Pedidos, y ningún estado se pinta con el acento.
   - Pendiente:
-    - Hyper sigue cargado (436 KB de `app.min.css`), con colores compilados que `theme.css` cubre uno por uno; los 60 KB de `vendor.min.css` sin uso salieron en la Fase 20B.
+    - Hyper salió en la Fase 20E (antes, en la 20B, los 60 KB de `vendor.min.css` sin uso). `theme.css` todavía cubre uno por uno colores que Bootstrap compila con los valores de Hyper.
     - No hay color libre de marca, solo los temas curados.
     - El logo del negocio todavía no salía en el ticket ni en el selector de negocio; se resolvió en la Fase 19.
 - En curso, Fase 20: retirar Hyper, empezando por la entrega del cliente (un PR por subfase).
@@ -79,7 +79,108 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
     - el menú público no trae `ordersPaused`, la dirección ni el horario;
     - no hay respuesta de acceso para el equipo de la plataforma;
     - el pedido simulado no cobra las variantes ni los extras.
-  - Pendiente (20C a 20F): un layout propio, las clases que hoy solo da Hyper, Bootstrap 5.3.8 compilado con los valores actuales en lugar de `app.min.css` y los arreglos visibles (foco del teclado, contraste del modo oscuro, campos de 16 px en el teléfono). Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+  - Resuelto en la 20C: el marco de la app es nuestro (`shell.css`, clases `ta-*` y variables `--ta-*`, sin SimpleBar), con cero diferencias contra `master` en las escenas. El menú cerrado del teléfono ya no deja enfocar sus enlaces invisibles. La primera visita baja 5.8 KB con gzip (JavaScript −7.1 KB, CSS +1.3 KB mientras `app.min.css` siga cargado).
+  - Resuelto en la 20D: las clases que la app tomaba solo de Hyper (tamaños de letra, avatares, botones suaves, títulos de tarjeta, ojo de la contraseña, pestañas con línea, paginación redonda y tablas centradas) tienen regla propia en `components.css`, con cero diferencias contra `master` en las 313 escenas. `hyperClasses.test.ts` falla si el código usa una clase que solo existe en Hyper. El CSS global sube 0.3 KB con gzip mientras `app.min.css` siga cargado.
+  - Resuelto en la 20E: Bootstrap 5.3.8 se compila desde Sass con los valores de Hyper (`assets/scss`), en lugar de la hoja que compiló Hyper, que salió con sus imágenes. Cero diferencias contra `master` en las escenas. El CSS global baja de 607 KB a 403 KB (de 87.5 KB a 62.1 KB con gzip).
+  - Resuelto en la 20F: los arreglos visibles que la 20C, la 20D y la 20E dejaron anotados para no mover nada, cada uno con su antes y después:
+    - **Foco del teclado:** enlaces y botones no mostraban dónde estaba el teclado (`outline: 0 !important` de Hyper), y los resplandores de Bootstrap no llegaban a 3:1 o no salían (`.btn-light`, `.btn-dark`, sus contornos y los botones suaves menos el principal). Ahora todo dibuja el mismo anillo de `theme.css`, 2 px del acento a 2 px del elemento, que pasa 3:1 en cada superficie de cada tema.
+    - **Campos de 16 px en el teléfono:** con menos, Safari de iOS acercaba la página al enfocar un campo y la dejaba así.
+    - **Contraste del modo oscuro:** el texto general, el secundario y el del menú lateral pasan AA en cada superficie oscura, y lo que iba en blanco sobre el acento (que en modo oscuro es claro) usa el texto del tema para él, también la marca de las casillas, radios e interruptores marcados.
+    - **Menú condensado de las tablets:** ya no alarga cada página a 2000 px, su nombre al pasar el puntero se lee en modo oscuro, el menú lateral avisa con un borde desvanecido que tiene más enlaces abajo, y el nombre y el rol de la cuenta ya no son encabezados dentro de un botón.
+    - **Pendientes chicos:** el botón suave gris se lee sobre su tinte y deshabilitado lo conserva, `font-12`…`font-22` crecen con la letra del navegador y el botón de borrar de las búsquedas queda como lo dibuja Bootstrap 5.3.8.
+    - **Lo que encontró la revisión del diff:** Safari antes de 15.4 descartaba la regla del anillo entera (ahora los campos tienen la suya y, sin `:focus-visible`, casillas y páginas lo dibujan con cualquier foco); en oscuro el filtro del botón de cerrar volvía gris el anillo; el borde desvanecido del menú podía tapar el enlace enfocado; y el menú condensado ya no depende de una caja que ignora el puntero en las pantallas táctiles.
+    - Cambiaron 270 de 321 escenas, y un arreglo explica cada una: se aplicaron uno por uno, con una corrida completa en cada paso. Las 8 nuevas (foco, menú condensado y búsqueda) pasan dos corridas seguidas. El CSS global sube 0.7 KB con gzip (a 62.8 KB) y el JavaScript inicial 0.4 KB.
+  - Pendiente después de la 20F:
+    - Con los campos de 16 px, la barra de filtros de una lista ocupa más en el teléfono (en Pedidos, de 3 a 5 renglones): un botón "Filtros" que la abra.
+    - En modo claro quedan dos colores de Hyper debajo de AA sobre blanco: el texto de error de un campo (`#fa5c7c`, 3.1:1) y el del código (`#39afd1`, 2.6:1).
+    - La paginación deshabilitada no se ve atenuada.
+    - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
+    - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
+    - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22C: el pedido no sabía a dónde iba ni cobraba el envío, y el folio de Paquetenvia se anotaba en papel ([ADR 0018](../adr/0018-home-delivery-orders.md)).
+  - El menú en línea y Vender toman pedidos a domicilio con la zona que llega al código postal, su mínimo y su envío, cobrado como concepto propio con su IVA y en el borrador de CFDI. Pedidos muestra la dirección y guarda el folio y el enlace del viaje de Paquetenvia; la cocina y el ticket lo dicen.
+  - Queda:
+    - Paquetenvia se anota a mano: no hay integración con su API ni seguimiento del repartidor dentro de TienditApp.
+    - La dirección no se valida contra un mapa y el cliente del menú no guarda sus direcciones.
+    - No hay tiempo estimado de entrega ni horario por zona.
+    - La clave del SAT del envío (78102203) es la más común; cada negocio debe confirmarla con su contador.
+    - Anotar el viaje de Paquetenvia no avisa en tiempo real: otra pantalla de Pedidos lo ve al refrescarse.
+    - Un negocio con precios sin IVA que escribió sus envíos con IVA incluido cobraría el IVA dos veces: la consulta 6 del `verify.sql` los lista antes del merge, y las pantallas y el bot dicen «más IVA».
+    - Volver a la versión anterior cobra los pedidos a domicilio por su total, pero no muestra su dirección ni su envío (`deploy-azure.md`); el `rollback.sql` se detiene (50013).
+    - La 22C suma 125 B a la primera visita (de 176,481 a 176,606 B, contra `master` en `0eaa1d1`). El presupuesto no cambia.
+- Resuelto en la Fase 22B: el negocio no sabía a dónde entrega ni cuánto cobra por llevar ([ADR 0017](../adr/0017-delivery-zones.md)).
+  - Zonas de entrega por código postal, con costo de envío, pedido mínimo y envío gratis desde un monto, en Configuración › Zonas de entrega. Las respuestas automáticas de WhatsApp dicen si llegan a un código postal y cuánto cuesta.
+  - Queda:
+    - El menú en línea con «A domicilio», el verificador de código postal en el menú, la dirección del cliente y el envío cobrado en el pedido (con su concepto en el CFDI) llegaron en la Fase 22C.
+    - No hay horario por zona ni tiempo estimado de entrega.
+    - Una zona llega a todo un código postal o a nada, aunque algunos códigos grandes cubran colonias a las que el negocio no llega.
+    - Una pregunta de envío con un número de cinco dígitos que no es un código postal recibe la respuesta de un código postal.
+    - Las zonas son del negocio: todo pedido sigue llegando a la sucursal principal.
+    - La 22B suma 154 B a la primera visita (de 176,327 a 176,481 B, contra `master` en `3e69f32`): la entrada del menú y la ruta. El presupuesto no cambia.
+- Resuelto en la Fase 22A: una cocina sin local publicaba su dirección, muchas veces su casa, en el menú en línea ([ADR 0016](../adr/0016-delivery-only-branches.md)).
+  - Cada sucursal dice cómo atiende. Con la principal «Solo a domicilio», el menú dice que no hay local para visitar y la respuesta automática a «¿dónde están?» también; ninguna lleva la dirección, que sigue viendo el equipo. El giro «Comida a domicilio» empieza así, y la guía de inicio ofrece a todo negocio de comida la plantilla «Comida a domicilio».
+  - Queda:
+    - Volver a la versión anterior de la app publica otra vez la dirección de una principal solo a domicilio: el aviso está en `deploy-azure.md` y el `rollback.sql` se detiene (50011).
+    - Las mesas y el horario siguen siendo del negocio, no de cada sucursal: un negocio con un local y una cocina aparte no puede tener horarios distintos.
+    - El giro decide la sucursal principal solo en el alta; en un negocio que ya existe se marca a mano en Sucursales.
+    - La entrega llegó en las Fases 22B (zonas por código postal) y 22C (dirección del cliente en el pedido, envío cobrado y Paquetenvia).
+    - La 22A suma 1 B a la primera visita (de 176,326 a 176,327 B, contra `master` en `a60b1d4`): el enum de la sucursal. El presupuesto no cambia.
+- Resuelto en la Fase 22G: la liquidación de cada depósito de Rappi, Uber Eats y DiDi Food y su conciliación con el estado de cuenta ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
+  - Reportes › Liquidaciones dice lo que debe cada plataforma por sus pedidos pendientes. El dueño o un administrador captura cada depósito, TienditApp propone los pedidos del periodo, lo que no cuadra se explica con ajustes con motivo (el 35 % que cubre Rappi, los faltantes, el saldo de DiDi, la publicidad, las cancelaciones tardías…) y la liquidación solo se cierra con la diferencia en $0.00.
+  - Cerrar vuelve a calcular cada pedido y, si una devolución cambió alguno, pide revisarlo; anular conserva la liquidación y libera sus pedidos; las dos quedan en la bitácora.
+  - Pendiente:
+    - El estado de cuenta se captura a mano: importar el archivo de cada plataforma, o leerlo de su API, llega con las integraciones.
+    - Un depósito no es un movimiento de caja ni de banco: TienditApp no lleva cuentas de banco ni concilia contra el estado de cuenta del banco.
+    - Con liquidaciones guardadas, el rollback de la base se detiene (error 50010): hay que exportarlas y borrarlas antes, o corregir hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
+    - Lo escrito en una liquidación se pierde sin preguntar al cambiar de pantalla dentro de la app (`BrowserRouter` no permite detener una navegación); cerrar o recargar la pestaña sí pregunta, como en Precios en apps.
+    - Una liquidación ofrece hasta 2,000 pedidos pendientes: con más hasta el final del periodo, van primero los del periodo y, en el lugar que quede, los más recientes de antes; los más viejos esperan en Por cobrar a otra liquidación. Un periodo con más de 2,000 pedidos propios tiene que partirse.
+    - Un pedido que el negocio cobra en dos partes y se liquida con la primera no trae la segunda a Por cobrar, como una devolución posterior: se explica con un ajuste.
+    - «Por cobrar» suma el neto esperado de cada pedido redondeado por separado, y Ventas por canal redondea por fila: pueden diferir por centavos.
+    - La 22G suma 317 B a la primera visita (de 176,009 a 176,326 B, contra `master` en `fa7c761`): la sección del menú, las dos rutas, los dos enums del contrato que usan las pantallas y lo que `DataTable` ganó en la revisión (no pasarse de la última página con menos filas, y el largo de la búsqueda); las pantallas, su API y sus etiquetas se cargan aparte. El presupuesto sube de 176,400 a 176,700 B y queda a 374 B: el siguiente crecimiento tendrá que subirlo y decir por qué.
+    - En el teléfono, las cuentas y «Guardar» quedan después de los pedidos y los ajustes, en el orden de un formulario; la tabla de pedidos se desplaza por dentro (hasta el 65 % de la pantalla). Una barra fija abajo tendría que convivir con la barra de pestañas.
+- Resuelto en la Fase 22F-2: el precio de cada producto y opción en la app de cada plataforma ([ADR 0014](../adr/0014-delivery-platform-prices.md)).
+  - Catálogo › Precios en apps pone lo que cuesta cada producto, y lo que suma cada opción, en Rappi, Uber Eats y DiDi Food, con un cálculo por porcentaje que la persona revisa antes de guardar. Sin precio propio, se cobra el del menú.
+  - Vender carga el catálogo con los precios de la plataforma elegida y no deja registrar hasta tenerlos; la venta cobra los mismos, así que el total, la comisión, las retenciones y el neto esperado salen de lo que cobró la app.
+  - Pendiente:
+    - Los precios se capturan a mano: si alguien cambia uno en la app y no aquí, el pedido sale con el anterior. Leerlos de cada plataforma llega con las integraciones.
+    - Sin bitácora de cada cambio de precio, igual que los del menú; cada pedido copia los que cobró.
+    - Fuera de alcance: las promociones de la plataforma, los precios por sucursal y un menú, una disponibilidad o un horario distintos por plataforma.
+    - Con precios guardados, el rollback de la base se detiene (error 50009): hay que exportarlos y borrarlos antes, o corregir hacia adelante. Volver a la versión anterior de la app sí funciona sin tocar la base.
+    - Lo escrito en Precios en apps se pierde sin preguntar al cambiar de pantalla dentro de la app: `BrowserRouter` no permite detener una navegación (`useBlocker` pide un router de datos). Cerrar o recargar la pestaña sí pregunta.
+    - Con más de 500 productos, Precios en apps muestra los primeros 500 y avisa que los demás se cobran con el precio del menú.
+    - Dos cambios del mismo precio ya guardado no chocan (sin token de concurrencia): gana el último, como en el menú.
+    - La 22F-2 suma 150 B a la primera visita (de 175,859 a 176,009 B, contra `master` en `9c17a90`): la entrada del menú y la ruta de Precios en apps; la pantalla y sus ganchos se cargan aparte. El presupuesto sube a 176,400 B y queda a 391 B: el siguiente crecimiento tendrá que subirlo y decir por qué.
+- Resuelto en la Fase 22F: pedidos de Rappi, Uber Eats y DiDi Food con captura manual ([ADR 0013](../adr/0013-delivery-platform-orders.md)).
+  - El negocio registra en Vender el pedido que llegó por la app, con su folio y quién cobró. Si cobró la plataforma, el pago «Plataforma» no entra a ninguna caja ni pide una abierta. Si cobra el negocio (el repartidor de DiDi paga en efectivo), se cobra por la caja como siempre.
+  - Cada negocio configura la comisión, su IVA y las retenciones de cada plataforma, con revisión y bitácora. Cada pedido copia sus términos y los importes calculados, que no cambian después.
+  - El corte del día separa lo que cobraron las plataformas («Otros» es ahora el resto), Inicio lo dice debajo de «Cobrado», y Reportes muestra las ventas por canal y los pedidos de cada plataforma con su comisión, sus retenciones y el neto esperado. Nueve invariantes de cuadre (I1 a I9) son pruebas.
+  - Un folio repetido el mismo día se pregunta (409 `possible_duplicate_order`) en lugar de bloquearse con un índice único.
+  - Los pedidos de plataforma nunca mandan avisos de WhatsApp y quedan fuera de las campañas y de la ficha del cliente.
+  - Pendiente:
+    - Resuelta en la Fase 22G (arriba): la liquidación semanal y la conciliación con el estado de cuenta. Una cancelación tardía (un pedido ya entregado que la plataforma cancela) sigue quedando entregada y reembolsada: si el pedido todavía no está liquidado, deja de estar pendiente (trae 0); si ya está en una liquidación cerrada, se explica con un ajuste «Cancelaciones» en la siguiente.
+    - Integraciones por la API de las plataformas o por un integrador, el CFDI de retenciones y el ID largo del pedido para conciliar.
+    - Confirmar con un contador las tasas de retención de 2026 para cada caso (persona física o moral, RFC, pago definitivo; las por omisión son las de la Ley de Ingresos 2026 y la Ley del IVA), la clave de forma de pago 31 y la base de la comisión de Uber Eats.
+    - El aviso de folio repetido no es una restricción: dos capturas del mismo folio en el mismo instante pasan las dos.
+    - En SQL Server, la parte de la comisión de cada pago se calcula con escala 6 antes de sumarse: con pagos parciales, un punto medio raro puede diferir un centavo del cálculo con toda la precisión.
+    - Desde el primer pedido de plataforma no hay rollback de la base (error 50008), solo correcciones hacia adelante. No conviene publicar entre las 00:00 y las 00:45, hora del negocio (ver [migraciones](../development/database-migrations.md)).
+    - El badge «En línea» de Pedidos usa el acento (`bg-primary-subtle`), algo que viene de antes; se dejó igual para no mover las líneas base.
+- Dependencia con avisos de seguridad (visto en la Fase 22F): `SixLabors.ImageSharp` 3.1.12 (`Directory.Packages.props`) tiene GHSA-j9gm-c75j-xc9q y GHSA-jjfr-hcj7-qf5w (altas) y GHSA-wmxv-xphr-5c9g (moderada), y `dotnet restore` las marca (NU1903, NU1902). Las tres están en el manejo de TIFF y se corrigen en la 4.1.2, una versión mayor. Hoy el riesgo es bajo: `ImageProcessingService` solo registra los decodificadores de JPEG, PNG, WebP y GIF, así que un TIFF subido se rechaza antes de decodificarse. Subirla, revisando su API y su licencia, va en un PR propio.
+- Resuelto en la Fase 21: días especiales y horario real en WhatsApp ([ADR 0012](../adr/0012-special-days.md)).
+  - El dueño marca por fecha los días que cierra o abre con otro horario (festivos, vacaciones, inventario), con un motivo que ven sus clientes y festivos sugeridos que nunca se aplican solos. Las fechas pasadas no cambian y cada cambio queda en la bitácora.
+  - El menú en línea y su pedido los toman en cuenta, también sin horario de la semana, y el servidor escribe lo que dicen ("Cerrado · por Navidad · abre el sábado 26 a las 9:00"); en un día especial cerrado tampoco pide una mesa (decisión por omisión).
+  - Las respuestas automáticas de WhatsApp dicen el horario de verdad, con los días especiales de las próximas dos semanas, leído con el mismo lector que el menú.
+  - El cambio de horario de Tijuana y Matamoros se evalúa en instantes, y `/health/ready` avisa (`business-time-zones`) si el servidor no tiene las zonas horarias; la prueba de humo lo exige.
+  - Pendiente:
+    - Horario y días especiales por sucursal.
+    - Pedidos programados para cuando abra.
+    - Preguntas por una fecha en WhatsApp ("¿abren el 25?") más allá de los días especiales de las próximas dos semanas.
+    - Avisar o rechazar citas en los días que el negocio cierra.
+    - Ventanas de envío de campañas y recordatorios según el horario.
+    - Días especiales que se repiten cada año.
+    - Retención de las filas viejas de `SpecialDays` (hoy se conservan todas; la pantalla muestra solo los últimos 90 días).
+    - Sugerir los días de elecciones y los festivos estatales.
+    - Quitar la redacción anterior del cliente (`describeOpeningStatus`, para una API sin `todayDate`) después de una entrega.
+    - Confirmar con el dueño del producto las dos decisiones por omisión: la mesa en un día especial cerrado y la descripción del negocio, que ya no contesta las preguntas de horario cuando hay horario de la semana.
 - Resuelto en la Fase 19: el menú en línea vende ([ADR 0011](../adr/0011-opening-hours.md)).
   - El negocio captura su horario (hasta dos por día) y el menú dice si está abierto, en la hora del negocio. Fuera de horario no recibe pedidos para recoger o a domicilio, y el servidor también los rechaza; los de una mesa sí llegan.
   - El encabezado del menú tiene logo o inicial, el horario de la semana, la dirección de la sucursal principal (nunca la fiscal) con "Cómo llegar" y WhatsApp.
@@ -87,10 +188,10 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
   - El logo del negocio sale en el selector de negocio y en el ticket.
   - Las filas de categorías se desvanecen en el borde que esconde más.
   - Pendiente:
-    - No hay días festivos ni cierres especiales.
+    - Resuelto en la Fase 21: no había días festivos ni cierres especiales.
     - El horario es del negocio, no de cada sucursal.
     - No hay pedidos programados para cuando abra.
-    - Las respuestas automáticas de WhatsApp todavía no dicen el horario.
+    - Resuelto en la Fase 21: las respuestas automáticas de WhatsApp no decían el horario.
 - Resuelto en la Fase 18: listas e Inventario.
   - Cada lista tiene una sola barra con búsqueda, filtros y su acción, y la paginación va abajo.
   - Pedidos filtra por canal (mostrador, WhatsApp, menú en línea) y muestra "Tipo" solo cuando el negocio vende y da servicios.
@@ -110,6 +211,10 @@ Actualizada el 2026-10-09 tras las Fases 0 a 17 del roadmap de producto (la audi
 - Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
+- Evidencia de servicios (lavanderías, talleres): `ServiceOrderDetail` guarda fotos del antes y del después (`BeforePhotosJson` y `AfterPhotosJson`, hasta 20 de cada una, privadas desde la Fase 8A), pero solo se adjuntan al crear la orden en «Recibir servicio con piezas» (`/orders/cart`): `Order.SetServiceDetail` solo lo llama `OrderPlacement`. Vender cobra los servicios sin detalle, Pedidos y el tablero de servicios solo muestran las fotos y ninguna ruta las agrega a una orden existente, así que las del después, que se toman al terminar o entregar, no tienen dónde capturarse. Pendiente:
+  - subir fotos del antes y del después a una orden existente desde Pedidos y el tablero de servicios, con un caso de uso en Application que las valide por negocio y por permiso, y que pase por el agregado (rowversion de la orden);
+  - guardar quién y cuándo tomó cada foto (hoy son una lista JSON sin autor) y no borrar las de una orden entregada o cancelada;
+  - pruebas del caso de uso y del acceso entre negocios en `CrossTenantOperationsSqlServerTests`.
 - Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
 - Las conversaciones partidas antes de la Fase 4 (`+52` y `+521` del mismo número) siguen como dos hilos; cada mensaje nuevo va al hilo con la misma forma del número.
 - No hay lealtad: es por negocio y queda fuera de alcance hasta tener reglas ([ADR 0009](../adr/0009-loyalty-per-business.md)). Las columnas `CustomerProfile.LoyaltyPoints` y `LoyaltyTier`, globales y sin uso, se borraron en la Fase 13.
@@ -153,7 +258,7 @@ Pendientes detectados en la Fase 0:
 
 - El emisor que ven las apps autenticadoras sale del `JwtSettings:Issuer` ("FoodParkDigital"); cambiarlo exige separar el nombre visible del emisor del JWT.
 - La confirmación de teléfono no permite corregir el número capturado.
-- El tema visual sigue siendo el CSS de Hyper (fase 1: tema propio; desde la Fase 16, `theme.css` por capas con el tema de cada negocio encima de Hyper, que sigue pendiente de retirar).
+- El tema visual era el CSS de Hyper (fase 1: tema propio; desde la Fase 16, `theme.css` por capas con el tema de cada negocio). Resuelto en la Fase 20E: Hyper salió y Bootstrap se compila desde Sass con sus valores.
 
 ## Resuelto el 2026-10-04 (Fase 1: plataforma)
 
@@ -323,6 +428,10 @@ Pendientes detectados en la Fase 3:
 
 - `TenantSettings.RequireOpenCashSession`, de la política que pedía caja solo para cobrar en efectivo, se borró en dos pasos: la PR #47 y la Fase 15 dejaron de mapearla (las dos `StopMappingRequireOpenCashSession`) y `DropRequireOpenCashSession` (escrita a mano) la borra. Su rollback la crea otra vez en 0 para volver a una versión anterior; los negocios que la tenían activada solo quedan en el respaldo.
 
+## Resuelto el 2026-10-10 (prueba de humo por commit)
+
+- La prueba de humo reconocía la versión nueva solo por el nombre del script del cliente, así que un despliegue que solo cambiaba el backend (como el de la PR #48) la podía pasar con la instancia anterior, incluso sin aplicar su `apply.sql`. Ahora los health checks nombran el commit de la versión (`BuildInfo`), el publish lo fija y la prueba exige el desplegado en `/health/ready` y `/health/schema`.
+
 ## Decisiones humanas pendientes
 
 - Quién confirma con cada tenant los movimientos de inventario desfasados y si se revalúa el costo promedio que alteraron.
@@ -333,3 +442,4 @@ Pendientes detectados en la Fase 3:
 - Cuándo activar el slot de staging (plan Standard) y quién aprueba los despliegues a producción.
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.
+- Evidencia de servicios: si las fotos van por orden o por pieza (una lavandería recibe varias prendas en una orden), si el cliente las recibe (WhatsApp o ticket) y cuánto tiempo se guardan.

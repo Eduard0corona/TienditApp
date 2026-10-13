@@ -26,12 +26,19 @@ public sealed class OrderAuditHandlers :
         _context = context;
     }
 
+    // Where the order came from and, for an order of a delivery platform, the folio of its app and who charged it; for
+    // an order sent to the customer's address, that it is and what it charged for it, never the address.
     public Task HandleAsync(OrderCreatedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)
         => AddAsync(domainEvent.TenantId, nameof(Order), domainEvent.OrderId, "OrderCreated", context, new
         {
             domainEvent.OrderNumber,
             domainEvent.BusinessType,
-            domainEvent.Total
+            domainEvent.Total,
+            domainEvent.Channel,
+            domainEvent.ExternalOrderNumber,
+            domainEvent.CollectedBy,
+            domainEvent.IsHomeDelivery,
+            domainEvent.DeliveryFee
         });
 
     public Task HandleAsync(OrderStatusChangedEvent domainEvent, OutboxEventContext context, CancellationToken cancellationToken)

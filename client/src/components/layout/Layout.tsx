@@ -20,8 +20,8 @@ import { getAccess } from '../../utils/access';
 
 type DesktopSidenavSize = 'default' | 'condensed';
 
-// Same breakpoints the Hyper theme uses: below 768 px the menu slides over the content, up to 1140 px
-// it starts condensed (icons only) so tablets keep room for the page.
+// Below 768 px the menu slides over the content; up to 1140 px it starts condensed (icons only) so tablets keep room
+// for the page. shell.css draws each size.
 const MOBILE_QUERY = '(max-width: 767.98px)';
 const TABLET_QUERY = '(max-width: 1140px)';
 const SIDENAV_SIZE_STORAGE_KEY = 'tienditapp.sidenavSize';
@@ -78,12 +78,12 @@ export default function Layout() {
   // Layout effect: the size must be on <html> before the first paint, or phones flash the open menu.
   useLayoutEffect(() => {
     const html = document.documentElement;
-    html.setAttribute('data-sidenav-size', isMobile ? 'full' : desktopSize);
-    html.classList.toggle('sidebar-enable', isMobileMenuOpen);
+    html.setAttribute('data-ta-sidenav', isMobile ? 'full' : desktopSize);
+    html.classList.toggle('ta-sidebar-open', isMobileMenuOpen);
     document.body.style.overflow = isMobileMenuOpen ? 'hidden' : '';
 
     return () => {
-      html.classList.remove('sidebar-enable');
+      html.classList.remove('ta-sidebar-open');
       document.body.style.overflow = '';
     };
   }, [isMobile, desktopSize, isMobileMenuOpen]);
@@ -179,12 +179,12 @@ export default function Layout() {
 
   return (
     <FocusModeContext.Provider value={focusMode}>
-      <div className="wrapper">
+      <div className="ta-shell">
         <Topbar onToggleSidebar={toggleSidebar} isMobileMenuOpen={isMobileMenuOpen} onOpenSearch={openSearch} />
         <LeftSidebar onClose={closeMobileMenu} />
         {isMobileMenuOpen && <div className="offcanvas-backdrop fade show" onClick={closeMobileMenu} aria-hidden="true" />}
-        <div className="content-page">
-          <div className="content">
+        <div className="ta-content-page">
+          <div className="ta-content">
             <div className="container-fluid">
               {isSuspended ? <SuspendedNotice businessName={tenant?.name} /> : (
                 <>

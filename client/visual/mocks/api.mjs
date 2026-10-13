@@ -137,6 +137,81 @@ function createMockOrder(data, body) {
   return order;
 }
 
+/** Rappi, Uber Eats and DiDi Food as GET /delivery-platforms answers them to a business that never saved one. */
+function unconfiguredPlatforms() {
+  return {
+    platforms: [3, 4, 5].map((channel) => ({
+      channel, isConfigured: false, isActive: false, commissionPercent: null, commissionBase: 0, commissionVatPercent: 16,
+      isrWithholdingPercent: 2.5, vatWithholdingPercent: 50, revision: 0, changedAt: null, changedBy: null, example: null,
+    })),
+  };
+}
+
+// Hour, Session and Service (UnitType): a service is never in an order of a delivery platform.
+const SERVICE_UNITS = [50, 51, 52];
+
+/**
+ * A product of the list for an order of a delivery platform, as GET /products?priceChannel= prices it: the app's price
+ * where the business set one (without the menu's offer, which is the menu's) and what each option adds in the app.
+ * `prices` is `data.platformPrices[channel]`: `{ products: { [productId]: price }, options: { [optionId]: delta } }`.
+ */
+function withPlatformPrices(product, prices) {
+  if (!prices) return product;
+  const price = prices.products[product.id];
+  return {
+    ...product,
+    ...(price === undefined ? {} : { priceAmount: price, compareAtPrice: null, hasDiscount: false }),
+    optionGroups: product.optionGroups?.map((group) => ({
+      ...group,
+      options: group.options.map((option) => (option.id in prices.options ? { ...option, priceDelta: prices.options[option.id] } : option)),
+    })),
+  };
+}
+
+/** Catálogo › Precios en apps: the products (no services) by category and name, with their menu's and app's prices. */
+function platformPriceList(data, channel) {
+  const prices = data.platformPrices[channel] ?? { products: {}, options: {} };
+  const categories = new Map(data.categories.map((category) => [category.id, category]));
+  return data.products
+    .filter((product) => !SERVICE_UNITS.includes(product.unit))
+    .map((product) => ({ product, category: categories.get(product.categoryId) }))
+    .sort((a, b) => a.category.sortOrder - b.category.sortOrder || a.category.name.localeCompare(b.category.name, 'es')
+      || a.product.name.localeCompare(b.product.name, 'es'))
+    .map(({ product, category }) => ({
+      productId: product.id, name: product.name, categoryId: category.id, categoryName: category.name, unit: product.unit,
+      isAvailable: product.isAvailable, menuPrice: product.priceAmount, platformPrice: prices.products[product.id] ?? null,
+      optionGroups: (product.optionGroups ?? []).map((group) => ({
+        id: group.id, name: group.name,
+        options: group.options.map((option) => ({
+          id: option.id, name: option.name, isAvailable: option.isAvailable, menuPriceDelta: option.priceDelta,
+          platformPriceDelta: prices.options[option.id] ?? null,
+        })),
+      })),
+    }));
+}
+
+/** PUT /delivery-platforms/{channel}/prices: each price sent replaces the saved one; null goes back to the menu's. */
+function savePlatformPrices(data, channel, body) {
+  const prices = (data.platformPrices[channel] ??= { products: {}, options: {} });
+  const set = (map, key, value) => {
+    if (value === null) delete map[key];
+    else map[key] = value;
+  };
+  for (const product of body?.products ?? []) {
+    set(prices.products, product.productId, product.price);
+    for (const option of product.options ?? []) set(prices.options, option.optionId, option.priceDelta);
+  }
+}
+
+/** Sales by channel of a period without orders of any channel: the demo shows its sales by branch, not by channel. */
+function emptySalesByChannel(q) {
+  const totals = {
+    channel: null, isDeliveryPlatform: false, paidOrders: 0, paymentsAmount: 0, refundsAmount: 0, netSales: 0, platformCollected: 0,
+    businessCollected: 0, commission: 0, commissionTax: 0, isrWithheld: 0, vatWithheld: 0, expectedSettlement: 0,
+  };
+  return { from: q.get('from') || '2026-10-01', to: q.get('to') || '2026-10-04', channels: [], totals };
+}
+
 function buildRoutes(data, token) {
   const ok = (json) => ({ status: 200, json });
   const notFound = (what) => ({ status: 404, json: { error: `${what} no encontrado` } });
@@ -162,6 +237,7 @@ function buildRoutes(data, token) {
     // ------------------------------------------------------------- dashboard / reports / audit
     ['GET', /^\/dashboard\/metrics$/, () => ok(data.dashboard)],
     ['GET', /^\/reports\/operational-summary$/, () => ok(data.report)],
+    ['GET', /^\/reports\/sales-by-channel$/, (m, q) => ok(emptySalesByChannel(q))],
     ['GET', /^\/audit\/logs$/, (m, q) => {
       let rows = data.auditLogs;
       if (q.get('entityName')) rows = rows.filter((r) => includesCI(r.entityName, q.get('entityName').toLowerCase()));
@@ -192,7 +268,8 @@ function buildRoutes(data, token) {
       }
       rows = [...rows].sort((a, b) => a.sortOrder - b.sortOrder);
       const page = paginate(rows, q, 10);
-      return ok({ ...page, items: page.items.map(stripProduct) });
+      const prices = q.has('priceChannel') ? data.platformPrices[q.get('priceChannel')] : undefined;
+      return ok({ ...page, items: page.items.map((p) => withPlatformPrices(stripProduct(p), prices)) });
     }],
     ['GET', /^\/products\/([^/]+)$/, (m) => {
       const p = data.products.find((x) => x.id === m[1]);
@@ -246,6 +323,7 @@ function buildRoutes(data, token) {
       return ok(payment);
     }],
     ['GET', /^\/auth\/my-tenant\/setup$/, () => ok(data.setup)],
+    ['GET', /^\/auth\/my-tenant\/special-days$/, () => ok(data.specialDays)],
     ['PUT', /^\/auth\/my-tenant\/sales-policy$/, (m, q, body) => {
       Object.assign(data.tenant, body);
       Object.assign(data.setup, { pricesIncludeTax: body.pricesIncludeTax, defaultTaxRate: body.defaultTaxRate });
@@ -262,6 +340,17 @@ function buildRoutes(data, token) {
       return { status: 204, json: null };
     }],
     ['GET', /^\/kitchen\/orders$/, () => ok(data.kitchenOrders)],
+    // The demo business set up no delivery platform: Vender and Pedidos look as they do without them, and Mi negocio
+    // offers the three to configure.
+    ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
+    // Nor any delivery zone: Vender offers no «A domicilio» (Configuración › Zonas de entrega answers its own).
+    ['GET', /^\/delivery-zones$/, () => ok([])],
+    ['GET', /^\/delivery-platforms$/, () => ok(unconfiguredPlatforms())],
+    ['GET', /^\/delivery-platforms\/([345])\/prices$/, (m, q) => ok(paginate(platformPriceList(data, m[1]), q, 100))],
+    ['PUT', /^\/delivery-platforms\/([345])\/prices$/, (m, q, body) => {
+      savePlatformPrices(data, m[1], body);
+      return { status: 204, json: null };
+    }],
     ['GET', /^\/service-board\/pieces$/, (m, q) => {
       let rows = data.boardPieces;
       if (!bool(q, 'includeCompleted')) rows = rows.filter((p) => p.status !== 2);

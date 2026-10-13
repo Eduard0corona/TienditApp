@@ -1,0 +1,856 @@
+/*
+ * The frame of the app (components/layout): top bar, side menu, content, footer, the tab bar of phones and the focus
+ * shell. Written from what Hyper drew for the one configuration the app used (light top bar and menu, nothing
+ * detached or boxed), so the screen did not move a pixel when Hyper's rules stopped applying (Fase 20C).
+ *
+ * Layout sets on <html>:
+ *   data-ta-sidenav  default: the whole menu (desktop) · condensed: only icons (tablets start here) ·
+ *                    full: hidden, it slides over the page (phones)
+ *   ta-sidebar-open  the menu of a phone is open
+ */
+
+:root {
+  --ta-sidebar-width: 260px;
+  --ta-sidebar-width-sm: 70px;
+  --ta-topbar-height: 70px;
+  --ta-footer-height: 60px;
+  --ta-logo-lg-height: 20px;
+  --ta-logo-sm-height: 22px;
+  --ta-menu-item-font-size: 0.9375rem;
+  --ta-menu-item-icon-size: 1.2rem;
+  --ta-menu-item-padding-x: 10px;
+  --ta-menu-item-padding-y: 10px;
+
+  --ta-menu-bg: #ffffff;
+  --ta-menu-item-color: #6c757d;
+  --ta-menu-item-hover-color: var(--ta-accent);
+  --ta-menu-item-active-color: var(--ta-accent);
+  /*
+   * A link of the condensed menu under the pointer: it grows to show its name on the accent, in the color each theme
+   * made for text on it. White read at 1.9:1 on the light accents of the dark mode.
+   */
+  --ta-menu-condensed-link-bg: var(--tt-accent);
+  --ta-menu-condensed-link-color: var(--tt-on-accent);
+  --ta-topbar-bg: #ffffff;
+  --ta-topbar-item-color: #6c757d;
+  --ta-topbar-item-hover-color: var(--ta-accent);
+  --ta-topbar-search-bg: #eef1f3;
+}
+
+:root[data-bs-theme='dark'] {
+  --ta-menu-bg: #3a444e;
+  /* Hyper's #8391a2 read at 3.1:1 on the menu. */
+  --ta-menu-item-color: var(--ct-secondary-color);
+  --ta-menu-item-hover-color: var(--ct-primary-text-emphasis);
+  --ta-menu-item-active-color: var(--ct-primary-text-emphasis);
+  --ta-menu-condensed-link-bg: var(--tt-dark-accent);
+  --ta-menu-condensed-link-color: var(--tt-dark-on-accent);
+  --ta-topbar-bg: #3a444e;
+  --ta-topbar-item-color: #8391a2;
+  --ta-topbar-item-hover-color: #bccee4;
+  --ta-topbar-search-bg: #464f5b;
+}
+
+/*
+ * Hyper's: <html> is at least as tall as the window and holds what is placed absolutely without a positioned parent.
+ * The condensed menu was the reason (it scrolled with the page until 20F); kept so nothing else moves.
+ */
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.ta-shell {
+  height: 100%;
+  width: 100%;
+}
+
+/* Logos: the large one in the whole menu, the small one in the condensed menu and on phones. */
+.ta-logo-lg img {
+  height: var(--ta-logo-lg-height);
+}
+
+.ta-logo-sm img {
+  height: var(--ta-logo-sm-height);
+}
+
+/* Top bar. */
+.ta-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  min-height: var(--ta-topbar-height);
+  margin-left: var(--ta-sidebar-width);
+  background: var(--ta-topbar-bg);
+  box-shadow: var(--ct-box-shadow);
+  transition: margin-left 0.25s ease-in-out;
+}
+
+.ta-topbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 auto;
+}
+
+/* The left group shrinks (truncating the business name) so the bar never overflows a phone. */
+.ta-topbar .ta-topbar-start {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ta-topbar .ta-topbar-menu {
+  position: relative;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  list-style-type: none;
+}
+
+.ta-topbar .ta-topbar-menu li {
+  max-height: var(--ta-topbar-height);
+}
+
+.ta-topbar .ta-topbar-menu .nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--ta-topbar-height);
+  padding: 0;
+  color: var(--ta-topbar-item-color);
+  cursor: pointer;
+}
+
+.ta-topbar .ta-topbar-menu .nav-link:hover,
+.ta-topbar .ta-topbar-menu li .nav-link.show {
+  color: var(--ta-topbar-item-hover-color);
+}
+
+/* The logo only shows on phones, where the menu is hidden. */
+.ta-topbar-logo {
+  float: left;
+  display: none;
+  padding: 0 0.75rem 0 0;
+  line-height: var(--ta-topbar-height);
+}
+
+.ta-topbar-logo > a {
+  display: block;
+}
+
+.ta-topbar-logo .ta-logo-sm {
+  display: none;
+}
+
+.ta-menu-toggle {
+  position: relative;
+  z-index: 1;
+  width: 60px;
+  border: none;
+  background-color: transparent;
+  color: var(--ta-topbar-item-color);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.ta-menu-toggle:hover {
+  color: var(--ta-topbar-item-hover-color);
+}
+
+/* The person's menu: their picture, name and role. */
+.ta-user-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--ta-topbar-height);
+  transition: none;
+}
+
+.ta-user-button::after {
+  display: none;
+}
+
+.ta-user-menu {
+  position: absolute;
+  z-index: 1000;
+  min-width: 170px;
+  margin: 0;
+  animation: ta-dropdown-slide 0.3s both;
+}
+
+.ta-user-menu.show {
+  top: 100% !important;
+}
+
+.ta-user-menu.dropdown-menu-end[style] {
+  left: auto;
+  right: 0;
+}
+
+.ta-user-menu[data-popper-placement^='left'],
+.ta-user-menu[data-popper-placement^='right'],
+.ta-user-menu[data-popper-placement^='top'] {
+  top: auto !important;
+  animation: none !important;
+}
+
+.ta-user-menu i {
+  display: inline-block;
+}
+
+.ta-user-menu i,
+.ta-user-menu span {
+  vertical-align: middle;
+}
+
+@keyframes ta-dropdown-slide {
+  0% {
+    transform: translateY(5px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* Business switcher, search trigger and Nueva venta. */
+.topbar-business {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(42vw, 260px);
+}
+
+.topbar-business-button {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.topbar-business-button .text-truncate {
+  min-width: 0;
+}
+
+/* The logo of the business it is in, and each business's logo (or initial) in the list. */
+.topbar-business-logo,
+.topbar-business-avatar {
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.topbar-business-logo {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.topbar-business-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.topbar-business-avatar.photo-initial {
+  font-size: 0.85rem;
+}
+
+.topbar-business-name {
+  max-width: 260px;
+  font-weight: 700;
+  color: var(--ct-emphasis-color);
+}
+
+.topbar-search-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 38px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: 999px;
+  background: var(--ta-topbar-search-bg);
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+}
+
+.topbar-search-button i {
+  font-size: 1.15rem;
+}
+
+/*
+ * A key drawn with an outline on the button's own fill, so its text has the contrast of the button's (tested in every
+ * theme). On a tint of their own, Ctrl K and F2 read at 3.2 to 4.2:1.
+ */
+.topbar-search-button kbd,
+.topbar-sell-button kbd {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.72rem;
+  font-family: inherit;
+}
+
+.topbar-sell-button {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-weight: 700;
+  padding-inline: 0.9rem;
+}
+
+/* Side menu. */
+.ta-sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  width: var(--ta-sidebar-width);
+  padding-bottom: calc(var(--ta-footer-height) + 0.75rem);
+  background: var(--ta-menu-bg);
+  box-shadow: var(--ct-box-shadow);
+  transition: width 0.25s ease-in-out, margin-left 0.25s ease-in-out;
+}
+
+.ta-sidebar-logo {
+  position: sticky;
+  top: 0;
+  display: block;
+  padding: 0 calc(var(--ta-sidebar-width-sm) * 0.5 - var(--ta-logo-sm-height) * 0.7);
+  line-height: var(--ta-topbar-height);
+  text-align: center;
+  transition: all 0.25s ease-in-out;
+}
+
+.ta-sidebar-logo .ta-logo-lg {
+  display: block;
+}
+
+.ta-sidebar-logo .ta-logo-sm {
+  display: none;
+}
+
+/* Closes the menu of a phone; hidden at the other sizes. */
+.ta-sidebar-close {
+  position: absolute;
+  top: 0;
+  right: calc(var(--ta-sidebar-width-sm) * 0.5 - var(--ta-logo-sm-height) * 0.7);
+  z-index: 1;
+  display: none;
+  color: var(--ta-menu-item-color);
+  font-size: var(--ta-menu-item-icon-size);
+  line-height: var(--ta-topbar-height);
+  cursor: pointer;
+}
+
+.ta-sidebar-close:hover,
+.ta-sidebar-close:focus,
+.ta-sidebar-close:active {
+  color: var(--ta-menu-item-hover-color);
+}
+
+/*
+ * The links scroll under the logo without a visible bar, as they did with SimpleBar when the pointer is away; the
+ * edge that hides more links fades (useScrollFade), or nothing would say the menu goes on.
+ */
+.ta-sidebar-scroll {
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.ta-sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.ta-nav {
+  padding-left: 0;
+  list-style-type: none;
+}
+
+.ta-nav-group > .list-unstyled {
+  margin-bottom: 0.25rem;
+}
+
+.ta-nav-title {
+  padding: var(--ta-menu-item-padding-y) calc(var(--ta-menu-item-padding-x) * 2.5);
+  color: var(--ta-menu-item-color);
+  font-size: calc(var(--ta-menu-item-font-size) * 0.74);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: default;
+  pointer-events: none;
+}
+
+.ta-nav-link {
+  position: relative;
+  display: block;
+  padding: var(--ta-menu-item-padding-y) var(--ta-menu-item-padding-x);
+  color: var(--ta-menu-item-color);
+  font-size: var(--ta-menu-item-font-size);
+  white-space: nowrap;
+  transition: all 0.25s ease-in-out;
+}
+
+.ta-nav-link:hover,
+.ta-nav-link:focus,
+.ta-nav-link:active {
+  color: var(--ta-menu-item-hover-color);
+  text-decoration: none;
+}
+
+.ta-nav-link span {
+  vertical-align: middle;
+}
+
+.ta-nav-link i {
+  display: inline-block;
+  width: calc(var(--ta-sidebar-width-sm) - var(--ta-menu-item-padding-x) * 2.5);
+  min-width: calc(var(--ta-sidebar-width-sm) - var(--ta-menu-item-padding-x) * 2.5);
+  font-size: var(--ta-menu-item-icon-size);
+  line-height: var(--ta-menu-item-icon-size);
+  text-align: center;
+  vertical-align: middle;
+}
+
+/*
+ * In dark mode the links already read light, close to the accent's light shade (Grafito's is a gray): under the
+ * pointer a link also gets a faint pill, so the change does not rest on the color alone.
+ */
+html[data-bs-theme='dark']:not([data-ta-sidenav='condensed']) .ta-nav-link:not(.active):hover {
+  border-radius: var(--ta-radius-sm);
+  background: rgba(var(--ct-emphasis-color-rgb), 0.08);
+}
+
+/* Current page: a tinted pill, not only a color change. */
+.ta-nav-link.active,
+.ta-nav-link.active:hover,
+.ta-nav-link.active:focus,
+.ta-nav-link.active:active {
+  border-radius: var(--ta-radius-sm);
+  background: var(--ct-primary-bg-subtle);
+  color: var(--ta-menu-item-active-color);
+  font-weight: 700;
+}
+
+/* Content and footer. */
+.ta-content-page {
+  position: relative;
+  min-height: calc(100vh - var(--ta-topbar-height) - 2px);
+  margin-left: var(--ta-sidebar-width);
+  padding: 0 0.75rem var(--ta-footer-height);
+  transition: all 0.25s ease-in-out;
+}
+
+.ta-footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  height: var(--ta-footer-height);
+  padding: 0 1.5rem;
+  border-top: 1px solid var(--ct-border-color);
+  color: var(--ct-emphasis-color);
+  transition: left 0.25s ease-in-out;
+}
+
+/* The pages without the frame (sign in, sign up): centered, without the line. */
+.ta-footer-centered {
+  justify-content: center;
+  border: none;
+  text-align: center;
+}
+
+/* Title of each screen (PageTitle). */
+.ta-page-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 75px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ta-page-title-right {
+  float: right;
+  margin-top: 20px;
+}
+
+.ta-page-title-box .breadcrumb {
+  padding-top: 8px;
+}
+
+/* Condensed menu: icons only; a link under the pointer grows to show its name. */
+html[data-ta-sidenav='condensed'] .ta-topbar {
+  z-index: 1005;
+  margin-left: var(--ta-sidebar-width-sm);
+}
+
+/* Fixed to the window like the whole menu: Hyper hung it on the page, which then had to be 2000 px tall. */
+html[data-ta-sidenav='condensed'] .ta-sidebar {
+  width: var(--ta-sidebar-width-sm);
+  min-width: var(--ta-sidebar-width-sm);
+}
+
+/*
+ * With a mouse a link grows to show its name, and a scroller cuts what grows out of it: there this one is as wide as a
+ * grown link, so a name is never cut, and a menu taller than the window still scrolls (the wheel on the icons, or the
+ * keyboard). Only the links take the pointer; past them it reaches the page underneath. A touch screen grows no link:
+ * its scroller stays as narrow as the menu and takes the finger like any list, as a box that ignores the pointer may
+ * not scroll under a finger in iOS.
+ */
+@media (hover: hover) {
+  html[data-ta-sidenav='condensed'] .ta-sidebar-scroll {
+    width: var(--ta-sidebar-width);
+    pointer-events: none;
+  }
+
+  html[data-ta-sidenav='condensed'] .ta-nav {
+    width: var(--ta-sidebar-width-sm);
+    pointer-events: auto;
+  }
+}
+
+html[data-ta-sidenav='condensed'] .ta-sidebar-logo {
+  z-index: 1;
+  background: var(--ta-menu-bg);
+}
+
+html[data-ta-sidenav='condensed'] .ta-sidebar-logo .ta-logo-lg {
+  display: none;
+}
+
+html[data-ta-sidenav='condensed'] .ta-sidebar-logo .ta-logo-sm {
+  display: block;
+}
+
+html[data-ta-sidenav='condensed'] .ta-nav-title {
+  display: none;
+}
+
+html[data-ta-sidenav='condensed'] .ta-nav-item {
+  position: relative;
+}
+
+html[data-ta-sidenav='condensed'] .ta-nav-link {
+  transition: none;
+}
+
+html[data-ta-sidenav='condensed'] .ta-nav-link span {
+  visibility: hidden;
+}
+
+html[data-ta-sidenav='condensed'] .ta-nav-link i {
+  width: calc(var(--ta-sidebar-width-sm) - var(--ta-menu-item-padding-x) * 2);
+  min-width: calc(var(--ta-sidebar-width-sm) - var(--ta-menu-item-padding-x) * 2);
+}
+
+/* Under the pointer a link grows to show its name on the accent; the focus ring on it takes the text's color. */
+@media (hover: hover) {
+  html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link {
+    --ta-focus-ring: var(--ta-menu-condensed-link-color);
+    position: relative;
+    width: var(--ta-sidebar-width);
+    background: var(--ta-menu-condensed-link-bg);
+    color: var(--ta-menu-condensed-link-color);
+  }
+
+  html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span {
+    visibility: visible;
+  }
+
+  html[data-ta-sidenav='condensed'] .ta-nav-item:hover .ta-nav-link span:not(.badge) {
+    margin-left: var(--ta-menu-item-padding-x);
+  }
+}
+
+html[data-ta-sidenav='condensed'] .ta-content-page {
+  margin-left: var(--ta-sidebar-width-sm);
+}
+
+/* Phones: the menu is hidden and slides over the page. */
+html[data-ta-sidenav='full'] .ta-topbar {
+  margin-left: 0;
+}
+
+html[data-ta-sidenav='full'] .ta-topbar .ta-topbar-logo {
+  display: inline-block;
+}
+
+html[data-ta-sidenav='full'] .ta-sidebar-close {
+  display: block;
+}
+
+/* Hidden, its links are out of the keyboard's way too (they used to be focusable while invisible). */
+html[data-ta-sidenav='full'] .ta-sidebar {
+  margin-left: calc(var(--ta-sidebar-width) * -1);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s ease-in-out;
+}
+
+html[data-ta-sidenav='full'] .ta-sidebar-logo {
+  text-align: left;
+}
+
+html[data-ta-sidenav='full'] .ta-content-page {
+  margin-left: 0;
+}
+
+html[data-ta-sidenav='full'].ta-sidebar-open .ta-sidebar {
+  z-index: 1055;
+  margin-left: 0;
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 767.98px) {
+  .ta-topbar {
+    padding: 0 0.75rem;
+  }
+
+  .ta-topbar-logo {
+    display: block;
+  }
+
+  .ta-topbar-logo .ta-logo-lg {
+    display: none;
+  }
+
+  .ta-topbar-logo .ta-logo-sm {
+    display: block;
+  }
+
+  /*
+   * Someone with several businesses must see which one they are in. The logo gives its room to the switcher (Inicio
+   * is in the tab bar) and so does the store icon, so "Café La Esquina" reads whole instead of "C…".
+   */
+  .ta-topbar-logo.ta-topbar-logo-gives-way,
+  .topbar-business-icon {
+    display: none !important;
+  }
+
+  .topbar-business {
+    max-width: min(60vw, 260px);
+  }
+
+  .topbar-business-button {
+    padding-inline: 0.625rem;
+  }
+
+  /* A steady 44px touch target leaves the rest of the bar to the switcher. */
+  .ta-menu-toggle {
+    flex-shrink: 0;
+    width: 44px;
+  }
+
+  /* Bootstrap indents every list by 2rem; in the bar most of that room is the switcher's. */
+  .ta-topbar .ta-topbar-menu {
+    padding-left: 0.5rem;
+  }
+
+  .ta-page-title {
+    display: block;
+    line-height: 70px;
+  }
+
+  .ta-page-title-box .breadcrumb,
+  .ta-page-title-right {
+    display: none;
+  }
+
+  .ta-footer {
+    text-align: center;
+  }
+
+  /* Room for the tab bar under the content. */
+  .ta-content-page {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+/* The menus of the bar open across the width of a small phone. */
+@media (max-width: 575.98px) {
+  .ta-topbar .ta-topbar-menu {
+    position: initial;
+  }
+
+  .ta-topbar .dropdown {
+    position: static;
+  }
+
+  .ta-topbar .dropdown .dropdown-menu {
+    left: 10px !important;
+    right: 10px !important;
+  }
+}
+
+@media (max-width: 375px) {
+  .ta-topbar-logo {
+    display: none !important;
+  }
+}
+
+/* Bottom tab bar on phones, with Vender in the middle. */
+.bottom-tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1005;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--ct-border-color);
+  background: var(--ta-surface);
+  box-shadow: 0 -4px 16px rgba(var(--ta-shadow-rgb), 0.08);
+}
+
+.bottom-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-height: 56px;
+  border: 0;
+  border-radius: var(--ta-radius-sm);
+  background: transparent;
+  color: var(--ct-secondary-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.bottom-tab i {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.bottom-tab.active {
+  color: var(--ct-primary);
+}
+
+.bottom-tab-primary {
+  flex: 1.2;
+}
+
+.bottom-tab-primary i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin-top: -18px;
+  border-radius: 50%;
+  background: var(--ct-primary);
+  color: var(--ta-on-accent);
+  box-shadow: 0 6px 14px rgba(var(--ct-primary-rgb), 0.4);
+}
+
+/*
+ * The keyboard's focus ring (theme.css) goes just inside these, where around them it would be cut: the links of the
+ * side menu fill a box that scrolls, the buttons of the top bar are as tall as the bar at the top of the window, and
+ * the tabs of the tab bar sit side by side out to the edges of the screen. Inside, the ring sits on the bar or the
+ * menu, or on the tint of the current page's link, where the accent passes 3:1 too; on a condensed link grown on the
+ * accent it takes the text's color.
+ */
+.ta-sidebar,
+.ta-topbar .ta-topbar-menu .nav-link,
+.bottom-tab-bar {
+  --ta-focus-ring-offset: calc(var(--ta-focus-ring-width) * -1);
+}
+
+/* Focus mode (Vender and Cocina alone, full screen): no menu, a slim bar, 44 px touch targets. */
+.focus-shell {
+  /* The sticky ticket of Vender sits under this bar instead of the top bar. */
+  --ta-topbar-height: 60px;
+  min-height: 100vh;
+  background: var(--ct-body-bg);
+  color: var(--ct-body-color);
+}
+
+.focus-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: var(--ta-topbar-height);
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--ct-border-color);
+  background: var(--ct-secondary-bg);
+}
+
+.focus-bar-title {
+  font-size: 1.15rem;
+}
+
+.focus-bar-clock {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.focus-content {
+  padding: 1rem;
+}
+
+/* The bar above says where you are. */
+.focus-shell .ta-page-title-box {
+  display: none;
+}
+
+.focus-shell .btn,
+.focus-shell .btn-sm,
+.focus-shell .form-control,
+.focus-shell .form-select {
+  min-height: var(--ta-touch);
+}
+
+.focus-shell .btn-sm {
+  padding-inline: 0.9rem;
+}
+
+/* Without the tab bar the phone ticket goes back to the bottom edge. */
+.focus-shell .sell-phone-bar {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+}
+
+/* Kitchen boards are read from a distance. */
+.focus-shell[data-area='kitchen'] .focus-content {
+  font-size: 1.1rem;
+}
+
+.focus-shell[data-area='kitchen'] .btn {
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+
+/* On paper only the page: no bars, menu or footer. */
+@media print {
+  .ta-topbar,
+  .ta-sidebar,
+  .ta-footer,
+  .ta-page-title-box {
+    display: none;
+  }
+
+  .ta-content,
+  .ta-content-page {
+    margin: 0;
+    padding: 0;
+  }
+}

@@ -75,7 +75,16 @@ public class DailyCashCutDto
     public decimal CardTotal { get; set; }
     public decimal TransferTotal { get; set; }
     public decimal WalletTotal { get; set; }
+    /// <summary>Every method without a bucket of its own: the buckets always add up to <see cref="SalesPaymentsTotal"/>.</summary>
     public decimal OtherTotal { get; set; }
+    /// <summary>
+    /// What the delivery platforms charged in their apps («Plataforma» payments): part of what was charged, but in no
+    /// drawer and in no cashier's row. The platform deposits it later, minus its commission and withholdings.
+    /// </summary>
+    public decimal PlatformTotal { get; set; }
+    public int PlatformPaymentsCount { get; set; }
+    /// <summary>What went back as «Plataforma» in the day (orders a platform charged and then cancelled): no drawer gave it.</summary>
+    public decimal PlatformRefundsTotal { get; set; }
     /// <summary>Tips given with the payments (not sales), and the part of them paid in cash (in the drawer).</summary>
     public decimal TipsTotal { get; set; }
     public decimal CashTipsTotal { get; set; }
@@ -85,10 +94,14 @@ public class DailyCashCutDto
     /// <summary>The part of those movements made in cash: only it enters or leaves the drawers.</summary>
     public decimal CashManualIncomeTotal { get; set; }
     public decimal CashManualExpenseTotal { get; set; }
-    /// <summary>All the money of the day: payments and tips plus manual income minus manual expenses, of any method.</summary>
+    /// <summary>
+    /// All the money the business received in the day: payments and tips plus manual income minus manual expenses, of any
+    /// method, except what the platforms charged (<see cref="PlatformTotal"/>).
+    /// </summary>
     public decimal NetCashFlow { get; set; }
     /// <summary>Cash payments and cash tips plus cash manual income minus cash manual expenses: the net change of the drawers.</summary>
     public decimal NetCashOnlyFlow { get; set; }
+    /// <summary>Payments by the person who took them, without what the platforms charged.</summary>
     public List<DailyCashCutByUserDto> ByUser { get; set; } = [];
     public List<DailyCashCutByLocationDto> ByLocation { get; set; } = [];
     /// <summary>Payments by the branch where the sale was made.</summary>

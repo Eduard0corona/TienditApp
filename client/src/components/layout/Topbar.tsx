@@ -14,7 +14,7 @@ import AttentionBell from './AttentionBell';
 import BusinessSwitcher from './BusinessSwitcher';
 import CashStatusChip from './CashStatusChip';
 import CreateBusinessModal from '../business/CreateBusinessModal';
-import { applyTheme, storeTheme } from '../../utils/theme';
+import ThemeToggle from './ThemeToggle';
 
 const AUTO_SWITCH_MARKER_KEY = 'fpd_auto_tenant_switch';
 const AVATAR_PLACEHOLDER = '/images/placeholders/avatar.svg';
@@ -145,32 +145,18 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
     }
   };
 
-  const handleDarkModeToggle = useCallback(() => {
-    const next = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
-    applyTheme(next);
-    storeTheme(next);
-  }, []);
-
   return (
-    <div className="navbar-custom">
-      <div className="topbar container-fluid">
-        <div className="topbar-start d-flex align-items-center gap-lg-2 gap-1">
-          {/* Topbar Brand Logo. On phones it gives its room to the business switcher, so the business reads whole. */}
-          <div className={`logo-topbar ${availableTenants.length > 1 ? 'logo-topbar-gives-way' : ''}`}>
-            <Link to="/" className="logo-light">
-              <span className="logo-lg">
-                {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="light" />}
+    <div className="ta-topbar">
+      <div className="ta-topbar-row container-fluid">
+        <div className="ta-topbar-start d-flex align-items-center gap-lg-2 gap-1">
+          {/* Only on phones, where the menu is hidden. It gives its room to the business switcher, so the business reads whole. */}
+          <div className={`ta-topbar-logo ${availableTenants.length > 1 ? 'ta-topbar-logo-gives-way' : ''}`}>
+            <Link to="/">
+              <span className="ta-logo-lg">
+                {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo />}
               </span>
-              <span className="logo-sm">
-                {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" tone="light" />}
-              </span>
-            </Link>
-            <Link to="/" className="logo-dark">
-              <span className="logo-lg">
-                {tenantLogoLg ? <img src={tenantLogoLg} alt={tenantLogoAlt} /> : <BrandLogo tone="dark" />}
-              </span>
-              <span className="logo-sm">
-                {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" tone="dark" />}
+              <span className="ta-logo-sm">
+                {tenantLogoSm ? <img src={tenantLogoSm} alt={tenantLogoAlt} /> : <BrandLogo variant="icon" />}
               </span>
             </Link>
           </div>
@@ -178,7 +164,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
           {/* Sidebar Menu Toggle Button */}
           <button
             type="button"
-            className="button-toggle-menu"
+            className="ta-menu-toggle"
             onClick={onToggleSidebar}
             aria-label="Mostrar u ocultar el menú"
             aria-expanded={isMobileMenuOpen}
@@ -206,7 +192,7 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
           )}
         </div>
 
-        <ul className="topbar-menu d-flex align-items-center gap-2 gap-md-3">
+        <ul className="ta-topbar-menu d-flex align-items-center gap-2 gap-md-3">
           {/* Global search (Ctrl K) */}
           <li>
             <button type="button" className="topbar-search-button" onClick={onOpenSearch} aria-label="Buscar (Ctrl K)">
@@ -241,28 +227,19 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
 
           {/* Dark/Light mode toggle */}
           <li className="d-none d-sm-inline-block">
-            <button
-              type="button"
-              className="nav-link border-0 bg-transparent"
-              id="light-dark-mode"
-              onClick={handleDarkModeToggle}
-              aria-label="Cambiar entre modo claro y oscuro"
-              title="Modo claro u oscuro"
-            >
-              <i className="ri-moon-line font-22" aria-hidden="true"></i>
-            </button>
+            <ThemeToggle />
           </li>
 
           {/* User Dropdown */}
           <li className="dropdown">
             <button
               type="button"
-              className="nav-link dropdown-toggle arrow-none nav-user px-1 px-md-2 border-0 bg-transparent"
+              className="nav-link dropdown-toggle ta-user-button px-1 px-md-2 border-0 bg-transparent"
               data-bs-toggle="dropdown"
               aria-expanded="false"
               aria-label="Menú de tu cuenta"
             >
-              <span className="account-user-avatar">
+              <span>
                 <img
                   src={user?.avatarImages?.thumbnail || AVATAR_PLACEHOLDER}
                   alt=""
@@ -270,17 +247,18 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
                   className="rounded-circle"
                 />
               </span>
+              {/* A button holds text, not headings: the name and role only look like an h5 and an h6. */}
               <span className="d-lg-flex flex-column gap-1 d-none">
-                <h5 className="my-0">
+                <span className="h5 my-0">
                   {user ? `${user.firstName} ${user.lastName}` : 'Usuario'}
-                </h5>
-                <h6 className="my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</h6>
+                </span>
+                <span className="h6 my-0 fw-normal">{getUserRoleLabel(user?.role, user?.tenantRole)}</span>
               </span>
             </button>
-            <div className="dropdown-menu dropdown-menu-end dropdown-menu-animated profile-dropdown">
+            <div className="dropdown-menu dropdown-menu-end ta-user-menu">
               {/* Welcome header */}
-              <div className="dropdown-header noti-title">
-                <h6 className="text-overflow m-0">¡Hola{user?.firstName ? `, ${user.firstName}` : ''}!</h6>
+              <div className="dropdown-header">
+                <h6 className="m-0">¡Hola{user?.firstName ? `, ${user.firstName}` : ''}!</h6>
               </div>
 
               <Link to="/profile" className="dropdown-item">

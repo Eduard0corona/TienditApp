@@ -13,8 +13,8 @@ interface AuthCardProps {
 /** The frame of the screens before signing in: brand, title and one card. */
 export default function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
   return (
-    <div className="authentication-bg position-relative" style={{ minHeight: '100vh' }}>
-      <div className="account-pages pt-2 pt-sm-5 pb-4 pb-sm-5 position-relative">
+    <div className="position-relative" style={{ minHeight: '100vh' }}>
+      <div className="pt-2 pt-sm-5 pb-4 pb-sm-5 position-relative">
         <div className="container">
           <div className="row justify-content-center">
             <div className="col-xxl-4 col-lg-5">

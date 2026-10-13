@@ -159,4 +159,47 @@ describe('OpeningHoursCard', () => {
     expect(refreshTenant).toHaveBeenCalled();
     expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('Horario quitado'));
   });
+
+  it('says that table orders still arrive outside the hours but not on the special days it closes', () => {
+    withTenant(split);
+    render(<OpeningHoursCard />);
+
+    expect(screen.getByText(
+      'Fuera de tu horario el menú se puede ver, pero no recibe pedidos para recoger o a domicilio; los pedidos desde el '
+      + 'QR de una mesa sí llegan fuera de horario, porque el cliente ya está en tu negocio, pero no en los días especiales '
+      + 'que cierras.',
+    )).toBeInTheDocument();
+  });
+
+  it('tells the special days the hours changed after saving them', async () => {
+    const refreshTenant = withTenant(split);
+    const onSaved = vi.fn();
+    vi.mocked(apiRequest).mockResolvedValue({ intervals: [] } as never);
+    render(<OpeningHoursCard onSaved={onSaved} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar el segundo horario del lunes' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar horario' }));
+
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    // After the business is read again: the special days ask the API for suggestions of the new hours.
+    expect(refreshTenant.mock.invocationCallOrder[0]).toBeLessThan(onSaved.mock.invocationCallOrder[0]);
+  });
+
+  it('says what is left when removing the hours of a business with special days ahead', async () => {
+    withTenant(split);
+    confirm.mockResolvedValue(false);
+    const { rerender } = render(<OpeningHoursCard />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar horario' }));
+    expect(confirm).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: 'Tu menú en línea dejará de mostrar tu horario y ya no aparecerá como cerrado.',
+    }));
+
+    rerender(<OpeningHoursCard upcomingSpecialDays={2} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar horario' }));
+    expect(confirm).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: 'Tu menú en línea dejará de mostrar tu horario de la semana y solo se verá cerrado en tus días especiales.',
+    }));
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
 });

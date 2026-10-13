@@ -1,5 +1,5 @@
 /*
- * Fixes on top of the Hyper theme (app.min.css). Loaded after it.
+ * Fixes on top of Bootstrap (assets/scss), the theme and the frame. Loaded after them.
  */
 
 /* Hyper paints disabled "soft" buttons with the same color for text and background, so a disabled
@@ -53,17 +53,8 @@
   color: #6fe0b0;
 }
 
-/* Hyper drew these with the Material Design Icons font, which the app no longer loads (one icon set: Remix). */
+/* Hyper drew it with the Material Design Icons font, which the app no longer loads (one icon set: Remix). */
 .breadcrumb-item + .breadcrumb-item::before {
   font-family: 'remixicon';
   content: '\ea6e'; /* ri-arrow-right-s-line */
-}
-
-.password-eye::before {
-  font-family: 'remixicon';
-  content: '\ecb5'; /* ri-eye-line */
-}
-
-.show-password .password-eye::before {
-  content: '\ecb7'; /* ri-eye-off-line */
 }

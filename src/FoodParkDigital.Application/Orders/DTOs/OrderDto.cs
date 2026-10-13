@@ -22,6 +22,10 @@ public class OrderDto
     /// <summary>True when item prices include IVA; false when IVA was added on top.</summary>
     public bool PricesIncludeTax { get; set; }
     public OrderChannel Channel { get; set; }
+    /// <summary>An order of Rappi, Uber Eats or DiDi Food: the folio of the app and who charged it. Null for any other channel.</summary>
+    public OrderPlatformDto? PlatformOrder { get; set; }
+    /// <summary>Where the order goes and what its delivery charged (Fase 22C); null for an order picked up or served.</summary>
+    public OrderDeliveryDto? Delivery { get; set; }
     /// <summary>Branch where the sale was made.</summary>
     public Guid? BranchId { get; set; }
     /// <summary>When the device captured it without connection; the sale reached the server later.</summary>
@@ -65,6 +69,38 @@ public class OrderDto
     /// when the business sells and warns instead of refusing.
     /// </summary>
     public List<string> StockWarnings { get; set; } = new();
+}
+
+/// <summary>
+/// What the team sees of an order of a delivery platform. Never its commission, withholdings or expected settlement:
+/// those figures are in the reports, for whoever may see them.
+/// </summary>
+public class OrderPlatformDto
+{
+    /// <summary>The folio the platform's app shows for the order.</summary>
+    public string ExternalOrderNumber { get; set; } = null!;
+    /// <summary>The platform, in its app, or the business, when the courier pays on pickup.</summary>
+    public PlatformCollectedBy CollectedBy { get; set; }
+}
+
+/// <summary>
+/// Where an order goes (Fase 22C): the customer's address, the zone that reached it, what the delivery charged (with the
+/// order's tax policy, at <see cref="FeeTaxRate"/>) and the courier's trip the business wrote down.
+/// </summary>
+public class OrderDeliveryDto
+{
+    public string PostalCode { get; set; } = null!;
+    public string AddressLine { get; set; } = null!;
+    public string? References { get; set; }
+    public string ZoneName { get; set; } = null!;
+    /// <summary>0 when the delivery was free.</summary>
+    public decimal Fee { get; set; }
+    public decimal FeeTaxRate { get; set; }
+    public DeliveryCourier? Courier { get; set; }
+    public string? CourierFolio { get; set; }
+    public string? TrackingUrl { get; set; }
+    public DateTimeOffset? ShipmentRegisteredAt { get; set; }
+    public string? ShipmentRegisteredBy { get; set; }
 }
 
 public class KitchenTicketSummaryDto
@@ -240,6 +276,12 @@ public class KitchenOrderDto
 {
     public Guid Id { get; set; }
     public string OrderNumber { get; set; } = null!;
+    /// <summary>Where the order came from: the kitchen packs an order of a delivery platform for its courier.</summary>
+    public OrderChannel Channel { get; set; }
+    /// <summary>The folio of the delivery platform's app, written on the bag; null for any other channel.</summary>
+    public string? ExternalOrderNumber { get; set; }
+    /// <summary>The order goes to the customer's address (Fase 22C): the kitchen packs it to go. Never the address.</summary>
+    public bool IsDelivery { get; set; }
     public OrderStatus Status { get; set; }
     public string CustomerName { get; set; } = null!;
     public string? TableNumber { get; set; }
@@ -262,6 +304,11 @@ public class DashboardMetricsDto
     public int ActiveServices { get; set; }
     /// <summary>Payments registered in the range, whatever the status of their orders.</summary>
     public decimal TotalRevenue { get; set; }
+    /// <summary>
+    /// The part of <see cref="TotalRevenue"/> the delivery platforms charged in their apps, minus what went back as
+    /// «Plataforma»: still to be settled with each platform.
+    /// </summary>
+    public decimal PlatformCollected { get; set; }
     /// <summary>Revenue divided by the orders that received those payments.</summary>
     public decimal AverageOrderValue { get; set; }
     public int PaidOrders { get; set; }

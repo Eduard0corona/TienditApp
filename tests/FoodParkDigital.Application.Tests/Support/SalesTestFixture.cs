@@ -8,6 +8,8 @@ using FoodParkDigital.Domain.Catalog.Enums;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
+using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Domain.WhatsApp.Entities;
@@ -42,14 +44,49 @@ internal sealed class SalesTestFixture : IAsyncDisposable
     public SalesCurrentUser CurrentUser { get; } = new();
     public SalesClock Clock { get; } = new();
 
-    public static SalesTestFixture Create()
+    /// <param name="mediator">Hears the events of what is saved (none by default).</param>
+    public static SalesTestFixture Create(IMediator? mediator = null)
     {
         var tenantService = new SalesTenantService();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new SalesTestFixture(new SalesDbContext(options, tenantService), tenantService);
+        return new SalesTestFixture(new SalesDbContext(options, tenantService, mediator), tenantService);
     }
+
+    /// <summary>
+    /// A delivery platform of the tenant in scope, with the fiscal defaults (IVA 16 % on the commission, ISR 2.5 % and
+    /// half the IVA withheld) and the commission of its contract.
+    /// </summary>
+    public async Task<DeliveryPlatformSetting> AddDeliveryPlatformAsync(
+        Tenant tenant,
+        OrderChannel channel,
+        decimal commissionPercent = 30m,
+        bool isActive = true,
+        PlatformCommissionBase commissionBase = PlatformCommissionBase.TotalWithTax)
+    {
+        var setting = new DeliveryPlatformSetting(
+            tenant.Id, channel, isActive, PlatformTerms.WithFiscalDefaults(commissionPercent, commissionBase));
+        Context.DeliveryPlatformSettings.Add(setting);
+        await Context.SaveChangesAsync();
+        return setting;
+    }
+
+    /// <summary>An order of a delivery platform as Vender sends it: its folio, who charged it and the name for the bag.</summary>
+    public static CreateOrderCommand PlatformOrder(
+        OrderChannel channel,
+        string folio,
+        Guid productId,
+        decimal quantity = 1,
+        PlatformCollectedBy? collectedBy = null,
+        string? bagName = null) => new()
+    {
+        Channel = channel,
+        ExternalOrderNumber = folio,
+        CollectedBy = collectedBy,
+        CustomerName = bagName,
+        Items = [new CreateOrderItemDto { ProductId = productId, Quantity = quantity }]
+    };
 
     public async Task<Tenant> AddTenantAsync(
         BusinessType businessType,
@@ -143,8 +180,8 @@ internal sealed class SalesTestFixture : IAsyncDisposable
 
 internal sealed class SalesDbContext : ApplicationDbContext
 {
-    public SalesDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentTenantService tenantService)
-        : base(options, tenantService, new SalesNullMediator())
+    public SalesDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentTenantService tenantService, IMediator? mediator = null)
+        : base(options, tenantService, mediator ?? new SalesNullMediator())
     {
     }
 

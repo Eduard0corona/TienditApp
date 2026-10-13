@@ -207,7 +207,8 @@ export function buildData() {
     id: uuid(`loc:${key}`), name, code, description: extra.description,
     addressLine1: extra.address, addressLine2: extra.address2, city: 'Ciudad de México', state: 'Ciudad de México',
     country: 'México', postalCode: extra.postalCode, contactName: extra.contactName, contactPhone: extra.contactPhone,
-    isDefault: !!extra.isDefault, isActive: extra.isActive ?? true, createdAt: extra.createdAt ?? '2026-02-12T16:30:00.000Z',
+    isDefault: !!extra.isDefault, isActive: extra.isActive ?? true, serviceMode: extra.serviceMode ?? 0,
+    createdAt: extra.createdAt ?? '2026-02-12T16:30:00.000Z',
   });
   const locations = [
     loc('roma', 'Sucursal Roma Norte', 'ROMA', { description: 'Sucursal principal y cocina', address: 'Av. Álvaro Obregón 182, Local 3', address2: 'Col. Roma Norte', postalCode: '06700', contactName: 'Mariana Ortiz', contactPhone: '55 5264 1180', isDefault: true }),
@@ -448,7 +449,10 @@ export function buildData() {
     // Same rule as GetKitchenOrdersQuery: food orders only (OrderType.Retail), before Ready.
     .filter((o) => o.businessType === 0 && o.orderType === 0 && [0, 1, 4, 2, 5].includes(o.status))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .map((o) => ({ id: o.id, orderNumber: o.orderNumber, status: o.status, customerName: o.customerName, tableNumber: o.tableNumber, customerNotes: o.customerNotes, createdAt: o.createdAt, items: o.items }));
+    .map((o) => ({
+      id: o.id, orderNumber: o.orderNumber, channel: o.channel ?? 0, externalOrderNumber: null, status: o.status,
+      customerName: o.customerName, tableNumber: o.tableNumber, customerNotes: o.customerNotes, createdAt: o.createdAt, items: o.items,
+    }));
 
   const nowMs = new Date(NOW_ISO).getTime();
   const boardPieces = [];
@@ -855,10 +859,55 @@ export function buildData() {
     ],
   };
 
+  // ---------------------------------------------------------------- special days (SpecialDaysDto, today 2026-10-04)
+  // Kind as the contract numbers it: 0 closed, 1 other hours. The suggestions are the holidays of the next 90 days that
+  // are not special days yet; Fin de año closes at 18:00 from the Thursday hours of the business profile (7:00 to 21:00).
+  const specialDay = (key, from, to, kind, openings, reason, revision = 1) => ({
+    id: uuid(`special:${key}`), from, to, kind, openings, reason, revision, inProgress: false,
+  });
+  const specialDays = {
+    today: '2026-10-04',
+    hasWeeklyHours: true,
+    upcoming: [
+      specialDay('revolucion', '2026-11-16', '2026-11-16', 0, [], 'Día de la Revolución'),
+      specialDay('nochebuena', '2026-12-24', '2026-12-24', 1, [{ opens: '09:00', closes: '18:00' }], 'Nochebuena'),
+      specialDay('navidad', '2026-12-25', '2026-12-25', 0, [], 'Navidad', 2),
+    ],
+    past: [specialDay('independencia', '2026-09-16', '2026-09-16', 0, [], 'Día de la Independencia')],
+    suggestions: [
+      { date: '2026-11-02', name: 'Día de Muertos', statutory: false, kind: 0, openings: [] },
+      { date: '2026-12-12', name: 'Día de la Virgen de Guadalupe', statutory: false, kind: 0, openings: [] },
+      { date: '2026-12-31', name: 'Fin de año', statutory: false, kind: 1, openings: [{ opens: '07:00', closes: '18:00' }] },
+      { date: '2027-01-01', name: 'Año Nuevo', statutory: true, kind: 0, openings: [] },
+    ],
+    upcomingDates: 3,
+    maxUpcomingDates: 120,
+    maxDaysPerPeriod: 92,
+    maxDaysAhead: 366,
+    maxReasonLength: 40,
+  };
+
+  // The prices set in the app of each delivery platform, by channel: `{ products: { [productId]: price }, options:
+  // { [optionId]: delta } }`. The demo set none: its orders of a platform would charge the menu's.
+  const platformPrices = {};
+
   return {
     setup, tenant, profile, myTenants, categories, products, customers: customerList, locations, orders, dashboard, kitchenOrders,
     boardPieces, cashSession, cashTx, dailyCut, supplies, stockRows, movements, kardex, alerts, recipes, suppliers,
     purchaseOrders, appointments, employees, permissionOptions, auditLogs, aiAgents, whatsAppConfig, conversations,
-    messagesByConversation, report, categoryTemplates, USER_ID, TENANT_ID, OWNER_EMAIL,
+    messagesByConversation, report, categoryTemplates, specialDays, platformPrices, USER_ID, TENANT_ID, OWNER_EMAIL,
+  };
+}
+
+/**
+ * What the demo business charges in the Rappi app (Catálogo › Precios en apps), for the scenes that show it: more than
+ * in its menu for the americano ($35 there), the croissant ($38) and the latte ($55), and for a large one (+$12) with
+ * almond milk (+$8; the latte's options are seeded with routes-p3). The rest charges the menu's.
+ */
+export function withRappiPrices(data) {
+  const product = (name) => data.products.find((candidate) => candidate.name === name).id;
+  data.platformPrices[3] = {
+    products: { [product('Café americano')]: 42, [product('Croissant de mantequilla')]: 45, [product('Latte')]: 66 },
+    options: { 'o-gr': 15, 'o-alm': 10 },
   };
 }

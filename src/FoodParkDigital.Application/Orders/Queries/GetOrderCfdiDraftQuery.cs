@@ -6,6 +6,8 @@ using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Orders.DTOs;
 using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Fiscal;
+using FoodParkDigital.Domain.Orders;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -61,6 +63,11 @@ public class GetOrderCfdiDraftQueryValidator : AbstractValidator<GetOrderCfdiDra
 
 public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQuery, Result<CfdiDraftDto>>
 {
+    public const string DeliveryFeeDescription = "Envío a domicilio";
+    public const string DeliveryFeeWarning =
+        "El envío a domicilio va como concepto propio con la clave 78102203 (servicios de envío) y la unidad E48: "
+        + "confirma con tu contador que es la clave que te corresponde.";
+
     private readonly IApplicationDbContext _context;
 
     public GetOrderCfdiDraftQueryHandler(IApplicationDbContext context)
@@ -89,11 +96,16 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .FirstOrDefaultAsync(t => t.Id == order.TenantId, cancellationToken)
             ?? throw new EntityNotFoundException("Tenant", order.TenantId);
 
-        // What the sale charged: dishes cancelled from a tab are not invoiced.
+        // What the sale charged: dishes cancelled from a tab are not invoiced. The delivery fee is one more concept, with
+        // the rate it was charged with.
         var items = order.Items.Where(item => item.ActiveQuantity > 0).ToList();
-        var amounts = CfdiAmountCalculator.Calculate(
-            order.PricesIncludeTax,
-            items.Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject)).ToList());
+        var lines = items
+            .Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject))
+            .ToList();
+        var deliveryFee = order.Delivery is { Fee: > 0 } delivery ? delivery : null;
+        if (deliveryFee is not null)
+            lines.Add(new CfdiLineInput(deliveryFee.Id, 1m, deliveryFee.Fee, deliveryFee.FeeVatRate, CfdiTaxObject.Subject));
+        var amounts = CfdiAmountCalculator.Calculate(order.PricesIncludeTax, lines);
         var amountsByLine = amounts.Concepts.ToDictionary(concept => concept.LineId);
 
         var draft = new CfdiDraftDto
@@ -124,10 +136,30 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             }).ToList(),
             Transfers = amounts.Transfers.Select(ToDto).ToList()
         };
+        if (deliveryFee is not null)
+        {
+            var concept = amountsByLine[deliveryFee.Id];
+            draft.Concepts.Add(new CfdiConceptDto
+            {
+                OrderItemId = deliveryFee.Id,
+                IsDeliveryFee = true,
+                ProductCode = SatCatalog.DeliveryFeeProductCode,
+                UnitCode = SatCatalog.ServiceUnitCode,
+                Description = DeliveryFeeDescription,
+                Quantity = concept.Quantity,
+                UnitValue = concept.UnitValue,
+                Amount = concept.Amount,
+                TaxObject = SatCatalog.Code(concept.TaxObject),
+                Transfer = concept.Transfer is null ? null : ToDto(concept.Transfer)
+            });
+            draft.Warnings.Add(DeliveryFeeWarning);
+        }
 
         SetIssuer(draft, tenant.Rfc, tenant.LegalName, tenant.TaxRegime, tenant.Address?.ZipCode);
         SetReceiver(draft, request.Receiver);
         SetPayment(draft, order.Balance, order.Payments.Select(payment => (payment.Method, payment.Amount)).ToList());
+        if (order.IsDeliveryPlatformOrder)
+            AddDeliveryPlatformWarnings(draft, order, hasReceiver: request.Receiver is not null);
 
         if (draft.Difference != 0)
         {
@@ -223,6 +255,30 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .First();
         draft.PaymentMethod = "PUE";
         draft.PaymentForm = SatCatalog.PaymentForm(main.Method);
+    }
+
+    /// <summary>
+    /// An order of Rappi, Uber Eats or DiDi Food. When the platform charged it, the invoice declares form 31
+    /// (intermediary of payments) and the platform withholds ISR and IVA from the sale; either way such orders usually
+    /// go in the global invoice of the period. The platform shares no customer data, so an invoice to a named customer
+    /// only makes sense when they gave theirs. To be confirmed with the accountant: the CFDI of withholdings is the
+    /// platform's, not part of this draft.
+    /// </summary>
+    private static void AddDeliveryPlatformWarnings(CfdiDraftDto draft, Order order, bool hasReceiver)
+    {
+        var platform = OrderChannelRules.DisplayName(order.Channel);
+        draft.Warnings.Add(order.Payments.Any(payment => payment.Method == OrderPaymentMethod.Platform)
+            ? $"{platform} cobró este pedido en su app: la factura lleva la forma de pago 31 (intermediario de pagos) y "
+              + $"normalmente va en la factura global del periodo. {platform} te retiene ISR e IVA de la venta; confirma con "
+              + "tu contador cómo facturar los pedidos de plataformas."
+            : $"Pedido de {platform} que cobra el negocio: normalmente va en la factura global del periodo. Confirma con tu "
+              + "contador cómo facturar los pedidos de plataformas.");
+        if (hasReceiver)
+        {
+            draft.Warnings.Add(
+                $"{platform} no comparte los datos de sus clientes: factura este pedido a nombre de alguien solo si te dio "
+                + "sus datos fiscales, y déjalo fuera de la factura global.");
+        }
     }
 
     private static CfdiTransferDto ToDto(CfdiTransfer transfer) => new()

@@ -50,7 +50,7 @@ describe('SupplyModal', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Crear insumo' }));
 
-    expect(within(screen.getByRole('dialog')).getByRole('alert')).toHaveTextContent('El nombre del insumo es obligatorio.');
+    expect(within(screen.getByRole('dialog', { name: 'Nuevo insumo' })).getByRole('alert')).toHaveTextContent('El nombre del insumo es obligatorio.');
     expect(api.createSupply).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
   });

@@ -11,6 +11,7 @@ import type {
   OrderType,
   PaginatedList,
   RefundOrderRequest,
+  RegisterCourierShipmentRequest,
   UploadedFileDto,
   VoidOrderRequest,
 } from '../types';
@@ -39,8 +40,13 @@ export const ordersApi = {
   updateStatus: (id: string, newStatus: OrderStatus) =>
     api.put(`/orders/${id}/status`, { newStatus }),
 
-  cancel: (id: string, reason?: string) =>
-    api.put(`/orders/${id}/cancel`, { reason }),
+  /** Writes down (or corrects) the courier's trip of an order sent to an address: its folio and, optionally, its link. */
+  registerCourierShipment: (id: string, request: RegisterCourierShipmentRequest) =>
+    api.put(`/orders/${id}/delivery/shipment`, request),
+
+  /** Cancels an order; what it consumed goes back to the stock unless `restockItems` is false. */
+  cancel: (id: string, reason?: string, restockItems?: boolean) =>
+    api.put(`/orders/${id}/cancel`, { reason, restockItems }),
 
   addPayment: (id: string, data: AddOrderPaymentRequest) =>
     api.post<OrderDto>(`/orders/${id}/payments`, data),

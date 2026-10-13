@@ -1,6 +1,9 @@
-// The hours of a business (TenantSettings.OpeningHours): up to two openings a day, in its own time zone. The API
-// keeps them and decides whether it is open (PublicOpeningHoursDto); here they only become words and a form.
-import { DayOfWeek, type OpeningIntervalDto } from '../types';
+// The hours of a business (TenantSettings.OpeningHours): up to two openings a day, in its own time zone, and its special
+// days (closed, or open with other hours). The API keeps them, decides whether it is open and, since the Fase 21, writes
+// what the public menu says about it (PublicOpeningHoursDto); here they only become words and a form.
+import type { Schemas } from '../api/typedClient';
+import { DayOfWeek, SpecialDayKind, type OpeningIntervalDto } from '../types';
+import { formatLongCalendarDay, formatShortCalendarDay } from './dates';
 
 export interface TimeRange {
   opens: string;
@@ -14,15 +17,19 @@ export interface DayDraft {
   ranges: TimeRange[];
 }
 
-/** Whether the business is open now, as the public menu receives it. */
-export interface PublicOpeningHours {
-  intervals: OpeningIntervalDto[];
-  today: DayOfWeek;
-  isOpen: boolean;
-  closesAt?: string | null;
-  closesInDays?: number | null;
-  opensAt?: string | null;
-  opensInDays?: number | null;
+/**
+ * Whether the business is open now, as the public menu receives it. With `todayDate` the API also sends its words
+ * (statusLabel, statusDetail, closedNotice…); an older API sends only the times, which describeOpeningStatus words.
+ */
+export type PublicOpeningHours = Schemas['PublicOpeningHoursDto'];
+
+/** A special day as the API sends it, to the public menu or to its owner: one date, or consecutive dates with one rule. */
+export interface SpecialDayText {
+  from: string;
+  to: string;
+  kind: SpecialDayKind;
+  openings: readonly TimeRange[];
+  reason?: string | null;
 }
 
 export const MAX_RANGES_PER_DAY = 2;
@@ -65,16 +72,48 @@ export function clock(time: string): string {
   return time.replace(/^0(\d)/, '$1');
 }
 
+/** "a las 9:00", or "a la 1:30" in the one o'clock hour, as the API words it. */
+function atClock(time: string): string {
+  return `${time.startsWith('01:') ? 'a la' : 'a las'} ${clock(time)}`;
+}
+
 /** "9:00 a 20:00", "13:00 a medianoche", or "Abierto las 24 horas" when it closes at the time it opens. */
 export function describeInterval(range: TimeRange): string {
   if (range.opens === range.closes) return 'Abierto las 24 horas';
   return `${clock(range.opens)} a ${range.closes === '00:00' ? 'medianoche' : clock(range.closes)}`;
 }
 
+/** Openings of one day: "9:00 a 14:00 y 16:00 a 20:00", or "Cerrado" without any. */
+export function describeOpenings(ranges: readonly TimeRange[]): string {
+  return ranges.length === 0 ? 'Cerrado' : [...ranges].sort(byOpening).map(describeInterval).join(' y ');
+}
+
 /** The hours of one day: "9:00 a 14:00 y 16:00 a 20:00", or "Cerrado". */
 export function describeDay(intervals: readonly OpeningIntervalDto[], day: DayOfWeek): string {
-  const ranges = intervals.filter((interval) => interval.day === day).sort(byOpening);
-  return ranges.length === 0 ? 'Cerrado' : ranges.map(describeInterval).join(' y ');
+  return describeOpenings(intervals.filter((interval) => interval.day === day));
+}
+
+/** What an opening means when it is not plain: the API reads a closing at or before the opening as the next day. */
+export function rangeHint(range: TimeRange): string | null {
+  if (!range.opens || !range.closes) return null;
+  if (range.opens === range.closes) return 'Abierto las 24 horas';
+  if (range.closes === '00:00') return 'Cierra a medianoche';
+  return range.closes < range.opens ? 'Cierra al día siguiente' : null;
+}
+
+/** An opening that still runs after midnight (18:00 to 2:00); one that closes at 00:00 ends with its day. */
+export function endsAfterMidnight(range: TimeRange): boolean {
+  return range.closes !== '00:00' && range.closes <= range.opens;
+}
+
+/** The weekday of a calendar date ("2026-12-25" is a Friday). */
+export function dayOfWeekOf(date: string): DayOfWeek {
+  return new Date(`${date}T12:00:00Z`).getUTCDay() as DayOfWeek;
+}
+
+/** The weekly openings of a weekday, by opening time. */
+export function openingsOn(intervals: readonly OpeningIntervalDto[] | null | undefined, day: DayOfWeek): TimeRange[] {
+  return (intervals ?? []).filter((interval) => interval.day === day).map(({ opens, closes }) => ({ opens, closes })).sort(byOpening);
 }
 
 function byOpening(a: TimeRange, b: TimeRange): number {
@@ -88,10 +127,7 @@ function sorted(intervals: readonly OpeningIntervalDto[]): OpeningIntervalDto[] 
 
 export function toDraft(intervals?: readonly OpeningIntervalDto[] | null): DayDraft[] {
   return WEEK.map((day) => {
-    const ranges = (intervals ?? [])
-      .filter((interval) => interval.day === day)
-      .map(({ opens, closes }) => ({ opens, closes }))
-      .sort(byOpening);
+    const ranges = openingsOn(intervals, day);
     return { day, open: ranges.length > 0, ranges };
   });
 }
@@ -130,7 +166,10 @@ function onDay(today: DayOfWeek, inDays: number): string {
   return `el ${dayName(((today + inDays) % 7) as DayOfWeek)}`;
 }
 
-/** "Abierto" and "cierra a las 20:00", or "Cerrado" and "abre mañana a las 9:00" (when: "mañana a las 9:00"). */
+/**
+ * "Abierto" and "cierra a las 20:00", or "Cerrado" and "abre mañana a las 9:00" (when: "mañana a las 9:00"; "mañana a la
+ * 1:00" in the one o'clock hour).
+ */
 export interface OpeningStatusText {
   isOpen: boolean;
   label: string;
@@ -146,10 +185,42 @@ export function describeOpeningStatus(hours: PublicOpeningHours): OpeningStatusT
     // Closing at 00:00 ends the day before: "cierra a medianoche", not "mañana a las 0:00".
     const when = hours.closesAt === '00:00'
       ? `${inDays <= 1 ? '' : `${onDay(hours.today, inDays - 1)} `}a medianoche`
-      : `${inDays <= 0 ? '' : `${onDay(hours.today, inDays)} `}a las ${clock(hours.closesAt)}`;
+      : `${inDays <= 0 ? '' : `${onDay(hours.today, inDays)} `}${atClock(hours.closesAt)}`;
     return { isOpen: true, label: 'Abierto', detail: `cierra ${when}`, when };
   }
   if (!hours.opensAt) return { isOpen: false, label: 'Cerrado', detail: null, when: null };
-  const when = `${onDay(hours.today, hours.opensInDays ?? 0)} a las ${clock(hours.opensAt)}`;
+  const when = `${onDay(hours.today, hours.opensInDays ?? 0)} ${atClock(hours.opensAt)}`;
   return { isOpen: false, label: 'Cerrado', detail: `abre ${when}`, when };
+}
+
+/**
+ * Today on the public menu, after "Hoy:": "9:00 a 20:00", "Cerrado" and, on a special day, why: "Cerrado · Navidad",
+ * "9:00 a 18:00 · Nochebuena", or "9:00 a 18:00 · horario especial" without a reason.
+ */
+export function describeTodayHours(today: Schemas['PublicDayHoursDto']): string {
+  const hours = today.closed ? 'Cerrado' : describeOpenings(today.openings);
+  if (!today.special) return hours;
+  return `${hours} · ${today.reason || (today.closed ? 'día especial' : 'horario especial')}`;
+}
+
+/** The dates of a special day in a list: "Vie 25 dic", or "Lun 21 dic al lun 4 ene" for several. */
+export function specialDayDates(from: string, to: string): string {
+  if (from === to) return formatShortCalendarDay(from);
+  const last = formatShortCalendarDay(to);
+  return `${formatShortCalendarDay(from)} al ${last.charAt(0).toLowerCase()}${last.slice(1)}`;
+}
+
+/** The dates of a special day in a sentence: "viernes 25 de diciembre", "del lunes 21 de diciembre al lunes 4 de enero". */
+export function specialDayDatesInWords(from: string, to: string): string {
+  return from === to ? formatLongCalendarDay(from) : `del ${formatLongCalendarDay(from)} al ${formatLongCalendarDay(to)}`;
+}
+
+/** What a special day does: "Cerrado", or its hours ("9:00 a 18:00 y 19:00 a 22:00"). */
+export function specialDayRule(day: Pick<SpecialDayText, 'kind' | 'openings'>): string {
+  return day.kind === SpecialDayKind.Closed ? 'Cerrado' : describeOpenings(day.openings);
+}
+
+/** A special day in one line: "Jue 24 dic · 9:00 a 18:00 · Nochebuena", "Lun 21 dic al lun 4 ene · Cerrado · Vacaciones". */
+export function describeSpecialDay(day: SpecialDayText): string {
+  return [specialDayDates(day.from, day.to), specialDayRule(day), day.reason].filter(Boolean).join(' · ');
 }

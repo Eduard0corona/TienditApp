@@ -11,6 +11,12 @@ export const AppointmentStatus = {
 } as const;
 export type AppointmentStatus = (typeof AppointmentStatus)[keyof typeof AppointmentStatus];
 
+export const BranchServiceMode = {
+  Premises: 0,
+  DeliveryOnly: 1,
+} as const;
+export type BranchServiceMode = (typeof BranchServiceMode)[keyof typeof BranchServiceMode];
+
 export const BusinessTheme = {
   Nopal: 0,
   Talavera: 1,
@@ -80,6 +86,11 @@ export const DayOfWeek = {
 } as const;
 export type DayOfWeek = (typeof DayOfWeek)[keyof typeof DayOfWeek];
 
+export const DeliveryCourier = {
+  Paquetenvia: 1,
+} as const;
+export type DeliveryCourier = (typeof DeliveryCourier)[keyof typeof DeliveryCourier];
+
 export const InsufficientStockPolicy = {
   Block: 0,
   Warn: 1,
@@ -145,6 +156,9 @@ export const OrderChannel = {
   Counter: 0,
   WhatsApp: 1,
   Online: 2,
+  Rappi: 3,
+  UberEats: 4,
+  DidiFood: 5,
 } as const;
 export type OrderChannel = (typeof OrderChannel)[keyof typeof OrderChannel];
 
@@ -161,6 +175,7 @@ export const OrderPaymentMethod = {
   Transfer: 2,
   DigitalWallet: 3,
   Other: 4,
+  Platform: 5,
 } as const;
 export type OrderPaymentMethod = (typeof OrderPaymentMethod)[keyof typeof OrderPaymentMethod];
 
@@ -192,6 +207,35 @@ export const OutgoingMessageStatus = {
 } as const;
 export type OutgoingMessageStatus = (typeof OutgoingMessageStatus)[keyof typeof OutgoingMessageStatus];
 
+export const PlatformCollectedBy = {
+  Platform: 0,
+  Business: 1,
+} as const;
+export type PlatformCollectedBy = (typeof PlatformCollectedBy)[keyof typeof PlatformCollectedBy];
+
+export const PlatformCommissionBase = {
+  TotalWithTax: 0,
+  SubTotalWithoutTax: 1,
+} as const;
+export type PlatformCommissionBase = (typeof PlatformCommissionBase)[keyof typeof PlatformCommissionBase];
+
+export const PlatformSettlementAdjustmentKind = {
+  Promotion: 1,
+  Claim: 2,
+  Cancellation: 3,
+  Fee: 4,
+  PreviousBalance: 5,
+  Other: 99,
+} as const;
+export type PlatformSettlementAdjustmentKind = (typeof PlatformSettlementAdjustmentKind)[keyof typeof PlatformSettlementAdjustmentKind];
+
+export const PlatformSettlementStatus = {
+  Open: 0,
+  Closed: 1,
+  Voided: 99,
+} as const;
+export type PlatformSettlementStatus = (typeof PlatformSettlementStatus)[keyof typeof PlatformSettlementStatus];
+
 export const ProductCatalogItemType = {
   Product: 0,
   Service: 1,
@@ -215,6 +259,12 @@ export const ServiceOrderPieceStatus = {
   Cancelled: 99,
 } as const;
 export type ServiceOrderPieceStatus = (typeof ServiceOrderPieceStatus)[keyof typeof ServiceOrderPieceStatus];
+
+export const SpecialDayKind = {
+  Closed: 0,
+  SpecialHours: 1,
+} as const;
+export type SpecialDayKind = (typeof SpecialDayKind)[keyof typeof SpecialDayKind];
 
 export const SubscriptionPaymentMethod = {
   Transfer: 0,

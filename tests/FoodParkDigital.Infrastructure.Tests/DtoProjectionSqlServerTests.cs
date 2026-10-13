@@ -17,6 +17,7 @@ using FoodParkDigital.Domain.Inventory.Entities;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -87,6 +88,48 @@ public class DtoProjectionSqlServerTests
         Assert.Equal(2, page.Items.Count);
         Assert.All(page.Items, o => Assert.NotEmpty(o.Items));
         Assert.All(page.Items, o => Assert.NotEmpty(o.TaxBreakdown));
+    }
+
+    [SqlServerFact]
+    public async Task OrdersOfPlatforms_ShouldBeProjectedBySqlServer_AsTheLoadedOrders_AndFoundByTheirFolio()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        Guid tenantId;
+        await using (var seed = database.CreateContext())
+            tenantId = await SeedPlatformOrdersAsync(seed);
+
+        await using var context = database.CreateContext(tenantId);
+        var listed = await context.Orders.AsNoTracking()
+            .OrderBy(o => o.OrderNumber)
+            .Select(OrderMappings.AsDto)
+            .ToListAsync();
+        var loaded = await context.Orders.AsNoTracking()
+            .Include(o => o.Items).ThenInclude(i => i.Options)
+            .Include(o => o.StatusHistory)
+            .Include(o => o.ServiceDetail)
+            .Include(o => o.PlatformDetail)
+            .Include(o => o.ServicePieces)
+            .Include(o => o.Payments)
+            .Include(o => o.Refunds).ThenInclude(r => r.Lines)
+            .Include(o => o.KitchenTickets)
+            .Include(o => o.ItemCancellations)
+            .AsSplitQuery()
+            .OrderBy(o => o.OrderNumber)
+            .ToListAsync();
+
+        Assert.Equal(Normalize(loaded.Select(o => o.ToDto())), Normalize(listed));
+        Assert.Equal([null, "BC953", "12"], listed.Select(o => o.PlatformOrder?.ExternalOrderNumber));
+        Assert.Equal(
+            [PlatformCollectedBy.Platform, PlatformCollectedBy.Business],
+            listed.Skip(1).Select(o => o.PlatformOrder!.CollectedBy));
+
+        // SQL Server searches the folio of the app, written as the cashier types it.
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        tenant.SetTenant(tenantId);
+        var found = await new GetOrdersByBusinessQueryHandler(context, tenant)
+            .Handle(new GetOrdersByBusinessQuery { Search = "#bc 953" }, CancellationToken.None);
+        var order = Assert.Single(found.Items);
+        Assert.Equal(("ORD-000002", "BC953"), (order.OrderNumber, order.PlatformOrder!.ExternalOrderNumber));
     }
 
     [SqlServerFact]
@@ -161,6 +204,34 @@ public class DtoProjectionSqlServerTests
         tab.CancelTabItem(tab.Items.Single(i => i.ProductName == "Arrachera").Id, 0.505m, "Se pasó de cocción", false, Now.AddMinutes(1), "mesero");
 
         context.Orders.AddRange(sale, service, tab);
+        await context.SaveChangesAsync();
+        return tenant.Id;
+    }
+
+    /// <summary>A counter sale, an order of Rappi the platform charged and one of DiDi Food the business collects.</summary>
+    private static async Task<Guid> SeedPlatformOrdersAsync(ApplicationDbContext context)
+    {
+        var tenant = new Tenant("Cocina", "cocina-" + Guid.NewGuid().ToString("N")[..8], BusinessType.Food, $"{Guid.NewGuid():N}@demo.com");
+        context.Tenants.Add(tenant);
+        context.TenantSettings.Add(new TenantSettings(tenant.Id, TenantCapability.Food));
+        var rappi = new DeliveryPlatformSetting(tenant.Id, OrderChannel.Rappi, true, PlatformTerms.WithFiscalDefaults(30m));
+        var didi = new DeliveryPlatformSetting(tenant.Id, OrderChannel.DidiFood, true, PlatformTerms.WithFiscalDefaults(28m));
+        context.DeliveryPlatformSettings.AddRange(rappi, didi);
+
+        var counter = NewOrder(tenant.Id, "ORD-000001", OrderType.Retail);
+        counter.AddItem(Guid.NewGuid(), "Concha", 2, 18m);
+
+        var paidByRappi = new Order(tenant.Id, null, null, true, "ORD-000002", BusinessType.Food, OrderType.Retail, "Juan", null, null, null,
+            pricesIncludeTax: true, channel: OrderChannel.Rappi);
+        paidByRappi.AddItem(Guid.NewGuid(), "Paquete familiar", 1, 350m);
+        paidByRappi.RegisterPlatformOrder(rappi, PlatformOrderNumber.From("BC953"), PlatformCollectedBy.Platform, Now, null);
+
+        var collectedByTheBusiness = new Order(tenant.Id, null, null, true, "ORD-000003", BusinessType.Food, OrderType.Retail,
+            "Público en general", null, null, null, pricesIncludeTax: true, channel: OrderChannel.DidiFood);
+        collectedByTheBusiness.AddItem(Guid.NewGuid(), "Orden de tacos", 1, 245m);
+        collectedByTheBusiness.RegisterPlatformOrder(didi, PlatformOrderNumber.From("12"), PlatformCollectedBy.Business, Now, null);
+
+        context.Orders.AddRange(counter, paidByRappi, collectedByTheBusiness);
         await context.SaveChangesAsync();
         return tenant.Id;
     }

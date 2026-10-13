@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Identity.Commands;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tests.Support;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -64,6 +65,32 @@ public class CreateBusinessCommandTests
         Assert.All(stored.Memberships, m => Assert.Equal(TenantUserRole.Owner, m.Role));
         Assert.Contains(stored.Memberships, m => m.TenantId == firstTenantId);
         Assert.Equal("BusinessOpenedByExistingAccount", Assert.Single(stored.Audit).Action);
+    }
+
+    [Theory]
+    [InlineData("Comida a domicilio", BranchServiceMode.DeliveryOnly)]
+    [InlineData("  comida a DOMICILIO ", BranchServiceMode.DeliveryOnly)]
+    [InlineData("Alimentos y bebidas", BranchServiceMode.Premises)]
+    [InlineData(null, BranchServiceMode.Premises)]
+    public async Task SignUp_OfAKitchenWithoutPremises_ShouldStartWithAMainBranchThatOnlyDelivers(string? industry, BranchServiceMode expected)
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+
+        var registration = await host.HandleAsync<RegisterBusinessCommandHandler, Result<Guid>>(handler => handler.Handle(new RegisterBusinessCommand
+        {
+            Email = "cocina@demo.com",
+            Password = "Secreto1",
+            FirstName = "Ana",
+            LastName = "Dueña",
+            BusinessName = "Cocina de Ana",
+            BusinessType = BusinessType.Food,
+            Industry = industry
+        }, CancellationToken.None));
+
+        Assert.True(registration.IsSuccess, registration.Error);
+        var main = await host.QueryAsync(db => db.Branches.IgnoreQueryFilters().SingleAsync());
+        Assert.True(main.IsDefault);
+        Assert.Equal(expected, main.ServiceMode);
     }
 
     [Fact]

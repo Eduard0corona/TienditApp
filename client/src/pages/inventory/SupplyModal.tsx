@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -16,6 +16,7 @@ interface SupplyModalProps {
 
 /** A supply's data, its stock limits and how it is tracked. Its problems show here, where the person is looking. */
 export default function SupplyModal({ show, supply, onHide, onSaved }: SupplyModalProps) {
+  const titleId = useId();
   const [form, setForm] = useState<SupplyFormState>(() => (supply ? toSupplyForm(supply) : buildEmptySupplyForm()));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -49,9 +50,9 @@ export default function SupplyModal({ show, supply, onHide, onSaved }: SupplyMod
   };
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="lg" centered aria-labelledby={titleId}>
       <Modal.Header closeButton>
-        <Modal.Title>{supply ? 'Editar insumo' : 'Nuevo insumo'}</Modal.Title>
+        <Modal.Title id={titleId}>{supply ? 'Editar insumo' : 'Nuevo insumo'}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}

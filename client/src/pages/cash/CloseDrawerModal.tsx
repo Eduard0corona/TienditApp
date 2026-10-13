@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import type { CashCountLineDto, CashSessionDto } from '../../types';
 import { formatMoney } from '../../utils/money';
@@ -17,6 +17,7 @@ interface CloseDrawerModalProps {
  * cash and explain it. The server keeps both amounts and the difference for the shift history.
  */
 export default function CloseDrawerModal({ session, submitting, error, onClose, onSubmit }: CloseDrawerModalProps) {
+  const titleId = useId();
   const [byDenomination, setByDenomination] = useState(true);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [typedTotal, setTypedTotal] = useState('');
@@ -39,7 +40,7 @@ export default function CloseDrawerModal({ session, submitting, error, onClose, 
   const canSubmit = counted !== null && (!needsNote || notes.trim().length > 0) && !submitting;
 
   return (
-    <Modal show onHide={onClose} centered size="lg">
+    <Modal show onHide={onClose} centered size="lg" aria-labelledby={titleId}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -48,7 +49,7 @@ export default function CloseDrawerModal({ session, submitting, error, onClose, 
         }}
       >
         <Modal.Header closeButton>
-          <Modal.Title as="h2" className="h5">Cerrar caja</Modal.Title>
+          <Modal.Title id={titleId} as="h2" className="h5">Cerrar caja</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="d-flex flex-wrap gap-3 mb-3">

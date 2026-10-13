@@ -50,6 +50,8 @@
 }
 
 .pm-hours summary,
+.pm-today,
+.pm-upcoming,
 .pm-address {
   display: flex;
   align-items: center;
@@ -71,7 +73,8 @@
   transform: rotate(180deg);
 }
 
-.pm-week {
+.pm-week,
+.pm-special-days {
   margin: 0 0 0.5rem;
   padding-left: 1.5rem;
 }
@@ -87,8 +90,22 @@
   font-weight: 700;
 }
 
+/* The special days ahead (Fase 21), one line each under the week: "Vie 25 dic · Cerrado · Navidad". */
+.pm-special-days li {
+  padding: 0.15rem 0;
+}
+
+.pm-week + .pm-special-days {
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--ct-border-color);
+}
+
 .pm-address + .pm-hours,
-.pm-hours + .pm-address {
+.pm-hours + .pm-address,
+.pm-hours + .pm-upcoming,
+.pm-today + .pm-address,
+.pm-today + .pm-upcoming,
+.pm-upcoming + .pm-address {
   border-top: 1px solid var(--ct-border-color);
 }
 

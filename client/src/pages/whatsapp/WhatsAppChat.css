@@ -3,7 +3,9 @@
   height: calc(100vh - 200px);
 }
 
+/* A row fills the width of a list that scrolls, which would cut the focus ring around it: the ring goes inside. */
 .wa-conversation-item {
+  --ta-focus-ring-offset: calc(var(--ta-focus-ring-width) * -1);
   cursor: pointer;
 }
 

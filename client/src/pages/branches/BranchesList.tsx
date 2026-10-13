@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import PageTitle from '../../components/common/PageTitle';
@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import { activeBranchesKey } from '../../hooks/useWorkingBranch';
+import { BranchServiceMode } from '../../types';
 
 const COLUMNS = [
   { header: 'Sucursal' },
@@ -30,6 +31,7 @@ interface BranchForm {
   contactName: string;
   contactPhone: string;
   isDefault: boolean;
+  serviceMode: BranchServiceMode;
 }
 
 const EMPTY_FORM: BranchForm = {
@@ -45,9 +47,24 @@ const EMPTY_FORM: BranchForm = {
   contactName: '',
   contactPhone: '',
   isDefault: false,
+  serviceMode: BranchServiceMode.Premises,
 };
 
-const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code'>; label: string; col: string; maxLength: number }> = [
+/** How a branch serves its customers; one that only delivers keeps its address for the team. */
+const SERVICE_MODES = [
+  {
+    value: BranchServiceMode.Premises,
+    label: 'Local abierto al público',
+    hint: 'Tus clientes llegan a comer, a comprar o a recoger.',
+  },
+  {
+    value: BranchServiceMode.DeliveryOnly,
+    label: 'Solo a domicilio, sin local',
+    hint: 'Solo entregas. Su dirección es para tu equipo y nunca se muestra a tus clientes.',
+  },
+];
+
+const TEXT_FIELDS: Array<{ key: keyof Omit<BranchForm, 'isDefault' | 'name' | 'code' | 'serviceMode'>; label: string; col: string; maxLength: number }> = [
   { key: 'addressLine1', label: 'Calle y número', col: 'col-md-6', maxLength: 250 },
   { key: 'addressLine2', label: 'Colonia o referencia', col: 'col-md-6', maxLength: 250 },
   { key: 'city', label: 'Ciudad', col: 'col-md-4', maxLength: 120 },
@@ -72,6 +89,7 @@ function toForm(branch: Branch): BranchForm {
     contactName: branch.contactName ?? '',
     contactPhone: branch.contactPhone ?? '',
     isDefault: branch.isDefault,
+    serviceMode: branch.serviceMode ?? BranchServiceMode.Premises,
   };
 }
 
@@ -82,6 +100,7 @@ const blankToNull = (value: string) => value.trim() || null;
  * inventory, its own stock. The default branch takes what names no branch and cannot be turned off.
  */
 export default function BranchesList() {
+  const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
   const queryClient = useQueryClient();
@@ -101,8 +120,10 @@ export default function BranchesList() {
   };
 
   const openCreate = () => {
+    // A new branch starts serving like the main one: the second kitchen of a business without premises is one too.
+    const main = branches.data?.find((branch) => branch.isDefault);
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, serviceMode: main?.serviceMode ?? BranchServiceMode.Premises });
     setFormError('');
   };
 
@@ -132,14 +153,19 @@ export default function BranchesList() {
       contactName: blankToNull(form.contactName),
       contactPhone: blankToNull(form.contactPhone),
     };
+    // How it serves goes only when it is new or was changed here: a list read before someone else marked the branch
+    // «Solo a domicilio» never turns it back into premises (left out, the server keeps what the branch has).
+    const serviceMode = !editing || form.serviceMode !== (editing.serviceMode ?? BranchServiceMode.Premises)
+      ? form.serviceMode
+      : undefined;
     setSaving(true);
     setFormError('');
     try {
       if (editing) {
-        await branchesApi.update(editing.id, { ...fields, id: editing.id });
+        await branchesApi.update(editing.id, { ...fields, id: editing.id, serviceMode });
         toast.success('Sucursal actualizada.');
       } else {
-        await branchesApi.create({ ...fields, isDefault: form.isDefault });
+        await branchesApi.create({ ...fields, isDefault: form.isDefault, serviceMode });
         toast.success('Sucursal creada.');
       }
       setForm(null);
@@ -154,7 +180,9 @@ export default function BranchesList() {
   const makeDefault = async (branch: Branch) => {
     const accepted = await confirm({
       title: 'Cambiar la sucursal principal',
-      message: `Las ventas y cajas que no elijan sucursal irán a ${branch.name}.`,
+      message: `Las ventas y cajas que no elijan sucursal irán a ${branch.name}. ${branch.serviceMode === BranchServiceMode.DeliveryOnly
+        ? 'Tu menú en línea dirá «Solo a domicilio» y no mostrará ninguna dirección.'
+        : 'Su dirección se mostrará en tu menú en línea.'}`,
       confirmLabel: 'Hacer principal',
     });
     if (!accepted) return;
@@ -232,6 +260,9 @@ export default function BranchesList() {
                   <div className="text-muted small">
                     {item.code}
                     {item.isDefault && <span className="badge text-bg-info ms-2">Principal</span>}
+                    {item.serviceMode === BranchServiceMode.DeliveryOnly && (
+                      <span className="badge text-bg-light border ms-2">Solo a domicilio</span>
+                    )}
                   </div>
                 </td>
                 <td>
@@ -271,11 +302,11 @@ export default function BranchesList() {
         </div>
       </div>
 
-      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered>
+      <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
         {form && (
           <form onSubmit={(event) => void save(event)}>
             <Modal.Header closeButton>
-              <Modal.Title>{editing ? `Editar ${editing.name}` : 'Nueva sucursal'}</Modal.Title>
+              <Modal.Title id={titleId}>{editing ? `Editar ${editing.name}` : 'Nueva sucursal'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <div className="row g-2">
@@ -303,6 +334,19 @@ export default function BranchesList() {
                   <input id="branch-description" className="form-control" maxLength={500}
                     value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
                 </div>
+                {/* A radio group whose title matches the other labels of the form, as in DeliveryPlatformForm. */}
+                <div className="col-12" role="radiogroup" aria-labelledby="branch-service-mode-label">
+                  <div id="branch-service-mode-label" className="form-label">¿Cómo atiende?</div>
+                  {SERVICE_MODES.map((mode) => (
+                    <div className="form-check" key={mode.value}>
+                      <input className="form-check-input" type="radio" name="branch-service-mode" id={`branch-service-mode-${mode.value}`}
+                        checked={form.serviceMode === mode.value} aria-describedby={`branch-service-mode-${mode.value}-hint`}
+                        onChange={() => setForm({ ...form, serviceMode: mode.value })} />
+                      <label className="form-check-label" htmlFor={`branch-service-mode-${mode.value}`}>{mode.label}</label>
+                      <div id={`branch-service-mode-${mode.value}-hint`} className="form-text mt-0">{mode.hint}</div>
+                    </div>
+                  ))}
+                </div>
                 {TEXT_FIELDS.map((field) => (
                   <div key={field.key} className={field.col}>
                     <label className="form-label" htmlFor={`branch-${field.key}`}>{field.label}</label>
@@ -311,12 +355,17 @@ export default function BranchesList() {
                   </div>
                 ))}
               </div>
-              {(editing ? editing.isDefault : form.isDefault) && (
+              {(editing ? editing.isDefault : form.isDefault) && (form.serviceMode === BranchServiceMode.DeliveryOnly ? (
+                <p className="text-muted small mt-3 mb-0">
+                  <i className="ri-lock-line me-1" aria-hidden="true"></i>
+                  Tu menú en línea dice «Solo a domicilio» y no muestra esta dirección. Solo la ve tu equipo.
+                </p>
+              ) : (
                 <p className="text-muted small mt-3 mb-0">
                   <i className="ri-map-pin-line me-1" aria-hidden="true"></i>
                   La dirección de la sucursal principal se muestra en tu menú en línea, con un enlace al mapa.
                 </p>
-              )}
+              ))}
               {!editing && (
                 <p className="text-muted small mt-3 mb-0">
                   Si el negocio usa inventario, la sucursal tendrá su propio almacén y sus ventas descontarán de él.

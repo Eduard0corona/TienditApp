@@ -6,12 +6,14 @@ Cada push a `master` corre el workflow `Deploy WebApp (API + SPA)` (`.github/wor
 
 Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 veces, cada 20 segundos:
 
+- las respuestas de `GET /health/ready` y `GET /health/schema` deben nombrar el commit desplegado (`"commit"`). El publish lo sella en la versión del ensamblado (`-p:SourceRevisionId=${{ github.sha }}`, que queda como `1.0.0+<sha>`) y la API lo reporta en sus health checks. Así no pasa una instancia de la versión anterior, ni siquiera cuando el cliente no cambió y su script conserva el nombre: cada chequeo de abajo lo contesta la versión nueva;
 - `GET /health/ready` debe responder 200 (la API arrancó y llega a la base de datos);
+- desde la Fase 21, esa respuesta debe decir `"business-time-zones":"Healthy"`: las zonas horarias que un negocio puede elegir existen en el servidor. Si una cae en UTC, el chequeo queda Degraded (200, la app sigue atendiendo) y el workflow falla diciéndolo; el log stream nombra las zonas ([observabilidad](../architecture/observability.md));
 - `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
-- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build, así que una instancia vieja no pasa);
+- `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build del cliente, que solo cambia si cambió el cliente);
 - desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
 
-Si en 10 minutos no se cumplen las cuatro, el workflow falla con el último estado de cada consulta. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
+Si en 10 minutos no se cumplen las seis, el workflow falla con el último estado de cada consulta y el commit que respondió. Si respondió otro commit, la versión nueva no arrancó; el aviso de migraciones faltantes solo sale cuando lo dice la versión nueva, porque la anterior no conoce sus migraciones. Sin slot, la versión ya quedó publicada: revisa el log stream del App Service (arranque, cadena de conexión, secretos; el chequeo del esquema escribe ahí qué migración falta) y aplica el `apply.sql` pendiente. La variable de repositorio `SMOKE_TEST_URL` cambia la dirección de producción consultada (un dominio propio); sin ella se usa la que devuelve el despliegue (`https://<app>.azurewebsites.net`).
 
 ## Entrega del cliente comprimida y en caché
 
@@ -133,7 +135,7 @@ La Fase 14 no trae migraciones: no hay `apply.sql` que aplicar antes del merge, 
 La Fase 15 trae dos migraciones en una sola carpeta, [`database/production/20261008074715_StopMappingRequireOpenCashSession`](../../database/production/20261008074715_StopMappingRequireOpenCashSession): su `apply.sql` se aplica, como siempre, antes del merge (respaldo, `verify.sql`, `apply.sql`, `verify.sql`).
 
 - `AddTabItemCancellations` solo agrega: `OrderItems.CancelledQuantity` y `CancelledAmount` (sin nulos, 0 por omisión) y la tabla `OrderItemCancellations`. La Fase 14 no los mapea, así que sigue funcionando mientras se publica la nueva y sus renglones toman 0 cancelado.
-- `StopMappingRequireOpenCashSession` no cambia la base: la versión nueva deja de mapear `TenantSettings.RequireOpenCashSession` (nadie la lee: todo cobro exige una caja abierta). La columna se queda con su valor por omisión, 0, que toman las filas nuevas; una fase posterior la borra cuando ninguna versión desplegada la mapee. Es el mismo paso que hizo la PR #47 en master (sección anterior).
+- `StopMappingRequireOpenCashSession` no cambia la base: la versión nueva deja de mapear `TenantSettings.RequireOpenCashSession` (nadie la lee: todo cobro del negocio exige una caja abierta). La columna se queda con su valor por omisión, 0, que toman las filas nuevas; una fase posterior la borra cuando ninguna versión desplegada la mapee. Es el mismo paso que hizo la PR #47 en master (sección anterior).
 - `GET /orders/{id}` ahora trae las rondas, las opciones, los reembolsos y las cancelaciones de la cuenta. El contrato solo agrega: la ruta `POST /orders/{id}/item-cancellations` y los campos `cancelledQuantity`, `chargedPrice` e `itemCancellations`.
 - Volver a la Fase 14 (con o sin `rollback.sql`) con platillos cancelados en cuentas abiertas: esa versión recalcula el total con todos los renglones al mandar una ronda y cobraría otra vez lo cancelado. Antes de regresar, cierra o cancela esas cuentas; la consulta 4 de `verify.sql` las cuenta. `rollback.sql` borra la tabla y las columnas de cancelaciones (la bitácora conserva cada cancelación con su motivo) y no toca `RequireOpenCashSession`.
 
@@ -184,6 +186,147 @@ La Fase 20A no trae migraciones ni scripts y se fusiona sin tocar la base. El co
 - **Entrega del cliente:** comprimida y en caché, como describe [la sección de arriba](#entrega-del-cliente-comprimida-y-en-caché). La prueba de humo exige ahora el script del cliente con `Content-Encoding: br` y `immutable`; si el publish dejara de dejar las copias, la app sigue funcionando sin comprimir y el workflow lo marca.
 - **Cambio de comportamiento:** el campo `address` de `GET /api/v1/public/menu/{slug}` es ahora la dirección de la sucursal principal (`Branch.IsDefault`), en una línea y `null` si no tiene calle. En la Fase 19 era la dirección fiscal del negocio (`Tenant.Address`), que suele ser la casa del dueño ([ADR 0011](../adr/0011-opening-hours.md), punto 7).
 - **Volver a la versión anterior:** no necesita nada en la base, pero esa versión vuelve a publicar en el menú, con enlace al mapa, la dirección fiscal de cada negocio que la capturó (al registrarse o en Configuración › Negocio) y tiene el menú encendido. Si hay que regresar, avisa a esos negocios o regresa solo lo indispensable. También quita la compresión y la caché larga; los archivos `immutable` no se quedan viejos porque su nombre cambia con cada build.
+
+## Días especiales y horario en WhatsApp (Fase 21)
+
+La Fase 21 trae una migración, [`database/production/20261011161835_AddSpecialDays`](../../database/production/20261011161835_AddSpecialDays). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y luego el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica.
+
+- **La migración:** `AddSpecialDays` solo crea la tabla `SpecialDays`, vacía, con cinco restricciones CHECK y sus dos índices ([ADR 0012](../adr/0012-special-days.md)). No toca `TenantSettings` ni otros datos: ningún negocio cambia su horario ni deja de recibir pedidos hasta que su dueño marca un día especial en Configuración › Negocio › Días especiales. Después de aplicarla, el `verify.sql` muestra sus columnas, las cinco restricciones y los tres índices (la llave, el único y el del periodo).
+- **Mientras se publica:** la versión de `master` (Fase 20) no conoce la tabla, así que sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - las rutas `GET`, `POST`, `PUT` y `DELETE` de `/api/v1/auth/my-tenant/special-days` (`[RequiresTenantManager]`), con sus DTOs y el enum `SpecialDayKind` (0 cerrado, 1 otro horario);
+  - campos con nulos en `PublicOpeningHoursDto` del menú en línea: `todayDate`, `hasWeeklyHours`, los textos (`statusLabel`, `statusDetail`, `closedNotice`, `upcomingNotice`), `closedBySpecialDay`, `todayHours`, `opensOn`, `closesOn` y `specialDays`.
+
+  Nada se quita ni cambia de nombre, y el cliente anterior ignora los campos nuevos. Sí cambia lo que traen dos campos que ya existían: `openingHours`, que era `null` sin horario de la semana, llega con `intervals: []` cuando ese negocio tiene un día especial hoy o en los próximos 31 días, y `opensInDays` puede pasar de 7 después de un cierre largo. Una pestaña abierta antes del despliegue, con el cliente anterior, los lee con su redacción hasta que se recarga: a ese negocio le pone "Abierto las 24 horas" ("cierra el jueves a medianoche" en la semana antes del día especial), "Hoy: Cerrado" y la semana cerrada, y en un día especial cerrado dice que abre "a las 0:00"; después de un cierre de más de una semana nombra el día sin la fecha ("abre el martes a las 9:00"). El servidor decide igual al recibir el pedido.
+- **Cambios de comportamiento:**
+  - **Mesas en un día especial cerrado:** el menú no recibe pedidos, ni desde el QR de una mesa en uso, tampoco pasada la medianoche mientras seguiría la noche que el día cerrado quitó. Fuera de horario la mesa sigue pidiendo, como en la Fase 19. Es una decisión por omisión que el dueño del producto debe confirmar (`PublicOrderRules.TableOverridesClosure`).
+  - **WhatsApp dice el horario:** las preguntas de horario reciben el horario real y los días especiales de las próximas dos semanas. Con horario de la semana, la descripción del negocio ya no las contesta, salvo que también pregunten dónde están; también la debe confirmar el dueño del producto. Mientras el negocio está cerrado, el enlace del menú en modo pedidos se ofrece solo para verlo.
+  - **Mensaje del pedido rechazado:** a 0 y 1 días es el mismo ("Ahora está cerrado: abre mañana a las 9:00."), salvo una apertura a medianoche, que dice solo el día ("abre mañana", antes "abre mañana a las 0:00"), y la hora de la una, en singular ("a la 1:00", antes "a las 1:00"); desde 2 días nombra la fecha ("abre el sábado 26 a las 9:00", "abre el sábado 2 de enero a las 9:00", "abre el martes 5 de enero a las 9:00").
+  - **Prueba de humo:** también exige `"business-time-zones":"Healthy"` en `/health/ready`. Un servidor sin los datos de zonas horarias hace fallar ahora el despliegue (con el slot de staging, no llega a producción) en lugar de pasar con los horarios en UTC.
+- **Volver a la versión anterior:** no necesita nada en la base. Esa versión no conoce la tabla: los días especiales se quedan guardados sin efecto (los menús reciben pedidos en las fechas cerradas y WhatsApp vuelve a contestar con la descripción) y vuelven a aplicarse al publicar otra vez esta versión. Un navegador con el cliente nuevo sobre la API anterior usa la redacción de antes, porque no recibe `todayDate`.
+- **Dejar también la base como estaba:** aplica el `rollback.sql`. Borra la tabla y con ella los días especiales de todos los negocios, también los pasados (la bitácora conserva cada cambio con sus valores: `SpecialDayAdded`, `SpecialDayUpdated` y `SpecialDayRemoved`); antes, la consulta 4 de `verify.sql` cuenta las filas, los negocios y las fechas desde hoy que se perderían. Es preferible corregir hacia adelante.
+
+## Pedidos de Rappi, Uber Eats y DiDi Food (Fase 22F)
+
+La Fase 22F trae una migración, [`database/production/20261012005540_AddDeliveryPlatformOrders`](../../database/production/20261012005540_AddDeliveryPlatformOrders). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql`, el merge, configurar las plataformas y capturar pedidos. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0013](../adr/0013-delivery-platform-orders.md)).
+
+- **La migración:**
+  - **Qué agrega:** crea `DeliveryPlatformSettings` y `PlatformOrderDetails`, vacías, y agrega `DailySalesSnapshots.PlatformAmount` con 0 por omisión. `Orders`, `OrderPayments`, `OrderRefunds` y `CashTransactions` no cambian.
+  - **Cuándo cambia algo:** cuando el dueño activa una plataforma en Configuración › Negocio › Plataformas de reparto.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las once restricciones CHECK y los índices. Sus consultas 4 y 5 (pedidos con canal 3 a 5 y pagos o reembolsos con el método 5) siguen en 0 hasta desplegar.
+- **Mientras se publica:** la versión de `master` (Fase 21) no conoce las tablas y sigue funcionando. Sus días guardados toman `PlatformAmount` 0 y su validación rechaza los canales 3 a 5. Se ensayó sobre la base ya aplicada: `/health/schema` sano, una venta de mostrador cobrada y su worker ([migraciones](database-migrations.md)). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **No publiques entre las 00:00 y las 00:45, hora del negocio.** Si el swap cruza la medianoche, la instancia anterior puede guardar el día con lo que cobraron las plataformas en «Otros». La consulta 7 del `verify.sql` lo detecta y [`database/production/data-repair/20261012_PlatformAmountSnapshots`](../../database/production/data-repair/20261012_PlatformAmountSnapshots) lo repara con la versión nueva en todas las instancias.
+- **El contrato solo agrega:**
+  - **Rutas:** `GET /api/v1/delivery-platforms` y `PUT /api/v1/delivery-platforms/{channel}` (`[RequiresTenantManager]`), `GET /api/v1/delivery-platforms/channels` (`ManageOrders` o `ViewReports`), y `GET /api/v1/reports/sales-by-channel` y `GET /api/v1/reports/delivery-platform-orders` (`ViewReports`, con `search` opcional), con sus DTOs. `PUT /api/v1/orders/{id}/cancel` acepta `restockItems` opcional (`true` si no viene).
+  - **Enums:** los valores 3 a 5 de `OrderChannel`, el 5 de `OrderPaymentMethod` («Plataforma»), y `PlatformCollectedBy` y `PlatformCommissionBase`.
+  - **Campos:**
+    - en la venta, `externalOrderNumber`, `collectedBy` y `confirmPossibleDuplicate`, opcionales;
+    - `platformOrder` en `OrderDto` (el folio y quién cobró, sin dinero);
+    - `channel` y `externalOrderNumber` en `KitchenOrderDto` y en el aviso en vivo `OrderCreated`;
+    - `platformTotal`, `platformPaymentsCount` y `platformRefundsTotal` en el corte del día;
+    - `platformCollected` en Inicio y `platformAmount` en las ventas por sucursal.
+  - **Código de error:** `possible_duplicate_order` (409), compatible según el [ADR 0008](../adr/0008-api-error-contract.md).
+
+  Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior, hasta que se recarga (el aviso de versión nueva lo ofrece), ve un pedido de plataforma como uno de mostrador y el método «Plataforma» como «5». Su corte del día no tiene la fila de plataformas, así que «Cobrado» puede ser mayor que la suma de sus filas. Vender no ofrece plataformas en ese cliente. El servidor decide igual.
+- **Cambios de comportamiento:**
+  - **«Otros» del corte:** desde la Fase 22F es todo método sin cubeta propia. Con los datos de hoy da lo mismo.
+  - **`NetCashFlow`:** deja fuera lo que cobraron las plataformas. Sin pedidos de plataforma no cambia.
+  - **Avisos y campañas:** un pedido de plataforma nunca manda avisos de WhatsApp ni entra a las campañas.
+- **Volver a la versión anterior:**
+  - **Sin pedidos de plataforma:** funciona sin tocar la base, porque no conoce las tablas ni la columna. La configuración de las plataformas se queda guardada sin efecto.
+  - **Con pedidos de plataforma:** no conviene. Esa versión sacaría de una caja la devolución de una anulación y su worker pondría en «Otros» lo que cobraron las plataformas. Se corrige hacia adelante.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50008, sin cambiar nada, si hay un pedido con canal 3 a 5 o un pago, reembolso o movimiento de caja con el método 5; su consulta 5 dice qué lo detiene. Sin ellos, borra las dos tablas y la columna. Se pierde la configuración de cada plataforma, que la bitácora conserva (`DeliveryPlatformUpdated`).
+
+## Precios en las apps de las plataformas (Fase 22F-2)
+
+La Fase 22F-2 trae una migración, [`database/production/20261012112823_AddPlatformPrices`](../../database/production/20261012112823_AddPlatformPrices). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql`, el merge, y poner los precios en Catálogo › Precios en apps. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0014](../adr/0014-delivery-platform-prices.md)).
+
+- **La migración:**
+  - **Qué agrega:** crea `ProductPlatformPrices` y `ProductOptionPlatformPrices`, vacías. No toca ninguna otra tabla.
+  - **Cuándo cambia algo:** cuando alguien con `ManageCatalog` guarda precios en Catálogo › Precios en apps. Mientras no haya precios, los pedidos de plataforma se cobran con el precio del menú, como en la Fase 22F.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las cuatro restricciones CHECK, las dos llaves en cascada y los seis índices. Su consulta 4 (los precios guardados) sigue vacía hasta desplegar, y la 5 (precios de otro negocio que su producto u opción) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22F) no conoce las tablas y sigue funcionando: ninguna de sus consultas las lee, y al quitar una opción o borrar un producto la base se lleva sus precios (`PlatformPricesMigrationSqlServerTests`, ver [migraciones](database-migrations.md)). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - **Rutas:** `GET` y `PUT /api/v1/delivery-platforms/{channel}/prices` (`ManageCatalog`; 403 sin él).
+    - **Esquemas:** `PlatformPriceItemDto` (y su página, `PlatformPriceItemDtoPaginatedList`), `PlatformPriceOptionGroupDto`, `PlatformPriceOptionDto`, `SavePlatformPricesRequest`, `PlatformProductPriceRequest` y `PlatformOptionPriceRequest`.
+    - **Campos obligatorios:** `products`, `price` y `priceDelta` son `[JsonRequired]` y el contrato los marca como requeridos: null se manda explícito (vuelve al precio del menú), y sin el campo, o con un elemento null en la lista, la API responde 400 `validation_failed`.
+    - **Respuestas del `PUT`:** 204; 400 `validation_failed` (la petición) o `business_rule` (un producto ajeno, un servicio, un precio fuera de los límites o un negocio sin el módulo de productos ni el de alimentos); y 409 `concurrency_conflict` si otra persona guardó al mismo tiempo el primer precio del mismo producto u opción, o lo borró.
+  - **Parámetro:** `GET /api/v1/products` acepta `priceChannel`, opcional: solo un canal de plataforma (400 si no).
+  - **Permiso ampliado:** `GET /api/v1/delivery-platforms/channels` también responde a `ManageCatalog`, sin tasas.
+  - **Mismo contrato, otros importes:** `POST /api/v1/orders` con canal 3 a 5 no cambia de forma, pero cobra los precios de la app donde los hay.
+
+  Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior no conoce Precios en apps, y su Vender cobra los pedidos de plataforma con el precio del menú. Si el negocio ya puso un precio en la app, la venta se rechaza porque el total no es el que calcula el servidor, hasta que la pantalla se recarga (el aviso de versión nueva lo ofrece). El servidor decide igual.
+- **Volver a la versión anterior:** funciona sin tocar la base, porque no conoce las tablas. Los precios se quedan guardados sin efecto: los pedidos de plataforma vuelven a cobrarse con el precio del menú, en Vender y en la venta a la vez, y los precios vuelven a aplicarse al publicar otra vez esta versión. Una pestaña que ya tenía el cliente nuevo, hasta recargarse, sigue pidiendo `priceChannel` (la versión anterior lo ignora): su ticket dice «Con tus precios de Rappi» sobre los precios del menú, que son los que se cobran, y Precios en apps responde 404.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50009, sin cambiar nada, si hay algún precio guardado, porque ninguna bitácora los conserva; su consulta 4 dice cuántos son y de cuántos negocios. Sin precios, borra las dos tablas. Es preferible corregir hacia adelante.
+
+## Liquidación de los depósitos de las plataformas (Fase 22G)
+
+La Fase 22G trae una migración, [`database/production/20261012145908_AddPlatformSettlements`](../../database/production/20261012145908_AddPlatformSettlements). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
+
+- **La migración:**
+  - **Qué agrega:** crea `PlatformSettlements`, `PlatformSettlementOrders` y `PlatformSettlementAdjustments` (con el lugar de cada ajuste, para leerlos en su orden), vacías. No toca ninguna otra tabla.
+  - **Cuándo cambia algo:** cuando un dueño o administrador registra un depósito en Reportes › Liquidaciones. Mientras no haya liquidaciones, todo sigue como en la Fase 22F-2.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las nueve restricciones CHECK, las tres llaves (dos en cascada y la del pedido sin ella) y los índices, con el filtro de los dos únicos. Su consulta 4 (las liquidaciones guardadas) sigue vacía hasta desplegar, y las cinco de la 5 (consistencia) deben quedar vacías siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22F-2) no conoce las tablas y sigue funcionando: ninguna de sus consultas las lee, y un pedido liquidado se puede reembolsar porque un reembolso no borra el pedido (`PlatformSettlementsMigrationSqlServerTests`, ver [migraciones](database-migrations.md)). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:**
+  - **Rutas** (`api/v1/platform-settlements`):
+    - `GET /`, con `channel`, `status`, `search`, `pageNumber` y `pageSize` (20 por omisión, hasta 100);
+    - `GET /receivable`;
+    - `GET /pending-orders?channel=&from=&to=`, con el periodo obligatorio: de hasta 31 días, desde 2000 y hasta hoy;
+    - `GET /{id}`;
+    - `POST /` responde 201, y `PUT /{id}`, `POST /{id}/close` y `POST /{id}/void` responden 200.
+    - Leer pide `ViewReports`, y cambiar, dueño o administrador; 403 sin ellos.
+  - **Esquemas:** `PlatformSettlementDto` (y su página), `PlatformSettlementDetailDto`, `PlatformSettlementOrderDto`, `PlatformSettlementAdjustmentDto`, `PendingPlatformOrdersDto`, `PlatformReceivableDto`, `CreatePlatformSettlementRequest`, `UpdatePlatformSettlementRequest`, `PlatformSettlementAdjustmentRequest`, `ClosePlatformSettlementRequest` y `VoidPlatformSettlementRequest`. Los enums `PlatformSettlementStatus` y `PlatformSettlementAdjustmentKind` viajan como números.
+  - **Campos obligatorios:** todo menos la referencia, las notas y la descripción de un ajuste es `[JsonRequired]`: sin el campo, o con un ajuste null, la API responde 400 `validation_failed`.
+  - **Respuestas de los cambios:** 400 `validation_failed` o `business_rule`; 404 si la liquidación es de otro negocio; 409 `concurrency_conflict` con una revisión vieja, una carrera con otra persona o el mismo guardado enviado dos veces; y 409 `conflict`, con su motivo, cuando otra liquidación ya tenía un pedido o cuando, al cerrar, cambió lo que se espera de uno (las cifras nuevas quedan guardadas).
+
+  Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior no conoce Reportes › Liquidaciones ni la pestaña «Ventas»: las ve al recargar (el aviso de versión nueva lo ofrece). Nada de lo que hacía cambia.
+- **Volver a la versión anterior:** funciona sin tocar la base, porque no conoce las tablas. Las liquidaciones se quedan guardadas sin efecto, y Reportes › Liquidaciones vuelve al publicar otra vez esta versión. Una pestaña con el cliente nuevo recibe 404 en Liquidaciones hasta recargarse.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50010, sin cambiar nada, si hay alguna liquidación guardada, porque la bitácora no guarda qué pedidos lleva cada una (solo cuántos) ni nada de una abierta; la consulta 4 del `verify.sql` dice cuántas son, de qué plataforma y estado, y de cuántos negocios. Sin liquidaciones, borra las tres tablas. Es preferible corregir hacia adelante.
+
+## Sucursal solo a domicilio (Fase 22A)
+
+La Fase 22A trae una migración, [`database/production/20261012204959_AddBranchServiceMode`](../../database/production/20261012204959_AddBranchServiceMode). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0016](../adr/0016-delivery-only-branches.md)).
+
+- **La migración:**
+  - **Qué agrega:** a `Branches`, la columna `ServiceMode` (`int NOT NULL DEFAULT 0`) y la restricción `CK_Branches_ServiceMode`. Todas las sucursales que ya existen quedan como locales. No toca ninguna otra tabla.
+  - **Cuándo cambia algo:** cuando un dueño o administrador marca una sucursal «Solo a domicilio» en Configuración › Sucursales, o un negocio nuevo se registra con el giro «Comida a domicilio». Con la principal así, su dirección deja de salir en el menú en línea.
+  - **Después de aplicarla:** el `verify.sql` muestra la columna, su `DEFAULT` y su restricción. Su consulta 3 cuenta las sucursales por modo y lista las solo a domicilio (todas en 0 y ninguna hasta desplegar), y la 4 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22G) no conoce la columna y sigue funcionando: sus sucursales nuevas toman el 0 del `DEFAULT`, y editar una no la cambia (`BranchServiceModeMigrationSqlServerTests`). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `BranchDto.serviceMode`; `serviceMode` opcional en `CreateBranchCommand` y `UpdateBranchCommand` (sin él, una nueva tiene local y una guardada conserva el que tenía; un valor desconocido es 400 `validation_failed`); `PublicMenuDto.deliveryOnly`; y el enum `BranchServiceMode`, que viaja como número. `PublicMenuDto.address` ya podía ser nulo. Nada se quita ni cambia de nombre.
+- **Pestañas abiertas antes del despliegue:** el cliente anterior no conoce el campo. Guardar una sucursal desde él no lo manda, así que la sucursal conserva cómo atiende: nunca convierte una cocina en local con la dirección a la vista. En el menú en línea de una cocina sin local, el cliente anterior ya no recibe la dirección, pero tampoco muestra «Solo a domicilio» hasta recargarse.
+- **Volver a la versión anterior:** funciona sin tocar la base, pero esa versión trata todas las sucursales como locales: **vuelve a publicar la dirección de una principal solo a domicilio** en el menú en línea. Antes de volver, la consulta 3 del `verify.sql` dice cuáles hay; cámbiala a local y borra su calle, o acepta que se publique.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50011, sin cambiar nada, mientras haya una sucursal solo a domicilio, por la misma razón. Sin ellas, borra la restricción y la columna, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
+## Zonas de entrega (Fase 22B)
+
+La Fase 22B trae una migración, [`database/production/20261013002425_AddDeliveryZones`](../../database/production/20261013002425_AddDeliveryZones). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0017](../adr/0017-delivery-zones.md)).
+
+- **La migración:**
+  - **Qué agrega:** dos tablas nuevas y vacías, `DeliveryZones` y `DeliveryZonePostalCodes`, con sus restricciones, la llave en cascada y los índices únicos de los nombres y de los códigos postales del negocio. No toca otras tablas.
+  - **Cuándo cambia algo:** cuando un dueño o administrador agrega una zona en Configuración › Zonas de entrega. Desde ese momento, las respuestas automáticas contestan si llegan a un código postal y cuánto cuesta el envío.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, la llave y los índices. Su consulta 4 cuenta las zonas (ninguna hasta desplegar) y la 5 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22A) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `GET`, `POST`, `PUT /{id}` y `DELETE /{id}?revision=` en `/api/v1/delivery-zones`, con `DeliveryZoneDto` y `SaveDeliveryZoneRequest`. Nada se quita ni cambia de nombre.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, y las zonas se quedan sin usarse. Sus respuestas automáticas vuelven a no saber de zonas.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50012, sin cambiar nada, mientras haya zonas guardadas: se perderían, y la bitácora no guarda sus códigos postales. Sin ellas, borra las dos tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
+## Pedido a domicilio (Fase 22C)
+
+La Fase 22C trae una migración, [`database/production/20261013042014_AddOrderDeliveries`](../../database/production/20261013042014_AddOrderDeliveries). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0018](../adr/0018-home-delivery-orders.md)).
+
+- **La migración:**
+  - **Qué agrega:** una tabla nueva y vacía, `OrderDeliveries`, con sus restricciones, la llave en cascada a `Orders` y el índice único del pedido. No toca otras tablas.
+  - **Cuándo cambia algo:** cuando un negocio con zonas de entrega activas recibe un pedido a domicilio, desde el menú en línea o Vender. Sin zonas, todo sigue como antes.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, la llave y el índice. Su consulta 4 cuenta los pedidos a domicilio por estado (ninguno hasta desplegar) y la 5 (consistencia) debe quedar vacía siempre.
+  - **Antes del merge, la consulta 6:** lista los negocios con zonas activas cuyos precios no incluyen IVA, con su tasa y el envío menor y mayor de sus zonas. A esos negocios el pedido les suma el IVA al envío, pero la pantalla de la 22B les decía que los montos eran con IVA incluido: desde ahora Configuración › Zonas de entrega lo explica, y las respuestas automáticas, el menú en línea y Vender dicen «más IVA». Avísales, para que corrijan sus envíos si los escribieron con IVA incluido. Vacía, no hay a quién avisar.
+- **Mientras se publica:** la versión de `master` (Fase 22B) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `PUT /api/v1/orders/{id}/delivery/shipment` y `GET /api/v1/public/menu/{slug}/delivery-quote`; `delivery` en `CreateOrderCommand`, `PlacePublicOrderRequest` y `OrderDto`; `isDelivery` en `KitchenOrderDto`; `deliveryAvailable` en `PublicMenuDto`; `deliveryFee` en `PublicOrderReceiptDto`; `isDeliveryFee` en `CfdiConceptDto`, y el enum `DeliveryCourier`. Nada se quita ni cambia de nombre. Un cliente abierto antes del despliegue sigue vendiendo como antes y ve el envío dentro del total hasta recargarse.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla y cobra cada pedido a domicilio por su total guardado, envío incluido. Pero no muestra la dirección ni el envío, ni en Pedidos ni en el ticket, y deja de ofrecer domicilio. Antes de volver, la consulta 4 del `verify.sql` dice cuántos pedidos a domicilio hay abiertos (estados 0 a 3).
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50013, sin cambiar nada, mientras haya pedidos a domicilio: se perderían su dirección y su envío. Sin ellos, borra la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
 ## Slot de staging con swap y aprobación
 

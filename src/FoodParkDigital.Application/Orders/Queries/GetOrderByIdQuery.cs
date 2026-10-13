@@ -28,6 +28,7 @@ public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, Order
             .Include(o => o.Items).ThenInclude(i => i.Options)
             .Include(o => o.StatusHistory)
             .Include(o => o.ServiceDetail)
+            .Include(o => o.PlatformDetail)
             .Include(o => o.ServicePieces)
             .Include(o => o.Payments)
             .Include(o => o.Refunds).ThenInclude(r => r.Lines)

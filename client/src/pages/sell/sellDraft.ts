@@ -1,3 +1,6 @@
+import { OrderChannel, PlatformCollectedBy } from '../../types';
+import { isDeliveryPlatform, normalizePlatformFolio } from '../../utils/deliveryPlatforms';
+
 // The sale being built survives a reload or a trip to another screen (per browser and business). It is
 // a convenience: storage can be unavailable and the sale still works.
 
@@ -26,17 +29,42 @@ export interface SellDraft {
   customerPhone: string;
   tableNumber: string;
   orderNotes: string;
+  /** The counter or the delivery platform the order came from (a chat is never kept: it comes with its link). */
+  channel: OrderChannel;
+  /** The folio of the platform's app, as typed. */
+  externalOrderNumber: string;
+  collectedBy: PlatformCollectedBy;
+  /** Where an order sent to the customer's address goes, as typed; null (or missing, before) when it does not. */
+  delivery?: SellDraftDelivery | null;
   pendingCharge?: PendingCharge;
+}
+
+export interface SellDraftDelivery {
+  postalCode: string;
+  addressLine: string;
+  references: string;
 }
 
 const storageKey = (tenantId: string) => `tienditapp.sell.draft.v1.${tenantId}`;
 
-/** What the server receives of the sale (its lines and customer), to tell whether a cart is still the one charged. */
+/**
+ * What the server receives of the sale (its lines, its customer and, for an order of a delivery platform, the platform,
+ * the folio and who charged), to tell whether a cart is still the one charged: another platform or another folio is
+ * another sale, with a key of its own. A counter sale reads as it always did, so a key kept before stays valid.
+ */
 export function describeSale(draft: SellDraft): string {
-  return JSON.stringify([
+  const sale: unknown[] = [
     draft.lines.map((line) => [line.productId, line.quantity, line.notes.trim(), line.optionIds ?? []]),
     [draft.customerName, draft.customerPhone, draft.tableNumber, draft.orderNotes].map((value) => value.trim()),
-  ]);
+  ];
+  if (isDeliveryPlatform(draft.channel)) {
+    sale.push([draft.channel, normalizePlatformFolio(draft.externalOrderNumber), draft.collectedBy]);
+  }
+  // Another address is another order: its zone, minimum and fee can differ.
+  if (draft.delivery) {
+    sale.push(['delivery', ...[draft.delivery.postalCode, draft.delivery.addressLine, draft.delivery.references].map((value) => value.trim())]);
+  }
+  return JSON.stringify(sale);
 }
 
 export function readSellDraft(tenantId: string): SellDraft | null {
@@ -58,6 +86,11 @@ export function readSellDraft(tenantId: string): SellDraft | null {
       customerPhone: typeof parsed.customerPhone === 'string' ? parsed.customerPhone : '',
       tableNumber: typeof parsed.tableNumber === 'string' ? parsed.tableNumber : '',
       orderNotes: typeof parsed.orderNotes === 'string' ? parsed.orderNotes : '',
+      // Only the counter or a platform: anything else (a draft from before, or edited by hand) is a counter sale.
+      channel: isDeliveryPlatform(parsed.channel) ? parsed.channel : OrderChannel.Counter,
+      externalOrderNumber: typeof parsed.externalOrderNumber === 'string' ? parsed.externalOrderNumber : '',
+      collectedBy: parsed.collectedBy === PlatformCollectedBy.Business ? PlatformCollectedBy.Business : PlatformCollectedBy.Platform,
+      delivery: readDelivery(parsed.delivery),
       pendingCharge: typeof charge?.key === 'string' && typeof charge.sale === 'string'
         ? { key: charge.key, sale: charge.sale }
         : undefined,
@@ -67,10 +100,21 @@ export function readSellDraft(tenantId: string): SellDraft | null {
   }
 }
 
+function readDelivery(value: unknown): SellDraftDelivery | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { postalCode, addressLine, references } = value as Partial<SellDraftDelivery>;
+  return {
+    postalCode: typeof postalCode === 'string' ? postalCode : '',
+    addressLine: typeof addressLine === 'string' ? addressLine : '',
+    references: typeof references === 'string' ? references : '',
+  };
+}
+
 export function writeSellDraft(tenantId: string, draft: SellDraft) {
   try {
     const isEmpty = draft.lines.length === 0 && !draft.customerName && !draft.customerPhone
-      && !draft.tableNumber && !draft.orderNotes;
+      && !draft.tableNumber && !draft.orderNotes && !isDeliveryPlatform(draft.channel) && !draft.externalOrderNumber
+      && !draft.delivery;
     if (isEmpty) window.localStorage.removeItem(storageKey(tenantId));
     else window.localStorage.setItem(storageKey(tenantId), JSON.stringify(draft));
   } catch {

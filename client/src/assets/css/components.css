@@ -1,0 +1,212 @@
+/*
+ * Classes of the app that only Hyper defined (Fase 20D): font sizes, avatars, soft buttons, card titles,
+ * the password eye, bordered tabs, round pagination and centered tables. Hyper's values, merged with what theme.css
+ * and overrides.css changed of them, so each class is whole in one place. Loaded right after Bootstrap (assets/scss)
+ * and before theme.css, where Hyper's rules were: the cascade around them does not change. hyperClasses.test.ts keeps every
+ * class the app uses from Hyper alone defined here.
+ */
+
+/*
+ * Font sizes for icons and small print, named after their size in pixels at the browser's default font size (16px).
+ * In rem, so they grow with the font size the person picks in the browser, as the rest of the text does.
+ */
+.font-12 {
+  font-size: 0.75rem !important;
+}
+
+.font-13 {
+  font-size: 0.8125rem !important;
+}
+
+.font-15 {
+  font-size: 0.9375rem !important;
+}
+
+.font-16 {
+  font-size: 1rem !important;
+}
+
+.font-22 {
+  font-size: 1.375rem !important;
+}
+
+/* Square boxes for a picture or an initial; avatar-title centers what goes inside. */
+.avatar-sm {
+  width: 3rem;
+  height: 3rem;
+}
+
+.avatar-lg {
+  width: 6rem;
+  height: 6rem;
+}
+
+.avatar-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background-color: var(--ct-primary);
+  /* The theme's text for the accent: white read at 1.9:1 on the light accents of dark mode. */
+  color: var(--ta-on-accent);
+  font-weight: 600;
+}
+
+/*
+ * Soft buttons: the color of a state on its tint (the emphasis text passes on it in every theme); hovered or pressed,
+ * the fill. Focused with the keyboard they draw theme.css's focus ring, like every button.
+ */
+.btn-soft-primary {
+  --ct-btn-color: var(--ct-primary-text-emphasis);
+  --ct-btn-bg: var(--ct-primary-bg-subtle);
+  --ct-btn-border-color: transparent;
+  --ct-btn-hover-color: var(--ta-on-accent);
+  --ct-btn-hover-bg: var(--ct-primary);
+  --ct-btn-hover-border-color: var(--ct-primary);
+  --ct-btn-active-color: var(--ta-on-accent);
+  --ct-btn-active-bg: var(--ct-primary);
+  --ct-btn-active-border-color: var(--ct-primary);
+  --ct-btn-disabled-color: var(--ct-primary-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-primary-bg-subtle);
+  --ct-btn-disabled-border-color: var(--ct-primary);
+}
+
+.btn-soft-secondary {
+  /*
+   * Gray has no emphasis color in theme.css, and Hyper's (#8a969c) is lighter than the fill: 2.8:1 on the tint. The
+   * body text is the gray's dark shade in light mode and its light one in dark, like the others' emphasis, and passes
+   * AA on the tint over the page and a card in both modes. The gray itself read 4.4:1 in light and 2:1 in dark.
+   */
+  --ct-btn-color: var(--ct-body-color);
+  --ct-btn-bg: var(--ct-secondary-bg-subtle);
+  --ct-btn-border-color: transparent;
+  --ct-btn-hover-color: #fff;
+  --ct-btn-hover-bg: var(--ct-secondary);
+  --ct-btn-hover-border-color: var(--ct-secondary);
+  --ct-btn-active-color: #fff;
+  --ct-btn-active-bg: var(--ct-secondary);
+  --ct-btn-active-border-color: var(--ct-secondary);
+  --ct-btn-disabled-color: var(--ct-body-color);
+  --ct-btn-disabled-bg: var(--ct-secondary-bg-subtle);
+  --ct-btn-disabled-border-color: var(--ct-secondary);
+}
+
+.btn-soft-success {
+  --ct-btn-color: var(--ct-success-text-emphasis);
+  --ct-btn-bg: var(--ct-success-bg-subtle);
+  --ct-btn-border-color: transparent;
+  --ct-btn-hover-color: #fff;
+  --ct-btn-hover-bg: var(--ct-success);
+  --ct-btn-hover-border-color: var(--ct-success);
+  --ct-btn-active-color: #fff;
+  --ct-btn-active-bg: var(--ct-success);
+  --ct-btn-active-border-color: var(--ct-success);
+  --ct-btn-disabled-color: var(--ct-success-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-success-bg-subtle);
+  --ct-btn-disabled-border-color: var(--ct-success);
+}
+
+.btn-soft-warning {
+  --ct-btn-color: var(--ct-warning-text-emphasis);
+  --ct-btn-bg: var(--ct-warning-bg-subtle);
+  --ct-btn-border-color: transparent;
+  --ct-btn-hover-color: var(--ta-on-warning);
+  --ct-btn-hover-bg: var(--ct-warning);
+  --ct-btn-hover-border-color: var(--ct-warning);
+  --ct-btn-active-color: var(--ta-on-warning);
+  --ct-btn-active-bg: var(--ct-warning);
+  --ct-btn-active-border-color: var(--ct-warning);
+  --ct-btn-disabled-color: var(--ct-warning-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-warning-bg-subtle);
+  --ct-btn-disabled-border-color: var(--ct-warning);
+}
+
+.btn-soft-danger {
+  --ct-btn-color: var(--ct-danger-text-emphasis);
+  --ct-btn-bg: var(--ct-danger-bg-subtle);
+  --ct-btn-border-color: transparent;
+  --ct-btn-hover-color: #fff;
+  --ct-btn-hover-bg: var(--ct-danger);
+  --ct-btn-hover-border-color: var(--ct-danger);
+  --ct-btn-active-color: #fff;
+  --ct-btn-active-bg: var(--ct-danger);
+  --ct-btn-active-border-color: var(--ct-danger);
+  --ct-btn-disabled-color: var(--ct-danger-text-emphasis);
+  --ct-btn-disabled-bg: var(--ct-danger-bg-subtle);
+  --ct-btn-disabled-border-color: var(--ct-danger);
+}
+
+[data-bs-theme='dark'] .btn-soft-secondary {
+  --ct-btn-hover-color: var(--ct-white);
+  --ct-btn-hover-bg: rgba(var(--ct-white-rgb), 0.1);
+  --ct-btn-hover-border-color: transparent;
+  --ct-btn-active-color: var(--ct-white);
+  --ct-btn-active-bg: rgba(var(--ct-white-rgb), 0.1);
+  --ct-btn-active-border-color: transparent;
+}
+
+/* Card titles read as they are written, with a capital only at the start, like the rest of the app. */
+.card .header-title {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.card-header .header-title,
+.card-title .header-title {
+  margin-bottom: 0;
+}
+
+/* The eye that shows the password, drawn with Remix (the only icon set the app loads). */
+.password-eye {
+  cursor: pointer;
+}
+
+.password-eye::before {
+  font-family: 'remixicon';
+  content: '\ecb5'; /* ri-eye-line */
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.show-password .password-eye::before {
+  content: '\ecb7'; /* ri-eye-off-line */
+}
+
+/* Tabs with a line under the current one. */
+.nav-tabs.nav-bordered {
+  border-bottom: 2px solid var(--ct-border-color);
+}
+
+.nav-tabs.nav-bordered .nav-item {
+  margin-bottom: -1px;
+}
+
+.nav-tabs.nav-bordered li a {
+  border: 0;
+  padding: 0.625rem 1.25rem;
+}
+
+.nav-tabs.nav-bordered li a.active {
+  border-bottom: 2px solid var(--ct-primary);
+}
+
+/* Round page buttons, a little apart. */
+.pagination-rounded .page-link {
+  border-radius: 30px !important;
+  margin: 0 3px !important;
+  border: none;
+}
+
+/* Cells centered on the line. */
+.table-centered td,
+.table-centered th {
+  vertical-align: middle !important;
+}

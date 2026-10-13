@@ -7,6 +7,7 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Customers.Commands;
 using FoodParkDigital.Application.Customers.Queries;
+using FoodParkDigital.Application.DeliveryPlatforms;
 using FoodParkDigital.Application.Dining;
 using FoodParkDigital.Application.Finance.Commands;
 using FoodParkDigital.Application.Marketing.Commands;
@@ -16,6 +17,7 @@ using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.Queries;
 using FoodParkDigital.Application.Reports.Queries;
 using FoodParkDigital.Application.Tenants.Commands;
+using FoodParkDigital.Application.Tenants.Queries;
 using FoodParkDigital.Application.WhatsApp.Commands;
 using FoodParkDigital.Domain.Tenants.Enums;
 using MediatR;
@@ -55,12 +57,36 @@ public class UseCaseRulesTests
         // Reports, and the business's activity for owners and admins.
         { typeof(GetDashboardMetricsQuery), "Permission(ViewReports)" },
         { typeof(GetSalesByBranchQuery), "Permission(ViewReports)" },
+        { typeof(GetSalesByChannelQuery), "Permission(ViewReports)" },
+        { typeof(GetDeliveryPlatformOrdersQuery), "Permission(ViewReports)" },
         { typeof(GetAuditLogsQuery), "Manager" },
         // Configuration stays with owners and admins; every member reads where they work.
         { typeof(UpdateMyTenantCommand), "Manager" },
         { typeof(UpdateSalesPolicyCommand), "Manager" },
         { typeof(UpdateBusinessThemeCommand), "Manager" },
         { typeof(UpdateOpeningHoursCommand), "Manager" },
+        { typeof(GetSpecialDaysQuery), "Manager" },
+        { typeof(AddSpecialDayCommand), "Manager" },
+        { typeof(UpdateSpecialDayCommand), "Manager" },
+        { typeof(RemoveSpecialDayCommand), "Manager" },
+        // The rates of the delivery platforms are for owners and admins; whoever sells or reads the reports learns only
+        // which platforms are on.
+        { typeof(GetDeliveryPlatformsQuery), "Manager" },
+        { typeof(SaveDeliveryPlatformCommand), "Manager" },
+        { typeof(GetDeliveryPlatformChannelsQuery), "Permission(ManageOrders, ViewReports, ManageCatalog)" },
+        // The prices of the products in each app, as the menu's: whoever manages the catalog.
+        { typeof(GetPlatformPriceListQuery), "Permission(ManageCatalog)" },
+        { typeof(SavePlatformPricesCommand), "Permission(ManageCatalog)" },
+        // The settlements of their deposits: read with the reports, where the commission and the net already are; opened,
+        // saved, closed and voided by owners and admins, as the terms.
+        { typeof(GetPlatformSettlementsQuery), "Permission(ViewReports)" },
+        { typeof(GetPlatformSettlementQuery), "Permission(ViewReports)" },
+        { typeof(GetPendingPlatformOrdersQuery), "Permission(ViewReports)" },
+        { typeof(GetPlatformReceivablesQuery), "Permission(ViewReports)" },
+        { typeof(CreatePlatformSettlementCommand), "Manager" },
+        { typeof(UpdatePlatformSettlementCommand), "Manager" },
+        { typeof(ClosePlatformSettlementCommand), "Manager" },
+        { typeof(VoidPlatformSettlementCommand), "Manager" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

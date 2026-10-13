@@ -1,10 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { SIZES, dialog, open, snap, snapElement } from '../helpers';
-import { productPhotos } from './catalogo-inventario.mocks';
+import { PLATFORM_ROUTES, RAPPI_PRICES, productPhotos } from './catalogo-inventario.mocks';
 
-// Catálogo (productos, categorías, servicios) and Inventario (insumos, compras, proveedores): every screen at the
-// three base looks, then the tabs, filters and dialogs each one has. A dialog is taken at the size of the screen
+// Catálogo (productos, categorías, servicios, precios en apps) and Inventario (insumos, compras, proveedores): every
+// screen at the three base looks, then the tabs, filters and dialogs each one has. A dialog is taken at the size of the screen
 // (not the whole page): it is fixed over the page, and the shot shows it where the person sees it.
 
 const LOOKS = [
@@ -70,6 +70,18 @@ for (const look of LOOKS) {
       await expect(page.getByRole('button', { name: 'Editar Café Finca Las Nubes' })).toBeVisible();
       await snap(page, `proveedores-${look.suffix}`);
     });
+
+    test.describe('con plataformas de reparto', () => {
+      test.use({ extraRoutes: PLATFORM_ROUTES, prepareData: RAPPI_PRICES });
+
+      test(`precios en apps ${look.suffix}`, async ({ page }) => {
+        // Rappi, the first platform that is on, with its prices beside the menu's: the empty boxes charge the menu's.
+        await open(page, '/platform-prices');
+        await expect(page.getByLabel('Precio de Latte en Rappi')).toHaveValue('66.00');
+        await expect(page.getByLabel('Precio de Espresso doble en Rappi')).toHaveValue('');
+        await snap(page, `precios-en-apps-${look.suffix}`);
+      });
+    });
   });
 }
 
@@ -92,6 +104,21 @@ test.describe('Productos', () => {
     await snap(page, 'productos-panaderia');
   });
 
+  // A search field with text keeps the focus, so its clear button shows (Bootstrap draws it gray).
+  for (const [colorMode, look] of [['light', 'claro'], ['dark', 'oscuro']] as const) {
+    test.describe(look, () => {
+      test.use({ colorMode });
+
+      test(`productos, buscar en ${look}`, async ({ page }) => {
+        await open(page, '/products');
+        await page.getByRole('searchbox', { name: 'Nombre, SKU o código de barras' }).fill('latte');
+        await expect(page.getByRole('link', { name: 'Editar Chai latte' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Editar Café americano' })).toBeHidden();
+        await snapElement(page.getByRole('search'), `productos-buscar-${look}`);
+      });
+    });
+  }
+
   test('producto editar, opciones y extras', async ({ page }) => {
     await open(page, '/products/c0cf3283-f80a-468d-b62f-9d7e6be47ec1/edit');
     await expect(page.getByRole('button', { name: 'Controlar existencias' })).toBeVisible();
@@ -102,18 +129,54 @@ test.describe('Productos', () => {
   });
 });
 
+test.describe('Precios en apps', () => {
+  test.use({ extraRoutes: PLATFORM_ROUTES, prepareData: RAPPI_PRICES });
+
+  /** Fills the boxes still empty with the menu's prices plus 25 %, rounded up to $5. */
+  async function calculate(page: Page) {
+    await page.getByRole('button', { name: 'Calcular precios' }).click();
+    const calculating = await dialog(page, 'Calcular precios de Rappi');
+    await calculating.getByLabel('Tu precio más (%)').fill('25');
+    await calculating.getByLabel('Redondear hacia arriba').selectOption({ label: 'A $5' });
+    return calculating;
+  }
+
+  test('precios en apps, calcular', async ({ page }) => {
+    await open(page, '/platform-prices');
+    const calculating = await calculate(page);
+    // The first product as the example: the americano, $35.00 in the menu.
+    await expect(calculating.getByText('Por ejemplo: Café americano, de $35.00 a $45.00.')).toBeVisible();
+    await snap(page, 'precios-en-apps-calcular-dialogo', { fullPage: false });
+  });
+
+  test('precios en apps, con cambios', async ({ page }) => {
+    // What the calculation filled waits to be checked and saved, and a box the API would refuse is marked.
+    await open(page, '/platform-prices');
+    const calculating = await calculate(page);
+    await calculating.getByRole('button', { name: 'Calcular', exact: true }).click();
+    await expect(calculating).toBeHidden();
+    await expect(page.getByLabel('Precio de Espresso doble en Rappi')).toHaveValue('50.00');
+    // The prices already set stay as they are.
+    await expect(page.getByLabel('Precio de Latte en Rappi')).toHaveValue('66.00');
+    await page.getByLabel('Precio de Capuchino en Rappi').fill('0');
+    // The bar under the list says why nothing can be saved yet.
+    await expect(page.getByText('Revisa los precios marcados en rojo.')).toBeVisible();
+    await snap(page, 'precios-en-apps-con-cambios');
+  });
+});
+
 test.describe('Categorías', () => {
   test('categorías, nueva categoría', async ({ page }) => {
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Nueva categoría' }).click();
-    await expect(await dialog(page)).toContainText('Nueva categoría');
+    await dialog(page, 'Nueva categoría');
     await snap(page, 'categorias-nueva-dialogo', { fullPage: false });
   });
 
   test('categorías, editar categoría', async ({ page }) => {
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Editar Bebidas calientes' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar categoría');
     await expect(editing.getByLabel('Nombre')).toHaveValue('Bebidas calientes');
     await snap(page, 'categorias-editar-dialogo', { fullPage: false });
   });
@@ -122,7 +185,7 @@ test.describe('Categorías', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Editar Bebidas calientes' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar categoría');
     await expect(editing.getByLabel('Nombre')).toHaveValue('Bebidas calientes');
     await snap(page, 'categorias-editar-dialogo-telefono', { fullPage: false });
   });
@@ -138,14 +201,14 @@ test.describe('Categorías', () => {
     // A category with products asks where to move them before it is archived.
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Archivar Bebidas calientes' }).click();
-    await expect(await dialog(page)).toContainText('Pasar los productos a');
+    await expect(await dialog(page, 'Archivar “Bebidas calientes”')).toContainText('Pasar los productos a');
     await snap(page, 'categorias-archivar-dialogo', { fullPage: false });
   });
 
   test('categorías, instalar plantilla', async ({ page }) => {
     await open(page, '/categories');
     await page.getByRole('button', { name: 'Instalar plantilla' }).click();
-    const templates = await dialog(page);
+    const templates = await dialog(page, 'Instalar plantilla de categorías');
     await expect(templates).toContainText('Lavanderia de calzado');
     await snap(page, 'categorias-plantillas-dialogo', { fullPage: false });
   });
@@ -156,7 +219,7 @@ test.describe('Categorías', () => {
     test('categorías, editar categoría en oscuro', async ({ page }) => {
       await open(page, '/categories');
       await page.getByRole('button', { name: 'Editar Bebidas calientes' }).click();
-      const editing = await dialog(page);
+      const editing = await dialog(page, 'Editar categoría');
       await expect(editing.getByLabel('Nombre')).toHaveValue('Bebidas calientes');
       await snap(page, 'categorias-editar-dialogo-oscuro', { fullPage: false });
     });
@@ -167,7 +230,7 @@ test.describe('Servicios', () => {
   test('servicios, editar servicio', async ({ page }) => {
     await open(page, '/services');
     await page.getByRole('button', { name: 'Editar Mantenimiento de cafetera espresso' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar servicio');
     await expect(editing.getByLabel('Nombre')).toHaveValue('Mantenimiento de cafetera espresso');
     await snap(page, 'servicios-editar-dialogo', { fullPage: false });
   });
@@ -223,7 +286,7 @@ test.describe('Inventario', () => {
   test('inventario, editar insumo', async ({ page }) => {
     await open(page, '/inventory');
     await page.getByRole('button', { name: 'Editar Leche entera' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar insumo');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Leche entera');
     await snap(page, 'inventario-insumo-dialogo', { fullPage: false });
   });
@@ -232,7 +295,7 @@ test.describe('Inventario', () => {
     // Pan de elote is the stock of a product: its unit is the product's and cannot change here.
     await open(page, '/inventory');
     await page.getByRole('button', { name: 'Editar Pan de elote' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar insumo');
     await expect(editing.getByText('Es la unidad del producto.')).toBeVisible();
     await snap(page, 'inventario-insumo-producto-dialogo', { fullPage: false });
   });
@@ -241,7 +304,7 @@ test.describe('Inventario', () => {
     await open(page, '/inventory');
     await page.getByRole('tab', { name: 'Entradas y salidas' }).click();
     await page.getByRole('button', { name: 'Registrar movimiento' }).click();
-    await expect(await dialog(page)).toContainText('Registrar movimiento de inventario');
+    await dialog(page, 'Registrar movimiento de inventario');
     await snap(page, 'inventario-movimiento-dialogo', { fullPage: false });
   });
 
@@ -249,7 +312,7 @@ test.describe('Inventario', () => {
     await open(page, '/inventory');
     await page.getByRole('tab', { name: 'Entradas y salidas' }).click();
     await page.getByRole('button', { name: 'Ver el movimiento INV-20261004-0001' }).click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, 'Detalle de movimiento');
     await expect(detail).toContainText('Recepción parcial de lácteos');
     await snap(page, 'inventario-movimiento-detalle-dialogo', { fullPage: false });
   });
@@ -258,7 +321,7 @@ test.describe('Inventario', () => {
     await open(page, '/inventory');
     await page.getByRole('tab', { name: 'Ubicaciones' }).click();
     await page.getByRole('button', { name: 'Editar Sucursal Roma Norte' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar ubicación');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Sucursal Roma Norte');
     await snap(page, 'inventario-ubicacion-dialogo', { fullPage: false });
   });
@@ -269,7 +332,7 @@ test.describe('Compras', () => {
     // A partial reception: what came, what is missing and every action its status allows.
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'Ver PO-20261003-0002' }).click();
-    await expect(await dialog(page)).toContainText('faltan');
+    await expect(await dialog(page, /^PO-20261003-0002/)).toContainText('faltan');
     await snap(page, 'compras-detalle-escritorio', { fullPage: false });
   });
 
@@ -277,14 +340,14 @@ test.describe('Compras', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'PO-20261003-0002', exact: true }).click();
-    await expect(await dialog(page)).toContainText('faltan');
+    await expect(await dialog(page, /^PO-20261003-0002/)).toContainText('faltan');
     await snap(page, 'compras-detalle-telefono', { fullPage: false });
   });
 
   test('compras, recibir mercancía', async ({ page }) => {
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'Recibir PO-20261002-0001' }).click();
-    const receiving = await dialog(page);
+    const receiving = await dialog(page, /^PO-20261002-0001/);
     await expect(receiving.getByRole('button', { name: 'Registrar recepción' })).toBeVisible();
     await snap(page, 'compras-recibir-escritorio', { fullPage: false });
   });
@@ -294,7 +357,7 @@ test.describe('Compras', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'PO-20261002-0001', exact: true }).click();
-    const detail = await dialog(page);
+    const detail = await dialog(page, /^PO-20261002-0001/);
     await detail.getByRole('button', { name: 'Recibir mercancía' }).click();
     await expect(detail.getByRole('button', { name: 'Registrar recepción' })).toBeVisible();
     await snap(page, 'compras-recibir-telefono', { fullPage: false });
@@ -303,7 +366,7 @@ test.describe('Compras', () => {
   test('compras, nueva compra', async ({ page }) => {
     await open(page, '/purchases');
     await page.getByRole('button', { name: 'Nueva compra' }).click();
-    await expect(await dialog(page)).toContainText('Registrar compra');
+    await expect(await dialog(page, 'Nueva compra')).toContainText('Registrar compra');
     await snap(page, 'compras-nueva-dialogo', { fullPage: false });
   });
 
@@ -313,7 +376,7 @@ test.describe('Compras', () => {
     test('compras, detalle de una compra en oscuro', async ({ page }) => {
       await open(page, '/purchases');
       await page.getByRole('button', { name: 'Ver PO-20261003-0002' }).click();
-      await expect(await dialog(page)).toContainText('faltan');
+      await expect(await dialog(page, /^PO-20261003-0002/)).toContainText('faltan');
       await snap(page, 'compras-detalle-escritorio-oscuro', { fullPage: false });
     });
   });
@@ -323,7 +386,7 @@ test.describe('Proveedores', () => {
   test('proveedores, editar proveedor', async ({ page }) => {
     await open(page, '/suppliers');
     await page.getByRole('button', { name: 'Editar Café Finca Las Nubes' }).click();
-    const editing = await dialog(page);
+    const editing = await dialog(page, 'Editar proveedor');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Café Finca Las Nubes');
     await snap(page, 'proveedores-editar-dialogo', { fullPage: false });
   });
@@ -332,7 +395,7 @@ test.describe('Proveedores', () => {
     await page.setViewportSize(SIZES.phone);
     await open(page, '/suppliers');
     await page.getByRole('button', { name: 'Nuevo proveedor' }).click();
-    await expect(await dialog(page)).toContainText('Crear proveedor');
+    await expect(await dialog(page, 'Nuevo proveedor')).toContainText('Crear proveedor');
     await snap(page, 'proveedores-nuevo-dialogo-telefono', { fullPage: false });
   });
 });

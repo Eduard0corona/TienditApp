@@ -35,6 +35,8 @@ export default function SalesByBranchCard() {
 
   const data = report.data;
   const maxDay = Math.max(0, ...(data?.days.map((day) => day.netSales) ?? []));
+  // What Rappi, Uber Eats or DiDi Food charged in their apps: a column of its own only once there is some.
+  const showsPlatforms = (data?.totals.platformAmount ?? 0) > 0;
 
   return (
     <div className="card mb-3">
@@ -119,6 +121,7 @@ export default function SalesByBranchCard() {
                       <th className="text-end">Tarjeta</th>
                       <th className="text-end">Transferencia</th>
                       <th className="text-end">Otros</th>
+                      {showsPlatforms && <th className="text-end">Plataformas</th>}
                       <th className="text-end">Devoluciones</th>
                     </tr>
                   </thead>
@@ -133,6 +136,7 @@ export default function SalesByBranchCard() {
                         <td className="text-end ta-money">{formatMoney(row.figures.cardAmount)}</td>
                         <td className="text-end ta-money">{formatMoney(row.figures.transferAmount)}</td>
                         <td className="text-end ta-money">{formatMoney(row.figures.walletAmount + row.figures.otherAmount)}</td>
+                        {showsPlatforms && <td className="text-end ta-money">{formatMoney(row.figures.platformAmount)}</td>}
                         <td className="text-end ta-money">{formatMoney(row.figures.refundsAmount)}</td>
                       </tr>
                     ))}

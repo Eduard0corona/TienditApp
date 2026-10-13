@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -225,6 +226,51 @@ public sealed class CrossTenantHttpSqlServerTests
                 new { theme = bBefore.GetProperty("theme").GetInt32() }));
             await TwoBusinessesApi.ReadAsync(await B.Client.PutAsJsonAsync("/api/v1/auth/my-tenant/opening-hours",
                 new { intervals = bBefore.GetProperty("openingHours").ValueKind == JsonValueKind.Array ? bBefore.GetProperty("openingHours") : default(JsonElement?) }));
+        }
+    }
+
+    [SqlServerFact]
+    public async Task SpecialDays_WithTheHeaderOfAnother_ShouldReadAndChangeOnlyTheirOwn()
+    {
+        const string path = "/api/v1/auth/my-tenant/special-days";
+        var today = DateOnly.Parse((await A.Client.GetFromJsonAsync<JsonElement>(path)).GetProperty("today").GetString()!);
+        // Far ahead, clear of any day the other tests of the suite mark.
+        var date = today.AddDays(300);
+        Guid? aPeriod = null;
+        Guid? bPeriod = null;
+        try
+        {
+            aPeriod = PeriodOn(await TwoBusinessesApi.ReadAsync(await A.Client.PostAsJsonAsync(path, new { from = date, kind = 0, reason = "Inventario de A" })), date).Id;
+
+            // The business override header is only for the platform admin: an owner's special day stays in their business.
+            using var add = InBusiness(A.TenantId, HttpMethod.Post, path);
+            add.Content = JsonContent.Create(new { from = date, kind = 0, reason = "Inventario de B" });
+            bPeriod = PeriodOn(await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(add)), date).Id;
+            var bList = await TwoBusinessesApi.ReadAsync(await B.Client.SendAsync(InBusiness(A.TenantId, HttpMethod.Get, path)));
+            Assert.Equal("Inventario de B", PeriodOn(bList, date).Reason);
+            Assert.DoesNotContain("Inventario de A", bList.GetRawText());
+
+            // A's period by its id, with A's header: as if it did not exist.
+            using var change = InBusiness(A.TenantId, HttpMethod.Put, $"{path}/{aPeriod}");
+            change.Content = JsonContent.Create(new { revision = 1, from = date, kind = 0, reason = "Cambiado por B" });
+            Assert.Equal(HttpStatusCode.NotFound, (await B.Client.SendAsync(change)).StatusCode);
+            using var remove = InBusiness(A.TenantId, HttpMethod.Delete, $"{path}/{aPeriod}?revision=1");
+            Assert.Equal(HttpStatusCode.NotFound, (await B.Client.SendAsync(remove)).StatusCode);
+
+            var aPeriodAfter = PeriodOn(await A.Client.GetFromJsonAsync<JsonElement>(path), date);
+            Assert.Equal((aPeriod.Value, "Inventario de A", 1), (aPeriodAfter.Id, aPeriodAfter.Reason, aPeriodAfter.Revision));
+
+            // In its own business, a change based on another version is a conflict to reload.
+            var stale = await A.Client.PutAsJsonAsync($"{path}/{aPeriod}", new { revision = 2, from = date, kind = 0, reason = "Otra versión" });
+            Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+            Assert.Equal("concurrency_conflict", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        }
+        finally
+        {
+            if (aPeriod is { } a)
+                await TwoBusinessesApi.ReadAsync(await A.Client.DeleteAsync($"{path}/{a}?revision={PeriodOn(await A.Client.GetFromJsonAsync<JsonElement>(path), date).Revision}"));
+            if (bPeriod is { } b)
+                await TwoBusinessesApi.ReadAsync(await B.Client.DeleteAsync($"{path}/{b}?revision={PeriodOn(await B.Client.GetFromJsonAsync<JsonElement>(path), date).Revision}"));
         }
     }
 
@@ -472,6 +518,14 @@ public sealed class CrossTenantHttpSqlServerTests
         orderNotificationPolicy = profile.GetProperty("orderNotificationPolicy").GetInt32(),
         insufficientStockPolicy
     };
+
+    /// <summary>The upcoming special day on a date, from the list of special days.</summary>
+    private static (Guid Id, string? Reason, int Revision) PeriodOn(JsonElement specialDays, DateOnly date)
+    {
+        var period = Assert.Single(specialDays.GetProperty("upcoming").EnumerateArray(),
+            day => day.GetProperty("from").GetString() == date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        return (period.GetProperty("id").GetGuid(), period.GetProperty("reason").GetString(), period.GetProperty("revision").GetInt32());
+    }
 
     private static HttpRequestMessage InBusiness(Guid tenantId, HttpMethod method, string path)
     {

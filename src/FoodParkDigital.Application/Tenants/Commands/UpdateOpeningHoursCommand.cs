@@ -24,8 +24,6 @@ public record UpdateOpeningHoursCommand(List<OpeningIntervalDto>? Intervals) : I
 
 public class UpdateOpeningHoursCommandValidator : AbstractValidator<UpdateOpeningHoursCommand>
 {
-    private const string TimePattern = "^([01][0-9]|2[0-3]):[0-5][0-9]$";
-
     public UpdateOpeningHoursCommandValidator()
     {
         RuleFor(x => x.Intervals!.Count)
@@ -35,8 +33,8 @@ public class UpdateOpeningHoursCommandValidator : AbstractValidator<UpdateOpenin
         RuleForEach(x => x.Intervals).ChildRules(interval =>
         {
             interval.RuleFor(i => i.Day).IsInEnum().WithMessage("El día del horario no existe.");
-            interval.RuleFor(i => i.Opens).NotEmpty().Matches(TimePattern).WithMessage("Escribe la hora de apertura como 09:00.");
-            interval.RuleFor(i => i.Closes).NotEmpty().Matches(TimePattern).WithMessage("Escribe la hora de cierre como 20:00.");
+            interval.RuleFor(i => i.Opens).NotEmpty().Matches(OpeningHoursMappings.TimePattern).WithMessage("Escribe la hora de apertura como 09:00.");
+            interval.RuleFor(i => i.Closes).NotEmpty().Matches(OpeningHoursMappings.TimePattern).WithMessage("Escribe la hora de cierre como 20:00.");
         });
     }
 }

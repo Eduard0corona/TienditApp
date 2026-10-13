@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Branches.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Reporting.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -9,7 +10,8 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
 {
     public void Configure(EntityTypeBuilder<Branch> builder)
     {
-        builder.ToTable("Branches");
+        builder.ToTable("Branches", table =>
+            table.HasCheckConstraint("CK_Branches_ServiceMode", "[ServiceMode] IN (0, 1)"));
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TenantId).IsRequired();
@@ -26,6 +28,13 @@ public class BranchConfiguration : IEntityTypeConfiguration<Branch>
         builder.Property(x => x.ContactPhone).HasMaxLength(30);
         builder.Property(x => x.IsDefault).IsRequired();
         builder.Property(x => x.IsActive).IsRequired();
+        // EF always writes it; the default fills the branches the previous version adds while this one is published
+        // (it knows only branches with premises).
+        builder.Property(x => x.ServiceMode)
+            .HasConversion<int>()
+            .HasDefaultValue(BranchServiceMode.Premises)
+            .ValueGeneratedNever()
+            .IsRequired();
 
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.IsActive });
@@ -57,6 +66,9 @@ public class DailySalesSnapshotConfiguration : IEntityTypeConfiguration<DailySal
         builder.Property(x => x.WalletAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.OtherAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.RefundsAmount).HasColumnType("decimal(18,2)");
+        // EF always writes it; the default fills the rows the previous version stores while this one is published
+        // (it does not know the «Plataforma» method, so 0 is what those days had).
+        builder.Property(x => x.PlatformAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m).ValueGeneratedNever();
         builder.Ignore(x => x.Figures);
 
         // One row per day, branch and kind of order. A null branch is one more bucket: without the filter SQL Server

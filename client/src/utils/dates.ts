@@ -71,6 +71,49 @@ export function formatCalendarDate(date: string, options: Intl.DateTimeFormatOpt
   return Number.isNaN(parsed.getTime()) ? date : new Intl.DateTimeFormat('es-MX', { ...options, timeZone: 'UTC' }).format(parsed);
 }
 
+/** A calendar date at noon UTC: the same day in words whatever the zone of the device or the business. */
+function calendarNoon(date: string): Date | null {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** The weekday, day and month of a calendar date in words, as Intl writes them in Spanish. */
+function calendarParts(date: Date, style: 'short' | 'long'): Record<'weekday' | 'day' | 'month', string> {
+  const parts = new Intl.DateTimeFormat('es-MX', { weekday: style, day: 'numeric', month: style, timeZone: 'UTC' }).formatToParts(date);
+  // Some versions of the browser's data end an abbreviation with a period ("dic.").
+  const part = (type: Intl.DateTimeFormatPartTypes) => (parts.find((item) => item.type === type)?.value ?? '').replace(/\.$/, '');
+  return { weekday: part('weekday'), day: part('day'), month: part('month') };
+}
+
+/** "Vie 25 dic": a calendar date in a short list (special days), without the comma Intl puts after the weekday. */
+export function formatShortCalendarDay(date: string): string {
+  const parsed = calendarNoon(date);
+  if (!parsed) return date;
+  const { weekday, day, month } = calendarParts(parsed, 'short');
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${day} ${month}`;
+}
+
+/** "viernes 25 de diciembre", or "viernes 25" without its month, to name a calendar date in a sentence. */
+export function formatLongCalendarDay(date: string, withMonth = true): string {
+  const parsed = calendarNoon(date);
+  if (!parsed) return date;
+  const { weekday, day, month } = calendarParts(parsed, 'long');
+  return withMonth ? `${weekday} ${day} de ${month}` : `${weekday} ${day}`;
+}
+
+/** The calendar date some days later, or earlier when negative: "2026-12-31" plus 1 is "2027-01-01". */
+export function addCalendarDays(date: string, days: number): string {
+  const parsed = calendarNoon(date);
+  if (!parsed) return date;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+/** Days from one calendar date to another: 1 from "2026-12-31" to "2027-01-01", negative when it is before. */
+export function calendarDaysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000);
+}
+
 /** Value for an <input type="datetime-local"> in local time. */
 export function toDateTimeLocalInput(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');

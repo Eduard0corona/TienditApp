@@ -34,6 +34,19 @@ public class PublicMenuController : ControllerBase
         return menu is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(menu);
     }
 
+    /// <summary>Whether the business delivers to a postal code and what it charges (Fase 22C); never the zone's name.</summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="postalCode">Five digits.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("delivery-quote")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicDeliveryQuoteDto>> GetDeliveryQuote(
+        string slug, [FromQuery] string postalCode, CancellationToken cancellationToken)
+    {
+        var quote = await _mediator.Send(new GetPublicDeliveryQuoteQuery(slug, postalCode), cancellationToken);
+        return quote is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(quote);
+    }
+
     [HttpPost("orders")]
     [EnableRateLimiting("public-order")]
     public async Task<ActionResult<PublicOrderReceiptDto>> PlaceOrder(string slug, [FromBody] PlacePublicOrderRequest request, CancellationToken cancellationToken)
@@ -46,7 +59,8 @@ public class PublicMenuController : ControllerBase
             Notes = request.Notes,
             TableLabel = request.TableLabel,
             Items = request.Items,
-            ExpectedTotal = request.ExpectedTotal
+            ExpectedTotal = request.ExpectedTotal,
+            Delivery = request.Delivery
         }, cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
@@ -62,4 +76,6 @@ public class PlacePublicOrderRequest
     public string? TableLabel { get; init; }
     public List<FoodParkDigital.Application.Orders.Commands.CreateOrderItemDto> Items { get; init; } = [];
     public decimal? ExpectedTotal { get; init; }
+    /// <summary>Where the order goes (Fase 22C); none to pick it up or for a table.</summary>
+    public FoodParkDigital.Application.Orders.OrderDeliveryInput? Delivery { get; init; }
 }
