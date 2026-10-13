@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { CashSessionDto, CashTransactionDto } from '../../types';
 import { CashSessionStatus } from '../../types';
 import { formatMoney, formatSignedMoney } from '../../utils/money';
-import { describeDifference, getTransactionTypeLabel } from '../../pages/cash/cashFormat';
+import { describeDifference, getTransactionTypeLabel, personLabel } from '../../pages/cash/cashFormat';
 import { formatInBusinessZone } from '../../utils/dates';
 
 interface CashCutTicketProps {
@@ -35,9 +35,9 @@ function Row({ label, value, strong }: { label: string; value: ReactNode; strong
   );
 }
 
-/** Who opened or closed the drawer (the API gives their user, an email), on its own line under the row. */
-function Person({ user }: { user: string }) {
-  return <div className="small ta-ticket-wrap">{user}</div>;
+/** Who opened or closed the drawer (their name, or their user when the API has none), on its own line under the row. */
+function Person({ name, user }: { name?: string | null; user: string }) {
+  return <div className="small ta-ticket-wrap">{personLabel(name, user)}</div>;
 }
 
 /** The cut of one shift, printed for the cashier and whoever receives the cash, with room to sign. */
@@ -51,11 +51,11 @@ export default function CashCutTicket({ businessName, session, movements }: Cash
       {session.branchName && <div className="text-center small ta-ticket-wrap">{session.branchName}</div>}
       <div className="mt-2">
         <Row label="Abrió" value={<DateTime value={session.openedAt} />} />
-        <Person user={session.openedBy} />
+        <Person name={session.openedByName} user={session.openedBy} />
         {closed && session.closedAt && (
           <>
             <Row label="Cerró" value={<DateTime value={session.closedAt} />} />
-            {session.closedBy && <Person user={session.closedBy} />}
+            {session.closedBy && <Person name={session.closedByName} user={session.closedBy} />}
           </>
         )}
       </div>

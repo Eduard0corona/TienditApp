@@ -935,14 +935,21 @@
 }
 
 /*
- * The tabs of a menu section (SectionTabs) slide when they do not fit: the edge that hides tabs fades
- * (.ta-scroll-fade) and, with a mouse, has a button. The frame draws the line under them, so it runs whole under the
- * faded edges, and holds the buttons.
+ * The tabs of a menu section (SectionTabs) and the parts of Inventario slide when they do not fit (TabRow): the edge
+ * that hides tabs fades (.ta-scroll-fade) and, with a mouse, has a button. The frame draws the line under them, so it
+ * runs whole under the faded edges, and holds the buttons.
  */
 .section-tabs-frame {
-  position: relative;
   margin: -0.5rem 0 1.25rem;
   border-bottom: 1px solid var(--ct-border-color);
+}
+
+/*
+ * Only a row that hides tabs holds buttons, so only then is the frame positioned: a positioned box paints apart, and
+ * the text of a screen whose tabs all fit (Existencias in Inventario) came out a shade off from before the frame.
+ */
+.section-tabs-frame.slides {
+  position: relative;
 }
 
 .section-tabs-frame > .section-tabs {
@@ -1058,7 +1065,8 @@ button.section-tab.active {
   margin-bottom: 1rem;
 }
 
-.inventory-header .section-tabs {
+/* Its row of tabs slides like a menu section's (TabRow): the frame, which draws the line, takes the row's place. */
+.inventory-header .section-tabs-frame {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;

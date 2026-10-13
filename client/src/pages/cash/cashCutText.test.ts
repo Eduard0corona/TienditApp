@@ -70,6 +70,19 @@ describe('cash cut text', () => {
     expect(text).toContain('• Ana: 8 pagos / $900.00');
   });
 
+  it('names each user of the day cut, or keeps the user when there is no name', () => {
+    const text = plain(buildDailyCutText(cut({
+      byUser: [
+        { userName: 'ana.lopez@laesquina.mx', displayName: 'Ana López', paymentsCount: 8, totalAmount: 900 },
+        { userName: 'beto@laesquina.mx', displayName: null, paymentsCount: 3, totalAmount: 300 },
+        { userName: 'Sistema', paymentsCount: 2, totalAmount: 50 },
+      ],
+    }), { dateLabel: 'Hoy', scopeLabel: 'Centro' }));
+
+    expect(text).toContain('• Ana López: 8 pagos / $900.00\n• beto@laesquina.mx: 3 pagos / $300.00\n• Sistema: 2 pagos / $50.00');
+    expect(text).not.toContain('ana.lopez@');
+  });
+
   it('leaves the platform rows out of a day without platform orders', () => {
     const labels = getDailyCutRows(cut({ platformTotal: 0, platformPaymentsCount: 0, platformRefundsTotal: 0 })).map(([label]) => label);
 
@@ -121,6 +134,19 @@ describe('cash cut text', () => {
     expect(text).toContain('*Corte de caja*\nAna · Centro');
     expect(text).toContain('*Debía haber: $1,300.00*\n*Contado: $1,284.00*\n*Diferencia: Faltan $16.00*');
     expect(text).toContain('Nota: Faltó cambio');
+  });
+
+  it('writes who opened and closed a shift by name, never with their email', () => {
+    const text = plain(buildShiftCutText(session({
+      openedBy: 'ana.lopez@laesquina.mx',
+      openedByName: 'Ana López',
+      closedBy: 'beto@laesquina.mx',
+      closedByName: 'Beto Ruiz',
+    })));
+
+    expect(text).toContain('*Corte de caja*\nAna López · Centro');
+    expect(text).toMatch(/^Cerró \(Beto Ruiz\): /m);
+    expect(text).not.toContain('@');
   });
 
   it('marks an open drawer as a partial cut without a count', () => {

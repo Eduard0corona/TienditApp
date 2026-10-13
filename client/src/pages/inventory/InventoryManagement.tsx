@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PageTitle from '../../components/common/PageTitle';
+import TabRow from '../../components/common/TabRow';
 import { getApiErrorMessage } from '../../api/errors';
 import { inventoryApi } from '../../api/inventoryApi';
 import type { InventoryAlertsDto, InventoryLocationDto, InventoryMovementDto, SupplyItemDto } from '../../types';
@@ -28,6 +29,8 @@ const TABS: Array<{ key: InventoryTab; label: string }> = [
   { key: 'locations', label: 'Ubicaciones' },
   { key: 'alerts', label: 'Alertas' },
 ];
+
+const TAB_KEYS = TABS.map((tab) => tab.key).join();
 
 const EMPTY_ALERTS: InventoryAlertsDto = {
   lowStockCount: 0,
@@ -204,9 +207,10 @@ export default function InventoryManagement() {
         <div className="col-12">
           <div className="card">
             <div className="card-body">
-              {/* The only row of tabs of Inventario, styled like a menu section's, with the action of the open tab beside it. */}
+              {/* The only row of tabs of Inventario, a menu section's row (it slides the same when they do not fit), with
+                  the action of the open tab beside it. */}
               <div className="inventory-header">
-                <div className="section-tabs" role="tablist" aria-label="Partes del inventario">
+                <TabRow role="tablist" label="Partes del inventario" contentKey={TAB_KEYS} activeKey={activeTab}>
                   {TABS.map((tab) => (
                     <button
                       key={tab.key}
@@ -219,7 +223,7 @@ export default function InventoryManagement() {
                       {tab.label}
                     </button>
                   ))}
-                </div>
+                </TabRow>
 
                 {activeTab === 'supplies' && (
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => supplyDialog.show()}>

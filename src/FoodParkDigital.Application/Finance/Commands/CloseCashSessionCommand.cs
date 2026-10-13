@@ -104,7 +104,12 @@ public class CloseCashSessionCommandHandler : IRequestHandler<CloseCashSessionCo
         var branchName = session.BranchId is { } branchId
             ? await _context.Branches.Where(x => x.Id == branchId).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken)
             : null;
-        return Result.Success(CashSessionMapping.ToDto(session, userId, locationName, branchName));
+        var people = await CashPeople.ResolveAsync(
+            _context,
+            [session.OpenedBy, session.ClosedBy],
+            [session.OpenedByUserId],
+            cancellationToken);
+        return Result.Success(CashSessionMapping.ToDto(session, userId, locationName, branchName, people));
     }
 
     private Task<string?> LocationNameAsync(Guid? locationId, CancellationToken cancellationToken)

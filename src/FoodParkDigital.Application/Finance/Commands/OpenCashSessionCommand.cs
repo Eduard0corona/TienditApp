@@ -106,7 +106,8 @@ public class OpenCashSessionCommandHandler : IRequestHandler<OpenCashSessionComm
         var locationName = locationId is { } stockLocationId
             ? await _context.InventoryLocations.Where(x => x.Id == stockLocationId).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken)
             : null;
-        return Result.Success(CashSessionMapping.ToDto(session, userId, locationName, branchName));
+        var people = await CashPeople.ResolveAsync(_context, [session.OpenedBy], [session.OpenedByUserId], cancellationToken);
+        return Result.Success(CashSessionMapping.ToDto(session, userId, locationName, branchName, people));
     }
 
     /// <summary>The branch of the drawer (asked for, the branch of the location asked for, or the default) and its stock location.</summary>

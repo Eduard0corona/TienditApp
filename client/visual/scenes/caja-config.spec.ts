@@ -67,6 +67,12 @@ function shiftRow(page: Page, text: string) {
   return page.getByRole('row').filter({ hasText: text });
 }
 
+/**
+ * The detail of Carlos's closed shift, titled with his name; the baseline's build titles it with his email when it is
+ * from before the API sent names.
+ */
+const CARLOS_SHIFT = /^Turno de (Carlos Méndez|carlos\.mendez@cafelaesquina\.mx)/;
+
 for (const look of LOOKS) {
   test.describe(`Caja y configuración ${look.suffix}`, () => {
     test.use({ colorMode: look.colorMode });
@@ -245,7 +251,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Faltan $50.00').getByRole('button').click();
-    const detail = await dialog(page, 'Turno de carlos.mendez@cafelaesquina.mx');
+    const detail = await dialog(page, CARLOS_SHIFT);
     // Its movements load after the dialog opens.
     await expect(detail.getByText('Hielo (6 bolsas)')).toBeVisible();
     await snapDialog(page, 'caja-turno-detalle-dialogo');
@@ -255,7 +261,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Faltan $50.00').getByRole('button').click();
-    const detail = await dialog(page, 'Turno de carlos.mendez@cafelaesquina.mx');
+    const detail = await dialog(page, CARLOS_SHIFT);
     await expect(detail.getByText('Hielo (6 bolsas)')).toBeVisible();
     await printCut(page, detail.getByRole('button', { name: 'Imprimir corte' }));
     await snap(page, 'caja-turno-corte-impreso');
@@ -266,7 +272,7 @@ test.describe('Caja', () => {
     await open(page, '/cash');
     await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
     await shiftRow(page, 'Sucursal Coyoacán').filter({ hasText: 'En curso' }).getByRole('button').click();
-    const detail = await dialog(page, 'Turno de carlos.mendez@cafelaesquina.mx');
+    const detail = await dialog(page, CARLOS_SHIFT);
     await expect(detail.getByText('Pago de pan')).toBeVisible();
     await expect(detail.getByRole('button', { name: 'Cerrar esta caja' })).toBeVisible();
     await snapDialog(page, 'caja-turno-abierto-otro-dialogo');

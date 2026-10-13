@@ -961,10 +961,15 @@ export { CashTransactionType } from '../api/generated/enums';
 export interface CashSessionDto {
   id: string;
   openedAt: string;
+  /** The user (email) of who opened the drawer. */
   openedBy: string;
+  /** Their name, when they are a member of the business: shown instead of `openedBy`. */
+  openedByName?: string | null;
   openingAmount: number;
   closedAt?: string;
   closedBy?: string;
+  /** The name of who closed it, when they are a member of the business: shown instead of `closedBy`. */
+  closedByName?: string | null;
   closingAmount?: number;
   status: CashSessionStatus;
   notes?: string;
@@ -1012,7 +1017,10 @@ export interface CashTransactionDto {
 }
 
 export interface DailyCashCutByUserDto {
+  /** The user (email) who took the payments, or "Sistema": what the cut groups and filters by. */
   userName: string;
+  /** Their name, when they are a member of the business: shown instead of `userName`. */
+  displayName?: string | null;
   paymentsCount: number;
   totalAmount: number;
 }

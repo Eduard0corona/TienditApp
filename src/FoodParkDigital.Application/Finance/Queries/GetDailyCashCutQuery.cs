@@ -19,6 +19,7 @@ public record GetDailyCashCutQuery : IRequest<DailyCashCutDto>
     public Guid? InventoryLocationId { get; init; }
     /// <summary>Payments of sales made at the branch and movements of its drawers.</summary>
     public Guid? BranchId { get; init; }
+    /// <summary>The user (email) who took the payments, or the name of the one member of the business called so.</summary>
     public string? UserName { get; init; }
 }
 
@@ -60,6 +61,10 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             tenantZone);
 
         var userNameFilter = request.UserName?.Trim();
+        // The cut shows names: the name of a member finds what they took, as their user does.
+        var userCalled = string.IsNullOrWhiteSpace(userNameFilter)
+            ? null
+            : await CashPeople.UserCalledAsync(_context, userNameFilter, cancellationToken);
 
         var orderPayments = _context.OrderPayments
             .AsNoTracking()
@@ -73,7 +78,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             orderPayments = orderPayments.Where(x => x.Order.BranchId == branchId);
 
         if (!string.IsNullOrWhiteSpace(userNameFilter))
-            orderPayments = orderPayments.Where(x => x.CreatedBy == userNameFilter);
+            orderPayments = orderPayments.Where(x => x.CreatedBy == userNameFilter || (userCalled != null && x.CreatedBy == userCalled));
 
         var paymentRows = await orderPayments
             .Select(x => new
@@ -96,6 +101,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .Where(x => !request.InventoryLocationId.HasValue || x.Id == request.InventoryLocationId.Value)
             .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
 
+        var people = await CashPeople.ResolveAsync(_context, paymentRows.Select(x => x.CreatedBy), [], cancellationToken);
         // What a delivery platform charged in its app went into no cashier's drawer: whoever captured the order did not
         // receive that money, so it is shown on its own row and not in theirs.
         var byUser = paymentRows
@@ -104,6 +110,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             .Select(x => new DailyCashCutByUserDto
             {
                 UserName = x.Key,
+                DisplayName = people.NameOf(x.Key),
                 PaymentsCount = x.Count(),
                 TotalAmount = x.Sum(y => y.Amount)
             })
@@ -178,7 +185,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             platformRefunds = platformRefunds.Where(x => _context.Orders.Any(order => order.Id == x.OrderId && order.BranchId == refundBranchId));
 
         if (!string.IsNullOrWhiteSpace(userNameFilter))
-            platformRefunds = platformRefunds.Where(x => x.RefundedBy == userNameFilter);
+            platformRefunds = platformRefunds.Where(x => x.RefundedBy == userNameFilter || (userCalled != null && x.RefundedBy == userCalled));
 
         var platformRefundsTotal = await platformRefunds.SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
 
@@ -199,7 +206,7 @@ public class GetDailyCashCutQueryHandler : IRequestHandler<GetDailyCashCutQuery,
             manualTransactions = manualTransactions.Where(x => x.CashSession.BranchId == drawerBranchId);
 
         if (!string.IsNullOrWhiteSpace(userNameFilter))
-            manualTransactions = manualTransactions.Where(x => x.CreatedBy == userNameFilter);
+            manualTransactions = manualTransactions.Where(x => x.CreatedBy == userNameFilter || (userCalled != null && x.CreatedBy == userCalled));
 
         var manualRows = await manualTransactions
             .Select(x => new { x.Amount, x.PaymentMethod })

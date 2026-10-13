@@ -7,10 +7,15 @@ public class CashSessionDto
 {
     public Guid Id { get; set; }
     public DateTimeOffset OpenedAt { get; set; }
+    /// <summary>The user (email) of who opened the drawer, or "system" / "system-migration" when no person did.</summary>
     public string OpenedBy { get; set; } = null!;
+    /// <summary>The name of who opened it, when they are a member of the business; without it, show <see cref="OpenedBy"/>.</summary>
+    public string? OpenedByName { get; set; }
     public decimal OpeningAmount { get; set; }
     public DateTimeOffset? ClosedAt { get; set; }
     public string? ClosedBy { get; set; }
+    /// <summary>The name of who closed it, when they are a member of the business; without it, show <see cref="ClosedBy"/>.</summary>
+    public string? ClosedByName { get; set; }
     public decimal? ClosingAmount { get; set; }
     public CashSessionStatus Status { get; set; }
     public string? Notes { get; set; }
@@ -105,7 +110,10 @@ public class DailyCashCutDto
 
 public class DailyCashCutByUserDto
 {
+    /// <summary>The user (email) who took the payments, or "Sistema": what the cut groups and filters by.</summary>
     public string UserName { get; set; } = "Sistema";
+    /// <summary>Their name, when they are a member of the business; without it, show <see cref="UserName"/>.</summary>
+    public string? DisplayName { get; set; }
     public int PaymentsCount { get; set; }
     public decimal TotalAmount { get; set; }
 }
