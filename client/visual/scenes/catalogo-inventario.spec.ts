@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { SIZES, dialog, open, snap, snapElement } from '../helpers';
+import { SIZES, dialog, open, settle, snap, snapElement } from '../helpers';
 import { PLATFORM_ROUTES, RAPPI_PRICES, productPhotos } from './catalogo-inventario.mocks';
 
 // Catálogo (productos, categorías, servicios, precios en apps) and Inventario (insumos, compras, proveedores): every
@@ -324,6 +324,68 @@ test.describe('Inventario', () => {
     const editing = await dialog(page, 'Editar ubicación');
     await expect(editing.getByLabel('Nombre *')).toHaveValue('Sucursal Roma Norte');
     await snap(page, 'inventario-ubicacion-dialogo', { fullPage: false });
+  });
+});
+
+// Inventario's tabs when they do not fit (TabRow, as the tabs of a section): the edge that hides tabs fades and, with
+// a mouse, has a button, while the line under them runs whole. The tablet held upright shows 602 of their 802 px and
+// a phone 294. A touch screen slides the row with a finger: the fade, no buttons.
+test.describe('Inventario, pestañas que no caben', () => {
+  const tabs = (page: Page) => page.getByRole('tablist', { name: 'Partes del inventario' });
+  // The buttons stay out of the accessibility tree (the tabs are all there): they are found by their title.
+  const next = (page: Page) => page.getByTitle('Ver las pestañas siguientes');
+  const previous = (page: Page) => page.getByTitle('Ver las pestañas anteriores');
+  const supplies = (page: Page) => expect(page.getByRole('button', { name: 'Editar Café en grano Chiapas' })).toBeVisible();
+
+  // A tab shows whole when it fits in the row from side to side. Its last pixel down overlaps the line under the row,
+  // which always cuts it, so toBeInViewport never counts a tab whole. The row scrolls by whole pixels and the tabs are
+  // not that wide: at the end of the row the last one can run a fraction of a pixel past it.
+  async function expectWhole(page: Page, name: string) {
+    const row = await tabs(page).boundingBox();
+    const tab = await tabs(page).getByRole('tab', { name }).boundingBox();
+    expect(tab!.x, `${name} starts inside the row`).toBeGreaterThanOrEqual(row!.x - 1);
+    expect(tab!.x + tab!.width, `${name} ends inside the row`).toBeLessThanOrEqual(row!.x + row!.width + 1);
+  }
+
+  test('inventario, pestañas que no caben, con el mouse', async ({ page }) => {
+    await page.setViewportSize(SIZES.upright);
+    await open(page, '/inventory');
+    await supplies(page);
+    await expect(next(page)).toBeVisible();
+    await expect(previous(page)).toHaveCount(0);
+    await snap(page, 'inventario-pestanas-no-caben', { fullPage: false });
+  });
+
+  test('inventario, pestañas que no caben, foco del teclado', async ({ page }) => {
+    // The keyboard reaches a tab hidden past the edge: the row brings it clear of the fade, with its ring inside it.
+    await page.setViewportSize(SIZES.upright);
+    await open(page, '/inventory');
+    await supplies(page);
+    await page.keyboard.press('Tab');
+    const locations = tabs(page).getByRole('tab', { name: 'Ubicaciones' });
+    await locations.focus();
+    await expect(locations).toBeFocused();
+    await expectWhole(page, 'Ubicaciones');
+    await settle(page);
+    await snap(page, 'inventario-pestanas-foco', { fullPage: false });
+  });
+
+  test.describe('en un teléfono táctil', () => {
+    test.use({ hasTouch: true });
+
+    test('inventario, pestaña al final en un teléfono táctil', async ({ page }) => {
+      // The open part slides into view; without motion it lands at once, where a slide would be caught halfway.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/inventory');
+      await supplies(page);
+      await tabs(page).getByRole('tab', { name: 'Alertas' }).click();
+      await expect(tabs(page).getByRole('tab', { name: 'Alertas' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('cell', { name: 'Totopos para chilaquiles' })).toBeVisible();
+      await expectWhole(page, 'Alertas');
+      await expect(previous(page)).toBeHidden();
+      await snap(page, 'inventario-pestana-al-final-tactil', { fullPage: false });
+    });
   });
 });
 
