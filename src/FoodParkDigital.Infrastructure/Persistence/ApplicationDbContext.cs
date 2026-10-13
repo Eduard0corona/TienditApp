@@ -8,6 +8,7 @@ using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Customers.Entities;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Finance.Entities;
 using FoodParkDigital.Domain.Identity.Entities;
@@ -171,6 +172,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<PlatformSettlement> PlatformSettlements => Set<PlatformSettlement>();
     public DbSet<PlatformSettlementOrder> PlatformSettlementOrders => Set<PlatformSettlementOrder>();
     public DbSet<PlatformSettlementAdjustment> PlatformSettlementAdjustments => Set<PlatformSettlementAdjustment>();
+    public DbSet<DeliveryZone> DeliveryZones => Set<DeliveryZone>();
+    public DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes => Set<DeliveryZonePostalCode>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
