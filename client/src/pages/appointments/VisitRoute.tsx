@@ -6,7 +6,7 @@ import type { EmployeeDto } from '../../types';
 import { formatInBusinessZone, getBusinessToday } from '../../utils/dates';
 import { MAX_ROUTE_STOPS, describeVisitFee, mapsPlaceUrl, mapsRouteUrl, telUrl } from '../../utils/homeVisits';
 import { formatMoney } from '../../utils/money';
-import { canBeCharged, statusBadge, statusLabel } from './appointmentStatus';
+import { canBeCharged, saleLabel, statusBadge, statusLabel } from './appointmentStatus';
 
 interface VisitRouteProps {
   /** The active team, to see the route of one person. */
@@ -103,7 +103,7 @@ function PersonRoute({ person, pricesIncludeTax, canCharge, onCharge }: { person
             <div className="d-flex flex-wrap align-items-center gap-2">
               <span className="fw-semibold">{time(stop.startAt)} a {time(stop.endAt)}</span>
               <span className={`badge ${statusBadge(stop.status)}`}>{statusLabel(stop.status)}</span>
-              {stop.saleOrderId && <span className="small text-muted">Cobrada</span>}
+              {saleLabel(stop) && <span className="small text-muted">{saleLabel(stop)}</span>}
             </div>
             <div>{stop.customerName} · {stop.serviceName}</div>
             <div className="small">{stop.addressLine}</div>

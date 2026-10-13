@@ -1123,6 +1123,8 @@ export interface AppointmentDto {
   visit?: AppointmentVisitDto | null;
   /** The sale it was charged with; null until it is charged. */
   saleOrderId?: string | null;
+  /** Its sale was cancelled: it is charged again with another one. */
+  saleCancelled?: boolean;
 }
 
 /** The customer's address of an appointment at their home, its zone and the charge for the visit agreed then. */

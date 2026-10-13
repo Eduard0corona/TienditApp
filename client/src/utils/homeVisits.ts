@@ -9,6 +9,7 @@ import { estimateOrderTotals, type OrderTotalsEstimate, type TotalsLine } from '
 /** The server's words (HomeVisitRules). */
 export const CANCELLED_SALE_MESSAGE = 'La cita se canceló: ya no se cobra.';
 export const NO_SHOW_SALE_MESSAGE = 'El cliente no se presentó a la cita: no se cobra.';
+export const ALREADY_SOLD_MESSAGE = 'La cita ya tiene su venta.';
 export const VISIT_POSTAL_CODE_REQUIRED_MESSAGE = 'Escribe el código postal de la visita.';
 export const VISIT_ADDRESS_LINE_REQUIRED_MESSAGE = 'Escribe a dónde es la visita: calle, número y colonia.';
 export const TRAVEL_MINUTES_MESSAGE = 'El traslado entre visitas va de 0 a 240 minutos.';
@@ -48,10 +49,18 @@ export function describeVisitPlace(visit: { postalCode: string; zoneName: string
   return `A domicilio · CP ${visit.postalCode} · ${visit.zoneName}`;
 }
 
+/** An appointment that has its sale: one that was cancelled no longer counts, and the appointment is charged again. */
+export function hasLiveSale(appointment: { saleOrderId?: string | null; saleCancelled?: boolean }): boolean {
+  return Boolean(appointment.saleOrderId) && !appointment.saleCancelled;
+}
+
 /** An appointment that cannot be charged (the server says so too); null when it can. */
-export function appointmentSaleProblem(status: AppointmentStatus): string | null {
-  if (status === AppointmentStatus.Cancelled) return CANCELLED_SALE_MESSAGE;
-  if (status === AppointmentStatus.NoShow) return NO_SHOW_SALE_MESSAGE;
+export function appointmentSaleProblem(
+  appointment: { status: AppointmentStatus; saleOrderId?: string | null; saleCancelled?: boolean },
+): string | null {
+  if (appointment.status === AppointmentStatus.Cancelled) return CANCELLED_SALE_MESSAGE;
+  if (appointment.status === AppointmentStatus.NoShow) return NO_SHOW_SALE_MESSAGE;
+  if (hasLiveSale(appointment)) return ALREADY_SOLD_MESSAGE;
   return null;
 }
 

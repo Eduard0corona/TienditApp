@@ -30,7 +30,7 @@ import {
 import { isPostalCode } from '../../utils/postalCodes';
 import AppointmentVisitFields, { type VisitFieldsState, type VisitQuoteView } from './AppointmentVisitFields';
 import { isSameAddress } from './appointmentVisit';
-import { canBeCharged, isClosed, statusBadge, statusLabel } from './appointmentStatus';
+import { canBeCharged, isClosed, saleLabel, statusBadge, statusLabel } from './appointmentStatus';
 import VisitRoute from './VisitRoute';
 
 const COLUMNS = [
@@ -130,7 +130,8 @@ export default function AppointmentsList() {
   const { tenant, capabilities } = useTenant();
   // «Cobrar» opens Vender with the appointment: only for whoever sells.
   const canSell = getAccess(user, capabilities).sell;
-  const pricesIncludeTax = tenant?.pricesIncludeTax ?? false;
+  // Like the server's notices: with IVA included while the business is read.
+  const pricesIncludeTax = tenant?.pricesIncludeTax ?? true;
   const [data, setData] = useState<PaginatedList<AppointmentDto>>(EMPTY_PAGINATED);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('upcoming');
@@ -485,7 +486,7 @@ export default function AppointmentsList() {
                         Cobrar
                       </button>
                     ) : (
-                      <span className="text-muted small">{item.saleOrderId ? 'Cobrada' : 'Cerrada'}</span>
+                      <span className="text-muted small">{saleLabel(item) ?? 'Cerrada'}</span>
                     )
                   ) : (
                     <div className="d-flex gap-1 justify-content-center">

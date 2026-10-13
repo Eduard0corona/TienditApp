@@ -1,3 +1,4 @@
+import { appointmentSaleProblem } from '../../utils/homeVisits';
 import type { AppointmentStatus } from '../../types';
 import { AppointmentStatus as AppointmentStatusConst } from '../../types';
 
@@ -30,10 +31,12 @@ export const isClosed = (status: AppointmentStatus) =>
   || status === AppointmentStatusConst.Cancelled;
 
 /**
- * Whether «Cobrar» is offered: an appointment neither cancelled nor missed, without its sale yet (the server also takes
- * one whose sale was cancelled; then the agenda says it is charged and Pedidos has it).
+ * Whether «Cobrar» is offered: an appointment neither cancelled nor missed, without its sale yet or whose sale was
+ * cancelled (the server charges it again then).
  */
-export const canBeCharged = (appointment: { status: AppointmentStatus; saleOrderId?: string | null }) =>
-  !appointment.saleOrderId
-  && appointment.status !== AppointmentStatusConst.Cancelled
-  && appointment.status !== AppointmentStatusConst.NoShow;
+export const canBeCharged = (appointment: { status: AppointmentStatus; saleOrderId?: string | null; saleCancelled?: boolean }) =>
+  appointmentSaleProblem(appointment) === null;
+
+/** «Con venta» once it has its sale (paid or not: Pedidos has it), «Venta cancelada» when that sale was cancelled. */
+export const saleLabel = (appointment: { saleOrderId?: string | null; saleCancelled?: boolean }) =>
+  !appointment.saleOrderId ? null : appointment.saleCancelled ? 'Venta cancelada' : 'Con venta';

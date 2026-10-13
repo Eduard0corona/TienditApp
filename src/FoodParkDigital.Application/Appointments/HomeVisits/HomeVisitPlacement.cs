@@ -53,7 +53,7 @@ internal static class HomeVisitPlacement
     public const string PostalCodeMessage = "El código postal lleva 5 dígitos.";
 
     /// <summary>
-    /// The appointment happens at <paramref name="input"/>: at the same address it keeps what was agreed; at another one,
+    /// The appointment happens at <paramref name="input"/>: at the same place it keeps what was agreed; at another one,
     /// the zone that reaches it now sets the charge. The message for the team when it cannot go there, or whether the visit
     /// changed.
     /// </summary>
@@ -67,8 +67,9 @@ internal static class HomeVisitPlacement
         try
         {
             var address = DeliveryAddress.ForVisit(input.PostalCode, input.AddressLine, input.References);
+            // The same place keeps what was agreed; only its references may change.
             if (appointment.Visit is { } visit && visit.IsAt(address))
-                return Result.Success(false);
+                return Result.Success(appointment.UpdateVisitReferences(address, now));
 
             var zone = await HomeDeliveryPlacement.FindZoneAsync(context, appointment.TenantId, address.PostalCode, cancellationToken);
             if (zone is null)

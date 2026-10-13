@@ -105,6 +105,8 @@ public class VisitRouteStopDto
     public decimal Fee { get; set; }
     /// <summary>The sale it was charged with; null until it is charged.</summary>
     public Guid? SaleOrderId { get; set; }
+    /// <summary>Its sale was cancelled: it is charged again with another one.</summary>
+    public bool SaleCancelled { get; set; }
 }
 
 /// <summary>
@@ -115,6 +117,17 @@ public class VisitRouteStopDto
 [RequiresPermission(TenantPermission.ManageAppointments)]
 [RequiresCapability(TenantCapability.Appointments)]
 public record GetVisitRouteQuery(DateOnly Date, Guid? StaffUserId = null) : IRequest<VisitRouteDto>;
+
+/// <summary>A day the agenda can hold: a missing date or one at the ends of the calendar is not a day of the route.</summary>
+public class GetVisitRouteQueryValidator : AbstractValidator<GetVisitRouteQuery>
+{
+    public const string DateMessage = "Elige el día de la ruta.";
+
+    public GetVisitRouteQueryValidator()
+    {
+        RuleFor(x => x.Date).Must(date => date.Year is >= 2000 and <= 2100).WithMessage(DateMessage);
+    }
+}
 
 public class GetVisitRouteQueryHandler : IRequestHandler<GetVisitRouteQuery, VisitRouteDto>
 {
@@ -171,6 +184,9 @@ public class GetVisitRouteQueryHandler : IRequestHandler<GetVisitRouteQuery, Vis
                 }
             })
             .ToListAsync(cancellationToken);
+        var cancelled = await AppointmentSales.CancelledAsync(_context, visits.Select(x => x.Stop.SaleOrderId), cancellationToken);
+        foreach (var visit in visits)
+            visit.Stop.SaleCancelled = visit.Stop.SaleOrderId is { } sale && cancelled.Contains(sale);
 
         // A team member of the team by their id; one written by hand (older appointments) by their name. Those nobody
         // attends yet go last.

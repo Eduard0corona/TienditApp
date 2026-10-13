@@ -123,7 +123,7 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         ArgumentNullException.ThrowIfNull(zone);
         EnsureOpen();
         if (Visit is not null && Visit.IsAt(address))
-            return false;
+            return UpdateVisitReferences(address, changedAt);
         if (zone.TenantId != TenantId || !zone.Covers(address.PostalCode))
             throw new DomainException(HomeVisitRules.NotCoveredMessage(address.PostalCode));
 
@@ -132,6 +132,24 @@ public class Appointment : AuditableEntity, ITenantScoped, IAggregateRoot
         else
             Visit.MoveTo(address, zone.Name, zone.Fee);
         // The appointment changes with its visit, so its version catches a charge (or a cancellation) saved meanwhile.
+        UpdatedAt = changedAt;
+        return true;
+    }
+
+    /// <summary>
+    /// The same place with other references («timbre 6»): the zone and the charge agreed stay, even if the zone no longer
+    /// reaches the postal code, and nothing is quoted again.
+    /// </summary>
+    /// <returns>False when they were the same.</returns>
+    public bool UpdateVisitReferences(DeliveryAddress address, DateTimeOffset changedAt)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        EnsureOpen();
+        if (Visit is null || !Visit.IsAt(address))
+            throw new InvalidOperationException("Only the references of the place already arranged change without a zone.");
+        if (!Visit.ChangeReferences(address.References))
+            return false;
+
         UpdatedAt = changedAt;
         return true;
     }

@@ -23,11 +23,14 @@ public class GetAppointmentByIdQueryHandler : IRequestHandler<GetAppointmentById
 
     public async Task<AppointmentDto> Handle(GetAppointmentByIdQuery request, CancellationToken cancellationToken)
     {
-        return await _context.Appointments
+        var appointment = await _context.Appointments
             .AsNoTracking()
             .Where(x => x.Id == request.Id)
             .Select(AppointmentDto.Projection)
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new EntityNotFoundException("Appointment", request.Id);
+        appointment.SaleCancelled = appointment.SaleOrderId is { } sale
+            && (await AppointmentSales.CancelledAsync(_context, [sale], cancellationToken)).Contains(sale);
+        return appointment;
     }
 }

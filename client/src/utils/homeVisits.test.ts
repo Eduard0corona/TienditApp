@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AppointmentStatus } from '../types';
 import {
+  ALREADY_SOLD_MESSAGE,
   CANCELLED_SALE_MESSAGE,
   NO_SHOW_SALE_MESSAGE,
   appointmentSaleProblem,
@@ -48,11 +49,14 @@ describe('texts', () => {
     expect(describeVisitPlace({ postalCode: '72000', zoneName: 'Centro' })).toBe('A domicilio · CP 72000 · Centro');
   });
 
-  it('refuses to charge a cancelled appointment or one the customer missed', () => {
-    expect(appointmentSaleProblem(AppointmentStatus.Cancelled)).toBe(CANCELLED_SALE_MESSAGE);
-    expect(appointmentSaleProblem(AppointmentStatus.NoShow)).toBe(NO_SHOW_SALE_MESSAGE);
-    expect(appointmentSaleProblem(AppointmentStatus.Completed)).toBeNull();
-    expect(appointmentSaleProblem(AppointmentStatus.Scheduled)).toBeNull();
+  it('refuses to charge a cancelled appointment, one the customer missed or one with its sale', () => {
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Cancelled })).toBe(CANCELLED_SALE_MESSAGE);
+    expect(appointmentSaleProblem({ status: AppointmentStatus.NoShow })).toBe(NO_SHOW_SALE_MESSAGE);
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Completed, saleOrderId: 'o1' })).toBe(ALREADY_SOLD_MESSAGE);
+    // Its sale was cancelled: it is charged again.
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Completed, saleOrderId: 'o1', saleCancelled: true })).toBeNull();
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Completed })).toBeNull();
+    expect(appointmentSaleProblem({ status: AppointmentStatus.Scheduled })).toBeNull();
   });
 });
 

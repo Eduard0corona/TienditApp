@@ -11580,6 +11580,7 @@
           "customerPhone",
           "endAt",
           "id",
+          "saleCancelled",
           "serviceName",
           "startAt",
           "status"
@@ -11635,6 +11636,9 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "saleCancelled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -25000,6 +25004,7 @@
           "endAt",
           "fee",
           "postalCode",
+          "saleCancelled",
           "serviceName",
           "startAt",
           "status",
@@ -25052,6 +25057,9 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "saleCancelled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

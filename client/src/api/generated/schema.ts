@@ -9389,6 +9389,7 @@ export interface components {
             visit?: components["schemas"]["AppointmentVisitDto"];
             /** Format: uuid */
             saleOrderId?: string | null;
+            saleCancelled: boolean;
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
@@ -13327,6 +13328,7 @@ export interface components {
             fee: number;
             /** Format: uuid */
             saleOrderId?: string | null;
+            saleCancelled: boolean;
         };
         VoidOrderRequest: {
             reason: string;

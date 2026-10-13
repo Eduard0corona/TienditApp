@@ -83,11 +83,18 @@ describe('AppointmentsList', () => {
 
   it('says where each visit is, filters by where they happen and charges them in Vender', async () => {
     const user = userEvent.setup();
-    renderAgenda([AT_HOME, appointment({ id: 'a2', customerName: 'Mara', status: AppointmentStatus.Completed, saleOrderId: 'o1' })]);
+    renderAgenda([
+      AT_HOME,
+      appointment({ id: 'a2', customerName: 'Mara', status: AppointmentStatus.Completed, saleOrderId: 'o1' }),
+      appointment({ id: 'a3', customerName: 'Iván', status: AppointmentStatus.Completed, saleOrderId: 'o2', saleCancelled: true }),
+    ]);
 
     const visit = (await screen.findByText('Ana Ruiz')).closest('tr')!;
     expect(within(visit).getByText('A domicilio · CP 72000 · Centro')).toBeInTheDocument();
-    expect(within(screen.getByText('Mara').closest('tr')!).getByText('Cobrada')).toBeInTheDocument();
+    // With its sale it is not charged again; once that sale was cancelled, it is.
+    expect(within(screen.getByText('Mara').closest('tr')!).getByText('Con venta')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cobrar la cita de Mara' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cobrar la cita de Iván' })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Dónde' }), 'A domicilio');
     await waitFor(() => expect(appointmentsApi.getAll).toHaveBeenLastCalledWith(expect.objectContaining({ homeVisit: true })));

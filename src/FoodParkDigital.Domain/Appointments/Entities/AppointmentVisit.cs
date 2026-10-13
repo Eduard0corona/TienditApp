@@ -33,11 +33,21 @@ public class AppointmentVisit : BaseEntity, ITenantScoped
     public decimal Fee { get; private set; }
 
     /// <summary>
-    /// Whether it is already at <paramref name="address"/>, as written: then it keeps what was agreed, even if its zone no
-    /// longer reaches it.
+    /// Whether it is already at the place of <paramref name="address"/> (its postal code and its address, as written): then it
+    /// keeps what was agreed, even if its zone no longer reaches it. The references only say how to find it.
     /// </summary>
     public bool IsAt(DeliveryAddress address)
-        => PostalCode == address.PostalCode && AddressLine == address.AddressLine && References == address.References;
+        => PostalCode == address.PostalCode && AddressLine == address.AddressLine;
+
+    /// <returns>False when they were the same.</returns>
+    internal bool ChangeReferences(string? references)
+    {
+        if (References == references)
+            return false;
+
+        References = references;
+        return true;
+    }
 
     internal void MoveTo(DeliveryAddress address, string zoneName, decimal fee)
     {

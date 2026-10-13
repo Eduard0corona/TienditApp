@@ -47,7 +47,7 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Cotizar una visita a un código postal y la ruta del día (`GetVisitQuoteQuery`, `GetVisitRouteQuery`, Fase 22E) | `ManageAppointments`, como agendar | `Appointments` |
 | El tiempo de traslado entre visitas: leerlo (`GetHomeVisitSettingsQuery`, Fase 22E) | cualquier miembro (`Member`), como las zonas | `Appointments` |
 | Cambiar el tiempo de traslado (`UpdateHomeVisitSettingsCommand`, Fase 22E) | dueño o admin (`Manager`), como las zonas | `Appointments` |
-| Cobrar una cita, con su cargo por visita (`CreateOrderCommand` con `AppointmentId`, Fase 22E) | `ManageOrders` (y `ChargeOrders` si trae pagos), como cualquier venta: Vender busca la cita del negocio y no pide `ManageAppointments` | — |
+| Cobrar una cita, con su cargo por visita (`CreateOrderCommand` con `AppointmentId`, Fase 22E) | `ManageOrders` (y `ChargeOrders` si trae pagos), y además `ManageAppointments` por contenido (`IRequiresContentPermissions`): la venta completa la cita en la agenda, y Vender la lee como la agenda | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
 

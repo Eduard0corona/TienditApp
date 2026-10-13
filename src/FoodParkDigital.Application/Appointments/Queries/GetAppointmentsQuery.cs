@@ -63,10 +63,14 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
         var projected = ordered
             .Select(AppointmentDto.Projection);
 
-        return await PaginatedList<AppointmentDto>.CreateAsync(
+        var page = await PaginatedList<AppointmentDto>.CreateAsync(
             projected,
             request.PageNumber,
             request.PageSize,
             cancellationToken);
+        var cancelled = await AppointmentSales.CancelledAsync(_context, page.Items.Select(x => x.SaleOrderId), cancellationToken);
+        foreach (var appointment in page.Items)
+            appointment.SaleCancelled = appointment.SaleOrderId is { } sale && cancelled.Contains(sale);
+        return page;
     }
 }

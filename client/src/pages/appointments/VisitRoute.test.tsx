@@ -52,6 +52,7 @@ describe('VisitRoute', () => {
     await userEvent.click(route.getByRole('button', { name: 'Cobrar la cita de Ana Ruiz' }));
     expect(onCharge).toHaveBeenCalledWith('a1');
     expect(route.queryByRole('button', { name: 'Cobrar la cita de Mara' })).not.toBeInTheDocument();
+    expect(route.getByText('Con venta')).toBeInTheDocument();
   });
 
   it('says when there are no visits, and offers no charge to whoever does not sell', () => {

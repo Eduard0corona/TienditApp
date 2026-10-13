@@ -2,8 +2,10 @@ using FoodParkDigital.Application.Appointments;
 using FoodParkDigital.Application.Appointments.Commands;
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Appointments.HomeVisits;
+using FoodParkDigital.Application.Appointments.Queries;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Inventory;
+using FoodParkDigital.Application.Messaging;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Orders.DTOs;
@@ -93,16 +95,20 @@ public class HomeVisitFlowTests
         await fixture.Context.SaveChangesAsync();
 
         var sameAddress = await UpdateAsync(fixture, Edit(created) with { Notes = "Llevar toallas", Visit = AtHome });
+        // The same place with other references keeps the charge agreed: nothing is quoted again.
+        var otherReferences = await UpdateAsync(fixture, Edit(created) with { Visit = AtHome with { References = "Timbre 6" } });
         var otherAddress = await UpdateAsync(fixture, Edit(created) with { Visit = AtHome with { PostalCode = "72005", References = null } });
         var atTheBusiness = await UpdateAsync(fixture, Edit(created) with { Visit = null });
 
         Assert.Equal(80m, sameAddress.Value!.Visit!.Fee);
+        Assert.Equal(("Timbre 6", 80m), (otherReferences.Value!.Visit!.References, otherReferences.Value.Visit.Fee));
         Assert.Equal(("72005", 120m), (otherAddress.Value!.Visit!.PostalCode, otherAddress.Value.Visit.Fee));
         Assert.Null(atTheBusiness.Value!.Visit);
         Assert.Equal(0, await fixture.Context.AppointmentVisits.CountAsync());
-        // Booked at home, moved to another address and then to the business: the same address again changed nothing.
+        // Booked at home, its references changed, moved to another address and then to the business: the same address again
+        // changed nothing.
         Assert.Equal(
-            [AppointmentVisitAudit.Arranged, AppointmentVisitAudit.Arranged, AppointmentVisitAudit.Removed],
+            [AppointmentVisitAudit.Arranged, AppointmentVisitAudit.Arranged, AppointmentVisitAudit.Arranged, AppointmentVisitAudit.Removed],
             (await fixture.Context.AuditLogs.Where(a => a.EntityName == "Appointment").Select(a => a.Action).ToListAsync()).Order());
         Assert.Equal(tenant.Id, (await fixture.Context.Appointments.SingleAsync()).TenantId);
     }
@@ -164,6 +170,27 @@ public class HomeVisitFlowTests
     }
 
     [Fact]
+    public async Task Reminder_OfAVisit_ShouldSayAtHomeWithThePostalCode_NeverTheAddress()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await SalonWithZonesAsync(fixture, pricesIncludeTax: true);
+        await CreateAsync(fixture, Appointment() with { Visit = AtHome });
+        var settings = await fixture.Context.TenantSettings.SingleAsync();
+        settings.UpdateAppointmentReminders(enabled: true, hoursBefore: 24, templateId: null);
+        await fixture.Context.SaveChangesAsync();
+
+        await new AppointmentReminderPlanner(fixture.Context, new PhoneNormalizationService(), fixture.Clock)
+            .QueueDueAsync(settings, CancellationToken.None);
+        await fixture.Context.SaveChangesAsync();
+
+        var reminder = await fixture.Context.OutgoingMessages.SingleAsync(m => m.Purpose == MessagePurpose.AppointmentReminder);
+        Assert.Equal(
+            "Hola Luis, te recordamos tu cita de Corte el lunes 5 de octubre a las 10:00 a. m. a domicilio (CP 72000) con "
+                + "Negocio demo. Si necesitas cambiarla, respóndenos este mensaje. Escribe BAJA si no quieres recibir recordatorios.",
+            reminder.Body);
+    }
+
+    [Fact]
     public async Task Notice_OfABusinessWithPricesBeforeIva_ShouldSayTheChargeIsPlusIva()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -218,6 +245,12 @@ public class HomeVisitFlowTests
         Assert.Equal([ten.Value!.Id, noon.Value!.Id], luisRoute.Stops.Select(s => s.AppointmentId));
         Assert.Equal((160m, "72000", "Portón negro"), (luisRoute.FeeTotal, luisRoute.Stops[0].PostalCode, luisRoute.Stops[0].References));
         Assert.Equal(luis, Assert.Single(onlyLuis.Staff).StaffUserId);
+        // A day the agenda can hold: missing or at the ends of the calendar, it is refused before reading anything.
+        var validator = new GetVisitRouteQueryValidator();
+        Assert.Equal(GetVisitRouteQueryValidator.DateMessage,
+            Assert.Single(validator.Validate(new GetVisitRouteQuery(default)).Errors).ErrorMessage);
+        Assert.False(validator.Validate(new GetVisitRouteQuery(DateOnly.MaxValue)).IsValid);
+        Assert.True(validator.Validate(new GetVisitRouteQuery(new DateOnly(2026, 10, 5))).IsValid);
     }
 
     [Fact]
@@ -258,12 +291,22 @@ public class HomeVisitFlowTests
 
         var again = await SellAsync(fixture, Sale(haircut, appointment.Id));
         Assert.Equal(HomeVisitRules.AlreadySoldMessage, again.Error);
+        var read = new GetAppointmentByIdQueryHandler(fixture.Context);
+        Assert.False((await read.Handle(new GetAppointmentByIdQuery(appointment.Id), CancellationToken.None)).SaleCancelled);
 
         await new CancelOrderCommandHandler(fixture.Context, fixture.CurrentUser, Inventory(fixture))
             .Handle(new CancelOrderCommand { OrderId = sale.Value.Id, Reason = "Se cobró mal" }, CancellationToken.None);
+        // Its sale was cancelled: the agenda and the route offer «Cobrar» again.
+        Assert.True((await read.Handle(new GetAppointmentByIdQuery(appointment.Id), CancellationToken.None)).SaleCancelled);
+        var list = await new GetAppointmentsQueryHandler(fixture.Context).Handle(new GetAppointmentsQuery(), CancellationToken.None);
+        Assert.True(Assert.Single(list.Items).SaleCancelled);
+        var route = await new GetVisitRouteQueryHandler(fixture.Context, fixture.TenantService)
+            .Handle(new GetVisitRouteQuery(new DateOnly(2026, 10, 5)), CancellationToken.None);
+        Assert.True(Assert.Single(Assert.Single(route.Staff).Stops).SaleCancelled);
         var resold = await SellAsync(fixture, Sale(haircut, appointment.Id));
         Assert.True(resold.IsSuccess, resold.Error);
         Assert.Equal(resold.Value!.Id, (await fixture.Context.Appointments.AsNoTracking().SingleAsync()).SaleOrderId);
+        Assert.False((await read.Handle(new GetAppointmentByIdQuery(appointment.Id), CancellationToken.None)).SaleCancelled);
         Assert.Equal(2, await fixture.Context.OrderVisitCharges.CountAsync());
     }
 

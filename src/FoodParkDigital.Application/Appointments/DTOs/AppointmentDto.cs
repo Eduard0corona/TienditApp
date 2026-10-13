@@ -21,6 +21,8 @@ public class AppointmentDto
     public AppointmentVisitDto? Visit { get; set; }
     /// <summary>The sale it was charged with (Fase 22E); null until it is charged.</summary>
     public Guid? SaleOrderId { get; set; }
+    /// <summary>Its sale was cancelled: it is charged again with another one.</summary>
+    public bool SaleCancelled { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {

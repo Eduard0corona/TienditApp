@@ -301,7 +301,7 @@ export default function SellPage() {
   const chargeAppointment = useCallback(async (appointmentId: string) => {
     try {
       const { data } = await appointmentsApi.getById(appointmentId);
-      const problem = appointmentSaleProblem(data.status);
+      const problem = appointmentSaleProblem(data);
       if (problem) {
         toast.warning(problem);
         return;

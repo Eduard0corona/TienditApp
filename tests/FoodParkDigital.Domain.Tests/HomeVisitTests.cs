@@ -73,6 +73,24 @@ public class HomeVisitTests
     }
 
     [Fact]
+    public void OtherReferences_ShouldKeepWhatWasAgreed_EvenWhenTheZoneNoLongerReachesIt()
+    {
+        var appointment = NewAppointment();
+        appointment.ArrangeVisit(Address, Zone(fee: 80m), Now);
+        var later = Now.AddMinutes(5);
+
+        Assert.True(appointment.ArrangeVisit(DeliveryAddress.ForVisit("72000", "Av. Juárez 123, Col. Centro", "Timbre 6"),
+            Zone(isActive: false, fee: 120m), later));
+
+        // The same place: its references change, its zone and charge stay, and its version catches the change.
+        Assert.Equal(("Timbre 6", "Centro", 80m), (appointment.Visit!.References, appointment.Visit.ZoneName, appointment.Visit.Fee));
+        Assert.Equal(later, appointment.UpdatedAt);
+        Assert.False(appointment.UpdateVisitReferences(DeliveryAddress.ForVisit("72000", "Av. Juárez 123, Col. Centro", "Timbre 6"), later));
+        Assert.Throws<InvalidOperationException>(
+            () => appointment.UpdateVisitReferences(DeliveryAddress.ForVisit("72005", "Calle 5 Sur 300", null), later));
+    }
+
+    [Fact]
     public void ArrangeVisit_ShouldQuoteAgain_AtAnotherAddress()
     {
         var appointment = NewAppointment();

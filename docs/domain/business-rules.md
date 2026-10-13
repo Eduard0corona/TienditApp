@@ -151,13 +151,14 @@ Una cita puede ser en la casa del cliente, con el cargo por visita de su zona, y
 
 - **Dónde:** «En el negocio» o «A domicilio» con el código postal (cinco dígitos), la dirección (hasta 300 caracteres: «Escribe a dónde es la visita: calle, número y colonia.») y referencias opcionales (hasta 500).
 - **La zona:** la de entrega activa que llega al código postal; su costo de envío es el cargo por visita (sin pedido mínimo ni envío gratis). Sin zonas activas: «Para citas a domicilio, primero da de alta tus zonas en Configuración › Zonas de entrega.»; fuera de ellas: «Por ahora no hacemos visitas en el 72000.».
-  - La misma dirección conserva la zona y el cargo acordados aunque la zona cambie después; otra dirección se cotiza otra vez. Quitar «A domicilio» quita el cargo. Solo en una cita abierta.
+  - El mismo lugar (código postal y dirección) conserva la zona y el cargo acordados aunque la zona cambie o deje de llegar después; cambiar solo las referencias las corrige sin cotizar. Otra dirección se cotiza otra vez. Quitar «A domicilio» quita el cargo. Solo en una cita abierta.
   - La bitácora (`AppointmentVisitArranged`, `AppointmentVisitRemoved`) guarda la zona y el cargo, nunca la dirección.
 - **Traslado:** entre una visita y otra cita de la misma persona pasan al menos los minutos del negocio (de 0 a 240, 30 por omisión): «Luis necesita 30 minutos de traslado entre una visita a domicilio y su otra cita.». Una visita lo pide contra cualquier cita de esa persona; una cita en el negocio, solo contra sus visitas. Se revisa después del traslape; sin persona asignada o con 0 no se revisa. Cambiarlo no mueve las citas ya agendadas.
-- **Ruta del día:** las visitas de un día por persona y en orden de hora, sin canceladas ni «no se presentó»; las de nadie, al final.
+- **Ruta del día:** las visitas de un día (entre los años 2000 y 2100: «Elige el día de la ruta.») por persona y en orden de hora, sin canceladas ni «no se presentó»; las de nadie, al final.
 - **Cobrar la cita:** su venta es de mostrador del negocio («La venta de una cita la registra el negocio en el mostrador: sin plataforma, mesa, cuenta abierta ni envío.») y con conexión («La venta de una cita se registra con conexión: la cita se revisa al cobrar.»).
   - La cita es del negocio («La cita no existe.»), no está cancelada («La cita se canceló: ya no se cobra.») ni «no se presentó» («El cliente no se presentó a la cita: no se cobra.»), y no tiene ya su venta («La cita ya tiene su venta.»), salvo que esa venta se haya cancelado.
-  - Con la venta, la cita queda completada y guarda qué venta la cobró. Dos cobros a la vez: el segundo recibe 409.
+  - La cobra quien vende y también agenda (`ManageAppointments`).
+  - Con la venta, la cita queda completada y guarda qué venta la cobró (pagada o no: Pedidos la tiene); la agenda dice «Con venta», o «Venta cancelada» y vuelve a ofrecer «Cobrar». Dos cobros a la vez: el segundo recibe 409.
   - Una visita con cargo lo suma como concepto propio: un monto más del desglose con la tasa del negocio al cobrar y la política de IVA del pedido, como el envío. Solo en una venta nueva, con productos y antes de cobrar; nunca con envío, plataforma o cuenta de mesa.
   - El borrador de CFDI lleva el concepto «Cargo por visita a domicilio» con la clave del SAT del primer servicio de la venta (o 01010101), la unidad E48 y el aviso de confirmarla con el contador.
   - `OrderCreated` guarda el cargo por visita.

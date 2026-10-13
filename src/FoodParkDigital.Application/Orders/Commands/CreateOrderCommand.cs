@@ -27,10 +27,16 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
 {
     /// <summary>
     /// Taking an order needs ManageOrders; charging it at once also needs ChargeOrders. The «Plataforma» payment of an
-    /// order a delivery platform charged is recorded by the server, outside every drawer: nobody charges it.
+    /// order a delivery platform charged is recorded by the server, outside every drawer: nobody charges it. The sale of an
+    /// appointment completes it in the agenda, so it also needs whoever books appointments (Fase 22E), as reading it does.
     /// </summary>
     public IEnumerable<TenantPermission> RequiredPermissions()
-        => Payments is { Count: > 0 } ? [TenantPermission.ChargeOrders] : [];
+    {
+        if (Payments is { Count: > 0 })
+            yield return TenantPermission.ChargeOrders;
+        if (AppointmentId is not null)
+            yield return TenantPermission.ManageAppointments;
+    }
 
     public Guid? CustomerId { get; init; }
     public string? CustomerName { get; init; }

@@ -105,6 +105,8 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22
     - Dos citas guardadas al mismo tiempo para la misma persona pueden traslaparse (la revisión del traslape y del traslado es en Application, sin restricción en la base), como antes.
     - Editar una cita sin `visit` la deja en el negocio: un cliente abierto antes del despliegue que edita una visita la quitaría hasta recargarse (`deploy-azure.md`).
     - Dos ediciones simultáneas de una cita ahora dan 409 en lugar de quedarse con la última.
+    - Una plantilla de recordatorio propia del negocio no sabe si la cita es a domicilio: dice lo que el negocio escribió (sin plantilla, el recordatorio dice «a domicilio (CP …)»).
+    - La agenda dice «Con venta» aunque la venta no esté pagada: el saldo se ve en Pedidos.
     - La clave del SAT del cargo por visita es la del primer servicio de la venta, o 01010101: cada negocio debe confirmarla con su contador.
     - El personal con `ManageAppointments` que no es dueño ni admin no lee la lista del equipo (`GET /employees`), así que su ruta del día no filtra por persona: ve la de todos.
     - Volver a la versión anterior no muestra las visitas ni el cargo, y una cita cobrada se podría cobrar otra vez (`deploy-azure.md`); el `rollback.sql` se detiene (50015).
