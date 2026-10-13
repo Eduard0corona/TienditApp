@@ -37,7 +37,13 @@
       "Bash(dotnet run:*)",
       "Bash(dotnet ef dbcontext script:*)",
       "Bash(dotnet tool list:*)",
-      "Bash(sqlcmd:*)"
+      "Bash(sqlcmd:*)",
+      "Bash(git config *)",
+      "Bash(git fetch *)",
+      "Bash(git rev-list *)",
+      "Bash(git diff *)",
+      "PowerShell(git fetch origin --quiet; git log --all --oneline -- client/visual/scenes/caja-config.spec.ts | Select-Object -First 10; git branch -a --contains \\(git log --all --format=%H -1 -- client/visual/scenes/caja-config.spec.ts\\) 2>$null | Select-Object -First 10)",
+      "Bash(git ls-remote *)"
     ]
   }
 }
