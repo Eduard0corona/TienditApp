@@ -27,7 +27,7 @@ interface AppointmentVisitFieldsProps {
 export default function AppointmentVisitFields({ value, onChange, quote, pricesIncludeTax, disabled }: AppointmentVisitFieldsProps) {
   return (
     <fieldset className="col-12 mb-2" disabled={disabled}>
-      <legend className="form-label fs-6 mb-1">Dónde</legend>
+      <legend className="form-label fw-semibold fs-6 mb-1">Dónde</legend>
       <div className="d-flex flex-wrap gap-3 mb-2">
         <div className="form-check">
           <input
