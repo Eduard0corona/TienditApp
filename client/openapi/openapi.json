@@ -11265,6 +11265,16 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "tip": {
+            "type": "number",
+            "format": "double",
+            "default": 0
+          },
+          "cashReceived": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false

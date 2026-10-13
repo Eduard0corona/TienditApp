@@ -237,7 +237,9 @@ public class OrdersController : ControllerBase
             InventoryLocationId = request.InventoryLocationId,
             EvidenceUrl = request.EvidenceUrl,
             Reference = request.Reference,
-            Notes = request.Notes
+            Notes = request.Notes,
+            Tip = request.Tip,
+            CashReceived = request.CashReceived
         }, cancellationToken);
 
         if (result.IsFailure)
@@ -365,6 +367,11 @@ public record AddOrderPaymentRequest
     public string? EvidenceUrl { get; init; }
     public string? Reference { get; init; }
     public string? Notes { get; init; }
+    /// <summary>On top of the amount, for the team: not part of the sale or its balance. 0 when not sent.</summary>
+    [System.ComponentModel.DefaultValue(0)]
+    public decimal Tip { get; init; }
+    /// <summary>What the customer handed over in cash, to keep the change with the payment.</summary>
+    public decimal? CashReceived { get; init; }
 }
 
 public record UpdateServiceOrderPieceStatusRequest
