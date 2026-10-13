@@ -131,7 +131,8 @@ public class BranchServiceModeMigrationSqlServerTests
     {
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant("Cocina sin local", slug, BusinessType.Food, $"{slug}@demo.com");
-        await using var seed = database.CreateContext();
+        // Without what Fase 22E added: some tests seed a database migrated to an earlier migration.
+        await using var seed = BeforeHomeVisits.CreateContext(database);
         seed.AddRange(tenant, new TenantSettings(tenant.Id, TenantCapability.Food));
         await seed.SaveChangesAsync();
         return tenant;
@@ -149,6 +150,7 @@ public class BranchServiceModeMigrationSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            BeforeHomeVisits.Ignore(modelBuilder);
             modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<Branch>().Ignore(b => b.ServiceMode);
         }

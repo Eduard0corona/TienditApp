@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders.Commands;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
@@ -192,6 +193,10 @@ internal sealed class SalesDbContext : ApplicationDbContext
         // InMemory provider does not generate rowversion; allow test inserts.
         modelBuilder.Entity<Order>()
             .Property(o => o.Version)
+            .IsRequired(false)
+            .ValueGeneratedNever();
+        modelBuilder.Entity<Appointment>()
+            .Property(a => a.Version)
             .IsRequired(false)
             .ValueGeneratedNever();
         modelBuilder.Entity<WhatsAppConversation>()

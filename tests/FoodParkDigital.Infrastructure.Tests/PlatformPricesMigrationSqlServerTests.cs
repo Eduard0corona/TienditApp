@@ -200,6 +200,7 @@ public class PlatformPricesMigrationSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            BeforeHomeVisits.Ignore(modelBuilder);
             modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<Product>().Ignore(p => p.PlatformPrices);
             modelBuilder.Entity<ProductOption>().Ignore(o => o.PlatformPrices);

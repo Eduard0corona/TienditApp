@@ -259,7 +259,8 @@ public class SpecialDaysSqlServerTests
         var slug = Guid.NewGuid().ToString("N")[..10];
         var tenant = new Tenant("Ferretería", slug, BusinessType.Retail, $"{slug}@demo.com");
         var other = new Tenant("Taquería", slug + "b", BusinessType.Food, $"{slug}b@demo.com");
-        await using var seed = database.CreateContext();
+        // Without what Fase 22E added: some tests seed a database migrated to an earlier migration.
+        await using var seed = BeforeHomeVisits.CreateContext(database);
         seed.AddRange(tenant, other, new TenantSettings(tenant.Id, TenantCapability.Retail), new TenantSettings(other.Id, TenantCapability.Food));
         await seed.SaveChangesAsync();
         return (tenant, other);
@@ -298,6 +299,7 @@ public class SpecialDaysSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            BeforeHomeVisits.Ignore(modelBuilder);
             modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Ignore<SpecialDay>();
         }

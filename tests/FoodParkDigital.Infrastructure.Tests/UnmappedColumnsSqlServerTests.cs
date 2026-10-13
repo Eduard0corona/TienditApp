@@ -178,6 +178,7 @@ public class UnmappedColumnsSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            BeforeHomeVisits.Ignore(modelBuilder);
             modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<TenantSettings>().Ignore(settings => settings.OpeningHours);
         }

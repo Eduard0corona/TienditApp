@@ -1,4 +1,5 @@
 using System.Globalization;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Delivery;
@@ -156,6 +157,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     /// </summary>
     public OrderDelivery? Delivery { get; private set; }
 
+    /// <summary>
+    /// The charge for the visit of the appointment it sells, when it was at the customer's address (<see cref="ChargeVisit"/>,
+    /// Fase 22E); none for any other sale. Always loaded with the order: it is part of the total.
+    /// </summary>
+    public OrderVisitCharge? VisitCharge { get; private set; }
+
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
     public IReadOnlyCollection<OrderPayment> Payments => _payments.AsReadOnly();
@@ -227,6 +234,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(PlatformOrderRules.NoTabMessage);
         if (Delivery is not null)
             throw new DomainException(HomeDeliveryRules.NotForTabsMessage);
+        if (VisitCharge is not null)
+            throw new DomainException(HomeVisitRules.NotForTabsMessage);
         if (IsTab || Status != OrderStatus.Pending)
             throw new DomainException("Solo un pedido nuevo puede abrirse como cuenta.");
         if (OrderType != OrderType.Retail)
@@ -633,6 +642,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         ArgumentNullException.ThrowIfNull(zone);
         if (Delivery is not null)
             throw new DomainException(HomeDeliveryRules.AlreadyArrangedMessage);
+        if (VisitCharge is not null)
+            throw new DomainException(HomeVisitRules.NotForDeliveriesMessage);
         if (Status != OrderStatus.Pending)
             throw new DomainException(HomeDeliveryRules.OnlyNewOrdersMessage);
         if (IsDeliveryPlatformOrder)
@@ -672,6 +683,39 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         }
 
         return delivery;
+    }
+
+    /// <summary>
+    /// Charges the visit of an appointment at the customer's address in its sale (Fase 22E): what the visit was agreed for,
+    /// with the order's tax policy and <paramref name="feeRate"/>, enters the total. It is added once, after the services
+    /// and before any payment, to a sale made by the business; never to an order that goes to the customer's address.
+    /// </summary>
+    /// <param name="feeRate">The IVA rate of the business: the rate of a service, not of a product.</param>
+    public OrderVisitCharge ChargeVisit(Guid appointmentId, string zoneName, decimal fee, VatRate feeRate)
+    {
+        if (appointmentId == Guid.Empty)
+            throw new ArgumentException("The appointment is required.", nameof(appointmentId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(zoneName);
+        if (VisitCharge is not null)
+            throw new DomainException(HomeVisitRules.AlreadyChargedMessage);
+        if (Status != OrderStatus.Pending)
+            throw new DomainException(HomeVisitRules.OnlyNewOrdersMessage);
+        if (IsDeliveryPlatformOrder)
+            throw new DomainException(HomeVisitRules.NotForPlatformsMessage);
+        if (IsTab)
+            throw new DomainException(HomeVisitRules.NotForTabsMessage);
+        if (Delivery is not null)
+            throw new DomainException(HomeVisitRules.NotForDeliveriesMessage);
+        if (_items.Count == 0)
+            throw new DomainException(HomeVisitRules.NeedsItemsMessage);
+        if (_payments.Count > 0)
+            throw new DomainException(HomeVisitRules.BeforeAnyPaymentMessage);
+        if (fee <= 0 || fee > DeliveryZone.MaxFee || decimal.Round(fee, 2) != fee)
+            throw new DomainException(HomeVisitRules.FeeMessage);
+
+        VisitCharge = new OrderVisitCharge(TenantId, Id, appointmentId, zoneName.Trim(), fee, feeRate);
+        RecalculateTotals();
+        return VisitCharge;
     }
 
     /// <summary>
@@ -860,12 +904,17 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public decimal ProductsTotal
         => OrderTaxCalculator.Calculate(PricesIncludeTax, ItemAmounts(item => item.ChargedPrice)).Sum(line => line.Total);
 
-    /// <summary>The products and, for an order that goes to the customer's address, its delivery: one more concept.</summary>
+    /// <summary>
+    /// The products and, for an order that goes to the customer's address, its delivery, or for the sale of a visit at
+    /// their home, its charge: one more concept.
+    /// </summary>
     private IReadOnlyList<OrderTaxLine> Breakdown(Func<OrderItem, decimal> chargedPrice)
     {
         var amounts = ItemAmounts(chargedPrice);
         if (Delivery is { Fee: > 0 } delivery)
             amounts = amounts.Append(new TaxableAmount(delivery.Fee, delivery.FeeVatRate));
+        if (VisitCharge is { } visit)
+            amounts = amounts.Append(new TaxableAmount(visit.Fee, visit.FeeVatRate));
         return OrderTaxCalculator.Calculate(PricesIncludeTax, amounts);
     }
 

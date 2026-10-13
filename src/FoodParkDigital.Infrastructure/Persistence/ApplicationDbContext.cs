@@ -170,6 +170,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<ServiceOrderDetail> ServiceOrderDetails => Set<ServiceOrderDetail>();
     public DbSet<PlatformOrderDetail> PlatformOrderDetails => Set<PlatformOrderDetail>();
     public DbSet<OrderDelivery> OrderDeliveries => Set<OrderDelivery>();
+    public DbSet<OrderVisitCharge> OrderVisitCharges => Set<OrderVisitCharge>();
     public DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings => Set<DeliveryPlatformSetting>();
     public DbSet<PlatformSettlement> PlatformSettlements => Set<PlatformSettlement>();
     public DbSet<PlatformSettlementOrder> PlatformSettlementOrders => Set<PlatformSettlementOrder>();
@@ -181,6 +182,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
     public DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes => Set<DeliveryZonePostalCode>();
     public DbSet<ServiceOrderPiece> ServiceOrderPieces => Set<ServiceOrderPiece>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<AppointmentVisit> AppointmentVisits => Set<AppointmentVisit>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
