@@ -34,7 +34,15 @@ export interface SellDraft {
   /** The folio of the platform's app, as typed. */
   externalOrderNumber: string;
   collectedBy: PlatformCollectedBy;
+  /** Where an order sent to the customer's address goes, as typed; null (or missing, before) when it does not. */
+  delivery?: SellDraftDelivery | null;
   pendingCharge?: PendingCharge;
+}
+
+export interface SellDraftDelivery {
+  postalCode: string;
+  addressLine: string;
+  references: string;
 }
 
 const storageKey = (tenantId: string) => `tienditapp.sell.draft.v1.${tenantId}`;
@@ -51,6 +59,10 @@ export function describeSale(draft: SellDraft): string {
   ];
   if (isDeliveryPlatform(draft.channel)) {
     sale.push([draft.channel, normalizePlatformFolio(draft.externalOrderNumber), draft.collectedBy]);
+  }
+  // Another address is another order: its zone, minimum and fee can differ.
+  if (draft.delivery) {
+    sale.push(['delivery', ...[draft.delivery.postalCode, draft.delivery.addressLine, draft.delivery.references].map((value) => value.trim())]);
   }
   return JSON.stringify(sale);
 }
@@ -78,6 +90,7 @@ export function readSellDraft(tenantId: string): SellDraft | null {
       channel: isDeliveryPlatform(parsed.channel) ? parsed.channel : OrderChannel.Counter,
       externalOrderNumber: typeof parsed.externalOrderNumber === 'string' ? parsed.externalOrderNumber : '',
       collectedBy: parsed.collectedBy === PlatformCollectedBy.Business ? PlatformCollectedBy.Business : PlatformCollectedBy.Platform,
+      delivery: readDelivery(parsed.delivery),
       pendingCharge: typeof charge?.key === 'string' && typeof charge.sale === 'string'
         ? { key: charge.key, sale: charge.sale }
         : undefined,
@@ -87,10 +100,21 @@ export function readSellDraft(tenantId: string): SellDraft | null {
   }
 }
 
+function readDelivery(value: unknown): SellDraftDelivery | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { postalCode, addressLine, references } = value as Partial<SellDraftDelivery>;
+  return {
+    postalCode: typeof postalCode === 'string' ? postalCode : '',
+    addressLine: typeof addressLine === 'string' ? addressLine : '',
+    references: typeof references === 'string' ? references : '',
+  };
+}
+
 export function writeSellDraft(tenantId: string, draft: SellDraft) {
   try {
     const isEmpty = draft.lines.length === 0 && !draft.customerName && !draft.customerPhone
-      && !draft.tableNumber && !draft.orderNotes && !isDeliveryPlatform(draft.channel) && !draft.externalOrderNumber;
+      && !draft.tableNumber && !draft.orderNotes && !isDeliveryPlatform(draft.channel) && !draft.externalOrderNumber
+      && !draft.delivery;
     if (isEmpty) window.localStorage.removeItem(storageKey(tenantId));
     else window.localStorage.setItem(storageKey(tenantId), JSON.stringify(draft));
   } catch {

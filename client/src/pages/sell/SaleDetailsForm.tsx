@@ -14,10 +14,15 @@ interface SaleDetailsFormProps {
    * goes with the folio; only the notes for the kitchen are left here.
    */
   forPlatform?: boolean;
+  /** Sent to the customer's address: the address says where it goes, there is no table. */
+  toAddress?: boolean;
 }
 
 /** Customer, table and notes of the sale, behind a link: a counter sale goes to the general public. */
-export default function SaleDetailsForm({ details, onChange, open, onToggle, isFood, phoneError, forPlatform = false }: SaleDetailsFormProps) {
+export default function SaleDetailsForm({
+  details, onChange, open, onToggle, isFood, phoneError, forPlatform = false, toAddress = false,
+}: SaleDetailsFormProps) {
+  const withTable = isFood && !toAddress;
   // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
   const id = useId();
   const notesField = (label: string) => (
@@ -59,7 +64,7 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
         aria-expanded={open}
       >
         <i className={`${open ? 'ri-arrow-up-s-line' : 'ri-user-add-line'} me-1`} aria-hidden="true"></i>
-        {open ? 'Ocultar datos del cliente' : 'Cliente, mesa y notas (opcional)'}
+        {open ? 'Ocultar datos del cliente' : withTable ? 'Cliente, mesa y notas (opcional)' : 'Cliente y notas (opcional)'}
       </button>
       {open && (
         <div className="sell-details mb-2">
@@ -92,7 +97,7 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
                 {phoneError || 'Con teléfono la venta queda en su historial.'}
               </div>
             </div>
-            {isFood && (
+            {withTable && (
               <div className="col-sm-6">
                 <label className="form-label small mb-1" htmlFor={`${id}-table`}>Mesa o referencia</label>
                 <input
@@ -104,7 +109,7 @@ export default function SaleDetailsForm({ details, onChange, open, onToggle, isF
                 />
               </div>
             )}
-            <div className={isFood ? 'col-sm-6' : 'col-12'}>{notesField('Notas del pedido')}</div>
+            <div className={withTable ? 'col-sm-6' : 'col-12'}>{notesField('Notas del pedido')}</div>
           </div>
         </div>
       )}

@@ -184,6 +184,18 @@ public class OrdersController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Writes down (or corrects) the Paquetenvia trip of an order that goes to the customer's address.</summary>
+    [HttpPut("{id:guid}/delivery/shipment")]
+    public async Task<IActionResult> RegisterCourierShipment(
+        Guid id, [FromBody] RegisterCourierShipmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new RegisterCourierShipmentCommand(id, request.Courier, request.Folio, request.TrackingUrl), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelOrderRequest? request, CancellationToken cancellationToken)
     {
@@ -379,4 +391,13 @@ public class CancelTabItemRequest
     public string Reason { get; init; } = string.Empty;
     /// <summary>The kitchen did not prepare it: its supplies go back to stock. Otherwise they were lost.</summary>
     public bool ReturnToStock { get; init; } = true;
+}
+
+public class RegisterCourierShipmentRequest
+{
+    public DeliveryCourier Courier { get; init; } = DeliveryCourier.Paquetenvia;
+    /// <summary>The folio of the trip in the courier's app.</summary>
+    public string Folio { get; init; } = string.Empty;
+    /// <summary>The https link that follows the trip, if the courier gave one.</summary>
+    public string? TrackingUrl { get; init; }
 }

@@ -32,6 +32,20 @@ public static class OrderMappings
             ExternalOrderNumber = order.PlatformDetail.ExternalOrderNumber,
             CollectedBy = order.PlatformDetail.CollectedBy
         },
+        Delivery = order.Delivery is null ? null : new OrderDeliveryDto
+        {
+            PostalCode = order.Delivery.PostalCode,
+            AddressLine = order.Delivery.AddressLine,
+            References = order.Delivery.References,
+            ZoneName = order.Delivery.ZoneName,
+            Fee = order.Delivery.Fee,
+            FeeTaxRate = order.Delivery.FeeTaxRate,
+            Courier = order.Delivery.Courier,
+            CourierFolio = order.Delivery.CourierFolio,
+            TrackingUrl = order.Delivery.TrackingUrl,
+            ShipmentRegisteredAt = order.Delivery.ShipmentRegisteredAt,
+            ShipmentRegisteredBy = order.Delivery.ShipmentRegisteredBy
+        },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,
         SubTotal = order.SubTotal,
@@ -65,6 +79,7 @@ public static class OrderMappings
         OrderNumber = order.OrderNumber,
         Channel = order.Channel,
         ExternalOrderNumber = order.PlatformDetail?.ExternalOrderNumber,
+        IsDelivery = order.Delivery != null,
         Status = order.Status,
         CustomerName = order.CustomerName,
         TableNumber = order.TableNumber,
@@ -224,6 +239,20 @@ public static class OrderMappings
         {
             ExternalOrderNumber = order.PlatformDetail.ExternalOrderNumber,
             CollectedBy = order.PlatformDetail.CollectedBy
+        },
+        Delivery = order.Delivery == null ? null : new OrderDeliveryDto
+        {
+            PostalCode = order.Delivery.PostalCode,
+            AddressLine = order.Delivery.AddressLine,
+            References = order.Delivery.References,
+            ZoneName = order.Delivery.ZoneName,
+            Fee = order.Delivery.Fee,
+            FeeTaxRate = order.Delivery.FeeTaxRate,
+            Courier = order.Delivery.Courier,
+            CourierFolio = order.Delivery.CourierFolio,
+            TrackingUrl = order.Delivery.TrackingUrl,
+            ShipmentRegisteredAt = order.Delivery.ShipmentRegisteredAt,
+            ShipmentRegisteredBy = order.Delivery.ShipmentRegisteredBy
         },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,

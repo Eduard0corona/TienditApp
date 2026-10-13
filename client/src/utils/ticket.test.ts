@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, UnitType, type OrderDto } from '../types';
-import { billedItems, buildTicketText, cancellableQuantity, formatCancelled, formatTicketQuantity, getTicketPlatform } from './ticket';
+import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, UnitType, type OrderDto } from '../types';
+import {
+  billedItems, buildTicketText, cancellableQuantity, formatCancelled, formatTicketQuantity, getTicketDelivery, getTicketPlatform,
+} from './ticket';
 
 const line = (overrides: Partial<OrderDto['items'][number]>): OrderDto['items'][number] => ({
   id: 'i1',
@@ -116,5 +118,28 @@ describe('ticket of an order of a delivery platform', () => {
     expect(getTicketPlatform(rappi)).toEqual({ name: 'Rappi', folio: 'BC953', packing: true });
     expect(getTicketPlatform({ ...rappi, channel: OrderChannel.Counter })).toBeNull();
     expect(getTicketPlatform({ ...rappi, platformOrder: null })).toBeNull();
+  });
+
+  it('says where an order sent to an address goes, its delivery and the courier\'s folio', () => {
+    const delivered: OrderDto = {
+      ...tab([line({ id: 'i1' })]),
+      customerName: 'Ana',
+      total: 110,
+      delivery: {
+        postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: 'Portón verde', zoneName: 'Centro',
+        fee: 35, feeTaxRate: 16, courier: DeliveryCourier.Paquetenvia, courierFolio: 'PQ1234',
+      },
+    };
+
+    const text = buildTicketText(delivered, { businessName: 'Fonda Lupita' });
+
+    expect(text).toContain('*A domicilio:* Av. Reforma 123, Centro · CP 72000');
+    expect(text).toContain('Referencias: Portón verde');
+    expect(text).toContain('Paquetenvia · Folio PQ1234');
+    expect(text).toContain('Envío a domicilio  $35.00');
+    expect(getTicketDelivery({ delivery: { ...delivered.delivery!, fee: 0, courier: null, courierFolio: null } }))
+      .toEqual({ address: 'Av. Reforma 123, Centro · CP 72000', references: 'Portón verde', fee: 0, courier: null });
+    expect(getTicketDelivery({ delivery: null })).toBeNull();
+    expect(buildTicketText(tab([line({})]), { businessName: 'Fonda Lupita' })).not.toContain('domicilio');
   });
 });

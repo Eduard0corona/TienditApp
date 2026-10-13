@@ -37,6 +37,10 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Ventas por canal y pedidos de una plataforma (`GetSalesByChannelQuery`, `GetDeliveryPlatformOrdersQuery`) | `ViewReports` (`Permission(ViewReports)`) | — |
 | Liquidaciones de las plataformas: la lista, una liquidación, los pedidos pendientes de un periodo y lo que debe cada plataforma (`GetPlatformSettlementsQuery`, `GetPlatformSettlementQuery`, `GetPendingPlatformOrdersQuery`, `GetPlatformReceivablesQuery`, Fase 22G) | `ViewReports` (`Permission(ViewReports)`), como Ventas por canal | — |
 | Abrir, guardar, cerrar y anular una liquidación (`CreatePlatformSettlementCommand`, `UpdatePlatformSettlementCommand`, `ClosePlatformSettlementCommand`, `VoidPlatformSettlementCommand`, Fase 22G) | dueño o admin (`Manager`), como las tasas de las plataformas | — |
+| Zonas de entrega: la lista (`GetDeliveryZonesQuery`, Fase 22B) | cualquier miembro (`Member`): quien toma un pedido necesita saber a dónde se entrega | — |
+| Agregar, guardar y borrar una zona de entrega (`CreateDeliveryZoneCommand`, `UpdateDeliveryZoneCommand`, `DeleteDeliveryZoneCommand`, Fase 22B) | dueño o admin (`Manager`) | — |
+| Anotar o corregir el viaje de Paquetenvia de un pedido a domicilio (`RegisterCourierShipmentCommand`, Fase 22C) | `ManageOrders` | — |
+| Cotizar el envío a un código postal en el menú público (`GetPublicDeliveryQuoteQuery`, Fase 22C) | anónimo (`[AllowAnonymousRequest]`), con el límite `public-menu`; sin el nombre de la zona | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
 
@@ -101,7 +105,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 | `[AllowAnonymousRequest("motivo")]` | Flujos públicos (inicio de sesión, registro, confirmaciones) y lo que envía el sistema sin usuario (webhook). |
 
 - `[RequiresCapability(X)]` se combina con la regla anterior y aplica a todos, también al administrador de plataforma: un módulo apagado está apagado.
-- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (147) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
+- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (237 con la Fase 22C) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
 - `CurrentAccessContext` lee una vez por petición la membresía, permisos y módulos; `TenantResolutionMiddleware` le pasa lo que ya consultó.
 - `ForbiddenAccessException` responde 403 con un mensaje en español.
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).

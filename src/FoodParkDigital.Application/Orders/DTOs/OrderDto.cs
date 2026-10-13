@@ -24,6 +24,8 @@ public class OrderDto
     public OrderChannel Channel { get; set; }
     /// <summary>An order of Rappi, Uber Eats or DiDi Food: the folio of the app and who charged it. Null for any other channel.</summary>
     public OrderPlatformDto? PlatformOrder { get; set; }
+    /// <summary>Where the order goes and what its delivery charged (Fase 22C); null for an order picked up or served.</summary>
+    public OrderDeliveryDto? Delivery { get; set; }
     /// <summary>Branch where the sale was made.</summary>
     public Guid? BranchId { get; set; }
     /// <summary>When the device captured it without connection; the sale reached the server later.</summary>
@@ -79,6 +81,26 @@ public class OrderPlatformDto
     public string ExternalOrderNumber { get; set; } = null!;
     /// <summary>The platform, in its app, or the business, when the courier pays on pickup.</summary>
     public PlatformCollectedBy CollectedBy { get; set; }
+}
+
+/// <summary>
+/// Where an order goes (Fase 22C): the customer's address, the zone that reached it, what the delivery charged (with the
+/// order's tax policy, at <see cref="FeeTaxRate"/>) and the courier's trip the business wrote down.
+/// </summary>
+public class OrderDeliveryDto
+{
+    public string PostalCode { get; set; } = null!;
+    public string AddressLine { get; set; } = null!;
+    public string? References { get; set; }
+    public string ZoneName { get; set; } = null!;
+    /// <summary>0 when the delivery was free.</summary>
+    public decimal Fee { get; set; }
+    public decimal FeeTaxRate { get; set; }
+    public DeliveryCourier? Courier { get; set; }
+    public string? CourierFolio { get; set; }
+    public string? TrackingUrl { get; set; }
+    public DateTimeOffset? ShipmentRegisteredAt { get; set; }
+    public string? ShipmentRegisteredBy { get; set; }
 }
 
 public class KitchenTicketSummaryDto
@@ -258,6 +280,8 @@ public class KitchenOrderDto
     public OrderChannel Channel { get; set; }
     /// <summary>The folio of the delivery platform's app, written on the bag; null for any other channel.</summary>
     public string? ExternalOrderNumber { get; set; }
+    /// <summary>The order goes to the customer's address (Fase 22C): the kitchen packs it to go. Never the address.</summary>
+    public bool IsDelivery { get; set; }
     public OrderStatus Status { get; set; }
     public string CustomerName { get; set; } = null!;
     public string? TableNumber { get; set; }

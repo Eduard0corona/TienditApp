@@ -1040,6 +1040,94 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("TemporaryCustomers", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Delivery.DeliveryZone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Fee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("FreeDeliveryFrom")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MinimumOrder")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("DeliveryZones", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DeliveryZones_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
+
+                            t.HasCheckConstraint("CK_DeliveryZones_FreeDeliveryFrom", "[FreeDeliveryFrom] IS NULL OR ([FreeDeliveryFrom] > 0 AND [FreeDeliveryFrom] <= 100000 AND [Fee] > 0)");
+
+                            t.HasCheckConstraint("CK_DeliveryZones_MinimumOrder", "[MinimumOrder] >= 0 AND [MinimumOrder] <= 100000");
+
+                            t.HasCheckConstraint("CK_DeliveryZones_Revision", "[Revision] >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Delivery.DeliveryZonePostalCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("DeliveryZoneId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeliveryZoneId");
+
+                    b.HasIndex("TenantId", "PostalCode")
+                        .IsUnique();
+
+                    b.ToTable("DeliveryZonePostalCodes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DeliveryZonePostalCodes_PostalCode", "LEN([PostalCode]) = 5 AND [PostalCode] NOT LIKE '%[^0-9]%'");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Dining.Entities.DiningTable", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2482,6 +2570,83 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("Orders", null, t =>
                         {
                             t.HasCheckConstraint("CK_Orders_CustomerLink", "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int?>("Courier")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CourierFolio")
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<decimal>("Fee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("FeeTaxRate")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<string>("References")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("ShipmentRegisteredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ShipmentRegisteredBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TrackingUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ZoneName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.ToTable("OrderDeliveries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OrderDeliveries_AddressLine", "LEN([AddressLine]) > 0");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_FeeTaxRate", "[FeeTaxRate] >= 0 AND [FeeTaxRate] <= 100");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_PostalCode", "LEN([PostalCode]) = 5 AND [PostalCode] NOT LIKE '%[^0-9]%'");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_Shipment", "([Courier] IS NULL AND [CourierFolio] IS NULL AND [TrackingUrl] IS NULL AND [ShipmentRegisteredAt] IS NULL) OR ([Courier] IS NOT NULL AND [Courier] = 1 AND [CourierFolio] IS NOT NULL AND LEN([CourierFolio]) > 0 AND [ShipmentRegisteredAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_TrackingUrl", "[TrackingUrl] IS NULL OR [TrackingUrl] LIKE 'https://_%'");
                         });
                 });
 
@@ -4410,6 +4575,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Delivery.DeliveryZonePostalCode", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Delivery.DeliveryZone", null)
+                        .WithMany("PostalCodes")
+                        .HasForeignKey("DeliveryZoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Branches.Entities.Branch", null)
@@ -4601,6 +4775,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TemporaryCustomerId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderDelivery", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithOne("Delivery")
+                        .HasForeignKey("FoodParkDigital.Domain.Orders.Entities.OrderDelivery", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItem", b =>
@@ -4998,6 +5181,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("Addresses");
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Delivery.DeliveryZone", b =>
+                {
+                    b.Navigation("PostalCodes");
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Finance.Entities.CashSession", b =>
                 {
                     b.Navigation("Transactions");
@@ -5010,6 +5198,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.Order", b =>
                 {
+                    b.Navigation("Delivery");
+
                     b.Navigation("ItemCancellations");
 
                     b.Navigation("Items");

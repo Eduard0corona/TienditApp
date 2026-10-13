@@ -199,9 +199,108 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
     - `industries.test.ts`: el giro «Comida a domicilio», escrito como lo lee el servidor.
   - **Escenas visuales** (contra `master` en `a60b1d4`, con la 22G): tres nuevas, la principal solo a domicilio en el formulario de Sucursales y en su lista, y el menú en línea solo a domicilio en el teléfono. Cambian a propósito los 4 diálogos de Sucursales (el grupo «¿Cómo atiende?») y las 9 escenas de Mi negocio (la frase de la dirección fiscal); las demás, sin cambios. Con esas capturas, las 352 escenas pasaron dos corridas seguidas contra el mismo build. Las nuevas no salen de la línea base de `master` hasta que la fase entre a `master`.
 
+- Fase 22B, zonas de entrega ([ADR 0017](../adr/0017-delivery-zones.md)):
+  - **Domain:** `DeliveryZoneTests` (27 pruebas):
+    - los códigos postales una vez cada uno, en orden y sin espacios;
+    - guardar conserva los que siguen, quita los demás y suma los nuevos;
+    - guardar sin cambios no sube la revisión;
+    - lo que no es un código postal (cuatro o seis dígitos, espacios, letras o dígitos que no son ASCII), rechazado con lo escrito;
+    - de 1 a 300 códigos postales;
+    - el nombre;
+    - los montos fuera de rango o con más de dos decimales;
+    - envío gratis con envío $0, rechazado;
+    - un guardado rechazado deja la zona como estaba;
+    - `Covers` solo mientras está activa;
+    - `FeeFor` y `MeetsMinimum`.
+  - **Application:**
+    - `DeliveryZonesFlowTests`:
+      - crear guarda los códigos postales una vez cada uno y deja en la bitácora lo que cobra, sin los códigos postales;
+      - el código postal de otra zona, rechazado con su nombre, mientras otro negocio puede tenerlo;
+      - el nombre de otra zona, rechazado al crear y al guardar, sin quedarse con el cambio, mientras otro negocio puede tenerlo;
+      - el tope de 30 zonas;
+      - los mensajes del dominio, sin guardar nada;
+      - guardar con la revisión vista, antes y después en la bitácora, y una revisión vieja rechazada;
+      - guardar sin cambios no registra nada;
+      - tomar el código postal de otra zona solo después de que esa lo suelta;
+      - borrar libera sus códigos postales;
+      - la zona de otro negocio no se encuentra;
+      - la lista por nombre y la búsqueda de una zona activa;
+      - los validadores.
+    - `AutoReplyDeliveryZonesTests`:
+      - un código postal de una zona (en una pregunta, solo, con «C.P.» o con «mi código postal es el») contesta lo que cobra y el menú;
+      - el envío gratis;
+      - un código postal fuera de las zonas o de una zona desactivada;
+      - la pregunta sin código postal, también «¿Llegan a la colonia Roma?», «¿Envían a Cholula?» o «¿Qué zonas cubren?», y el costo del envío sin los productos;
+      - «Te envío el comprobante», «Gracias por el envío», «¿Me mandan el número de cuenta?», «¿Me entregas factura?» y «¿En qué colonia están?», como antes: esas palabras cuentan solo junto a un código postal;
+      - el costo del envío y los precios del menú en el mismo mensaje;
+      - con un saludo, con el horario y con «¿dónde están?» de una cocina sin local, sin la calle;
+      - sin zonas activas, como antes;
+      - de dos negocios, cada uno con las suyas.
+  - **SQL Server:** `DeliveryZonesSqlServerTests` (13 pruebas):
+    - índices y llave; guardado en su negocio;
+    - el código postal repetido (error 2601), y en otro negocio permitido; lo mismo con el nombre, sin distinguir mayúsculas;
+    - guardar conserva las filas y borrar se lleva los códigos; las restricciones CHECK;
+    - revertir detenido con el error 50012 y después solo las dos tablas;
+    - con los casos de uso y otro guardado justo antes (`SavedMeanwhile`): agregar el código postal que alguien agregó, o guardar una zona que alguien borró, es 409 aunque la base conteste con el índice único (2601) o la llave (547), porque escribe el código postal antes que la zona; el código postal o el nombre que otra zona tomó, con su nombre, al guardar y al crear; borrar una zona que alguien guardó, 409; y un error de otra causa se lanza, no pasa por conflicto. Sin leer otra vez la revisión, las dos primeras respondían 500.
+  - **WebApi:** `CrossTenantDeliveryZonesSqlServerTests` (3 pruebas): otro negocio no lee, guarda ni borra las zonas, ni con el encabezado del negocio; el 409 con una revisión vieja y el código postal de otra zona rechazado con su nombre; el equipo las lee y solo dueños y administradores las cambian.
+  - **Cliente:**
+    - `DeliveryZones.test.tsx`:
+      - la lista con lo que cobra cada zona y sus primeros códigos postales;
+      - «Probar un código postal»;
+      - agregar una zona con sus códigos postales una vez cada uno;
+      - los errores antes de guardar y la respuesta del servidor;
+      - guardar con la revisión leída; con el 409 o el 404 el diálogo se cierra y la lista se lee otra vez;
+      - el nombre de otra zona, sin distinguir mayúsculas, antes de guardar;
+      - las acciones de todas las zonas apagadas mientras se guarda un cambio;
+      - el aviso cuando ninguna zona está activa;
+      - desactivar y eliminar solo con confirmación, con sus revisiones.
+    - `postalCodes.test.ts`: cinco dígitos; cada uno una vez, en orden, con cualquier separador; lo que no es código postal, como se escribió.
+  - **Escenas visuales** (contra `master` en `3e69f32`, con la 22A):
+    - **Nuevas (7):** Zonas de entrega en escritorio, teléfono y oscuro; probar un código postal; editar una zona; nueva zona en el teléfono; y sin zonas. No salen de la línea base de `master` hasta que la fase entre a `master`.
+    - **Cambian a propósito (35):** las escenas de Configuración que muestran sus pestañas, ahora con «Zonas de entrega» después de «Sucursales»: Negocio (9), Sucursales (8), Equipo y permisos (6), WhatsApp (3), Respuestas automáticas (5), Seguridad y actividad (3) y Plataformas de reparto (1). Solo cambia la fila de pestañas. En escritorio, «Primeros pasos» queda al final de la fila, que se desplaza, como ya pasaba en pantallas más angostas.
+    - **Resultado:** con esas capturas, las 359 escenas pasaron dos corridas seguidas contra el mismo build.
+
+- Fase 22C, pedido a domicilio ([ADR 0018](../adr/0018-home-delivery-orders.md)):
+  - **Domain:**
+    - `HomeDeliveryTests` (17 pruebas):
+      - la dirección sin espacios alrededor, con referencias opcionales, y los textos demasiado largos;
+      - el folio de Paquetenvia normalizado y el enlace solo escrito con `https://` (en mayúsculas se guarda en minúsculas); un folio vacío o con otros signos, un enlace `http`, `javascript:`, sin esquema, `https:/`, con barras invertidas o con usuario y contraseña, un repartidor desconocido o un enlace demasiado largo, rechazados;
+      - el envío en el total como un concepto más con IVA incluido, con el IVA sumado si los precios no lo incluyen, y con su propia tasa cuando los productos llevan otra;
+      - gratis desde el monto de la zona; un pedido por debajo del mínimo, rechazado; una zona del negocio que llegue hoy al código postal;
+      - solo una vez, en un pedido nuevo de productos, antes de cualquier pago; nunca un pedido de plataforma;
+      - después no toma productos ni se vuelve cuenta; pagado y listo en cocina no se cierra solo;
+      - el viaje se anota y se corrige, no en un pedido cancelado ni en uno que no va a domicilio.
+    - `OrderNotificationRulesTests`: un pedido tomado en el mostrador para la dirección del cliente le avisa por WhatsApp, como uno del menú.
+  - **Application:**
+    - `HomeDeliveryFlowTests` (16 pruebas):
+      - Vender manda el pedido a la dirección con el envío de la zona y su IVA; gratis desde lo que dice la zona y rechazado debajo de su mínimo; un código postal sin zona activa, rechazado sin guardar nada;
+      - pagado al tomarlo sigue abierto hasta que alguien lo marca entregado;
+      - el validador rechaza la dirección en un pedido de plataforma, una cuenta, una mesa, un servicio o una venta sin conexión;
+      - la bitácora dice que va a domicilio y cuánto cobró, nunca la dirección;
+      - con la política de omisión, el cliente de un pedido a domicilio tomado en Vender recibe el aviso por WhatsApp y el de una venta de mostrador no;
+      - el borrador de CFDI con el envío como concepto propio que cuadra con el pedido, también con precios sin IVA junto a un producto exento (total $344, IVA trasladado $44, el envío $35 con $5.60 de IVA);
+      - el viaje se anota, se corrige y queda en la bitácora sin el enlace; un enlace inseguro, un pedido cerrado o de otro negocio, rechazados;
+      - el menú en línea toma el pedido a domicilio con el envío en el total que vio el cliente; una cocina sin local con zonas pide a dónde va, también con una mesa inventada en el enlace («Mesa 9»); una mesa con dirección, rechazada;
+      - el menú ofrece domicilio solo mientras toma pedidos y hay una zona activa;
+      - la cotización dice lo que cuesta sin el nombre de la zona, y nada sin menú.
+    - `AutoReplyDeliveryZonesTests`: con precios sin IVA, el envío se dice «más IVA», como lo cobra el pedido.
+    - `AuthorizationBehaviorTests`: la cotización del menú, en la lista de peticiones anónimas.
+  - **SQL Server:** `OrderDeliveriesSqlServerTests` (7 pruebas): un envío por pedido que se va con él; el pedido siempre trae su envío, así que un cambio conserva el envío en el total; el viaje se guarda con el pedido y choca (409) con una cancelación guardada al mismo tiempo; la versión anterior sigue tomando pedidos y cobra el total de uno a domicilio; las restricciones CHECK; revertir detenido con el error 50013 y después solo la tabla.
+  - **WebApi:** `CrossTenantHomeDeliverySqlServerTests` (2 pruebas): un pedido de otro negocio no usa sus zonas ni anota su viaje; el menú público cotiza y toma el pedido solo con las zonas del negocio del slug.
+  - **Cliente:**
+    - `homeDelivery.test.ts`: la zona activa que llega al código postal; el envío hasta «gratis desde» y el mínimo contra los productos; el envío como concepto con el IVA del negocio; con productos de otras tasas, igual que el servidor (cada tasa redondeada una vez); los textos del servidor y «más IVA».
+    - `PublicMenuPage.test.tsx`: el pedido a domicilio con lo que cobra el negocio a su código postal; dónde no llega o el mínimo, sin mandar nada; con precios sin IVA, el envío con su IVA y renglones que suman el total ($127.60 + $40.60 = $168.20); en una mesa no se ofrece.
+    - `SellPage.test.tsx`: el pedido a la dirección con el envío de la zona; dónde no llega o el mínimo, sin mandar nada; sin zonas activas ni en un pedido de plataforma no se ofrece; un domicilio traído con la venta mientras las zonas no se pueden leer se queda y dice por qué, sin mandar la venta.
+    - `OrderDeliveryPanel.test.tsx`: la dirección y el envío; anotar y corregir el viaje; un enlace inseguro rechazado antes de mandarlo; un enlace que no empieza con `https://` (también con barras invertidas) nunca se ofrece.
+    - `KitchenBoard.test.tsx`, `SaleTicket.test.tsx`, `ticket.test.ts`, `sellDraft.test.ts` y `DeliveryZones.test.tsx`: la cocina marca «A domicilio» sin la dirección; el ticket lleva la dirección, el folio y el envío; el borrador guarda la dirección y distingue otra; Zonas de entrega dice si los montos llevan IVA.
+  - **Escenas visuales** (contra `master` en `0eaa1d1`, con la 22B):
+    - **Nuevas (10):** Vender a domicilio en escritorio y teléfono, la venta a domicilio cobrada con su ticket, el detalle de un pedido a domicilio con su viaje de Paquetenvia, registrar el viaje, la cocina con un pedido a domicilio, y el menú en línea que también entrega a domicilio, su carrito, por debajo del mínimo y el pedido enviado. No salen de la línea base de `master` hasta que la fase entre a `master`.
+    - **Cambian a propósito (7):** las 6 escenas de Zonas de entrega (la explicación dice dónde se usan las zonas y si los montos llevan IVA) y Vender del cajero que entra a Mi negocio sin acceso (sus datos simulados tienen zonas activas, así que el ticket ofrece «A domicilio»).
+    - **Resultado:** con esas capturas, las 369 escenas pasaron dos corridas seguidas contra el mismo build.
+
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 
-Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 349 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones ni animaciones CSS, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
+Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 369 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones ni animaciones CSS, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).
 
 El pipeline HTTP completo solo se prueba en la suite de aislamiento entre negocios (Fases 8 a 15, con hubs, webhook y el acceso de soporte), en las rondas de una cuenta con existencias (Fase 14) y sus platillos cancelados (Fase 15), en el controller de sondeo de `RequestCancellationTests` y en la entrega del cliente (`ClientDeliveryTests`, Fase 20); la integración con SQL Server real cubre folios, proyecciones, ventas, sesiones y aislamiento. El workflow `CI` compila y ejecuta las pruebas, valida migraciones pendientes, aplica las migraciones en SQL Server 2022 con el script y el `sqlcmd` de producción (job `Migrations`, ver [migraciones](database-migrations.md)) y corre lint, pruebas, build y `npm audit` del cliente en cada PR; el despliegue repite build, pruebas y lint antes de publicar. Producción y pruebas apuntan a .NET 10.
 

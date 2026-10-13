@@ -301,6 +301,33 @@ La Fase 22A trae una migración, [`database/production/20261012204959_AddBranchS
 - **Volver a la versión anterior:** funciona sin tocar la base, pero esa versión trata todas las sucursales como locales: **vuelve a publicar la dirección de una principal solo a domicilio** en el menú en línea. Antes de volver, la consulta 3 del `verify.sql` dice cuáles hay; cámbiala a local y borra su calle, o acepta que se publique.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50011, sin cambiar nada, mientras haya una sucursal solo a domicilio, por la misma razón. Sin ellas, borra la restricción y la columna, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Zonas de entrega (Fase 22B)
+
+La Fase 22B trae una migración, [`database/production/20261013002425_AddDeliveryZones`](../../database/production/20261013002425_AddDeliveryZones). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0017](../adr/0017-delivery-zones.md)).
+
+- **La migración:**
+  - **Qué agrega:** dos tablas nuevas y vacías, `DeliveryZones` y `DeliveryZonePostalCodes`, con sus restricciones, la llave en cascada y los índices únicos de los nombres y de los códigos postales del negocio. No toca otras tablas.
+  - **Cuándo cambia algo:** cuando un dueño o administrador agrega una zona en Configuración › Zonas de entrega. Desde ese momento, las respuestas automáticas contestan si llegan a un código postal y cuánto cuesta el envío.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, la llave y los índices. Su consulta 4 cuenta las zonas (ninguna hasta desplegar) y la 5 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22A) no conoce las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `GET`, `POST`, `PUT /{id}` y `DELETE /{id}?revision=` en `/api/v1/delivery-zones`, con `DeliveryZoneDto` y `SaveDeliveryZoneRequest`. Nada se quita ni cambia de nombre.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las tablas, y las zonas se quedan sin usarse. Sus respuestas automáticas vuelven a no saber de zonas.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50012, sin cambiar nada, mientras haya zonas guardadas: se perderían, y la bitácora no guarda sus códigos postales. Sin ellas, borra las dos tablas, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
+## Pedido a domicilio (Fase 22C)
+
+La Fase 22C trae una migración, [`database/production/20261013042014_AddOrderDeliveries`](../../database/production/20261013042014_AddOrderDeliveries). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0018](../adr/0018-home-delivery-orders.md)).
+
+- **La migración:**
+  - **Qué agrega:** una tabla nueva y vacía, `OrderDeliveries`, con sus restricciones, la llave en cascada a `Orders` y el índice único del pedido. No toca otras tablas.
+  - **Cuándo cambia algo:** cuando un negocio con zonas de entrega activas recibe un pedido a domicilio, desde el menú en línea o Vender. Sin zonas, todo sigue como antes.
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, la llave y el índice. Su consulta 4 cuenta los pedidos a domicilio por estado (ninguno hasta desplegar) y la 5 (consistencia) debe quedar vacía siempre.
+  - **Antes del merge, la consulta 6:** lista los negocios con zonas activas cuyos precios no incluyen IVA, con su tasa y el envío menor y mayor de sus zonas. A esos negocios el pedido les suma el IVA al envío, pero la pantalla de la 22B les decía que los montos eran con IVA incluido: desde ahora Configuración › Zonas de entrega lo explica, y las respuestas automáticas, el menú en línea y Vender dicen «más IVA». Avísales, para que corrijan sus envíos si los escribieron con IVA incluido. Vacía, no hay a quién avisar.
+- **Mientras se publica:** la versión de `master` (Fase 22B) no conoce la tabla y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `PUT /api/v1/orders/{id}/delivery/shipment` y `GET /api/v1/public/menu/{slug}/delivery-quote`; `delivery` en `CreateOrderCommand`, `PlacePublicOrderRequest` y `OrderDto`; `isDelivery` en `KitchenOrderDto`; `deliveryAvailable` en `PublicMenuDto`; `deliveryFee` en `PublicOrderReceiptDto`; `isDeliveryFee` en `CfdiConceptDto`, y el enum `DeliveryCourier`. Nada se quita ni cambia de nombre. Un cliente abierto antes del despliegue sigue vendiendo como antes y ve el envío dentro del total hasta recargarse.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce la tabla y cobra cada pedido a domicilio por su total guardado, envío incluido. Pero no muestra la dirección ni el envío, ni en Pedidos ni en el ticket, y deja de ofrecer domicilio. Antes de volver, la consulta 4 del `verify.sql` dice cuántos pedidos a domicilio hay abiertos (estados 0 a 3).
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50013, sin cambiar nada, mientras haya pedidos a domicilio: se perderían su dirección y su envío. Sin ellos, borra la tabla, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

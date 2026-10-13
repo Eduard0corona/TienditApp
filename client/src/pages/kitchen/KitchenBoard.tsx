@@ -271,6 +271,12 @@ export default function KitchenBoard() {
                     <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
                       <div>
                         {platform && <ChannelBadge channel={platform} className="mb-1" />}
+                        {/* It goes out to the customer's address: packed to travel (where, the kitchen does not need). */}
+                        {!platform && order.isDelivery && (
+                          <span className="badge text-bg-light border mb-1">
+                            <i className="ri-e-bike-2-line me-1" aria-hidden="true"></i>A domicilio
+                          </span>
+                        )}
                         <h4 className="mb-1">{platform ? order.externalOrderNumber : order.orderNumber}</h4>
                         {platform && <small className="d-block text-muted mb-1">{order.orderNumber}</small>}
                         <span className={`badge ${getAgeBadgeClass(elapsed)}`}>{formatElapsed(elapsed)}</span>

@@ -3030,6 +3030,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/delivery-zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryZoneDto"][];
+                        "application/json": components["schemas"]["DeliveryZoneDto"][];
+                        "text/json": components["schemas"]["DeliveryZoneDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "text/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "application/*+json": components["schemas"]["SaveDeliveryZoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryZoneDto"];
+                        "application/json": components["schemas"]["DeliveryZoneDto"];
+                        "text/json": components["schemas"]["DeliveryZoneDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-zones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "text/json": components["schemas"]["SaveDeliveryZoneRequest"];
+                    "application/*+json": components["schemas"]["SaveDeliveryZoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DeliveryZoneDto"];
+                        "application/json": components["schemas"]["DeliveryZoneDto"];
+                        "text/json": components["schemas"]["DeliveryZoneDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: {
+                    revision?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees": {
         parameters: {
             query?: never;
@@ -5410,6 +5540,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/delivery/shipment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RegisterCourierShipmentRequest"];
+                    "text/json": components["schemas"]["RegisterCourierShipmentRequest"];
+                    "application/*+json": components["schemas"]["RegisterCourierShipmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{id}/cancel": {
         parameters: {
             query?: never;
@@ -6816,6 +6987,47 @@ export interface paths {
                         "text/plain": components["schemas"]["PublicMenuDto"];
                         "application/json": components["schemas"]["PublicMenuDto"];
                         "text/json": components["schemas"]["PublicMenuDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/delivery-quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    postalCode?: string;
+                };
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicDeliveryQuoteDto"];
+                        "application/json": components["schemas"]["PublicDeliveryQuoteDto"];
+                        "text/json": components["schemas"]["PublicDeliveryQuoteDto"];
                     };
                 };
             };
@@ -9139,6 +9351,7 @@ export interface components {
         CfdiConceptDto: {
             /** Format: uuid */
             orderItemId: string;
+            isDeliveryFee: boolean;
             productCode: string;
             unitCode: string;
             description: string;
@@ -9484,6 +9697,7 @@ export interface components {
             idempotencyKey?: string | null;
             /** Format: date-time */
             capturedOfflineAt?: string | null;
+            delivery?: components["schemas"]["OrderDeliveryInput"];
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -9876,6 +10090,11 @@ export interface components {
          * @enum {integer}
          */
         DayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        DeliveryCourier: 1;
         DeliveryPlatformChannelDto: {
             channel: components["schemas"]["OrderChannel"];
             isActive: boolean;
@@ -9933,6 +10152,21 @@ export interface components {
         };
         DeliveryPlatformsDto: {
             platforms: components["schemas"]["DeliveryPlatformDto"][];
+        };
+        DeliveryZoneDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            minimumOrder: number;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
+            isActive: boolean;
+            /** Format: int32 */
+            revision: number;
+            postalCodes: string[];
         };
         DiningRoomDto: {
             tables: components["schemas"]["DiningTableDto"][];
@@ -10264,6 +10498,7 @@ export interface components {
             orderNumber: string;
             channel: components["schemas"]["OrderChannel"];
             externalOrderNumber?: string | null;
+            isDelivery: boolean;
             status: components["schemas"]["OrderStatus"];
             customerName: string;
             tableNumber?: string | null;
@@ -10528,6 +10763,27 @@ export interface components {
          * @enum {integer}
          */
         OrderChannel: 0 | 1 | 2 | 3 | 4 | 5;
+        OrderDeliveryDto: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+            zoneName: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            feeTaxRate: number;
+            courier?: components["schemas"]["DeliveryCourier"];
+            courierFolio?: string | null;
+            trackingUrl?: string | null;
+            /** Format: date-time */
+            shipmentRegisteredAt?: string | null;
+            shipmentRegisteredBy?: string | null;
+        };
+        OrderDeliveryInput: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+        };
         OrderDto: {
             /** Format: uuid */
             id: string;
@@ -10547,6 +10803,7 @@ export interface components {
             pricesIncludeTax: boolean;
             channel: components["schemas"]["OrderChannel"];
             platformOrder?: components["schemas"]["OrderPlatformDto"];
+            delivery?: components["schemas"]["OrderDeliveryDto"];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -10809,6 +11066,7 @@ export interface components {
             items: components["schemas"]["CreateOrderItemDto"][];
             /** Format: double */
             expectedTotal?: number | null;
+            delivery?: components["schemas"]["OrderDeliveryInput"];
         };
         PlanDto: {
             /** Format: uuid */
@@ -11262,6 +11520,16 @@ export interface components {
             openings: components["schemas"]["SpecialOpeningDto"][];
             reason?: string | null;
         };
+        PublicDeliveryQuoteDto: {
+            postalCode: string;
+            covered: boolean;
+            /** Format: double */
+            fee?: number | null;
+            /** Format: double */
+            minimumOrder?: number | null;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
+        };
         PublicMenuCategoryDto: {
             /** Format: uuid */
             id: string;
@@ -11282,6 +11550,7 @@ export interface components {
             theme: components["schemas"]["BusinessTheme"];
             address?: string | null;
             deliveryOnly: boolean;
+            deliveryAvailable: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
@@ -11333,6 +11602,8 @@ export interface components {
             orderNumber: string;
             /** Format: double */
             total: number;
+            /** Format: double */
+            deliveryFee?: number | null;
             confirmed: boolean;
             businessName: string;
             contactPhone?: string | null;
@@ -11471,6 +11742,11 @@ export interface components {
             city?: string | null;
             state?: string | null;
         };
+        RegisterCourierShipmentRequest: {
+            courier: components["schemas"]["DeliveryCourier"];
+            folio: string;
+            trackingUrl?: string | null;
+        };
         RegisterCustomerCommand: {
             email: string;
             password: string;
@@ -11572,6 +11848,19 @@ export interface components {
             isrWithholdingPercent: number;
             /** Format: double */
             vatWithholdingPercent: number;
+        };
+        SaveDeliveryZoneRequest: {
+            name: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            minimumOrder: number;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
+            postalCodes: string[];
+            isActive: boolean;
+            /** Format: int32 */
+            revision: number;
         };
         SavePlatformPricesRequest: {
             products: components["schemas"]["PlatformProductPriceRequest"][];

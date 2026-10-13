@@ -105,6 +105,15 @@ export function readChatOrigin(params: URLSearchParams): ChatOrigin | null {
 
 export type CategoryFilter = 'all' | 'featured' | string;
 
+/** Where an order sent to the customer's address goes (Fase 22C), as typed: the server normalizes it. */
+export interface SaleDelivery {
+  postalCode: string;
+  addressLine: string;
+  references: string;
+}
+
+export const NO_DELIVERY_ADDRESS: SaleDelivery = { postalCode: '', addressLine: '', references: '' };
+
 /** Who the sale is for, where it goes and where it came from: all optional at the counter. */
 export interface SaleDetails {
   /** At the counter, the customer; in an order of a delivery platform, the name for the bag. */
@@ -118,6 +127,8 @@ export interface SaleDetails {
   externalOrderNumber: string;
   /** Who charged an order of a platform: the platform in its app (by default) or the business, when the courier pays. */
   collectedBy: PlatformCollectedBy;
+  /** Sent to the customer's address with the zone that reaches its postal code; null when it is picked up or eaten here. */
+  delivery: SaleDelivery | null;
 }
 
 /** Where a counter sale comes from: no platform, no folio. */
@@ -127,7 +138,9 @@ export const COUNTER_ORIGIN: Pick<SaleDetails, 'channel' | 'externalOrderNumber'
   collectedBy: PlatformCollectedBy.Platform,
 };
 
-export const NO_SALE_DETAILS: SaleDetails = { customerName: '', customerPhone: '', tableNumber: '', orderNotes: '', ...COUNTER_ORIGIN };
+export const NO_SALE_DETAILS: SaleDetails = {
+  customerName: '', customerPhone: '', tableNumber: '', orderNotes: '', ...COUNTER_ORIGIN, delivery: null,
+};
 
 const SERVICE_UNITS: ReadonlyArray<number> = [UnitType.Hour, UnitType.Session, UnitType.Service];
 

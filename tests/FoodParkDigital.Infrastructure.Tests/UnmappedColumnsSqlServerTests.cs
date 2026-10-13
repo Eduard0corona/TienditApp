@@ -5,6 +5,7 @@ using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using MediatR;
@@ -177,6 +178,7 @@ public class UnmappedColumnsSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<TenantSettings>().Ignore(settings => settings.OpeningHours);
         }
     }

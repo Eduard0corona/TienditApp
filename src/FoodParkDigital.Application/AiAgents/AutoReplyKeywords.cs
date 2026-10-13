@@ -45,6 +45,26 @@ public static class AutoReplyKeywords
     public static bool ContainsAny(IReadOnlyList<string> words, IEnumerable<string> phrases)
         => phrases.Any(phrase => Contains(words, phrase));
 
+    /// <summary>
+    /// The words without each appearance of <paramref name="phrases"/>, so a phrase that holds a keyword of another kind
+    /// does not count as it: «cuánto cuesta el envío» is not a question about the prices of the menu.
+    /// </summary>
+    public static IReadOnlyList<string> Without(IReadOnlyList<string> words, IEnumerable<string> phrases)
+    {
+        var kept = new bool[words.Count];
+        Array.Fill(kept, true);
+        foreach (var target in phrases.Select(Words).Where(target => target.Count > 0))
+        {
+            for (var start = 0; start <= words.Count - target.Count; start++)
+            {
+                if (Enumerable.Range(0, target.Count).All(offset => words[start + offset] == target[offset]))
+                    Array.Fill(kept, false, start, target.Count);
+            }
+        }
+
+        return words.Where((_, index) => kept[index]).ToList();
+    }
+
     /// <summary>Every word of the message is one of <paramref name="allowed"/> ("ok, gracias").</summary>
     public static bool OnlyWordsFrom(IReadOnlyList<string> words, IReadOnlySet<string> allowed)
         => words.Count > 0 && words.All(allowed.Contains);

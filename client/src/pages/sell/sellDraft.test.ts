@@ -87,4 +87,22 @@ describe('sellDraft', () => {
     writeSellDraft('t1', empty);
     expect(readSellDraft('t1')).toBeNull();
   });
+
+  it('keeps where an order sent to an address goes, and tells another address apart', () => {
+    const delivery = { postalCode: '72000', addressLine: 'Av. Reforma 123', references: '' };
+    const toAddress: SellDraft = { ...draft, delivery };
+
+    writeSellDraft('t1', toAddress);
+    expect(readSellDraft('t1')?.delivery).toEqual(delivery);
+    // A counter sale saved before, or with a delivery that is not one, reads without it.
+    expect(describeSale({ ...draft, delivery: null })).toBe(describeSale(draft));
+    expect(describeSale(toAddress)).not.toBe(describeSale(draft));
+    expect(describeSale({ ...toAddress, delivery: { ...delivery, addressLine: ' Av. Reforma 123 ' } })).toBe(describeSale(toAddress));
+    expect(describeSale({ ...toAddress, delivery: { ...delivery, postalCode: '72005' } })).not.toBe(describeSale(toAddress));
+
+    writeSellDraft('t1', { ...draft, lines: [], customerName: '', delivery: { postalCode: '', addressLine: '', references: '' } });
+    expect(readSellDraft('t1')?.delivery).toEqual({ postalCode: '', addressLine: '', references: '' });
+    window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify({ ...draft, delivery: 'Reforma' }));
+    expect(readSellDraft('t1')?.delivery).toBeUndefined();
+  });
 });

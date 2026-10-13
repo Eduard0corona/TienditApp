@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using MediatR;
@@ -199,6 +200,7 @@ public class PlatformPricesMigrationSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<Product>().Ignore(p => p.PlatformPrices);
             modelBuilder.Entity<ProductOption>().Ignore(o => o.PlatformPrices);
             modelBuilder.Ignore<ProductPlatformPrice>();

@@ -94,6 +94,39 @@ Una cocina sin local no publica su dirección ([ADR 0016](../adr/0016-delivery-o
 - **Guardado:** dueños y administradores. Sin `serviceMode`, una nueva tiene local y una guardada conserva el que tenía; un valor desconocido es 400 `validation_failed` (`Elige cómo atiende la sucursal.`).
 - **Giro:** el alta con «Comida a domicilio» crea la principal solo a domicilio. La guía de inicio, como a todo negocio de comida, ofrece la plantilla «Comida a domicilio». Cambiar el giro después no cambia ninguna sucursal.
 
+## Zonas de entrega (Fase 22B)
+
+A dónde entrega el negocio y cuánto cobra por llevar, por código postal ([ADR 0017](../adr/0017-delivery-zones.md)).
+
+- **Cada zona** (`DeliveryZone`) lleva:
+  - nombre, uno por zona en el negocio, sin distinguir mayúsculas;
+  - de 1 a 300 códigos postales de cinco dígitos;
+  - costo de envío, de $0 a $10,000;
+  - pedido mínimo, de $0 a $100,000; $0 es sin mínimo;
+  - «envío gratis desde», opcional; no aplica si el envío ya es gratis;
+  - si está activa.
+
+  Un negocio tiene hasta 30 zonas.
+- **Un código postal, una zona:** no puede estar en dos zonas del mismo negocio, activas o no. Agregarlo a otra zona se rechaza diciendo cuál lo tiene, también cuando dos guardados lo agregan al mismo tiempo. Lo mismo con el nombre. Otro negocio puede tener el mismo nombre y el mismo código postal.
+- **Montos:** el envío va como los precios del negocio: con IVA incluido si los precios lo incluyen (lo de omisión) y con el IVA sumado si no ([ADR 0018](../adr/0018-home-delivery-orders.md), que enmienda el 0017). El mínimo y el envío gratis se comparan con lo que paga el cliente en productos (con IVA), sin el envío.
+- **Quién las cambia:** dueños y administradores, con la revisión que vieron. Un guardado sobre una revisión vieja, o de una zona que alguien borró, es 409 `concurrency_conflict`, en el orden en que la base escriba las filas. Guardar sin cambios no registra nada. Todo el equipo puede leerlas.
+- **Bitácora:** `DeliveryZoneCreated`, `DeliveryZoneUpdated` y `DeliveryZoneDeleted` guardan lo que cobra la zona y cuántos códigos postales tiene, antes y después, nunca cuáles.
+- **Dónde se usan:** en las respuestas automáticas de WhatsApp ([mensajería](messaging.md)) y en el pedido a domicilio (Fase 22C). Una zona desactivada no llega a ninguno de sus códigos postales.
+
+## Pedido a domicilio (Fase 22C)
+
+El pedido sabe a dónde va y cobra el envío de su zona ([ADR 0018](../adr/0018-home-delivery-orders.md)).
+
+- **Qué guarda** (`OrderDelivery`, uno por pedido): código postal, dirección (hasta 300 caracteres), referencias (hasta 500, opcionales), el nombre de la zona que llegó, el envío cobrado ($0 si fue gratis) y su tasa de IVA, y el viaje del repartidor cuando se anota.
+- **Cuándo:** solo al crear un pedido de productos, desde Vender o el menú en línea, antes de cualquier pago o estado. Nunca un pedido de Rappi, Uber Eats o DiDi (su repartidor lo lleva), una cuenta de mesa, un servicio, uno con mesa o uno capturado sin conexión. Después no toma más productos ni se vuelve cuenta.
+- **La zona:** la activa del negocio que llega al código postal. Si ninguna llega: «Por ahora no llegamos al 72999.». Si los productos no alcanzan su mínimo: «El pedido mínimo para el 72000 es de $150.00.». El envío es el de la zona, o $0 desde su «envío gratis desde», y queda fijo en el pedido.
+- **El envío en el total:** un concepto más, con la tasa por omisión del negocio y la política de IVA del pedido. Entra al desglose de IVA, al total, a lo que se cobra y al borrador de CFDI como «Envío a domicilio» (78102203, E48, con un aviso para confirmarlo con el contador). Con precios sin IVA, el envío se dice «más IVA» en las respuestas automáticas, el menú en línea y Vender.
+- **Cierre:** un pedido a domicilio pagado no se cierra solo como una venta de mostrador: alguien lo marca entregado.
+- **Avisos por WhatsApp:** un pedido a domicilio tomado en Vender avisa al cliente como uno del menú en línea, no como una venta de mostrador: el cliente lo espera en casa.
+- **Menú en línea:** ofrece «A domicilio» mientras toma pedidos y hay alguna zona activa; el cliente cotiza su código postal sin ver el nombre de la zona. En una mesa no se ofrece. Una cocina sin local con zonas exige la dirección, salvo desde una mesa activa del negocio (una mesa inventada en el enlace no cuenta); sin zonas, sus pedidos llegan como antes.
+- **Paquetenvia:** quien toma los pedidos anota o corrige el folio del viaje y su enlace (opcional, escrito con `https://`) en Pedidos, no en un pedido cancelado. Anotar el mismo viaje otra vez no registra nada.
+- **Bitácora:** `OrderCreated` dice si va a domicilio y cuánto cobró de envío, nunca la dirección; `OrderCourierShipmentRegistered` guarda repartidor, folio anterior y nuevo y si hay enlace, nunca el enlace.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

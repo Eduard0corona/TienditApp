@@ -10,6 +10,7 @@ import ChargePanel, { type ChargeResult } from '../../components/sales/ChargePan
 import SaleTicket from '../../components/sales/SaleTicket';
 import RefundOrderModal from '../../components/orders/RefundOrderModal';
 import CfdiDraftModal from '../../components/orders/CfdiDraftModal';
+import OrderDeliveryPanel from '../../components/orders/OrderDeliveryPanel';
 import { allowsFractions, formatQuantity } from '../../utils/units';
 import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
@@ -649,6 +650,13 @@ export default function OrdersList() {
                           <span className="badge mt-1 bg-primary-subtle text-primary-emphasis">En línea</span>
                         </div>
                       )}
+                      {order.delivery && (
+                        <div>
+                          <span className="badge mt-1 text-bg-light border">
+                            <i className="ri-e-bike-2-line me-1" aria-hidden="true"></i>A domicilio
+                          </span>
+                        </div>
+                      )}
                       {isDeliveryPlatform(order.channel) && (
                         <div>
                           <ChannelBadge channel={order.channel} className="mt-1" />
@@ -790,6 +798,16 @@ export default function OrdersList() {
                   <p className="mb-1"><strong>Por cobrar:</strong> <span className="ta-money">{formatMoney(selectedOrder.balance)}</span></p>
                 </div>
               </div>
+
+              <OrderDeliveryPanel
+                key={selectedOrder.id}
+                order={selectedOrder}
+                canManage={canSell}
+                onSaved={async () => {
+                  await Promise.all([loadOrders(), refreshSelectedOrder(selectedOrder.id)]);
+                  toast.success('Envío guardado.');
+                }}
+              />
 
               {((canSell && (selectedOrderStatusActions.length > 0 || selectedOrder.canCancel))
                 || (canCharge && selectedOrder.balance > 0)

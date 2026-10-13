@@ -1,6 +1,6 @@
 import { PlatformCollectedBy, type OrderDto } from '../types';
 import { getPlatformName, isDeliveryPlatform } from './deliveryPlatforms';
-import { getPaymentMethodLabel } from './labels';
+import { DELIVERY_COURIER_LABELS, getPaymentMethodLabel } from './labels';
 import { formatMoney } from './money';
 import { getVatLabel } from './orderTotals';
 import { describeItem } from './productOptions';
@@ -55,6 +55,35 @@ export function getTicketPlatform(order: OrderDto): TicketPlatform | null {
     folio: order.platformOrder.externalOrderNumber,
     packing: order.platformOrder.collectedBy === PlatformCollectedBy.Platform,
   };
+}
+
+/** How the ticket of an order sent to the customer's address reads: where it goes, what it charged and the courier's folio. */
+export interface TicketDelivery {
+  /** "Av. Reforma 123, Centro · CP 72000". */
+  address: string;
+  references: string | null;
+  /** What the order charged for the delivery, in its total: 0 when it was free. */
+  fee: number;
+  /** "Paquetenvia · Folio PQ1234", once the trip is written down. */
+  courier: string | null;
+}
+
+export function getTicketDelivery(order: Pick<OrderDto, 'delivery'>): TicketDelivery | null {
+  const delivery = order.delivery;
+  if (!delivery) return null;
+  return {
+    address: `${delivery.addressLine} · CP ${delivery.postalCode}`,
+    references: delivery.references || null,
+    fee: delivery.fee,
+    courier: delivery.courier != null && delivery.courierFolio
+      ? `${DELIVERY_COURIER_LABELS[delivery.courier]} · Folio ${delivery.courierFolio}`
+      : null,
+  };
+}
+
+/** "$35.00", or "Gratis" when the zone delivered it free. */
+export function formatDeliveryFee(fee: number): string {
+  return fee > 0 ? formatMoney(fee) : 'Gratis';
 }
 
 /** The name on the order (or on the bag, for an order of a platform), unless it is the general public's. */
@@ -114,11 +143,15 @@ export function formatTicketDate(value: string): string {
 export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
   const platform = getTicketPlatform(order);
   const bagName = platform ? getTicketCustomerName(order) : null;
+  const delivery = getTicketDelivery(order);
   const lines: string[] = [
     `*${extras.businessName}*`,
     `Ticket ${order.orderNumber} · ${formatTicketDate(order.createdAt)}`,
     ...(platform ? [`*${platform.name} · Folio ${platform.folio}*`] : []),
     ...(bagName ? [`Bolsa: ${bagName}`] : []),
+    ...(delivery ? [`*A domicilio:* ${delivery.address}`] : []),
+    ...(delivery?.references ? [`Referencias: ${delivery.references}`] : []),
+    ...(delivery?.courier ? [delivery.courier] : []),
     ...(extras.provisional ? ['_Folio provisional: venta registrada sin conexión._'] : []),
     '',
     ...billedItems(order).map((item) => {
@@ -126,6 +159,7 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
       const price = platform?.packing ? '' : `  ${formatMoney(chargedPrice(item))}`;
       return `${formatTicketQuantity(item)} ${describeItem(item)}${price}${note}`;
     }),
+    ...(delivery ? [`Envío a domicilio  ${formatDeliveryFee(delivery.fee)}`] : []),
     '',
   ];
 
