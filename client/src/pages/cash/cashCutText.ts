@@ -1,7 +1,7 @@
 import type { CashSessionDto, DailyCashCutDto } from '../../types';
 import { CashSessionStatus } from '../../types';
 import { formatMoney, toCents } from '../../utils/money';
-import { describeDifference } from './cashFormat';
+import { describeDifference, personLabel } from './cashFormat';
 import { formatInBusinessZone } from '../../utils/dates';
 
 const dateTime = (value: string) => formatInBusinessZone(value, { dateStyle: 'short', timeStyle: 'short' });
@@ -48,7 +48,8 @@ export function buildDailyCutText(cut: DailyCashCutDto, scope: DailyCutScope): s
     text.push(index === 0 ? `*${label}: ${formatMoney(amount)}* (${cut.salesPaymentsCount} pagos)` : `${label}: ${formatMoney(amount)}`));
   if (cut.byUser.length > 0) {
     text.push('', 'Por usuario');
-    cut.byUser.forEach((item) => text.push(`• ${item.userName}: ${item.paymentsCount} pagos / ${formatMoney(item.totalAmount)}`));
+    cut.byUser.forEach((item) =>
+      text.push(`• ${personLabel(item.displayName, item.userName)}: ${item.paymentsCount} pagos / ${formatMoney(item.totalAmount)}`));
   }
   return text.join('\n');
 }
@@ -61,10 +62,13 @@ export function buildShiftCutText(session: CashSessionDto, businessName?: string
   if (businessName) text.push(`*${businessName}*`);
   text.push(
     `*${closed ? 'Corte de caja' : 'Corte parcial (caja abierta)'}*`,
-    `${session.openedBy}${session.branchName ? ` · ${session.branchName}` : ''}`,
+    `${personLabel(session.openedByName, session.openedBy)}${session.branchName ? ` · ${session.branchName}` : ''}`,
     `Abrió: ${dateTime(session.openedAt)}`,
   );
-  if (closed && session.closedAt) text.push(`Cerró${session.closedBy ? ` (${session.closedBy})` : ''}: ${dateTime(session.closedAt)}`);
+  if (closed && session.closedAt) {
+    const closedBy = session.closedBy ? ` (${personLabel(session.closedByName, session.closedBy)})` : '';
+    text.push(`Cerró${closedBy}: ${dateTime(session.closedAt)}`);
+  }
   text.push(
     '',
     `Fondo inicial: ${formatMoney(session.openingAmount)}`,

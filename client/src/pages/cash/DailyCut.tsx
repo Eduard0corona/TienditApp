@@ -7,6 +7,7 @@ import WhatsAppLink from '../../components/common/WhatsAppLink';
 import { useTenant } from '../../hooks/useTenant';
 import { formatMoney } from '../../utils/money';
 import { buildDailyCutText, getDailyCutRows, getOtherMethodsTotal } from './cashCutText';
+import { personLabel } from './cashFormat';
 import { formatCalendarDate, formatInBusinessZone, getBusinessToday } from '../../utils/dates';
 
 interface DailyCutProps {
@@ -94,7 +95,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
           </div>
           <div className="col-md-5">
             <label className="form-label" htmlFor="cut-user">Usuario</label>
-            <input id="cut-user" className="form-control" placeholder="Filtrar por usuario" value={userName}
+            <input id="cut-user" className="form-control" placeholder="Nombre o correo" value={userName}
               onChange={(event) => setUserName(event.target.value)} />
           </div>
         </div>
@@ -136,10 +137,10 @@ export default function DailyCut({ branches }: DailyCutProps) {
                     ))}
                     <div className="small">{cut.salesPaymentsCount} pagos</div>
                     {cut.byUser.length > 0 && <hr className="my-1" />}
-                    {/* The user (an email) on its own line, so it never pushes the amount past the edge of the ticket. */}
+                    {/* The person on their own line, so a long name or email never pushes the amount past the edge of the ticket. */}
                     {cut.byUser.map((item) => (
                       <div key={`${item.userName}-${item.paymentsCount}`}>
-                        <div className="ta-ticket-wrap">{item.userName}</div>
+                        <div className="ta-ticket-wrap">{personLabel(item.displayName, item.userName)}</div>
                         <div className="ta-ticket-row">
                           <span>{item.paymentsCount} {item.paymentsCount === 1 ? 'pago' : 'pagos'}</span>
                           <span className="text-nowrap">{formatMoney(item.totalAmount)}</span>
@@ -158,7 +159,7 @@ export default function DailyCut({ branches }: DailyCutProps) {
                 <h3 className="h6 mb-1">Por usuario</h3>
                 <ul className="mb-0 ps-3">
                   {cut.byUser.length === 0 ? <li className="text-muted">Sin datos</li> : cut.byUser.map((item) => (
-                    <li key={`${item.userName}-${item.paymentsCount}`}>{item.userName}: {item.paymentsCount} pagos / {formatMoney(item.totalAmount)}</li>
+                    <li key={`${item.userName}-${item.paymentsCount}`}>{personLabel(item.displayName, item.userName)}: {item.paymentsCount} pagos / {formatMoney(item.totalAmount)}</li>
                   ))}
                 </ul>
               </div>

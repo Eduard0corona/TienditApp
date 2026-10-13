@@ -9243,11 +9243,13 @@ export interface components {
             /** Format: date-time */
             openedAt: string;
             openedBy: string;
+            openedByName?: string | null;
             /** Format: double */
             openingAmount: number;
             /** Format: date-time */
             closedAt?: string | null;
             closedBy?: string | null;
+            closedByName?: string | null;
             /** Format: double */
             closingAmount?: number | null;
             status: components["schemas"]["CashSessionStatus"];
@@ -9992,6 +9994,7 @@ export interface components {
         };
         DailyCashCutByUserDto: {
             userName: string;
+            displayName?: string | null;
             /** Format: int32 */
             paymentsCount: number;
             /** Format: double */

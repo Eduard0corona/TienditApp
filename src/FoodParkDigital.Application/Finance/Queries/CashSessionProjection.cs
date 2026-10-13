@@ -45,11 +45,23 @@ internal static class CashSessionProjection
             .Sum(t => (decimal?)t.Amount) ?? 0m
     };
 
-    public static DTOs.CashSessionDto ToDto(CashSessionRow row, Guid? currentUserId) => new()
+    /// <summary>The names of who opened and closed the rows' drawers, in one query.</summary>
+    public static Task<CashPeopleNames> PeopleAsync(
+        IApplicationDbContext context,
+        IReadOnlyCollection<CashSessionRow> rows,
+        CancellationToken cancellationToken)
+        => CashPeople.ResolveAsync(
+            context,
+            rows.SelectMany(row => new[] { row.Session.OpenedBy, row.Session.ClosedBy }),
+            rows.Select(row => row.Session.OpenedByUserId),
+            cancellationToken);
+
+    public static DTOs.CashSessionDto ToDto(CashSessionRow row, Guid? currentUserId, CashPeopleNames people) => new()
     {
         Id = row.Session.Id,
         OpenedAt = row.Session.OpenedAt,
         OpenedBy = row.Session.OpenedBy,
+        OpenedByName = people.NameOf(row.Session.OpenedBy, row.Session.OpenedByUserId),
         OpenedByUserId = row.Session.OpenedByUserId,
         IsMine = row.Session.IsOwnedBy(currentUserId),
         InventoryLocationId = row.Session.InventoryLocationId,
@@ -59,6 +71,7 @@ internal static class CashSessionProjection
         OpeningAmount = row.Session.OpeningAmount,
         ClosedAt = row.Session.ClosedAt,
         ClosedBy = row.Session.ClosedBy,
+        ClosedByName = people.NameOf(row.Session.ClosedBy),
         ClosingAmount = row.Session.ClosingAmount,
         Status = row.Session.Status,
         Notes = row.Session.Notes,

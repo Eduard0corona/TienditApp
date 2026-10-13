@@ -11972,6 +11972,10 @@
           "openedBy": {
             "type": "string"
           },
+          "openedByName": {
+            "type": "string",
+            "nullable": true
+          },
           "openingAmount": {
             "type": "number",
             "format": "double"
@@ -11982,6 +11986,10 @@
             "nullable": true
           },
           "closedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "closedByName": {
             "type": "string",
             "nullable": true
           },
@@ -14531,6 +14539,10 @@
         "properties": {
           "userName": {
             "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
           },
           "paymentsCount": {
             "type": "integer",

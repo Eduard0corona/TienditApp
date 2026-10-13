@@ -42,6 +42,7 @@ interface Session {
   id: string;
   openedAt: string;
   openedBy: string;
+  openedByName?: string | null;
   openingAmount: number;
   status: number;
   inflows: number;
@@ -56,6 +57,7 @@ interface Session {
   cashCount: CountLine[];
   closedAt?: string;
   closedBy?: string;
+  closedByName?: string | null;
   closingAmount?: number;
   expectedClosingAmount?: number;
   closingDifference?: number;
@@ -68,6 +70,17 @@ interface Branch {
   name: string;
 }
 
+/** The name of a member of the business by their user (email), as the API gives it; null for anyone else. */
+type NameOf = (user: string) => string | null;
+
+function namesOf(data: DemoData): NameOf {
+  const names = new Map<string, string>(
+    (data.employees as Array<{ email: string; firstName: string; lastName: string }>)
+      .map((member) => [member.email, `${member.firstName} ${member.lastName}`]),
+  );
+  return (user) => names.get(user) ?? null;
+}
+
 /** The cash a count adds up to, in cents (coins of $0.50 included). */
 function countTotal(lines: CountLine[]) {
   return lines.reduce((sum, line) => sum + Math.round(line.denomination * 100) * line.quantity, 0) / 100;
@@ -78,7 +91,7 @@ function countTotal(lines: CountLine[]) {
  * data. Each closed one tells a different ending: short with a note and the count by denomination, over by a little,
  * and exact with only the total typed.
  */
-function shiftHistory(today: Session | null, roma: Branch, coyoacan: Branch) {
+function shiftHistory(today: Session | null, roma: Branch, coyoacan: Branch, nameOf: NameOf) {
   const place = (branch: Branch) => ({
     branchId: branch.id, branchName: branch.name, inventoryLocationId: branch.id, inventoryLocationName: branch.name,
   });
@@ -88,16 +101,16 @@ function shiftHistory(today: Session | null, roma: Branch, coyoacan: Branch) {
     const expected = amounts.opening + amounts.inflows - amounts.outflows;
     const counted = amounts.counted ?? countTotal(amounts.count);
     return {
-      id, openedAt, openedBy, openingAmount: amounts.opening, status: CLOSED, inflows: amounts.inflows,
+      id, openedAt, openedBy, openedByName: nameOf(openedBy), openingAmount: amounts.opening, status: CLOSED, inflows: amounts.inflows,
       outflows: amounts.outflows, nonCashInflows: amounts.nonCash, expectedBalance: expected, isMine: openedBy === today?.openedBy,
-      ...place(branch), cashCount: amounts.count, closedAt, closedBy: openedBy, closingAmount: counted,
+      ...place(branch), cashCount: amounts.count, closedAt, closedBy: openedBy, closedByName: nameOf(openedBy), closingAmount: counted,
       expectedClosingAmount: expected, closingDifference: Math.round((counted - expected) * 100) / 100, closingNotes: amounts.notes,
     };
   };
 
   const sessions: Session[] = [
     {
-      id: 'turno-coyoacan-hoy', openedAt: at(8, 0), openedBy: CARLOS, openingAmount: 800, status: OPEN, inflows: 1240.5,
+      id: 'turno-coyoacan-hoy', openedAt: at(8, 0), openedBy: CARLOS, openedByName: nameOf(CARLOS), openingAmount: 800, status: OPEN, inflows: 1240.5,
       outflows: 150, nonCashInflows: 960, expectedBalance: 1890.5, isMine: false, ...place(coyoacan), cashCount: [],
       notes: 'Fondo de la barra',
     },
@@ -147,7 +160,7 @@ function shiftHistory(today: Session | null, roma: Branch, coyoacan: Branch) {
 const cashRoutes: ExtraRoutes = (data, { ok, paginate }) => {
   const today: Session | null = data.cashSession;
   const [roma, coyoacan] = data.locations as Branch[];
-  const { sessions, movements } = shiftHistory(today, roma, coyoacan);
+  const { sessions, movements } = shiftHistory(today, roma, coyoacan, namesOf(data));
   const todayId = today?.id;
   return [
     ['GET', /^\/delivery-zones$/, () => ok(data.deliveryZones ?? deliveryZones())],
@@ -181,17 +194,21 @@ const cashRoutes: ExtraRoutes = (data, { ok, paginate }) => {
 
 /**
  * The fields the contract requires that the demo's drawer and day cut leave out (CashSessionDto.isMine, cashCount and
- * its branch; the tips and cash-only figures of DailyCashCutDto). Without them the drawer reads as somebody else's.
- * The day had tips: $120.00, $70.00 of them in cash, which the cash-only net includes.
+ * its branch; the tips and cash-only figures of DailyCashCutDto), and the names of the people the API gives with their
+ * users. Without them the drawer reads as somebody else's. The day had tips: $120.00, $70.00 of them in cash, which the
+ * cash-only net includes.
  */
 function completeCashData(data: DemoData) {
   const [roma] = data.locations as Branch[];
+  const nameOf = namesOf(data);
   if (data.cashSession) {
     Object.assign(data.cashSession, {
       isMine: true, cashCount: [], branchId: roma.id, branchName: roma.name, inventoryLocationId: roma.id, inventoryLocationName: roma.name,
+      openedByName: nameOf(data.cashSession.openedBy),
     });
   }
   const cut = data.dailyCut;
+  for (const user of cut.byUser as Array<{ userName: string; displayName?: string | null }>) user.displayName = nameOf(user.userName);
   Object.assign(cut, {
     tipsTotal: 120,
     cashTipsTotal: 70,

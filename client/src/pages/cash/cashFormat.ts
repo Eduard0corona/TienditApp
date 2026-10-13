@@ -25,6 +25,14 @@ export function getTransactionTypeLabel(type: CashTransactionType): string {
   }
 }
 
+/**
+ * Who opened, closed or charged: their name when the API gives it (a member of the business), else their user, as the
+ * API stores it (an email, or "Sistema"). Never both, so the cut shows no more about the person than before.
+ */
+export function personLabel(name: string | null | undefined, user: string): string {
+  return name?.trim() || user;
+}
+
 /** Short label of a closing difference: "Cuadró", "Faltan $16.00" or "Sobran $5.00". */
 export function describeDifference(difference: number, formatMoney: (value: number) => string): string {
   if (difference === 0) return 'Cuadró';

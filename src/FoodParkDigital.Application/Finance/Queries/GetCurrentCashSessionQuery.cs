@@ -48,6 +48,10 @@ public class GetCurrentCashSessionQueryHandler : IRequestHandler<GetCurrentCashS
             .Where(x => x.Id == sessionId.Value)
             .Select(CashSessionProjection.ToRow(_context))
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null ? null : CashSessionProjection.ToDto(row, userId);
+        if (row is null)
+            return null;
+
+        var people = await CashSessionProjection.PeopleAsync(_context, [row], cancellationToken);
+        return CashSessionProjection.ToDto(row, userId, people);
     }
 }
