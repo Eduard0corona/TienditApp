@@ -211,6 +211,10 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B y 22C, despué
 - Resuelto en la Fase 14: cada ronda de una cuenta de mesa descuenta sus insumos cuando va a cocina, con la política del negocio como una venta (se rechaza nombrando lo que falta o pasa con aviso); cerrar la cuenta solo descuenta las rondas sin movimiento propio, y cancelarla devuelve lo de todas. Pendiente: volver a la Fase 13 con cuentas abiertas haría que, al cerrarlas, se descuenten otra vez las rondas mandadas con la Fase 14, y que cancelarlas no las devuelva ([despliegue](../development/deploy-azure.md#inicio-authcontroller-y-rondas-fase-14)).
 - `Appointment.ServiceProductId` y `StaffUserId` no tienen llave foránea: se validan contra el negocio al guardar.
 - Los medios de WhatsApp se guardan como marcador: falta descargar y mostrar la foto o el audio (requiere guardar el archivo por negocio).
+- Evidencia de servicios (lavanderías, talleres): `ServiceOrderDetail` guarda fotos del antes y del después (`BeforePhotosJson` y `AfterPhotosJson`, hasta 20 de cada una, privadas desde la Fase 8A), pero solo se adjuntan al crear la orden en «Recibir servicio con piezas» (`/orders/cart`): `Order.SetServiceDetail` solo lo llama `OrderPlacement`. Vender cobra los servicios sin detalle, Pedidos y el tablero de servicios solo muestran las fotos y ninguna ruta las agrega a una orden existente, así que las del después, que se toman al terminar o entregar, no tienen dónde capturarse. Pendiente:
+  - subir fotos del antes y del después a una orden existente desde Pedidos y el tablero de servicios, con un caso de uso en Application que las valide por negocio y por permiso, y que pase por el agregado (rowversion de la orden);
+  - guardar quién y cuándo tomó cada foto (hoy son una lista JSON sin autor) y no borrar las de una orden entregada o cancelada;
+  - pruebas del caso de uso y del acceso entre negocios en `CrossTenantOperationsSqlServerTests`.
 - Teléfonos de clientes capturados antes de la Fase 4 quedan como se escribieron; la ficha y el alta los comparan en sus formas comunes, pero no se normalizaron en la base.
 - Las conversaciones partidas antes de la Fase 4 (`+52` y `+521` del mismo número) siguen como dos hilos; cada mensaje nuevo va al hilo con la misma forma del número.
 - No hay lealtad: es por negocio y queda fuera de alcance hasta tener reglas ([ADR 0009](../adr/0009-loyalty-per-business.md)). Las columnas `CustomerProfile.LoyaltyPoints` y `LoyaltyTier`, globales y sin uso, se borraron en la Fase 13.
@@ -438,3 +442,4 @@ Pendientes detectados en la Fase 3:
 - Cuándo activar el slot de staging (plan Standard) y quién aprueba los despliegues a producción.
 - Cantidades fraccionarias y control de stock por producto.
 - Capabilities ligadas al plan contratado.
+- Evidencia de servicios: si las fotos van por orden o por pieza (una lavandería recibe varias prendas en una orden), si el cliente las recibe (WhatsApp o ticket) y cuánto tiempo se guardan.
