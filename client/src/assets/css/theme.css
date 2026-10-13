@@ -918,18 +918,96 @@
   background: var(--ct-primary-bg-subtle);
 }
 
-/* Pages of a menu section (Catálogo, Inventario, Clientes, Configuración): tabs under the page title. */
+/* Pages of a menu section (Catálogo, Compras, Clientes, Reportes, Configuración): tabs under the page title. */
 .section-tabs {
   display: flex;
   gap: 0.25rem;
   margin: -0.5rem 0 1.25rem;
   overflow-x: auto;
+  /* The underline of a tab runs a pixel past the row: cut, not scrolled, or the wheel moved the tabs before the page. */
+  overflow-y: hidden;
   scrollbar-width: none;
   border-bottom: 1px solid var(--ct-border-color);
 }
 
 .section-tabs::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * The tabs of a menu section (SectionTabs) slide when they do not fit: the edge that hides tabs fades
+ * (.ta-scroll-fade) and, with a mouse, has a button. The frame draws the line under them, so it runs whole under the
+ * faded edges, and holds the buttons.
+ */
+.section-tabs-frame {
+  position: relative;
+  margin: -0.5rem 0 1.25rem;
+  border-bottom: 1px solid var(--ct-border-color);
+}
+
+.section-tabs-frame > .section-tabs {
+  margin: 0;
+  border-bottom: 0;
+}
+
+/* A touch screen slides the row with a finger: no buttons. */
+.section-tabs-slide {
+  display: none;
+}
+
+/*
+ * With a mouse the button sits on the edge that hides tabs, over a clear stretch of the row, with a shorter fade just
+ * inside it. What the keyboard or the open page brings forward stops clear of both.
+ */
+@media (hover: hover) {
+  .section-tabs-frame > .ta-scroll-fade {
+    scroll-padding-inline: 3.5rem;
+  }
+
+  .section-tabs-frame > .ta-scroll-fade.fade-end {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3.5rem), transparent calc(100% - 2rem));
+    mask-image: linear-gradient(to right, #000 calc(100% - 3.5rem), transparent calc(100% - 2rem));
+  }
+
+  .section-tabs-frame > .ta-scroll-fade.fade-start {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 3.5rem), transparent calc(100% - 2rem));
+    mask-image: linear-gradient(to left, #000 calc(100% - 3.5rem), transparent calc(100% - 2rem));
+  }
+
+  .section-tabs-frame > .ta-scroll-fade.fade-start.fade-end {
+    -webkit-mask-image: linear-gradient(to right, transparent 2rem, #000 3.5rem, #000 calc(100% - 3.5rem), transparent calc(100% - 2rem));
+    mask-image: linear-gradient(to right, transparent 2rem, #000 3.5rem, #000 calc(100% - 3.5rem), transparent calc(100% - 2rem));
+  }
+
+  .section-tabs-slide {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--ta-radius-sm);
+    background: transparent;
+    color: var(--ct-body-color);
+    font-size: 1.25rem;
+  }
+
+  .section-tabs-slide.start {
+    left: 0;
+  }
+
+  .section-tabs-slide.end {
+    right: 0;
+  }
+
+  /* Under the pointer, the faint pill of the side menu's links (shell.css) and the color of a tab. */
+  .section-tabs-slide:hover {
+    background: rgba(var(--ct-emphasis-color-rgb), 0.08);
+    color: var(--ct-link-color);
+  }
 }
 
 .section-tab {
