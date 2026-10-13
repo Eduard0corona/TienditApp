@@ -3,6 +3,7 @@ using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using MediatR;
@@ -297,6 +298,7 @@ public class SpecialDaysSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Ignore<SpecialDay>();
         }
     }

@@ -2573,6 +2573,83 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int?>("Courier")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CourierFolio")
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<decimal>("Fee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("FeeTaxRate")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<string>("References")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("ShipmentRegisteredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ShipmentRegisteredBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TrackingUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ZoneName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.ToTable("OrderDeliveries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OrderDeliveries_AddressLine", "LEN([AddressLine]) > 0");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_FeeTaxRate", "[FeeTaxRate] >= 0 AND [FeeTaxRate] <= 100");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_PostalCode", "LEN([PostalCode]) = 5 AND [PostalCode] NOT LIKE '%[^0-9]%'");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_Shipment", "([Courier] IS NULL AND [CourierFolio] IS NULL AND [TrackingUrl] IS NULL AND [ShipmentRegisteredAt] IS NULL) OR ([Courier] IS NOT NULL AND [Courier] = 1 AND [CourierFolio] IS NOT NULL AND LEN([CourierFolio]) > 0 AND [ShipmentRegisteredAt] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_OrderDeliveries_TrackingUrl", "[TrackingUrl] IS NULL OR [TrackingUrl] LIKE 'https://_%'");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4700,6 +4777,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderDelivery", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithOne("Delivery")
+                        .HasForeignKey("FoodParkDigital.Domain.Orders.Entities.OrderDelivery", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItem", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
@@ -5112,6 +5198,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.Order", b =>
                 {
+                    b.Navigation("Delivery");
+
                     b.Navigation("ItemCancellations");
 
                     b.Navigation("Items");

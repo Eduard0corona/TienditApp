@@ -29,8 +29,8 @@ public class PlatformSettlementsMigrationSqlServerTests
     [SqlServerFact]
     public async Task PreviousVersion_ShouldKeepRefundingASettledOrder_AndTheSettlementStays()
     {
-        await using var database = SqlServerTestDatabase.CreateEmpty();
-        await MigrateAsync(database, Migration);
+        // The base as it is once every migration is applied: the version before refunds over tables it does not know.
+        await using var database = await SqlServerTestDatabase.CreateAsync();
         var tenant = await SeedAsync(database);
         var orderId = await SeedOrderAsync(database, tenant.Id);
         await SettleAsync(database, tenant.Id, orderId, close: true);
@@ -163,6 +163,7 @@ public class PlatformSettlementsMigrationSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Ignore<PlatformSettlementOrder>();
             modelBuilder.Ignore<PlatformSettlementAdjustment>();
             modelBuilder.Ignore<PlatformSettlement>();

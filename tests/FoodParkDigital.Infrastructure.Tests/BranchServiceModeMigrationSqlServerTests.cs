@@ -3,6 +3,7 @@ using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
+using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using MediatR;
@@ -148,6 +149,7 @@ public class BranchServiceModeMigrationSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<Branch>().Ignore(b => b.ServiceMode);
         }
     }
