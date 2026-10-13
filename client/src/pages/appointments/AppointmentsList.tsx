@@ -200,9 +200,11 @@ export default function AppointmentsList() {
     };
   }, [showModal, view, services.length, staff.length]);
 
+  // At the same address an appointment keeps what was agreed; another one is quoted again.
+  const agreed = editing?.visit && form.atHome && isSameAddress(editing.visit, form) ? editing.visit : null;
   // What a visit to the postal code typed charges: asked once the five digits are there.
   const typedPostalCode = form.postalCode.trim();
-  const shouldQuote = showModal && form.atHome && isPostalCode(typedPostalCode);
+  const shouldQuote = showModal && form.atHome && !agreed && isPostalCode(typedPostalCode);
   useEffect(() => {
     if (!shouldQuote) return;
     const controller = new AbortController();
@@ -216,8 +218,6 @@ export default function AppointmentsList() {
     return () => controller.abort();
   }, [shouldQuote, typedPostalCode]);
 
-  // At the same address an appointment keeps what was agreed; another one is quoted again.
-  const agreed = editing?.visit && form.atHome && isSameAddress(editing.visit, form) ? editing.visit : null;
   const quoteView: VisitQuoteView = agreed
     ? { kind: 'agreed', zoneName: agreed.zoneName, fee: agreed.fee }
     : !shouldQuote ? { kind: 'none' }

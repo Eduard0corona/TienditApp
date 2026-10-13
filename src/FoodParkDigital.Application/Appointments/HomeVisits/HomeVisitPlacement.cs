@@ -120,6 +120,7 @@ internal static class HomeVisitPlacement
         var to = endAt.AddMinutes(minutes);
         var query = context.Appointments
             .AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
             .Where(x => x.Status != AppointmentStatus.Cancelled && x.Status != AppointmentStatus.NoShow)
             .Where(x => from < x.EndAt && to > x.StartAt);
         // At the business, only a visit of the same person needs the trip; a visit needs it with any other appointment.

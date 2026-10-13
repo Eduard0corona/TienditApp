@@ -23,8 +23,9 @@ internal static class AppointmentSalePlacement
     public static async Task<string?> ChargeAsync(
         IApplicationDbContext context, Order order, Guid appointmentId, decimal feeTaxRate, CancellationToken cancellationToken)
     {
-        // Appointments are filtered by business: one of another business is not found.
-        var appointment = await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointmentId, cancellationToken);
+        // The business of the sale besides the global filter: one of another business is not found.
+        var appointment = await context.Appointments
+            .FirstOrDefaultAsync(a => a.Id == appointmentId && a.TenantId == order.TenantId, cancellationToken);
         if (appointment is null)
             return CreateOrderCommandValidator.AppointmentNotFoundMessage;
 

@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C y 22D, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -97,6 +97,18 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C y 22D, de
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22E: la dirección de una cita a domicilio iba en las notas, el cargo por ir se cobraba de memoria, nada dejaba tiempo de traslado entre una casa y otra y la venta no sabía qué cita cobraba ([ADR 0020](../adr/0020-home-visits.md)).
+  - Citas a domicilio con la dirección del cliente y el cargo por visita de su zona de entrega, tiempo de traslado por negocio, ruta del día por persona con Maps, y «Cobrar» en la Agenda, que abre Vender con la cita y cobra el cargo como concepto propio con su IVA, una vez por cita.
+  - Queda:
+    - La ruta va en orden de hora, sin optimizar, y el traslado es un tiempo fijo: no hay mapa propio, geocodificación ni distancia real.
+    - No se agenda desde el menú en línea, y las direcciones guardadas del cliente no tienen código postal: la dirección se escribe en la cita.
+    - Dos citas guardadas al mismo tiempo para la misma persona pueden traslaparse (la revisión del traslape y del traslado es en Application, sin restricción en la base), como antes.
+    - Editar una cita sin `visit` la deja en el negocio: un cliente abierto antes del despliegue que edita una visita la quitaría hasta recargarse (`deploy-azure.md`).
+    - Dos ediciones simultáneas de una cita ahora dan 409 en lugar de quedarse con la última.
+    - La clave del SAT del cargo por visita es la del primer servicio de la venta, o 01010101: cada negocio debe confirmarla con su contador.
+    - El personal con `ManageAppointments` que no es dueño ni admin no lee la lista del equipo (`GET /employees`), así que su ruta del día no filtra por persona: ve la de todos.
+    - Volver a la versión anterior no muestra las visitas ni el cargo, y una cita cobrada se podría cobrar otra vez (`deploy-azure.md`); el `rollback.sql` se detiene (50015).
+    - La 22E suma 68 B a la primera visita (de 176,728 a 176,796 B, contra `master` en `5aac2b7`): solo el mapa de módulos que cargan las pantallas que bajan aparte (la Agenda, Vender y Zonas de entrega comparten dos módulos nuevos). Queda a 4 B del presupuesto (176,800 B): el siguiente crecimiento tendrá que subirlo y decir por qué.
 - Resuelto en la Fase 22D: nadie sabía cuándo salía un pedido ni qué cobraba el repartidor, y el efectivo que entregaba Paquetenvia se anotaba en una libreta ([ADR 0019](../adr/0019-courier-cash-on-delivery.md)).
   - «Salió a entregar» con lo que cobra en efectivo y con cuánto paga el cliente, aviso «En camino» por WhatsApp, lo que debe el repartidor y su liquidación en Caja › Repartidores, que cobra los pedidos en la caja de quien recibe y deja el viaje y la comisión como gastos.
   - Queda:
@@ -105,7 +117,7 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C y 22D, de
     - Sin saldo a favor del repartidor: lo que entrega de más se registra como «Otro» en esa liquidación.
     - Una liquidación no se anula ni se edita: se corrige con un reembolso o un movimiento de caja.
     - Volver a la versión anterior no muestra la salida ni lo que debe el repartidor (`deploy-azure.md`); el `rollback.sql` se detiene (50014).
-    - La 22D suma 133 B a la primera visita (de 176,614 a 176,747 B, contra `master` en `516f92b`) y sube el presupuesto a 176,800 B.
+    - La 22D suma 126 B a la primera visita (de 176,614 a 176,740 B, contra `master` en `516f92b`) y sube el presupuesto a 176,800 B.
 - Resuelto en la Fase 22C: el pedido no sabía a dónde iba ni cobraba el envío, y el folio de Paquetenvia se anotaba en papel ([ADR 0018](../adr/0018-home-delivery-orders.md)).
   - El menú en línea y Vender toman pedidos a domicilio con la zona que llega al código postal, su mínimo y su envío, cobrado como concepto propio con su IVA y en el borrador de CFDI. Pedidos muestra la dirección y guarda el folio y el enlace del viaje de Paquetenvia; la cocina y el ticket lo dicen.
   - Queda:

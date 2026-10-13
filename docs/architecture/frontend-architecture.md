@@ -350,7 +350,24 @@ Salida a entregar y liquidación del repartidor (Fase 22D, [ADR 0019](../adr/001
 - **Menú en línea:** «¿Con cuánto pagas? (opcional)» en el domicilio, con «Tu cambio» cuando ya se sabe el envío; no deja enviar si no alcanza.
 - **Ticket:** «Cobrar $275.00 · paga con $500.00 · cambio $225.00» mientras el pedido lo debe: lo que todavía cobra el repartidor (lo que salió a cobrar o, si se pagó una parte, el saldo) o, antes de salir, el saldo con el billete del cliente.
 - **Escenas:** `GET /courier-settlements/receivable` responde que nadie debe nada por omisión (`mocks/api.mjs`), así que Caja se ve como antes en las demás escenas.
-- **Primera visita:** suma 133 B (de 176,614 a 176,747 B, contra `master` en `516f92b`): el aviso en vivo `OrderUpdated` y la línea del ticket con lo que cobra el repartidor. Caja › Repartidores y el diálogo bajan con Caja. El presupuesto sube de 176,700 a 176,800 B.
+- **Primera visita:** suma 126 B (de 176,614 a 176,740 B, contra `master` en `516f92b`): el aviso en vivo `OrderUpdated` y la línea del ticket con lo que cobra el repartidor. Caja › Repartidores y el diálogo bajan con Caja. El presupuesto sube de 176,700 a 176,800 B.
+
+Servicios a domicilio (Fase 22E, [ADR 0020](../adr/0020-home-visits.md)):
+
+- **`utils/homeVisits.ts`** refleja los mensajes del servidor (código postal, dirección, traslado de 0 a 240 minutos, cita cancelada o que no se presentó) y arma lo que se muestra: «Cargo por visita $80.00» (o «más IVA»), «A domicilio · CP 72000 · Centro», los totales de Vender con el cargo (`estimateVisitTotals`, como el envío) y los enlaces de Maps (`mapsPlaceUrl`; `mapsRouteUrl`, con las primeras 10 visitas) y de llamada (`telUrl`).
+- **Datos:** `api/homeVisits.ts`, fuera de `queries.ts`: `quoteVisit` (la cotización, cancelable), `useVisitRoute` (llave `['visit-route', día, persona]`) y el tiempo de traslado (`['home-visit-settings']`, que se lee otra vez al guardarlo).
+- **Agenda** (`AppointmentsList`):
+  - Tres vistas: «Próximas», «Anteriores» y «Ruta del día»; el filtro «Dónde» (todas, en el negocio, a domicilio) va al servidor (`homeVisit`).
+  - Cada cita a domicilio dice su código postal y su zona; «Cobrar» (quien vende, `access.sell`) abre `/sell?appointment=<id>` en una cita no cancelada, que no faltó y sin venta; una cobrada dice «Cobrada».
+  - El formulario (`AppointmentVisitFields`) pregunta «Dónde» y, a domicilio, el código postal, la dirección y las referencias. Con cinco dígitos cotiza (`QuoteAnswer`, derivado: sin `setState` en el efecto salvo la respuesta) y muestra la zona y el cargo, o el mensaje del servidor. En la misma dirección (`isSameAddress`) dice lo acordado con el cliente sin volver a cotizar; con otro código postal avisa que el cliente recibe el nuevo lugar.
+  - **Ruta del día** (`VisitRoute`): día y persona; cada persona con sus visitas, sus cargos y «Ruta en Maps»; cada visita con hora, estado, dirección, referencias, zona y cargo, y «Abrir en Maps», «Llamar» y «Cobrar». La dirección sale del dispositivo solo cuando alguien abre un enlace.
+- **Vender** lee `?appointment=` una vez, cuando ya cargó el catálogo (y con él la venta guardada). Pide la cita: una cancelada o que no se presentó avisa y no cambia nada; con otra venta en el ticket pregunta antes de reemplazarla. Pone el servicio del catálogo (si no, pide agregarlo), el cliente y el aviso «Cobro de la cita de …», que se puede quitar.
+  - El cargo va como «Cargo por visita (zona)» en los totales, sin elegir origen ni domicilio, y entra al pedido como `appointmentId`: el servidor pone el cargo.
+  - No se guarda para mandar sin conexión (el servidor revisa la cita al cobrar). Va en el borrador y en la clave de la venta (`describeSale`): cobrar otra cita es otra venta.
+- **Ticket** («Cargo por visita $80.00») y detalle de Pedidos («Incluye el cargo por visita a domicilio (zona): $80.00»).
+- **Configuración › Zonas de entrega** muestra la tarjeta «Visitas a domicilio» (`HomeVisitTravelCard`) a un negocio con Agenda: el tiempo de traslado entre citas, que guarda el dueño o un admin.
+- **Escenas:** `mocks/routes-p8.mjs` contesta la cotización, la ruta, una cita y el tiempo de traslado (30 minutos), con las zonas de `data.deliveryZones` (ninguna por omisión, como `GET /delivery-zones`). `scenes/agenda-domicilio.spec.ts` pone a Café La Esquina con zonas y visitas.
+- **Primera visita:** suma 68 B (de 176,728 a 176,796 B, contra `master` en `5aac2b7`): solo el mapa de módulos de las pantallas que bajan aparte, que comparten dos módulos nuevos (`api/homeVisits.ts` con sus utilidades y `appointmentsApi`). El presupuesto (176,800 B) no cambia.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

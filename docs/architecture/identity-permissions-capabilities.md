@@ -44,6 +44,10 @@ ASP.NET Identity autentica y el JWT incluye contexto del tenant. `TenantAccessSe
 | Mandar un pedido a domicilio con el repartidor, con lo que cobra en efectivo, o corregir su salida (`DispatchOrderCommand`, Fase 22D) | `ManageOrders` | — |
 | Lo que debe cada repartidor, sus pedidos pendientes, sus liquidaciones y una liquidación (`GetCourierReceivablesQuery`, `GetPendingCourierOrdersQuery`, `GetCourierSettlementsQuery`, `GetCourierSettlementQuery`, Fase 22D) | `ManageCash` (`Permission(ManageCash)`): Caja › Repartidores | — |
 | Liquidar al repartidor (`CreateCourierSettlementCommand`, Fase 22D) | `ChargeOrders`, y además `ManageCash` por contenido (`IRequiresContentPermissions`): cobra los pedidos y mueve la caja propia | — |
+| Cotizar una visita a un código postal y la ruta del día (`GetVisitQuoteQuery`, `GetVisitRouteQuery`, Fase 22E) | `ManageAppointments`, como agendar | `Appointments` |
+| El tiempo de traslado entre visitas: leerlo (`GetHomeVisitSettingsQuery`, Fase 22E) | cualquier miembro (`Member`), como las zonas | `Appointments` |
+| Cambiar el tiempo de traslado (`UpdateHomeVisitSettingsCommand`, Fase 22E) | dueño o admin (`Manager`), como las zonas | `Appointments` |
+| Cobrar una cita, con su cargo por visita (`CreateOrderCommand` con `AppointmentId`, Fase 22E) | `ManageOrders` (y `ChargeOrders` si trae pagos), como cualquier venta: Vender busca la cita del negocio y no pide `ManageAppointments` | — |
 
 Pedidos de plataformas (Fase 22F, [ADR 0013](../adr/0013-delivery-platform-orders.md)):
 
@@ -108,7 +112,7 @@ La regla vive en cada caso de uso: todo `Command`/`Query` declara exactamente un
 | `[AllowAnonymousRequest("motivo")]` | Flujos públicos (inicio de sesión, registro, confirmaciones) y lo que envía el sistema sin usuario (webhook). |
 
 - `[RequiresCapability(X)]` se combina con la regla anterior y aplica a todos, también al administrador de plataforma: un módulo apagado está apagado.
-- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (243 con la Fase 22D) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
+- **Deny by default:** una solicitud sin regla (o con más de una) no se ejecuta. `AuthorizationBehaviorTests` exige una regla en cada caso de uso (247 con la Fase 22E) y fija la lista de anónimos; un caso de uso nuevo sin regla rompe CI.
 - `CurrentAccessContext` lee una vez por petición la membresía, permisos y módulos; `TenantResolutionMiddleware` le pasa lo que ya consultó.
 - `ForbiddenAccessException` responde 403 con un mensaje en español.
 - `GET /api/v1/me/access` devuelve rol, permisos efectivos y módulos según el servidor. El cliente lo usa al cargar el perfil, así un cambio de permisos aplica sin volver a iniciar sesión (el token anterior conserva sus claims hasta expirar, pero la API ya decide con los permisos actuales).

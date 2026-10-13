@@ -103,6 +103,8 @@ export function phase4Routes(data, { ok, notFound, paginate, createMockOrder }) 
       const to = q.get('toDate');
       if (from) rows = rows.filter((a) => a.startAt >= from);
       if (to) rows = rows.filter((a) => a.startAt <= to);
+      // Where they happen (Fase 22E): at the customer's address or at the business.
+      if (q.has('homeVisit')) rows = rows.filter((a) => Boolean(a.visit) === (q.get('homeVisit') === 'true'));
       const history = !from && to;
       rows = [...rows].sort((a, b) => (history ? b.startAt.localeCompare(a.startAt) : a.startAt.localeCompare(b.startAt)));
       return ok(paginate(rows, q, 10));

@@ -33,6 +33,8 @@ interface SaleRequest {
   payments?: SalePaymentRequest[];
   /** Sent to the customer's address (Fase 22C): the zone that reaches its postal code charges its fee. */
   delivery?: { postalCode: string; addressLine: string; references?: string; paysWith?: number };
+  /** The appointment the sale charges (Fase 22E): one at the customer's address adds its charge for the visit. */
+  appointmentId?: string;
 }
 
 /** A delivery zone of the business as GET /delivery-zones answers it. */
@@ -133,7 +135,12 @@ function createSale(data: DemoData, body: SaleRequest) {
   const zone = body.delivery
     ? deliveryZonesOf(data).find((candidate) => candidate.isActive && candidate.postalCodes.includes(body.delivery!.postalCode))
     : undefined;
-  const feeCents = zone ? (zone.freeDeliveryFrom !== null && productsCents >= cents(zone.freeDeliveryFrom) ? 0 : cents(zone.fee)) : 0;
+  // An appointment at the customer's address charges what was agreed for the visit, at the business's rate as well.
+  const appointment = body.appointmentId
+    ? data.appointments.find((candidate: { id: string }) => candidate.id === body.appointmentId)
+    : undefined;
+  const visitCents = appointment?.visit ? cents(appointment.visit.fee) : 0;
+  const feeCents = zone ? (zone.freeDeliveryFrom !== null && productsCents >= cents(zone.freeDeliveryFrom) ? 0 : cents(zone.fee)) : visitCents;
   const taxBreakdown = breakdownOf(feeCents > 0
     ? [...itemAmounts, { taxRate: data.tenant.defaultTaxRate, isTaxExempt: false, cents: feeCents }]
     : itemAmounts);
@@ -184,8 +191,13 @@ function createSale(data: DemoData, body: SaleRequest) {
         paysWith: body.delivery.paysWith ?? null, dispatchedAt: null, dispatchedBy: null, cashToCollect: null, awaitsCourierCash: false,
       }
       : null,
+    visitCharge: visitCents > 0
+      ? { appointmentId: appointment.id, zoneName: appointment.visit.zoneName, fee: money(visitCents), feeTaxRate: data.tenant.defaultTaxRate }
+      : null,
   };
   data.orders.unshift(order);
+  // The appointment keeps its sale and is done.
+  if (appointment) Object.assign(appointment, { saleOrderId: id, status: 3 });
   return order;
 }
 

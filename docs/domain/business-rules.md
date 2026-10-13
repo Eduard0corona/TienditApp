@@ -145,6 +145,23 @@ El pedido sale con Paquetenvia, que puede cobrar en efectivo al cliente, y lo qu
   - Un pedido se liquida una vez, con el saldo que se vio: si alguien lo cobró, lo liquidó o pagó una parte mientras tanto: «Un pedido de la lista ya no se le debe al repartidor (alguien lo cobró, lo liquidó o cambió): lee otra vez la lista.». Una liquidación no se anula ni se edita: se corrige con un reembolso o un movimiento de caja.
   - La bitácora `CourierSettlementRegistered` guarda repartidor, método, montos, pedidos y ajustes, sin direcciones.
 
+## Servicios a domicilio (Fase 22E)
+
+Una cita puede ser en la casa del cliente, con el cargo por visita de su zona, y se cobra con su venta ([ADR 0020](../adr/0020-home-visits.md)).
+
+- **Dónde:** «En el negocio» o «A domicilio» con el código postal (cinco dígitos), la dirección (hasta 300 caracteres: «Escribe a dónde es la visita: calle, número y colonia.») y referencias opcionales (hasta 500).
+- **La zona:** la de entrega activa que llega al código postal; su costo de envío es el cargo por visita (sin pedido mínimo ni envío gratis). Sin zonas activas: «Para citas a domicilio, primero da de alta tus zonas en Configuración › Zonas de entrega.»; fuera de ellas: «Por ahora no hacemos visitas en el 72000.».
+  - La misma dirección conserva la zona y el cargo acordados aunque la zona cambie después; otra dirección se cotiza otra vez. Quitar «A domicilio» quita el cargo. Solo en una cita abierta.
+  - La bitácora (`AppointmentVisitArranged`, `AppointmentVisitRemoved`) guarda la zona y el cargo, nunca la dirección.
+- **Traslado:** entre una visita y otra cita de la misma persona pasan al menos los minutos del negocio (de 0 a 240, 30 por omisión): «Luis necesita 30 minutos de traslado entre una visita a domicilio y su otra cita.». Una visita lo pide contra cualquier cita de esa persona; una cita en el negocio, solo contra sus visitas. Se revisa después del traslape; sin persona asignada o con 0 no se revisa. Cambiarlo no mueve las citas ya agendadas.
+- **Ruta del día:** las visitas de un día por persona y en orden de hora, sin canceladas ni «no se presentó»; las de nadie, al final.
+- **Cobrar la cita:** su venta es de mostrador del negocio («La venta de una cita la registra el negocio en el mostrador: sin plataforma, mesa, cuenta abierta ni envío.») y con conexión («La venta de una cita se registra con conexión: la cita se revisa al cobrar.»).
+  - La cita es del negocio («La cita no existe.»), no está cancelada («La cita se canceló: ya no se cobra.») ni «no se presentó» («El cliente no se presentó a la cita: no se cobra.»), y no tiene ya su venta («La cita ya tiene su venta.»), salvo que esa venta se haya cancelado.
+  - Con la venta, la cita queda completada y guarda qué venta la cobró. Dos cobros a la vez: el segundo recibe 409.
+  - Una visita con cargo lo suma como concepto propio: un monto más del desglose con la tasa del negocio al cobrar y la política de IVA del pedido, como el envío. Solo en una venta nueva, con productos y antes de cobrar; nunca con envío, plataforma o cuenta de mesa.
+  - El borrador de CFDI lleva el concepto «Cargo por visita a domicilio» con la clave del SAT del primer servicio de la venta (o 01010101), la unidad E48 y el aviso de confirmarla con el contador.
+  - `OrderCreated` guarda el cargo por visita.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.
@@ -182,7 +199,7 @@ El agregado conserva `CancellationReason`, agrega historial con estado anterior/
 - Quien escribe BAJA (o STOP) deja de recibir campañas y recordatorios; con ALTA vuelve. La baja no se borra al volver: se conserva cuándo y cómo se eligió. Los avisos de sus pedidos y de sus citas siguen llegando.
 - Las bajas se revisan al momento de enviar cada mensaje, no solo al elegir destinatarios.
 - Un recordatorio no se envía si la cita cambió de hora, se canceló, se cerró o ya empezó.
-- Agendar, reprogramar, confirmar o cancelar una cita encola un aviso al cliente con la cita completa, en el mismo guardado; si llega uno más reciente de la misma cita antes de enviarse, el anterior se omite.
+- Agendar, reprogramar, confirmar o cancelar una cita encola un aviso al cliente con la cita completa, en el mismo guardado; si llega uno más reciente de la misma cita antes de enviarse, el anterior se omite. Desde la Fase 22E, cambiar el código postal de una visita también avisa, y el aviso dice «a domicilio (CP 72000)» y el cargo por visita, nunca la calle.
 - Una campaña llega como máximo a 5,000 clientes y no se envía dos veces al mismo número.
 
 ## Guardrails
