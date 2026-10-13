@@ -127,6 +127,24 @@ El pedido sabe a dónde va y cobra el envío de su zona ([ADR 0018](../adr/0018-
 - **Paquetenvia:** quien toma los pedidos anota o corrige el folio del viaje y su enlace (opcional, escrito con `https://`) en Pedidos, no en un pedido cancelado. Anotar el mismo viaje otra vez no registra nada.
 - **Bitácora:** `OrderCreated` dice si va a domicilio y cuánto cobró de envío, nunca la dirección; `OrderCourierShipmentRegistered` guarda repartidor, folio anterior y nuevo y si hay enlace, nunca el enlace.
 
+## Salida a entregar y cobro contra entrega (Fase 22D)
+
+El pedido sale con Paquetenvia, que puede cobrar en efectivo al cliente, y lo que entrega se liquida en Caja ([ADR 0019](../adr/0019-courier-cash-on-delivery.md)).
+
+- **«Paga con»:** el billete con que paga el cliente, de $0.01 a $100,000 con dos decimales; lo de más es el cambio. Al tomar el pedido (Vender o el menú en línea) es opcional y cubre el total; al salir, cubre lo que cobra el repartidor: «Con $200.00 no alcanza: hay que cobrar $275.00.».
+- **Salió a entregar:** quien toma los pedidos anota el viaje y si el repartidor cobra en efectivo. Sale un pedido confirmado y hasta que se entrega, no uno pendiente («Confirma el pedido antes de mandarlo.») ni cancelado ni entregado. No es un estado del pedido: la cocina y los estados siguen igual.
+  - Si cobra, cobra el saldo del pedido en ese momento; un pedido pagado no cobra nada («El pedido ya está pagado: el repartidor no cobra nada.»). Si no cobra, no hay «paga con».
+  - Se corrige mientras va en camino; la primera salida queda como la hora en que salió. Guardar lo mismo no registra nada.
+  - La bitácora `OrderDispatched` guarda repartidor, folio, si hay enlace, lo que cobra, con cuánto paga y si fue corrección; nunca el enlace ni la dirección.
+- **«En camino»:** la primera salida avisa al cliente por WhatsApp, con el enlace si lo hay. No avisa una corrección ni un pedido que se entregó o canceló antes.
+- **Lo que debe el repartidor:** el saldo de los pedidos que entregó cobrando y que nadie liquidó ni cobró. Si el cliente pagó una parte por otro medio, debe el resto. Lo que va en camino todavía no se debe.
+- **Liquidación** (Caja › Repartidores):
+  - Se eligen los pedidos que entrega (hasta 200), lo que entregó y cómo (efectivo o transferencia), y los ajustes (hasta 50): viaje, comisión por cobrar y faltante se descuentan; «Otro» descuenta o suma y necesita descripción (hasta 200 caracteres).
+  - Lo entregado debe ser los pedidos más los ajustes, al centavo; si no: «Entregó $500.00 y los pedidos con sus ajustes dan $505.00: la diferencia debe ser $0.00. Registra lo que falta como un ajuste.».
+  - Cada pedido se cobra con su saldo en la caja propia y abierta de quien recibe; cada ajuste entra a esa caja como gasto (descuento) o depósito (suma) con el mismo método.
+  - Un pedido se liquida una vez. Una liquidación no se anula ni se edita: se corrige con un reembolso o un movimiento de caja.
+  - La bitácora `CourierSettlementRegistered` guarda repartidor, método, montos, pedidos y ajustes, sin direcciones.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

@@ -10,6 +10,9 @@ import {
   NEGOCIO_DATA,
   PLATAFORMAS_ROUTES,
   PRINCIPAL_SOLO_A_DOMICILIO_DATA,
+  REPARTIDORES_DATA,
+  REPARTIDORES_ROUTES,
+  REPARTIDORES_SIN_CAJA_DATA,
   SIN_CAJA_DATA,
   SIN_ZONAS_DATA,
   SUPER_ADMIN_PROFILE,
@@ -318,6 +321,70 @@ test.describe('Caja', () => {
       await open(page, '/cash');
       await openCashTab(page, 'Turnos', page.getByText('Faltan $50.00'));
       await snap(page, 'caja-turnos-oscuro');
+    });
+  });
+});
+
+test.describe('Repartidores', () => {
+  // Fase 22D: Paquetenvia owes two orders it delivered, carries one on its way and was settled the two days before.
+  test.use({ extraRoutes: REPARTIDORES_ROUTES, prepareData: REPARTIDORES_DATA });
+
+  async function openCouriers(page: Page) {
+    await open(page, '/cash');
+    await page.getByRole('tab', { name: 'Repartidores' }).click();
+    await expect(page.getByRole('heading', { name: 'Paquetenvia' })).toBeVisible();
+    await expect(page.getByText('ORD-000331')).toBeVisible();
+    await settle(page);
+  }
+
+  test('caja, repartidores', async ({ page }) => {
+    await openCouriers(page);
+    await snap(page, 'caja-repartidores-escritorio');
+  });
+
+  test('caja, repartidores en el teléfono', async ({ page }) => {
+    await page.setViewportSize(SIZES.phone);
+    await openCouriers(page);
+    await snap(page, 'caja-repartidores-telefono');
+  });
+
+  test('caja, liquidar a Paquetenvia con su viaje y un faltante', async ({ page }) => {
+    await openCouriers(page);
+    await page.getByRole('button', { name: 'Liquidar a Paquetenvia' }).click();
+    const settling = await dialog(page, 'Liquidar a Paquetenvia');
+    await settling.getByLabel('Entregó').fill('355');
+    await settling.getByRole('button', { name: 'Agregar ajuste' }).click();
+    await settling.getByLabel('Motivo del ajuste 1').selectOption({ label: 'Viaje' });
+    await settling.getByLabel('Importe del ajuste 1').fill('35');
+    await settling.getByRole('button', { name: 'Registrar faltante de $5.00' }).click();
+    await expect(settling.getByLabel('Motivo del ajuste 2')).toHaveValue('3');
+    await snapDialog(page, 'caja-liquidar-paquetenvia');
+  });
+
+  test('caja, liquidación de Paquetenvia', async ({ page }) => {
+    await openCouriers(page);
+    await page.getByRole('button', { name: /^Ver la liquidación/ }).first().click();
+    const detail = await dialog(page, 'Liquidación de Paquetenvia');
+    await expect(detail.getByText('ORD-000318')).toBeVisible();
+    await snapDialog(page, 'caja-liquidacion-paquetenvia');
+  });
+
+  test.describe('sin caja propia', () => {
+    test.use({ prepareData: REPARTIDORES_SIN_CAJA_DATA });
+
+    test('caja, repartidores sin caja propia', async ({ page }) => {
+      await openCouriers(page);
+      await expect(page.getByRole('button', { name: 'Ir a Mi caja' })).toBeVisible();
+      await snap(page, 'caja-repartidores-sin-caja');
+    });
+  });
+
+  test.describe('oscuro', () => {
+    test.use({ colorMode: 'dark' });
+
+    test('caja, repartidores oscuro', async ({ page }) => {
+      await openCouriers(page);
+      await snap(page, 'caja-repartidores-escritorio-oscuro');
     });
   });
 });

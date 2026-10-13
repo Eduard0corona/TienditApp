@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B y 22C, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C y 22D, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -97,6 +97,15 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B y 22C, despué
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22D: nadie sabía cuándo salía un pedido ni qué cobraba el repartidor, y el efectivo que entregaba Paquetenvia se anotaba en una libreta ([ADR 0019](../adr/0019-courier-cash-on-delivery.md)).
+  - «Salió a entregar» con lo que cobra en efectivo y con cuánto paga el cliente, aviso «En camino» por WhatsApp, lo que debe el repartidor y su liquidación en Caja › Repartidores, que cobra los pedidos en la caja de quien recibe y deja el viaje y la comisión como gastos.
+  - Queda:
+    - Paquetenvia sigue sin integración: el equipo marca la salida y la entrega, y TienditApp no sabe cuánto cobró de verdad.
+    - Un solo repartidor en el catálogo (Paquetenvia).
+    - Sin saldo a favor del repartidor: lo que entrega de más se registra como «Otro» en esa liquidación.
+    - Una liquidación no se anula ni se edita: se corrige con un reembolso o un movimiento de caja.
+    - Volver a la versión anterior no muestra la salida ni lo que debe el repartidor (`deploy-azure.md`); el `rollback.sql` se detiene (50014).
+    - La 22D suma 133 B a la primera visita (de 176,614 a 176,747 B, contra `master` en `516f92b`) y sube el presupuesto a 176,800 B.
 - Resuelto en la Fase 22C: el pedido no sabía a dónde iba ni cobraba el envío, y el folio de Paquetenvia se anotaba en papel ([ADR 0018](../adr/0018-home-delivery-orders.md)).
   - El menú en línea y Vender toman pedidos a domicilio con la zona que llega al código postal, su mínimo y su envío, cobrado como concepto propio con su IVA y en el borrador de CFDI. Pedidos muestra la dirección y guarda el folio y el enlace del viaje de Paquetenvia; la cocina y el ticket lo dicen.
   - Queda:
@@ -104,7 +113,7 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B y 22C, despué
     - La dirección no se valida contra un mapa y el cliente del menú no guarda sus direcciones.
     - No hay tiempo estimado de entrega ni horario por zona.
     - La clave del SAT del envío (78102203) es la más común; cada negocio debe confirmarla con su contador.
-    - Anotar el viaje de Paquetenvia no avisa en tiempo real: otra pantalla de Pedidos lo ve al refrescarse.
+    - Anotar el viaje de Paquetenvia no avisaba en tiempo real: desde la Fase 22D, `OrderUpdated` refresca Pedidos.
     - Un negocio con precios sin IVA que escribió sus envíos con IVA incluido cobraría el IVA dos veces: la consulta 6 del `verify.sql` los lista antes del merge, y las pantallas y el bot dicen «más IVA».
     - Volver a la versión anterior cobra los pedidos a domicilio por su total, pero no muestra su dirección ni su envío (`deploy-azure.md`); el `rollback.sql` se detiene (50013).
     - La 22C suma 125 B a la primera visita (de 176,481 a 176,606 B, contra `master` en `0eaa1d1`). El presupuesto no cambia.
