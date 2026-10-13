@@ -8958,6 +8958,13 @@ export interface components {
             evidenceUrl?: string | null;
             reference?: string | null;
             notes?: string | null;
+            /**
+             * Format: double
+             * @default 0
+             */
+            tip: number;
+            /** Format: double */
+            cashReceived?: number | null;
         };
         AddTabRoundRequest: {
             items: components["schemas"]["CreateOrderItemDto"][];
