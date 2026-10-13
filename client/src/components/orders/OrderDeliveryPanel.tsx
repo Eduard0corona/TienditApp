@@ -17,9 +17,9 @@ interface OrderDeliveryPanelProps {
 const FOLIO_MAX_LENGTH = 60;
 const TRACKING_URL_MAX_LENGTH = 500;
 
-/** A link the browser can open safely: https only, as the server keeps them. */
+/** A link the browser can open safely: written with «https://», as the server keeps them. */
 function isHttpsUrl(value: string | null | undefined): value is string {
-  if (!value) return false;
+  if (!value || !/^https:\/\//i.test(value.trim())) return false;
   try {
     return new URL(value).protocol === 'https:';
   } catch {

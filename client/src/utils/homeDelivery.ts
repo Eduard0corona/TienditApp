@@ -23,6 +23,8 @@ export interface DeliveryZoneTerms extends DeliveryTerms {
 export const ADDRESS_LINE_MAX_LENGTH = 300;
 export const REFERENCES_MAX_LENGTH = 500;
 export const ADDRESS_LINE_REQUIRED_MESSAGE = 'Escribe a dónde va el pedido: calle, número y colonia.';
+/** The server's words (HomeDeliveryRules.OnlyProductsMessage). */
+export const DELIVERY_ONLY_PRODUCTS_MESSAGE = 'Solo los productos se mandan a domicilio.';
 
 /** The postal code as the server keeps it: without spaces around. */
 export function normalizePostalCode(text: string): string {
@@ -55,9 +57,13 @@ export function belowMinimumMessage(postalCode: string, minimumOrder: number): s
   return `El pedido mínimo para el ${postalCode} es de ${formatMoney(minimumOrder)}.`;
 }
 
-/** «Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00», for the customer or the cashier. */
-export function describeDeliveryTerms(terms: DeliveryTerms): string {
-  const parts = [terms.fee > 0 ? `Envío ${formatMoney(terms.fee)}` : 'Envío gratis'];
+/**
+ * «Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00», for the customer or the cashier. The fee goes like the
+ * prices of the business: «más IVA» when they do not include it (the order adds it); the minimum and «gratis desde» are
+ * what the customer pays in products.
+ */
+export function describeDeliveryTerms(terms: DeliveryTerms, pricesIncludeTax = true): string {
+  const parts = [terms.fee > 0 ? `Envío ${formatMoney(terms.fee)}${pricesIncludeTax ? '' : ' más IVA'}` : 'Envío gratis'];
   if (terms.fee > 0 && terms.freeDeliveryFrom != null) parts.push(`gratis desde ${formatMoney(terms.freeDeliveryFrom)}`);
   if (terms.minimumOrder > 0) parts.push(`pedido mínimo ${formatMoney(terms.minimumOrder)}`);
   return parts.join(' · ');

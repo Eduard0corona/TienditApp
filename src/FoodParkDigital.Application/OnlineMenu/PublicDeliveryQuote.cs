@@ -30,13 +30,16 @@ public record GetPublicDeliveryQuoteQuery(string Slug, string PostalCode) : IReq
 
 public class GetPublicDeliveryQuoteQueryValidator : AbstractValidator<GetPublicDeliveryQuoteQuery>
 {
+    public const string PostalCodeMessage = "El código postal lleva 5 dígitos.";
+
     public GetPublicDeliveryQuoteQueryValidator()
     {
         RuleFor(x => x.Slug).NotEmpty().MaximumLength(100);
         RuleFor(x => x.PostalCode).Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("Escribe tu código postal.")
             .Must(code => DeliveryZone.IsPostalCode(DeliveryZone.NormalizePostalCode(code)))
-            .WithMessage(x => DeliveryZone.NotAPostalCodeMessage(x.PostalCode.Trim()));
+            // Without what was written: a validation message reaches the log (ADR 0017 keeps postal codes out of it).
+            .WithMessage(PostalCodeMessage);
     }
 }
 

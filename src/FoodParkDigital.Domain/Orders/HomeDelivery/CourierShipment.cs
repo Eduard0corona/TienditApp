@@ -42,13 +42,22 @@ public sealed record CourierShipment
         return new CourierShipment(courier, normalized, NormalizeTrackingUrl(trackingUrl));
     }
 
-    /// <summary>The link trimmed, or none when blank; a <see cref="DomainException"/> when it is not an https address.</summary>
+    private const string HttpsPrefix = "https://";
+
+    /// <summary>
+    /// The link trimmed, with «https://» in lower case, or none when blank; a <see cref="DomainException"/> when it is not
+    /// an https address. It must start with «https://» as written: <see cref="Uri"/> also reads «https:\\host», which the
+    /// database would refuse (CK_OrderDeliveries_TrackingUrl).
+    /// </summary>
     public static string? NormalizeTrackingUrl(string? trackingUrl)
     {
         if (string.IsNullOrWhiteSpace(trackingUrl))
             return null;
 
         var url = trackingUrl.Trim();
+        if (!url.StartsWith(HttpsPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new DomainException(TrackingUrlMessage);
+        url = HttpsPrefix + url[HttpsPrefix.Length..];
         if (url.Length > MaxTrackingUrlLength
             || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || uri.Scheme != Uri.UriSchemeHttps

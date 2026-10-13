@@ -331,7 +331,8 @@ test.describe('Menú público a domicilio', () => {
     const cart = await dialog(page, 'Tu pedido');
     await cart.getByRole('radio', { name: 'A domicilio' }).click();
     await cart.getByLabel('Código postal').fill('06700');
-    await expect(cart.getByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00')).toBeVisible();
+    // The server answered for 06700: the delivery enters the total.
+    await expect(cart.getByText('Envío a domicilio')).toBeVisible();
     return cart;
   }
 
@@ -357,6 +358,7 @@ test.describe('Menú público a domicilio', () => {
     const full = await dialog(page, 'Tu pedido');
     await full.getByLabel('Dirección').fill('Colima 145, depto. 3, Roma Norte');
     await full.getByLabel('Referencias (opcional)').fill('Portón negro, timbre 3');
+    await expect(full.getByText('Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00')).toBeVisible();
     await expect(full.getByRole('button', { name: /^Enviar pedido · / })).toBeEnabled();
     await snapScreen(page, 'menu-publico-carrito-a-domicilio-telefono');
   });

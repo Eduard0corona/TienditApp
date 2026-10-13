@@ -75,3 +75,17 @@ FROM [OrderDeliveries] d
 INNER JOIN [Orders] o ON o.[Id] = d.[OrderId]
 WHERE o.[Channel] IN (3, 4, 5) OR o.[IsTab] = 1 OR o.[OrderType] <> 0;');
 END;
+
+-- 6. Antes del merge: negocios con zonas de entrega activas cuyos precios no incluyen IVA. Desde esta
+--    fase el pedido les cobra el envío como sus precios, con el IVA sumado: una zona de $35.00 cobra
+--    $40.60 con IVA de 16 % (ADR 0018). La pantalla de la Fase 22B les decía que el monto era con IVA
+--    incluido: avísales, o ajusta el envío de sus zonas. Lo común es ninguna fila (los precios incluyen
+--    IVA por omisión).
+IF OBJECT_ID(N'dbo.DeliveryZones') IS NOT NULL
+    EXEC(N'SELECT s.[TenantId] AS [Negocio], s.[DefaultTaxRate] AS [Tasa], COUNT(*) AS [ZonasActivas],
+       MIN(z.[Fee]) AS [EnvioMenor], MAX(z.[Fee]) AS [EnvioMayor]
+FROM [DeliveryZones] z
+INNER JOIN [TenantSettings] s ON s.[TenantId] = z.[TenantId]
+WHERE z.[IsActive] = 1 AND s.[PricesIncludeTax] = 0
+GROUP BY s.[TenantId], s.[DefaultTaxRate]
+ORDER BY [ZonasActivas] DESC;');

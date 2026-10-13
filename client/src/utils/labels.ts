@@ -60,12 +60,12 @@ const PAYMENT_METHOD_BY_NAME: Record<string, OrderPaymentMethod> = {
   Platform: 5,
 };
 
-/** Where the order came from, as the server names each channel (OrderChannelRules.DisplayName). */
 /** The couriers a business asks for the trip of an order sent to an address (Fase 22C). */
 export const DELIVERY_COURIER_LABELS: Record<DeliveryCourier, string> = {
   [DeliveryCourier.Paquetenvia]: 'Paquetenvia',
 };
 
+/** Where the order came from, as the server names each channel (OrderChannelRules.DisplayName). */
 export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
   0: 'Mostrador',
   1: 'WhatsApp',

@@ -56,7 +56,7 @@ interface CartPanelProps {
   online: boolean;
   /** Registers the order of the platform without charging it. */
   onRegisterPlatformOrder: () => void;
-  /** The business has active delivery zones and the order can go to an address (not a tab, a platform or services). */
+  /** «A domicilio» is on screen: the business has active zones, or a delivery typed before still waits to be sent or removed. */
   deliveryOffered: boolean;
   /** Where the order goes, or null when it does not go to an address. */
   delivery: SaleDelivery | null;
@@ -123,6 +123,7 @@ export default function CartPanel(props: CartPanelProps) {
           problem={props.deliveryProblem}
           disabled={submitting}
           online={props.online}
+          pricesIncludeTax={props.pricesIncludeTax}
         />
       )}
       {platform && (

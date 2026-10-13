@@ -42,10 +42,30 @@ describe('homeDelivery', () => {
     expect(free).toMatchObject({ productsTotal: 480, fee: 0, total: 480 });
   });
 
+  it('matches the server with products of other rates: each rate rounded once, the fee in the business\'s', () => {
+    const tacos = { unitPrice: 120, quantity: 2, ratePercent: 16, isExempt: false };
+    const tortillas = { unitPrice: 25, quantity: 1, ratePercent: 0, isExempt: true };
+    const noFreeDelivery = { ...centro, freeDeliveryFrom: null };
+
+    // IVA included: $275 at 16 % (tacos and the fee) and $25 exempt.
+    expect(estimateDeliveryTotals([tacos, tortillas], true, noFreeDelivery, 16))
+      .toMatchObject({ productsTotal: 265, fee: 35, total: 300, tax: 37.93 });
+    // Before IVA: the tacos and the fee get 16 % on top; the tortillas none.
+    expect(estimateDeliveryTotals([tacos, tortillas], false, noFreeDelivery, 16))
+      .toMatchObject({ productsTotal: 303.4, fee: 35, subtotal: 300, tax: 44, total: 344 });
+    // Products at the border's 8 % and the fee at 16 %: two groups.
+    const border = estimateDeliveryTotals([{ ...tacos, ratePercent: 8 }], true, noFreeDelivery, 16);
+    expect(border.breakdown.map((line) => [line.ratePercent, line.taxAmount])).toEqual([[16, 4.83], [8, 17.78]]);
+    expect(border.total).toBe(275);
+  });
+
   it('says it in the words of the server', () => {
     expect(notCoveredMessage('72999')).toBe('Por ahora no llegamos al 72999.');
     expect(belowMinimumMessage('72000', 150)).toBe('El pedido mínimo para el 72000 es de $150.00.');
     expect(describeDeliveryTerms(centro)).toBe('Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00');
     expect(describeDeliveryTerms({ fee: 0, minimumOrder: 0 })).toBe('Envío gratis');
+    // With prices before IVA the order adds IVA to the fee; the minimum is what the customer pays in products.
+    expect(describeDeliveryTerms(centro, false)).toBe('Envío $35.00 más IVA · gratis desde $400.00 · pedido mínimo $150.00');
+    expect(describeDeliveryTerms({ fee: 0, minimumOrder: 0 }, false)).toBe('Envío gratis');
   });
 });

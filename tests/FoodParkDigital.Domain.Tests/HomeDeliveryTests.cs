@@ -53,6 +53,8 @@ public class HomeDeliveryTests
         Assert.Equal("PQ1234-AB", shipment.Folio);
         Assert.Equal("https://paquetenvia.mx/rastreo/PQ1234-AB", shipment.TrackingUrl);
         Assert.Null(CourierShipment.From(DeliveryCourier.Paquetenvia, "PQ1", "  ").TrackingUrl);
+        // The scheme in capitals is kept in lower case, so the check of the database reads it whatever its collation.
+        Assert.Equal("https://paquetenvia.mx/r/PQ1", CourierShipment.From(DeliveryCourier.Paquetenvia, "PQ1", " HTTPS://paquetenvia.mx/r/PQ1 ").TrackingUrl);
     }
 
     [Theory]
@@ -62,6 +64,9 @@ public class HomeDeliveryTests
     [InlineData("PQ1", "javascript:alert(1)", CourierShipment.TrackingUrlMessage)]
     [InlineData("PQ1", "https://usuario:clave@paquetenvia.mx", CourierShipment.TrackingUrlMessage)]
     [InlineData("PQ1", "paquetenvia.mx/rastreo", CourierShipment.TrackingUrlMessage)]
+    // .NET reads «https:\\host» as https, but the database (and a browser) would not: it must say «https://».
+    [InlineData("PQ1", "https:\\\\paquetenvia.mx\\rastreo", CourierShipment.TrackingUrlMessage)]
+    [InlineData("PQ1", "https:/paquetenvia.mx/rastreo", CourierShipment.TrackingUrlMessage)]
     public void Shipment_ShouldSayWhatIsWrong(string folio, string? trackingUrl, string message)
         => Assert.Equal(message,
             Assert.Throws<DomainException>(() => CourierShipment.From(DeliveryCourier.Paquetenvia, folio, trackingUrl)).Message);

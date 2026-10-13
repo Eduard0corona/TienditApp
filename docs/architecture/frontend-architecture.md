@@ -336,7 +336,7 @@ Pedido a domicilio (Fase 22C, [ADR 0018](../adr/0018-home-delivery-orders.md)):
 - **Ticket** (`SaleTicket` y `buildTicketText`): «A domicilio» con la dirección y el código postal, las referencias y el folio de Paquetenvia, y la línea «Envío a domicilio» (o «Gratis») antes de los totales, que el servidor ya calculó con el envío. El nombre de la zona no se imprime.
 - **Zonas de entrega:** la explicación dice si los montos llevan el IVA incluido o si el pedido se lo suma, según la política del negocio.
 - **Escenas:** `GET /delivery-zones` responde vacío por omisión (`mocks/api.mjs`), así que Vender se ve como antes en las demás escenas.
-- **Primera visita:** suma 116 B (de 176,481 a 176,597 B, contra `master` en `0eaa1d1`): los tipos y etiquetas del envío que comparten Pedidos, el ticket y la cocina. El presupuesto (176,700 B) no cambia.
+- **Primera visita:** suma 125 B (de 176,481 a 176,606 B, contra `master` en `0eaa1d1`): los tipos y etiquetas del envío que comparten Pedidos, el ticket y la cocina. El presupuesto (176,700 B) no cambia.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 

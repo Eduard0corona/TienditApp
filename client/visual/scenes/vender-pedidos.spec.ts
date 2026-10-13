@@ -325,7 +325,7 @@ test.describe('A domicilio', () => {
   // Café La Esquina delivers to Roma ($35, from $150, free from $400) and Condesa ($45); two orders of today went out.
   test.use({ extraRoutes: DELIVERY_ROUTES, prepareData: DELIVERY_ORDERS_DATA });
 
-  /** Two chilaquiles and an americano to Roma Norte, as the cashier types the address. */
+  /** Sent to Roma Norte, as the cashier types the address. */
   async function sendToRoma(ticket: Locator) {
     await ticket.getByRole('switch', { name: 'A domicilio' }).check();
     await ticket.getByLabel('Código postal').fill('06700');
@@ -334,8 +334,9 @@ test.describe('A domicilio', () => {
     await expect(ticket.getByText('Roma · Envío $35.00 · gratis desde $400.00 · pedido mínimo $150.00')).toBeVisible();
   }
 
+  /** Two tortas and an americano: $175.00, above the minimum of Roma. */
   async function fillDeliveryTicket(page: Page) {
-    await tapProduct(page, 'Chilaquiles verdes', 2);
+    await tapProduct(page, 'Torta de jamón', 2);
     await tapProduct(page, 'Café americano');
   }
 

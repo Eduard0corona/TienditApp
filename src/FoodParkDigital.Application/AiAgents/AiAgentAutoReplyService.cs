@@ -228,7 +228,16 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
                 return AskForPostalCodeText;
 
             var zone = await DeliveryZoneLookup.FindAsync(_context, tenantId, postalCode, cancellationToken);
-            return zone is null ? NotCoveredText(postalCode) : CoveredText(postalCode, zone);
+            if (zone is null)
+                return NotCoveredText(postalCode);
+
+            // The order charges the fee like the business's prices: with IVA added when they do not include it (ADR 0018).
+            var pricesIncludeTax = await _context.TenantSettings
+                .AsNoTracking()
+                .Where(s => s.TenantId == tenantId)
+                .Select(s => (bool?)s.PricesIncludeTax)
+                .FirstOrDefaultAsync(cancellationToken) ?? true;
+            return CoveredText(postalCode, zone, pricesIncludeTax);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -243,12 +252,16 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
 
     public static string NotCoveredText(string postalCode) => $"Por ahora no llegamos al {postalCode}.";
 
-    /// <summary>«Sí llegamos al 72000: el envío cuesta $35.00. Pedido mínimo de $150.00. Envío gratis en pedidos desde $400.00.»</summary>
-    public static string CoveredText(string postalCode, DeliveryZoneCoverage zone)
+    /// <summary>
+    /// «Sí llegamos al 72000: el envío cuesta $35.00. Pedido mínimo de $150.00. Envío gratis en pedidos desde $400.00.»
+    /// For a business whose prices do not include IVA the fee is «$35.00 más IVA», as the order charges it; the minimum
+    /// and the free delivery are what the customer pays in products.
+    /// </summary>
+    public static string CoveredText(string postalCode, DeliveryZoneCoverage zone, bool pricesIncludeTax = true)
     {
         var text = zone.Fee == 0
             ? $"Sí llegamos al {postalCode}: el envío es gratis."
-            : $"Sí llegamos al {postalCode}: el envío cuesta {OrderStatusLabels.FormatMoney(zone.Fee)}.";
+            : $"Sí llegamos al {postalCode}: el envío cuesta {OrderStatusLabels.FormatMoney(zone.Fee)}{(pricesIncludeTax ? "" : " más IVA")}.";
         if (zone.MinimumOrder > 0)
             text += $" Pedido mínimo de {OrderStatusLabels.FormatMoney(zone.MinimumOrder)}.";
         if (zone.FreeDeliveryFrom is { } freeFrom)

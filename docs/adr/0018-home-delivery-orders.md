@@ -23,17 +23,19 @@ Desde la Fase 22B el negocio sabe a qué códigos postales entrega, cuánto cobr
    - el envío de la zona, o $0 desde su «envío gratis desde».
 
    Después, el pedido ya no toma productos ni se vuelve cuenta. Un pedido a domicilio pagado no se cierra solo: listo en cocina no es entregado; alguien lo marca entregado. No se registra sin conexión: el envío sale de las zonas.
-3. **El envío es un concepto más del pedido, con la política de IVA del pedido.** Entra al desglose como un monto con la tasa por omisión del negocio (`TenantSalesSettings.DefaultTaxRate`), igual que un precio: con IVA incluido si los precios del negocio lo incluyen (lo de omisión desde la Fase 1), y con el IVA sumado si no. Así el negocio escribe el envío como escribe sus precios. **Enmienda el punto 3 del ADR 0017**, que decía que el envío era siempre con IVA incluido: lo sigue siendo para casi todos los negocios, y Configuración › Zonas de entrega dice cuál aplica. El mínimo y el envío gratis se siguen comparando con lo que paga el cliente en productos. El envío queda fijo en el pedido: es lo que el cliente aceptó, aunque la zona cambie después.
+
+   Un pedido a domicilio tomado en Vender no es una venta de mostrador para los avisos por WhatsApp (`OrderNotificationRules`): el cliente lo espera en casa, así que recibe los avisos de su pedido como los de un pedido del menú en línea.
+3. **El envío es un concepto más del pedido, con la política de IVA del pedido.** Entra al desglose como un monto con la tasa por omisión del negocio (`TenantSalesSettings.DefaultTaxRate`), igual que un precio: con IVA incluido si los precios del negocio lo incluyen (lo de omisión desde la Fase 1), y con el IVA sumado si no. Así el negocio escribe el envío como escribe sus precios. **Enmienda el punto 3 del ADR 0017**, que decía que el envío era siempre con IVA incluido: lo sigue siendo para casi todos los negocios, y Configuración › Zonas de entrega dice cuál aplica. Con precios sin IVA, donde se dice el envío se dice «más IVA» (las respuestas automáticas, la cotización del menú en línea y Vender), y el carrito muestra el envío con su IVA para que sus renglones sumen el total. Antes del merge, la consulta 6 de `verify.sql` lista los negocios con zonas activas y precios sin IVA: son los que verán el cambio. El mínimo y el envío gratis se siguen comparando con lo que paga el cliente en productos. El envío queda fijo en el pedido: es lo que el cliente aceptó, aunque la zona cambie después.
 4. **El borrador de CFDI lleva el envío como concepto propio:** «Envío a domicilio», clave 78102203 (servicios de envío) y unidad E48 (unidad de servicio), objeto de impuesto 02. Un aviso pide confirmarlo con el contador. Las sumas del CFDI cuadran con el total del pedido como con los demás conceptos.
 5. **El menú en línea ofrece «A domicilio» cuando el negocio toma pedidos y tiene al menos una zona activa** (`PublicMenuDto.DeliveryAvailable`):
    - el cliente elige «A domicilio» o «Paso por él»; una cocina sin local con zonas solo ofrece domicilio, y el servidor exige la dirección (sin zonas, sus pedidos llegan como antes y el negocio arregla la entrega);
-   - en una mesa (`?mesa=`) no se ofrece: el cliente ya está ahí, y una mesa con dirección se rechaza;
-   - el código postal se cotiza con `GET /public/menu/{slug}/delivery-quote` (anónimo, con el límite del menú): si llega, cuánto cobra, el mínimo y desde cuánto es gratis, **nunca el nombre de la zona**, que puede ser interno;
+   - en una mesa (`?mesa=`) no se ofrece: el cliente ya está ahí, y una mesa con dirección se rechaza. Cualquiera puede escribir una mesa en el enlace, así que solo una mesa activa del negocio libra a una cocina sin local de exigir la dirección (`PublicMenuTables.IsSeatedAsync`, la misma regla que ya decidía si el cliente está sentado);
+   - el código postal se cotiza con `GET /public/menu/{slug}/delivery-quote` (anónimo, con el límite del menú): si llega, cuánto cobra, el mínimo y desde cuánto es gratis, **nunca el nombre de la zona**, que puede ser interno. Contesta también con los pedidos pausados: el cliente puede ver si llegan mientras mira el menú;
    - el total del carrito suma el envío y se manda como `expectedTotal`: si el servidor calcula otro, rechaza el pedido como cuando cambia un precio.
 6. **Vender ofrece «A domicilio» con las zonas activas del negocio** (que puede leer todo el equipo), no en cuentas de mesa, pedidos de plataforma ni servicios. Con el código postal muestra la zona, su envío y su mínimo; el envío entra al total y a la clave de la venta (otra dirección es otra venta). Sin mesa: la dirección dice a dónde va.
 7. **Paquetenvia se anota a mano, por folio.** Quien toma los pedidos (`ManageOrders`) escribe o corrige en Pedidos el folio del viaje y, si lo hay, su enlace (`PUT /orders/{id}/delivery/shipment`):
    - el folio con las reglas del folio de plataformas (sin `#` ni espacios, en mayúsculas);
-   - el enlace solo `https`, hasta 500 caracteres y sin usuario ni contraseña; el cliente solo lo abre si es `https`;
+   - el enlace escrito con `https://` al principio (no `https:/` ni con barras invertidas, que el navegador entendería distinto), hasta 500 caracteres y sin usuario ni contraseña; el cliente solo lo ofrece si empieza con `https://`;
    - no en un pedido cancelado ni en uno que no va a domicilio;
    - el pedido cambia con su viaje, así que su versión detecta una cancelación guardada al mismo tiempo (409);
    - anotar el mismo viaje otra vez no registra nada.
@@ -42,6 +44,7 @@ Desde la Fase 22B el negocio sabe a qué códigos postales entrega, cuánto cobr
 8. **La dirección no sale de donde no hace falta.**
    - La bitácora del pedido creado dice que va a domicilio y cuánto cobró de envío, nunca la dirección; la del viaje guarda repartidor y folio, antes y después, y si hay enlace, nunca el enlace.
    - La cocina ve «A domicilio», sin la dirección.
+   - Un código postal mal escrito se rechaza sin repetirlo en el error, que puede llegar a la bitácora de la API.
    - El ticket sí la lleva, con las referencias y el folio del viaje: va en la bolsa para el repartidor.
 
 ## Consecuencias
@@ -55,6 +58,7 @@ Desde la Fase 22B el negocio sabe a qué códigos postales entrega, cuánto cobr
   - No hay tiempo estimado de entrega, horario por zona, ni seguimiento del repartidor dentro de TienditApp.
   - Paquetenvia se anota a mano; otros repartidores (un repartidor propio, Lalamove) quedan para cuando los pidan.
   - El cliente del menú no guarda sus direcciones para la próxima vez.
+  - Anotar el viaje no avisa en tiempo real: otra pantalla de Pedidos lo ve al refrescarse (como hoy otras correcciones del pedido).
   - La clave del SAT del envío es la más común para cargos de envío; cada negocio debe confirmarla con su contador.
 - **Decisión por omisión:** se tomó sin una preferencia expresa del dueño del producto, con su autorización para decidir. Si se prefiere que el envío sea siempre con IVA incluido aunque los precios no lo incluyan, el cambio está en `Order.Breakdown` y en el cliente (`utils/homeDelivery.ts`); los pedidos ya guardados conservan su envío y su tasa.
 - **Reversibilidad:**

@@ -5,9 +5,12 @@ namespace FoodParkDigital.Domain.Orders;
 
 public static class OrderNotificationRules
 {
-    /// <summary>A sale made at the counter: the customer is there and leaves with the ticket (services excepted).</summary>
-    public static bool IsCounterSale(bool createdByBusiness, OrderChannel channel, OrderType orderType) =>
-        createdByBusiness && channel == OrderChannel.Counter && orderType != OrderType.Service;
+    /// <summary>
+    /// A sale made at the counter: the customer is there and leaves with the ticket (services excepted). An order taken at
+    /// the counter for the customer's address is not one: the customer waits for it at home (Fase 22C).
+    /// </summary>
+    public static bool IsCounterSale(bool createdByBusiness, OrderChannel channel, OrderType orderType, bool homeDelivery = false) =>
+        createdByBusiness && channel == OrderChannel.Counter && orderType != OrderType.Service && !homeDelivery;
 
     /// <summary>
     /// Whether the business's policy sends the customer WhatsApp messages about this order. An order of a delivery
@@ -18,7 +21,8 @@ public static class OrderNotificationRules
         OrderNotificationPolicy policy,
         bool createdByBusiness,
         OrderChannel channel,
-        OrderType orderType)
+        OrderType orderType,
+        bool homeDelivery = false)
     {
         if (OrderChannelRules.IsDeliveryPlatform(channel))
             return false;
@@ -27,7 +31,7 @@ public static class OrderNotificationRules
         {
             OrderNotificationPolicy.Off => false,
             OrderNotificationPolicy.AllOrders => true,
-            _ => !IsCounterSale(createdByBusiness, channel, orderType)
+            _ => !IsCounterSale(createdByBusiness, channel, orderType, homeDelivery)
         };
     }
 }

@@ -104,8 +104,10 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B y 22C, despué
     - La dirección no se valida contra un mapa y el cliente del menú no guarda sus direcciones.
     - No hay tiempo estimado de entrega ni horario por zona.
     - La clave del SAT del envío (78102203) es la más común; cada negocio debe confirmarla con su contador.
+    - Anotar el viaje de Paquetenvia no avisa en tiempo real: otra pantalla de Pedidos lo ve al refrescarse.
+    - Un negocio con precios sin IVA que escribió sus envíos con IVA incluido cobraría el IVA dos veces: la consulta 6 del `verify.sql` los lista antes del merge, y las pantallas y el bot dicen «más IVA».
     - Volver a la versión anterior cobra los pedidos a domicilio por su total, pero no muestra su dirección ni su envío (`deploy-azure.md`); el `rollback.sql` se detiene (50013).
-    - La 22C suma 116 B a la primera visita (de 176,481 a 176,597 B, contra `master` en `0eaa1d1`). El presupuesto no cambia.
+    - La 22C suma 125 B a la primera visita (de 176,481 a 176,606 B, contra `master` en `0eaa1d1`). El presupuesto no cambia.
 - Resuelto en la Fase 22B: el negocio no sabía a dónde entrega ni cuánto cobra por llevar ([ADR 0017](../adr/0017-delivery-zones.md)).
   - Zonas de entrega por código postal, con costo de envío, pedido mínimo y envío gratis desde un monto, en Configuración › Zonas de entrega. Las respuestas automáticas de WhatsApp dicen si llegan a un código postal y cuánto cuesta.
   - Queda:

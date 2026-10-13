@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Events;
+using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Delivery;
@@ -182,6 +183,30 @@ public class HomeDeliveryFlowTests
     }
 
     [Fact]
+    public async Task OrderTakenInVender_ForTheCustomersAddress_ShouldMessageTheCustomer_WhoWaitsAtHome()
+    {
+        var mediator = new RecordingMediator();
+        await using var fixture = SalesTestFixture.Create(mediator);
+        var (tenant, tacos) = await KitchenAsync(fixture);
+        var whatsApp = new RecordingWhatsApp();
+        var notifications = new OrderCustomerNotifications(fixture.Context, whatsApp, NullLogger<OrderCustomerNotifications>.Instance);
+        var context = OutboxContext(tenant.Id);
+
+        // With the policy of omission (remote orders and services), a sale at the counter leaves with its ticket...
+        var counter = await SellAsync(fixture, Delivery(tacos, 2) with { Delivery = null });
+        Assert.True(counter.IsSuccess, counter.Error);
+        await notifications.HandleAsync(Assert.Single(mediator.Published.OfType<OrderCreatedEvent>()), context, CancellationToken.None);
+        Assert.Empty(whatsApp.Templates);
+
+        // ...while the customer of an order sent to their address hears of it, like one of the online menu.
+        mediator.Published.Clear();
+        var sale = await SellAsync(fixture, Delivery(tacos, 2));
+        Assert.True(sale.IsSuccess, sale.Error);
+        await notifications.HandleAsync(Assert.Single(mediator.Published.OfType<OrderCreatedEvent>()), context, CancellationToken.None);
+        Assert.Equal(["order_confirmed"], whatsApp.Templates);
+    }
+
+    [Fact]
     public async Task CfdiDraft_ShouldInvoiceTheFee_AsItsOwnConcept_ThatAddsUpToTheOrder()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -205,6 +230,39 @@ public class HomeDeliveryFlowTests
         Assert.Equal(35m, fee.Amount + fee.Transfer.Amount);
         Assert.Contains(GetOrderCfdiDraftQueryHandler.DeliveryFeeWarning, draft.Value.Warnings);
         Assert.Single(draft.Value.Concepts, concept => !concept.IsDeliveryFee);
+    }
+
+    [Fact]
+    public async Task CfdiDraft_OfPricesBeforeIva_ShouldInvoiceTheFeeAtItsRate_BesideAnExemptProduct()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        // Prices before IVA, tortillas exempt and tacos at 16 %: the fee goes at the business's 16 %.
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: false, slug: "demo");
+        tenant.SetBusinessInfo(
+            "EKU9003173C9", "ESCUELA KEMPER URGATE", "Comercio", "626 - Régimen Simplificado de Confianza (RESICO)",
+            new Address("Reforma", "1", null, "Centro", "06000", "Cuauhtémoc", "Ciudad de México"));
+        await fixture.Context.SaveChangesAsync();
+        var tacos = await fixture.AddProductAsync(tenant, "Orden de tacos", 120m);
+        var tortillas = await fixture.AddProductAsync(tenant, "Tortillas", 25m, isTaxExempt: true);
+        await AddZoneAsync(fixture, "Centro", 35m, 150m, null, "72000");
+        var sale = await SellAsync(fixture, new CreateOrderCommand
+        {
+            CustomerName = "Ana",
+            Items = [new CreateOrderItemDto { ProductId = tacos.Id, Quantity = 2 }, new CreateOrderItemDto { ProductId = tortillas.Id, Quantity = 1 }],
+            Delivery = new OrderDeliveryInput { PostalCode = "72000", AddressLine = Address }
+        });
+        Assert.True(sale.IsSuccess, sale.Error);
+        // $240 + $35 at 16 % and $25 exempt: 275 × 1.16 + 25.
+        Assert.Equal(344m, sale.Value.Total);
+
+        var draft = await new GetOrderCfdiDraftQueryHandler(fixture.Context)
+            .Handle(new GetOrderCfdiDraftQuery { OrderId = sale.Value.Id }, CancellationToken.None);
+
+        Assert.True(draft.IsSuccess, draft.Error);
+        Assert.Equal((344m, 0m, 44m), (draft.Value.Total, draft.Value.Difference, draft.Value.TotalTransferred));
+        var fee = Assert.Single(draft.Value.Concepts, concept => concept.IsDeliveryFee);
+        Assert.Equal((35m, 0.160000m, 5.60m), (fee.Amount, fee.Transfer!.RateOrQuota, fee.Transfer.Amount));
+        Assert.Equal("Exento", Assert.Single(draft.Value.Concepts, concept => concept.Description == "Tortillas").Transfer!.FactorType);
     }
 
     [Fact]
@@ -306,6 +364,9 @@ public class HomeDeliveryFlowTests
 
         Assert.Equal(PlacePublicOrderCommandHandler.DeliveryRequiredMessage, withoutAddress.Error);
         Assert.True(toTheAddress.IsSuccess, toTheAddress.Error);
+        // Anyone can type a table into the link: only one of the business in use counts as a customer already there.
+        var madeUpTable = await PlaceAsync(fixture, pickup with { TableLabel = "Mesa 9" });
+        Assert.Equal(PlacePublicOrderCommandHandler.DeliveryRequiredMessage, madeUpTable.Error);
     }
 
     [Fact]
@@ -489,5 +550,20 @@ public class HomeDeliveryFlowTests
         public Task<object?> Send(object request, CancellationToken ct = default) => throw new NotSupportedException();
         public IAsyncEnumerable<TResponse> CreateStream<TResponse>(IStreamRequest<TResponse> request, CancellationToken ct = default) => throw new NotSupportedException();
         public IAsyncEnumerable<object?> CreateStream(object request, CancellationToken ct = default) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingWhatsApp : IWhatsAppService
+    {
+        public List<string> Templates { get; } = [];
+
+        public Task<MessageSendResult> SendTemplateMessageAsync(
+            Guid tenantId, string phoneNumber, string templateName, string languageCode, string[] parameters, CancellationToken cancellationToken = default)
+        {
+            Templates.Add(templateName);
+            return Task.FromResult(MessageSendResult.Sent($"wamid.{Templates.Count}"));
+        }
+
+        public Task<MessageSendResult> SendTextMessageAsync(Guid tenantId, string phoneNumber, string message, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException("Order notices are templates.");
     }
 }

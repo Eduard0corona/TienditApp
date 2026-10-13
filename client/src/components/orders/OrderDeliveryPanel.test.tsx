@@ -108,8 +108,10 @@ describe('OrderDeliveryPanel', () => {
     rerender(<OrderDeliveryPanel order={{ ...shipped, status: OrderStatus.Cancelled }} canManage onSaved={vi.fn()} />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
 
-    // A link that is not https is never offered.
+    // A link that is not written with https:// is never offered.
     rerender(<OrderDeliveryPanel order={order({ ...shipped.delivery, trackingUrl: 'javascript:alert(1)' })} canManage onSaved={vi.fn()} />);
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    rerender(<OrderDeliveryPanel order={order({ ...shipped.delivery, trackingUrl: 'https:\\\\paquetenvia.mx\\r' })} canManage onSaved={vi.fn()} />);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

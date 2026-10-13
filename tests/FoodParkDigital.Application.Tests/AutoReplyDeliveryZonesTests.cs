@@ -51,6 +51,23 @@ public class AutoReplyDeliveryZonesTests
     }
 
     [Fact]
+    public async Task BusinessWithPricesBeforeIva_ShouldSayTheFeeIsPlusIva_AsTheOrderChargesIt()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var tenant = await BusinessAsync(fixture, pricesIncludeTax: false);
+        await AddZoneAsync(fixture, tenant, "Centro", 35m, 150m, 400m, isActive: true, "72000");
+        await AddZoneAsync(fixture, tenant, "Norte", 0m, 0m, null, isActive: true, "72100");
+
+        var paid = await Replies(fixture).BuildReplyAsync(tenant.Id, "¿Envían al 72000?", null);
+        var free = await Replies(fixture).BuildReplyAsync(tenant.Id, "¿Envían al 72100?", null);
+
+        // The minimum and the free delivery are what the customer pays in products: only the fee gets «más IVA».
+        Assert.StartsWith(
+            "Sí llegamos al 72000: el envío cuesta $35.00 más IVA. Pedido mínimo de $150.00. Envío gratis en pedidos desde $400.00.", paid);
+        Assert.StartsWith("Sí llegamos al 72100: el envío es gratis.", free);
+    }
+
+    [Fact]
     public async Task FreeDelivery_AndAZoneWithoutMinimum_ShouldSaySoAndNoMore()
     {
         await using var fixture = SalesTestFixture.Create();
@@ -216,11 +233,14 @@ public class AutoReplyDeliveryZonesTests
         await fixture.Context.SaveChangesAsync();
     }
 
-    /// <summary>A business with its online menu taking orders and an active agent with a description.</summary>
+    /// <summary>
+    /// A business with its online menu taking orders and an active agent with a description; its prices include IVA, as a
+    /// new business's do.
+    /// </summary>
     private static async Task<Tenant> BusinessAsync(
-        SalesTestFixture fixture, OpeningHours? weekly = null, string slug = "demo", string? products = null)
+        SalesTestFixture fixture, OpeningHours? weekly = null, string slug = "demo", string? products = null, bool pricesIncludeTax = true)
     {
-        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: slug);
+        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: pricesIncludeTax, slug: slug);
         var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
         settings.UpdateOnlineMenu(OnlineMenuMode.Orders);
         settings.SetOpeningHours(weekly);

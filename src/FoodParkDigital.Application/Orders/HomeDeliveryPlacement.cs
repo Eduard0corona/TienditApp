@@ -28,7 +28,8 @@ public class OrderDeliveryInputValidator : AbstractValidator<OrderDeliveryInput>
     public OrderDeliveryInputValidator()
     {
         RuleFor(x => x.PostalCode).Cascade(CascadeMode.Stop).NotEmpty().WithMessage(DeliveryAddress.PostalCodeRequiredMessage)
-            .MaximumLength(MaxPostalCodeLength).WithMessage("«{PropertyValue}» no es un código postal: lleva 5 dígitos.");
+            // Without what was written: a validation message reaches the log.
+            .MaximumLength(MaxPostalCodeLength).WithMessage("El código postal lleva 5 dígitos.");
         RuleFor(x => x.AddressLine).Cascade(CascadeMode.Stop).NotEmpty().WithMessage(DeliveryAddress.AddressLineRequiredMessage)
             .Must(line => line.Trim().Length <= DeliveryAddress.MaxAddressLineLength).WithMessage(DeliveryAddress.AddressLineTooLongMessage);
         RuleFor(x => x.References)

@@ -18,13 +18,17 @@ interface DeliveryOrderFieldsProps {
   disabled: boolean;
   /** An order sent to an address is registered with connection only (its fee comes from the zones). */
   online: boolean;
+  /** The fee goes like the prices of the business: «más IVA» when they do not include it. */
+  pricesIncludeTax: boolean;
 }
 
 /**
  * Vender's switch for an order that goes to the customer's address (Fase 22C), with the postal code its zone is found
  * by, the address and references. The zone's fee and minimum show as typed; the server charges them.
  */
-export default function DeliveryOrderFields({ delivery, onChange, zone, problem, disabled, online }: DeliveryOrderFieldsProps) {
+export default function DeliveryOrderFields({
+  delivery, onChange, zone, problem, disabled, online, pricesIncludeTax,
+}: DeliveryOrderFieldsProps) {
   // The ticket shows twice (beside the catalog, and in the sheet of a phone): each copy names its own fields.
   const id = useId();
   const update = (changes: Partial<SaleDelivery>) => onChange({ ...(delivery ?? NO_DELIVERY_ADDRESS), ...changes });
@@ -89,7 +93,7 @@ export default function DeliveryOrderFields({ delivery, onChange, zone, problem,
             </div>
             <div id={`${id}-zone`} className="col-12 small" role="status">
               {problem ? <span className="text-danger">{problem}</span>
-                : zone ? <span className="text-muted">{zone.name} · {describeDeliveryTerms(zone)}</span>
+                : zone ? <span className="text-muted">{zone.name} · {describeDeliveryTerms(zone, pricesIncludeTax)}</span>
                 : <span className="text-muted">El código postal dice qué zona lo lleva y cuánto cobra.</span>}
             </div>
           </div>

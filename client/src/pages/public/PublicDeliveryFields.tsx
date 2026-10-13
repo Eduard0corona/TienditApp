@@ -25,6 +25,8 @@ interface PublicDeliveryFieldsProps {
   checking: boolean;
   /** Why the order cannot go there yet (not covered, below the minimum, not a postal code), or ''. */
   problem: string;
+  /** The fee goes like the prices of the business: «más IVA» when they do not include it. */
+  pricesIncludeTax: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ interface PublicDeliveryFieldsProps {
  * zones are checked by, or picked up. What the delivery costs is the server's answer for that postal code.
  */
 export default function PublicDeliveryFields({
-  required, toAddress, onToAddressChange, address, onAddressChange, terms, checking, problem,
+  required, toAddress, onToAddressChange, address, onAddressChange, terms, checking, problem, pricesIncludeTax,
 }: PublicDeliveryFieldsProps) {
   const id = useId();
   const delivering = required || toAddress;
@@ -106,7 +108,7 @@ export default function PublicDeliveryFields({
           <div id={`${id}-quote`} className="col-12 small" role="status">
             {checking ? <span className="text-muted">Revisando si llegamos…</span>
               : problem ? <span className="text-danger">{problem}</span>
-              : terms ? <span className="text-muted">{describeDeliveryTerms(terms)}</span>
+              : terms ? <span className="text-muted">{describeDeliveryTerms(terms, pricesIncludeTax)}</span>
               : <span className="text-muted">Escribe tu código postal para ver el envío.</span>}
           </div>
         </div>

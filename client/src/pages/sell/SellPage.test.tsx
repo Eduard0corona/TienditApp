@@ -1127,5 +1127,30 @@ describe('SellPage with a platform order and no connection', () => {
       await userEvent.click(await screen.findByRole('button', { name: /^Agregar Taco/ }));
       expect(ticket().queryByRole('switch', { name: 'A domicilio' })).not.toBeInTheDocument();
     });
+
+    it('keeps a delivery brought back with the sale while the zones cannot be read, and says why instead of sending it', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash']);
+      const delivery = { postalCode: '72000', addressLine: 'Av. Reforma 123, Centro', references: '' };
+      window.localStorage.setItem(draftKey, JSON.stringify({
+        lines: [{ productId: 'taco', quantity: 2, notes: '' }],
+        customerName: '', customerPhone: '', tableNumber: '', orderNotes: '',
+        channel: OrderChannel.Counter, externalOrderNumber: '', collectedBy: PlatformCollectedBy.Platform, delivery,
+      }));
+      vi.mocked(apiRequest).mockImplementation(((_method: string, path: string) => (path === '/api/v1/delivery-zones'
+        ? Promise.reject(new AxiosError('Request failed', 'ERR_BAD_RESPONSE'))
+        : Promise.resolve(path === '/api/v1/delivery-platforms/channels' ? [] : undefined))) as unknown as typeof apiRequest);
+      renderAt('/sell');
+
+      const zonesError = 'No se pudieron leer tus zonas de entrega: intenta de nuevo o quita «A domicilio».';
+      expect(await ticket().findByText(zonesError)).toBeInTheDocument();
+      // The address is still there, with its switch, so the cashier can take it off or try again.
+      expect(ticket().getByRole('switch', { name: 'A domicilio' })).toBeChecked();
+      expect(ticket().getByLabelText('Dirección')).toHaveValue('Av. Reforma 123, Centro');
+
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+      expect(ordersApi.create).not.toHaveBeenCalled();
+      expect(ticket().getByText(zonesError, { selector: '.alert' })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').delivery).toEqual(delivery);
+    });
   });
 });

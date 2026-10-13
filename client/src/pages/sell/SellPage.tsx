@@ -36,6 +36,7 @@ import { getChannelLabel } from '../../utils/labels';
 import { formatMoney } from '../../utils/money';
 import {
   ADDRESS_LINE_REQUIRED_MESSAGE,
+  DELIVERY_ONLY_PRODUCTS_MESSAGE,
   belowMinimumMessage,
   estimateDeliveryTotals,
   findDeliveryZone,
@@ -324,11 +325,14 @@ export default function SellPage() {
   const itemCount = cart.reduce((sum, line) => sum + (line.fractional ? 1 : line.quantity), 0);
   const hasServices = cart.some((line) => line.isService);
 
-  // To the customer's address (Fase 22C): with the active zones of the business, never for a tab, a platform or services.
+  // To the customer's address (Fase 22C): with the active zones of the business, never for a tab or a platform's order.
   const zones = useDeliveryZones(access.sell && !tabTarget);
   const activeZones = useMemo(() => (zones.data ?? []).filter((zone) => zone.isActive), [zones.data]);
-  const deliveryOffered = !tabTarget && !platform && !hasServices && activeZones.length > 0;
-  const delivery = deliveryOffered ? details.delivery : null;
+  const deliveryPossible = !tabTarget && !platform;
+  // A delivery typed (or brought back with the sale) stays on screen while the zones load, fail or were turned off, or
+  // with services in the ticket: it says why instead of sending the sale without its address.
+  const delivery = deliveryPossible ? details.delivery : null;
+  const deliveryOffered = deliveryPossible && ((!hasServices && activeZones.length > 0) || delivery !== null);
   const deliveryZone = delivery ? findDeliveryZone(activeZones, delivery.postalCode) : null;
 
   const totals = useMemo(() => {
@@ -344,15 +348,24 @@ export default function SellPage() {
   }, [cart, pricesIncludeTax, deliveryZone, defaultTaxRate]);
   // Quick feedback only: the server finds the zone, checks its minimum and charges its fee.
   const deliveryPostalCode = delivery ? normalizePostalCode(delivery.postalCode) : '';
+  const zonesProblem = !delivery ? ''
+    : hasServices ? DELIVERY_ONLY_PRODUCTS_MESSAGE
+    : zones.isPending ? 'Cargando tus zonas de entrega…'
+    : activeZones.length === 0
+      ? zones.isError
+        ? 'No se pudieron leer tus zonas de entrega: intenta de nuevo o quita «A domicilio».'
+        : 'Ninguna zona de entrega está activa: quita «A domicilio» o activa una en Configuración › Zonas de entrega.'
+      : '';
   const deliveryProblem = !delivery ? ''
+    : zonesProblem ? zonesProblem
     : !isPostalCode(deliveryPostalCode) ? 'Escribe el código postal de la entrega (5 dígitos).'
     : !deliveryZone ? notCoveredMessage(deliveryPostalCode)
     : totals.productsTotal !== null && !meetsMinimum(deliveryZone, totals.productsTotal)
       ? belowMinimumMessage(deliveryPostalCode, deliveryZone.minimumOrder)
       : !delivery.addressLine.trim() ? ADDRESS_LINE_REQUIRED_MESSAGE
       : '';
-  // Said once the cashier wrote a whole postal code, not while typing it.
-  const deliveryHint = delivery && isPostalCode(deliveryPostalCode) ? deliveryProblem : '';
+  // Said once the cashier wrote a whole postal code, not while typing it (what is wrong with the zones, right away).
+  const deliveryHint = delivery && (zonesProblem || isPostalCode(deliveryPostalCode)) ? deliveryProblem : '';
   // An order of a platform never sends the phone: what is in the hidden field does not stop it.
   const phoneError = !platform && details.customerPhone.trim() && !isPlausiblePhone(details.customerPhone)
     ? 'Revisa el teléfono: 10 dígitos o el número con lada internacional (+52…).'

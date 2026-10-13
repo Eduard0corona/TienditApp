@@ -542,16 +542,20 @@ export default function PublicMenuPage() {
                 terms={terms}
                 checking={checkingQuote}
                 problem={deliveryProblem}
+                pricesIncludeTax={data.pricesIncludeTax}
               />
             )}
-            {totals.fee !== null && (
+            {totals.fee !== null && totals.productsTotal !== null && (
               <>
+                {/* What the customer pays for each, with IVA, so the two add up to the total. */}
                 <div className="d-flex justify-content-between small">
-                  <span>Productos</span><span className="ta-money">{formatMoney(totals.productsTotal ?? 0)}</span>
+                  <span>Productos</span><span className="ta-money">{formatMoney(totals.productsTotal)}</span>
                 </div>
                 <div className="d-flex justify-content-between small">
                   <span>Envío a domicilio</span>
-                  <span className="ta-money">{totals.fee > 0 ? formatMoney(totals.fee) : 'Gratis'}</span>
+                  <span className="ta-money">
+                    {totals.fee > 0 ? formatMoney(Math.round((totals.total - totals.productsTotal) * 100) / 100) : 'Gratis'}
+                  </span>
                 </div>
               </>
             )}

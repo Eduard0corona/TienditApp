@@ -553,10 +553,12 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
 
         // A kitchen without premises that delivers has nowhere to pick an order up: it goes to an address, or to a table
-        // of the business (Fase 22C). Without delivery zones, orders arrive as before and the business arranges it.
-        if (request.Delivery is null && string.IsNullOrWhiteSpace(request.TableLabel)
+        // of the business in use (anyone can type a table into the link). Without delivery zones, orders arrive as before
+        // and the business arranges it (Fase 22C).
+        if (request.Delivery is null
             && await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
-            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken))
+            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken)
+            && !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken))
             return Result.Failure<PublicOrderReceiptDto>(DeliveryRequiredMessage);
 
         // Until the business confirms or cancels them, a phone cannot keep piling up orders.

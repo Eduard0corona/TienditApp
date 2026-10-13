@@ -488,6 +488,22 @@ describe('PublicMenuPage', () => {
       expect(api.placeOrder).not.toHaveBeenCalled();
     });
 
+    it('adds the IVA of the fee for a business whose prices do not include it, and the rows add up', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true, pricesIncludeTax: false }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => quoted(postalCode));
+
+      renderPage();
+      const cart = await openCart();
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+      await userEvent.type(within(cart).getByLabelText('Código postal'), '72000');
+
+      expect(await within(cart).findByText('Envío $35.00 más IVA · gratis desde $400.00 · pedido mínimo $100.00')).toBeInTheDocument();
+      // $110 + 16 % = $127.60 in products and $35 + 16 % = $40.60 of delivery: $168.20.
+      expect(within(cart).getByText('Productos').nextSibling).toHaveTextContent('$127.60');
+      expect(within(cart).getByText('Envío a domicilio').nextSibling).toHaveTextContent('$40.60');
+      expect(within(cart).getByRole('button', { name: /^Enviar pedido/ })).toHaveTextContent('$168.20');
+    });
+
     it('offers no delivery at a table', async () => {
       api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
 
