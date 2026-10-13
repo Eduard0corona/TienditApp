@@ -16,6 +16,12 @@ public static partial class SatCatalog
     public const string GeneralPublicUse = "S01";
     /// <summary>"Sin obligaciones fiscales": the regime of the general public receptor.</summary>
     public const string GeneralPublicRegime = "616";
+    /// <summary>
+    /// ClaveProdServ of the delivery fee of an order sent to the customer's address ("Servicios de envío, recogida o
+    /// entrega"), with ClaveUnidad E48 (unidad de servicio). To be confirmed with the accountant of each business.
+    /// </summary>
+    public const string DeliveryFeeProductCode = "78102203";
+    public const string ServiceUnitCode = "E48";
 
     /// <summary>c_RegimenFiscal codes accepted for issuers and receivers.</summary>
     public static readonly IReadOnlySet<string> FiscalRegimes = new HashSet<string>

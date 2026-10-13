@@ -7,12 +7,15 @@ using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.Customers.Services;
+using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Orders.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Audit.Entities;
+using FoodParkDigital.Domain.Branches.Enums;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Dining.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
@@ -124,6 +127,12 @@ public class PublicMenuDto
     /// never published.
     /// </summary>
     public bool DeliveryOnly { get; set; }
+    /// <summary>
+    /// The menu takes orders to an address (Fase 22C): it takes orders and the business has an active delivery zone. The
+    /// customer writes a postal code (GetPublicDeliveryQuoteQuery says whether it is reached and what it costs). Without a
+    /// premises (<see cref="DeliveryOnly"/>) it is the only way to order, except from a table.
+    /// </summary>
+    public bool DeliveryAvailable { get; set; }
     /// <summary>
     /// Its hours and whether it is open now. Null when the business has no hours and no special day today or in the
     /// next 31 days.
@@ -381,6 +390,7 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
             Theme = settings.Theme,
             Address = AddressText.ForCustomers(mainBranch),
             DeliveryOnly = mainBranch is { KeepsAddressPrivate: true },
+            DeliveryAvailable = ordersOn && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken),
             OpeningHours = hours is null ? null : PublicOpeningHoursDto.From(hours, seatedOverride: acceptsOrders && closed),
             Categories = categories
                 .Where(c => byCategory.ContainsKey(c.Id))
@@ -427,6 +437,8 @@ public class PublicOrderReceiptDto
 {
     public string OrderNumber { get; set; } = null!;
     public decimal Total { get; set; }
+    /// <summary>What the delivery charged, inside <see cref="Total"/>; null for an order picked up or served.</summary>
+    public decimal? DeliveryFee { get; set; }
     /// <summary>True when the business accepts online orders without confirming each one.</summary>
     public bool Confirmed { get; set; }
     public string BusinessName { get; set; } = null!;
@@ -446,6 +458,11 @@ public record PlacePublicOrderCommand : IRequest<Result<PublicOrderReceiptDto>>,
     public List<CreateOrderItemDto> Items { get; init; } = new();
     /// <summary>Total the customer saw; the order is rejected if a price changed meanwhile.</summary>
     public decimal? ExpectedTotal { get; init; }
+    /// <summary>
+    /// Where the order goes (Fase 22C): a zone of the business must reach the postal code and the products its minimum;
+    /// its fee is in the total. Never with a table.
+    /// </summary>
+    public OrderDeliveryInput? Delivery { get; init; }
 }
 
 public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrderCommand>
@@ -466,6 +483,11 @@ public class PlacePublicOrderCommandValidator : AbstractValidator<PlacePublicOrd
         RuleForEach(x => x.Items).SetValidator(new CreateOrderItemDtoValidator());
         RuleFor(x => x.ExpectedTotal).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, ignoreTrailingZeros: true)
             .When(x => x.ExpectedTotal.HasValue);
+        When(x => x.Delivery is not null, () =>
+        {
+            RuleFor(x => x.Delivery!).SetValidator(new OrderDeliveryInputValidator());
+            RuleFor(x => x.TableLabel).Empty().WithMessage(PlacePublicOrderCommandHandler.TableNotDeliveredMessage);
+        });
     }
 }
 
@@ -474,6 +496,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
     /// <summary>Orders a phone may leave waiting for the business to confirm them (spam guard).</summary>
     public const int MaxPendingPerPhone = 3;
     public const string OrdersPausedMessage = "Por ahora este negocio no está recibiendo pedidos en línea. Intenta más tarde.";
+    public const string TableNotDeliveredMessage = "Un pedido para tu mesa no se manda a domicilio.";
+    public const string DeliveryRequiredMessage = "Este negocio solo entrega a domicilio: escribe a dónde te lo llevamos.";
 
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
@@ -528,6 +552,13 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         if (!await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken))
             return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
 
+        // A kitchen without premises that delivers has nowhere to pick an order up: it goes to an address, or to a table
+        // of the business (Fase 22C). Without delivery zones, orders arrive as before and the business arranges it.
+        if (request.Delivery is null && string.IsNullOrWhiteSpace(request.TableLabel)
+            && await _context.Branches.AnyAsync(b => b.Id == branchId && b.ServiceMode == BranchServiceMode.DeliveryOnly, cancellationToken)
+            && await DeliveryZoneLookup.AnyActiveAsync(_context, tenant.Id, cancellationToken))
+            return Result.Failure<PublicOrderReceiptDto>(DeliveryRequiredMessage);
+
         // Until the business confirms or cancels them, a phone cannot keep piling up orders.
         var waiting = await _context.Orders.CountAsync(o => o.Channel == OrderChannel.Online
             && o.CustomerPhone == phone
@@ -570,6 +601,15 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             order.AddItem(built.Value.Line);
         }
 
+        // To the customer's address: the zone's minimum and fee, on the products, before the total is compared.
+        if (request.Delivery is not null)
+        {
+            var deliveryError = await HomeDeliveryPlacement.ArrangeAsync(
+                _context, order, request.Delivery, settings.DefaultTaxRate, cancellationToken);
+            if (deliveryError is not null)
+                return Result.Failure<PublicOrderReceiptDto>(deliveryError);
+        }
+
         if (request.ExpectedTotal.HasValue && request.ExpectedTotal.Value != order.Total)
         {
             return Result.Failure<PublicOrderReceiptDto>(
@@ -599,6 +639,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         {
             OrderNumber = order.OrderNumber,
             Total = order.Total,
+            DeliveryFee = order.Delivery?.Fee,
             Confirmed = accepted,
             BusinessName = tenant.Name,
             ContactPhone = tenant.ContactPhone

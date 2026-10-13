@@ -12,6 +12,7 @@ using FoodParkDigital.Domain.Exceptions;
 using FoodParkDigital.Domain.Orders;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
+using FoodParkDigital.Domain.Orders.HomeDelivery;
 using FoodParkDigital.Domain.Orders.Platforms;
 using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -84,6 +85,11 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     public Guid? IdempotencyKey { get; init; }
     /// <summary>When the device captured the sale without connection: at most 7 days ago, and 5 minutes ahead for clock drift.</summary>
     public DateTimeOffset? CapturedOfflineAt { get; init; }
+    /// <summary>
+    /// The order goes to the customer's address (Fase 22C): a zone of the business must reach the postal code and the
+    /// products its minimum; what the zone charges is added to the total. Not for platforms, tabs, tables or services.
+    /// </summary>
+    public OrderDeliveryInput? Delivery { get; init; }
 }
 
 public record CreateOrderPaymentDto
@@ -166,6 +172,8 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
     public const string PlatformAlreadyChargedMessage = "La plataforma ya cobró este pedido: no registres pagos.";
     public const string PlatformFieldsOnlyForPlatformsMessage =
         "El folio de la app y quién cobró solo van en pedidos de Rappi, Uber Eats o DiDi Food.";
+    public const string DeliveryNoTableMessage = "Un pedido a domicilio no lleva mesa: la dirección dice a dónde va.";
+    public const string DeliveryWithConnectionMessage = "Un pedido a domicilio se registra con conexión: su envío sale de las zonas.";
 
     public CreateOrderCommandValidator()
     {
@@ -270,6 +278,20 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
                 .WithMessage(PlatformAlreadyChargedMessage);
             RuleForEach(x => x.Payments).ChildRules(payment =>
                 payment.RuleFor(p => p.Tip).Must(tip => tip <= 0).WithMessage(PlatformOrderRules.NoTipMessage));
+        });
+        // Home delivery (Fase 22C): products the business sends to an address, never a tab, a table or a service, and never
+        // an order of a platform, whose courier takes it.
+        When(x => x.Delivery is not null, () =>
+        {
+            RuleFor(x => x.Delivery!).SetValidator(new OrderDeliveryInputValidator());
+            RuleFor(x => x.Channel).Must(channel => !OrderChannelRules.IsDeliveryPlatform(channel))
+                .WithMessage(HomeDeliveryRules.NotForPlatformsMessage);
+            RuleFor(x => x.OpenTab).Equal(false).WithMessage(HomeDeliveryRules.NotForTabsMessage);
+            RuleFor(x => x.DiningTableId).Null().WithMessage(HomeDeliveryRules.NotForTabsMessage);
+            RuleFor(x => x.TableNumber).Empty().WithMessage(DeliveryNoTableMessage);
+            RuleFor(x => x.OrderType).Equal(OrderType.Retail).WithMessage(HomeDeliveryRules.OnlyProductsMessage);
+            RuleFor(x => x.ServiceDetail).Null().WithMessage(HomeDeliveryRules.OnlyProductsMessage);
+            RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(DeliveryWithConnectionMessage);
         });
         When(x => !OrderChannelRules.IsDeliveryPlatform(x.Channel), () =>
         {
@@ -494,6 +516,15 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
             quantitiesByProduct.Keys.ToHashSet());
         if (piecesError is not null)
             return Result.Failure<OrderDto>(piecesError);
+
+        // 8b. To the customer's address: the zone's minimum and fee, on the products, before any status or payment.
+        if (request.Delivery is not null)
+        {
+            var deliveryError = await HomeDeliveryPlacement.ArrangeAsync(
+                _context, order, request.Delivery, salesSettings.DefaultTaxRate, cancellationToken);
+            if (deliveryError is not null)
+                return Result.Failure<OrderDto>(deliveryError);
+        }
 
         // 9. The status the team starts it with.
         if (request.CreatedByBusiness)

@@ -546,7 +546,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         AddDomainEvent(new OrderCreatedEvent(
             Id, TenantId, OrderNumber, BusinessType, Total, Status, Channel,
-            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy));
+            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee));
     }
 
     public void LinkToCustomerUser(Guid userId)
@@ -668,7 +668,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         if (Status == OrderStatus.Cancelled)
             throw new DomainException(HomeDeliveryRules.CancelledMessage);
 
-        return Delivery.RegisterShipment(shipment, registeredAt, registeredBy);
+        if (!Delivery.RegisterShipment(shipment, registeredAt, registeredBy))
+            return false;
+
+        // The order changes with its trip, so its version catches a cancellation saved meanwhile.
+        UpdatedAt = registeredAt;
+        return true;
     }
 
     public OrderPayment RegisterPayment(

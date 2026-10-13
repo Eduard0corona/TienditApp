@@ -63,6 +63,11 @@ public class GetOrderCfdiDraftQueryValidator : AbstractValidator<GetOrderCfdiDra
 
 public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQuery, Result<CfdiDraftDto>>
 {
+    public const string DeliveryFeeDescription = "Envío a domicilio";
+    public const string DeliveryFeeWarning =
+        "El envío a domicilio va como concepto propio con la clave 78102203 (servicios de envío) y la unidad E48: "
+        + "confirma con tu contador que es la clave que te corresponde.";
+
     private readonly IApplicationDbContext _context;
 
     public GetOrderCfdiDraftQueryHandler(IApplicationDbContext context)
@@ -91,11 +96,16 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .FirstOrDefaultAsync(t => t.Id == order.TenantId, cancellationToken)
             ?? throw new EntityNotFoundException("Tenant", order.TenantId);
 
-        // What the sale charged: dishes cancelled from a tab are not invoiced.
+        // What the sale charged: dishes cancelled from a tab are not invoiced. The delivery fee is one more concept, with
+        // the rate it was charged with.
         var items = order.Items.Where(item => item.ActiveQuantity > 0).ToList();
-        var amounts = CfdiAmountCalculator.Calculate(
-            order.PricesIncludeTax,
-            items.Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject)).ToList());
+        var lines = items
+            .Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject))
+            .ToList();
+        var deliveryFee = order.Delivery is { Fee: > 0 } delivery ? delivery : null;
+        if (deliveryFee is not null)
+            lines.Add(new CfdiLineInput(deliveryFee.Id, 1m, deliveryFee.Fee, deliveryFee.FeeVatRate, CfdiTaxObject.Subject));
+        var amounts = CfdiAmountCalculator.Calculate(order.PricesIncludeTax, lines);
         var amountsByLine = amounts.Concepts.ToDictionary(concept => concept.LineId);
 
         var draft = new CfdiDraftDto
@@ -126,6 +136,24 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             }).ToList(),
             Transfers = amounts.Transfers.Select(ToDto).ToList()
         };
+        if (deliveryFee is not null)
+        {
+            var concept = amountsByLine[deliveryFee.Id];
+            draft.Concepts.Add(new CfdiConceptDto
+            {
+                OrderItemId = deliveryFee.Id,
+                IsDeliveryFee = true,
+                ProductCode = SatCatalog.DeliveryFeeProductCode,
+                UnitCode = SatCatalog.ServiceUnitCode,
+                Description = DeliveryFeeDescription,
+                Quantity = concept.Quantity,
+                UnitValue = concept.UnitValue,
+                Amount = concept.Amount,
+                TaxObject = SatCatalog.Code(concept.TaxObject),
+                Transfer = concept.Transfer is null ? null : ToDto(concept.Transfer)
+            });
+            draft.Warnings.Add(DeliveryFeeWarning);
+        }
 
         SetIssuer(draft, tenant.Rfc, tenant.LegalName, tenant.TaxRegime, tenant.Address?.ZipCode);
         SetReceiver(draft, request.Receiver);

@@ -4,6 +4,7 @@ using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Domain.Orders.Enums;
 using FoodParkDigital.Domain.Orders.HomeDelivery;
+using FoodParkDigital.Domain.Orders.StateMachines;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -92,6 +93,31 @@ public class OrderDeliveriesSqlServerTests
         var delivery = await check.OrderDeliveries.SingleAsync();
         Assert.Equal((DeliveryCourier.Paquetenvia, "PQ1234", "https://paquetenvia.mx/rastreo/PQ1234", "caja", Now),
             (delivery.Courier, delivery.CourierFolio, delivery.TrackingUrl, delivery.ShipmentRegisteredBy, delivery.ShipmentRegisteredAt));
+    }
+
+    [SqlServerFact]
+    public async Task Shipment_ShouldConflict_WithACancellationSavedMeanwhile()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var orderId = await SeedDeliveryOrderAsync(database, tenant.Id);
+        await using var context = database.CreateContext(tenant.Id);
+        var order = await context.Orders.SingleAsync(o => o.Id == orderId);
+
+        // Someone cancels the order after this request read it, and before it writes the trip down.
+        await using (var meanwhile = database.CreateContext(tenant.Id))
+        {
+            var theirs = await meanwhile.Orders.SingleAsync(o => o.Id == orderId);
+            theirs.Cancel(OrderStateMachineFactory.Create(BusinessType.Food, OrderType.Retail), "caja", "El cliente ya no lo quiso");
+            await meanwhile.SaveChangesAsync();
+        }
+
+        // The trip changes the order too, so its version catches the cancellation instead of writing a folio on it.
+        order.RegisterCourierShipment(CourierShipment.From(DeliveryCourier.Paquetenvia, "PQ1234", null), Now, "caja");
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => context.SaveChangesAsync());
+        await using var check = database.CreateContext(tenant.Id);
+        Assert.Null((await check.OrderDeliveries.SingleAsync()).CourierFolio);
+        Assert.Equal(OrderStatus.Cancelled, (await check.Orders.SingleAsync(o => o.Id == orderId)).Status);
     }
 
     [SqlServerFact]

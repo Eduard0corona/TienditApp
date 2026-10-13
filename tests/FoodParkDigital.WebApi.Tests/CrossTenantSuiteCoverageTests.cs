@@ -20,7 +20,6 @@ public class CrossTenantSuiteCoverageTests
         [nameof(PasswordRecoveryController)] = "Recuperar la contraseña es de la cuenta y anónimo: no tiene datos de un negocio.",
         [nameof(PlatformController)] = "La consola de plataforma trabaja entre negocios por diseño y es solo para SUPER_ADMIN.",
         [nameof(ProfileController)] = "El perfil es de la cuenta (datos, avatar, teléfono, contraseña y el WhatsApp de sus códigos): no tiene datos de un negocio.",
-        [nameof(PublicMenuController)] = "El menú público es anónimo: el negocio sale del slug de su ruta.",
         [nameof(TwoFactorController)] = "El 2FA es de la cuenta: no tiene datos de un negocio."
     };
 
