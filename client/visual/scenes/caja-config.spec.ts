@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
-import { SIZES, dialog, open, snap, snapElement } from '../helpers';
+import { SIZES, dialog, open, settle, snap, snapElement } from '../helpers';
 import {
   CAJA_DATA,
   CAJA_ROUTES,
@@ -597,6 +597,83 @@ test.describe('Equipo', () => {
       const inviting = await dialog(page, 'Invitar persona');
       await expect(inviting.getByRole('button', { name: 'Invitar', exact: true })).toBeVisible();
       await snapDialog(page, 'equipo-invitar-dialogo-oscuro');
+    });
+  });
+});
+
+// The tabs of Configuración when they do not fit (SectionTabs): the edge that hides tabs fades and, with a mouse, has a
+// button that slides the row a page, and the open page's tab shows as it loads. 1280 px with the menu open is a common
+// laptop; at the tablet's 1024 px the condensed menu still leaves too little room. A touch screen slides the row with a
+// finger: the fade, no buttons.
+test.describe('Pestañas que no caben', () => {
+  const LAPTOP = { width: 1280, height: 800 };
+  const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Configuración' }).getByRole('link', { name });
+  // The row cuts the last pixel of each tab's underline (1 of 44 px): a whole tab is 95% in view, a cut one far less.
+  const whole = (locator: Locator) => expect(locator).toBeInViewport({ ratio: 0.95 });
+  // The buttons stay out of the accessibility tree (the tabs are all there): they are found by their title.
+  const next = (page: Page) => page.getByTitle('Ver las pestañas siguientes');
+  const previous = (page: Page) => page.getByTitle('Ver las pestañas anteriores');
+
+  test('pestañas que no caben, con el mouse', async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await open(page, '/employees');
+    await expect(next(page)).toBeVisible();
+    await expect(previous(page)).toHaveCount(0);
+    await snap(page, 'pestanas-no-caben', { fullPage: false });
+  });
+
+  test('pestañas que no caben, la abierta se ve al cargar', async ({ page }) => {
+    // On master Seguridad y actividad is cut at this size: the row now slides to it, with tabs hidden on both sides.
+    await page.setViewportSize(SIZES.tablet);
+    await open(page, '/audit');
+    await whole(tab(page, 'Seguridad y actividad'));
+    await expect(previous(page)).toBeVisible();
+    await expect(next(page)).toBeVisible();
+    await snap(page, 'pestanas-abierta-al-cargar', { fullPage: false });
+  });
+
+  test('pestañas que no caben, puntero sobre el botón', async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await open(page, '/employees');
+    await next(page).hover();
+    await settle(page);
+    await expect(page).toHaveScreenshot('pestanas-puntero-boton.png');
+  });
+
+  test('pestañas que no caben, después del botón', async ({ page }) => {
+    // Without motion the row lands at once: a smooth slide would be caught halfway.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize(LAPTOP);
+    await open(page, '/employees');
+    await next(page).click();
+    await expect(previous(page)).toBeVisible();
+    await expect(next(page)).toHaveCount(0);
+    await whole(tab(page, 'Primeros pasos'));
+    await snap(page, 'pestanas-despues-del-boton', { fullPage: false });
+  });
+
+  test.describe('oscuro', () => {
+    test.use({ colorMode: 'dark' });
+
+    test('pestañas que no caben en oscuro', async ({ page }) => {
+      await page.setViewportSize(LAPTOP);
+      await open(page, '/audit');
+      await whole(tab(page, 'Seguridad y actividad'));
+      await expect(previous(page)).toBeVisible();
+      await expect(next(page)).toBeVisible();
+      await snap(page, 'pestanas-no-caben-oscuro', { fullPage: false });
+    });
+  });
+
+  test.describe('en un teléfono táctil', () => {
+    test.use({ hasTouch: true });
+
+    test('pestañas que no caben en un teléfono táctil', async ({ page }) => {
+      await page.setViewportSize(SIZES.phone);
+      await open(page, '/employees');
+      await whole(tab(page, 'Equipo y permisos'));
+      await expect(next(page)).toBeHidden();
+      await snap(page, 'pestanas-telefono-tactil', { fullPage: false });
     });
   });
 });

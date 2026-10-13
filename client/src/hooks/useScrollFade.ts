@@ -6,7 +6,8 @@ import { scrollFade, scrollFadeClass, type ScrollFade } from '../utils/scrollFad
  * fade: when it scrolls, when the window, the row or what it holds changes size, and when `contentKey` changes (chips
  * that arrive later). What it holds is watched too because it can change without the row changing (the condensed side
  * menu hides its group titles). The ref is a callback, so a row that unmounts and comes back (the menu after an order)
- * is measured again.
+ * is measured again. Besides the classes it gives the row itself and which edges hide more (the buttons of the section
+ * tabs follow them).
  */
 export function useScrollFade<T extends HTMLElement>(contentKey: unknown, axis: 'x' | 'y' = 'x') {
   const [element, setElement] = useState<T | null>(null);
@@ -33,5 +34,5 @@ export function useScrollFade<T extends HTMLElement>(contentKey: unknown, axis: 
     };
   }, [element, contentKey, axis]);
 
-  return { ref: setElement, fadeClass: scrollFadeClass(fade) };
+  return { ref: setElement, element, fade, fadeClass: scrollFadeClass(fade) };
 }
