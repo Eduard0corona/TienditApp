@@ -60,6 +60,7 @@
 - En la caja, la propina entra como su propio movimiento (`CashTransactionType.Tip`, ingreso) en la misma caja y con la forma de pago del pago: en efectivo aumenta el esperado; con tarjeta queda como entrada no efectiva. No es un movimiento manual.
 - El corte del día muestra `TipsTotal` y `CashTipsTotal` aparte de lo cobrado: `NetCashOnlyFlow` incluye las propinas en efectivo (están en los cajones) y `NetCashFlow` todas.
 - Vender, Pedidos y Mesas ofrecen Sin propina, 10 %, 15 % u Otra (sobre lo que se cobra), y la propina va con el último pago del cobro. El botón muestra lo que paga el cliente con la propina incluida.
+- Vender manda la propina y el efectivo recibido con los pagos de la venta (`POST /api/v1/orders`); Pedidos y Mesas, con cada pago (`tip` y `cashReceived` en `POST /api/v1/orders/{id}/payments`). Hasta el 2026-10-13 ese endpoint los ignoraba: los cobros de Pedidos y Mesas desde la Fase 4F se guardaron sin propina ni efectivo recibido, y su propina no entró a la caja. `OrderPaymentTipSqlServerTests` lo prueba por la API contra SQL Server.
 - Un reembolso o una anulación devuelven lo pagado de la venta, no la propina; si hay que devolverla, se registra como retiro de caja.
 
 ## Caja por cajero (Fase 2)
