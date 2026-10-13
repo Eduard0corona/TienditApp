@@ -105,7 +105,7 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A y 22B, después de 
     - Una zona llega a todo un código postal o a nada, aunque algunos códigos grandes cubran colonias a las que el negocio no llega.
     - Una pregunta de envío con un número de cinco dígitos que no es un código postal recibe la respuesta de un código postal.
     - Las zonas son del negocio: todo pedido sigue llegando a la sucursal principal.
-    - La 22B suma 155 B a la primera visita (de 176,327 a 176,482 B, contra `master` en `3e69f32`): la entrada del menú y la ruta. El presupuesto no cambia.
+    - La 22B suma 154 B a la primera visita (de 176,327 a 176,481 B, contra `master` en `3e69f32`): la entrada del menú y la ruta. El presupuesto no cambia.
 - Resuelto en la Fase 22A: una cocina sin local publicaba su dirección, muchas veces su casa, en el menú en línea ([ADR 0016](../adr/0016-delivery-only-branches.md)).
   - Cada sucursal dice cómo atiende. Con la principal «Solo a domicilio», el menú dice que no hay local para visitar y la respuesta automática a «¿dónde están?» también; ninguna lleva la dirección, que sigue viendo el equipo. El giro «Comida a domicilio» empieza así, y la guía de inicio ofrece a todo negocio de comida la plantilla «Comida a domicilio».
   - Queda:

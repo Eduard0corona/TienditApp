@@ -324,7 +324,7 @@ Zonas de entrega (Fase 22B, [ADR 0017](../adr/0017-delivery-zones.md)):
   - Lo que el servidor rechace (un código postal o un nombre de otra zona) se muestra en el diálogo. Con un 409 o un 404 (alguien más la guardó o la borró), guardar otra vez fallaría igual: el diálogo se cierra con un aviso y la zona se abre otra vez desde la lista, ya leída de nuevo.
 - **Probar un código postal:** con zonas guardadas, sobre la lista leída, dice qué zona lo tiene y qué cobra, si está desactivada o si ninguna llega. Es lo que contestarían las respuestas automáticas. Si ninguna zona está activa, avisa que mientras tanto las respuestas no hablan de entregas.
 - **Datos:** `useDeliveryZones`, `useSaveDeliveryZone` y `useDeleteDeliveryZone` en `api/deliveryZones.ts`, fuera de `queries.ts`, con su propia llave (`['delivery-zones']`); guardar y borrar la leen otra vez.
-- **Primera visita:** suma 155 B (de 176,327 a 176,482 B, contra `master` en `3e69f32`): la entrada del menú de Configuración y la ruta. La pantalla baja aparte (3.7 kB con gzip). El presupuesto (176,700 B) no cambia.
+- **Primera visita:** suma 154 B (de 176,327 a 176,481 B, contra `master` en `3e69f32`): la entrada del menú de Configuración y la ruta. La pantalla baja aparte (3.7 kB con gzip). El presupuesto (176,700 B) no cambia.
 
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
