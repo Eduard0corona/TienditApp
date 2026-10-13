@@ -13,8 +13,8 @@ namespace FoodParkDigital.Application.Delivery;
 
 /// <summary>
 /// Adds a delivery zone (owners and admins): its name, the postal codes it reaches, its delivery fee, the smallest order
-/// it takes and, optionally, from what order the delivery is free. A postal code already in another zone of the business
-/// is refused, naming that zone.
+/// it takes and, optionally, from what order the delivery is free. A name or a postal code already in another zone of the
+/// business is refused, naming that zone.
 /// </summary>
 [RequiresTenantManager]
 public record CreateDeliveryZoneCommand(
@@ -76,6 +76,12 @@ public static class DeliveryZoneErrors
 
     public static string PostalCodeInAnotherZone(string postalCode, string zone)
         => $"El código postal {postalCode} ya está en la zona «{zone}». Quítalo de ahí primero.";
+
+    /// <summary>
+    /// Another zone of the business has the name (IX_DeliveryZones_TenantId_Name, which compares as the database does:
+    /// without telling capitals apart).
+    /// </summary>
+    public static string NameTaken(string name) => $"Ya tienes una zona llamada «{name}». Ponle otro nombre.";
 }
 
 internal static class DeliveryZoneFieldRules
@@ -139,6 +145,7 @@ public class CreateDeliveryZoneCommandHandler : IRequestHandler<CreateDeliveryZo
     public async Task<Result<DeliveryZoneDto>> Handle(CreateDeliveryZoneCommand request, CancellationToken cancellationToken)
     {
         var tenantId = _tenantService.TenantId;
+        // A soft cap: two zones added at the same moment can leave a business one or two over it, which is harmless.
         if (await _context.DeliveryZones.CountAsync(zone => zone.TenantId == tenantId, cancellationToken) >= DeliveryZone.MaxZonesPerBusiness)
             return Result.Failure<DeliveryZoneDto>(DeliveryZone.TooManyZonesMessage);
 
@@ -152,8 +159,8 @@ public class CreateDeliveryZoneCommandHandler : IRequestHandler<CreateDeliveryZo
             return Result.Failure<DeliveryZoneDto>(ex.Message);
         }
 
-        if (await DeliveryZonePostalCodes.TakenAsync(_context, tenantId, zone, cancellationToken) is { } taken)
-            return Result.Failure<DeliveryZoneDto>(taken);
+        if (await DeliveryZoneConflicts.FindAsync(_context, tenantId, zone, cancellationToken) is { } conflict)
+            return Result.Failure<DeliveryZoneDto>(conflict);
 
         _context.DeliveryZones.Add(zone);
         _context.AuditLogs.Add(DeliveryZoneAudit.Create(tenantId, zone, DeliveryZoneAudit.Created, null, _currentUserService.UserName));
@@ -163,11 +170,11 @@ public class CreateDeliveryZoneCommandHandler : IRequestHandler<CreateDeliveryZo
         }
         catch (DbUpdateException)
         {
-            // Another save took one of its postal codes at the same time (IX_DeliveryZonePostalCodes_TenantId_PostalCode):
-            // this one is undone whole, its activity entry included, and the person is told which zone has it.
+            // Another save took its name or one of its postal codes at the same time (the unique indexes): this one is
+            // undone whole, its activity entry included, and the person is told which.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            if (await DeliveryZonePostalCodes.TakenAsync(_context, tenantId, zone, cancellationToken) is { } takenMeanwhile)
-                return Result.Failure<DeliveryZoneDto>(takenMeanwhile);
+            if (await DeliveryZoneConflicts.FindAsync(_context, tenantId, zone, cancellationToken) is { } meanwhile)
+                return Result.Failure<DeliveryZoneDto>(meanwhile);
             throw;
         }
 
@@ -213,11 +220,11 @@ public class UpdateDeliveryZoneCommandHandler : IRequestHandler<UpdateDeliveryZo
             return Result.Failure<DeliveryZoneDto>(ex.Message);
         }
 
-        if (await DeliveryZonePostalCodes.TakenAsync(_context, tenantId, zone, cancellationToken) is { } taken)
+        if (await DeliveryZoneConflicts.FindAsync(_context, tenantId, zone, cancellationToken) is { } conflict)
         {
             // The zone took the change in memory: it is undone, so nothing of it is saved by a later SaveChanges.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            return Result.Failure<DeliveryZoneDto>(taken);
+            return Result.Failure<DeliveryZoneDto>(conflict);
         }
 
         _context.AuditLogs.Add(DeliveryZoneAudit.Create(tenantId, zone, DeliveryZoneAudit.Updated, previous, _currentUserService.UserName));
@@ -234,9 +241,14 @@ public class UpdateDeliveryZoneCommandHandler : IRequestHandler<UpdateDeliveryZo
         }
         catch (DbUpdateException)
         {
+            // Whatever order the database ran the rows in: a new postal code of the zone can be written before the zone
+            // itself, and then someone else's save shows as its unique index or as the key to a zone deleted meanwhile,
+            // not as a revision that moved. Undone whole, and told apart by reading again.
             await _context.DiscardUnitOfWorkAsync(cancellationToken);
-            if (await DeliveryZonePostalCodes.TakenAsync(_context, tenantId, zone, cancellationToken) is { } takenMeanwhile)
-                return Result.Failure<DeliveryZoneDto>(takenMeanwhile);
+            if (!await DeliveryZoneConflicts.StillAtAsync(_context, tenantId, request.Id, request.Revision, cancellationToken))
+                return Result.Failure<DeliveryZoneDto>(DeliveryZoneErrors.Stale);
+            if (await DeliveryZoneConflicts.FindAsync(_context, tenantId, zone, cancellationToken) is { } meanwhile)
+                return Result.Failure<DeliveryZoneDto>(meanwhile);
             throw;
         }
 
@@ -286,11 +298,30 @@ public class DeleteDeliveryZoneCommandHandler : IRequestHandler<DeleteDeliveryZo
     }
 }
 
-/// <summary>A postal code is in one zone of the business at most: the one a save would take from another zone.</summary>
-internal static class DeliveryZonePostalCodes
+/// <summary>
+/// A name and a postal code are in one zone of the business at most: what a save would take from another zone, and
+/// whether the zone is still the revision a save was made over.
+/// </summary>
+internal static class DeliveryZoneConflicts
 {
+    /// <summary>Why <paramref name="zone"/> cannot be saved as it is: its name or one of its postal codes is in another zone.</summary>
+    public static async Task<string?> FindAsync(
+        IApplicationDbContext context, Guid tenantId, DeliveryZone zone, CancellationToken cancellationToken)
+    {
+        if (await context.DeliveryZones.AsNoTracking()
+                .AnyAsync(other => other.TenantId == tenantId && other.Id != zone.Id && other.Name == zone.Name, cancellationToken))
+            return DeliveryZoneErrors.NameTaken(zone.Name);
+        return await PostalCodeTakenAsync(context, tenantId, zone, cancellationToken);
+    }
+
+    /// <summary>The zone is saved with <paramref name="revision"/>: nobody saved or deleted it since it was read.</summary>
+    public static Task<bool> StillAtAsync(
+        IApplicationDbContext context, Guid tenantId, Guid zoneId, int revision, CancellationToken cancellationToken)
+        => context.DeliveryZones.AsNoTracking()
+            .AnyAsync(zone => zone.Id == zoneId && zone.TenantId == tenantId && zone.Revision == revision, cancellationToken);
+
     /// <summary>The message naming the first postal code of <paramref name="zone"/> another zone has, or null.</summary>
-    public static async Task<string?> TakenAsync(
+    private static async Task<string?> PostalCodeTakenAsync(
         IApplicationDbContext context, Guid tenantId, DeliveryZone zone, CancellationToken cancellationToken)
     {
         var codes = zone.PostalCodes.Select(code => code.PostalCode).ToList();

@@ -10,7 +10,7 @@
 --   - crea [DeliveryZones]: nombre, costo de envío, pedido mínimo, «envío gratis desde» (montos en
 --     decimal(18,2)), si está activa y su revisión (para no pisar el cambio de otra persona), con
 --     cuatro restricciones CHECK (CK_DeliveryZones_Fee, _MinimumOrder, _FreeDeliveryFrom y
---     _Revision) y el índice IX_DeliveryZones_TenantId_Name;
+--     _Revision) y el índice único IX_DeliveryZones_TenantId_Name (un nombre por zona en el negocio);
 --   - crea [DeliveryZonePostalCodes]: los códigos postales de cada zona (varchar(5), cinco dígitos,
 --     CK_DeliveryZonePostalCodes_PostalCode), con la llave a su zona en cascada, el índice único
 --     IX_DeliveryZonePostalCodes_TenantId_PostalCode (un código postal en una sola zona del
@@ -5955,7 +5955,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261013002425_AddDeliveryZones'
 )
 BEGIN
-    CREATE INDEX [IX_DeliveryZones_TenantId_Name] ON [DeliveryZones] ([TenantId], [Name]);
+    CREATE UNIQUE INDEX [IX_DeliveryZones_TenantId_Name] ON [DeliveryZones] ([TenantId], [Name]);
 END;
 
 IF NOT EXISTS (

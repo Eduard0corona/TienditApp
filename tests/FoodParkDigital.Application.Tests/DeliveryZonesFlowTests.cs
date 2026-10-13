@@ -55,6 +55,29 @@ public class DeliveryZonesFlowTests
     }
 
     [Fact]
+    public async Task CreateAndUpdate_ShouldRefuse_TheNameOfAnotherZone_WhileAnotherBusinessCanHaveIt()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessAsync(fixture);
+        await CreateAsync(fixture, "Centro", 35m, 0m, null, "72000");
+        var norte = (await CreateAsync(fixture, "Norte", 45m, 0m, null, "72100")).Value;
+
+        var created = await CreateAsync(fixture, " Centro ", 40m, 0m, null, "72005");
+        var renamed = await UpdateAsync(fixture, norte.Id, norte.Revision, "Centro", 45m, 0m, null, true, "72100");
+
+        Assert.Equal(DeliveryZoneErrors.NameTaken("Centro"), created.Error);
+        Assert.Equal(DeliveryZoneErrors.NameTaken("Centro"), renamed.Error);
+        // The refused rename is undone: the zone keeps its name and revision for the next save.
+        var saved = await UpdateAsync(fixture, norte.Id, norte.Revision, "Norte", 50m, 0m, null, true, "72100");
+        Assert.True(saved.IsSuccess, saved.Error);
+        Assert.Equal(("Norte", 2), (saved.Value.Name, saved.Value.Revision));
+        Assert.Equal(2, await fixture.Context.DeliveryZones.CountAsync());
+
+        await BusinessAsync(fixture, "fonda-vecina");
+        Assert.True((await CreateAsync(fixture, "Centro", 30m, 0m, null, "72000")).IsSuccess);
+    }
+
+    [Fact]
     public async Task Create_ShouldStopAt30Zones()
     {
         await using var fixture = SalesTestFixture.Create();

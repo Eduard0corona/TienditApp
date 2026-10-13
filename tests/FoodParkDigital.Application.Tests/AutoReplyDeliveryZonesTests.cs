@@ -24,6 +24,7 @@ public class AutoReplyDeliveryZonesTests
     private const string MenuLink = "https://app.tienditapp.mx/m/demo";
     private const string Description = "Cocina casera en Puebla.";
     private const string Order = $"Mira el menú y haz tu pedido aquí: {MenuLink}";
+    private const string Products = "Tacos $25, aguas $15.";
     private const string CoversCentro =
         "Sí llegamos al 72000: el envío cuesta $35.00. Pedido mínimo de $150.00. Envío gratis en pedidos desde $400.00.";
 
@@ -36,6 +37,9 @@ public class AutoReplyDeliveryZonesTests
     [InlineData("C.P. 72000")]
     [InlineData("Mi código postal es el 72000")]
     [InlineData("¿Cuánto cuesta el envío a la colonia del CP 72000?")]
+    // «mandan» and «colonia» also mean something else, so they count next to a postal code.
+    [InlineData("¿Me mandan al 72000?")]
+    [InlineData("Mi colonia es del 72000")]
     public async Task PostalCodeOfAZone_ShouldGetWhatItCharges_AndTheMenu(string message)
     {
         await using var fixture = SalesTestFixture.Create();
@@ -74,14 +78,49 @@ public class AutoReplyDeliveryZonesTests
     [Theory]
     [InlineData("¿Tienen servicio a domicilio?")]
     [InlineData("¿Cuánto cobran de envío?")]
+    [InlineData("¿Cuál es el costo de envío?")]
+    [InlineData("¿Llegan a la colonia Roma?")]
+    [InlineData("¿Envían a Cholula?")]
+    [InlineData("¿Entregan en San Andrés?")]
+    [InlineData("¿Qué zonas cubren?")]
     public async Task DeliveryQuestion_WithoutAPostalCode_ShouldAskForIt(string message)
     {
         await using var fixture = SalesTestFixture.Create();
-        await BusinessWithZonesAsync(fixture);
+        await BusinessWithZonesAsync(fixture, products: Products);
 
         var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, message, null);
 
+        // Without the products: «costo» or «servicio» in a question about the delivery does not ask for the menu.
         Assert.Equal($"{AiAgentAutoReplyService.AskForPostalCodeText}\n\n{Order}", reply);
+    }
+
+    [Theory]
+    [InlineData("Te envío el comprobante")]
+    [InlineData("Gracias por el envío")]
+    [InlineData("¿Me mandan el número de cuenta?")]
+    [InlineData("¿Me entregas factura?")]
+    [InlineData("¿En qué colonia están?")]
+    public async Task WordsThatAlsoMeanSomethingElse_WithoutAPostalCode_ShouldAnswerAsBefore(string message)
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessWithZonesAsync(fixture);
+        var agent = await fixture.Context.AiAgents.SingleAsync();
+
+        var reply = await Replies(fixture).BuildReplyAsync(fixture.TenantService.TenantId, message, null);
+
+        Assert.Equal(agent.FallbackMessage, reply);
+    }
+
+    [Fact]
+    public async Task DeliveryCost_AndThePricesOfTheMenu_ShouldGetBoth()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        await BusinessWithZonesAsync(fixture, products: Products);
+
+        var reply = await Replies(fixture).BuildReplyAsync(
+            fixture.TenantService.TenantId, "¿Cuánto cuesta el envío y cuánto cuestan los tacos?", null);
+
+        Assert.Equal($"{AiAgentAutoReplyService.AskForPostalCodeText}\n\n{Products}\n\n{Order}", reply);
     }
 
     [Fact]
@@ -160,9 +199,9 @@ public class AutoReplyDeliveryZonesTests
     /// A business with an active zone «Centro» (72000 and 72005: $35, minimum $150, free from $400), an active zone with
     /// free delivery (72100) and an inactive one (72830).
     /// </summary>
-    private static async Task<Tenant> BusinessWithZonesAsync(SalesTestFixture fixture, OpeningHours? weekly = null)
+    private static async Task<Tenant> BusinessWithZonesAsync(SalesTestFixture fixture, OpeningHours? weekly = null, string? products = null)
     {
-        var tenant = await BusinessAsync(fixture, weekly);
+        var tenant = await BusinessAsync(fixture, weekly, products: products);
         await AddZoneAsync(fixture, tenant, "Centro", 35m, 150m, 400m, isActive: true, "72000", "72005");
         await AddZoneAsync(fixture, tenant, "Norte", 0m, 0m, null, isActive: true, "72100");
         await AddZoneAsync(fixture, tenant, "Angelópolis", 60m, 0m, null, isActive: false, "72830");
@@ -178,14 +217,15 @@ public class AutoReplyDeliveryZonesTests
     }
 
     /// <summary>A business with its online menu taking orders and an active agent with a description.</summary>
-    private static async Task<Tenant> BusinessAsync(SalesTestFixture fixture, OpeningHours? weekly = null, string slug = "demo")
+    private static async Task<Tenant> BusinessAsync(
+        SalesTestFixture fixture, OpeningHours? weekly = null, string slug = "demo", string? products = null)
     {
         var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, slug: slug);
         var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
         settings.UpdateOnlineMenu(OnlineMenuMode.Orders);
         settings.SetOpeningHours(weekly);
         var agent = new AiAgent(tenant.Id, "Respuestas", "Atención");
-        agent.UpdateGeneral("Respuestas", "Atención", "Amable", "Español", "Amigable", tenant.Name, Description, null);
+        agent.UpdateGeneral("Respuestas", "Atención", "Amable", "Español", "Amigable", tenant.Name, Description, products);
         agent.UpdateAiConfiguration("keywords", 0.4m, 800, false, strictMode: true);
         fixture.Context.AiAgents.Add(agent);
         await fixture.Context.SaveChangesAsync();

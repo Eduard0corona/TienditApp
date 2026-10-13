@@ -91,6 +91,15 @@ describe('DeliveryZones', () => {
     await userEvent.type(probe, '7a5000');
     expect(probe).toHaveValue('75000');
     expect(screen.getByRole('status')).toHaveTextContent('Ninguna zona llega al 75000.');
+    expect(screen.queryByText(/Ninguna zona está activa/)).not.toBeInTheDocument();
+  });
+
+  it('says that the automatic replies do not talk about delivering while no zone is active', async () => {
+    serve([NORTE]);
+    renderPage();
+
+    expect(await screen.findByText('Ninguna zona está activa: mientras tanto, tus respuestas automáticas no hablan de entregas.'))
+      .toBeInTheDocument();
   });
 
   it('adds a zone with its postal codes once each and the amounts it charges', async () => {
@@ -141,7 +150,7 @@ describe('DeliveryZones', () => {
     expect(await within(dialog).findByText('El código postal 72005 ya está en la zona «Centro». Quítalo de ahí primero.')).toBeInTheDocument();
   });
 
-  it('saves a zone with the revision it was read with, and asks to reload when someone saved it first', async () => {
+  it('saves a zone with the revision it was read with, and closes it to read it again when someone saved it first', async () => {
     serve([CENTRO], () => Promise.reject(apiError(409, 'concurrency_conflict', 'Alguien más modificó este registro al mismo tiempo. Recarga e intenta de nuevo.')));
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Editar Centro' }));
@@ -153,11 +162,49 @@ describe('DeliveryZones', () => {
     await userEvent.type(within(dialog).getByLabelText('Costo de envío'), '40');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
 
-    expect(await within(dialog).findByText(/Recarga e intenta de nuevo/)).toBeInTheDocument();
+    // Saving it again would be refused the same way: it opens again from the list, read again.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.error).toHaveBeenCalledWith('Alguien más cambió «Centro» al mismo tiempo. Ábrela otra vez para ver lo que quedó guardado.');
     expect(writes()[0]).toEqual(['put', '/api/v1/delivery-zones/{id}', {
       path: { id: 'z1' },
       body: expect.objectContaining({ fee: 40, freeDeliveryFrom: 400, revision: 3 }),
     }]);
+    await waitFor(() => expect(vi.mocked(apiRequest).mock.calls.filter(([method]) => method === 'get')).toHaveLength(2));
+  });
+
+  it('closes a zone someone else deleted', async () => {
+    serve([CENTRO], () => Promise.reject(apiError(404, 'not_found', 'No se encontró la zona.')));
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Editar Centro' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(toast.error).toHaveBeenCalledWith('Alguien más eliminó «Centro».');
+  });
+
+  it('refuses the name of another zone before saving, without telling capitals apart', async () => {
+    serve([CENTRO, NORTE]);
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Editar Norte' }));
+    const dialog = screen.getByRole('dialog', { name: 'Editar Norte' });
+    await userEvent.clear(within(dialog).getByLabelText('Nombre'));
+    await userEvent.type(within(dialog).getByLabelText('Nombre'), 'centro ');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(within(dialog).getByText('Ya tienes una zona llamada «centro». Ponle otro nombre.')).toBeInTheDocument();
+    expect(writes()).toHaveLength(0);
+  });
+
+  it('keeps the actions of every zone off while a change is being saved', async () => {
+    serve([CENTRO, NORTE], () => new Promise(() => {}));
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Activar Norte' }));
+
+    expect(screen.getByRole('button', { name: 'Activar Norte' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Editar Centro' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Eliminar Centro' })).toBeDisabled();
+    expect(writes()).toHaveLength(1);
   });
 
   it('turns a zone off and deletes one only once confirmed, with their revisions', async () => {

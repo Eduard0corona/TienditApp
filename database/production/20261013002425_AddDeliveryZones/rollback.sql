@@ -8,7 +8,7 @@
 -- Se detiene sin cambiar nada (error 50012; con -b, sqlcmd termina ahí) si hay zonas de entrega
 -- guardadas, activas o no: se perderían, y la bitácora guarda su nombre, costo y cuántos códigos
 -- postales tenía, nunca cuáles. Con zonas guardadas solo queda corregir hacia adelante, o borrarlas
--- a propósito antes en Configuración › Zonas de entrega (la consulta 3 de verify.sql las cuenta).
+-- a propósito antes en Configuración › Zonas de entrega (la consulta 4 de verify.sql las cuenta).
 -- Sin zonas, borra [DeliveryZonePostalCodes] y [DeliveryZones] (vacías). Nada más cambia.
 -- Volver al código anterior (master con la Fase 22A) funciona también sin este script: no conoce
 -- las tablas.

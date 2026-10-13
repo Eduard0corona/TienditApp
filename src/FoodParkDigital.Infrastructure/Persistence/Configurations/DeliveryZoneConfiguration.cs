@@ -29,8 +29,9 @@ public class DeliveryZoneConfiguration : IEntityTypeConfiguration<DeliveryZone>
         builder.Property(x => x.IsActive).IsRequired();
         builder.Property(x => x.Revision).IsConcurrencyToken();
 
-        // The list, by name.
-        builder.HasIndex(x => new { x.TenantId, x.Name });
+        // The list, by name; one zone per name in the business, so a message naming a zone points to one. It compares as the
+        // database does (without telling capitals apart, in the default collation).
+        builder.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
 
         builder.HasMany(x => x.PostalCodes)
             .WithOne()

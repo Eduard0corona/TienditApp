@@ -1083,7 +1083,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Name");
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
 
                     b.ToTable("DeliveryZones", null, t =>
                         {

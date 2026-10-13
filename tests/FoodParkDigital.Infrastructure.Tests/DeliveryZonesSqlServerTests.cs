@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -11,10 +13,12 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace FoodParkDigital.Infrastructure.Tests;
 
 /// <summary>
-/// The tables of the delivery zones (Fase 22B): a zone keeps its postal codes and cents in its business, a postal code is
-/// in one zone of a business at most (another business can have it too), a saved zone keeps the rows of the postal codes
-/// it still has, deleting a zone takes its postal codes, the checks keep every row one the domain could write, and
-/// rolling back stops while zones are saved and otherwise drops only the two tables.
+/// The tables of the delivery zones (Fase 22B): a zone keeps its postal codes and cents in its business, a name and a
+/// postal code are in one zone of a business at most (another business can have them too), a saved zone keeps the rows of
+/// the postal codes it still has, deleting a zone takes its postal codes, the checks keep every row one the domain could
+/// write, and rolling back stops while zones are saved and otherwise drops only the two tables. With the use cases: a save
+/// that meets someone else's at the same moment is answered as stale or with the zone that took the name or postal code,
+/// whatever order the database ran the rows in, and is undone whole.
 /// </summary>
 public class DeliveryZonesSqlServerTests
 {
@@ -34,7 +38,7 @@ public class DeliveryZonesSqlServerTests
             """).ToListAsync();
         Assert.True(Assert.Single(indexes, index => index.Name == "IX_DeliveryZonePostalCodes_TenantId_PostalCode").IsUnique);
         Assert.False(Assert.Single(indexes, index => index.Name == "IX_DeliveryZonePostalCodes_DeliveryZoneId").IsUnique);
-        Assert.False(Assert.Single(indexes, index => index.Name == "IX_DeliveryZones_TenantId_Name").IsUnique);
+        Assert.True(Assert.Single(indexes, index => index.Name == "IX_DeliveryZones_TenantId_Name").IsUnique);
         Assert.Equal(5, indexes.Count);
 
         var onDelete = await context.Database.SqlQuery<string>($"""
@@ -92,6 +96,146 @@ public class DeliveryZonesSqlServerTests
             neighbor.DeliveryZones.Add(new DeliveryZone(other.Id, Fields("Centro", "72000")));
             await neighbor.SaveChangesAsync();
         }
+    }
+
+    [SqlServerFact]
+    public async Task Name_ShouldBeInOneZoneOfTheBusiness_WithoutTellingCapitalsApart()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, other) = await SeedAsync(database);
+        await SeedZoneAsync(database, tenant.Id, "Centro", "72000");
+
+        await using (var context = database.CreateContext(tenant.Id))
+        {
+            context.DeliveryZones.Add(new DeliveryZone(tenant.Id, Fields("centro", "72005")));
+            var error = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+            Assert.Equal(2601, Assert.IsType<SqlException>(error.InnerException).Number);
+        }
+
+        await SeedZoneAsync(database, other.Id, "Centro", "72000");
+    }
+
+    [SqlServerFact]
+    public async Task Update_AddingThePostalCodeSomeoneAddedMeanwhile_ShouldBeStale()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var zoneId = await SeedZoneAsync(database, tenant.Id, "Centro", "72000");
+        // Someone adds 72010 to the zone after this save read it, and before it writes. Its new postal code is written
+        // before the zone, so the database answers with the unique index, not with the revision.
+        await using var racing = Racing(database, tenant.Id, async other =>
+            (await LoadAsync(other, zoneId)).Update(Fields("Centro", "72000", "72010")));
+
+        var result = await UpdateAsync(racing, tenant.Id, zoneId, 1, "Centro", "72000", "72010");
+
+        Assert.Equal(DeliveryZoneErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        var stored = await LoadAsync(context, zoneId);
+        Assert.Equal(2, stored.Revision);
+        Assert.Equal(["72000", "72010"], stored.PostalCodes.Select(code => code.PostalCode));
+        Assert.Empty(await context.AuditLogs.ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task Update_OfAZoneDeletedMeanwhile_ShouldBeStale()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var zoneId = await SeedZoneAsync(database, tenant.Id, "Centro", "72000");
+        await using var racing = Racing(database, tenant.Id, async other => other.DeliveryZones.Remove(await LoadAsync(other, zoneId)));
+
+        var result = await UpdateAsync(racing, tenant.Id, zoneId, 1, "Centro", "72000", "72010");
+
+        Assert.Equal(DeliveryZoneErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        Assert.Empty(await context.DeliveryZones.ToListAsync());
+        Assert.Empty(await context.DeliveryZonePostalCodes.ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task Update_TakingAPostalCodeAnotherZoneTookMeanwhile_ShouldNameThatZone()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var centroId = await SeedZoneAsync(database, tenant.Id, "Centro", "72000");
+        var norteId = await SeedZoneAsync(database, tenant.Id, "Norte", "72100");
+        await using var racing = Racing(database, tenant.Id, async other =>
+            (await LoadAsync(other, norteId)).Update(Fields("Norte", "72100", "72010")));
+
+        var result = await UpdateAsync(racing, tenant.Id, centroId, 1, "Centro", "72000", "72010");
+
+        Assert.Equal(DeliveryZoneErrors.PostalCodeInAnotherZone("72010", "Norte"), result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        var centro = await LoadAsync(context, centroId);
+        Assert.Equal((1, "72000"), (centro.Revision, Assert.Single(centro.PostalCodes).PostalCode));
+    }
+
+    [SqlServerFact]
+    public async Task Create_WithANameOrPostalCodeAnotherZoneTookMeanwhile_ShouldNameIt()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        await using (var racing = Racing(database, tenant.Id, other =>
+        {
+            other.DeliveryZones.Add(new DeliveryZone(tenant.Id, Fields("Norte", "72010")));
+            return Task.CompletedTask;
+        }))
+        {
+            var result = await CreateAsync(racing, tenant.Id, "Centro", "72000", "72010");
+            Assert.Equal(DeliveryZoneErrors.PostalCodeInAnotherZone("72010", "Norte"), result.Error);
+        }
+
+        await using (var racing = Racing(database, tenant.Id, other =>
+        {
+            other.DeliveryZones.Add(new DeliveryZone(tenant.Id, Fields("Centro", "72020")));
+            return Task.CompletedTask;
+        }))
+        {
+            var result = await CreateAsync(racing, tenant.Id, "Centro", "72000");
+            Assert.Equal(DeliveryZoneErrors.NameTaken("Centro"), result.Error);
+        }
+
+        await using var context = database.CreateContext(tenant.Id);
+        Assert.Equal(["Centro", "Norte"], await context.DeliveryZones.OrderBy(z => z.Name).Select(z => z.Name).ToListAsync());
+        Assert.Empty(await context.AuditLogs.ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task Delete_OfAZoneSavedMeanwhile_ShouldBeStale()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var zoneId = await SeedZoneAsync(database, tenant.Id, "Centro", "72000");
+        await using var racing = Racing(database, tenant.Id, async other =>
+            (await LoadAsync(other, zoneId)).Update(Fields("Centro", "72000", "72010")));
+
+        var result = await new DeleteDeliveryZoneCommandHandler(racing, Tenant(tenant.Id), new Owner())
+            .Handle(new DeleteDeliveryZoneCommand(zoneId, 1), CancellationToken.None);
+
+        Assert.Equal(DeliveryZoneErrors.Stale, result.Error);
+        await using var context = database.CreateContext(tenant.Id);
+        Assert.Equal(2, (await LoadAsync(context, zoneId)).PostalCodes.Count);
+        Assert.Empty(await context.AuditLogs.ToListAsync());
+    }
+
+    [SqlServerFact]
+    public async Task Update_ThatFailsForAnotherReason_ShouldNotPassForSomeoneElsesSave()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var (tenant, _) = await SeedAsync(database);
+        var zoneId = await SeedZoneAsync(database, tenant.Id, "Centro", "72000");
+        // A check that no longer agrees with the domain (made stricter by hand here): an error to log, not a conflict.
+        await using (var schema = database.CreateContext())
+        {
+            await schema.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE [DeliveryZones] DROP CONSTRAINT [CK_DeliveryZones_Fee]; "
+                + "ALTER TABLE [DeliveryZones] ADD CONSTRAINT [CK_DeliveryZones_Fee] CHECK ([Fee] <= 35);");
+        }
+
+        await using var context = database.CreateContext(tenant.Id);
+        await Assert.ThrowsAsync<DbUpdateException>(() => UpdateAsync(context, tenant.Id, zoneId, 1, "Centro", "72000", "72010"));
+        await using var check = database.CreateContext(tenant.Id);
+        Assert.Equal(1, (await LoadAsync(check, zoneId)).Revision);
     }
 
     [SqlServerFact]
@@ -154,12 +298,14 @@ public class DeliveryZonesSqlServerTests
 
         foreach (var row in rows)
         {
+            // A name of its own: a row whose postal code is refused leaves its zone, and names are one per zone.
             var zoneId = Guid.NewGuid();
+            var name = $"Zona {zoneId:N}";
             var error = await Assert.ThrowsAsync<SqlException>(async () =>
             {
                 await context.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO [DeliveryZones] ([Id], [TenantId], [Name], [Fee], [MinimumOrder], [FreeDeliveryFrom], [IsActive], [Revision], [CreatedAt])
-                    VALUES ({zoneId}, {tenant.Id}, N'Centro', {row.Fee}, {row.Minimum}, {row.FreeFrom}, 1, {row.Revision}, SYSDATETIMEOFFSET())
+                    VALUES ({zoneId}, {tenant.Id}, {name}, {row.Fee}, {row.Minimum}, {row.FreeFrom}, 1, {row.Revision}, SYSDATETIMEOFFSET())
                     """);
                 await context.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO [DeliveryZonePostalCodes] ([Id], [TenantId], [DeliveryZoneId], [PostalCode])
@@ -214,6 +360,55 @@ public class DeliveryZonesSqlServerTests
 
     private static DeliveryZoneFields Fields(string name, params string[] postalCodes)
         => new(name, 35m, 0m, null, postalCodes);
+
+    private static async Task<Guid> SeedZoneAsync(SqlServerTestDatabase database, Guid tenantId, string name, params string[] postalCodes)
+    {
+        await using var context = database.CreateContext(tenantId);
+        var zone = new DeliveryZone(tenantId, Fields(name, postalCodes));
+        context.DeliveryZones.Add(zone);
+        await context.SaveChangesAsync();
+        return zone.Id;
+    }
+
+    private static Task<DeliveryZone> LoadAsync(ApplicationDbContext context, Guid zoneId)
+        => context.DeliveryZones.Include(z => z.PostalCodes).SingleAsync(z => z.Id == zoneId);
+
+    /// <summary>A context whose first save is preceded by <paramref name="change"/>, saved by someone else.</summary>
+    private static ApplicationDbContext Racing(SqlServerTestDatabase database, Guid tenantId, Func<ApplicationDbContext, Task> change)
+        => database.CreateProductionLikeContext(Tenant(tenantId), new InMemoryApplicationDbContext.NullMediator(),
+            new SavedMeanwhile(async () =>
+            {
+                await using var other = database.CreateContext(tenantId);
+                await change(other);
+                await other.SaveChangesAsync();
+            }));
+
+    private static Task<FoodParkDigital.Application.Common.Models.Result<DeliveryZoneDto>> CreateAsync(
+        ApplicationDbContext context, Guid tenantId, string name, params string[] postalCodes)
+        => new CreateDeliveryZoneCommandHandler(context, Tenant(tenantId), new Owner())
+            .Handle(new CreateDeliveryZoneCommand(name, 35m, 0m, null, postalCodes), CancellationToken.None);
+
+    private static Task<FoodParkDigital.Application.Common.Models.Result<DeliveryZoneDto>> UpdateAsync(
+        ApplicationDbContext context, Guid tenantId, Guid zoneId, int revision, string name, params string[] postalCodes)
+        => new UpdateDeliveryZoneCommandHandler(context, Tenant(tenantId), new Owner())
+            .Handle(new UpdateDeliveryZoneCommand(zoneId, revision, name, 40m, 0m, null, postalCodes, true), CancellationToken.None);
+
+    private static ICurrentTenantService Tenant(Guid tenantId)
+    {
+        var tenant = new InMemoryApplicationDbContext.TestCurrentTenantService();
+        tenant.SetTenant(tenantId);
+        return tenant;
+    }
+
+    private sealed class Owner : ICurrentUserService
+    {
+        public string? UserId => "4f6c2a0e-8d8b-4a8f-9a55-0c4b1f3f8a10";
+        public string? UserName => "duena@demo.com";
+        public string? Role => "TENANT_ADMIN";
+        public string? TenantRole => "Owner";
+        public IReadOnlyCollection<string> Permissions => [];
+        public Guid? TenantId => null;
+    }
 
     private static async Task<(Tenant Tenant, Tenant Other)> SeedAsync(SqlServerTestDatabase database)
     {

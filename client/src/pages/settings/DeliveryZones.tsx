@@ -8,7 +8,7 @@ import {
   useSaveDeliveryZone,
   type DeliveryZone,
 } from '../../api/deliveryZones';
-import { getApiErrorMessage } from '../../api/errors';
+import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import { formatMoney, parseMoneyInput } from '../../utils/money';
@@ -83,7 +83,8 @@ function chargesOf(zone: DeliveryZone): string {
 /**
  * Configuración › Zonas de entrega (owners and admins): where the business delivers and what it charges for it, by postal
  * code. The automatic replies of WhatsApp already use them to say whether it delivers to a postal code and what it costs;
- * the server keeps a postal code in one zone, refuses a save made over an older revision and records every change.
+ * the server keeps a name and a postal code in one zone, refuses a save made over an older revision and records every
+ * change.
  */
 export default function DeliveryZones() {
   const titleId = useId();
@@ -99,6 +100,9 @@ export default function DeliveryZones() {
   const parsed = useMemo(() => parsePostalCodes(form?.postalCodes ?? ''), [form?.postalCodes]);
   const list = zones.data ?? [];
   const probed = isPostalCode(probe) ? checkPostalCode(list, probe) : null;
+  const anyActive = list.some((zone) => zone.isActive);
+  // One change at a time: a second click with the same revision would be refused as someone else's change.
+  const busy = save.isPending || remove.isPending;
 
   const openCreate = () => {
     setEditing(null);
@@ -116,6 +120,11 @@ export default function DeliveryZones() {
     const name = current.name.trim();
     if (!name) return 'Escribe el nombre de la zona.';
     if (name.length > MAX_NAME_LENGTH) return 'El nombre de la zona admite hasta 60 caracteres.';
+    // The server compares names without telling capitals apart, as here.
+    const sameName = name.toLocaleLowerCase('es-MX');
+    if (list.some((zone) => zone.id !== editing?.id && zone.name.toLocaleLowerCase('es-MX') === sameName)) {
+      return `Ya tienes una zona llamada «${name}». Ponle otro nombre.`;
+    }
     const fee = parseMoneyInput(current.fee);
     if (fee === null || fee > MAX_FEE) return 'El costo de envío va de $0 a $10,000, con dos decimales.';
     const minimum = current.minimumOrder.trim() ? parseMoneyInput(current.minimumOrder) : 0;
@@ -158,6 +167,16 @@ export default function DeliveryZones() {
       toast.success(editing ? 'Zona guardada.' : 'Zona agregada.');
       setForm(null);
     } catch (err: unknown) {
+      const code = getApiErrorCode(err);
+      // Saved or deleted by someone else meanwhile: saving again would fail the same way. The list is read again and
+      // the zone opens from it, as it is now.
+      if (editing && (code === 'concurrency_conflict' || code === 'not_found')) {
+        setForm(null);
+        toast.error(code === 'not_found'
+          ? `Alguien más eliminó «${editing.name}».`
+          : `Alguien más cambió «${editing.name}» al mismo tiempo. Ábrela otra vez para ver lo que quedó guardado.`);
+        return;
+      }
       setFormError(getApiErrorMessage(err, 'No se pudo guardar la zona.'));
     }
   };
@@ -235,6 +254,11 @@ export default function DeliveryZones() {
                 {probed?.kind === 'inactive' && `El ${probe} está en «${probed.zone.name}», que está desactivada: no llegas por ahora.`}
                 {probed?.kind === 'none' && `Ninguna zona llega al ${probe}.`}
               </div>
+              {!anyActive && (
+                <div className="form-text">
+                  Ninguna zona está activa: mientras tanto, tus respuestas automáticas no hablan de entregas.
+                </div>
+              )}
             </div>
           )}
 
@@ -274,15 +298,15 @@ export default function DeliveryZones() {
                 </td>
                 <td className="text-end text-nowrap">
                   <button type="button" className="btn btn-sm btn-light me-1" onClick={() => openEdit(item)}
-                    aria-label={`Editar ${item.name}`}>
+                    disabled={busy} aria-label={`Editar ${item.name}`}>
                     Editar
                   </button>
                   <button type="button" className="btn btn-sm btn-light me-1" onClick={() => void toggleActive(item)}
-                    aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}>
+                    disabled={busy} aria-label={item.isActive ? `Desactivar ${item.name}` : `Activar ${item.name}`}>
                     {item.isActive ? 'Desactivar' : 'Activar'}
                   </button>
                   <button type="button" className="btn btn-sm btn-light" onClick={() => void deleteZone(item)}
-                    aria-label={`Eliminar ${item.name}`}>
+                    disabled={busy} aria-label={`Eliminar ${item.name}`}>
                     Eliminar
                   </button>
                 </td>

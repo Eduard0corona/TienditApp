@@ -32,8 +32,8 @@ ORDER BY [Tabla], c.[column_id];
 -- 3. Después: las restricciones CHECK, cuatro de [DeliveryZones] (_Fee, _FreeDeliveryFrom,
 --    _MinimumOrder y _Revision) y una de [DeliveryZonePostalCodes] (_PostalCode); la llave
 --    FK_DeliveryZonePostalCodes_DeliveryZones_DeliveryZoneId en cascada (CASCADE); y los índices: las
---    dos llaves primarias, IX_DeliveryZonePostalCodes_TenantId_PostalCode ([Unico] 1),
---    IX_DeliveryZonePostalCodes_DeliveryZoneId e IX_DeliveryZones_TenantId_Name. SQL Server muestra
+--    dos llaves primarias, IX_DeliveryZonePostalCodes_TenantId_PostalCode e IX_DeliveryZones_TenantId_Name
+--    (las dos con [Unico] 1) e IX_DeliveryZonePostalCodes_DeliveryZoneId. SQL Server muestra
 --    las CHECK a su manera (por ejemplo, ([Fee]>=(0) AND [Fee]<=(10000))). Antes de aplicar y después
 --    de rollback.sql: ninguna fila.
 SELECT N'CHECK' AS [Tipo], OBJECT_NAME([parent_object_id]) AS [Tabla], [name] AS [Nombre], NULL AS [Unico],

@@ -72,7 +72,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_DeliveryZones_TenantId_Name",
                 table: "DeliveryZones",
-                columns: new[] { "TenantId", "Name" });
+                columns: new[] { "TenantId", "Name" },
+                unique: true);
         }
 
         /// <inheritdoc />

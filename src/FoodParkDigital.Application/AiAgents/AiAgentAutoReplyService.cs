@@ -49,12 +49,28 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
     // the business is.
     private static readonly string[] CustomerAddressKeywords = ["mi direccion", "mi ubicacion"];
 
-    // Whether and where it delivers: with a postal code, its zones say if it reaches it and what it charges.
+    // Whether and where it delivers, asked outright: «¿Hacen envíos?», «¿Tienen servicio a domicilio?», «¿Llegan a la
+    // Roma?», «¿Qué zonas cubren?». With a postal code, its zones say if it reaches it and what it charges.
     private static readonly string[] DeliveryKeywords =
     [
-        "envio", "envios", "envian", "envias", "mandan", "domicilio", "entregan", "entregas", "reparten", "reparto",
-        "costo de envio", "codigo postal", "cp", "zona", "zonas", "colonia"
+        "envios", "domicilio", "reparten", "reparto", "codigo postal", "cp", "zonas", "cobertura",
+        "hacen envio", "tienen envio", "hay envio", "hacen entregas", "hacen entrega",
+        "envian a", "envias a", "mandan a", "entregan a", "entregan en", "llegan a", "llegan hasta", "envio gratis"
     ];
+
+    // About delivering, with a word that alone asks for the menu («costo», «cuánto cuesta», «servicio»): «¿Cuánto cuesta el
+    // envío?» is not a question about the prices of the menu.
+    private static readonly string[] DeliveryPhrasesWithCatalogWords =
+    [
+        "costo de envio", "costo del envio", "precio de envio", "precio del envio", "cuesta el envio", "cuesta de envio",
+        "cuanto es el envio", "cuanto es de envio", "sale el envio", "cobran de envio", "cobran el envio", "cobran por el envio",
+        "servicio a domicilio"
+    ];
+
+    // Words that often mean something else: «Te envío el comprobante», «¿Me mandan el número de cuenta?», «¿Me entregas
+    // factura?», «¿En qué colonia están?». About delivering only next to a postal code («¿Envían al 72000?»).
+    private static readonly string[] DeliveryWithPostalCodeKeywords =
+        ["envio", "envian", "envias", "mandan", "entregan", "entregas", "llegan", "zona", "colonia"];
 
     // What may come around a postal code written alone: «72000», «CP 72000», «mi código postal es el 72000».
     private static readonly HashSet<string> PostalCodeFillerWords = ["mi", "es", "el", "cp", "codigo", "postal", "c", "p"];
@@ -117,14 +133,17 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         CancellationToken cancellationToken)
     {
         var greeting = AutoReplyKeywords.ContainsAny(words, GreetingKeywords);
-        var catalog = AutoReplyKeywords.ContainsAny(words, CatalogKeywords);
+        var catalog = AutoReplyKeywords.ContainsAny(AutoReplyKeywords.Without(words, DeliveryPhrasesWithCatalogWords), CatalogKeywords);
         var hoursAsked = AutoReplyKeywords.ContainsAny(words, HoursKeywords);
         var locationAsked = AutoReplyKeywords.ContainsAny(words, LocationKeywords)
             && !AutoReplyKeywords.ContainsAny(words, CustomerAddressKeywords);
         var deliveryOnly = locationAsked && await TryReadDeliveryOnlyAsync(tenantId, cancellationToken);
-        var coverage = AutoReplyKeywords.ContainsAny(words, DeliveryKeywords) || IsOnlyAPostalCode(words)
-            ? await TryReadCoverageAsync(tenantId, words.FirstOrDefault(DeliveryZone.IsPostalCode), cancellationToken)
-            : null;
+        var postalCode = words.FirstOrDefault(DeliveryZone.IsPostalCode);
+        var deliveryAsked = AutoReplyKeywords.ContainsAny(words, DeliveryKeywords)
+            || AutoReplyKeywords.ContainsAny(words, DeliveryPhrasesWithCatalogWords)
+            || (postalCode is not null && AutoReplyKeywords.ContainsAny(words, DeliveryWithPostalCodeKeywords))
+            || IsOnlyAPostalCode(words);
+        var coverage = deliveryAsked ? await TryReadCoverageAsync(tenantId, postalCode, cancellationToken) : null;
         var context = hoursAsked || catalog || deliveryOnly || coverage is not null
             ? await TryReadContextAsync(tenantId, hoursAsked, cancellationToken)
             : null;
