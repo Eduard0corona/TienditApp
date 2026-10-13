@@ -11,6 +11,8 @@ namespace FoodParkDigital.Domain.Orders.Events;
 /// <param name="CollectedBy">Who charged an order of a delivery platform; null for any other channel.</param>
 /// <param name="DeliveryFee">What an order sent to the customer's address charged for it, never where it goes; null for
 /// any other order and for events stored before it existed.</param>
+/// <param name="VisitFee">What the sale of an appointment at the customer's address charged for the visit, never where it
+/// was; null for any other order and for events stored before it existed.</param>
 public sealed record OrderCreatedEvent(
     Guid OrderId,
     Guid TenantId,
@@ -21,7 +23,8 @@ public sealed record OrderCreatedEvent(
     OrderChannel Channel = OrderChannel.Counter,
     string? ExternalOrderNumber = null,
     PlatformCollectedBy? CollectedBy = null,
-    decimal? DeliveryFee = null) : DomainEvent
+    decimal? DeliveryFee = null,
+    decimal? VisitFee = null) : DomainEvent
 {
     public bool IsHomeDelivery => DeliveryFee is not null;
 }

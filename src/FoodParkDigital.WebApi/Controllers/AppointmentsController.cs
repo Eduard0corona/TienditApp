@@ -1,5 +1,6 @@
 using FoodParkDigital.Application.Appointments.Commands;
 using FoodParkDigital.Application.Appointments.DTOs;
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Appointments.Queries;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Appointments.Enums;
@@ -28,6 +29,7 @@ public class AppointmentsController : ControllerBase
         [FromQuery] DateTimeOffset? fromDate,
         [FromQuery] DateTimeOffset? toDate,
         [FromQuery] string? search,
+        [FromQuery] bool? homeVisit,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -38,10 +40,32 @@ public class AppointmentsController : ControllerBase
             FromDate = fromDate,
             ToDate = toDate,
             Search = search,
+            HomeVisit = homeVisit,
             PageNumber = pageNumber,
             PageSize = pageSize
         }, cancellationToken);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// The visits at the customers' addresses of a day (in the business's time zone), by team member and in the order of
+    /// their time (Fase 22E); optionally of one team member.
+    /// </summary>
+    [HttpGet("route")]
+    public async Task<ActionResult<VisitRouteDto>> GetRoute(
+        [FromQuery] DateOnly date,
+        [FromQuery] Guid? staffUserId,
+        CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetVisitRouteQuery(date, staffUserId), cancellationToken));
+
+    /// <summary>The zone and the charge of a visit to a postal code, while the appointment is written (Fase 22E).</summary>
+    [HttpGet("visit-quote")]
+    public async Task<ActionResult<VisitQuoteDto>> GetVisitQuote([FromQuery] string postalCode, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetVisitQuoteQuery(postalCode), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
     }
 
     [HttpGet("{id:guid}")]

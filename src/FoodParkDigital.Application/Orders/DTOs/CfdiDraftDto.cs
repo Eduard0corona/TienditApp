@@ -55,10 +55,15 @@ public class CfdiPartyDto
 
 public class CfdiConceptDto
 {
-    /// <summary>The sold item, or the order's delivery for the concept of its fee (<see cref="IsDeliveryFee"/>).</summary>
+    /// <summary>
+    /// The sold item, the order's delivery for the concept of its fee (<see cref="IsDeliveryFee"/>) or its visit charge
+    /// (<see cref="IsVisitCharge"/>).
+    /// </summary>
     public Guid OrderItemId { get; set; }
     /// <summary>The concept is what the order charged for taking it to the customer's address.</summary>
     public bool IsDeliveryFee { get; set; }
+    /// <summary>The concept is what the sale of an appointment charged for going to the customer's address (Fase 22E).</summary>
+    public bool IsVisitCharge { get; set; }
     /// <summary>ClaveProdServ.</summary>
     public string ProductCode { get; set; } = null!;
     /// <summary>ClaveUnidad.</summary>

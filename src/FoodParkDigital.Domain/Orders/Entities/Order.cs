@@ -555,7 +555,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         AddDomainEvent(new OrderCreatedEvent(
             Id, TenantId, OrderNumber, BusinessType, Total, Status, Channel,
-            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee));
+            PlatformDetail?.ExternalOrderNumber, PlatformDetail?.CollectedBy, Delivery?.Fee, VisitCharge?.Fee));
     }
 
     public void LinkToCustomerUser(Guid userId)

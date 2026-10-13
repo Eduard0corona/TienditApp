@@ -32,8 +32,11 @@ public class AppointmentVisit : BaseEntity, ITenantScoped
     /// <summary>What going there charges, with the tax policy of the sale like any price of it; 0 when it is free.</summary>
     public decimal Fee { get; private set; }
 
-    /// <summary>Whether it is already at <paramref name="address"/>, as written.</summary>
-    internal bool IsAt(DeliveryAddress address)
+    /// <summary>
+    /// Whether it is already at <paramref name="address"/>, as written: then it keeps what was agreed, even if its zone no
+    /// longer reaches it.
+    /// </summary>
+    public bool IsAt(DeliveryAddress address)
         => PostalCode == address.PostalCode && AddressLine == address.AddressLine && References == address.References;
 
     internal void MoveTo(DeliveryAddress address, string zoneName, decimal fee)

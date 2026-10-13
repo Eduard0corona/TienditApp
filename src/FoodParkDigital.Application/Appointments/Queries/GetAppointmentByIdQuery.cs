@@ -26,20 +26,7 @@ public class GetAppointmentByIdQueryHandler : IRequestHandler<GetAppointmentById
         return await _context.Appointments
             .AsNoTracking()
             .Where(x => x.Id == request.Id)
-            .Select(x => new AppointmentDto
-            {
-                Id = x.Id,
-                CustomerName = x.CustomerName,
-                CustomerPhone = x.CustomerPhone,
-                ServiceName = x.ServiceName,
-                StaffName = x.StaffName,
-                ServiceProductId = x.ServiceProductId,
-                StaffUserId = x.StaffUserId,
-                StartAt = x.StartAt,
-                EndAt = x.EndAt,
-                Status = x.Status,
-                Notes = x.Notes
-            })
+            .Select(AppointmentDto.Projection)
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new EntityNotFoundException("Appointment", request.Id);
     }
