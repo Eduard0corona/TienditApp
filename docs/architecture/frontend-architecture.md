@@ -307,6 +307,25 @@ Sucursal solo a domicilio (Fase 22A, [ADR 0016](../adr/0016-delivery-only-branch
 - **Giro:** «Comida a domicilio» (`HOME_DELIVERY_INDUSTRY`, el mismo texto que `BusinessIndustries.HomeDelivery`) está en el alta y en Mi negocio, donde al elegirlo recuerda marcar después de guardar, en Configuración › Sucursales, las que no tienen local (sin enlace: la pantalla no avisa antes de perder lo escrito). La dirección fiscal ya no dice que la de la principal siempre sale en el menú.
 - **Primera visita:** suma 1 B (de 176,326 a 176,327 B, contra `master` en `a60b1d4`), el enum `BranchServiceMode` que usa la pantalla de Sucursales.
 
+Zonas de entrega (Fase 22B, [ADR 0017](../adr/0017-delivery-zones.md)):
+
+- **Configuración › Zonas de entrega** (`/settings/delivery-zones`, área `businessSettings`, en su propio archivo): `DataTable` con una fila por zona:
+  - el nombre;
+  - cuántos códigos postales tiene y los primeros cuatro («y 2 más»);
+  - el envío («Gratis» con $0);
+  - el pedido mínimo («Sin mínimo»);
+  - «envío gratis desde»;
+  - el estado.
+
+  Las acciones dicen con texto lo que hacen y nombran la zona: «Editar», «Desactivar» o «Activar» y «Eliminar». Desactivar y eliminar piden confirmación y mandan la revisión leída. La búsqueda encuentra por nombre o por el principio de un código postal.
+- **Diálogo:** nombre, costo de envío, pedido mínimo (opcional), «envío gratis desde» (opcional), los códigos postales en un `textarea` (separados por comas, espacios o renglones) y si está activa.
+  - `parsePostalCodes` (`utils/postalCodes.ts`) los lee igual que el servidor: cada uno una vez, en orden. Cuenta los que lleva y marca los que no tienen cinco dígitos.
+  - Antes de guardar dice lo mismo que el servidor rechazaría, con su texto: montos fuera de rango, envío gratis con envío $0, un código postal mal escrito, ninguno o más de 300.
+  - Lo que el servidor rechace (un código postal de otra zona, 409 de una revisión vieja) se muestra en el diálogo.
+- **Probar un código postal:** con zonas guardadas, sobre la lista leída, dice qué zona lo tiene y qué cobra, si está desactivada o si ninguna llega. Es lo que contestarían las respuestas automáticas.
+- **Datos:** `useDeliveryZones`, `useSaveDeliveryZone` y `useDeleteDeliveryZone` en `api/deliveryZones.ts`, fuera de `queries.ts`, con su propia llave (`['delivery-zones']`); guardar y borrar la leen otra vez.
+- **Primera visita:** suma 155 B (de 176,327 a 176,482 B, contra `master` en `3e69f32`): la entrada del menú de Configuración y la ruta. La pantalla baja aparte (3.7 kB con gzip). El presupuesto (176,700 B) no cambia.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

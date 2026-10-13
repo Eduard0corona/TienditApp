@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-12 con las Fases 22F, 22F-2, 22G y 22A, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A y 22B, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -97,13 +97,22 @@ Actualizada el 2026-10-12 con las Fases 22F, 22F-2, 22G y 22A, después de las F
     - En el menú condensado de las tablets, los enlaces no tienen nombre accesible (su texto va oculto con `visibility: hidden`) y el teclado no muestra el nombre que muestra el puntero. Las escenas del menú condensado buscan los enlaces por su ruta mientras tanto; ya pasaba en `master`.
     - El menú condensado se desplaza con el dedo en una pantalla táctil sin ratón; con un iPad con trackpad o ratón toma el comportamiento del escritorio, que no se ha probado con el dedo en iOS.
     - Los tipos de los datos simulados de las escenas no se comprueban contra el contrato: baseline y comparación usan los mismos, así que no esconden una regresión visual, pero pueden alejarse de la API real.
+- Resuelto en la Fase 22B: el negocio no sabía a dónde entrega ni cuánto cobra por llevar ([ADR 0017](../adr/0017-delivery-zones.md)).
+  - Zonas de entrega por código postal, con costo de envío, pedido mínimo y envío gratis desde un monto, en Configuración › Zonas de entrega. Las respuestas automáticas de WhatsApp dicen si llegan a un código postal y cuánto cuesta.
+  - Queda:
+    - El menú en línea con «A domicilio», el verificador de código postal en el menú, la dirección del cliente y el envío cobrado en el pedido (con su concepto en el CFDI) llegan en la Fase 22C.
+    - No hay horario por zona ni tiempo estimado de entrega.
+    - Una zona llega a todo un código postal o a nada, aunque algunos códigos grandes cubran colonias a las que el negocio no llega.
+    - Una pregunta de envío con un número de cinco dígitos que no es un código postal recibe la respuesta de un código postal.
+    - Las zonas son del negocio: todo pedido sigue llegando a la sucursal principal.
+    - La 22B suma 155 B a la primera visita (de 176,327 a 176,482 B, contra `master` en `3e69f32`): la entrada del menú y la ruta. El presupuesto no cambia.
 - Resuelto en la Fase 22A: una cocina sin local publicaba su dirección, muchas veces su casa, en el menú en línea ([ADR 0016](../adr/0016-delivery-only-branches.md)).
   - Cada sucursal dice cómo atiende. Con la principal «Solo a domicilio», el menú dice que no hay local para visitar y la respuesta automática a «¿dónde están?» también; ninguna lleva la dirección, que sigue viendo el equipo. El giro «Comida a domicilio» empieza así, y la guía de inicio ofrece a todo negocio de comida la plantilla «Comida a domicilio».
   - Queda:
     - Volver a la versión anterior de la app publica otra vez la dirección de una principal solo a domicilio: el aviso está en `deploy-azure.md` y el `rollback.sql` se detiene (50011).
     - Las mesas y el horario siguen siendo del negocio, no de cada sucursal: un negocio con un local y una cocina aparte no puede tener horarios distintos.
     - El giro decide la sucursal principal solo en el alta; en un negocio que ya existe se marca a mano en Sucursales.
-    - La entrega (zonas por código postal, costo de envío, dirección del cliente en el pedido y Paquetenvia) sigue en las Fases 22B y 22C.
+    - La entrega (dirección del cliente en el pedido, costo de envío cobrado y Paquetenvia) sigue en la Fase 22C; las zonas por código postal llegaron en la 22B.
     - La 22A suma 1 B a la primera visita (de 176,326 a 176,327 B, contra `master` en `a60b1d4`): el enum de la sucursal. El presupuesto no cambia.
 - Resuelto en la Fase 22G: la liquidación de cada depósito de Rappi, Uber Eats y DiDi Food y su conciliación con el estado de cuenta ([ADR 0015](../adr/0015-delivery-platform-settlements.md)).
   - Reportes › Liquidaciones dice lo que debe cada plataforma por sus pedidos pendientes. El dueño o un administrador captura cada depósito, TienditApp propone los pedidos del periodo, lo que no cuadra se explica con ajustes con motivo (el 35 % que cubre Rappi, los faltantes, el saldo de DiDi, la publicidad, las cancelaciones tardías…) y la liquidación solo se cierra con la diferencia en $0.00.
