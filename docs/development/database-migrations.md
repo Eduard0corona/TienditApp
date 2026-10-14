@@ -4,6 +4,8 @@
 
 `ApplicationDbContext`, configuraciones y migraciones están en `FoodParkDigital.Infrastructure`. `MigrationsAssembly` apunta a ese assembly. En Development, `Program.cs` ejecuta migración y seed al arranque solo si `Database:AutoMigrateOnStartup`/`Database:SeedOnStartup` están activos y el servidor es local (o `Database:AllowRemoteDatabase=true`); fuera de Development nunca se migra al iniciar.
 
+Producción se migra en un paso del despliegue ([ADR 0021](../adr/0021-automatic-production-migrations.md)). Con las migraciones automáticas activas, cada release se ensaya en una copia de producción y, con la aprobación del environment `production`, el workflow migra producción antes del swap ([despliegue](deploy-azure.md#slot-de-staging-migraciones-automáticas-y-aprobación)). Mientras no estén activas, se aplica a mano el `apply.sql` de cada migración antes del merge ([scripts para producción](#scripts-para-producción)).
+
 El CI ejecuta `dotnet ef migrations has-pending-model-changes` en cada PR, por lo que una configuración sin migración rompe el build.
 
 Además, el job `Migrations` de `.github/workflows/ci.yml` aplica las migraciones en SQL Server 2022 (Docker) en cada PR y en cada push a `master`:
@@ -13,6 +15,7 @@ Además, el job `Migrations` de `.github/workflows/ci.yml` aplica las migracione
 3. Lo ejecuta otra vez con la caché de planes vacía y falla si cambia el historial o algún objeto. Así SQL Server vuelve a compilar todos los lotes, incluidos los que salta, como en una ejecución posterior en producción: un lote viejo que nombra una columna que una migración nueva borró falla ahí.
 4. Revierte con el `Down` idempotente hasta `PRODUCTION_BASELINE`, lo ejecuta otra vez con la caché de planes vacía (no debe cambiar nada: cada lote tiene que compilar aunque ya no existan las columnas que nombra; sin vaciarla, SQL Server reutiliza los planes de la primera vez y el error no aparece) y aplica el script de nuevo.
 5. Crea otra base vacía con `dotnet ef database update`, como se crea una base nueva.
+6. Crea otra base en `PRODUCTION_BASELINE` y le aplica las migraciones como el despliegue (`.github/scripts/apply-migrations.sh`): la API como Production, con un usuario que solo tiene `db_ddladmin`, `db_datareader` y `db_datawriter`, los roles de la identidad de despliegue. Lo ejecuta dos veces; la segunda no debe aplicar nada. Una migración que necesite más permisos falla aquí y no en un release.
 
 La contraseña de SA se genera en el job y el runner la enmascara en los logs. Cuando producción avance, sube `PRODUCTION_BASELINE`; un valor más viejo solo prueba más migraciones. Si el job falla, sus scripts quedan como artefacto `migration-scripts` de la ejecución.
 
@@ -101,7 +104,7 @@ Migraciones recientes con notas operativas:
 - No edites una migración aplicada ni el snapshot manualmente.
 - No elimines/recrees bases como proceso normal de actualización.
 - Cada cambio de esquema incluye migración descriptiva, revisión SQL y documentación.
-- Producción no ejecuta migraciones automáticamente al iniciar; un paso de despliegue controlado aplica y observa el cambio.
+- Producción no ejecuta migraciones automáticamente al iniciar; un paso de despliegue controlado aplica y observa el cambio: el job `promote`, con aprobación, después de ensayarlo en una copia de producción.
 - Cambios destructivos usan expand/contract, backfill, compatibilidad de versiones y rollback/roll-forward.
 - Índices, claves y precisiones conservan `TenantId` cuando corresponda.
 - Consultas aplican filtros y paginación antes de materializar.
@@ -122,7 +125,14 @@ Revisa el código/SQL generado, prueba desde la versión productiva previa y con
 
 ## Scripts para producción
 
-Como producción no migra al arrancar, cada migración nueva deja en `database/production/<MigrationId>/` los scripts que aplica el despliegue:
+Con las migraciones automáticas activas, el despliegue aplica las migraciones y una migración nueva ya no necesita `apply.sql`. Deja `verify.sql` y `rollback.sql` en su carpeta cuando aporten:
+
+- un `Down` con guardas o que pierde datos;
+- una consulta para revisar lo que cambió.
+
+Si no hay `rollback.sql`, el `Down` idempotente se genera con `dotnet ef migrations script <migración> <anterior> --idempotent`. Las notas operativas (como desactivar sucursales después de una migración o no publicar a cierta hora) siguen en este documento y en la PR, porque quien aprueba `production` las aplica.
+
+Mientras no estén activas, el proceso es el de esta sección. Como producción no migra al arrancar, cada migración nueva deja en `database/production/<MigrationId>/` los scripts que se aplican a mano:
 
 - **`verify.sql`:** consultas de solo lectura para antes y después. Muestra las migraciones aplicadas, los datos que harían fallar la migración y las filas afectadas.
 - **`apply.sql`:** la salida de `dotnet ef migrations script --idempotent`, que aplica solo las migraciones que faltan en `__EFMigrationsHistory`. Va precedida de un bloque `SET` con dos partes:
@@ -132,7 +142,7 @@ Como producción no migra al arrancar, cada migración nueva deja en `database/p
 
 Los `apply.sql` son para la base de producción existente (ya en la Fase 0 o después): el de la última carpeta aplica de una vez todo lo que falte. Una base nueva y vacía se crea con `dotnet ef database update` (o con el arranque en Development): con EF Core 10, el script idempotente desde cero falla en `20260217004713_AddOrderServiceAndTenantCapabilities`, que actualiza en el mismo lote una columna que acaba de agregar. Esa migración ya está aplicada en producción y no se edita.
 
-El orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR. Si se olvida, `GET /health/schema` responde 503 y la prueba de humo del despliegue falla pidiendo el script; con el slot de staging, la versión no pasa a producción ([despliegue](deploy-azure.md)).
+Sin migraciones automáticas, el orden es: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y, al final, desplegar el código. Como cada push a `master` despliega, `apply.sql` se ejecuta antes de fusionar la PR. Si se olvida, `GET /health/schema` responde 503 y la prueba de humo del despliegue falla pidiendo el script; con el slot de staging, la versión no pasa a producción ([despliegue](deploy-azure.md)).
 
 Antes de publicarlos:
 
@@ -311,4 +321,6 @@ Las reparaciones de datos sin cambio de esquema van en `database/production/data
 - `PendingModelChangesWarning` está ignorado en la configuración del DbContext; el chequeo del CI lo compensa, pero no en ejecución local.
 - El CI no prueba migraciones con datos ni ejecuta los `apply.sql`/`rollback.sql` versionados: regenera el script, así que un archivo que quedó desactualizado frente a su migración no se detecta.
 - La guarda 50005 de `20261004165450_AddOfflineSaleIdempotency` nombra `CapturedOfflineAt` fuera de `EXEC`: si su `rollback.sql` se ejecuta otra vez, ya revertido, falla con `Invalid column name` (no cambia nada). La migración está aplicada en producción y no se edita.
-- Falta el proceso productivo: generar `migrations script --idempotent` como artefacto del pipeline, revisarlo y aplicarlo en un paso controlado antes de desplegar.
+- Las migraciones automáticas (copia, ensayo, aprobación y migración antes del swap) están en el workflow, pero falta activarlas en Azure: el slot, la base de staging, los permisos de la identidad y las variables ([despliegue](deploy-azure.md#paso-2-base-de-staging-y-migraciones-automáticas)). Hasta entonces se aplica el `apply.sql` a mano.
+- La copia de staging no se anonimiza: tiene los datos personales y las credenciales de WhatsApp de cada negocio, y solo la protege que el slot no procese colas y que nadie mande mensajes desde él.
+- Si una migración falla en el despliegue, el mensaje de SQL Server queda en el log del job y puede incluir un valor (por ejemplo, una llave duplicada).

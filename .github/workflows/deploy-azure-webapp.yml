@@ -23,6 +23,16 @@ concurrency:
 # - Through a staging slot, when the AZURE_WEBAPP_SLOT and AZURE_RESOURCE_GROUP variables exist (OIDC required): the
 #   package goes to the slot and is checked there; the `promote` job swaps it into production after the approval of
 #   the `production` environment, and checks production. A version that fails in the slot never reaches production.
+# Without automatic migrations, the database gets each apply.sql by hand before the merge. With them (the slot plus the
+# AZURE_SQL_* variables), each release copies production into the staging database, migrates the copy and tests the
+# slot over it; after the approval, `promote` migrates production and then swaps. Production never migrates on startup.
+env:
+  AZURE_SQL_SERVER: ${{ vars.AZURE_SQL_SERVER }}
+  AZURE_SQL_RESOURCE_GROUP: ${{ vars.AZURE_SQL_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}
+  AZURE_SQL_DATABASE: ${{ vars.AZURE_SQL_DATABASE }}
+  AZURE_SQL_STAGING_DATABASE: ${{ vars.AZURE_SQL_STAGING_DATABASE }}
+  AZURE_SQL_STAGING_SERVICE_OBJECTIVE: ${{ vars.AZURE_SQL_STAGING_SERVICE_OBJECTIVE }}
+
 jobs:
   build-and-deploy:
     if: github.ref == 'refs/heads/master'
@@ -36,6 +46,22 @@ jobs:
         run: |
           echo "::error::AZURE_WEBAPP_SLOT needs OIDC (AZURE_CLIENT_ID) and AZURE_RESOURCE_GROUP: the swap signs in to Azure."
           exit 1
+
+      # Production migrates only in `promote`, after its rehearsal on the copy and the approval: never without the slot.
+      - name: Check the database settings
+        if: vars.AZURE_SQL_SERVER != ''
+        env:
+          AZURE_WEBAPP_SLOT: ${{ vars.AZURE_WEBAPP_SLOT }}
+        run: |
+          if [ -z "$AZURE_WEBAPP_SLOT" ] || [ -z "$AZURE_SQL_RESOURCE_GROUP" ] || [ -z "$AZURE_SQL_DATABASE" ] \
+            || [ -z "$AZURE_SQL_STAGING_DATABASE" ]; then
+            echo "::error::AZURE_SQL_SERVER needs AZURE_WEBAPP_SLOT, AZURE_SQL_DATABASE and AZURE_SQL_STAGING_DATABASE (and AZURE_SQL_RESOURCE_GROUP or AZURE_RESOURCE_GROUP): production migrates only after its rehearsal in the slot."
+            exit 1
+          fi
+          if [ "${AZURE_SQL_STAGING_DATABASE,,}" = "${AZURE_SQL_DATABASE,,}" ]; then
+            echo "::error::AZURE_SQL_STAGING_DATABASE must not be production: every release deletes it and copies production into it."
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -92,6 +118,10 @@ jobs:
           cd "${{ github.workspace }}/publish"
           zip -r "${{ github.workspace }}/webapp.zip" .
 
+      - name: Install dotnet-ef
+        if: vars.AZURE_SQL_SERVER != ''
+        run: dotnet tool install --global dotnet-ef --version 10.0.12
+
       # OIDC (recommended, see docs/development/deploy-azure.md): with the AZURE_CLIENT_ID, AZURE_TENANT_ID and
       # AZURE_SUBSCRIPTION_ID repository variables, the deployment signs in with a federated credential and no
       # long-lived secret. Without them it keeps using the publish profile, as before.
@@ -102,6 +132,32 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # With OIDC, az gets new tokens only while GitHub's token lasts (minutes): the database's is taken now, before
+      # the copy, and lasts about an hour. The migrations sign in with it (Active Directory Default reads az).
+      - name: Open the database firewall to this runner
+        id: open-firewall
+        if: vars.AZURE_SQL_SERVER != ''
+        run: |
+          az account get-access-token --resource https://database.windows.net/ --output none
+          bash .github/scripts/sql-firewall.sh open
+
+      # Each release rehearses its migrations on today's production: the slot's database is a fresh copy of it.
+      - name: Copy production into the staging database
+        if: vars.AZURE_SQL_SERVER != ''
+        timeout-minutes: 60
+        run: bash .github/scripts/refresh-staging-database.sh
+
+      - name: Migrate the staging database
+        if: vars.AZURE_SQL_SERVER != ''
+        run: |
+          host=$(az sql server show --resource-group "$AZURE_SQL_RESOURCE_GROUP" --name "$AZURE_SQL_SERVER" --query fullyQualifiedDomainName --output tsv)
+          export MIGRATIONS_CONNECTION="Server=tcp:$host,1433;Database=$AZURE_SQL_STAGING_DATABASE;Authentication=Active Directory Default;Encrypt=True;Connect Timeout=60"
+          bash .github/scripts/apply-migrations.sh "staging ($AZURE_SQL_STAGING_DATABASE, copia de producción)"
+
+      - name: Close the database firewall
+        if: always() && steps.open-firewall.outcome != 'skipped'
+        run: bash .github/scripts/sql-firewall.sh close
 
       # To the staging slot when there is one; production keeps serving the previous version until the swap.
       - name: Deploy to Azure Web App (OIDC)
@@ -136,8 +192,19 @@ jobs:
           fi
           bash .github/scripts/smoke-test.sh "$APP_URL" "${{ steps.publish-output.outputs.client-script }}" "${{ github.sha }}"
 
+      # What the approval of `production` looks at: this version answering in the slot.
+      - name: Point the approval to the slot
+        if: vars.AZURE_WEBAPP_SLOT != ''
+        env:
+          SLOT_URL: ${{ steps.deploy-oidc.outputs.webapp-url }}
+        run: |
+          {
+            echo "### Lista para aprobar"
+            echo "Esta versión responde en el slot: $SLOT_URL. Pruébala ahí antes de aprobar el environment \`production\`: al aprobarlo, \`promote\` migra producción (con las migraciones automáticas) y hace el swap."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Only with a staging slot. The `production` environment holds the approval: with required reviewers in its settings,
-  # the swap waits for one of them. The OIDC subject of this job is the environment
+  # the production migrations and the swap wait for one of them. The OIDC subject of this job is the environment
   # (repo:Eduard0corona/TienditApp:environment:production), which needs its own federated credential.
   promote:
     needs: build-and-deploy
@@ -148,8 +215,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # The same commit the slot runs, built again for its migrations: the ones its copy of production already got.
+      - name: Setup .NET
+        if: vars.AZURE_SQL_SERVER != ''
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
-          sparse-checkout: .github/scripts
+          dotnet-version: 10.0.x
+
+      - name: Build the API for its migrations
+        if: vars.AZURE_SQL_SERVER != ''
+        run: |
+          dotnet build src/FoodParkDigital.WebApi --configuration Release
+          dotnet tool install --global dotnet-ef --version 10.0.12
 
       - name: Sign in to Azure (OIDC)
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
@@ -158,8 +236,36 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      # The slot already started this version, so production changes without a cold start. The previous version stays
-      # in the slot: swapping again goes back to it.
+      # As in build-and-deploy: the database token is taken right after signing in.
+      - name: Open the database firewall to this runner
+        id: open-firewall
+        if: vars.AZURE_SQL_SERVER != ''
+        run: |
+          az account get-access-token --resource https://database.windows.net/ --output none
+          bash .github/scripts/sql-firewall.sh open
+
+      # Before the swap, while production still runs the previous version: each migration keeps it working
+      # (expand/contract, docs/development/database-migrations.md). Each one is its own transaction; if one fails, the
+      # ones before it stay, nothing is swapped, and a new run applies only what is missing.
+      - name: Migrate production
+        if: vars.AZURE_SQL_SERVER != ''
+        run: |
+          {
+            echo "### Punto de restauración"
+            echo "Producción empezó a migrarse a las $(date -u +%Y-%m-%dT%H:%M:%SZ) (UTC). Para dejarla como estaba, restaura \`$AZURE_SQL_DATABASE\` a un momento anterior (restauración a un momento dado de Azure SQL)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          host=$(az sql server show --resource-group "$AZURE_SQL_RESOURCE_GROUP" --name "$AZURE_SQL_SERVER" --query fullyQualifiedDomainName --output tsv)
+          export MIGRATIONS_CONNECTION="Server=tcp:$host,1433;Database=$AZURE_SQL_DATABASE;Authentication=Active Directory Default;Encrypt=True;Connect Timeout=60"
+          bash .github/scripts/apply-migrations.sh "producción ($AZURE_SQL_DATABASE)"
+
+      - name: Close the database firewall
+        if: always() && steps.open-firewall.outcome != 'skipped'
+        run: bash .github/scripts/sql-firewall.sh close
+
+      # The slot already started this version, so production changes without a cold start. With the slot's own database
+      # (a slot setting), the swap first restarts the slot with production's settings, now over the migrated production
+      # database, and switches only once it warmed up. The previous version stays in the slot: swapping again goes back
+      # to it.
       - name: Swap the slot into production
         env:
           APP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}

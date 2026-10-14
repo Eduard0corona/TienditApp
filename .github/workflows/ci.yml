@@ -118,12 +118,13 @@ jobs:
             --configuration Release \
             --no-build
 
-  # Production does not migrate on startup: before each merge to master the team runs
-  # database/production/<MigrationId>/apply.sql (the SET block below plus the output of
-  # `dotnet ef migrations script --idempotent`) with `sqlcmd -b`. SQL Server compiles each
-  # migration of that script as one batch, so a statement naming a column added in the same
-  # migration fails there even though `dotnet ef database update` passes. This job runs the
-  # same script over a database in production's state.
+  # Production does not migrate on startup. Without the deploy's automatic migrations, before each
+  # merge to master the team runs database/production/<MigrationId>/apply.sql (the SET block below
+  # plus the output of `dotnet ef migrations script --idempotent`) with `sqlcmd -b`. SQL Server
+  # compiles each migration of that script as one batch, so a statement naming a column added in
+  # the same migration fails there even though `dotnet ef database update` passes. This job runs
+  # the same script over a database in production's state, and also the deploy's own way
+  # (.github/scripts/apply-migrations.sh).
   migrations:
     name: Migrations (SQL Server 2022, sqlcmd)
     runs-on: ubuntu-latest
@@ -287,6 +288,26 @@ jobs:
         run: |
           env 'Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore.Database.Command=Warning' \
             dotnet ef database update --connection "$MSSQL_CONNECTION;Database=TienditAppCiNew" $EF_PROJECTS
+
+      # How the deploy migrates the staging copy and production (.github/scripts/apply-migrations.sh):
+      # the API as Production, from the production baseline, signed in as a user with only the roles
+      # that docs/development/deploy-azure.md gives the deploy identity. A migration that needs more
+      # fails here instead of in a release. The second run must find nothing to apply.
+      - name: Apply the migrations as the deploy does
+        run: |
+          database=TienditAppCiDeploy
+          env 'Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore.Database.Command=Warning' \
+            dotnet ef database update "$PRODUCTION_BASELINE" --connection "$MSSQL_CONNECTION;Database=$database" $EF_PROJECTS
+          password="$(openssl rand -hex 24)Aa1"
+          echo "::add-mask::$password"
+          $SQLCMD -d "$database" -Q "CREATE LOGIN [tienditapp-deploy] WITH PASSWORD = N'$password';
+            CREATE USER [tienditapp-deploy] FOR LOGIN [tienditapp-deploy];
+            ALTER ROLE db_ddladmin ADD MEMBER [tienditapp-deploy];
+            ALTER ROLE db_datareader ADD MEMBER [tienditapp-deploy];
+            ALTER ROLE db_datawriter ADD MEMBER [tienditapp-deploy];"
+          export MIGRATIONS_CONNECTION="Server=127.0.0.1,1433;User ID=tienditapp-deploy;Password=$password;Encrypt=True;TrustServerCertificate=True;Database=$database"
+          bash .github/scripts/apply-migrations.sh "CI ($database, desde $PRODUCTION_BASELINE)"
+          bash .github/scripts/apply-migrations.sh "CI ($database), otra vez"
 
       # What depends on SQL Server itself (the folio counters take the next number under a row lock; the lists project
       # in SQL) runs against the same container: test classes named *SqlServerTests, skipped everywhere else. The

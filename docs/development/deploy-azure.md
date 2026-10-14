@@ -1,6 +1,6 @@
 # Despliegue en Azure App Service
 
-Cada push a `master` corre el workflow `Deploy WebApp (API + SPA)` (`.github/workflows/deploy-azure-webapp.yml`): compila el cliente y la solución, corre las pruebas, publica la API con la SPA en `wwwroot`, despliega el paquete y espera a que la app responda con esa versión. Las migraciones no corren al desplegar: antes del merge se aplica `database/production/<MigrationId>/apply.sql` (ver [migraciones](database-migrations.md)). Sin más configuración el paquete va directo a la app; con un [slot de staging](#slot-de-staging-con-swap-y-aprobación) va primero al slot y pasa a producción con un swap aprobado.
+Cada push a `master` corre el workflow `Deploy WebApp (API + SPA)` (`.github/workflows/deploy-azure-webapp.yml`): compila el cliente y la solución, corre las pruebas, publica la API con la SPA en `wwwroot`, despliega el paquete y espera a que la app responda con esa versión. Producción nunca migra al arrancar. Sin más configuración el paquete va directo a la app y antes del merge se aplica a mano `database/production/<MigrationId>/apply.sql` (ver [migraciones](database-migrations.md)). Con un [slot de staging](#slot-de-staging-migraciones-automáticas-y-aprobación), el paquete va primero al slot y pasa a producción con un swap aprobado. Con las migraciones automáticas, además, cada release se ensaya en una copia de producción y el despliegue migra producción antes del swap, sin pasos a mano.
 
 ## Prueba de humo
 
@@ -9,7 +9,7 @@ Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 
 - las respuestas de `GET /health/ready` y `GET /health/schema` deben nombrar el commit desplegado (`"commit"`). El publish lo sella en la versión del ensamblado (`-p:SourceRevisionId=${{ github.sha }}`, que queda como `1.0.0+<sha>`) y la API lo reporta en sus health checks. Así no pasa una instancia de la versión anterior, ni siquiera cuando el cliente no cambió y su script conserva el nombre: cada chequeo de abajo lo contesta la versión nueva;
 - `GET /health/ready` debe responder 200 (la API arrancó y llega a la base de datos);
 - desde la Fase 21, esa respuesta debe decir `"business-time-zones":"Healthy"`: las zonas horarias que un negocio puede elegir existen en el servidor. Si una cae en UTC, el chequeo queda Degraded (200, la app sigue atendiendo) y el workflow falla diciéndolo; el log stream nombra las zonas ([observabilidad](../architecture/observability.md));
-- `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
+- `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql` (o, con las migraciones automáticas, falló su paso), dice `Unhealthy` (503) y el workflow falla pidiendo revisarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
 - `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build del cliente, que solo cambia si cambió el cliente);
 - desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
 
@@ -359,17 +359,75 @@ La Fase 22E trae una migración, [`database/production/20261013191311_AddHomeVis
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas ni las tablas, sigue agendando y cada venta conserva su total guardado, cargo incluido. Pero no muestra las visitas ni el cargo, no deja tiempo de traslado y una cita cobrada se podría cobrar otra vez. Antes de volver, la consulta 4 del `verify.sql` dice cuántas visitas hay abiertas.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50015, sin cambiar nada, mientras haya visitas, cargos por visita o citas cobradas: se perderían las direcciones, los cargos y qué venta cobró cada cita. Sin ellos, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
-## Slot de staging con swap y aprobación
+## Slot de staging, migraciones automáticas y aprobación
 
-Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
+Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Se activa en dos pasos, y el segundo es el destino ([ADR 0021](../adr/0021-automatic-production-migrations.md)):
 
-Requiere OIDC (sección anterior), porque el swap inicia sesión en Azure, y un plan Standard o superior.
+1. **Slot.** Cada versión se despliega a un slot de staging y se prueba ahí (lista, esquema al día, cliente nuevo) mientras producción sigue con la anterior. El job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot nunca llega a producción, y la anterior queda en el slot para volver a ella. En este paso el slot comparte la base de producción, así que el `apply.sql` se sigue aplicando a mano antes del merge.
+2. **Migraciones automáticas.** El slot tiene su propia base, una copia de producción que se hace en cada release, y nadie aplica nada a mano:
+   - `build-and-deploy`, sin aprobación:
+     1. compila y prueba;
+     2. abre el firewall de Azure SQL a su runner;
+     3. borra la base de staging y copia en ella la de producción;
+     4. le aplica las migraciones de esta versión (`.github/scripts/apply-migrations.sh`) y cierra el firewall;
+     5. despliega al slot y lo prueba sobre esa copia.
 
-1. **Slot.** En el App Service: *Deployment slots* → *Add slot*, nombre `staging`, clonando la configuración de producción. Comparte la base de datos de producción: el `apply.sql` se aplica antes del merge, como siempre.
-2. **Ajustes del slot.** En el slot, *Configuration*: agrega `BackgroundJobs__Enabled` = `false` marcado como *Deployment slot setting*, para que el slot no procese colas ni envíe mensajes mientras prueba; al ser del slot, no viaja con el swap y producción conserva sus workers.
+     El resumen de la ejecución dice a qué hora se copió producción, qué migraciones aplicó y en qué dirección probar el slot antes de aprobar.
+   - `promote`, con la aprobación de `production`: aplica las mismas migraciones a producción, que todavía sirve la versión anterior, y después hace el swap y prueba producción. El resumen anota a qué hora empezó a migrar, para una restauración a un momento dado.
+
+   Si una migración falla en la copia, producción no se toca. Si falla en producción, no hay swap. Las migraciones anteriores a la que falló se quedan (cada una es su propia transacción), y la versión anterior sigue funcionando sobre ellas por la regla de expandir y contraer ([migraciones](database-migrations.md)). Corregida la causa, una ejecución nueva aplica solo lo que falta.
+
+Requiere OIDC (sección anterior), porque el swap y la copia inician sesión en Azure, y un plan Standard o superior.
+
+### Paso 1: el slot
+
+1. **Slot.** En el App Service: *Deployment slots* → *Add slot*, nombre `staging`, clonando la configuración de producción. Hasta el paso 2 comparte la base de datos de producción: el `apply.sql` se aplica antes del merge, como siempre.
+2. **Ajustes del slot.** En el slot, *Configuration*: agrega `BackgroundJobs__Enabled` = `false` marcado como *Deployment slot setting*. Así el slot no procesa colas ni envía mensajes mientras prueba. Al ser del slot, no viaja con el swap, y producción conserva sus workers.
 3. **Credencial federada del environment.** En la identidad de despliegue, agrega otra credencial federada con entidad *Environment* y nombre `production`. El job `promote` corre en ese environment y su sujeto es `repo:Eduard0corona/TienditApp:environment:production`; la credencial de la rama `master` sigue sirviendo al job que despliega al slot. El rol *Website Contributor* sobre la app ya cubre sus slots y el swap.
 4. **Aprobación.** En GitHub: *Settings* → *Environments* → `production` (GitHub lo crea en la primera ejecución si no existe) → *Required reviewers* con quien aprueba, y en *Deployment branches* solo `master`.
 5. **Variables.** En *Settings* → *Secrets and variables* → *Actions* → *Variables*: `AZURE_WEBAPP_SLOT` = `staging` y `AZURE_RESOURCE_GROUP` con el grupo de recursos de la app. Sin OIDC o sin el grupo, el workflow se detiene al empezar con un error que lo dice.
 6. **Probar.** Corre el workflow desde `master`: el job de despliegue prueba `https://<app>-staging.azurewebsites.net`; el job `promote` pide la aprobación, hace el swap y prueba producción (o `SMOKE_TEST_URL`).
 
-Para volver a la versión anterior después de un swap: *Deployment slots* → *Swap* (o `az webapp deployment slot swap --resource-group <grupo> --name <app> --slot staging --target-slot production`), que intercambia otra vez. Para dejar el slot, borra `AZURE_WEBAPP_SLOT` y el workflow vuelve a desplegar directo a producción.
+### Paso 2: base de staging y migraciones automáticas
+
+Con el paso 1 funcionando:
+
+1. **Administrador de Entra en Azure SQL.** En el servidor: *Microsoft Entra ID* → *Set admin*. Sin él no se crean usuarios de Entra en las bases.
+2. **Usuario de la identidad de despliegue.** Conectado como ese administrador a la base de producción (no a `master`), con el nombre de la identidad (por ejemplo `tienditapp-deploy`):
+
+   ```sql
+   CREATE USER [tienditapp-deploy] FROM EXTERNAL PROVIDER;
+   ALTER ROLE db_ddladmin ADD MEMBER [tienditapp-deploy];
+   ALTER ROLE db_datareader ADD MEMBER [tienditapp-deploy];
+   ALTER ROLE db_datawriter ADD MEMBER [tienditapp-deploy];
+   ```
+
+   Con esos roles el CI aplica todas las migraciones desde la línea base de producción (job `Migrations`, paso «Apply the migrations as the deploy does»): si una migración nueva necesitara más, el CI falla antes del release. La copia hereda el usuario, así que no se repite en staging. Las migraciones inician sesión con el token de `az` (`Authentication=Active Directory Default`): no hay contraseña ni secreto.
+3. **Permiso sobre el servidor.** En el servidor de Azure SQL: *Access control (IAM)* → rol *SQL Server Contributor* para la identidad, con alcance solo en ese servidor. Con él borra y crea la copia, y abre y cierra una regla de firewall para la IP de cada runner (`github-actions-*`; al abrir, borra las que haya dejado una ejecución cancelada).
+4. **Candado en producción.** Ese rol también podría borrar la base de producción. En la base de producción: *Locks* → *Add*, tipo *Delete*. La identidad no puede quitar candados (eso pide *Owner* o *User Access Administrator*), y además el workflow se niega a borrar una base de staging que se llame como la de producción. No pongas el candado en el servidor: impediría borrar la copia.
+5. **Conexión del slot.** En el slot, *Configuration*: la misma cadena de conexión `DefaultConnection` que usa producción, pero con la base de staging (`Database=TienditApp-staging`, por ejemplo), marcada como *Deployment slot setting*. Usa el mismo lugar que producción: *Connection strings* o la variable `ConnectionStrings__DefaultConnection`. Al ser del slot, no viaja con el swap: el slot siempre usa la copia y producción su base. En el swap, Azure reinicia el slot con la configuración de producción (ya migrada) y cambia cuando arrancó. Antes del primer release la copia no existe, y el slot falla hasta que el workflow la crea.
+6. **Variables.**
+   - `AZURE_SQL_SERVER`: el nombre del servidor, sin `.database.windows.net`.
+   - `AZURE_SQL_DATABASE`: la base de producción.
+   - `AZURE_SQL_STAGING_DATABASE`: la copia.
+   - Opcional, `AZURE_SQL_RESOURCE_GROUP`: el grupo del servidor, si no es el de la app.
+   - Opcional, `AZURE_SQL_STAGING_SERVICE_OBJECTIVE`: un nivel más barato para la copia (por ejemplo `S0`), que admita el tamaño de producción; vacío copia con el de producción.
+
+   Sin el slot, o con la copia igual a producción, el workflow se detiene al empezar con un error que lo dice.
+7. **Probar.** Corre el workflow desde `master`:
+   - en `build-and-deploy` deben aparecer la copia, sus migraciones (o «Ninguna pendiente») y la prueba del slot;
+   - en `promote`, después de aprobar, las migraciones de producción, el swap y la prueba de producción.
+
+Desde entonces el merge de una PR con migraciones ya no espera su `apply.sql`. Para volver al proceso manual, borra `AZURE_SQL_SERVER`; el slot vuelve a compartir la base cuando quitas la cadena de conexión del slot.
+
+### La copia tiene los datos de producción
+
+Es una copia completa, en el mismo servidor y con los mismos accesos: clientes, pedidos y las credenciales de WhatsApp de cada negocio. El slot tiene la misma autenticación que producción, así que no expone más de lo que ya expone producción. Aun así:
+
+- `BackgroundJobs__Enabled=false` en el slot es obligatorio: sin él, el slot mandaría a clientes reales los avisos, códigos y campañas pendientes en la copia;
+- lo que la API manda sin pasar por el outbox (como responder un chat de WhatsApp) sale de verdad: no respondas chats ni mandes mensajes desde el slot;
+- un archivo que se suba en el slot va al almacenamiento de producción, salvo que el slot tenga su propio `FileStorage__AzureBlob__ConnectionString` (o sus contenedores) como *Deployment slot setting*.
+
+### Volver a la versión anterior
+
+Después de un swap: *Deployment slots* → *Swap* (o `az webapp deployment slot swap --resource-group <grupo> --name <app> --slot staging --target-slot production`), que intercambia otra vez. Volver no revierte la base: la versión anterior funciona sobre el esquema nuevo (expandir y contraer). Si hace falta revertir una migración, usa su `rollback.sql` (si lo tiene) o restaura la base a la hora que anotó `promote`. Para dejar el slot, borra `AZURE_WEBAPP_SLOT` (y `AZURE_SQL_SERVER`) y el workflow vuelve a desplegar directo a producción.

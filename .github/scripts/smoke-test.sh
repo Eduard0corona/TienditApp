@@ -53,7 +53,7 @@ done
 if [ -n "$answered" ] && [ "$answered" != "$commit" ]; then
   echo "::error::$url still answers with commit $answered, not $commit: this version did not start within 10 minutes. Check the App Service log stream."
 elif [ "$current" = "yes" ] && [ "$schema" = "Unhealthy" ]; then
-  echo "::error::The database lacks migrations of this version: apply database/production/<MigrationId>/apply.sql (docs/development/database-migrations.md)."
+  echo "::error::The database lacks migrations of this version: with automatic migrations, check the migration steps of this run; without them, apply database/production/<MigrationId>/apply.sql (docs/development/database-migrations.md)."
 elif [ "$current" = "yes" ] && [ "$zones" = "Degraded" ]; then
   echo "::error::A time zone a business can pick resolves to UTC on $url: the host lacks its time-zone data, so the hours and dates of those businesses would run in UTC. The log of the business-time-zones check names them (docs/architecture/observability.md)."
 elif [ "$current" = "yes" ] && [ "$served" = "yes" ] && [ "$delivered" = "no" ]; then
