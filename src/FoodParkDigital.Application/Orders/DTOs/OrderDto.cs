@@ -26,6 +26,8 @@ public class OrderDto
     public OrderPlatformDto? PlatformOrder { get; set; }
     /// <summary>Where the order goes and what its delivery charged (Fase 22C); null for an order picked up or served.</summary>
     public OrderDeliveryDto? Delivery { get; set; }
+    /// <summary>The charge for the visit of the appointment it sells (Fase 22E); null for any other order.</summary>
+    public OrderVisitChargeDto? VisitCharge { get; set; }
     /// <summary>Branch where the sale was made.</summary>
     public Guid? BranchId { get; set; }
     /// <summary>When the device captured it without connection; the sale reached the server later.</summary>
@@ -81,6 +83,18 @@ public class OrderPlatformDto
     public string ExternalOrderNumber { get; set; } = null!;
     /// <summary>The platform, in its app, or the business, when the courier pays on pickup.</summary>
     public PlatformCollectedBy CollectedBy { get; set; }
+}
+
+/// <summary>
+/// The charge for going to the customer's address in the sale of an appointment at their home (Fase 22E): the appointment,
+/// its zone and what the visit was agreed for, with the order's tax policy at <see cref="FeeTaxRate"/>.
+/// </summary>
+public class OrderVisitChargeDto
+{
+    public Guid AppointmentId { get; set; }
+    public string ZoneName { get; set; } = null!;
+    public decimal Fee { get; set; }
+    public decimal FeeTaxRate { get; set; }
 }
 
 /// <summary>

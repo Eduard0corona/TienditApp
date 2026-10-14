@@ -17,6 +17,8 @@ public record GetAppointmentsQuery : IRequest<PaginatedList<AppointmentDto>>
     public DateTimeOffset? FromDate { get; init; }
     public DateTimeOffset? ToDate { get; init; }
     public string? Search { get; init; }
+    /// <summary>Only the appointments at the customer's address (true) or at the business (false); all when null.</summary>
+    public bool? HomeVisit { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -42,6 +44,8 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
             query = query.Where(x => x.StartAt >= request.FromDate.Value);
         if (request.ToDate.HasValue)
             query = query.Where(x => x.StartAt <= request.ToDate.Value);
+        if (request.HomeVisit is { } homeVisit)
+            query = query.Where(x => (x.Visit != null) == homeVisit);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLower();
@@ -57,25 +61,16 @@ public class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery,
         var history = !request.FromDate.HasValue && request.ToDate.HasValue;
         var ordered = history ? query.OrderByDescending(x => x.StartAt) : query.OrderBy(x => x.StartAt);
         var projected = ordered
-            .Select(x => new AppointmentDto
-            {
-                Id = x.Id,
-                CustomerName = x.CustomerName,
-                CustomerPhone = x.CustomerPhone,
-                ServiceName = x.ServiceName,
-                StaffName = x.StaffName,
-                ServiceProductId = x.ServiceProductId,
-                StaffUserId = x.StaffUserId,
-                StartAt = x.StartAt,
-                EndAt = x.EndAt,
-                Status = x.Status,
-                Notes = x.Notes
-            });
+            .Select(AppointmentDto.Projection);
 
-        return await PaginatedList<AppointmentDto>.CreateAsync(
+        var page = await PaginatedList<AppointmentDto>.CreateAsync(
             projected,
             request.PageNumber,
             request.PageSize,
             cancellationToken);
+        var cancelled = await AppointmentSales.CancelledAsync(_context, page.Items.Select(x => x.SaleOrderId), cancellationToken);
+        foreach (var appointment in page.Items)
+            appointment.SaleCancelled = appointment.SaleOrderId is { } sale && cancelled.Contains(sale);
+        return page;
     }
 }

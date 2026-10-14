@@ -92,6 +92,10 @@ public class AuthorizationBehaviorTests
         Assert.Equal(
             [TenantPermission.ChargeOrders],
             new Orders.Commands.CreateOrderCommand { Payments = [new() { Amount = 10m }] }.RequiredPermissions());
+        // The sale of an appointment completes it in the agenda (Fase 22E): whoever books appointments charges it.
+        Assert.Equal(
+            [TenantPermission.ManageAppointments],
+            new Orders.Commands.CreateOrderCommand { AppointmentId = Guid.NewGuid() }.RequiredPermissions());
         Assert.Equal(
             TenantPermission.ChargeOrders,
             Assert.Single(typeof(Orders.Commands.AddOrderPaymentCommand).GetCustomAttribute<RequiresPermissionAttribute>()!.AnyOf));

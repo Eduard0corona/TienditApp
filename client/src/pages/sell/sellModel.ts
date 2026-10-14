@@ -116,6 +116,25 @@ export interface SaleDelivery {
 
 export const NO_DELIVERY_ADDRESS: SaleDelivery = { postalCode: '', addressLine: '', references: '' };
 
+/**
+ * The appointment of the agenda the sale charges (Fase 22E), opened with «Cobrar» (Vender with ?appointment=): the server
+ * completes it with the sale and adds its visit charge to the total.
+ */
+export interface SaleAppointment {
+  id: string;
+  customerName: string;
+  /** «Corte · lun 5 oct, 10:00», for the ticket's banner. */
+  description: string;
+  /** What the visit at the customer's address was agreed for; null at the business or without a charge. */
+  visitFee: number | null;
+  zoneName: string | null;
+}
+
+/** The appointment a link asks to charge (?appointment=), read once. */
+export function readAppointmentId(params: URLSearchParams): string | null {
+  return params.get('appointment')?.trim() || null;
+}
+
 /** Who the sale is for, where it goes and where it came from: all optional at the counter. */
 export interface SaleDetails {
   /** At the counter, the customer; in an order of a delivery platform, the name for the bag. */
@@ -131,6 +150,8 @@ export interface SaleDetails {
   collectedBy: PlatformCollectedBy;
   /** Sent to the customer's address with the zone that reaches its postal code; null when it is picked up or eaten here. */
   delivery: SaleDelivery | null;
+  /** The appointment it charges; null (or missing in drafts from before) for any other sale. */
+  appointment?: SaleAppointment | null;
 }
 
 /** Where a counter sale comes from: no platform, no folio. */
@@ -141,7 +162,7 @@ export const COUNTER_ORIGIN: Pick<SaleDetails, 'channel' | 'externalOrderNumber'
 };
 
 export const NO_SALE_DETAILS: SaleDetails = {
-  customerName: '', customerPhone: '', tableNumber: '', orderNotes: '', ...COUNTER_ORIGIN, delivery: null,
+  customerName: '', customerPhone: '', tableNumber: '', orderNotes: '', ...COUNTER_ORIGIN, delivery: null, appointment: null,
 };
 
 const SERVICE_UNITS: ReadonlyArray<number> = [UnitType.Hour, UnitType.Session, UnitType.Service];

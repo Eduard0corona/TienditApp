@@ -89,6 +89,14 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(o => o.Delivery).AutoInclude();
 
+        // The charge for the visit of the appointment it sells (Fase 22E). Always loaded, like the delivery: it is part of
+        // the total.
+        builder.HasOne(o => o.VisitCharge)
+            .WithOne()
+            .HasForeignKey<OrderVisitCharge>(v => v.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(o => o.VisitCharge).AutoInclude();
+
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(o => o.CustomerUserId)

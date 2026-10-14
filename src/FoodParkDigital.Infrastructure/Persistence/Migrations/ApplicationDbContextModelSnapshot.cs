@@ -170,6 +170,9 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<Guid?>("SaleOrderId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("ServiceName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -200,7 +203,15 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("SaleOrderId");
 
                     b.HasIndex("TenantId", "CustomerPhone");
 
@@ -211,6 +222,55 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "StaffUserId", "StartAt");
 
                     b.ToTable("Appointments", (string)null);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentVisit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AddressLine")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Fee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PostalCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(5)");
+
+                    b.Property<string>("References")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ZoneName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId")
+                        .IsUnique();
+
+                    b.ToTable("AppointmentVisits", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AppointmentVisits_AddressLine", "LEN([AddressLine]) > 0");
+
+                            t.HasCheckConstraint("CK_AppointmentVisits_Fee", "[Fee] >= 0 AND [Fee] <= 10000");
+
+                            t.HasCheckConstraint("CK_AppointmentVisits_PostalCode", "LEN([PostalCode]) = 5 AND [PostalCode] NOT LIKE '%[^0-9]%'");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Audit.Entities.AuditLog", b =>
@@ -3039,6 +3099,46 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("OrderStatusHistory", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderVisitCharge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Fee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("FeeTaxRate")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ZoneName")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.ToTable("OrderVisitCharges", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OrderVisitCharges_Fee", "[Fee] > 0 AND [Fee] <= 10000");
+
+                            t.HasCheckConstraint("CK_OrderVisitCharges_FeeTaxRate", "[FeeTaxRate] >= 0 AND [FeeTaxRate] <= 100");
+                        });
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.PlatformOrderDetail", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4131,6 +4231,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("DefaultTaxRate")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<int>("HomeVisitTravelMinutes")
+                        .HasColumnType("int")
+                        .HasDefaultValue(30);
+
                     b.Property<int>("InsufficientStockPolicy")
                         .HasColumnType("int");
 
@@ -4173,7 +4277,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId")
                         .IsUnique();
 
-                    b.ToTable("TenantSettings", (string)null);
+                    b.ToTable("TenantSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.TenantUser", b =>
@@ -4638,6 +4745,23 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.Appointment", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithMany()
+                        .HasForeignKey("SaleOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.AppointmentVisit", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Appointments.Entities.Appointment", null)
+                        .WithOne("Visit")
+                        .HasForeignKey("FoodParkDigital.Domain.Appointments.Entities.AppointmentVisit", "AppointmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Billing.Entities.SubscriptionPayment", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Billing.Entities.TenantSubscription", null)
@@ -5033,6 +5157,21 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderVisitCharge", b =>
+                {
+                    b.HasOne("FoodParkDigital.Domain.Appointments.Entities.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
+                        .WithOne("VisitCharge")
+                        .HasForeignKey("FoodParkDigital.Domain.Orders.Entities.OrderVisitCharge", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.PlatformOrderDetail", b =>
                 {
                     b.HasOne("FoodParkDigital.Domain.Orders.Entities.Order", null)
@@ -5342,6 +5481,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("FoodParkDigital.Domain.Appointments.Entities.Appointment", b =>
+                {
+                    b.Navigation("Visit");
+                });
+
             modelBuilder.Entity("FoodParkDigital.Domain.Billing.Entities.TenantSubscription", b =>
                 {
                     b.Navigation("Payments");
@@ -5410,6 +5554,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Navigation("ServicePieces");
 
                     b.Navigation("StatusHistory");
+
+                    b.Navigation("VisitCharge");
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Orders.Entities.OrderItem", b =>

@@ -296,6 +296,13 @@
             }
           },
           {
+            "name": "homeVisit",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -377,6 +384,91 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppointmentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/route": {
+      "get": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "staffUserId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitRouteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitRouteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitRouteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/appointments/visit-quote": {
+      "get": {
+        "tags": [
+          "Appointments"
+        ],
+        "parameters": [
+          {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitQuoteDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitQuoteDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitQuoteDto"
                 }
               }
             }
@@ -3953,6 +4045,81 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/delivery-zones/home-visits": {
+      "get": {
+        "tags": [
+          "DeliveryZones"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DeliveryZones"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomeVisitSettingsCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomeVisitSettingsCommand"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHomeVisitSettingsCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitSettingsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitSettingsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeVisitSettingsDto"
+                }
+              }
+            }
           }
         }
       }
@@ -11413,6 +11580,7 @@
           "customerPhone",
           "endAt",
           "id",
+          "saleCancelled",
           "serviceName",
           "startAt",
           "status"
@@ -11460,6 +11628,17 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "visit": {
+            "$ref": "#/components/schemas/AppointmentVisitDto"
+          },
+          "saleOrderId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "saleCancelled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -11525,6 +11704,55 @@
           "NoShow",
           "Cancelled"
         ]
+      },
+      "AppointmentVisitDto": {
+        "required": [
+          "addressLine",
+          "fee",
+          "postalCode",
+          "zoneName"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AppointmentVisitInput": {
+        "required": [
+          "addressLine",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "AssignPlanRequest": {
         "required": [
@@ -12611,6 +12839,7 @@
           "amount",
           "description",
           "isDeliveryFee",
+          "isVisitCharge",
           "orderItemId",
           "productCode",
           "quantity",
@@ -12625,6 +12854,9 @@
             "format": "uuid"
           },
           "isDeliveryFee": {
+            "type": "boolean"
+          },
+          "isVisitCharge": {
             "type": "boolean"
           },
           "productCode": {
@@ -13633,6 +13865,9 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "visit": {
+            "$ref": "#/components/schemas/AppointmentVisitInput"
           }
         },
         "additionalProperties": false
@@ -14186,6 +14421,11 @@
           },
           "delivery": {
             "$ref": "#/components/schemas/OrderDeliveryInput"
+          },
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -16085,6 +16325,19 @@
         },
         "additionalProperties": false
       },
+      "HomeVisitSettingsDto": {
+        "required": [
+          "travelMinutes"
+        ],
+        "type": "object",
+        "properties": {
+          "travelMinutes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "InstallCategoryTemplateResultDto": {
         "required": [
           "createdCount",
@@ -17980,6 +18233,9 @@
           "delivery": {
             "$ref": "#/components/schemas/OrderDeliveryDto"
           },
+          "visitCharge": {
+            "$ref": "#/components/schemas/OrderVisitChargeDto"
+          },
           "branchId": {
             "type": "string",
             "format": "uuid",
@@ -18602,6 +18858,33 @@
           "Retail",
           "Service"
         ]
+      },
+      "OrderVisitChargeDto": {
+        "required": [
+          "appointmentId",
+          "fee",
+          "feeTaxRate",
+          "zoneName"
+        ],
+        "type": "object",
+        "properties": {
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          },
+          "feeTaxRate": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
       },
       "OutgoingMessageDto": {
         "required": [
@@ -23380,6 +23663,9 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "visit": {
+            "$ref": "#/components/schemas/AppointmentVisitInput"
           }
         },
         "additionalProperties": false
@@ -23622,6 +23908,19 @@
               "type": "string"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateHomeVisitSettingsCommand": {
+        "required": [
+          "travelMinutes"
+        ],
+        "type": "object",
+        "properties": {
+          "travelMinutes": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -24622,6 +24921,145 @@
         "properties": {
           "code": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisitQuoteDto": {
+        "required": [
+          "fee",
+          "postalCode",
+          "zoneName"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisitRouteDto": {
+        "required": [
+          "date",
+          "staff"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VisitRouteStaffDto"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisitRouteStaffDto": {
+        "required": [
+          "feeTotal",
+          "stops"
+        ],
+        "type": "object",
+        "properties": {
+          "staffUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "staffName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VisitRouteStopDto"
+            }
+          },
+          "feeTotal": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VisitRouteStopDto": {
+        "required": [
+          "addressLine",
+          "appointmentId",
+          "customerName",
+          "customerPhone",
+          "endAt",
+          "fee",
+          "postalCode",
+          "saleCancelled",
+          "serviceName",
+          "startAt",
+          "status",
+          "zoneName"
+        ],
+        "type": "object",
+        "properties": {
+          "appointmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "customerPhone": {
+            "type": "string"
+          },
+          "serviceName": {
+            "type": "string"
+          },
+          "startAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AppointmentStatus"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "zoneName": {
+            "type": "string"
+          },
+          "fee": {
+            "type": "number",
+            "format": "double"
+          },
+          "saleOrderId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "saleCancelled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

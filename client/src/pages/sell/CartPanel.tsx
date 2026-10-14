@@ -11,7 +11,7 @@ import DeliveryOrderFields from './DeliveryOrderFields';
 import PlatformOrderFields from './PlatformOrderFields';
 import PlatformOriginPicker from './PlatformOriginPicker';
 import SaleDetailsForm from './SaleDetailsForm';
-import type { CartLine, ChatOrigin, SaleDelivery, SaleDetails, TabTarget } from './sellModel';
+import type { CartLine, ChatOrigin, SaleAppointment, SaleDelivery, SaleDetails, TabTarget } from './sellModel';
 
 interface CartPanelProps {
   /** A table's tab: the sale goes to the kitchen instead of being charged. */
@@ -64,6 +64,9 @@ interface CartPanelProps {
   /** The active zone that reaches the postal code written. */
   deliveryZone: DeliveryZoneTerms | null;
   deliveryProblem: string;
+  /** The appointment the sale charges (Fase 22E): with its charge for the visit, when it has one. */
+  appointment: SaleAppointment | null;
+  onDismissAppointment: () => void;
   /** The prices on screen are not yet those of where the sale comes from (the platform's app, or the menu). */
   pricesPending: boolean;
   /** Why the catalog of where the sale comes from did not load, if it did not. */
@@ -76,8 +79,9 @@ export default function CartPanel(props: CartPanelProps) {
   const { tabTarget, tabOrder, chatOrigin, cart, totals, submitting, platform, pricesPending } = props;
   // Nothing is charged, registered or sent at prices that are about to change.
   const blocked = cart.length === 0 || submitting || pricesPending;
-  // A chat is a WhatsApp order and a tab goes to a table: neither comes from a platform's app.
-  const showOrigin = !tabTarget && !chatOrigin && props.activePlatforms.length > 0;
+  // A chat is a WhatsApp order, a tab goes to a table and an appointment is charged at the counter: none comes from a
+  // platform's app.
+  const showOrigin = !tabTarget && !chatOrigin && !props.appointment && props.activePlatforms.length > 0;
   const platformName = platform ? getPlatformName(platform) : '';
   const platformCharged = platform !== null && props.details.collectedBy === PlatformCollectedBy.Platform;
 
@@ -104,6 +108,22 @@ export default function CartPanel(props: CartPanelProps) {
             Pedido por WhatsApp de <strong>{chatOrigin.name ?? chatOrigin.phone}</strong>
           </span>
           <button type="button" className="btn-close" aria-label="Ya no es un pedido por WhatsApp" onClick={props.onDismissChat}></button>
+        </div>
+      )}
+      {props.appointment && (
+        <div className="alert alert-info d-flex align-items-center justify-content-between gap-2 py-2 mb-2">
+          <span className="small">
+            <i className="ri-calendar-check-line me-1" aria-hidden="true"></i>
+            Cobro de la cita de <strong>{props.appointment.customerName}</strong>
+            {props.appointment.description && <> · {props.appointment.description}</>}
+          </span>
+          <button
+            type="button"
+            className="btn-close"
+            aria-label="Ya no es el cobro de la cita"
+            onClick={props.onDismissAppointment}
+            disabled={submitting}
+          ></button>
         </div>
       )}
       {showOrigin && (
@@ -176,7 +196,11 @@ export default function CartPanel(props: CartPanelProps) {
       <div className="sell-totals">
         {totals.fee !== null && (
           <div className="d-flex justify-content-between">
-            <span>Envío a domicilio</span>
+            <span>
+              {props.appointment
+                ? `Cargo por visita${props.appointment.zoneName ? ` (${props.appointment.zoneName})` : ''}`
+                : 'Envío a domicilio'}
+            </span>
             <span className="ta-money">{formatDeliveryFee(totals.fee)}</span>
           </div>
         )}

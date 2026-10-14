@@ -12,6 +12,7 @@ import { phase4Routes } from './routes-p4.mjs';
 import { phase4eRoutes } from './routes-p5.mjs';
 import { phase5aRoutes } from './routes-p6.mjs';
 import { phase5eRoutes } from './routes-p7.mjs';
+import { phase22eRoutes } from './routes-p8.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 export { NOW_ISO };
@@ -218,6 +219,7 @@ function buildRoutes(data, token) {
   const NOW_LOCAL = localHhmmss(NOW_ISO);
 
   return [
+    ...phase22eRoutes(data, { ok, notFound }),
     ...phase5eRoutes(data, { ok, notFound }),
     ...phase5aRoutes(data, { ok, notFound }),
     ...phase4eRoutes(Object.assign(data, { token }), { ok }),
@@ -343,8 +345,9 @@ function buildRoutes(data, token) {
     // The demo business set up no delivery platform: Vender and Pedidos look as they do without them, and Mi negocio
     // offers the three to configure.
     ['GET', /^\/delivery-platforms\/channels$/, () => ok([])],
-    // Nor any delivery zone: Vender offers no «A domicilio» (Configuración › Zonas de entrega answers its own).
-    ['GET', /^\/delivery-zones$/, () => ok([])],
+    // Nor any delivery zone: Vender offers no «A domicilio» and the agenda no visits (a scene file with zones sets
+    // `data.deliveryZones`; Configuración › Zonas de entrega answers its own).
+    ['GET', /^\/delivery-zones$/, () => ok(data.deliveryZones ?? [])],
     // Nor has a courier collected anything (Fase 22D): Caja shows no Repartidores tab.
     ['GET', /^\/courier-settlements\/receivable$/, () => ok(data.courierReceivables ?? [{
       courier: 1, owedOrders: 0, owedAmount: 0, oldestDispatchedAt: null, onTheWayOrders: 0, onTheWayAmount: 0, lastSettledAt: null,

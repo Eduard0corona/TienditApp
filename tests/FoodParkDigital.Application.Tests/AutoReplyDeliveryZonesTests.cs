@@ -3,6 +3,7 @@ using FoodParkDigital.Application.AiAgents;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Tests.Support;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Branches.Entities;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Delivery;
@@ -212,6 +213,29 @@ public class AutoReplyDeliveryZonesTests
         Assert.StartsWith($"{CoversCentro}\n\n", own);
     }
 
+    [Fact]
+    public async Task BusinessThatGoesToItsCustomers_ShouldTalkOfTheChargeForTheVisit()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var salon = await BusinessAsync(fixture, capabilities: TenantCapability.Service | TenantCapability.Retail | TenantCapability.Appointments);
+        await AddZoneAsync(fixture, salon, "Centro", 80m, 150m, 400m, isActive: true, "72000");
+        await AddZoneAsync(fixture, salon, "Norte", 0m, 0m, null, isActive: true, "72100");
+
+        var covered = await Replies(fixture).BuildReplyAsync(salon.Id, "¿Vienen a domicilio al 72000?", null);
+        var free = await Replies(fixture).BuildReplyAsync(salon.Id, "¿Tienen servicio a domicilio en el 72100?", null);
+        var outside = await Replies(fixture).BuildReplyAsync(salon.Id, "¿Hacen servicio a domicilio al 75000?", null);
+        var ask = await Replies(fixture).BuildReplyAsync(salon.Id, "¿Tienen servicio a domicilio?", null);
+
+        // A zone's minimum and free delivery are for orders: a visit only has its charge.
+        Assert.StartsWith("Sí llegamos al 72000: el cargo por visita es de $80.00.", covered);
+        Assert.DoesNotContain("mínimo", covered);
+        Assert.StartsWith("Sí llegamos al 72100: la visita a domicilio no tiene cargo.", free);
+        Assert.StartsWith(HomeVisitRules.NotCoveredMessage("75000"), outside);
+        Assert.StartsWith(AiAgentAutoReplyService.AskForVisitPostalCodeText, ask);
+        Assert.True(AiAgentAutoReplyService.MakesHomeVisits(TenantCapability.Retail | TenantCapability.Appointments));
+        Assert.False(AiAgentAutoReplyService.MakesHomeVisits(TenantCapability.Food | TenantCapability.Appointments));
+    }
+
     /// <summary>
     /// A business with an active zone «Centro» (72000 and 72005: $35, minimum $150, free from $400), an active zone with
     /// free delivery (72100) and an inactive one (72830).
@@ -238,9 +262,15 @@ public class AutoReplyDeliveryZonesTests
     /// new business's do.
     /// </summary>
     private static async Task<Tenant> BusinessAsync(
-        SalesTestFixture fixture, OpeningHours? weekly = null, string slug = "demo", string? products = null, bool pricesIncludeTax = true)
+        SalesTestFixture fixture,
+        OpeningHours? weekly = null,
+        string slug = "demo",
+        string? products = null,
+        bool pricesIncludeTax = true,
+        TenantCapability capabilities = TenantCapability.Food)
     {
-        var tenant = await fixture.AddTenantAsync(BusinessType.Food, TenantCapability.Food, pricesIncludeTax: pricesIncludeTax, slug: slug);
+        var businessType = capabilities.HasFlag(TenantCapability.Food) ? BusinessType.Food : BusinessType.Service;
+        var tenant = await fixture.AddTenantAsync(businessType, capabilities, pricesIncludeTax: pricesIncludeTax, slug: slug);
         var settings = await fixture.Context.TenantSettings.SingleAsync(s => s.TenantId == tenant.Id);
         settings.UpdateOnlineMenu(OnlineMenuMode.Orders);
         settings.SetOpeningHours(weekly);

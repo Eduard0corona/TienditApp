@@ -217,12 +217,12 @@ public class AppointmentSchedulingTests
 
     private static Task<Result<Application.Appointments.DTOs.AppointmentDto>> CreateAsync(
         SalesTestFixture fixture, CreateAppointmentCommand command, IOutgoingMessageSignal? signal = null)
-        => new CreateAppointmentCommandHandler(fixture.Context, fixture.TenantService, Notices(fixture), signal)
+        => new CreateAppointmentCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser, fixture.Clock, Notices(fixture), signal)
             .Handle(command, CancellationToken.None);
 
     private static Task<Result<Application.Appointments.DTOs.AppointmentDto>> UpdateAsync(
         SalesTestFixture fixture, UpdateAppointmentCommand command, IOutgoingMessageSignal? signal = null)
-        => new UpdateAppointmentCommandHandler(fixture.Context, Notices(fixture), signal)
+        => new UpdateAppointmentCommandHandler(fixture.Context, fixture.CurrentUser, fixture.Clock, Notices(fixture), signal)
             .Handle(command, CancellationToken.None);
 
     private static Task<Result<Application.Appointments.DTOs.AppointmentDto>> ChangeStatusAsync(

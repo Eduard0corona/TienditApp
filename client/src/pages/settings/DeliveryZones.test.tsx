@@ -5,6 +5,7 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest, type Schemas } from '../../api/typedClient';
+import { TenantCapability } from '../../types';
 import DeliveryZones from './DeliveryZones';
 
 vi.mock('../../api/typedClient', () => ({ apiRequest: vi.fn() }));
@@ -15,7 +16,9 @@ vi.mock('../../components/layout/SectionTabs', () => ({ default: () => null }));
 const confirm = vi.fn();
 vi.mock('../../hooks/useConfirm', () => ({ useConfirm: () => ({ confirm }) }));
 const tenant = { pricesIncludeTax: true };
-vi.mock('../../hooks/useTenant', () => ({ useTenant: () => ({ tenant }) }));
+// The modules of the business: with the agenda it also goes to its customers' addresses (Fase 22E).
+const modules = { capabilities: 0 };
+vi.mock('../../hooks/useTenant', () => ({ useTenant: () => ({ tenant, capabilities: modules.capabilities }) }));
 
 type Zone = Schemas['DeliveryZoneDto'];
 
@@ -28,6 +31,7 @@ const NORTE: Zone = { id: 'z2', name: 'Norte', fee: 0, minimumOrder: 0, freeDeli
 function serve(zones: Zone[], save: () => Promise<unknown> = () => Promise.resolve(CENTRO)) {
   vi.mocked(apiRequest).mockImplementation(((method: string, path: string) => {
     if (method === 'get' && path === '/api/v1/delivery-zones') return Promise.resolve(zones);
+    if (method === 'get' && path === '/api/v1/delivery-zones/home-visits') return Promise.resolve({ travelMinutes: 30 });
     if (method === 'post' || method === 'put' || method === 'delete') return save();
     return Promise.reject(new Error(`Sin respuesta para ${method} ${path}`));
   }) as unknown as typeof apiRequest);
@@ -59,6 +63,20 @@ describe('DeliveryZones', () => {
     vi.resetAllMocks();
     confirm.mockResolvedValue(true);
     tenant.pricesIncludeTax = true;
+    modules.capabilities = 0;
+  });
+
+  it('shows the travel time between visits only to a business with the agenda', async () => {
+    serve([CENTRO]);
+    const { unmount } = renderPage();
+    await screen.findByText('Centro');
+    expect(screen.queryByRole('heading', { name: 'Visitas a domicilio' })).not.toBeInTheDocument();
+    unmount();
+
+    modules.capabilities = TenantCapability.Service | TenantCapability.Appointments;
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Visitas a domicilio' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Traslado entre citas (minutos)')).toHaveValue(30));
   });
 
   it('says the amounts go like the prices of the business: with IVA included, or before IVA', async () => {

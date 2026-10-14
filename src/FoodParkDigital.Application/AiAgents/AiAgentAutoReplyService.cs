@@ -4,6 +4,7 @@ using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.Application.Orders;
 using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.AiAgents.Entities;
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -215,8 +216,9 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
 
     /// <summary>
     /// What the business answers about delivering: whether its zones reach <paramref name="postalCode"/> and what they
-    /// charge, or, without one, to write it. Null when it has no active zone (the reply goes on as before them) or when
-    /// they could not be read, which is logged.
+    /// charge, or, without one, to write it. A business that books appointments and serves no food goes to its customers
+    /// instead (Fase 22E): its zones are where it makes visits, and their fee is the charge for the visit. Null when it has
+    /// no active zone (the reply goes on as before them) or when they could not be read, which is logged.
     /// </summary>
     private async Task<string?> TryReadCoverageAsync(Guid tenantId, string? postalCode, CancellationToken cancellationToken)
     {
@@ -224,20 +226,23 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         {
             if (!await DeliveryZoneLookup.AnyActiveAsync(_context, tenantId, cancellationToken))
                 return null;
+
+            var settings = await _context.TenantSettings
+                .AsNoTracking()
+                .Where(s => s.TenantId == tenantId)
+                .Select(s => new { s.Capabilities, s.PricesIncludeTax })
+                .FirstOrDefaultAsync(cancellationToken);
+            var visits = settings is not null && MakesHomeVisits(settings.Capabilities);
             if (postalCode is null)
-                return AskForPostalCodeText;
+                return visits ? AskForVisitPostalCodeText : AskForPostalCodeText;
 
             var zone = await DeliveryZoneLookup.FindAsync(_context, tenantId, postalCode, cancellationToken);
             if (zone is null)
-                return NotCoveredText(postalCode);
+                return visits ? HomeVisitRules.NotCoveredMessage(postalCode) : NotCoveredText(postalCode);
 
             // The order charges the fee like the business's prices: with IVA added when they do not include it (ADR 0018).
-            var pricesIncludeTax = await _context.TenantSettings
-                .AsNoTracking()
-                .Where(s => s.TenantId == tenantId)
-                .Select(s => (bool?)s.PricesIncludeTax)
-                .FirstOrDefaultAsync(cancellationToken) ?? true;
-            return CoveredText(postalCode, zone, pricesIncludeTax);
+            var pricesIncludeTax = settings?.PricesIncludeTax ?? true;
+            return visits ? VisitCoveredText(postalCode, zone, pricesIncludeTax) : CoveredText(postalCode, zone, pricesIncludeTax);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -251,6 +256,22 @@ public class AiAgentAutoReplyService : IAiAgentAutoReplyService
         "Sí hacemos entregas a domicilio. Escríbenos tu código postal y te decimos si llegamos y cuánto cuesta el envío.";
 
     public static string NotCoveredText(string postalCode) => $"Por ahora no llegamos al {postalCode}.";
+
+    public const string AskForVisitPostalCodeText =
+        "Sí damos servicio a domicilio. Escríbenos tu código postal y te decimos si llegamos y cuánto es el cargo por visita.";
+
+    /// <summary>A business that books appointments and serves no food: its zones are where it goes to its customers.</summary>
+    public static bool MakesHomeVisits(TenantCapability capabilities)
+        => capabilities.HasFlag(TenantCapability.Appointments) && !capabilities.HasFlag(TenantCapability.Food);
+
+    /// <summary>
+    /// «Sí llegamos al 72000: el cargo por visita es de $80.00.» For a business whose prices do not include IVA it is
+    /// «$80.00 más IVA», as the sale charges it. A zone's minimum and free delivery are for orders, not for visits.
+    /// </summary>
+    public static string VisitCoveredText(string postalCode, DeliveryZoneCoverage zone, bool pricesIncludeTax = true)
+        => zone.Fee == 0
+            ? $"Sí llegamos al {postalCode}: la visita a domicilio no tiene cargo."
+            : $"Sí llegamos al {postalCode}: el cargo por visita es de {OrderStatusLabels.FormatMoney(zone.Fee)}{(pricesIncludeTax ? "" : " más IVA")}.";
 
     /// <summary>
     /// «Sí llegamos al 72000: el envío cuesta $35.00. Pedido mínimo de $150.00. Envío gratis en pedidos desde $400.00.»
