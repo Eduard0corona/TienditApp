@@ -93,6 +93,21 @@ jobs:
             --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),mcp__github_inline_comment__create_inline_comment"
             --json-schema '{"type":"object","properties":{"blocker":{"type":"integer","minimum":0},"major":{"type":"integer","minimum":0},"minor":{"type":"integer","minimum":0},"summary":{"type":"string"}},"required":["blocker","major","minor","summary"],"additionalProperties":false}'
 
+      # The action logs only a sanitized summary of Claude's result, so a failed call (invalid or expired token, usage
+      # limit, unavailable model) shows up as "did not return structured_output". The reason stays in its execution
+      # file: print only the error of the result, between stop-commands because it is not our text.
+      - name: Show why Claude failed
+        if: failure() && steps.claude-review.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude-review.outputs.execution_file }}
+        run: |
+          reason=$(jq -r '.[] | select(.type == "result" and .is_error) | (.result // empty), (.errors // [] | .[])' \
+            "$EXECUTION_FILE" | head -c 2000)
+          stop=$(uuidgen)
+          echo "::stop-commands::$stop"
+          echo "${reason:-The execution file has no error message.}"
+          echo "::$stop::"
+
       # Creates or updates a single summary comment, found by its hidden marker.
       - name: Publish review summary
         if: steps.claude-review.outputs.structured_output != ''
