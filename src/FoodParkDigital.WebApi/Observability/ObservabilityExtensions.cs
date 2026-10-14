@@ -3,6 +3,7 @@ using Azure.Monitor.OpenTelemetry.AspNetCore;
 using FoodParkDigital.Application.Common.Diagnostics;
 using FoodParkDigital.Infrastructure.BackgroundJobs;
 using FoodParkDigital.Infrastructure.Persistence;
+using FoodParkDigital.Infrastructure.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using OpenTelemetry;
@@ -32,6 +33,9 @@ public static class ObservabilityExtensions
             // Degraded even if the check itself fails: zone data never takes an instance out of rotation.
             .AddCheck<BusinessTimeZonesHealthCheck>(
                 "business-time-zones", failureStatus: HealthStatus.Degraded, tags: [ReadyTag])
+            // Degraded as well: without email the app still sells, but nobody who signs up can activate their account.
+            .AddCheck<EmailProviderHealthCheck>(
+                "email-provider", failureStatus: HealthStatus.Degraded, tags: [ReadyTag])
             .AddCheck<DatabaseSchemaHealthCheck>("database-schema", tags: [SchemaTag]);
 
         var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
@@ -68,8 +72,9 @@ public static class ObservabilityExtensions
 
     /// <summary>
     /// <c>/health/live</c> answers while the process runs (no dependencies), for restarts.
-    /// <c>/health/ready</c> checks the database, the background queues and the businesses' time zones, for the load
-    /// balancer and alerts; a degraded queue or a zone that falls back to UTC still answers 200. <c>/health/schema</c>
+    /// <c>/health/ready</c> checks the database, the background queues, the businesses' time zones and the email
+    /// provider, for the load balancer and alerts; a degraded queue, a zone that falls back to UTC or no email provider
+    /// still answers 200. <c>/health/schema</c>
     /// answers 503 while the database lacks a migration of this version, for the deployment: it stays out of readiness
     /// so a missing <c>apply.sql</c> fails the deployment instead of taking every instance out of rotation. All three
     /// are anonymous and show only statuses and the commit of this build (<see cref="BuildInfo"/>), which the smoke

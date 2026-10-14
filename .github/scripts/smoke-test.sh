@@ -4,7 +4,8 @@
 # built, and its script compressed (Brotli) and cached for a year.
 # The health endpoints name the commit the API was built from, so an instance of the previous version does not pass,
 # not even when the client did not change and its script kept its name. App Service restarts take a few minutes, so it
-# tries 30 times, 20 seconds apart.
+# tries 30 times, 20 seconds apart. Without an email provider it passes with a warning: the app works, but nobody who
+# signs up can activate their account.
 #   $1: the app's address (the slot's, while it is still in staging)
 #   $2: the script that index.html loads; its name carries the hash of the client build
 #   $3: the commit deployed (github.sha), which /health/ready and /health/schema must name
@@ -27,6 +28,8 @@ for attempt in $(seq 1 30); do
   # A time zone that falls back to UTC leaves readiness Degraded, which still answers 200: the entry itself is read
   # (BusinessTimeZonesHealthCheck).
   zones=$(grep -oE '"business-time-zones":"[A-Za-z]+"' <<< "$ready_answer" | head -n 1 | cut -d'"' -f4 || true)
+  # The same for the email provider (EmailProviderHealthCheck), which only warns.
+  email=$(grep -oE '"email-provider":"[A-Za-z]+"' <<< "$ready_answer" | head -n 1 | cut -d'"' -f4 || true)
   schema_answer=$(curl -s --max-time 20 "$url/health/schema" || true)
   # The status in the JSON, not just a 200: a version without the endpoint answers with the client's index.html.
   schema=$(grep -oE '"status":"[A-Za-z]+"' <<< "$schema_answer" | head -n 1 | cut -d'"' -f4 || true)
@@ -43,6 +46,9 @@ for attempt in $(seq 1 30); do
   if [ "$current" = "yes" ] && [ "$ready" = "200" ] && [ "$zones" = "Healthy" ] && [ "$schema" = "Healthy" ] \
     && [ "$served" = "yes" ] && [ "$delivered" = "yes" ]; then
     echo "$url answers with this version ($commit): ready, with its time zones and migrations, and serving $script compressed and cached."
+    if [ "$email" != "Healthy" ]; then
+      echo "::warning::$url has no email provider configured (email-provider=${email:-no answer}): nobody who signs up can activate their account, and password resets and team invitations by email are not sent. Configure EmailSettings (docs/development/deploy-azure.md); the log of the email-provider check says what is missing."
+    fi
     exit 0
   fi
   echo "Attempt $attempt: commit=${answered:-none}, /health/ready=$ready, time zones=${zones:-no answer}, /health/schema=${schema:-no answer}, new client served=$served, compressed and cached=$delivered."

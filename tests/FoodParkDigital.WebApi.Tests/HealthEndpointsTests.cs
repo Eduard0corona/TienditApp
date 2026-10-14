@@ -56,6 +56,19 @@ public sealed class HealthEndpointsTests : IClassFixture<HealthEndpointsTests.Ap
         Assert.Equal(HealthStatus.Degraded, registration.FailureStatus);
     }
 
+    [Fact]
+    public async Task Readiness_ShouldSayWhetherAccountEmailsCanBeSent_WithoutFailingForIt()
+    {
+        using var response = await _api.Http.GetAsync("/health/ready");
+        var text = await response.Content.ReadAsStringAsync();
+
+        // appsettings.json carries example SMTP values: they count as no provider. The exact text the smoke test reads.
+        Assert.Contains("\"email-provider\":\"Degraded\"", text);
+        var registration = _api.Services.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations
+            .Single(check => check.Name == "email-provider");
+        Assert.Equal(HealthStatus.Degraded, registration.FailureStatus);
+    }
+
     [Theory]
     [InlineData("1.0.0+b16e105d33d19afed856bea34b11db7e6b1a489c", "b16e105d33d19afed856bea34b11db7e6b1a489c")]
     [InlineData("1.0.0", null)]
