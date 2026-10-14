@@ -54,6 +54,8 @@ export default function CheckEmail() {
         <i className="ri-mail-send-line text-primary" style={{ fontSize: '3rem' }} aria-hidden="true"></i>
       </div>
       <p>Abre el correo y haz clic en el enlace. Después inicia sesión con tu correo y tu contraseña.</p>
+      {/* The page is the same whether the email had an account or not; that email says how to enter. */}
+      <p>¿Ya tenías una cuenta con ese correo? Te escribimos cómo entrar.</p>
       <p className="text-muted small">
         Si no lo ves en unos minutos, revisa la carpeta de spam o correo no deseado. El enlace vence en 24 horas.
       </p>

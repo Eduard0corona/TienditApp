@@ -31,6 +31,8 @@ describe('CheckEmail', () => {
 
     expect(screen.getByRole('heading', { name: 'Revisa tu correo' })).toBeInTheDocument();
     expect(screen.getByText('Te enviamos un enlace para activar tu cuenta.')).toBeInTheDocument();
+    // The same page whether the email already had an account: that email says how to enter.
+    expect(screen.getByText('¿Ya tenías una cuenta con ese correo? Te escribimos cómo entrar.')).toBeInTheDocument();
     expect(screen.queryByText(/ana@demo\.com/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ir a iniciar sesión' })).toHaveAttribute('href', '/login');
   });
