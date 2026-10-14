@@ -81,6 +81,24 @@ public class EmailServiceLoggingTests
         Assert.Null(logger.FirstMentioning(Token));
     }
 
+    [Theory]
+    // Wrong or rotated credentials: the server refuses the sender.
+    [InlineData("530 5.7.0")]
+    // A relay that does not take the sender.
+    [InlineData("550 5.7.1")]
+    public async Task SendEmailAsync_WhenTheServerRefusesTheSender_ThrowsForTheOutboxToRetry(string rejection)
+    {
+        // A 5xx to the sender is a setting to fix, not a bad address: dropping the email would lose it for good.
+        await using var smtpServer = new RejectingSmtpServer(rejection, rejectedCommand: "MAIL FROM:");
+        var service = CreateService(Environments.Production, SmtpSettings(smtpServer.Port), new CapturingLogger<EmailService>());
+
+        var thrown = await Assert.ThrowsAsync<EmailDeliveryException>(
+            () => service.SendEmailConfirmationAsync(Email, Guid.NewGuid().ToString(), Token));
+
+        Assert.DoesNotContain(Mailbox, thrown.Message);
+        Assert.Null(thrown.InnerException);
+    }
+
     [Fact]
     public async Task SendEmailAsync_WhenTheServerCannotBeReached_ThrowsForTheOutboxToRetry()
     {
@@ -105,6 +123,9 @@ public class EmailServiceLoggingTests
         var logger = new CapturingLogger<EmailService>();
         var settings = SmtpSettings(smtpServer.Port);
         settings[setting] = value;
+        // The password only counts with a user (a relay without a login sends none).
+        if (setting == "EmailSettings:Smtp:Password")
+            settings["EmailSettings:Smtp:Username"] = "cuenta-real";
         var service = CreateService(Environments.Production, settings, logger);
 
         await service.SendEmailConfirmationAsync(Email, Guid.NewGuid().ToString(), Token);
@@ -135,12 +156,41 @@ public class EmailServiceLoggingTests
             new() { ["EmailSettings:Provider"] = "", ["AppUrl"] = "https://app.tienditapp.mx/" },
             logger);
 
-        await service.SendAccountAlreadyExistsAsync(Email);
+        await service.SendAccountAlreadyExistsAsync(Email, customerAccount: false);
 
         Assert.NotNull(logger.FirstMentioning("Ya tienes una cuenta - TienditApp"));
         Assert.NotNull(logger.FirstMentioning("https://app.tienditapp.mx/login"));
         Assert.NotNull(logger.FirstMentioning("https://app.tienditapp.mx/forgot-password"));
         Assert.NotNull(logger.FirstMentioning("tu cuenta no cambió"));
+        Assert.Null(logger.FirstMentioning("cuenta de cliente"));
+    }
+
+    [Fact]
+    public async Task SendAccountAlreadyExistsAsync_ToACustomerAccount_SaysABusinessNeedsAnotherEmail()
+    {
+        var logger = new CapturingLogger<EmailService>();
+        var service = CreateService(Environments.Development, new() { ["EmailSettings:Provider"] = "" }, logger);
+
+        await service.SendAccountAlreadyExistsAsync(Email, customerAccount: true);
+
+        Assert.NotNull(logger.FirstMentioning("Es una cuenta de cliente: para registrar un negocio, usa otro correo."));
+    }
+
+    [Fact]
+    public async Task SendUnfinishedAccountAsync_SaysThisSignUpWasNotSaved_AndNotToOpenTheLinkIfItWasNotThem()
+    {
+        var logger = new CapturingLogger<EmailService>();
+        var service = CreateService(
+            Environments.Development,
+            new() { ["EmailSettings:Provider"] = "", ["AppUrl"] = "https://app.tienditapp.mx" },
+            logger);
+
+        await service.SendUnfinishedAccountAsync(Email, "user-1", Token);
+
+        Assert.NotNull(logger.FirstMentioning("Ya empezaste una cuenta - TienditApp"));
+        Assert.NotNull(logger.FirstMentioning("Lo que se llenó esta vez no se guardó"));
+        Assert.NotNull(logger.FirstMentioning($"https://app.tienditapp.mx/confirm-email?userId=user-1&token={Uri.EscapeDataString(Token)}"));
+        Assert.NotNull(logger.FirstMentioning("no abras el enlace"));
     }
 
     private static int RejectingSmtpServerPortThatIsClosed()

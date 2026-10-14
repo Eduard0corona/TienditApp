@@ -115,6 +115,33 @@ public class TeamInvitationTests
     }
 
     [Fact]
+    public async Task AnInvitedPersonWhoSignsUpOrAsksForALink_ShouldGetTheirInvitation_NotAnActivationLink()
+    {
+        await using var host = await CreateHostAsync();
+        var tenant = await SeedTenantAsync(host, "Tacos Don Pepe");
+        var employee = (await InviteAsync(host, tenant, "luis@demo.com", permissions: null)).Value!;
+        await host.DispatchAccountEmailsAsync();
+
+        // Activating the email of an account without a password would leave the person unable to sign in.
+        host.SetTenant(Guid.Empty);
+        Assert.True((await host.HandleAsync<RegisterCustomerCommandHandler, Result<Guid>>(handler => handler.Handle(
+            new RegisterCustomerCommand
+            {
+                Email = "luis@demo.com", Password = Password, FirstName = "Luis", LastName = "Demo", PhoneNumber = "5522223333"
+            },
+            CancellationToken.None))).IsSuccess);
+        Assert.True((await host.HandleAsync<ResendConfirmationEmailCommandHandler, Result>(handler => handler.Handle(
+            new ResendConfirmationEmailCommand { Email = "luis@demo.com" }, CancellationToken.None))).IsSuccess);
+        await host.DispatchAccountEmailsAsync();
+
+        Assert.Equal(3, host.Email.Invitations.Count);
+        Assert.All(host.Email.Invitations, sent => Assert.Equal(("luis@demo.com", "Tacos Don Pepe"), (sent.Email, sent.Business)));
+        Assert.True((await AcceptAsync(host, employee.UserId, TokenOf(host.Email.Invitations[^1].Path))).IsSuccess);
+        Assert.Empty(host.Email.Confirmations);
+        Assert.Empty(host.Email.Unfinished);
+    }
+
+    [Fact]
     public async Task Resend_ShouldGiveANewLink_OnlyWhileTheInvitationWaits()
     {
         await using var host = await CreateHostAsync();

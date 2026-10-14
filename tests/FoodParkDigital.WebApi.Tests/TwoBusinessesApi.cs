@@ -407,9 +407,15 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         return (response.StatusCode, await response.Content.ReadAsStringAsync());
     }
 
-    /// <summary>Runs the outbox once, as its worker would (the workers are off here).</summary>
-    public Task DispatchOutboxAsync()
-        => _factory!.Services.GetRequiredService<OutboxDispatcher>().DispatchDueAsync(CancellationToken.None);
+    /// <summary>Runs the outbox until nothing is due, as its worker would (the workers are off here).</summary>
+    public async Task DispatchOutboxAsync()
+    {
+        var dispatcher = _factory!.Services.GetRequiredService<OutboxDispatcher>();
+        // One pass takes a batch: earlier tests of the collection may have left more than one batch of events.
+        while (await dispatcher.DispatchDueAsync(CancellationToken.None) > 0)
+        {
+        }
+    }
 
     /// <summary>How many confirmation emails went to <paramref name="email"/>.</summary>
     public int ConfirmationsTo(string email) => _emails.ConfirmationsTo(email);
@@ -448,10 +454,12 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
 
         public int AlreadyExistsTo(string email) => _alreadyExists.Count(recipient => recipient == email);
 
-        public Task SendAccountAlreadyExistsAsync(string email)
+        public Task SendAccountAlreadyExistsAsync(string email, bool customerAccount)
         {
             _alreadyExists.Enqueue(email);
             return Task.CompletedTask;
         }
+
+        public Task SendUnfinishedAccountAsync(string email, string userId, string token) => Task.CompletedTask;
     }
 }

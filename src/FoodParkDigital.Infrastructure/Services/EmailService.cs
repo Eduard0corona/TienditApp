@@ -80,9 +80,12 @@ public class EmailService : IEmailService
         await SendEmailAsync(email, subject, body);
     }
 
-    public async Task SendAccountAlreadyExistsAsync(string email)
+    public async Task SendAccountAlreadyExistsAsync(string email, bool customerAccount)
     {
         var appUrl = (_configuration["AppUrl"] ?? "https://localhost:5001").TrimEnd('/');
+        var business = customerAccount
+            ? "<p>Es una cuenta de cliente: para registrar un negocio, usa otro correo.</p>"
+            : string.Empty;
 
         var subject = "Ya tienes una cuenta - TienditApp";
         var body = $@"
@@ -90,17 +93,38 @@ public class EmailService : IEmailService
             <p>Alguien intentó crear una cuenta con este correo, pero ya tiene una. Si fuiste tú, entra con tu correo y tu contraseña:</p>
             <p><a href='{appUrl}/login'>Iniciar sesión</a></p>
             <p>¿No recuerdas tu contraseña? <a href='{appUrl}/forgot-password'>Recupérala aquí</a>.</p>
+            {business}
             <p>Si no fuiste tú, puedes ignorar este mensaje: tu cuenta no cambió.</p>
         ";
 
         await SendEmailAsync(email, subject, body);
     }
 
+    public async Task SendUnfinishedAccountAsync(string email, string userId, string token)
+    {
+        var appUrl = _configuration["AppUrl"] ?? "https://localhost:5001";
+        var link = BuildEmailConfirmationLink(appUrl, userId, token);
+
+        var subject = "Ya empezaste una cuenta - TienditApp";
+        var body = $@"
+            <h2>Ya hay una cuenta empezada con este correo</h2>
+            <p>Alguien intentó crear una cuenta en TienditApp con este correo, pero ya hay una que no se ha activado. Lo que se llenó esta vez no se guardó.</p>
+            <p>Si la empezaste tú, actívala con este enlace y entra con la contraseña que elegiste esa vez:</p>
+            <p><a href='{link}'>Activar mi cuenta</a></p>
+            <p>¿No recuerdas esa contraseña? Después de activarla, recupérala desde «¿Olvidaste tu contraseña?».</p>
+            <p>Si no la empezaste tú, no abras el enlace: una cuenta sin activar no puede entrar.</p>
+        ";
+
+        await SendEmailAsync(email, subject, body);
+    }
+
     /// <summary>
-    /// Sends the email. Without a provider configured it is logged as not sent; a rejection the provider gives for
-    /// good (a 5xx answer, such as a mailbox that does not exist) is logged as an error. Anything else (a 4xx answer,
-    /// no connection, a timeout) throws <see cref="EmailDeliveryException"/>, without the address, so the outbox
-    /// retries.
+    /// Sends the email. Without a provider configured it is logged as not sent; a 5xx answer to the recipient (a
+    /// mailbox that does not exist, an address the server refuses) is logged as an error: retrying cannot fix the
+    /// address. Anything else throws <see cref="EmailDeliveryException"/>, without the address, so the outbox retries:
+    /// a 4xx answer, no connection, a timeout, and also the failures of the server or of its settings (wrong or rotated
+    /// credentials, a refused sender or relay), which are fixed for every email at once. Those that keep failing are set
+    /// aside after the last attempt and the background queues show Degraded.
     /// </summary>
     public async Task SendEmailAsync(string to, string subject, string body)
     {
@@ -147,7 +171,8 @@ public class EmailService : IEmailService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var status = (ex as SmtpException)?.StatusCode;
-            var permanent = status is { } code && (int)code >= 500;
+            // Only the recipient is rejected for good; a 5xx to the sender or the login is a setting to fix.
+            var permanent = ex is SmtpFailedRecipientException && status is { } code && (int)code >= 500;
             _logger.LogError(
                 _logSensitiveData ? ex : null,
                 "SMTP send failed for {Email}. Error: {ErrorType}. SMTP status: {SmtpStatusCode}. {Outcome}",

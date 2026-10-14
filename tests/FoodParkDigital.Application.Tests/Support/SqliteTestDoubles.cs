@@ -168,14 +168,27 @@ internal sealed class RecordingEmailService : IEmailService
     /// <summary>Who signed up again with the email of their confirmed account.</summary>
     public List<string> AlreadyExistsRecipients { get; } = [];
 
-    public Task SendAccountAlreadyExistsAsync(string email)
+    /// <summary>Whether each "already exists" email was told the account is a customer's.</summary>
+    public List<bool> AlreadyExistsToCustomers { get; } = [];
+
+    public Task SendAccountAlreadyExistsAsync(string email, bool customerAccount)
     {
         AlreadyExistsRecipients.Add(email);
+        AlreadyExistsToCustomers.Add(customerAccount);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The link of each "you already started an account" email.</summary>
+    public List<(string Email, string UserId, string Token)> Unfinished { get; } = [];
+
+    public Task SendUnfinishedAccountAsync(string email, string userId, string token)
+    {
+        Unfinished.Add((email, userId, token));
         return Task.CompletedTask;
     }
 
     /// <summary>Every email sent, of any kind.</summary>
-    public int Sent => Confirmations.Count + PasswordResets.Count + Invitations.Count + AlreadyExistsRecipients.Count;
+    public int Sent => Confirmations.Count + PasswordResets.Count + Invitations.Count + AlreadyExistsRecipients.Count + Unfinished.Count;
 }
 
 internal sealed class RecordingSmsService : ISmsService

@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Employees;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Identity;
@@ -63,7 +64,7 @@ public sealed class AccountEmailRequestedHandler : IOutboxEventHandler<AccountEm
         {
             case AccountEmailPurpose.EmailConfirmation:
                 if (!user.EmailConfirmed)
-                    await SendConfirmationAsync(user);
+                    await SendActivationAsync(user, cancellationToken);
                 break;
 
             case AccountEmailPurpose.PasswordReset:
@@ -79,11 +80,18 @@ public sealed class AccountEmailRequestedHandler : IOutboxEventHandler<AccountEm
                 // A deactivated account gets nothing: it cannot sign in, and nobody is waiting for the email.
                 if (!user.IsActive)
                     break;
-                // Who signs up again with an account not confirmed yet most likely lost the first link.
-                if (!user.EmailConfirmed)
-                    await SendConfirmationAsync(user);
+                if (user.EmailConfirmed)
+                    await _email.SendAccountAlreadyExistsAsync(user.Email, user.Role == UserRole.Customer);
+                else if (!await _userManager.HasPasswordAsync(user))
+                    // Invited to a team and never accepted: the invitation is how that account enters.
+                    await SendPendingInvitationsAsync(user, cancellationToken);
                 else
-                    await _email.SendAccountAlreadyExistsAsync(user.Email);
+                {
+                    // Started and never activated: this sign-up was not saved, and the email says so. Its link
+                    // activates the account started then, which whoever did not start it is told not to open.
+                    var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    await _email.SendUnfinishedAccountAsync(user.Email, user.Id.ToString(), token);
+                }
                 break;
 
             case AccountEmailPurpose.TeamInvitation:
@@ -92,10 +100,31 @@ public sealed class AccountEmailRequestedHandler : IOutboxEventHandler<AccountEm
         }
     }
 
-    private async Task SendConfirmationAsync(ApplicationUser user)
+    /// <summary>
+    /// The link that activates the account; an account invited to a team, without a password yet, gets its pending
+    /// invitations instead (activating its email would leave it unable to sign in).
+    /// </summary>
+    private async Task SendActivationAsync(ApplicationUser user, CancellationToken cancellationToken)
     {
+        if (!await _userManager.HasPasswordAsync(user))
+        {
+            await SendPendingInvitationsAsync(user, cancellationToken);
+            return;
+        }
+
         var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         await _email.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), token);
+    }
+
+    /// <summary>One invitation link, which accepts every pending invitation of the account; none pending, nothing.</summary>
+    private async Task SendPendingInvitationsAsync(ApplicationUser user, CancellationToken cancellationToken)
+    {
+        var businesses = await EmployeeInvitations.PendingBusinessesAsync(_context, user.Id, cancellationToken);
+        if (businesses.Count == 0)
+            return;
+
+        var path = await EmployeeInvitations.CreatePathAsync(_userManager, user);
+        await _email.SendTeamInvitationAsync(user.Email!, string.Join(", ", businesses), path);
     }
 
     private async Task SendInvitationAsync(ApplicationUser user, Guid? tenantId, CancellationToken cancellationToken)

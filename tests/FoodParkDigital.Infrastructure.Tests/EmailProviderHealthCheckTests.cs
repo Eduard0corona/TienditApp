@@ -47,6 +47,19 @@ public class EmailProviderHealthCheckTests
     }
 
     [Fact]
+    public async Task ARelayWithoutALogin_ShouldBeHealthy_EvenWithTheExamplePasswordLeftInAppSettings()
+    {
+        // No user: no credentials are sent, so the password left from appsettings.json does not matter.
+        var result = await CheckAsync(new Dictionary<string, string?>(Complete)
+        {
+            ["EmailSettings:Smtp:Username"] = "",
+            ["EmailSettings:Smtp:Password"] = "YOUR_SMTP_PASSWORD"
+        });
+
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+    }
+
+    [Fact]
     public async Task TheExampleSettingsOfAppSettings_ShouldBeDegraded()
     {
         // The values src/FoodParkDigital.WebApi/appsettings.json carries.

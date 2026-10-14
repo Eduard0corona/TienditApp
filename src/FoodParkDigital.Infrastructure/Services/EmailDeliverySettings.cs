@@ -40,7 +40,9 @@ public sealed record EmailDeliverySettings(
             return (null, "The SMTP settings are incomplete (host, port or sender).");
         }
 
-        if (IsExample(username) || IsExample(password))
+        // The password only counts with a user: a relay without a login leaves the user empty, and the example
+        // password of appsettings.json is then never sent.
+        if (IsExample(username) || (!string.IsNullOrWhiteSpace(username) && IsExample(password)))
             return (null, "The SMTP account still has the example values of appsettings.json.");
 
         if (!MailAddress.TryCreate(fromEmail, out _))
@@ -60,6 +62,7 @@ public sealed record EmailDeliverySettings(
             configuration["EmailSettings:FromName"] ?? "TienditApp"), null);
     }
 
+    /// <summary>The placeholders of appsettings.json (<c>YOUR_SMTP_USERNAME</c>, <c>YOUR_SMTP_PASSWORD</c>), exactly.</summary>
     private static bool IsExample(string? value)
-        => value is not null && value.Trim().StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase);
+        => value is not null && value.Trim().StartsWith("YOUR_SMTP_", StringComparison.Ordinal);
 }

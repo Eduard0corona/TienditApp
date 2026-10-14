@@ -14,12 +14,13 @@ export default function CheckEmail() {
   const location = useLocation();
   // Router state only, never the URL: it prefills the form below and a reload forgets it.
   const routerState = location.state as { email?: string } | null;
-  const [email, setEmail] = useState(routerState?.email ?? '');
+  const signedUpEmail = routerState?.email;
+  const [email, setEmail] = useState(signedUpEmail ?? '');
   const [info, setInfo] = useState('');
   const [error, setError] = useState('');
   const [resending, setResending] = useState(false);
   // Coming straight from the sign-up the first email was just sent: wait before offering another one.
-  const [cooldown, setCooldown] = useState(() => (routerState?.email ? RESEND_COOLDOWN_SECONDS : 0));
+  const [cooldown, setCooldown] = useState(() => (signedUpEmail ? RESEND_COOLDOWN_SECONDS : 0));
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -54,8 +55,9 @@ export default function CheckEmail() {
         <i className="ri-mail-send-line text-primary" style={{ fontSize: '3rem' }} aria-hidden="true"></i>
       </div>
       <p>Abre el correo y haz clic en el enlace. Después inicia sesión con tu correo y tu contraseña.</p>
-      {/* The page is the same whether the email had an account or not; that email says how to enter. */}
-      <p>¿Ya tenías una cuenta con ese correo? Te escribimos cómo entrar.</p>
+      {/* After signing up the page is the same whether the email had an account or not; that email says how to enter.
+          From the login's "no te llegó el correo" link nobody just signed up. */}
+      {signedUpEmail && <p>¿Ya tenías una cuenta con ese correo? Te escribimos cómo entrar.</p>}
       <p className="text-muted small">
         Si no lo ves en unos minutos, revisa la carpeta de spam o correo no deseado. El enlace vence en 24 horas.
       </p>

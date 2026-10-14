@@ -91,6 +91,18 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
         if (!passwordResult.Succeeded)
             return Result.Failure<Guid>(passwordResult.ToErrorMessage());
 
+        var phoneHolder = await CustomerPhoneOwnershipRules.FindHolderAsync(
+            _context,
+            _phoneNormalizationService,
+            phoneNormalized,
+            cancellationToken);
+
+        // Only a number its account confirmed by SMS is taken: an unverified profile must not let
+        // whoever typed the number first lock its real owner out. Checked before the email, for every email: after it,
+        // a confirmed phone would answer this to a free email and success to one with an account.
+        if (phoneHolder is { IsVerified: true })
+            return Result.Failure<Guid>("Ya existe una cuenta de cliente con este teléfono.");
+
         var normalizedEmail = request.Email.ToUpperInvariant();
         // IgnoreQueryFilters: accounts belong to no business, and signing up comes without a session.
         var existingUserId = await _context.Users
@@ -105,17 +117,6 @@ public class RegisterCustomerCommandHandler : IRequestHandler<RegisterCustomerCo
             await _context.SaveChangesAsync(cancellationToken);
             return Result.Success(accountId);
         }
-
-        var phoneHolder = await CustomerPhoneOwnershipRules.FindHolderAsync(
-            _context,
-            _phoneNormalizationService,
-            phoneNormalized,
-            cancellationToken);
-
-        // Only a number its account confirmed by SMS is taken: an unverified profile must not let
-        // whoever typed the number first lock its real owner out.
-        if (phoneHolder is { IsVerified: true })
-            return Result.Failure<Guid>("Ya existe una cuenta de cliente con este teléfono.");
 
         // User, role, profile and the request of the email that activates the account are committed together or not
         // at all

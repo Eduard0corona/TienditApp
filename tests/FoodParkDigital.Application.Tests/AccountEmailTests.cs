@@ -47,12 +47,13 @@ public class AccountEmailTests
         Assert.Equal(0, host.Email.Sent);
         await host.DispatchAccountEmailsAsync();
         Assert.Equal([Email, Email], host.Email.AlreadyExistsRecipients);
+        Assert.Equal([false, false], host.Email.AlreadyExistsToCustomers);
         Assert.Empty(host.Email.Confirmations);
         Assert.Equal(accountId, business.Value);
     }
 
     [Fact]
-    public async Task SigningUpAgain_BeforeConfirming_ShouldSendTheLinkAgain()
+    public async Task SigningUpAgain_WithAnAccountStartedEarlier_ShouldSayThisSignUpWasNotSaved_AndActivateTheFirst()
     {
         await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
         var accountId = await SeedAccountAsync(host, emailConfirmed: false);
@@ -61,12 +62,47 @@ public class AccountEmailTests
 
         Assert.True(again.IsSuccess, again.Error);
         await host.DispatchAccountEmailsAsync();
-        var link = Assert.Single(host.Email.Confirmations);
+        // Not the welcome email: it says this sign-up was not saved and the link activates the account started then.
+        var link = Assert.Single(host.Email.Unfinished);
         Assert.Equal((Email, accountId.ToString()), (link.Email, link.UserId));
+        Assert.Empty(host.Email.Confirmations);
         Assert.Empty(host.Email.AlreadyExistsRecipients);
         var confirmed = await host.HandleAsync<ConfirmEmailCommandHandler, Result>(
             handler => handler.Handle(new ConfirmEmailCommand(link.UserId, link.Token), CancellationToken.None));
         Assert.True(confirmed.IsSuccess, confirmed.Error);
+        // The password is the one chosen when the account was started, not this sign-up's.
+        Assert.True((await LoginCommandTests.LoginAsync(host, Email, Password)).IsSuccess);
+    }
+
+    [Fact]
+    public async Task SigningUpAndThenSigningIn_ShouldTellNothingAboutTheEmail()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        await SeedAccountAsync(host, emailConfirmed: true);
+        const string attackerPassword = "Atacante9";
+
+        // Someone signs up with an email that has an account and with a free one, with a password of theirs, and then
+        // tries to sign in with it.
+        Assert.True((await RegisterCustomerAsync(host, Email, attackerPassword)).IsSuccess);
+        Assert.True((await RegisterCustomerAsync(host, "libre@demo.com", attackerPassword, phone: "5511112222")).IsSuccess);
+        var taken = await LoginCommandTests.LoginAsync(host, Email, attackerPassword);
+        var free = await LoginCommandTests.LoginAsync(host, "libre@demo.com", attackerPassword);
+
+        Assert.True(taken.IsFailure);
+        Assert.Equal(free.Error, taken.Error);
+    }
+
+    [Fact]
+    public async Task ACustomerAccount_ShouldBeToldItCannotOpenABusiness()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("TENANT_ADMIN");
+        await SeedAccountAsync(host, emailConfirmed: true, role: UserRole.Customer);
+
+        Assert.True((await RegisterBusinessAsync(host, Email)).IsSuccess);
+
+        await host.DispatchAccountEmailsAsync();
+        Assert.Equal([Email], host.Email.AlreadyExistsRecipients);
+        Assert.Equal([true], host.Email.AlreadyExistsToCustomers);
     }
 
     [Fact]
@@ -164,7 +200,8 @@ public class AccountEmailTests
         SqliteTestHost host,
         bool emailConfirmed,
         bool active = true,
-        string email = Email)
+        string email = Email,
+        UserRole role = UserRole.Staff)
         => host.InScopeAsync(async services =>
         {
             var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
@@ -175,7 +212,7 @@ public class AccountEmailTests
                 FirstName = "Ana",
                 LastName = "Demo",
                 EmailConfirmed = emailConfirmed,
-                Role = UserRole.Staff,
+                Role = role,
                 IsActive = active
             };
             var created = await userManager.CreateAsync(user, Password);
@@ -197,7 +234,8 @@ public class AccountEmailTests
             },
             CancellationToken.None));
 
-    private static Task<Result<Guid>> RegisterCustomerAsync(SqliteTestHost host, string email, string password = "Secreto12")
+    private static Task<Result<Guid>> RegisterCustomerAsync(
+        SqliteTestHost host, string email, string password = "Secreto12", string phone = "5599998888")
         => host.HandleAsync<RegisterCustomerCommandHandler, Result<Guid>>(handler => handler.Handle(
             new RegisterCustomerCommand
             {
@@ -205,7 +243,7 @@ public class AccountEmailTests
                 Password = password,
                 FirstName = "Beto",
                 LastName = "Otro",
-                PhoneNumber = "5599998888"
+                PhoneNumber = phone
             },
             CancellationToken.None));
 

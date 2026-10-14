@@ -14,12 +14,16 @@ public sealed class RejectingSmtpServer : IAsyncDisposable
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly ConcurrentQueue<string> _commands = new();
     private readonly string _rejection;
+    private readonly string _rejectedCommand;
     private readonly Task _session;
 
-    /// <param name="rejection">The start of the answer to each recipient: "550 5.1.1" (for good) or "451 4.3.0" (for now).</param>
-    public RejectingSmtpServer(string rejection = "550 5.1.1")
+    /// <param name="rejection">The start of the answer: "550 5.1.1" (for good) or "451 4.3.0" (for now).</param>
+    /// <param name="rejectedCommand">What it answers that to: each recipient ("RCPT TO:") or, as a server with wrong
+    /// credentials or a refused sender does, the sender ("MAIL FROM:").</param>
+    public RejectingSmtpServer(string rejection = "550 5.1.1", string rejectedCommand = "RCPT TO:")
     {
         _rejection = rejection;
+        _rejectedCommand = rejectedCommand;
         _listener.Start();
         _session = ServeSingleClientAsync();
     }
@@ -40,9 +44,9 @@ public sealed class RejectingSmtpServer : IAsyncDisposable
         {
             _commands.Enqueue(command);
 
-            if (command.StartsWith("RCPT TO:", StringComparison.OrdinalIgnoreCase))
+            if (command.StartsWith(_rejectedCommand, StringComparison.OrdinalIgnoreCase))
             {
-                await writer.WriteLineAsync($"{_rejection} {command["RCPT TO:".Length..].Trim()}: Recipient address rejected");
+                await writer.WriteLineAsync($"{_rejection} {command[_rejectedCommand.Length..].Trim()}: Recipient address rejected");
             }
             else if (command.StartsWith("QUIT", StringComparison.OrdinalIgnoreCase))
             {

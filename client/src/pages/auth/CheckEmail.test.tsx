@@ -37,6 +37,14 @@ describe('CheckEmail', () => {
     expect(screen.getByRole('link', { name: 'Ir a iniciar sesión' })).toHaveAttribute('href', '/login');
   });
 
+  it('says nothing about an existing account when nobody just signed up', () => {
+    // Opened from the login's "¿No te llegó el correo…?" link.
+    renderPage();
+
+    expect(screen.getByRole('heading', { name: 'Revisa tu correo' })).toBeInTheDocument();
+    expect(screen.queryByText(/Ya tenías una cuenta/)).not.toBeInTheDocument();
+  });
+
   it('waits a minute after the sign-up before offering another link', () => {
     renderPage({ email: 'ana@demo.com' });
 

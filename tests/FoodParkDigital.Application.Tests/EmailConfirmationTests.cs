@@ -23,7 +23,7 @@ public class EmailConfirmationTests
         var userId = await RegisterBusinessAsync(host);
 
         var beforeConfirming = await LoginCommandTests.LoginAsync(host, Email, Password);
-        Assert.Equal(LoginCommandHandler.NotConfirmedMessage, beforeConfirming.Error);
+        Assert.Equal(LoginCommandHandler.InvalidCredentialsMessage, beforeConfirming.Error);
 
         var link = Assert.Single(host.Email.Confirmations);
         Assert.Equal((Email, userId.ToString()), (link.Email, link.UserId));
