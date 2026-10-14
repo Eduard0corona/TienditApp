@@ -360,6 +360,18 @@ La Fase 22E trae una migración, [`database/production/20261013191311_AddHomeVis
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas ni las tablas, sigue agendando y cada venta conserva su total guardado, cargo incluido. Pero no muestra las visitas ni el cargo, no deja tiempo de traslado y una cita cobrada se podría cobrar otra vez. Antes de volver, la consulta 4 del `verify.sql` dice cuántas visitas hay abiertas.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50015, sin cambiar nada, mientras haya visitas, cargos por visita o citas cobradas: se perderían las direcciones, los cargos y qué venta cobró cada cita. Sin ellos, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Registro confiable (Fase 23A)
+
+La Fase 23A no tiene migración ni `apply.sql`: la cola (`OutboxMessages`) ya existe.
+
+- **El proveedor de correo:** sin él, nadie que se registre puede activar su cuenta. Mientras falte, `/health/ready` queda Degraded (sigue respondiendo 200) y la prueba de humo pasa con un aviso (arriba).
+- **Los correos de las cuentas salen de la cola** (`AccountEmailRequestedHandler`), después de responder: la activación, la recuperación de contraseña, el aviso a quien se registra con un correo que ya tiene cuenta y las invitaciones al equipo. Necesitan los workers: con `BackgroundJobs__Enabled=false` (por ejemplo el slot de staging) se guardan y salen cuando una instancia con workers los atiende, si no pasó un día. Un rechazo pasajero del proveedor se reintenta como cualquier mensaje de la cola; después de 8 intentos queda apartado y `background-queues` lo dice.
+- **Mientras se publica:** la versión anterior manda sus correos dentro de la petición, como siempre. Si en los segundos en que corren las dos su worker toma un correo que guardó la versión nueva, no conoce el evento y lo aparta (`Unknown event type` en el log): quien no recibió su enlace lo pide otra vez, y `background-queues` queda Degraded durante un día.
+- **El contrato no cambia de forma**, pero dos respuestas sí:
+  - registrarse con un correo que ya tiene cuenta responde como un registro nuevo («Revisa tu correo»), en lugar de «Ya existe una cuenta con este correo electrónico.»;
+  - iniciar sesión con una cuenta sin activar responde como una contraseña incorrecta, con un texto que menciona la activación, en lugar de «Activa tu cuenta…».
+- **Volver a la versión anterior:** funciona sin tocar la base, pero aparta del mismo modo los correos de cuenta que sigan en la cola, y vuelve a decir si un correo tiene cuenta.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.
