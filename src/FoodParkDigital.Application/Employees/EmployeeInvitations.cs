@@ -1,15 +1,16 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.Employees;
 
 /// <summary>
 /// An invitation is a link, valid for a week, where the person chooses their own password: the admin never invents
-/// one. It goes by email when that is configured and the admin can share the same link by WhatsApp. Accepting it
+/// one. It goes by email when that is configured and the admin can share a link as well, by WhatsApp. Accepting it
 /// activates every pending invitation of the account.
 /// </summary>
 public static class EmployeeInvitations
@@ -30,35 +31,21 @@ public static class EmployeeInvitations
     public static Task<bool> IsValidAsync(UserManager<ApplicationUser> userManager, ApplicationUser user, string token)
         => userManager.VerifyUserTokenAsync(user, TokenProvider, TokenPurpose, token);
 
-    /// <summary>Creates the link and emails it (best effort).</summary>
+    /// <summary>
+    /// Creates the link the admin shares and asks for the invitation email, which goes out from the outbox with a link
+    /// of its own (<c>AccountEmailRequestedHandler</c>) once the caller saves: with the membership, so neither is
+    /// stored without the other.
+    /// </summary>
     /// <returns>The invitation link, relative to the app.</returns>
     public static async Task<string> IssueAsync(
         UserManager<ApplicationUser> userManager,
-        IEmailService? emailService,
-        IApplicationDbContext context,
+        IOutbox outbox,
         ApplicationUser user,
-        Guid tenantId,
-        ILogger logger,
-        CancellationToken cancellationToken)
+        Guid tenantId)
     {
         var path = await CreatePathAsync(userManager, user);
-        if (emailService is null || string.IsNullOrWhiteSpace(user.Email))
-            return path;
-
-        var businessName = await context.Tenants
-            .Where(t => t.Id == tenantId)
-            .Select(t => t.Name)
-            .FirstOrDefaultAsync(cancellationToken) ?? "tu negocio";
-        try
-        {
-            await emailService.SendTeamInvitationAsync(user.Email, businessName, path);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // The admin still gets the link to share it; the email is a convenience.
-            logger.LogWarning("Team invitation email for user {UserId} could not be sent: {ErrorType}", user.Id, ex.GetType().Name);
-        }
-
+        if (!string.IsNullOrWhiteSpace(user.Email))
+            outbox.Add(new AccountEmailRequestedEvent(AccountEmailPurpose.TeamInvitation, UserId: user.Id), tenantId);
         return path;
     }
 

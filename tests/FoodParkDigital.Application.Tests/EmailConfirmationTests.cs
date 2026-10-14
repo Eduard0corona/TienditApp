@@ -82,6 +82,7 @@ public class EmailConfirmationTests
             },
             CancellationToken.None));
         Assert.True(result.IsSuccess, result.Error);
+        await host.DispatchAccountEmailsAsync();
         return result.Value;
     }
 

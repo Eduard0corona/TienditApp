@@ -7,6 +7,10 @@ using System.Net.Mail;
 
 namespace FoodParkDigital.Infrastructure.Services;
 
+/// <summary>
+/// Sends the emails of the accounts by SMTP (<see cref="EmailDeliverySettings"/>). Full addresses and the answers of the
+/// SMTP server, which can echo them, are only logged in Development.
+/// </summary>
 public class EmailService : IEmailService
 {
     private readonly IConfiguration _configuration;
@@ -76,66 +80,103 @@ public class EmailService : IEmailService
         await SendEmailAsync(email, subject, body);
     }
 
+    public async Task SendAccountAlreadyExistsAsync(string email)
+    {
+        var appUrl = (_configuration["AppUrl"] ?? "https://localhost:5001").TrimEnd('/');
+
+        var subject = "Ya tienes una cuenta - TienditApp";
+        var body = $@"
+            <h2>Ya tienes una cuenta en TienditApp</h2>
+            <p>Alguien intentó crear una cuenta con este correo, pero ya tiene una. Si fuiste tú, entra con tu correo y tu contraseña:</p>
+            <p><a href='{appUrl}/login'>Iniciar sesión</a></p>
+            <p>¿No recuerdas tu contraseña? <a href='{appUrl}/forgot-password'>Recupérala aquí</a>.</p>
+            <p>Si no fuiste tú, puedes ignorar este mensaje: tu cuenta no cambió.</p>
+        ";
+
+        await SendEmailAsync(email, subject, body);
+    }
+
+    /// <summary>
+    /// Sends the email. Without a provider configured it is logged as not sent; a rejection the provider gives for
+    /// good (a 5xx answer, such as a mailbox that does not exist) is logged as an error. Anything else (a 4xx answer,
+    /// no connection, a timeout) throws <see cref="EmailDeliveryException"/>, without the address, so the outbox
+    /// retries.
+    /// </summary>
     public async Task SendEmailAsync(string to, string subject, string body)
     {
-        var provider = _configuration["EmailSettings:Provider"]?.Trim();
-        if (!string.Equals(provider, "Smtp", StringComparison.OrdinalIgnoreCase))
+        var (settings, problem) = EmailDeliverySettings.Read(_configuration);
+        if (settings is null)
         {
-            _logger.LogWarning("Email provider not configured for runtime sending. Email to {Email} was not sent.", LoggableEmail(to));
+            _logger.LogWarning("Email not sent to {Email}: {Problem}", LoggableEmail(to), problem);
             _logger.LogInformation("Email subject: {Subject}", subject);
+            // Its link is the only way to test sign-ups locally without a provider.
+            if (_logSensitiveData)
+                _logger.LogInformation("Email body (Development only): {Body}", body);
             return;
         }
 
-        var host = _configuration["EmailSettings:Smtp:Host"];
-        var portRaw = _configuration["EmailSettings:Smtp:Port"];
-        var username = _configuration["EmailSettings:Smtp:Username"];
-        var password = _configuration["EmailSettings:Smtp:Password"];
-        var fromEmail = _configuration["EmailSettings:FromEmail"];
-        var fromName = _configuration["EmailSettings:FromName"] ?? "TienditApp";
-        var enableSsl = bool.TryParse(_configuration["EmailSettings:Smtp:EnableSsl"], out var ssl) && ssl;
-
-        if (string.IsNullOrWhiteSpace(host)
-            || string.IsNullOrWhiteSpace(portRaw)
-            || !int.TryParse(portRaw, out var port)
-            || string.IsNullOrWhiteSpace(fromEmail))
+        using var smtp = new SmtpClient(settings.Host, settings.Port)
         {
-            _logger.LogWarning("SMTP settings are incomplete. Email to {Email} was not sent.", LoggableEmail(to));
-            return;
-        }
-
-        using var smtp = new SmtpClient(host, port)
-        {
-            EnableSsl = enableSsl
+            EnableSsl = settings.EnableSsl
         };
 
-        if (!string.IsNullOrWhiteSpace(username))
-            smtp.Credentials = new NetworkCredential(username, password);
+        if (settings.Username is not null)
+            smtp.Credentials = new NetworkCredential(settings.Username, settings.Password);
+
+        if (!MailAddress.TryCreate(to, out var recipient))
+        {
+            // Retrying cannot fix the address.
+            _logger.LogWarning("Email not sent to {Email}: the address is not valid.", LoggableEmail(to));
+            return;
+        }
 
         using var mail = new MailMessage
         {
-            From = new MailAddress(fromEmail, fromName),
+            From = new MailAddress(settings.FromEmail, settings.FromName),
             Subject = subject,
             Body = body,
             IsBodyHtml = true
         };
-        mail.To.Add(to);
+        mail.To.Add(recipient);
 
         try
         {
             await smtp.SendMailAsync(mail);
             _logger.LogInformation("Email sent successfully to {Email}", LoggableEmail(to));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            var status = (ex as SmtpException)?.StatusCode;
+            var permanent = status is { } code && (int)code >= 500;
             _logger.LogError(
                 _logSensitiveData ? ex : null,
-                "SMTP send failed for {Email}. Error: {ErrorType}. SMTP status: {SmtpStatusCode}",
+                "SMTP send failed for {Email}. Error: {ErrorType}. SMTP status: {SmtpStatusCode}. {Outcome}",
                 LoggableEmail(to),
                 ex.GetType().Name,
-                (ex as SmtpException)?.StatusCode);
+                status,
+                permanent ? "Rejected for good: not retried." : "It will be retried.");
+            if (!permanent)
+                throw new EmailDeliveryException(status);
         }
     }
 
     private string LoggableEmail(string email)
         => _logSensitiveData ? email : LogRedaction.MaskEmail(email);
+}
+
+/// <summary>
+/// The SMTP server did not take an email, for a reason it may recover from. It carries neither the address nor the
+/// server's answer (which can echo it): the outbox stores and logs this message.
+/// </summary>
+public sealed class EmailDeliveryException : Exception
+{
+    public EmailDeliveryException(SmtpStatusCode? status)
+        : base(status is { } code
+            ? $"The SMTP server did not take the email ({(int)code} {code})."
+            : "The SMTP server could not be reached.")
+    {
+        Status = status;
+    }
+
+    public SmtpStatusCode? Status { get; }
 }

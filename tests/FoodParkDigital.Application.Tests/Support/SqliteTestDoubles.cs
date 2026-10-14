@@ -2,8 +2,11 @@ using System.Data.Common;
 using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Common;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
+using FoodParkDigital.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FoodParkDigital.Application.Tests.Support;
 
@@ -143,7 +146,14 @@ internal sealed class RecordingEmailService : IEmailService
         return Task.CompletedTask;
     }
 
-    public Task SendPasswordResetEmailAsync(string email, string userId, string token) => Task.CompletedTask;
+    /// <summary>What the reset link carries.</summary>
+    public List<(string Email, string UserId, string Token)> PasswordResets { get; } = [];
+
+    public Task SendPasswordResetEmailAsync(string email, string userId, string token)
+    {
+        PasswordResets.Add((email, userId, token));
+        return Task.CompletedTask;
+    }
 
     public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
 
@@ -154,6 +164,18 @@ internal sealed class RecordingEmailService : IEmailService
         Invitations.Add((email, businessName, invitationPath));
         return Task.CompletedTask;
     }
+
+    /// <summary>Who signed up again with the email of their confirmed account.</summary>
+    public List<string> AlreadyExistsRecipients { get; } = [];
+
+    public Task SendAccountAlreadyExistsAsync(string email)
+    {
+        AlreadyExistsRecipients.Add(email);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Every email sent, of any kind.</summary>
+    public int Sent => Confirmations.Count + PasswordResets.Count + Invitations.Count + AlreadyExistsRecipients.Count;
 }
 
 internal sealed class RecordingSmsService : ISmsService
@@ -172,26 +194,43 @@ internal sealed class RecordingSmsService : ISmsService
 }
 
 /// <summary>
-/// Records the events the requests add to the outbox (<see cref="Added"/>); <see cref="SqliteTestHost.DispatchAsync{TEvent, THandler}"/>
-/// runs a handler for the ones not dispatched yet, as the outbox dispatcher does after the commit.
+/// Records the events the requests add to the outbox (<see cref="Added"/>) and stores them through the real
+/// <see cref="OutboxWriter"/>, in the context of the request: an event is committed, or rolled back, with its request,
+/// as in production (a retried transaction keeps only the attempt that committed).
+/// <see cref="SqliteTestHost.DispatchAsync{TEvent, THandler}"/> runs a handler for the committed ones not dispatched
+/// yet, as the outbox dispatcher does after the commit.
 /// </summary>
-internal sealed class RecordingOutbox : IOutbox
+internal sealed class RecordingOutbox
 {
-    private readonly List<(DomainEvent Event, Guid? TenantId)> _pending = [];
+    private readonly HashSet<Guid> _dispatched = [];
 
+    /// <summary>Every event added, committed or not.</summary>
     public List<(DomainEvent Event, Guid? TenantId)> Added { get; } = [];
 
-    public void Add(DomainEvent domainEvent, Guid? tenantId)
-    {
-        Added.Add((domainEvent, tenantId));
-        _pending.Add((domainEvent, tenantId));
-    }
+    /// <summary>The outbox of one request (DI scope).</summary>
+    public IOutbox For(IServiceProvider services)
+        => new ScopedOutbox(this, ActivatorUtilities.CreateInstance<OutboxWriter>(services));
 
-    public List<(TEvent Event, Guid? TenantId)> TakePending<TEvent>()
+    /// <summary>The committed events of <typeparamref name="TEvent"/> not dispatched yet, in the order they were stored.</summary>
+    public async Task<List<(TEvent Event, Guid? TenantId)>> TakeCommittedAsync<TEvent>(ApplicationDbContext context)
         where TEvent : DomainEvent
     {
-        var taken = _pending.Where(p => p.Event is TEvent).Select(p => ((TEvent)p.Event, p.TenantId)).ToList();
-        _pending.RemoveAll(p => p.Event is TEvent);
-        return taken;
+        var typeName = typeof(TEvent).FullName!;
+        var stored = await context.OutboxMessages.AsNoTracking().Where(m => m.Type == typeName).ToListAsync();
+        var order = Added.Select((added, index) => (added.Event.EventId, index)).ToDictionary(x => x.EventId, x => x.index);
+        return stored
+            .Where(message => _dispatched.Add(message.Id))
+            .OrderBy(message => order.GetValueOrDefault(message.Id, int.MaxValue))
+            .Select(message => ((TEvent)OutboxEventSerializer.Deserialize(message.Type, message.Payload)!, message.TenantId))
+            .ToList();
+    }
+
+    private sealed class ScopedOutbox(RecordingOutbox recorder, OutboxWriter writer) : IOutbox
+    {
+        public void Add(DomainEvent domainEvent, Guid? tenantId)
+        {
+            recorder.Added.Add((domainEvent, tenantId));
+            writer.Add(domainEvent, tenantId);
+        }
     }
 }

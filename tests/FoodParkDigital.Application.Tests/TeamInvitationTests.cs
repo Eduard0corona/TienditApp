@@ -39,8 +39,14 @@ public class TeamInvitationTests
         Assert.Equal("Invited", employee.Status);
         Assert.False(employee.IsActive);
         Assert.StartsWith("/aceptar-invitacion?userId=", employee.InvitationUrl);
-        Assert.Equal(("ana@demo.com", "Tacos Don Pepe", employee.InvitationUrl!), Assert.Single(host.Email.Invitations));
         var token = TokenOf(employee.InvitationUrl!);
+        // The email goes out from the outbox with a link of its own; the one the admin shares stays valid as well.
+        Assert.Empty(host.Email.Invitations);
+        await host.DispatchAccountEmailsAsync();
+        var emailed = Assert.Single(host.Email.Invitations);
+        Assert.Equal(("ana@demo.com", "Tacos Don Pepe"), (emailed.Email, emailed.Business));
+        Assert.StartsWith($"/aceptar-invitacion?userId={employee.UserId}&token=", emailed.Path);
+        Assert.True((await GetInvitationAsync(host, employee.UserId, TokenOf(emailed.Path))).IsSuccess);
 
         var shown = await GetInvitationAsync(host, employee.UserId, token);
         Assert.True(shown.IsSuccess, shown.Error);
@@ -95,6 +101,20 @@ public class TeamInvitationTests
     }
 
     [Fact]
+    public async Task AnInvitationAcceptedBeforeItsEmailGoesOut_ShouldNotBeEmailed()
+    {
+        await using var host = await CreateHostAsync();
+        var tenant = await SeedTenantAsync(host, "Estética Luz");
+        var employee = (await InviteAsync(host, tenant, "carla@demo.com", permissions: null)).Value!;
+
+        // The admin shared the link by WhatsApp and the person accepted it before the outbox sent the email.
+        Assert.True((await AcceptAsync(host, employee.UserId, TokenOf(employee.InvitationUrl!))).IsSuccess);
+        await host.DispatchAccountEmailsAsync();
+
+        Assert.Empty(host.Email.Invitations);
+    }
+
+    [Fact]
     public async Task Resend_ShouldGiveANewLink_OnlyWhileTheInvitationWaits()
     {
         await using var host = await CreateHostAsync();
@@ -103,6 +123,7 @@ public class TeamInvitationTests
 
         var resent = await ResendAsync(host, tenant, employee.TenantUserId);
         Assert.True(resent.IsSuccess, resent.Error);
+        await host.DispatchAccountEmailsAsync();
         Assert.Equal(2, host.Email.Invitations.Count);
         Assert.True((await AcceptAsync(host, employee.UserId, TokenOf(resent.Value!.InvitationUrl))).IsSuccess);
 

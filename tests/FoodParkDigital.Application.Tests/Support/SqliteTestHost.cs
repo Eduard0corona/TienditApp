@@ -2,9 +2,11 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
+using FoodParkDigital.Application.Identity.EventHandlers;
 using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Orders.Entities;
 using FoodParkDigital.Infrastructure.Identity;
 using FoodParkDigital.Infrastructure.Persistence;
@@ -82,7 +84,7 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddSingleton<IEmailService>(Email);
         services.AddSingleton<ISmsService>(Sms);
-        services.AddSingleton<IOutbox>(Outbox);
+        services.AddScoped<IOutbox>(Outbox.For);
         services.AddSingleton<IJwtTokenService>(Jwt);
 
         _provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
@@ -147,7 +149,8 @@ internal sealed class SqliteTestHost : IAsyncDisposable
         where TEvent : DomainEvent
         where THandler : IOutboxEventHandler<TEvent>
     {
-        foreach (var (domainEvent, tenantId) in Outbox.TakePending<TEvent>())
+        var committed = await InScopeAsync(services => Outbox.TakeCommittedAsync<TEvent>(services.GetRequiredService<ApplicationDbContext>()));
+        foreach (var (domainEvent, tenantId) in committed)
         {
             await InScopeAsync(services => ActivatorUtilities.CreateInstance<THandler>(services).HandleAsync(
                 domainEvent,
@@ -156,6 +159,10 @@ internal sealed class SqliteTestHost : IAsyncDisposable
                 CancellationToken.None));
         }
     }
+
+    /// <summary>Sends the account emails the requests asked for (confirmation, reset, invitation), as the outbox does.</summary>
+    public Task DispatchAccountEmailsAsync()
+        => DispatchAsync<AccountEmailRequestedEvent, AccountEmailRequestedHandler>();
 
     /// <summary>Reads committed data through a fresh context, never the handler's change tracker.</summary>
     public Task<TResult> QueryAsync<TResult>(Func<ApplicationDbContext, Task<TResult>> query)

@@ -9,22 +9,21 @@ public class TenantFilterBypassAllowlistTests
 {
     private static readonly Dictionary<string, int> Approved = new(StringComparer.Ordinal)
     {
-        // Identity and session: accounts are not tenant-scoped, and login, refresh, confirmations and the business switch run before or across a business.
+        // Identity and session: accounts are not tenant-scoped, and login, refresh, confirmations, the emails and codes of the accounts and the business switch run before or across a business.
         ["src/FoodParkDigital.Application/Common/Utils/MyTenantResolver.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Commands/AcceptInvitationCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ConfirmEmailCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ConfirmPhoneCommand.cs"] = 2,
-        ["src/FoodParkDigital.Application/Identity/Commands/ForgotPasswordCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/LoginCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/PhoneChangeCommands.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RefreshTokenCommand.cs"] = 3,
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterBusinessCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/RegisterCustomerCommand.cs"] = 1,
-        ["src/FoodParkDigital.Application/Identity/Commands/ResendConfirmationEmailCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/ResetPasswordCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/SmsPasswordResetCommands.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Commands/SwitchTenantCommand.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Commands/UpdateOwnerWhatsAppConfigCommand.cs"] = 1,
+        ["src/FoodParkDigital.Application/Identity/EventHandlers/AccountEmailRequestedHandler.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/EventHandlers/VerificationCodeRequestedHandler.cs"] = 1,
         ["src/FoodParkDigital.Application/Identity/Queries/GetMyTenantsQuery.cs"] = 2,
         ["src/FoodParkDigital.Application/Identity/Queries/GetOwnerWhatsAppConfigQuery.cs"] = 1,

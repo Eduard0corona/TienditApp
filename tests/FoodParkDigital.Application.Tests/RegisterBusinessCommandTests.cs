@@ -25,6 +25,7 @@ public class RegisterBusinessCommandTests
         Assert.Contains(IdentityErrors.PasswordRequiresDigit().Description, result.Error);
         Assert.Contains(IdentityErrors.PasswordRequiresUpper().Description, result.Error);
         await AssertNothingPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
         Assert.Empty(host.Sms.VerificationRecipients);
     }
@@ -41,6 +42,7 @@ public class RegisterBusinessCommandTests
         Assert.True(result.IsFailure);
         Assert.Contains(IdentityErrors.InvalidUserName("dueño@demo.com").Description, result.Error);
         await AssertNothingPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
         Assert.Empty(host.Sms.VerificationRecipients);
     }
@@ -152,6 +154,7 @@ public class RegisterBusinessCommandTests
         Assert.Empty(stored.RefreshTokens);
 
         // The confirmation link goes out once, after the commit, even when the transaction was retried; no SMS code.
+        await host.DispatchAccountEmailsAsync();
         Assert.Equal("owner@demo.com", Assert.Single(host.Email.ConfirmationRecipients));
         Assert.Empty(host.Sms.VerificationRecipients);
     }

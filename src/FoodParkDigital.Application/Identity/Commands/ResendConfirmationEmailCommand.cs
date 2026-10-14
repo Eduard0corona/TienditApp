@@ -1,11 +1,10 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
-using FoodParkDigital.Domain.Identity.Entities;
+using FoodParkDigital.Domain.Identity.Events;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 namespace FoodParkDigital.Application.Identity.Commands;
 
@@ -25,34 +24,21 @@ public class ResendConfirmationEmailCommandValidator : AbstractValidator<ResendC
 
 public class ResendConfirmationEmailCommandHandler : IRequestHandler<ResendConfirmationEmailCommand, Result>
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IEmailService _emailService;
     private readonly IApplicationDbContext _context;
+    private readonly IOutbox _outbox;
 
-    public ResendConfirmationEmailCommandHandler(
-        UserManager<ApplicationUser> userManager,
-        IEmailService emailService,
-        IApplicationDbContext context)
+    public ResendConfirmationEmailCommandHandler(IApplicationDbContext context, IOutbox outbox)
     {
-        _userManager = userManager;
-        _emailService = emailService;
         _context = context;
+        _outbox = outbox;
     }
 
     public async Task<Result> Handle(ResendConfirmationEmailCommand request, CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.ToUpperInvariant();
-        var user = await _context.Users
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
-
-        // Por seguridad, no revelamos si el usuario existe o no
-        if (user is null || user.EmailConfirmed)
-            return Result.Success();
-
-        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), token);
-
+        // The same work and answer for every email: the account is found, and the link sent, after the answer
+        // (AccountEmailRequestedHandler), and only while the account has not confirmed its email.
+        _outbox.Add(new AccountEmailRequestedEvent(AccountEmailPurpose.EmailConfirmation, Email: request.Email.Trim()), tenantId: null);
+        await _context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }
