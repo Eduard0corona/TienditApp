@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -7,6 +8,7 @@ using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
+using FoodParkDigital.Infrastructure.BackgroundJobs.Outbox;
 using FoodParkDigital.Infrastructure.Persistence;
 using FoodParkDigital.Infrastructure.Tests.Support;
 using FoodParkDigital.WebApi.Security;
@@ -148,7 +150,9 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         Assert.False(registered.TryGetProperty("accessToken", out _));
         Assert.DoesNotContain(SetCookies(response), cookie => cookie.StartsWith($"{RefreshTokenCookie.Name}=", StringComparison.Ordinal));
 
-        // The owner opens the emailed link (the app's /confirm-email sends it to this endpoint) and then signs in.
+        // The outbox sends the email after the answer (the workers are off here); the owner opens its link (the app's
+        // /confirm-email sends it to this endpoint) and then signs in.
+        await DispatchOutboxAsync();
         var (userId, token) = _emails.ConfirmationTo(email);
         await ReadAsync(await client.GetAsync(
             $"/api/v1/auth/confirm-email?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}"));
@@ -386,6 +390,39 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     private static readonly byte[] TinyPng = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
+    /// <summary>Signs up a business with <paramref name="email"/>, anonymously, and answers what the API answered.</summary>
+    public async Task<(HttpStatusCode Status, string Body)> RegisterBusinessRequestAsync(string email)
+    {
+        using var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register/business", new
+        {
+            email,
+            password = Password,
+            firstName = "Otra",
+            lastName = "Persona",
+            phoneNumber = "+52155" + Random.Shared.Next(10000000, 99999999),
+            businessName = "Negocio repetido",
+            businessType = ServicesBusiness
+        });
+        return (response.StatusCode, await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>Runs the outbox until nothing is due, as its worker would (the workers are off here).</summary>
+    public async Task DispatchOutboxAsync()
+    {
+        var dispatcher = _factory!.Services.GetRequiredService<OutboxDispatcher>();
+        // One pass takes a batch: earlier tests of the collection may have left more than one batch of events.
+        while (await dispatcher.DispatchDueAsync(CancellationToken.None) > 0)
+        {
+        }
+    }
+
+    /// <summary>How many confirmation emails went to <paramref name="email"/>.</summary>
+    public int ConfirmationsTo(string email) => _emails.ConfirmationsTo(email);
+
+    /// <summary>How many "you already have an account" emails went to <paramref name="email"/>.</summary>
+    public int AlreadyExistsEmailsTo(string email) => _emails.AlreadyExistsTo(email);
+
     /// <summary>The emails the API sends, kept to open their links as the person would.</summary>
     private sealed class RecordedEmails : IEmailService
     {
@@ -410,5 +447,19 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         public Task SendEmailAsync(string to, string subject, string body) => Task.CompletedTask;
 
         public Task SendTeamInvitationAsync(string email, string businessName, string invitationPath) => Task.CompletedTask;
+
+        private readonly ConcurrentQueue<string> _alreadyExists = new();
+
+        public int ConfirmationsTo(string email) => _confirmations.Count(confirmation => confirmation.Email == email);
+
+        public int AlreadyExistsTo(string email) => _alreadyExists.Count(recipient => recipient == email);
+
+        public Task SendAccountAlreadyExistsAsync(string email, bool customerAccount)
+        {
+            _alreadyExists.Enqueue(email);
+            return Task.CompletedTask;
+        }
+
+        public Task SendUnfinishedAccountAsync(string email, string userId, string token) => Task.CompletedTask;
     }
 }

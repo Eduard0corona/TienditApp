@@ -9,6 +9,7 @@ Después de desplegar, `.github/scripts/smoke-test.sh` consulta la app hasta 30 
 - las respuestas de `GET /health/ready` y `GET /health/schema` deben nombrar el commit desplegado (`"commit"`). El publish lo sella en la versión del ensamblado (`-p:SourceRevisionId=${{ github.sha }}`, que queda como `1.0.0+<sha>`) y la API lo reporta en sus health checks. Así no pasa una instancia de la versión anterior, ni siquiera cuando el cliente no cambió y su script conserva el nombre: cada chequeo de abajo lo contesta la versión nueva;
 - `GET /health/ready` debe responder 200 (la API arrancó y llega a la base de datos);
 - desde la Fase 21, esa respuesta debe decir `"business-time-zones":"Healthy"`: las zonas horarias que un negocio puede elegir existen en el servidor. Si una cae en UTC, el chequeo queda Degraded (200, la app sigue atendiendo) y el workflow falla diciéndolo; el log stream nombra las zonas ([observabilidad](../architecture/observability.md));
+- desde la Fase 23A, si esa respuesta no dice `"email-provider":"Healthy"` el workflow pasa con un aviso, sin fallar: no hay proveedor de correo o tiene los valores de ejemplo de `appsettings.json`, así que nadie que se registre puede activar su cuenta y no salen la recuperación de contraseña ni las invitaciones por correo. Se configura en el App Service con `EmailSettings__Provider` (`Smtp`), `EmailSettings__FromEmail`, `EmailSettings__FromName` y `EmailSettings__Smtp__Host`, `__Port`, `__Username`, `__Password` y `__EnableSsl`; el log del chequeo dice qué falta, sin valores;
 - `GET /health/schema` debe decir `Healthy`: la base tiene todas las migraciones de esta versión. Si falta un `apply.sql`, dice `Unhealthy` (503) y el workflow falla pidiendo aplicarlo; la app sigue atendiendo, porque ese chequeo no forma parte de `/health/ready`;
 - `GET /` debe servir el `index.html` recién compilado (sus scripts llevan el hash del build del cliente, que solo cambia si cambió el cliente);
 - desde la Fase 20, ese script, pedido como lo pide un navegador (`Accept-Encoding: br, gzip`), debe llegar con `Content-Encoding: br` y `Cache-Control: ... immutable` (ver [entrega del cliente](#entrega-del-cliente-comprimida-y-en-caché)).
@@ -358,6 +359,18 @@ La Fase 22E trae una migración, [`database/production/20261013191311_AddHomeVis
   - Una venta con `appointmentId` pide también `ManageAppointments`.
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas ni las tablas, sigue agendando y cada venta conserva su total guardado, cargo incluido. Pero no muestra las visitas ni el cargo, no deja tiempo de traslado y una cita cobrada se podría cobrar otra vez. Antes de volver, la consulta 4 del `verify.sql` dice cuántas visitas hay abiertas.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50015, sin cambiar nada, mientras haya visitas, cargos por visita o citas cobradas: se perderían las direcciones, los cargos y qué venta cobró cada cita. Sin ellos, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
+## Registro confiable (Fase 23A)
+
+La Fase 23A no tiene migración ni `apply.sql`: la cola (`OutboxMessages`) ya existe.
+
+- **El proveedor de correo:** sin él, nadie que se registre puede activar su cuenta. Mientras falte, `/health/ready` queda Degraded (sigue respondiendo 200) y la prueba de humo pasa con un aviso (arriba).
+- **Los correos de las cuentas salen de la cola** (`AccountEmailRequestedHandler`), después de responder: la activación, la recuperación de contraseña, el aviso a quien se registra con un correo que ya tiene cuenta y las invitaciones al equipo. Necesitan los workers: con `BackgroundJobs__Enabled=false` (por ejemplo el slot de staging) se guardan y salen cuando una instancia con workers los atiende, si no pasó un día. Un rechazo pasajero del proveedor se reintenta como cualquier mensaje de la cola; después de 8 intentos queda apartado y `background-queues` lo dice.
+- **Mientras se publica:** la versión anterior manda sus correos dentro de la petición, como siempre. Si en los segundos en que corren las dos su worker toma un correo que guardó la versión nueva, no conoce el evento y lo aparta (`Unknown event type` en el log): quien no recibió su enlace lo pide otra vez, y `background-queues` queda Degraded durante un día.
+- **El contrato no cambia de forma**, pero dos respuestas sí:
+  - registrarse con un correo que ya tiene cuenta responde como un registro nuevo («Revisa tu correo»), en lugar de «Ya existe una cuenta con este correo electrónico.»;
+  - iniciar sesión con una cuenta sin activar responde como una contraseña incorrecta, con un texto que menciona la activación, en lugar de «Activa tu cuenta…».
+- **Volver a la versión anterior:** funciona sin tocar la base, pero aparta del mismo modo los correos de cuenta que sigan en la cola, y vuelve a decir si un correo tiene cuenta.
 
 ## Slot de staging con swap y aprobación
 

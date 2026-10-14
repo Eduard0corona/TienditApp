@@ -259,7 +259,11 @@ public class OutboxTests
                 "Se pasó de cocción", ReturnedToStock: false),
             new OrderDeliveryUpdatedEvent(Guid.NewGuid(), TenantA, WentOut: true),
             new VerificationCodeRequestedEvent(VerificationCodePurpose.PasswordReset, Email: "ana@demo.com"),
-            new VerificationCodeRequestedEvent(VerificationCodePurpose.PhoneConfirmation, UserId: Guid.NewGuid())
+            new VerificationCodeRequestedEvent(VerificationCodePurpose.PhoneConfirmation, UserId: Guid.NewGuid()),
+            new AccountEmailRequestedEvent(AccountEmailPurpose.EmailConfirmation, UserId: Guid.NewGuid()),
+            new AccountEmailRequestedEvent(AccountEmailPurpose.PasswordReset, Email: "ana@demo.com"),
+            new AccountEmailRequestedEvent(AccountEmailPurpose.SignUpWithExistingEmail, Email: "ana@demo.com"),
+            new AccountEmailRequestedEvent(AccountEmailPurpose.TeamInvitation, UserId: Guid.NewGuid())
         };
 
         foreach (var domainEvent in events)

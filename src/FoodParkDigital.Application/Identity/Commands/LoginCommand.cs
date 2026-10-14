@@ -29,10 +29,14 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
 
 public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResponse>>
 {
-    /// <summary>Every refused attempt says this, so it also tells whoever got locked why.</summary>
+    /// <summary>
+    /// Every refused attempt says this, an account not activated yet included: it also tells whoever got locked, or
+    /// has not opened their activation link, why. Since the Fase 23A a sign-up with an email that already has an
+    /// account answers as if it created one, so the right password of a new, unactivated account must not answer
+    /// differently from a wrong one: signing up with someone's email and then signing in would tell whether it had one.
+    /// </summary>
     public const string InvalidCredentialsMessage =
-        "Correo o contraseña incorrectos. Después de varios intentos la cuenta se bloquea unos minutos; puedes recuperar tu contraseña.";
-    public const string NotConfirmedMessage = "Activa tu cuenta con el enlace que te enviamos por correo antes de iniciar sesión.";
+        "Correo o contraseña incorrectos, o tu cuenta aún no está activa (actívala con el enlace que te enviamos por correo). Después de varios intentos la cuenta se bloquea unos minutos; puedes recuperar tu contraseña.";
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISignInService _signInService;
@@ -77,9 +81,9 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
         if (!signInResult.Succeeded)
             return Result.Failure<AuthResponse>(InvalidCredentialsMessage);
 
-        // Only whoever knows the password learns that the account is not confirmed yet.
+        // An account not activated yet answers like a wrong password, even to the right one (see the message).
         if (!user.EmailConfirmed && !user.PhoneNumberConfirmed)
-            return Result.Failure<AuthResponse>(NotConfirmedMessage);
+            return Result.Failure<AuthResponse>(InvalidCredentialsMessage);
 
         // Con 2FA la contraseña solo habilita el desafío del segundo paso; los tokens los emite Login2FACommand.
         var is2FAEnabled = await _userManager.GetTwoFactorEnabledAsync(user);

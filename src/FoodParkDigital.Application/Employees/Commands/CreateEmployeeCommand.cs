@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Billing;
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -13,8 +14,6 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Employees.Commands;
 
@@ -60,21 +59,18 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IEmailService? _emailService;
-    private readonly ILogger<CreateEmployeeCommandHandler> _logger;
+    private readonly IOutbox _outbox;
 
     public CreateEmployeeCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
         UserManager<ApplicationUser> userManager,
-        IEmailService? emailService = null,
-        ILogger<CreateEmployeeCommandHandler>? logger = null)
+        IOutbox outbox)
     {
         _context = context;
         _tenantService = tenantService;
         _userManager = userManager;
-        _emailService = emailService;
-        _logger = logger ?? NullLogger<CreateEmployeeCommandHandler>.Instance;
+        _outbox = outbox;
     }
 
     public async Task<Result<EmployeeDto>> Handle(CreateEmployeeCommand request, CancellationToken cancellationToken)
@@ -152,11 +148,11 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
         else
             tenantUser.SetExplicitPermissions(request.Permissions);
         _context.TenantUsers.Add(tenantUser);
-        await _context.SaveChangesAsync(cancellationToken);
-
+        // The invitation email is saved with the membership and goes out from the outbox.
         var invitationPath = invite
-            ? await EmployeeInvitations.IssueAsync(_userManager, _emailService, _context, user, tenantId, _logger, cancellationToken)
+            ? await EmployeeInvitations.IssueAsync(_userManager, _outbox, user, tenantId)
             : null;
+        await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new EmployeeDto
         {

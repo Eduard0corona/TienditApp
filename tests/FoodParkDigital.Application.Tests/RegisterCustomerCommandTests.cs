@@ -25,6 +25,7 @@ public class RegisterCustomerCommandTests
         Assert.True(result.IsFailure);
         Assert.Contains(IdentityErrors.PasswordRequiresDigit().Description, result.Error);
         await AssertNoAccountPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
         Assert.Empty(host.Sms.VerificationRecipients);
     }
@@ -44,6 +45,7 @@ public class RegisterCustomerCommandTests
 
         Assert.True(host.CommandFaults.Fired);
         await AssertNoAccountPersistedAsync(host);
+        await host.DispatchAccountEmailsAsync();
         Assert.Empty(host.Email.ConfirmationRecipients);
         Assert.Empty(host.Sms.VerificationRecipients);
     }
@@ -87,6 +89,7 @@ public class RegisterCustomerCommandTests
         Assert.Null(stored.Order.CustomerUserId);
 
         // The confirmation link goes by email; the phone is verified later from the profile, so no SMS code.
+        await host.DispatchAccountEmailsAsync();
         Assert.Equal("cliente@demo.com", Assert.Single(host.Email.ConfirmationRecipients));
         Assert.Empty(host.Sms.VerificationRecipients);
     }

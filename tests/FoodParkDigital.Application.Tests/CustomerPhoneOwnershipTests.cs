@@ -177,6 +177,23 @@ public class CustomerPhoneOwnershipTests
     }
 
     [Fact]
+    public async Task AConfirmedPhone_ShouldGetTheSameAnswer_WhetherTheEmailHasAnAccountOrNot()
+    {
+        await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");
+        var ownerId = await RegisterUserAsync(host, "duena@demo.com", OwnerPhoneInput);
+        await ConfirmPhoneAsync(host, ownerId);
+        await RegisterUserAsync(host, "tomado@demo.com", OtherPhoneInput);
+
+        // Whoever confirmed their own phone cannot use it to learn which emails have an account.
+        var taken = await RegisterAsync(host, "tomado@demo.com", OwnerPhoneInput);
+        var free = await RegisterAsync(host, "libre@demo.com", OwnerPhoneInput);
+
+        Assert.True(taken.IsFailure);
+        Assert.Equal(free.Error, taken.Error);
+        Assert.Equal("Ya existe una cuenta de cliente con este teléfono.", taken.Error);
+    }
+
+    [Fact]
     public async Task ConfirmPhone_ShouldNotTakeThePhoneFromAnAccountThatConfirmedItFirst()
     {
         await using var host = await SqliteTestHost.CreateAsync("CUSTOMER");

@@ -41,7 +41,7 @@ public class LoginCommandTests
     }
 
     [Fact]
-    public async Task UnconfirmedAccount_ShouldBeToldOnly_ToWhoeverKnowsItsPassword()
+    public async Task UnconfirmedAccount_ShouldAnswerLikeAWrongPassword_EvenToTheRightOne()
     {
         await using var host = await SqliteTestHost.CreateAsync();
         await SeedAccountAsync(host, confirmed: false);
@@ -49,8 +49,11 @@ public class LoginCommandTests
         var wrong = await LoginAsync(host, Email, Wrong);
         var right = await LoginAsync(host, Email, Password);
 
+        // Signing up with someone's email answers as if it created the account: a different answer to the right
+        // password would tell whether the email already had one.
         Assert.Equal(LoginCommandHandler.InvalidCredentialsMessage, wrong.Error);
-        Assert.Equal(LoginCommandHandler.NotConfirmedMessage, right.Error);
+        Assert.Equal(LoginCommandHandler.InvalidCredentialsMessage, right.Error);
+        Assert.Contains("aún no está activa", right.Error);
     }
 
     [Fact]

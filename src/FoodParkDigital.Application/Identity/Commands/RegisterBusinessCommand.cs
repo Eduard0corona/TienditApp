@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -5,6 +6,7 @@ using FoodParkDigital.Application.Tenants;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
+using FoodParkDigital.Domain.Identity.Events;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
@@ -16,8 +18,10 @@ namespace FoodParkDigital.Application.Identity.Commands;
 
 /// <summary>
 /// Signs up a business with its owner and sends the link that confirms the owner's email. It opens no session:
-/// the account is activated from that link and the owner then signs in with their credentials. Returns the id of
-/// the new account.
+/// the account is activated from that link and the owner then signs in with their credentials.
+/// <para>An email that already has an account answers the same and creates nothing: that account gets an email
+/// instead (<see cref="AccountEmailPurpose.SignUpWithExistingEmail"/>), so the answer never tells whether an email has
+/// an account. Returns the id of the account of the email, new or not: never send it back to whoever signed up.</para>
 /// </summary>
 [AllowAnonymousRequest("Acceso público: inicio de sesión, registro y confirmaciones.")]
 public record RegisterBusinessCommand : IRequest<Result<Guid>>
@@ -77,31 +81,55 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IApplicationDbContext _context;
-    private readonly IEmailService _emailService;
+    private readonly IOutbox _outbox;
     private readonly IDateTimeProvider _clock;
 
     public RegisterBusinessCommandHandler(
         UserManager<ApplicationUser> userManager,
         IApplicationDbContext context,
-        IEmailService emailService,
+        IOutbox outbox,
         IDateTimeProvider clock)
     {
         _userManager = userManager;
         _context = context;
-        _emailService = emailService;
+        _outbox = outbox;
         _clock = clock;
     }
 
     public async Task<Result<Guid>> Handle(RegisterBusinessCommand request, CancellationToken cancellationToken)
     {
-        // Check for duplicate email
-        var normalizedEmail = request.Email.ToUpperInvariant();
-        var existingUser = await _context.Users
-            .IgnoreQueryFilters()
-            .AnyAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
+        var user = new ApplicationUser
+        {
+            UserName = request.Email,
+            Email = request.Email,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            PhoneNumber = request.PhoneNumber,
+            Role = UserRole.TenantAdmin,
+            EmailConfirmed = false,
+            IsActive = true
+        };
 
-        if (existingUser)
-            return Result.Failure<Guid>("Ya existe una cuenta con este correo electrónico.");
+        // Identity checks the password only inside CreateAsync; reject it before writing anything. Before looking for
+        // the email, too: its rules depend on what was typed, never on whether the email has an account.
+        var passwordResult = await _userManager.ValidatePasswordPolicyAsync(user, request.Password);
+        if (!passwordResult.Succeeded)
+            return Result.Failure<Guid>(passwordResult.ToErrorMessage());
+
+        var normalizedEmail = request.Email.ToUpperInvariant();
+        // IgnoreQueryFilters: accounts belong to no business, and signing up comes without a session.
+        var existingUserId = await _context.Users
+            .IgnoreQueryFilters()
+            .Where(u => u.NormalizedEmail == normalizedEmail)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existingUserId is { } accountId)
+        {
+            SignUpTiming.HashAsIfCreating(_userManager, user, request.Password);
+            _outbox.Add(new AccountEmailRequestedEvent(AccountEmailPurpose.SignUpWithExistingEmail, Email: request.Email), tenantId: null);
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result.Success(accountId);
+        }
 
         var slug = await BusinessProvisioning.UniqueSlugAsync(_context, request.BusinessName, cancellationToken);
 
@@ -137,26 +165,11 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
         if (!string.IsNullOrWhiteSpace(request.ContactPhone))
             tenant.Update(tenant.Name, tenant.ContactEmail, request.ContactPhone, tenant.LogoUrl);
 
-        // Create user as TenantAdmin
-        var user = new ApplicationUser
-        {
-            DefaultTenantId = tenant.Id,
-            UserName = request.Email,
-            Email = request.Email,
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            PhoneNumber = request.PhoneNumber,
-            Role = UserRole.TenantAdmin,
-            EmailConfirmed = false,
-            IsActive = true
-        };
+        // The owner, as TenantAdmin, starts in the new business
+        user.DefaultTenantId = tenant.Id;
 
-        // Identity checks the password only inside CreateAsync; reject it before writing anything
-        var passwordResult = await _userManager.ValidatePasswordPolicyAsync(user, request.Password);
-        if (!passwordResult.Succeeded)
-            return Result.Failure<Guid>(passwordResult.ToErrorMessage());
-
-        // Tenant, owner and membership are committed together or not at all
+        // Tenant, owner, membership and the request of the email that activates the account are committed together
+        // or not at all
         var registration = await _context.ExecuteInResilientTransactionAsync(async ct =>
         {
             await BusinessProvisioning.AddAsync(_context, tenant, _clock.UtcNow, ct);
@@ -175,6 +188,9 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
                 userId: user.Id,
                 role: TenantUserRole.Owner,
                 status: TenantUserStatus.Active));
+            // The link goes out from the outbox, after the commit, and is retried if the provider fails. It activates
+            // the account (signing in needs a confirmed email or phone); the phone is verified later from the profile.
+            _outbox.Add(new AccountEmailRequestedEvent(AccountEmailPurpose.EmailConfirmation, UserId: user.Id), tenantId: null);
             await _context.SaveChangesAsync(ct);
 
             return Result.Success();
@@ -182,11 +198,6 @@ public class RegisterBusinessCommandHandler : IRequestHandler<RegisterBusinessCo
 
         if (registration.IsFailure)
             return Result.Failure<Guid>(registration.Error!);
-
-        // The link goes out only after the registration is committed. It activates the account (signing in needs a
-        // confirmed email or phone); the phone is verified later from the profile.
-        var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-        await _emailService.SendEmailConfirmationAsync(user.Email!, user.Id.ToString(), emailToken);
 
         return Result.Success(user.Id);
     }

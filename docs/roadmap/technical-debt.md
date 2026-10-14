@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-14 con la Fase 23A y antes con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -33,10 +33,10 @@ Actualizada el 2026-10-13 con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22
 - Resuelto en la Fase 11: los controllers reciben el `CancellationToken` y lo pasan a su caso de uso; `RequestCancellation` decide su efecto: una lectura (GET) se detiene si el cliente se va y un cambio termina siempre, porque la mayoría de los casos de uso guarda en varios pasos fuera de una transacción. Pendiente: cancelar un cambio exigiría que cada caso de uso guarde de una vez o en una transacción.
 - Resuelto en la Fase 9: las contraseñas nuevas tienen al menos 8 caracteres con mayúscula, minúscula y dígito, y se rechazan las comunes y las que contienen el correo o el nombre. Pendiente: las actuales valen hasta que se cambien y no se consulta una lista de contraseñas filtradas.
 - Resuelto en la Fase 10: `GlobalExceptionHandlerMiddleware` registra los rechazos esperados (400, 401, 403, 404, 409 y 422) como advertencia, sin la traza de pila; solo los 500 quedan como error con la excepción.
-- Activación por correo (2026-10-06): el registro de negocio y de cliente ya no abre sesión ni manda código por SMS; la cuenta se activa con el enlace del correo y después inicia sesión ([identidad](../architecture/identity-permissions-capabilities.md)). Pendiente:
-   - sin un proveedor de correo configurado (`EmailSettings`) nadie que se registre puede activar su cuenta. Los valores de ejemplo de `appsettings.json` (`YOUR_SMTP_USERNAME`) no cuentan como vacíos: el servicio intenta enviar con ellos, falla y solo lo registra en el log;
-   - el registro todavía responde "Ya existe una cuenta con este correo", así que dice qué correos tienen cuenta;
-   - el envío del correo no pasa por el outbox: si el proveedor falla, la cuenta queda creada y la persona pide un enlace nuevo desde "Revisa tu correo".
+- Activación por correo (2026-10-06): el registro de negocio y de cliente ya no abre sesión ni manda código por SMS; la cuenta se activa con el enlace del correo y después inicia sesión ([identidad](../architecture/identity-permissions-capabilities.md)). Resuelto en la Fase 23A: el registro responde lo mismo si el correo ya tiene cuenta (su dueño recibe el aviso por correo), y los correos de las cuentas salen del outbox con reintentos, el de la activación guardado con la cuenta. Pendiente:
+   - sin un proveedor de correo configurado (`EmailSettings`) nadie que se registre puede activar su cuenta. Desde la Fase 23A los valores de ejemplo de `appsettings.json` cuentan como no configurados (no se intenta enviar con ellos), `/health/ready` lo dice (`email-provider`, Degraded) y la prueba de humo avisa; falta configurarlo en producción;
+   - el registro de cliente todavía responde «Ya existe una cuenta de cliente con este teléfono» cuando una cuenta confirmó ese teléfono (antes de buscar el correo, así que no dice nada del correo); crear una cuenta escribe más filas que no crearla, una diferencia de milisegundos que la respuesta puede mostrar (probar un correo libre así lo registra, así que cada correo se prueba una vez); y dos registros simultáneos con el mismo correo pueden dar al segundo el error de Identity «Ya existe una cuenta con ese correo»;
+   - un correo con cuenta puede recibir el aviso cada vez que alguien se registra con él: lo acota el límite de peticiones por IP, sin límite por cuenta.
 
 ## Media
 
