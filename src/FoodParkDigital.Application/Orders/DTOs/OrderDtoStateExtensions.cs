@@ -22,12 +22,14 @@ public static class OrderDtoStateExtensions
         order.CanCancel = stateMachine.CanCancel(order.Status) && order.NetPaidAmount <= 0;
 
         // Same calculation as Order.GetTaxBreakdown, from what each item charges and the rate stored on it, and the
-        // delivery as one more concept.
+        // delivery or the visit charge as one more concept.
         var amounts = order.Items
             .Where(item => item.CancelledQuantity < item.Quantity)
             .Select(item => new TaxableAmount(item.ChargedPrice, new VatRate(item.TaxRate, item.IsTaxExempt)));
         if (order.Delivery is { Fee: > 0 } delivery)
             amounts = amounts.Append(new TaxableAmount(delivery.Fee, VatRate.Of(delivery.FeeTaxRate)));
+        if (order.VisitCharge is { } visit)
+            amounts = amounts.Append(new TaxableAmount(visit.Fee, VatRate.Of(visit.FeeTaxRate)));
         order.TaxBreakdown = OrderTaxCalculator
             .Calculate(order.PricesIncludeTax, amounts)
             .Select(line => new OrderTaxLineDto

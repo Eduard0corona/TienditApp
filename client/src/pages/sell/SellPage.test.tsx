@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { appointmentsApi } from '../../api/appointmentsApi';
 import { categoriesApi } from '../../api/categoriesApi';
 import { cashApi } from '../../api/cashApi';
 import { ordersApi } from '../../api/ordersApi';
@@ -30,6 +31,7 @@ import {
   type OrderDto,
   type ProductDto,
 } from '../../types';
+import { CANCELLED_SALE_MESSAGE, ALREADY_SOLD_MESSAGE } from '../../utils/homeVisits';
 import { ROUND_STOCK_WARNING_TITLE } from '../../utils/stockWarnings';
 import SellPage from './SellPage';
 
@@ -48,6 +50,7 @@ vi.mock('../../offline/saleQueue', async (importOriginal) => ({
   enqueueSale: vi.fn(),
 }));
 vi.mock('../../api/productsApi', () => ({ productsApi: { getAll: vi.fn() } }));
+vi.mock('../../api/appointmentsApi', () => ({ appointmentsApi: { getById: vi.fn() } }));
 vi.mock('../../api/categoriesApi', () => ({ categoriesApi: { getAll: vi.fn() } }));
 vi.mock('../../api/cashApi', () => ({ cashApi: { getCurrentSession: vi.fn() } }));
 vi.mock('../../api/chatApi', () => ({ chatApi: { sendMessage: vi.fn() } }));
@@ -1183,6 +1186,84 @@ describe('SellPage with a platform order and no connection', () => {
       expect(ticket().getByText(zonesError, { selector: '.alert' })).toBeInTheDocument();
       // A draft from before «paga con» comes back with it empty.
       expect(JSON.parse(window.localStorage.getItem(draftKey) ?? '{}').delivery).toEqual({ ...delivery, paysWith: '' });
+    });
+  });
+  describe('charging an appointment of the agenda', () => {
+    const haircut = product({ id: 'haircut', name: 'Corte a domicilio', priceAmount: 400, unit: UnitType.Service, sortOrder: 4 });
+    const appointment = {
+      id: 'a1',
+      customerName: 'Ana Ruiz',
+      customerPhone: '5512345678',
+      serviceName: 'Corte a domicilio',
+      serviceProductId: 'haircut',
+      startAt: '2026-10-14T16:00:00Z',
+      endAt: '2026-10-14T17:00:00Z',
+      status: 0,
+      visit: { postalCode: '72000', addressLine: 'Av. Juárez 123', zoneName: 'Centro', fee: 80 },
+    };
+
+    it('brings its customer, its service and its visit charge, and sends the appointment with the total', async () => {
+      // Whoever books the appointment charges it (ManageAppointments, as the server asks).
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({ data: appointment } as never);
+      vi.mocked(ordersApi.create).mockResolvedValue({ data: { orderNumber: 'ORD-000004', stockWarnings: [] } } as never);
+      renderAt('/sell?appointment=a1');
+
+      expect(await ticket().findByText(/Cobro de la cita de/)).toHaveTextContent('Ana Ruiz');
+      expect(ticket().getByRole('textbox', { name: 'Cantidad de Corte a domicilio' })).toHaveValue('1');
+      // The charge agreed is one more concept, with IVA included like the prices of the business.
+      expect(ticket().getByText('Cargo por visita (Centro)').nextSibling).toHaveTextContent('$80.00');
+      expect(ticket().getByRole('button', { name: /Cobrar \$480\.00/ })).toBeEnabled();
+
+      await userEvent.click(ticket().getByRole('button', { name: 'Guardar sin cobrar' }));
+
+      expect(ordersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+        appointmentId: 'a1',
+        orderType: OrderType.Service,
+        customerName: 'Ana Ruiz',
+        customerPhone: '5512345678',
+        expectedTotal: 480,
+        delivery: undefined,
+      }));
+    });
+
+    it('stops being the charge of the appointment when the cashier says so', async () => {
+      // Whoever books the appointment charges it (ManageAppointments, as the server asks).
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({ data: appointment } as never);
+      renderAt('/sell?appointment=a1');
+
+      await userEvent.click(await ticket().findByRole('button', { name: 'Ya no es el cobro de la cita' }));
+
+      expect(ticket().queryByText(/Cargo por visita/)).not.toBeInTheDocument();
+      expect(ticket().getByRole('button', { name: /Cobrar \$400\.00/ })).toBeEnabled();
+    });
+
+    it('does not bring a cancelled appointment', async () => {
+      // Whoever books the appointment charges it (ManageAppointments, as the server asks).
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({ data: { ...appointment, status: 99 } } as never);
+      renderAt('/sell?appointment=a1');
+
+      await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(CANCELLED_SALE_MESSAGE));
+      expect(ticket().queryByText(/Cobro de la cita/)).not.toBeInTheDocument();
+    });
+
+    it('does not bring an appointment that has its sale, unless that sale was cancelled', async () => {
+      signIn(['ManageOrders', 'ChargeOrders', 'ManageCash', 'ManageAppointments']);
+      vi.mocked(productsApi.getAll).mockResolvedValue({ data: { items: [taco, haircut], totalCount: 2 } } as never);
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({ data: { ...appointment, status: 3, saleOrderId: 'o1' } } as never);
+      const { unmount } = renderAt('/sell?appointment=a1');
+
+      await waitFor(() => expect(toast.warning).toHaveBeenCalledWith(ALREADY_SOLD_MESSAGE));
+      expect(ticket().queryByText(/Cobro de la cita/)).not.toBeInTheDocument();
+      unmount();
+
+      vi.mocked(appointmentsApi.getById).mockResolvedValue({ data: { ...appointment, status: 3, saleOrderId: 'o1', saleCancelled: true } } as never);
+      renderAt('/sell?appointment=a1');
+      expect(await ticket().findByText(/Cobro de la cita de/)).toHaveTextContent('Ana Ruiz');
     });
   });
 });

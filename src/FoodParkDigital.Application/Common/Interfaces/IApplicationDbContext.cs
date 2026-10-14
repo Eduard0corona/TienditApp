@@ -48,6 +48,7 @@ public interface IApplicationDbContext
     DbSet<ServiceOrderDetail> ServiceOrderDetails { get; }
     DbSet<PlatformOrderDetail> PlatformOrderDetails { get; }
     DbSet<OrderDelivery> OrderDeliveries { get; }
+    DbSet<OrderVisitCharge> OrderVisitCharges { get; }
     DbSet<DeliveryPlatformSetting> DeliveryPlatformSettings { get; }
     DbSet<PlatformSettlement> PlatformSettlements { get; }
     DbSet<PlatformSettlementOrder> PlatformSettlementOrders { get; }
@@ -59,6 +60,7 @@ public interface IApplicationDbContext
     DbSet<DeliveryZonePostalCode> DeliveryZonePostalCodes { get; }
     DbSet<ServiceOrderPiece> ServiceOrderPieces { get; }
     DbSet<Appointment> Appointments { get; }
+    DbSet<AppointmentVisit> AppointmentVisits { get; }
     DbSet<Supplier> Suppliers { get; }
     DbSet<PurchaseOrder> PurchaseOrders { get; }
     DbSet<PurchaseOrderLine> PurchaseOrderLines { get; }

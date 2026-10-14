@@ -77,15 +77,17 @@ public sealed class AppointmentReminderPlanner
                 continue;
 
             var values = Values(appointment, businessName, settings.TimeZone);
+            // Without a template of its own, a visit is reminded as one; a template says what the business wrote.
+            var text = template is null && appointment.Visit is { } visit ? MessagingDefaults.HomeVisitReminderBody(visit.PostalCode) : body;
             _context.OutgoingMessages.Add(new OutgoingMessage(
                 settings.TenantId,
                 MessagePurpose.AppointmentReminder,
                 phone,
                 appointment.CustomerName,
-                MessageTemplateText.Render(body, values),
+                MessageTemplateText.Render(text, values),
                 template?.ProviderTemplateName,
                 template?.LanguageCode ?? MessageTemplate.DefaultLanguageCode,
-                MessageTemplateText.Parameters(body, values),
+                MessageTemplateText.Parameters(text, values),
                 notBefore: now,
                 deduplicationKey: key,
                 appointmentId: appointment.Id));

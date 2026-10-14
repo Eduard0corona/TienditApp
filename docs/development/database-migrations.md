@@ -4,7 +4,7 @@
 
 `ApplicationDbContext`, configuraciones y migraciones están en `FoodParkDigital.Infrastructure`. `MigrationsAssembly` apunta a ese assembly. En Development, `Program.cs` ejecuta migración y seed al arranque solo si `Database:AutoMigrateOnStartup`/`Database:SeedOnStartup` están activos y el servidor es local (o `Database:AllowRemoteDatabase=true`); fuera de Development nunca se migra al iniciar.
 
-Producción se migra en un paso del despliegue ([ADR 0020](../adr/0020-automatic-production-migrations.md)). Con las migraciones automáticas activas, cada release se ensaya en una copia de producción y, con la aprobación del environment `production`, el workflow migra producción antes del swap ([despliegue](deploy-azure.md#slot-de-staging-migraciones-automáticas-y-aprobación)). Mientras no estén activas, se aplica a mano el `apply.sql` de cada migración antes del merge ([scripts para producción](#scripts-para-producción)).
+Producción se migra en un paso del despliegue ([ADR 0021](../adr/0021-automatic-production-migrations.md)). Con las migraciones automáticas activas, cada release se ensaya en una copia de producción y, con la aprobación del environment `production`, el workflow migra producción antes del swap ([despliegue](deploy-azure.md#slot-de-staging-migraciones-automáticas-y-aprobación)). Mientras no estén activas, se aplica a mano el `apply.sql` de cada migración antes del merge ([scripts para producción](#scripts-para-producción)).
 
 El CI ejecuta `dotnet ef migrations has-pending-model-changes` en cada PR, por lo que una configuración sin migración rompe el build.
 
@@ -89,6 +89,14 @@ Migraciones recientes con notas operativas:
   - `CourierSettlementAdjustments` (posición, motivo, descripción y monto), con CHECK: motivo conocido, monto distinto de cero y negativo salvo «Otro», y «Otro» con descripción.
   - La versión anterior (`master` con la Fase 22C) no conoce las columnas ni las tablas (`CourierSettlementsSqlServerTests`).
   - Su `Down` se detiene con el error 50014 mientras haya pedidos que salieron o con «paga con», o liquidaciones. El chequeo va en un `EXEC`: SQL Server compila el lote entero, y una columna ya borrada rompería aun la rama que no corre. Sin ellos, quita lo que agregó, y el `rollback.sql` se puede ejecutar otra vez.
+- Fase 22E: `AddHomeVisits` agrega las citas a domicilio y su cobro ([ADR 0020](../adr/0020-home-visits.md)).
+  - `TenantSettings` gana `HomeVisitTravelMinutes` `int` (30 por omisión, también en las filas que ya existen) con el CHECK `_HomeVisitTravelMinutes` (0 a 240).
+  - `Appointments` gana `SaleOrderId` (con nulos, llave a `Orders` sin cascada e índice) y `Version` `rowversion`: dos cobros o ediciones de la misma cita al mismo tiempo dan 409 en lugar de quedarse con el último. Cambiar solo la visita marca la cita como modificada para que su versión cambie.
+  - `AppointmentVisits`, una fila por cita: `PostalCode` `varchar(5)`, `AddressLine` `nvarchar(300)`, `References` `nvarchar(500)` (con nulos), `ZoneName` `nvarchar(60)` y `Fee` `decimal(18,2)`; llave a su cita en cascada e índice único `IX_AppointmentVisits_AppointmentId`; tres CHECK: `_PostalCode` (cinco dígitos), `_AddressLine` (no vacía) y `_Fee` (0 a 10,000).
+  - `OrderVisitCharges`, una fila por venta: `AppointmentId`, `ZoneName`, `Fee` `decimal(18,2)` y `FeeTaxRate` `decimal(5,2)`; llave a su venta en cascada e índice único `IX_OrderVisitCharges_OrderId`; llave a la cita sin cascada; dos CHECK: `_Fee` (más de 0 y hasta 10,000) y `_FeeTaxRate` (0 a 100). La cita no lleva índice único aquí: si su venta se canceló, otra venta la cobra.
+  - La cita carga su visita siempre (`AutoInclude`), y el pedido su cargo: es parte del total.
+  - La versión anterior (`master` con la Fase 22D) no conoce las columnas ni las tablas y sigue agendando y guardando la configuración (`HomeVisitsSqlServerTests`).
+  - Su `Down` se detiene con el error 50015 mientras haya visitas, cargos por visita o citas cobradas. El chequeo va en un `EXEC`, como el de la 22D. Sin ellos, quita lo que agregó, y el `rollback.sql` se puede ejecutar otra vez.
 
 ## Reglas
 

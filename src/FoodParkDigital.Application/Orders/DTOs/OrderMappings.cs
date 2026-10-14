@@ -51,6 +51,13 @@ public static class OrderMappings
             CashToCollect = order.Delivery.CashToCollect,
             AwaitsCourierCash = order.AwaitsCourierCash
         },
+        VisitCharge = order.VisitCharge is null ? null : new OrderVisitChargeDto
+        {
+            AppointmentId = order.VisitCharge.AppointmentId,
+            ZoneName = order.VisitCharge.ZoneName,
+            Fee = order.VisitCharge.Fee,
+            FeeTaxRate = order.VisitCharge.FeeTaxRate
+        },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,
         SubTotal = order.SubTotal,
@@ -265,6 +272,13 @@ public static class OrderMappings
             // Order.AwaitsCourierCash, written out so the database reads it.
             AwaitsCourierCash = order.Delivery.CashToCollect != null && order.Status == OrderStatus.Delivered
                 && order.Total > order.PaidAmount
+        },
+        VisitCharge = order.VisitCharge == null ? null : new OrderVisitChargeDto
+        {
+            AppointmentId = order.VisitCharge.AppointmentId,
+            ZoneName = order.VisitCharge.ZoneName,
+            Fee = order.VisitCharge.Fee,
+            FeeTaxRate = order.VisitCharge.FeeTaxRate
         },
         BranchId = order.BranchId,
         CapturedOfflineAt = order.CapturedOfflineAt,

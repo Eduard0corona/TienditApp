@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Delivery;
 using FoodParkDigital.WebApi.Errors;
@@ -69,6 +70,23 @@ public class DeliveryZonesController : ControllerBase
             return Refused(result.Error);
 
         return NoContent();
+    }
+
+    /// <summary>The travel time between visits at the customers' addresses (Fase 22E), with the Agenda module.</summary>
+    [HttpGet("home-visits")]
+    public async Task<ActionResult<HomeVisitSettingsDto>> GetHomeVisitSettings(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetHomeVisitSettingsQuery(), cancellationToken));
+
+    /// <summary>Sets the travel time between visits (owners and admins).</summary>
+    [HttpPut("home-visits")]
+    public async Task<ActionResult<HomeVisitSettingsDto>> UpdateHomeVisitSettings(
+        [FromBody] UpdateHomeVisitSettingsCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
     }
 
     private ActionResult<DeliveryZoneDto> Answer(Result<DeliveryZoneDto> result)

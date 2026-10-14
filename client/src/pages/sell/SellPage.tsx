@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Modal, Offcanvas } from 'react-bootstrap';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { productsApi } from '../../api/productsApi';
+import { appointmentsApi } from '../../api/appointmentsApi';
 import { ordersApi } from '../../api/ordersApi';
 import { cashApi } from '../../api/cashApi';
 import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
@@ -24,7 +25,7 @@ import { newUuid } from '../../utils/uuid';
 import type { CreateOrderRequest, OrderDto, ProductDto } from '../../types';
 import { BusinessType, OrderChannel, OrderType, TenantCapability } from '../../types';
 import { getAccess } from '../../utils/access';
-import { formatDateTime } from '../../utils/dates';
+import { formatDateTime, formatInBusinessZone } from '../../utils/dates';
 import {
   PLATFORM_ONLY_PRODUCTS_MESSAGE,
   getPlatformFolioProblem,
@@ -45,6 +46,7 @@ import {
   notCoveredMessage,
 } from '../../utils/homeDelivery';
 import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
+import { appointmentSaleProblem, estimateVisitTotals } from '../../utils/homeVisits';
 import { estimateOrderTotals } from '../../utils/orderTotals';
 import { isPostalCode } from '../../utils/postalCodes';
 import { hasCapability } from '../../utils/tenantCapabilities';
@@ -64,6 +66,7 @@ import {
   MAX_LINES,
   MAX_QUANTITY_PER_LINE,
   NO_SALE_DETAILS,
+  readAppointmentId,
   readChatOrigin,
   readCustomerPrefill,
   readTabTarget,
@@ -74,6 +77,7 @@ import {
   type CustomerPrefill,
   type MeasureRequest,
   type OptionsRequest,
+  type SaleAppointment,
   type SaleDetails,
   type TabTarget,
 } from './sellModel';
@@ -166,6 +170,8 @@ export default function SellPage() {
   // conversation) makes it a WhatsApp order; the customer card just fills the customer in.
   const pendingCustomer = useRef<CustomerPrefill | null>(readCustomerPrefill(searchParams));
   const pendingChatOrigin = useRef<ChatOrigin | null>(readChatOrigin(searchParams));
+  // «Cobrar» in the agenda (?appointment=): read once, after the saved sale is brought back.
+  const pendingAppointment = useRef<string | null>(readAppointmentId(searchParams));
   const [chatOrigin, setChatOrigin] = useState<ChatOrigin | null>(null);
   const [measure, setMeasure] = useState<MeasureRequest | null>(null);
   const draftLoadedFor = useRef('');
@@ -200,6 +206,7 @@ export default function SellPage() {
           externalOrderNumber: draft.externalOrderNumber,
           collectedBy: draft.collectedBy,
           delivery: draft.delivery ?? null,
+          appointment: draft.appointment ?? null,
           ...(toCounter ? COUNTER_ORIGIN : {}),
         });
         // The name for the bag of a platform's order is in sight with its folio: behind the link there are only notes.
@@ -284,10 +291,56 @@ export default function SellPage() {
     };
   }, [tabTarget]);
 
-  // The customer is already in the form: a reload must not fill it again.
+  // The customer (or the appointment) is already in the sale: a reload must not fill it again.
   useEffect(() => {
-    if (searchParams.has('phone')) setSearchParams({}, { replace: true });
+    if (searchParams.has('phone') || searchParams.has('appointment')) setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  // The appointment to charge: its customer, its service of the catalog and its visit charge. The server checks it again
+  // and charges what the appointment says.
+  const chargeAppointment = useCallback(async (appointmentId: string) => {
+    try {
+      const { data } = await appointmentsApi.getById(appointmentId);
+      const problem = appointmentSaleProblem(data);
+      if (problem) {
+        toast.warning(problem);
+        return;
+      }
+      // Another sale was on screen: the charge of the appointment takes its place only if the cashier says so.
+      if (cart.length > 0 && !(await confirm({
+        title: '¿Cobrar la cita?',
+        message: 'Hay otra venta en el ticket. El cobro de la cita la reemplaza.',
+        confirmLabel: 'Cobrar la cita',
+        cancelLabel: 'Seguir con la venta',
+      }))) return;
+      const when = formatInBusinessZone(data.startAt, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      const appointment: SaleAppointment = {
+        id: data.id,
+        customerName: data.customerName,
+        description: `${data.serviceName} · ${when}`,
+        visitFee: data.visit && data.visit.fee > 0 ? data.visit.fee : null,
+        zoneName: data.visit?.zoneName ?? null,
+      };
+      const service = data.serviceProductId ? products.find((product) => product.id === data.serviceProductId) : undefined;
+      pendingCharge.current = null;
+      setCart(service ? [toCartLine(service, 1, '', [])] : []);
+      // A counter sale of the business, for the customer of the appointment: no platform and no delivery.
+      setDetails({ ...NO_SALE_DETAILS, customerName: data.customerName, customerPhone: data.customerPhone, appointment });
+      setShowDetails(true);
+      setSaleError('');
+      if (!service) toast.info('Agrega al ticket el servicio de la cita.');
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, 'No se encontró la cita.'));
+    }
+  }, [cart.length, confirm, products, setCart, toCartLine, toast]);
+
+  // Once the catalog is in (its first load also brings back the sale saved on the device).
+  useEffect(() => {
+    const appointmentId = pendingAppointment.current;
+    if (!appointmentId || catalog.loading) return;
+    pendingAppointment.current = null;
+    void chargeAppointment(appointmentId);
+  }, [catalog.loading, chargeAppointment]);
 
   const workingBranchId = workingBranch.branch?.id;
   useEffect(() => {
@@ -329,7 +382,9 @@ export default function SellPage() {
   // To the customer's address (Fase 22C): with the active zones of the business, never for a tab or a platform's order.
   const zones = useDeliveryZones(access.sell && !tabTarget);
   const activeZones = useMemo(() => (zones.data ?? []).filter((zone) => zone.isActive), [zones.data]);
-  const deliveryPossible = !tabTarget && !platform;
+  // The appointment the sale charges: a counter sale, never a tab, a platform's order or a delivery.
+  const appointment = !tabTarget && !platform ? details.appointment ?? null : null;
+  const deliveryPossible = !tabTarget && !platform && !appointment;
   // A delivery typed (or brought back with the sale) stays on screen while the zones load, fail or were turned off, or
   // with services in the ticket: it says why instead of sending the sale without its address.
   const delivery = deliveryPossible ? details.delivery : null;
@@ -343,10 +398,11 @@ export default function SellPage() {
       ratePercent: line.ratePercent,
       isExempt: line.isExempt,
     }));
-    return deliveryZone
-      ? estimateDeliveryTotals(lines, pricesIncludeTax, deliveryZone, defaultTaxRate)
-      : { ...estimateOrderTotals(lines, pricesIncludeTax), productsTotal: null, fee: null };
-  }, [cart, pricesIncludeTax, deliveryZone, defaultTaxRate]);
+    if (deliveryZone) return estimateDeliveryTotals(lines, pricesIncludeTax, deliveryZone, defaultTaxRate);
+    // The charge for the visit agreed, one more concept as the server adds it.
+    if (appointment?.visitFee) return estimateVisitTotals(lines, pricesIncludeTax, appointment.visitFee, defaultTaxRate);
+    return { ...estimateOrderTotals(lines, pricesIncludeTax), productsTotal: null, fee: null };
+  }, [cart, pricesIncludeTax, deliveryZone, defaultTaxRate, appointment?.visitFee]);
   // Quick feedback only: the server finds the zone, checks its minimum and charges its fee.
   const deliveryPostalCode = delivery ? normalizePostalCode(delivery.postalCode) : '';
   const zonesProblem = !delivery ? ''
@@ -553,6 +609,7 @@ export default function SellPage() {
         paysWith: payingWith ?? undefined,
       }
       : undefined,
+    appointmentId: appointment?.id,
   });
 
   /** Keeps a charged sale on the device when the connection is down; it is sent with its key when it comes back. */
@@ -627,7 +684,8 @@ export default function SellPage() {
     // Only a counter sale charged now can wait on the device: a tab, a chat order, a sale saved unpaid, a service
     // (its pieces are picked up with the server's folio) or an order of a platform (checked against today's folios)
     // need the server.
-    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices && !platform && !delivery;
+    // The sale of an appointment needs the server too: it checks the appointment as it charges it.
+    const canQueue = !!charge && !tabTarget && !chatOrigin && !hasServices && !platform && !delivery && !appointment;
     // The same key on a retry returns this sale instead of charging twice; another cart is another sale.
     const draft = toDraft(cart, details);
     const sale = describeSale(draft);
@@ -798,6 +856,8 @@ export default function SellPage() {
       }}
       deliveryZone={deliveryZone}
       deliveryProblem={deliveryHint}
+      appointment={appointment}
+      onDismissAppointment={() => setDetails((current) => ({ ...current, appointment: null }))}
       pricesPending={pricesPending}
       pricesError={catalog.loadError}
       onRetryPrices={() => void catalog.reload()}

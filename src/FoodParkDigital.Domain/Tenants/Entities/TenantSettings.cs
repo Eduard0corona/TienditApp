@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Common.ValueObjects;
 using FoodParkDigital.Domain.Exceptions;
@@ -67,6 +68,12 @@ public class TenantSettings : BaseEntity, ITenantScoped
     /// <summary>The reminder template; null uses the default text.</summary>
     public Guid? AppointmentReminderTemplateId { get; private set; }
 
+    /// <summary>
+    /// The minutes a team member needs between a visit at the customer's address and their other appointments (Fase 22E);
+    /// 0 for none.
+    /// </summary>
+    public int HomeVisitTravelMinutes { get; private set; } = HomeVisitRules.DefaultTravelMinutes;
+
     public Tenant Tenant { get; private set; } = null!;
 
     public void Update(string currency, string timeZone, bool autoAcceptOrders, int maxConcurrentOrders)
@@ -123,6 +130,14 @@ public class TenantSettings : BaseEntity, ITenantScoped
         AppointmentRemindersEnabled = enabled;
         AppointmentReminderHoursBefore = hoursBefore;
         AppointmentReminderTemplateId = templateId;
+    }
+
+    /// <summary>The travel time between a visit at the customer's address and another appointment of the same person.</summary>
+    public void SetHomeVisitTravelMinutes(int minutes)
+    {
+        if (minutes is < 0 or > HomeVisitRules.MaxTravelMinutes)
+            throw new DomainException(HomeVisitRules.TravelMinutesMessage);
+        HomeVisitTravelMinutes = minutes;
     }
 
     /// <summary>Records the end of the guided setup; finishing it again keeps the first date.</summary>

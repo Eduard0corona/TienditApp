@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Appointments.DTOs;
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Security;
@@ -25,6 +26,11 @@ public record CreateAppointmentCommand : IRequest<Result<AppointmentDto>>
     public DateTimeOffset StartAt { get; init; }
     public DateTimeOffset EndAt { get; init; }
     public string? Notes { get; init; }
+    /// <summary>
+    /// At the customer's address (Fase 22E): an active delivery zone of the business must reach its postal code, and the
+    /// visit charges what the zone charges to go there. Null when the customer comes to the business.
+    /// </summary>
+    public AppointmentVisitInput? Visit { get; init; }
 }
 
 public class CreateAppointmentCommandValidator : AbstractValidator<CreateAppointmentCommand>
@@ -39,6 +45,7 @@ public class CreateAppointmentCommandValidator : AbstractValidator<CreateAppoint
         RuleFor(x => x.StaffName).MaximumLength(120);
         RuleFor(x => x.Notes).MaximumLength(2000);
         RuleFor(x => x.EndAt).GreaterThan(x => x.StartAt);
+        RuleFor(x => x.Visit!).SetValidator(new AppointmentVisitInputValidator()).When(x => x.Visit is not null);
     }
 }
 
@@ -46,17 +53,23 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentTenantService _tenantService;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IDateTimeProvider _clock;
     private readonly AppointmentNotices _notices;
     private readonly IOutgoingMessageSignal? _signal;
 
     public CreateAppointmentCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenantService,
+        ICurrentUserService currentUserService,
+        IDateTimeProvider clock,
         AppointmentNotices notices,
         IOutgoingMessageSignal? signal = null)
     {
         _context = context;
         _tenantService = tenantService;
+        _currentUserService = currentUserService;
+        _clock = clock;
         _notices = notices;
         _signal = signal;
     }
@@ -84,7 +97,22 @@ public class CreateAppointmentCommandHandler : IRequestHandler<CreateAppointment
             serviceProductId: request.ServiceProductId,
             staffUserId: request.StaffUserId);
 
+        if (request.Visit is not null)
+        {
+            var visit = await HomeVisitPlacement.ArrangeAsync(_context, entity, request.Visit, _clock.UtcNow, cancellationToken);
+            if (visit.IsFailure)
+                return Result.Failure<AppointmentDto>(visit.Error!);
+        }
+
+        var travel = await HomeVisitPlacement.TravelConflictAsync(
+            _context, entity.TenantId, request.StaffUserId, resources.Value.StaffName, request.StartAt, request.EndAt,
+            entity.IsHomeVisit, null, cancellationToken);
+        if (travel is not null)
+            return Result.Failure<AppointmentDto>(travel);
+
         _context.Appointments.Add(entity);
+        if (entity.IsHomeVisit)
+            _context.AuditLogs.Add(AppointmentVisitAudit.Create(entity, _currentUserService.UserName));
         var noticeQueued = await _notices.QueueScheduledAsync(entity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         if (noticeQueued)

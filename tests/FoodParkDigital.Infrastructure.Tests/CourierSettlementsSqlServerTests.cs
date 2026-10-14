@@ -346,7 +346,8 @@ public class CourierSettlementsSqlServerTests
     {
         var tenant = NewTenant("Cocina de Lupita");
         var other = NewTenant("Fonda vecina");
-        await using var seed = database.CreateContext();
+        // Without what Fase 22E added: some tests seed a database migrated to an earlier migration.
+        await using var seed = BeforeHomeVisits.CreateContext(database);
         seed.AddRange(tenant, other, new TenantSettings(tenant.Id, TenantCapability.Food), new TenantSettings(other.Id, TenantCapability.Food));
         await seed.SaveChangesAsync();
         return (tenant, other);
@@ -370,6 +371,7 @@ public class CourierSettlementsSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            BeforeHomeVisits.Ignore(modelBuilder);
             modelBuilder.Ignore<CourierSettlementAdjustment>();
             modelBuilder.Ignore<CourierSettlementOrder>();
             modelBuilder.Ignore<CourierSettlement>();

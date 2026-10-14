@@ -27,10 +27,16 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
 {
     /// <summary>
     /// Taking an order needs ManageOrders; charging it at once also needs ChargeOrders. The «Plataforma» payment of an
-    /// order a delivery platform charged is recorded by the server, outside every drawer: nobody charges it.
+    /// order a delivery platform charged is recorded by the server, outside every drawer: nobody charges it. The sale of an
+    /// appointment completes it in the agenda, so it also needs whoever books appointments (Fase 22E), as reading it does.
     /// </summary>
     public IEnumerable<TenantPermission> RequiredPermissions()
-        => Payments is { Count: > 0 } ? [TenantPermission.ChargeOrders] : [];
+    {
+        if (Payments is { Count: > 0 })
+            yield return TenantPermission.ChargeOrders;
+        if (AppointmentId is not null)
+            yield return TenantPermission.ManageAppointments;
+    }
 
     public Guid? CustomerId { get; init; }
     public string? CustomerName { get; init; }
@@ -90,6 +96,12 @@ public record CreateOrderCommand : IRequest<Result<OrderDto>>, IRequiresContentP
     /// products its minimum; what the zone charges is added to the total. Not for platforms, tabs, tables or services.
     /// </summary>
     public OrderDeliveryInput? Delivery { get; init; }
+    /// <summary>
+    /// The appointment of the agenda this sale charges (Fase 22E): it is done with the sale, and when it was at the
+    /// customer's address the charge for the visit agreed is added to the total. Only for a sale the business makes at the
+    /// counter, with connection; once per appointment, unless its sale was cancelled.
+    /// </summary>
+    public Guid? AppointmentId { get; init; }
 }
 
 public record CreateOrderPaymentDto
@@ -174,6 +186,10 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         "El folio de la app y quién cobró solo van en pedidos de Rappi, Uber Eats o DiDi Food.";
     public const string DeliveryNoTableMessage = "Un pedido a domicilio no lleva mesa: la dirección dice a dónde va.";
     public const string DeliveryWithConnectionMessage = "Un pedido a domicilio se registra con conexión: su envío sale de las zonas.";
+    public const string AppointmentSaleMessage =
+        "La venta de una cita la registra el negocio en el mostrador: sin plataforma, mesa, cuenta abierta ni envío.";
+    public const string AppointmentWithConnectionMessage = "La venta de una cita se registra con conexión: la cita se revisa al cobrar.";
+    public const string AppointmentNotFoundMessage = "La cita no existe.";
 
     public CreateOrderCommandValidator()
     {
@@ -292,6 +308,17 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
             RuleFor(x => x.OrderType).Equal(OrderType.Retail).WithMessage(HomeDeliveryRules.OnlyProductsMessage);
             RuleFor(x => x.ServiceDetail).Null().WithMessage(HomeDeliveryRules.OnlyProductsMessage);
             RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(DeliveryWithConnectionMessage);
+        });
+        // The sale of an appointment of the agenda (Fase 22E): the business charges it at the counter, with connection.
+        When(x => x.AppointmentId is not null, () =>
+        {
+            RuleFor(x => x.AppointmentId).NotEqual(Guid.Empty).WithMessage(AppointmentNotFoundMessage);
+            RuleFor(x => x.CreatedByBusiness).Equal(true).WithMessage(AppointmentSaleMessage);
+            RuleFor(x => x.Channel).Must(channel => !OrderChannelRules.IsDeliveryPlatform(channel)).WithMessage(AppointmentSaleMessage);
+            RuleFor(x => x.OpenTab).Equal(false).WithMessage(AppointmentSaleMessage);
+            RuleFor(x => x.DiningTableId).Null().WithMessage(AppointmentSaleMessage);
+            RuleFor(x => x.Delivery).Null().WithMessage(AppointmentSaleMessage);
+            RuleFor(x => x.CapturedOfflineAt).Null().WithMessage(AppointmentWithConnectionMessage);
         });
         When(x => !OrderChannelRules.IsDeliveryPlatform(x.Channel), () =>
         {
@@ -524,6 +551,16 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Res
                 _context, order, request.Delivery, salesSettings.DefaultTaxRate, cancellationToken);
             if (deliveryError is not null)
                 return Result.Failure<OrderDto>(deliveryError);
+        }
+
+        // 8c. The appointment it charges: done with the sale, and its visit charge on the services, before any status or
+        // payment.
+        if (request.AppointmentId is { } appointmentId)
+        {
+            var appointmentError = await AppointmentSalePlacement.ChargeAsync(
+                _context, order, appointmentId, salesSettings.DefaultTaxRate, cancellationToken);
+            if (appointmentError is not null)
+                return Result.Failure<OrderDto>(appointmentError);
         }
 
         // 9. The status the team starts it with.

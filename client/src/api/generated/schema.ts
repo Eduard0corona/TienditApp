@@ -212,6 +212,7 @@ export interface paths {
                     fromDate?: string;
                     toDate?: string;
                     search?: string;
+                    homeVisit?: boolean;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -263,6 +264,85 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/route": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    date?: string;
+                    staffUserId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["VisitRouteDto"];
+                        "application/json": components["schemas"]["VisitRouteDto"];
+                        "text/json": components["schemas"]["VisitRouteDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/visit-quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    postalCode?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["VisitQuoteDto"];
+                        "application/json": components["schemas"]["VisitQuoteDto"];
+                        "text/json": components["schemas"]["VisitQuoteDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3338,6 +3418,70 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/delivery-zones/home-visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["HomeVisitSettingsDto"];
+                        "application/json": components["schemas"]["HomeVisitSettingsDto"];
+                        "text/json": components["schemas"]["HomeVisitSettingsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateHomeVisitSettingsCommand"];
+                    "text/json": components["schemas"]["UpdateHomeVisitSettingsCommand"];
+                    "application/*+json": components["schemas"]["UpdateHomeVisitSettingsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["HomeVisitSettingsDto"];
+                        "application/json": components["schemas"]["HomeVisitSettingsDto"];
+                        "text/json": components["schemas"]["HomeVisitSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -9242,6 +9386,10 @@ export interface components {
             endAt: string;
             status: components["schemas"]["AppointmentStatus"];
             notes?: string | null;
+            visit?: components["schemas"]["AppointmentVisitDto"];
+            /** Format: uuid */
+            saleOrderId?: string | null;
+            saleCancelled: boolean;
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
@@ -9259,6 +9407,19 @@ export interface components {
          * @enum {integer}
          */
         AppointmentStatus: 0 | 1 | 2 | 3 | 4 | 99;
+        AppointmentVisitDto: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+            zoneName: string;
+            /** Format: double */
+            fee: number;
+        };
+        AppointmentVisitInput: {
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+        };
         AssignPlanRequest: {
             /** Format: uuid */
             planId: string;
@@ -9585,6 +9746,7 @@ export interface components {
             /** Format: uuid */
             orderItemId: string;
             isDeliveryFee: boolean;
+            isVisitCharge: boolean;
             productCode: string;
             unitCode: string;
             description: string;
@@ -9885,6 +10047,7 @@ export interface components {
             /** Format: date-time */
             endAt: string;
             notes?: string | null;
+            visit?: components["schemas"]["AppointmentVisitInput"];
         };
         CreateBranchCommand: {
             name: string;
@@ -10037,6 +10200,8 @@ export interface components {
             /** Format: date-time */
             capturedOfflineAt?: string | null;
             delivery?: components["schemas"]["OrderDeliveryInput"];
+            /** Format: uuid */
+            appointmentId?: string | null;
         };
         CreateOrderItemDto: {
             /** Format: uuid */
@@ -10605,6 +10770,10 @@ export interface components {
             kind: components["schemas"]["SpecialDayKind"];
             openings: components["schemas"]["SpecialOpeningDto"][];
         };
+        HomeVisitSettingsDto: {
+            /** Format: int32 */
+            travelMinutes: number;
+        };
         InstallCategoryTemplateResultDto: {
             templateId: string;
             templateName: string;
@@ -11162,6 +11331,7 @@ export interface components {
             channel: components["schemas"]["OrderChannel"];
             platformOrder?: components["schemas"]["OrderPlatformDto"];
             delivery?: components["schemas"]["OrderDeliveryDto"];
+            visitCharge?: components["schemas"]["OrderVisitChargeDto"];
             /** Format: uuid */
             branchId?: string | null;
             /** Format: date-time */
@@ -11354,6 +11524,15 @@ export interface components {
          * @enum {integer}
          */
         OrderType: 0 | 1;
+        OrderVisitChargeDto: {
+            /** Format: uuid */
+            appointmentId: string;
+            zoneName: string;
+            /** Format: double */
+            fee: number;
+            /** Format: double */
+            feeTaxRate: number;
+        };
         OutgoingMessageDto: {
             /** Format: uuid */
             id: string;
@@ -12756,6 +12935,7 @@ export interface components {
             /** Format: date-time */
             endAt: string;
             notes?: string | null;
+            visit?: components["schemas"]["AppointmentVisitInput"];
         };
         UpdateAppointmentRemindersCommand: {
             enabled: boolean;
@@ -12824,6 +13004,10 @@ export interface components {
             appRole: components["schemas"]["UserRole"];
             tenantRole: components["schemas"]["TenantUserRole"];
             permissions?: string[] | null;
+        };
+        UpdateHomeVisitSettingsCommand: {
+            /** Format: int32 */
+            travelMinutes: number;
         };
         UpdateInventoryLocationCommand: {
             /** Format: uuid */
@@ -13105,6 +13289,46 @@ export interface components {
         };
         VerifyRequest: {
             code: string;
+        };
+        VisitQuoteDto: {
+            postalCode: string;
+            zoneName: string;
+            /** Format: double */
+            fee: number;
+        };
+        VisitRouteDto: {
+            /** Format: date */
+            date: string;
+            staff: components["schemas"]["VisitRouteStaffDto"][];
+        };
+        VisitRouteStaffDto: {
+            /** Format: uuid */
+            staffUserId?: string | null;
+            staffName?: string | null;
+            stops: components["schemas"]["VisitRouteStopDto"][];
+            /** Format: double */
+            feeTotal: number;
+        };
+        VisitRouteStopDto: {
+            /** Format: uuid */
+            appointmentId: string;
+            customerName: string;
+            customerPhone: string;
+            serviceName: string;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            status: components["schemas"]["AppointmentStatus"];
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+            zoneName: string;
+            /** Format: double */
+            fee: number;
+            /** Format: uuid */
+            saleOrderId?: string | null;
+            saleCancelled: boolean;
         };
         VoidOrderRequest: {
             reason: string;

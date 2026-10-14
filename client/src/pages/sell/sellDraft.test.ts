@@ -119,4 +119,19 @@ describe('sellDraft', () => {
     expect(describeSale({ ...toAddress, delivery: { ...delivery, paysWith: '500' } }))
       .not.toBe(describeSale({ ...toAddress, delivery: { ...delivery, paysWith: '1000' } }));
   });
+  it('keeps the appointment it charges, as another sale, and drops one that is not', () => {
+    const appointment = { id: 'a1', customerName: 'Ana', description: 'Corte · lun 5 oct, 10:00', visitFee: 80, zoneName: 'Centro' };
+    const charging: SellDraft = { ...draft, appointment };
+
+    writeSellDraft('t1', charging);
+
+    expect(readSellDraft('t1')?.appointment).toEqual(appointment);
+    expect(describeSale(charging)).not.toBe(describeSale(draft));
+    expect(describeSale({ ...charging, appointment: { ...appointment, id: 'a2' } })).not.toBe(describeSale(charging));
+    // Only the appointment kept: a sale that charges it is not empty.
+    writeSellDraft('t1', { ...draft, lines: [], customerName: '', appointment });
+    expect(readSellDraft('t1')?.appointment?.id).toBe('a1');
+    window.localStorage.setItem('tienditapp.sell.draft.v1.t1', JSON.stringify({ ...draft, appointment: { visitFee: 80 } }));
+    expect(readSellDraft('t1')?.appointment).toBeUndefined();
+  });
 });

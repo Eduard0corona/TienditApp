@@ -199,6 +199,7 @@ public class DeliveryPlatformsMigrationSqlServerTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            BeforeHomeVisits.Ignore(modelBuilder);
             modelBuilder.Ignore<OrderDelivery>();
             modelBuilder.Entity<Order>().Ignore(o => o.PlatformDetail);
             modelBuilder.Ignore<PlatformOrderDetail>();

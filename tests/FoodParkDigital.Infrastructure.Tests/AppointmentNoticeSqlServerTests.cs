@@ -35,7 +35,8 @@ public class AppointmentNoticeSqlServerTests
         Guid appointmentId;
         await using (var context = database.CreateContext(tenantId))
         {
-            var created = await new CreateAppointmentCommandHandler(context, tenant, new AppointmentNotices(context, new PhoneNormalizationService(), clock))
+            var created = await new CreateAppointmentCommandHandler(
+                    context, tenant, new Receptionist(), clock, new AppointmentNotices(context, new PhoneNormalizationService(), clock))
                 .Handle(new CreateAppointmentCommand
                 {
                     CustomerName = "Luis",
@@ -104,6 +105,16 @@ public class AppointmentNoticeSqlServerTests
         context.WhatsAppConfigs.Add(whatsApp);
         await context.SaveChangesAsync();
         return tenant.Id;
+    }
+
+    private sealed class Receptionist : ICurrentUserService
+    {
+        public string? UserId => "7b1e6f0a-3c2d-4e5f-8a9b-1c2d3e4f5a6b";
+        public string? UserName => "recepcion@demo.com";
+        public string? Role => "TENANT_STAFF";
+        public string? TenantRole => "Staff";
+        public IReadOnlyCollection<string> Permissions => [];
+        public Guid? TenantId => null;
     }
 
     private sealed class CountingWhatsApp : IWhatsAppService

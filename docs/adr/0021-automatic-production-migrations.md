@@ -1,4 +1,4 @@
-# ADR 0020: Migraciones de producción en el despliegue, ensayadas en una copia
+# ADR 0021: Migraciones de producción en el despliegue, ensayadas en una copia
 
 - Estado: Aceptada
 - Fecha: 2026-10-14

@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.AiAgents.Queries;
+using FoodParkDigital.Application.Appointments.HomeVisits;
 using FoodParkDigital.Application.Audit.Queries;
 using FoodParkDigital.Application.Branches;
 using FoodParkDigital.Application.Catalog.Commands;
@@ -97,6 +98,12 @@ public class UseCaseRulesTests
         { typeof(GetCourierSettlementsQuery), "Permission(ManageCash)" },
         { typeof(GetCourierSettlementQuery), "Permission(ManageCash)" },
         { typeof(CreateCourierSettlementCommand), "Permission(ChargeOrders)" },
+        // Visits at the customer's address (Fase 22E): whoever books appointments quotes a visit and reads the route of the
+        // day; the whole team reads the travel time between visits and the owner or an admin sets it, like the zones.
+        { typeof(GetVisitQuoteQuery), "Permission(ManageAppointments) Module(Appointments)" },
+        { typeof(GetVisitRouteQuery), "Permission(ManageAppointments) Module(Appointments)" },
+        { typeof(GetHomeVisitSettingsQuery), "Member Module(Appointments)" },
+        { typeof(UpdateHomeVisitSettingsCommand), "Manager Module(Appointments)" },
         { typeof(InstallStarterCatalogCommand), "Manager" },
         { typeof(UploadTenantLogoCommand), "Manager" },
         { typeof(UpdateWhatsAppConfigCommand), "Manager" },

@@ -1,3 +1,4 @@
+using FoodParkDigital.Domain.Appointments.HomeVisits;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,9 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
 {
     public void Configure(EntityTypeBuilder<TenantSettings> builder)
     {
-        builder.ToTable("TenantSettings");
+        builder.ToTable("TenantSettings", table =>
+            table.HasCheckConstraint(
+                "CK_TenantSettings_HomeVisitTravelMinutes", "[HomeVisitTravelMinutes] >= 0 AND [HomeVisitTravelMinutes] <= 240"));
         builder.HasKey(s => s.Id);
 
         builder.Property(s => s.Currency).HasMaxLength(3).IsRequired();
@@ -25,6 +28,12 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
         builder.Property(s => s.Theme)
             .HasConversion<int>()
             .HasDefaultValue(BusinessTheme.Nopal)
+            .ValueGeneratedNever()
+            .IsRequired();
+        // Fase 22E: the database default fills the rows that exist and those the previous version saves while this one is
+        // published; EF always writes the value.
+        builder.Property(s => s.HomeVisitTravelMinutes)
+            .HasDefaultValue(HomeVisitRules.DefaultTravelMinutes)
             .ValueGeneratedNever()
             .IsRequired();
         // Null until the owner sets the hours: the version this one replaces does not map it.

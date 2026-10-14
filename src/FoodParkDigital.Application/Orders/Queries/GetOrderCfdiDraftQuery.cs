@@ -67,6 +67,12 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
     public const string DeliveryFeeWarning =
         "El envío a domicilio va como concepto propio con la clave 78102203 (servicios de envío) y la unidad E48: "
         + "confirma con tu contador que es la clave que te corresponde.";
+    public const string VisitChargeDescription = "Cargo por visita a domicilio";
+
+    /// <summary>The visit charge goes with the code of the service sold (or the generic one) and the unit of a service.</summary>
+    public static string VisitChargeWarning(string productCode)
+        => $"El cargo por visita va como concepto propio con la clave {productCode} y la unidad E48: "
+            + "confirma con tu contador que es la clave que te corresponde.";
 
     private readonly IApplicationDbContext _context;
 
@@ -96,8 +102,8 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
             .FirstOrDefaultAsync(t => t.Id == order.TenantId, cancellationToken)
             ?? throw new EntityNotFoundException("Tenant", order.TenantId);
 
-        // What the sale charged: dishes cancelled from a tab are not invoiced. The delivery fee is one more concept, with
-        // the rate it was charged with.
+        // What the sale charged: dishes cancelled from a tab are not invoiced. The delivery fee, or the visit charge of the
+        // sale of an appointment at the customer's address, is one more concept, with the rate it was charged with.
         var items = order.Items.Where(item => item.ActiveQuantity > 0).ToList();
         var lines = items
             .Select(item => new CfdiLineInput(item.Id, item.ActiveQuantity, item.ChargedPrice, item.VatRate, item.TaxObject))
@@ -105,6 +111,9 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
         var deliveryFee = order.Delivery is { Fee: > 0 } delivery ? delivery : null;
         if (deliveryFee is not null)
             lines.Add(new CfdiLineInput(deliveryFee.Id, 1m, deliveryFee.Fee, deliveryFee.FeeVatRate, CfdiTaxObject.Subject));
+        var visitCharge = order.VisitCharge;
+        if (visitCharge is not null)
+            lines.Add(new CfdiLineInput(visitCharge.Id, 1m, visitCharge.Fee, visitCharge.FeeVatRate, CfdiTaxObject.Subject));
         var amounts = CfdiAmountCalculator.Calculate(order.PricesIncludeTax, lines);
         var amountsByLine = amounts.Concepts.ToDictionary(concept => concept.LineId);
 
@@ -153,6 +162,27 @@ public class GetOrderCfdiDraftQueryHandler : IRequestHandler<GetOrderCfdiDraftQu
                 Transfer = concept.Transfer is null ? null : ToDto(concept.Transfer)
             });
             draft.Warnings.Add(DeliveryFeeWarning);
+        }
+        if (visitCharge is not null)
+        {
+            // Going to the customer is part of the service: the code of the first service sold, or the generic one.
+            var productCode = items.FirstOrDefault(item => OrderProductClassifier.IsServiceUnit(item.Unit))?.SatProductCode
+                ?? SatCatalog.GenericProductCode;
+            var concept = amountsByLine[visitCharge.Id];
+            draft.Concepts.Add(new CfdiConceptDto
+            {
+                OrderItemId = visitCharge.Id,
+                IsVisitCharge = true,
+                ProductCode = productCode,
+                UnitCode = SatCatalog.ServiceUnitCode,
+                Description = VisitChargeDescription,
+                Quantity = concept.Quantity,
+                UnitValue = concept.UnitValue,
+                Amount = concept.Amount,
+                TaxObject = SatCatalog.Code(concept.TaxObject),
+                Transfer = concept.Transfer is null ? null : ToDto(concept.Transfer)
+            });
+            draft.Warnings.Add(VisitChargeWarning(productCode));
         }
 
         SetIssuer(draft, tenant.Rfc, tenant.LegalName, tenant.TaxRegime, tenant.Address?.ZipCode);

@@ -12,6 +12,8 @@ export const appointmentsApi = {
     fromDate?: string;
     toDate?: string;
     search?: string;
+    /** Only those at the customer's address (true) or at the business (false). */
+    homeVisit?: boolean;
     pageNumber?: number;
     pageSize?: number;
   }) => api.get<PaginatedList<AppointmentDto>>('/appointments', { params }),

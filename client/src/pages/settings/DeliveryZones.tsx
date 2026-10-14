@@ -12,8 +12,11 @@ import { getApiErrorCode, getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
+import { TenantCapability } from '../../types';
 import { formatMoney, parseMoneyInput } from '../../utils/money';
 import { isPostalCode, parsePostalCodes } from '../../utils/postalCodes';
+import { hasCapability } from '../../utils/tenantCapabilities';
+import HomeVisitTravelCard from './HomeVisitTravelCard';
 
 const COLUMNS = [
   { header: 'Zona' },
@@ -91,8 +94,11 @@ export default function DeliveryZones() {
   const titleId = useId();
   const toast = useToast();
   const { confirm } = useConfirm();
+  const { tenant, capabilities } = useTenant();
   // The fee is charged like the prices of the business: with IVA included, or IVA added on top (ADR 0018).
-  const pricesIncludeTax = useTenant().tenant?.pricesIncludeTax ?? true;
+  const pricesIncludeTax = tenant?.pricesIncludeTax ?? true;
+  // With the agenda the zones are also where the business makes its visits (Fase 22E).
+  const makesVisits = hasCapability(capabilities, TenantCapability.Appointments);
   const zones = useDeliveryZones();
   const save = useSaveDeliveryZone();
   const remove = useDeleteDeliveryZone();
@@ -321,6 +327,8 @@ export default function DeliveryZones() {
           />
         </div>
       </div>
+
+      {makesVisits && <div className="mt-3"><HomeVisitTravelCard /></div>}
 
       <Modal show={form !== null} onHide={() => setForm(null)} size="lg" centered aria-labelledby={titleId}>
         {form && (

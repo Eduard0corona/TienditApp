@@ -342,9 +342,26 @@ La Fase 22D trae una migración, [`database/production/20261013085926_AddCourier
 - **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas ni las tablas, y los pagos de una liquidación son pagos normales de cada pedido. Pero no muestra la salida, lo que debe el repartidor ni sus liquidaciones. Antes de volver, la consulta 4 del `verify.sql` dice cuánto debe el repartidor.
 - **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50014, sin cambiar nada, mientras haya pedidos que salieron o con «paga con», o liquidaciones: se perdería lo que cobra el repartidor y lo que entregó. Sin ellos, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
 
+## Servicios a domicilio (Fase 22E)
+
+La Fase 22E trae una migración, [`database/production/20261013191311_AddHomeVisits`](../../database/production/20261013191311_AddHomeVisits). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0020](../adr/0020-home-visits.md)).
+
+- **La migración:**
+  - **Qué agrega:** `HomeVisitTravelMinutes` en `TenantSettings` (30 en cada negocio), `SaleOrderId` (con nulos) y la versión (`rowversion`) en `Appointments`, y dos tablas nuevas y vacías: `AppointmentVisits` y `OrderVisitCharges`, con sus restricciones, llaves e índices. No cambia otros datos.
+  - **Cuándo cambia algo:** cuando un negocio con Agenda y zonas de entrega agenda una cita a domicilio, o cobra una cita desde la Agenda. Sin eso, todo sigue como antes, salvo que la agenda deja 30 minutos de traslado solo alrededor de las visitas (no hay ninguna todavía).
+  - **Después de aplicarla:** el `verify.sql` muestra las columnas, las restricciones, las llaves y los índices. Su consulta 4 cuenta por negocio las visitas, las abiertas, los cargos por visita cobrados y su suma, y las citas cobradas (nada hasta desplegar); la 5 (consistencia) debe quedar vacía siempre.
+- **Mientras se publica:** la versión de `master` (Fase 22D) no conoce las columnas ni las tablas y sigue funcionando. Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **Los avisos de cita** siguen sin plantilla de Meta (el sistema los escribe): no hay plantilla nueva que dar de alta.
+- **El contrato solo agrega:** `GET /api/v1/appointments/route` y `/visit-quote`; `GET` y `PUT /api/v1/delivery-zones/home-visits`; el filtro `homeVisit` de `GET /api/v1/appointments`; `visit` en la cita que se crea o edita y en `AppointmentDto`, con `saleOrderId` y `saleCancelled` (también en cada parada de la ruta); `appointmentId` en `CreateOrderCommand`; `visitCharge` en `OrderDto`, e `isVisitCharge` en `CfdiConceptDto`. Nada se quita ni cambia de nombre.
+  - Editar una cita sin `visit` la deja en el negocio: un cliente abierto antes del despliegue que edita una cita a domicilio le quitaría la visita. El aviso de versión nueva (Fase 20A) pide recargar; mientras no haya visitas no pasa nada.
+  - Dos ediciones de la misma cita al mismo tiempo ahora dan 409 a la segunda, en lugar de quedarse con la última.
+  - Una venta con `appointmentId` pide también `ManageAppointments`.
+- **Volver a la versión anterior:** funciona sin tocar la base: no conoce las columnas ni las tablas, sigue agendando y cada venta conserva su total guardado, cargo incluido. Pero no muestra las visitas ni el cargo, no deja tiempo de traslado y una cita cobrada se podría cobrar otra vez. Antes de volver, la consulta 4 del `verify.sql` dice cuántas visitas hay abiertas.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50015, sin cambiar nada, mientras haya visitas, cargos por visita o citas cobradas: se perderían las direcciones, los cargos y qué venta cobró cada cita. Sin ellos, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging, migraciones automáticas y aprobación
 
-Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Se activa en dos pasos, y el segundo es el destino ([ADR 0020](../adr/0020-automatic-production-migrations.md)):
+Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Se activa en dos pasos, y el segundo es el destino ([ADR 0021](../adr/0021-automatic-production-migrations.md)):
 
 1. **Slot.** Cada versión se despliega a un slot de staging y se prueba ahí (lista, esquema al día, cliente nuevo) mientras producción sigue con la anterior. El job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot nunca llega a producción, y la anterior queda en el slot para volver a ella. En este paso el slot comparte la base de producción, así que el `apply.sql` se sigue aplicando a mano antes del merge.
 2. **Migraciones automáticas.** El slot tiene su propia base, una copia de producción que se hace en cada release, y nadie aplica nada a mano:

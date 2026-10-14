@@ -1,5 +1,6 @@
 import { OrderChannel, PlatformCollectedBy } from '../../types';
 import { isDeliveryPlatform, normalizePlatformFolio } from '../../utils/deliveryPlatforms';
+import type { SaleAppointment } from './sellModel';
 
 // The sale being built survives a reload or a trip to another screen (per browser and business). It is
 // a convenience: storage can be unavailable and the sale still works.
@@ -36,6 +37,8 @@ export interface SellDraft {
   collectedBy: PlatformCollectedBy;
   /** Where an order sent to the customer's address goes, as typed; null (or missing, before) when it does not. */
   delivery?: SellDraftDelivery | null;
+  /** The appointment the sale charges (Fase 22E); null (or missing, before) for any other sale. */
+  appointment?: SaleAppointment | null;
   pendingCharge?: PendingCharge;
 }
 
@@ -72,6 +75,8 @@ export function describeSale(draft: SellDraft): string {
       ...(paysWith ? [paysWith] : []),
     ]);
   }
+  // Charging another appointment is another sale (and charging none is too).
+  if (draft.appointment) sale.push(['appointment', draft.appointment.id]);
   return JSON.stringify(sale);
 }
 
@@ -99,6 +104,7 @@ export function readSellDraft(tenantId: string): SellDraft | null {
       externalOrderNumber: typeof parsed.externalOrderNumber === 'string' ? parsed.externalOrderNumber : '',
       collectedBy: parsed.collectedBy === PlatformCollectedBy.Business ? PlatformCollectedBy.Business : PlatformCollectedBy.Platform,
       delivery: readDelivery(parsed.delivery),
+      appointment: readAppointment(parsed.appointment),
       pendingCharge: typeof charge?.key === 'string' && typeof charge.sale === 'string'
         ? { key: charge.key, sale: charge.sale }
         : undefined,
@@ -119,11 +125,24 @@ function readDelivery(value: unknown): SellDraftDelivery | undefined {
   };
 }
 
+function readAppointment(value: unknown): SaleAppointment | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { id, customerName, description, visitFee, zoneName } = value as Partial<SaleAppointment>;
+  if (typeof id !== 'string' || !id) return undefined;
+  return {
+    id,
+    customerName: typeof customerName === 'string' ? customerName : '',
+    description: typeof description === 'string' ? description : '',
+    visitFee: typeof visitFee === 'number' && Number.isFinite(visitFee) && visitFee > 0 ? visitFee : null,
+    zoneName: typeof zoneName === 'string' ? zoneName : null,
+  };
+}
+
 export function writeSellDraft(tenantId: string, draft: SellDraft) {
   try {
     const isEmpty = draft.lines.length === 0 && !draft.customerName && !draft.customerPhone
       && !draft.tableNumber && !draft.orderNotes && !isDeliveryPlatform(draft.channel) && !draft.externalOrderNumber
-      && !draft.delivery;
+      && !draft.delivery && !draft.appointment;
     if (isEmpty) window.localStorage.removeItem(storageKey(tenantId));
     else window.localStorage.setItem(storageKey(tenantId), JSON.stringify(draft));
   } catch {

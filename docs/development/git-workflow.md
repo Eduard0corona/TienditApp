@@ -17,6 +17,8 @@ Cada Pull Request hacia `master` pasa, además de `CI`, por el workflow `Claude 
 - Un solo comentario del PR resume los hallazgos vigentes con su severidad (BLOCKER, MAJOR, MINOR) y se actualiza en cada ejecución. Con algún BLOCKER el check queda en rojo.
 - No modifica archivos, no aprueba ni fusiona: la revisión humana y `CI` siguen siendo necesarias.
 - Necesita el secreto `CLAUDE_CODE_OAUTH_TOKEN` del repositorio (lo da `claude setup-token`) y la app de GitHub de Claude instalada en el repositorio, con la que publica los comentarios en línea.
+- Si la llamada a Claude falla (token inválido o vencido, límite de uso, modelo no disponible), la action solo dice que Claude no devolvió `structured_output`; el motivo real queda en el paso `Show why Claude failed`.
+- La action solo corre si el workflow del PR es idéntico al de `master`: un PR que lo cambia sale en verde sin revisión, y el cambio se prueba hasta el siguiente PR después del merge.
 
 ## Flujo
 

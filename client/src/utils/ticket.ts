@@ -102,6 +102,11 @@ function describeTicketCollection(delivery: NonNullable<OrderDto['delivery']>, b
   return parts.join(' · ');
 }
 
+/** What the sale of an appointment at the customer's address charged for the visit (Fase 22E), already in the total. */
+export function getTicketVisitCharge(order: Pick<OrderDto, 'visitCharge'>): number | null {
+  return order.visitCharge ? order.visitCharge.fee : null;
+}
+
 /** "$35.00", or "Gratis" when the zone delivered it free. */
 export function formatDeliveryFee(fee: number): string {
   return fee > 0 ? formatMoney(fee) : 'Gratis';
@@ -165,6 +170,7 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
   const platform = getTicketPlatform(order);
   const bagName = platform ? getTicketCustomerName(order) : null;
   const delivery = getTicketDelivery(order);
+  const visitCharge = getTicketVisitCharge(order);
   const lines: string[] = [
     `*${extras.businessName}*`,
     `Ticket ${order.orderNumber} · ${formatTicketDate(order.createdAt)}`,
@@ -182,6 +188,7 @@ export function buildTicketText(order: OrderDto, extras: TicketExtras): string {
       return `${formatTicketQuantity(item)} ${describeItem(item)}${price}${note}`;
     }),
     ...(delivery ? [`Envío a domicilio  ${formatDeliveryFee(delivery.fee)}`] : []),
+    ...(visitCharge !== null ? [`Cargo por visita  ${formatMoney(visitCharge)}`] : []),
     '',
   ];
 

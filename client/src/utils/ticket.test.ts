@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DeliveryCourier, OrderChannel, OrderPaymentMethod, OrderType, PlatformCollectedBy, UnitType, type OrderDto } from '../types';
 import {
-  billedItems, buildTicketText, cancellableQuantity, formatCancelled, formatTicketQuantity, getTicketDelivery, getTicketPlatform,
+  billedItems, buildTicketText, cancellableQuantity, formatCancelled, formatTicketQuantity, getTicketDelivery, getTicketPlatform, getTicketVisitCharge,
 } from './ticket';
 
 const line = (overrides: Partial<OrderDto['items'][number]>): OrderDto['items'][number] => ({
@@ -118,6 +118,19 @@ describe('ticket of an order of a delivery platform', () => {
     expect(getTicketPlatform(rappi)).toEqual({ name: 'Rappi', folio: 'BC953', packing: true });
     expect(getTicketPlatform({ ...rappi, channel: OrderChannel.Counter })).toBeNull();
     expect(getTicketPlatform({ ...rappi, platformOrder: null })).toBeNull();
+  });
+
+  it('lists the charge for the visit of an appointment at the customer\'s address, already in the total', () => {
+    const visit: OrderDto = {
+      ...tab([line({ id: 'i1' })]),
+      customerName: 'Ana',
+      total: 480,
+      visitCharge: { appointmentId: 'a1', zoneName: 'Centro', fee: 80, feeTaxRate: 16 },
+    };
+
+    expect(buildTicketText(visit, { businessName: 'Barbería Luis' })).toContain('Cargo por visita  $80.00');
+    expect(getTicketVisitCharge(visit)).toBe(80);
+    expect(getTicketVisitCharge({ visitCharge: null })).toBeNull();
   });
 
   it('says where an order sent to an address goes, its delivery and the courier\'s folio', () => {

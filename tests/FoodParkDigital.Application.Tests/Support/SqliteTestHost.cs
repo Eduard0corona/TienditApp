@@ -2,6 +2,7 @@ using FoodParkDigital.Application.Common.Events;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Customers.Services;
 using FoodParkDigital.Application.Finance;
+using FoodParkDigital.Domain.Appointments.Entities;
 using FoodParkDigital.Domain.Common;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Orders.Entities;
@@ -194,6 +195,9 @@ internal sealed class SqliteTestHost : IAsyncDisposable
             // SQL Server generates rowversion values; emulate them so inserts satisfy NOT NULL.
             modelBuilder.Entity<Order>()
                 .Property(o => o.Version)
+                .HasDefaultValueSql("randomblob(8)");
+            modelBuilder.Entity<Appointment>()
+                .Property(a => a.Version)
                 .HasDefaultValueSql("randomblob(8)");
 
             SqliteConversationVersion.Configure(modelBuilder);
