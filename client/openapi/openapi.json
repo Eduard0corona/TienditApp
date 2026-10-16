@@ -20873,6 +20873,7 @@
         "required": [
           "acceptsOrders",
           "category",
+          "closed",
           "deliveryAvailable",
           "deliveryOnly",
           "name",
@@ -20925,6 +20926,9 @@
           "statusDetail": {
             "type": "string",
             "nullable": true
+          },
+          "closed": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

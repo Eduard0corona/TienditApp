@@ -57,12 +57,20 @@ public class Tenant : AuditableEntity
         var text = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         if (text is { Length: > MaxPublicDescriptionLength })
             throw new DomainException($"La descripción admite como máximo {MaxPublicDescriptionLength} caracteres.");
-        if (text is not null && text.Any(char.IsControl))
+        if (text is not null && !IsOneLine(text))
             throw new DomainException("La descripción va en un solo renglón.");
 
         DirectoryCategory = category;
         PublicDescription = text;
     }
+
+    /// <summary>
+    /// Text without a line break of any kind: no control characters (a tab, CR or LF) and no Unicode line or paragraph
+    /// separators (U+2028, U+2029), which a card would also show as a new line.
+    /// </summary>
+    public static bool IsOneLine(string text) => !text.Any(c => char.IsControl(c)
+        || char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.LineSeparator
+            or System.Globalization.UnicodeCategory.ParagraphSeparator);
 
     public void Update(string name, string contactEmail, string? contactPhone, string? logoUrl)
     {

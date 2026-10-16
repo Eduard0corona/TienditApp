@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from '../../api/publicDirectoryApi';
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
+import { useScrollFade } from '../../hooks/useScrollFade';
 import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
 import './ExplorePage.css';
 
@@ -77,7 +78,11 @@ export default function ExplorePage() {
   }, [draft, query, setParams]);
 
   useEffect(() => {
+    const previous = document.title;
     document.title = category ? `${category.label} · Explorar · TienditApp` : 'Explorar · TienditApp';
+    return () => {
+      document.title = previous;
+    };
   }, [category]);
 
   const search: DirectorySearch = { category: category?.value, q: query.trim() || undefined, pageSize: PAGE_SIZE };
@@ -86,6 +91,8 @@ export default function ExplorePage() {
     queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber: 1 }, signal),
     enabled: !categoria || !!category,
   });
+  // The categories slide sideways on a phone: the edge that hides more fades.
+  const { ref, fadeClass } = useScrollFade<HTMLElement>(directory.data?.categories);
   // «Ver más» adds the next page under the ones shown; another category or search starts again at the first.
   const searchKey = JSON.stringify(search);
   const [more, setMore] = useState({ searchKey, pages: 1 });
@@ -127,7 +134,7 @@ export default function ExplorePage() {
       </section>
 
       {chips.length > 0 && (
-        <nav className="ex-chips" aria-label="Categorías">
+        <nav ref={ref} className={`ex-chips ta-scroll-fade ${fadeClass}`} aria-label="Categorías">
           <Link className={`ex-chip ${category ? '' : 'active'}`} to={`/explorar${searchSuffix}`} aria-current={category ? undefined : 'page'}>
             Todos
           </Link>
@@ -148,9 +155,7 @@ export default function ExplorePage() {
 
       <section className="ex-results" aria-labelledby="explore-results" aria-busy={directory.isLoading}>
         <h2 id="explore-results" className="visually-hidden">Negocios</h2>
-        {directory.isSuccess && total > 0 && (
-          <p className="ex-count" aria-live="polite">{countLabel(total)}</p>
-        )}
+        <p className="ex-count" aria-live="polite">{directory.isSuccess && total > 0 ? countLabel(total) : ''}</p>
 
         {directory.isLoading && (
           <ul className="ex-grid" aria-hidden="true">

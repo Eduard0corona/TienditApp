@@ -87,7 +87,7 @@
 .ex-chip.active {
   border-color: var(--ct-primary);
   background: var(--ct-primary);
-  color: var(--ct-btn-color, #fff);
+  color: var(--ta-on-accent);
 }
 
 .ex-chip-count {
@@ -98,6 +98,10 @@
 
 .ex-results {
   margin-top: 1.25rem;
+}
+
+.ex-count:empty {
+  margin: 0;
 }
 
 .ex-count {

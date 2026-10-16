@@ -84,7 +84,7 @@ public class UpdateDirectoryProfileCommandValidator : AbstractValidator<UpdateDi
         RuleFor(x => x.Description)
             .Must(description => description is null || description.Trim().Length <= Tenant.MaxPublicDescriptionLength)
             .WithMessage($"La descripción admite como máximo {Tenant.MaxPublicDescriptionLength} caracteres.")
-            .Must(description => description is null || !description.Trim().Any(char.IsControl))
+            .Must(description => description is null || Tenant.IsOneLine(description.Trim()))
             .WithMessage("La descripción va en un solo renglón.");
     }
 }

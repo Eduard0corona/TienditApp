@@ -46,8 +46,9 @@ WHERE (d.[parent_object_id] = OBJECT_ID(N'dbo.TenantSettings') AND c.[name] = N'
 ORDER BY [Tabla], [Tipo], [Nombre];
 
 -- 4. Antes de aplicar: la categoría que apply.sql dará a los negocios, por giro y tipo (la misma
---    regla que BusinessCategoryDefaults.Suggest), y cuántos aparecerán en Explorar (activos y con
---    el menú en línea publicado: [OnlineMenuMode] 1 o 2). Revisa los giros escritos a mano: toman
+--    regla que BusinessCategoryDefaults.Suggest), y cuántos pueden aparecer en Explorar (activos y
+--    con el menú en línea publicado: [OnlineMenuMode] 1 o 2; aparecen los que además tienen algún
+--    producto que su menú muestra, que esta consulta no cuenta). Revisa los giros escritos a mano: toman
 --    la categoría de su tipo y el dueño la puede cambiar. [Tipo] 0 Alimentos, 1 Comercio,
 --    2 Servicios; [Categoria] 0 Comida, 1 Abarrotes, 2 Farmacia y salud, 3 Ropa y accesorios,
 --    4 Electrónica, 5 Ferretería y hogar, 6 Papelería, 7 Belleza y bienestar, 8 Autos, 9 Servicios,
@@ -100,11 +101,14 @@ WHERE s.[ListedInDirectory] = 0
     OR EXISTS (SELECT 1 FROM [AuditLogs] a WHERE a.[TenantId] = t.[Id] AND a.[Action] = N''DirectoryProfileUpdated'')
 ORDER BY t.[Name];');
 
--- 6. Después: consistencia. Debe dar 0 filas: descripciones con saltos de línea o tabuladores, que
---    la app no escribe (la descripción va en un solo renglón).
+-- 6. Después: consistencia. Debe dar 0 filas: descripciones con saltos de línea, tabuladores o
+--    separadores de línea o de párrafo (U+2028, U+2029), que la app no escribe (la descripción va
+--    en un solo renglón).
 IF COL_LENGTH(N'dbo.Tenants', N'PublicDescription') IS NOT NULL
     EXEC(N'SELECT [Id], [Name]
 FROM [Tenants]
 WHERE [PublicDescription] LIKE N''%'' + CHAR(10) + N''%''
     OR [PublicDescription] LIKE N''%'' + CHAR(13) + N''%''
-    OR [PublicDescription] LIKE N''%'' + CHAR(9) + N''%'';');
+    OR [PublicDescription] LIKE N''%'' + CHAR(9) + N''%''
+    OR [PublicDescription] LIKE N''%'' + NCHAR(8232) + N''%''
+    OR [PublicDescription] LIKE N''%'' + NCHAR(8233) + N''%'';');

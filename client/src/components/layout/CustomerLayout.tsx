@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { BusinessTheme } from '../../types';
 import { getAccess } from '../../utils/access';
@@ -17,9 +17,15 @@ const navClass = ({ isActive }: { isActive: boolean }) => `cl-link${isActive ? '
 export default function CustomerLayout() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const customer = isAuthenticated && getAccess(user, null).myOrders;
+  const navigate = useNavigate();
+  // Out of the session the customer stays in Explorar, not in the sign-in that Mis pedidos would ask for.
+  const signOut = async () => {
+    await logout();
+    navigate('/explorar', { replace: true });
+  };
 
-  // TienditApp's colors, not those of the last business opened on this device.
-  useEffect(() => {
+  // TienditApp's colors, not those of the last business opened on this device: before the first paint.
+  useLayoutEffect(() => {
     previewBusinessTheme(BusinessTheme.Nopal);
     return () => previewBusinessTheme(undefined);
   }, []);
@@ -48,7 +54,10 @@ export default function CustomerLayout() {
             )}
           </nav>
           <div className="cl-actions">
-            <ThemeToggle />
+            {/* On a phone the brand and the account fit on one row: the theme toggle waits for a wider screen. */}
+            <span className="d-none d-sm-inline-flex">
+              <ThemeToggle />
+            </span>
             {!isLoading && !isAuthenticated && (
               <>
                 <Link to="/login" className="btn btn-sm btn-light">Entrar</Link>
@@ -60,7 +69,7 @@ export default function CustomerLayout() {
                 <Link to="/profile" className="btn btn-sm btn-light" aria-label="Mi perfil">
                   <i className="ri-user-line" aria-hidden="true"></i>
                 </Link>
-                <button type="button" className="btn btn-sm btn-light" onClick={() => void logout()}>Salir</button>
+                <button type="button" className="btn btn-sm btn-light" onClick={() => void signOut()}>Salir</button>
               </>
             )}
           </div>

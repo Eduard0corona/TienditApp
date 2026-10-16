@@ -16,11 +16,6 @@ a.dc-card:hover {
   color: var(--ct-body-color);
 }
 
-a.dc-card:focus-visible {
-  outline: 3px solid var(--ct-primary);
-  outline-offset: 2px;
-}
-
 .dc-logo {
   width: 3.5rem;
   height: 3.5rem;

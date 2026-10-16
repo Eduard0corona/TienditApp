@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-14 con la Fase 23A y antes con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-16 con la Fase 24A y antes con la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -39,6 +39,14 @@ Actualizada el 2026-10-14 con la Fase 23A y antes con las Fases 22F, 22F-2, 22G,
    - un correo con cuenta puede recibir el aviso cada vez que alguien se registra con él: lo acota el límite de peticiones por IP, sin límite por cuenta.
 
 ## Media
+
+- Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
+  - La foto de cada instancia lee hasta 1,000 negocios (los primeros por nombre) y se rehace cada 30 segundos con una consulta sobre todos. El siguiente paso es una tabla del directorio mantenida con eventos de caja, menú y horario, que hoy no existen. Con varias instancias, dos peticiones pueden ver estados distintos durante esos 30 segundos.
+  - No hay ubicación ni distancia: la búsqueda encuentra la ciudad de la tarjeta. Tampoco hay mapa, favoritos, «pedir otra vez» desde Explorar ni carrito entre negocios.
+  - Las categorías son fijas y una por negocio. Agregar una necesita migración (la CHECK), enum, cliente y la lista del registro.
+  - El perfil de un cliente (`/profile`) sigue en el marco del equipo, con «Mis pedidos» en el menú. Explorar y Mis pedidos ya tienen el suyo.
+  - «Ver más» pide cada página por separado sobre una foto que puede rehacerse entre una y otra: un negocio que cambia de grupo puede repetirse u omitirse entre páginas.
+  - La 24A suma 330 B a la primera visita (de 176,806 a 177,136 B, contra `master` en `c3c1a00`) y sube el presupuesto a 177,200 B. Una parte son los enums del contrato, que viven en el primer chunk aunque solo los usen pantallas que bajan aparte.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

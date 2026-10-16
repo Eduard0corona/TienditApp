@@ -116,6 +116,8 @@ public class BusinessDirectoryTests
     [Theory]
     [InlineData("Tacos\ny gringas")]
     [InlineData("Tacos\ty gringas")]
+    [InlineData("Tacos\u2028y gringas")]
+    [InlineData("Tacos\u2029y gringas")]
     public void SetDirectoryProfile_ShouldRejectADescriptionOnMoreThanOneLine(string description)
     {
         var tenant = new Tenant("Taquería", "taqueria", BusinessType.Food, "a@b.mx");

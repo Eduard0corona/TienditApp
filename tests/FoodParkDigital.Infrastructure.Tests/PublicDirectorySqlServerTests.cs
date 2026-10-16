@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FoodParkDigital.Infrastructure.Tests.Support;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Infrastructure.Tests;
 
@@ -38,7 +39,7 @@ public class PublicDirectorySqlServerTests
         await SeedAsync(database, "i-apagado", OnlineMenuMode.Off, drawer: Drawer.MainBranch);
 
         await using var context = database.CreateContext();
-        var directory = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache())
+        var directory = await new GetPublicDirectoryQueryHandler(context, new FixedClock(), new PublicDirectoryCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance)
             .Handle(new GetPublicDirectoryQuery(), CancellationToken.None);
 
         var cards = directory.Businesses.Items;

@@ -10,6 +10,7 @@ using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FoodParkDigital.Application.Tests;
 
@@ -59,8 +60,9 @@ public class PublicDirectoryTests
             [(true, false), (false, true), (false, true), (false, false), (false, true)],
             listed.Select(b => (b.AcceptsOrders, b.OrdersPaused)));
         var shut = listed.Single(b => b.Slug == "e-cerrado");
-        Assert.Equal(("Cerrado", "abre mañana a las 9:00"), (shut.StatusLabel, shut.StatusDetail));
+        Assert.Equal(("Cerrado", "abre mañana a las 9:00", true), (shut.StatusLabel, shut.StatusDetail, shut.Closed));
         Assert.Null(listed[0].StatusLabel);
+        Assert.False(listed[0].Closed);
         Assert.Equal((BusinessCategory.Hardware, "Tornillos y pinturas"), (listed[3].Category, listed[3].Description));
         Assert.Equal(4, directory.Categories.Single(c => c.Category == BusinessCategory.Food).Count);
         Assert.Equal(1, directory.Categories.Single(c => c.Category == BusinessCategory.Hardware).Count);
@@ -93,6 +95,10 @@ public class PublicDirectoryTests
         // Its menu takes no orders, so neither does Explorar offer delivery.
         Assert.Equal(((string?)null, true, false), (cards["sin-local"].City, cards["sin-local"].DeliveryOnly, cards["sin-local"].DeliveryAvailable));
         Assert.Equal("Negocio con-local", cards["con-local"].Name);
+
+        // A search by its city finds the one that shows it, never the kitchen that only delivers there.
+        var inPuebla = await Handler(fixture).Handle(new GetPublicDirectoryQuery(Search: "puebla"), CancellationToken.None);
+        Assert.Equal(["con-local"], inPuebla.Businesses.Items.Select(b => b.Slug));
     }
 
     [Fact]
@@ -148,6 +154,7 @@ public class PublicDirectoryTests
     [InlineData(null, "una búsqueda de más de sesenta letras que nadie escribe en el directorio xx", 1, 24)]
     [InlineData(null, null, 0, 24)]
     [InlineData(null, null, 1, 49)]
+    [InlineData(null, null, 1001, 24)]
     public void Query_ShouldRefuseWhatExplorarDoesNotAsk(int? category, string? search, int pageNumber, int pageSize)
     {
         var result = new GetPublicDirectoryQueryValidator().Validate(
@@ -212,6 +219,7 @@ public class PublicDirectoryTests
     [Theory]
     [InlineData("Tacos\ny gringas")]
     [InlineData("Tacos\ty gringas")]
+    [InlineData("Tacos\u2028y gringas")]
     public void Owner_ShouldWriteTheDescriptionOnOneLine(string description)
     {
         var result = new UpdateDirectoryProfileCommandValidator().Validate(
@@ -266,7 +274,7 @@ public class PublicDirectoryTests
             weekly, specialDays, TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City"), SalesTestFixture.Now);
 
     private static GetPublicDirectoryQueryHandler Handler(SalesTestFixture fixture)
-        => new(fixture.Context, fixture.Clock, new PublicDirectoryCache());
+        => new(fixture.Context, fixture.Clock, new PublicDirectoryCache(), NullLogger<GetPublicDirectoryQueryHandler>.Instance);
 
     private static Task<PublicDirectoryDto> DirectoryAsync(SalesTestFixture fixture)
         => Handler(fixture).Handle(new GetPublicDirectoryQuery(), CancellationToken.None);

@@ -371,6 +371,50 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
   - **Escenas visuales** (contra `master` en `2acbc81`): ninguna cambia. La línea nueva de «Revisa tu correo» solo sale al venir del registro, y sus 3 escenas abren la página directo (en la etapa 3 salía siempre y las cambiaba). Las 403 escenas pasaron dos corridas seguidas contra el mismo build.
 
 
+- Fase 24A, Explorar ([ADR 0021](../adr/0021-business-directory.md)):
+  - **Domain:** `BusinessDirectoryTests` (29 pruebas):
+    - los números guardados de las categorías y `BusinessCategoryDefaults.Suggest` para cada giro de la lista con cada tipo, sin acentos, mayúsculas ni espacios, y con el tipo cuando el giro no es de la lista;
+    - la categoría sigue al giro hasta que el dueño elige otra;
+    - la descripción se recorta, cabe en 160 caracteres y va en un solo renglón, y un error no cambia nada;
+    - «Aparecer en Explorar» empieza encendido.
+  - **Application:** `PublicDirectoryTests` (13 pruebas):
+    - quién aparece y quién no: oculto, menú apagado, sin productos, solo servicios, categoría inactiva y suspendido;
+    - cada tarjeta responde lo mismo que el menú de su negocio, con la caja en la principal, en otra sucursal y de antes de las sucursales, y cerrado por horario;
+    - el orden;
+    - la ciudad, salvo en una cocina que solo entrega;
+    - la búsqueda sin acentos dentro de la categoría y por páginas, con conteos que no dependen de la búsqueda;
+    - la foto de 30 segundos, también con el reloj que va hacia atrás;
+    - la regla `OnlineOrderAvailability`, con la mesa fuera del horario y en un día cerrado;
+    - el dueño: un cambio auditado sin el texto de la descripción, nada al guardar igual, y por qué no aparece;
+    - los validadores.
+
+    Las pruebas del menú en línea (`OnlineMenuTests`, `SpecialDaysMenuTests`, `OpeningHoursFlowTests`, `HomeDeliveryFlowTests`) siguen iguales con la regla compartida. `AuthorizationBehaviorTests` suma `GetPublicDirectoryQuery` a los anónimos.
+  - **SQL Server:**
+    - `BusinessDirectoryMigrationSqlServerTests` (4 pruebas): el relleno da a cada giro y tipo la categoría de `Suggest`; la versión anterior abre y edita negocios sobre las columnas nuevas; las CHECK; revertir se detiene con el error 50016 por un negocio oculto, por una descripción y por un cambio solo en la bitácora, y después quita solo lo suyo.
+    - `PublicDirectorySqlServerTests`: la consulta de Explorar sin negocio en contexto lee cada negocio de sus propias filas: caja de la principal, de otra sucursal y de antes de las sucursales, día especial cerrado, sin local, zonas, oculto, solo servicios, categoría inactiva y menú apagado.
+    - Las pruebas de las migraciones anteriores siembran y leen con el modelo sin las columnas nuevas (`Support/BeforeBusinessDirectory`, que también ignora `BeforeHomeVisits`).
+  - **WebApi:** `CrossTenantDirectorySqlServerTests`, sobre la API real:
+    - un visitante solo encuentra el negocio que se mostró, con lo que decidió su dueño y sin su correo ni su id;
+    - el otro negocio, aun con el encabezado del primero, solo cambia el suyo;
+    - la tarjeta del dueño dice «oculto» y «sin productos»;
+    - cada cambio queda en la bitácora de su negocio.
+
+    `TenantFilterBypassAllowlistTests` suma los dos `IgnoreQueryFilters()` de `PublicDirectoryFeature.cs`.
+  - **Cliente:**
+    - `ExplorePage.test.tsx`: las tarjetas con lo que responde el menú, las categorías con negocios, la búsqueda en la dirección, los estados vacíos, «Ver más» y una categoría que no existe.
+    - `CustomerLayout.test.tsx`: visitante, cliente y equipo.
+    - `HomeRedirect.test.tsx`: visitante y cliente a Explorar; negocio nuevo a su guía.
+    - `DirectoryCard.test.tsx`: guardar, la sugerencia del giro, la vista previa, por qué no aparece y un solo renglón.
+    - `businessCategories.test.ts`: cada categoría del contrato (`BusinessCategory` generado) una vez, con su propia ruta y Otros al final; buscarlas por ruta y por valor; y `orderStatus` con `closed` del servidor.
+    - `access.test.ts`: el inicio de un cliente es `/explorar`.
+  - **Escenas visuales** (contra `master` en `c3c1a00`):
+    - **Nuevas (8, `explorar.spec.ts`):** Explorar en escritorio, teléfono y oscuro; una categoría en el teléfono; una búsqueda sin resultados; sin negocios todavía; como cliente en el teléfono; y la tarjeta «Cómo te ven en TienditApp» con el menú publicado. Los datos simulados (`mocks/routes-p9.mjs`) contestan el directorio y el perfil. No salen de la línea base de `master` hasta que la fase entre a `master`.
+    - **Cambian a propósito (19):**
+      - Mis pedidos en escritorio, teléfono y oscuro (3): ahora van en el marco del cliente, con «Explorar» y «Mis pedidos».
+      - Mi negocio (10): la tarjeta «Cómo te ven en TienditApp» al final de Configuración › Negocio, en escritorio, teléfono y oscuro, al editar (también en el teléfono y en oscuro), con días especiales, la vista previa de un tema, el menú en línea y las plataformas de reparto.
+      - La consola de plataforma y los planes, en escritorio, teléfono y oscuro (6): la campana de avisos ya no sale al administrador de la plataforma, que no es equipo de un negocio (`Topbar`).
+    - **Resultado:** con esas capturas, las 411 escenas pasaron contra el mismo build, y las 8 de Explorar dos corridas seguidas. «Zonas de entrega: tiempo de traslado entre visitas» (`agenda-domicilio.spec.ts`) salió distinta una vez y pasó en las corridas siguientes sin cambios: la fase no toca esa pantalla.
+
 `ClientDeliveryTests` (Fase 20) arranca la API real sin base sobre una carpeta como la que deja el publish (`UseWebRoot`, sin el manifiesto de static web assets para que Development no le sume `client/dist`): la copia Brotli o gzip según `Accept-Encoding` (con `q=0` y `*`), HEAD igual que GET, `immutable` en `/assets` solo para lo que se envía (un 412 o 416 sin caché ni codificación), `no-cache` en `/`, en las rutas de la app y en `/index.html`, 404 para un archivo viejo o cualquier copia pedida por su nombre (también `/index.html.gz`), el contrato de la API sin comprimir y las subidas con sus encabezados. `PrivateUploadsGuardMiddlewareTests` bloquea también `/uploads//orders`, `//uploads/orders` y las barras invertidas. En el cliente, `useNewVersion.test.tsx` prueba cada momento en que se pregunta por una versión nueva (pestaña visible, foco, conexión, cada 10 minutos, nunca con la pestaña oculta ni justo al cargar) y `NewVersionNotice.test.tsx`, que sin conexión no ofrece recargar; `BranchesList.test.tsx`, el aviso de que el menú muestra la dirección de la sucursal principal.
 
 Escenas visuales del cliente (Fase 20B, `client/visual`, [README](../../client/visual/README.md)): Playwright sobre el build de producción con la API simulada en modo estricto (una petición sin respuesta o un error de la página hacen fallar la escena). `npm run visual:baseline` toma la línea base de `origin/master` en un worktree y `npm run visual:compare` compara cada escena con cero píxeles de tolerancia. Cubren cada ruta de `App.tsx` (`coverage.spec.ts` lo exige) en escritorio, teléfono y modo oscuro, los diálogos y paneles de cada área, el marco de la app en cinco tamaños, la impresión del ticket y de los cortes, y estados como sin conexión, negocio suspendido o un error de la API: 403 pruebas, contando el muestrario, en estos grupos: Catálogo e Inventario, Vender y Pedidos, Clientes y Mensajes, Caja y Configuración, Reportes › Liquidaciones (desde la 22G), la Agenda a domicilio (desde la 22E), las pantallas públicas y de cuenta con el marco, el marco en cada tamaño y el anillo de foco. Salen iguales en cada corrida: sin transiciones ni animaciones CSS, esperando las que queden y con repintado de mosaicos completos. Un muestrario de componentes compara además el estilo calculado de cada pieza y las variables CSS que leen nuestros estilos, en claro, en oscuro y en los ocho temas. No corren en CI (se corren antes de abrir un PR que toque el CSS global y el PR dice el resultado); CI comprueba que compilen (`npm run visual:typecheck`) y que la primera visita no pase de `bundle-budget.json` (`scripts/check-bundle.mjs`).

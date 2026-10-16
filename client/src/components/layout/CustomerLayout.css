@@ -88,6 +88,13 @@
   flex: 1 0 auto;
 }
 
+/* A page of the frame without layout of its own (Mis pedidos): the width and margins of Explorar. */
+.cl-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
 .cl-footer {
   padding: 1.25rem 1rem;
   border-top: 1px solid var(--ct-border-color);

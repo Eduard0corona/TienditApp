@@ -12209,6 +12209,7 @@ export interface components {
             ordersPaused: boolean;
             statusLabel?: string | null;
             statusDetail?: string | null;
+            closed: boolean;
         };
         PublicDirectoryBusinessDtoPaginatedList: {
             items: components["schemas"]["PublicDirectoryBusinessDto"][];

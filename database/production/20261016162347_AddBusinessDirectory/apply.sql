@@ -28,7 +28,7 @@
 --
 -- Compatible con la versión desplegada (master con la Fase 23A): no conoce las columnas y
 -- /health/schema sigue sano; un negocio que abra mientras se publica la nueva queda en Otros (el
--- DEFAULT) y aparece en Explorar si publica su menú. Volver a ella (redespliegue, o swap si el
+-- DEFAULT) y aparece en Explorar si publica su menú con algún producto. Volver a ella (redespliegue, o swap si el
 -- slot de staging está activo) funciona sin rollback.sql: Explorar desaparece y nada más cambia.
 --
 -- Cada migración corre en su propia transacción (EF Core 10). XACT_ABORT ON revierte la

@@ -372,6 +372,21 @@ La Fase 23A no tiene migración ni `apply.sql`: la cola (`OutboxMessages`) ya ex
   - iniciar sesión con una cuenta sin activar responde como una contraseña incorrecta, con un texto que menciona la activación, en lugar de «Activa tu cuenta…».
 - **Volver a la versión anterior:** funciona sin tocar la base, pero aparta del mismo modo los correos de cuenta que sigan en la cola, y vuelve a decir si un correo tiene cuenta.
 
+## Explorar, el directorio de negocios (Fase 24A)
+
+La Fase 24A trae una migración, [`database/production/20261016162347_AddBusinessDirectory`](../../database/production/20261016162347_AddBusinessDirectory). Su `apply.sql` se aplica, como siempre, **antes del merge**: respaldo, `verify.sql`, `apply.sql` (`sqlcmd -S <servidor> -d <base> <autenticación> -b -i apply.sql`), `verify.sql` y el merge. Es idempotente y, si a la base le falta una migración anterior, también la aplica ([ADR 0021](../adr/0021-business-directory.md)).
+
+- **La migración:**
+  - **Qué agrega:** `ListedInDirectory` en `TenantSettings` (encendido en cada negocio), y `DirectoryCategory` y `PublicDescription` (con nulos) en `Tenants`, con dos CHECK. Da a cada negocio la categoría de su giro, o la de su tipo si el giro no es de la lista del registro. No cambia otros datos.
+  - **Antes de aplicarla:** la consulta 4 del `verify.sql` muestra la categoría que recibirá cada giro y cuántos negocios pueden aparecer en Explorar: activos y con el menú en línea publicado. Aparecen los que además tienen algún producto que su menú muestra, que la consulta no cuenta. Los giros escritos a mano toman la categoría de su tipo, y el dueño la puede cambiar.
+  - **Después de aplicarla:** la misma consulta muestra la categoría guardada. La 5 (decisiones de los dueños) queda vacía hasta que alguno cambie algo, y la 6 (descripciones con saltos de línea) debe quedar vacía siempre.
+- **Desde el despliegue, `/` lleva a Explorar a visitantes y clientes**, y Explorar lista los negocios activos con el menú publicado y algún producto que su menú muestra. Un negocio que no quiera aparecer apaga «Aparecer en Explorar» en Configuración › Negocio; su enlace y su QR siguen funcionando. El equipo de un negocio sigue entrando a su trabajo.
+- **Mientras se publica:** la versión de `master` (Fase 23A) no conoce las columnas, y los negocios que abra toman los DEFAULT (Otros, en Explorar). Sin el `apply.sql`, la versión nueva responde 503 en `/health/schema` y la prueba de humo falla pidiéndolo.
+- **El contrato solo agrega:** `GET /api/v1/public/directory` (anónimo, con el límite `public-menu`), `GET` y `PUT /api/v1/auth/my-tenant/directory`, y los enums `BusinessCategory` y `DirectoryVisibility`. Nada se quita ni cambia de nombre.
+- **Una foto por instancia:** cada instancia rehace la lista de Explorar como mucho cada 30 segundos, sin configuración ni servicio externo. Con varias instancias, dos peticiones pueden ver estados distintos durante ese tiempo.
+- **Volver a la versión anterior:** funciona sin tocar la base, pero no hay Explorar: `/` vuelve a pedir iniciar sesión, y lo que decidieron los dueños queda guardado sin usarse.
+- **Dejar también la base como estaba:** el `rollback.sql` se detiene con el error 50016, sin cambiar nada, en cuanto un dueño decidió cómo se ve su negocio: lo ocultó, escribió su descripción o cambió su categoría (`DirectoryProfileUpdated` en la bitácora). Volver a aplicar perdería esa decisión y listaría otra vez al que se ocultó. Si nadie decidió nada, quita lo que agregó, y ejecutarlo otra vez no hace nada. Es preferible corregir hacia adelante.
+
 ## Slot de staging con swap y aprobación
 
 Opcional, y el workflow ya lo soporta: mientras no existan sus variables, todo sigue como arriba. Con él, cada versión se despliega a un slot de staging y se prueba ahí (listo, esquema al día, cliente nuevo) mientras producción sigue con la anterior; el job `promote` espera la aprobación del environment `production`, hace el swap y prueba producción. Una versión que falla en el slot, por ejemplo porque no se aplicó su `apply.sql`, nunca llega a producción, y la anterior queda en el slot para volver a ella.

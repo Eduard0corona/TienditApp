@@ -9,7 +9,7 @@
 -- decidió cómo se ve su negocio en Explorar: si alguno lo ocultó, escribió su descripción o
 -- cambió su categoría (cada cambio queda en la bitácora como DirectoryProfileUpdated). Se
 -- perdería su decisión y, al aplicar de nuevo, un negocio oculto volvería a aparecer. Con eso solo
--- queda corregir hacia adelante (la consulta 4 de verify.sql lo cuenta).
+-- queda corregir hacia adelante (la consulta 5 de verify.sql dice quiénes).
 -- Sin eso, borra las dos CHECK de [Tenants] y las tres columnas con sus DEFAULT
 -- ([TenantSettings].[ListedInDirectory], [Tenants].[DirectoryCategory] y
 -- [Tenants].[PublicDescription]). Nada más cambia.

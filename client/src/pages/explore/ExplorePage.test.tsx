@@ -23,6 +23,7 @@ function business(overrides: Partial<DirectoryBusiness>): DirectoryBusiness {
     deliveryAvailable: false,
     acceptsOrders: false,
     ordersPaused: false,
+    closed: false,
     ...overrides,
   };
 }
@@ -69,7 +70,7 @@ describe('ExplorePage', () => {
   it('lists each business with what its menu answers, and opens its menu', async () => {
     api.getDirectory.mockResolvedValue(directory([
       business({ acceptsOrders: true, deliveryAvailable: true, description: 'Tacos al pastor desde 1998', city: 'Puebla' }),
-      business({ name: 'Café Luna', slug: 'cafe-luna', ordersPaused: true, statusLabel: 'Cerrado', statusDetail: 'abre mañana a las 9:00' }),
+      business({ name: 'Café Luna', slug: 'cafe-luna', ordersPaused: true, closed: true, statusLabel: 'Cerrado', statusDetail: 'abre mañana a las 9:00' }),
       business({ name: 'Ferretería Don Beto', slug: 'don-beto', category: BusinessCategory.Hardware, deliveryOnly: true }),
     ]));
 

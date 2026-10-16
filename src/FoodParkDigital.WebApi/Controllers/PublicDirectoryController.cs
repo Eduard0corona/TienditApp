@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace FoodParkDigital.WebApi.Controllers;
 
 /// <summary>
-/// Explorar (/ in the app): the businesses that published their menu, by category, with no sign-in and only what their
+/// Explorar (/explorar in the app): the businesses that published their menu, by category, with no sign-in and only what their
 /// menu already shows. Rate limited per IP like the menu.
 /// </summary>
 [ApiController]

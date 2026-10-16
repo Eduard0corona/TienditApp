@@ -16,6 +16,7 @@ using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FoodParkDigital.Application.PublicDirectory;
 
@@ -63,6 +64,8 @@ public class PublicDirectoryBusinessDto
     public string? StatusLabel { get; set; }
     /// <summary>When it closes or opens and why: «abre mañana a las 9:00».</summary>
     public string? StatusDetail { get; set; }
+    /// <summary>Closed now by its hours or a special day; false without hours (it never closes).</summary>
+    public bool Closed { get; set; }
 }
 
 /// <summary>
@@ -72,7 +75,7 @@ public class PublicDirectoryBusinessDto
 /// business, rebuilt at most every <see cref="PublicDirectoryCache.Lifetime"/>: the menu confirms it when opened.
 /// </summary>
 /// <param name="Category">Only the businesses of this category; all without one.</param>
-/// <param name="Search">Words of the name or the description, without accents or capitals.</param>
+/// <param name="Search">Words of the name, the description or the city, without accents or capitals.</param>
 [AllowAnonymousRequest("Explorar: los negocios que publicaron su menú y aparecen en el directorio, solo con lo que su menú ya muestra.")]
 public record GetPublicDirectoryQuery(
     BusinessCategory? Category = null,
@@ -92,7 +95,8 @@ public class GetPublicDirectoryQueryValidator : AbstractValidator<GetPublicDirec
         RuleFor(x => x.Category).IsInEnum().WithMessage("La categoría no existe.");
         RuleFor(x => x.Search).MaximumLength(GetPublicDirectoryQuery.MaxSearchLength)
             .WithMessage($"Busca con {GetPublicDirectoryQuery.MaxSearchLength} letras como máximo.");
-        RuleFor(x => x.PageNumber).GreaterThanOrEqualTo(1);
+        // No snapshot holds more pages than businesses.
+        RuleFor(x => x.PageNumber).InclusiveBetween(1, PublicDirectorySnapshot.MaxBusinesses);
         RuleFor(x => x.PageSize).InclusiveBetween(1, GetPublicDirectoryQuery.MaxPageSize);
     }
 }
@@ -102,18 +106,24 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly PublicDirectoryCache _cache;
+    private readonly ILogger<GetPublicDirectoryQueryHandler> _logger;
 
-    public GetPublicDirectoryQueryHandler(IApplicationDbContext context, IDateTimeProvider dateTimeProvider, PublicDirectoryCache cache)
+    public GetPublicDirectoryQueryHandler(
+        IApplicationDbContext context,
+        IDateTimeProvider dateTimeProvider,
+        PublicDirectoryCache cache,
+        ILogger<GetPublicDirectoryQueryHandler> logger)
     {
         _context = context;
         _dateTimeProvider = dateTimeProvider;
         _cache = cache;
+        _logger = logger;
     }
 
     public async Task<PublicDirectoryDto> Handle(GetPublicDirectoryQuery request, CancellationToken cancellationToken)
     {
         var snapshot = await _cache.GetAsync(
-            _dateTimeProvider.UtcNow, (utcNow, ct) => PublicDirectorySnapshot.BuildAsync(_context, utcNow, ct), cancellationToken);
+            _dateTimeProvider.UtcNow, (utcNow, ct) => PublicDirectorySnapshot.BuildAsync(_context, utcNow, ct, _logger), cancellationToken);
 
         var words = PublicDirectorySnapshot.Comparable(request.Search)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -164,7 +174,7 @@ public sealed class PublicDirectorySnapshot
 
     internal IReadOnlyList<PublicDirectoryCategoryDto> Categories { get; }
 
-    /// <param name="SearchText">Its name and description as a search compares them.</param>
+    /// <param name="SearchText">Its name, description and city as a search compares them.</param>
     /// <param name="Rank">0 while it takes orders, 1 open (its menu, or its orders paused), 2 closed.</param>
     internal sealed record Entry(PublicDirectoryBusinessDto Business, string SearchText, int Rank);
 
@@ -172,8 +182,9 @@ public sealed class PublicDirectorySnapshot
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
     /// filtered by its own business and only for the columns its menu already shows.
     /// </summary>
+    /// <param name="logger">Says when there were more businesses than one snapshot reads.</param>
     public static async Task<PublicDirectorySnapshot> BuildAsync(
-        IApplicationDbContext context, DateTimeOffset utcNow, CancellationToken cancellationToken)
+        IApplicationDbContext context, DateTimeOffset utcNow, CancellationToken cancellationToken, ILogger? logger = null)
     {
         // Explorar lists an active business whose menu is published and shows in Explorar, with a product its menu shows.
         var menuProducts = MenuProducts(context);
@@ -187,7 +198,7 @@ public sealed class PublicDirectorySnapshot
                 && menuProducts.Any(p => p.TenantId == t.Id));
         var rows = await listed
             .OrderBy(t => t.Name).ThenBy(t => t.Id)
-            .Take(MaxBusinesses)
+            .Take(MaxBusinesses + 1)
             .Select(t => new Row(
                 t.Id,
                 t.Name,
@@ -212,6 +223,12 @@ public sealed class PublicDirectorySnapshot
                         || context.Branches.Any(b => b.TenantId == t.Id && b.IsDefault && b.Id == cs.BranchId))),
                 context.DeliveryZones.Any(z => z.TenantId == t.Id && z.IsActive)))
             .ToListAsync(cancellationToken);
+        if (rows.Count > MaxBusinesses)
+        {
+            // The last ones by name are left out, also when they take orders: time for the table kept by events (ADR 0021).
+            logger?.LogWarning("Explorar lists more than {MaxBusinesses} businesses: the ones after it by name are left out.", MaxBusinesses);
+            rows.RemoveAt(MaxBusinesses);
+        }
 
         // Their special days, in a range that holds the window of every time zone; each business keeps its own below.
         var utcToday = DateOnly.FromDateTime(utcNow.UtcDateTime);
@@ -268,10 +285,12 @@ public sealed class PublicDirectorySnapshot
             AcceptsOrders = acceptsOrders,
             OrdersPaused = ordersOn && !acceptsOrders,
             StatusLabel = hours is null ? null : BusinessHoursText.StatusLabel(hours),
-            StatusDetail = hours is null ? null : BusinessHoursText.StatusDetail(hours, seatedOverride: false)
+            StatusDetail = hours is null ? null : BusinessHoursText.StatusDetail(hours, seatedOverride: false),
+            Closed = hours is { Status.IsOpen: false }
         };
-        var rank = acceptsOrders ? 0 : hours is { Status.IsOpen: false } ? 2 : 1;
-        return new Entry(business, Comparable($"{row.Name} {row.Description}"), rank);
+        var rank = acceptsOrders ? 0 : business.Closed ? 2 : 1;
+        // Its city too, when the card shows it: never the one of a kitchen that only delivers.
+        return new Entry(business, Comparable($"{row.Name} {row.Description} {business.City}"), rank);
     }
 
     /// <summary>Lowercase, without accents and with single spaces: «Taquería  EL Güero» and «taqueria el guero» match.</summary>
@@ -310,6 +329,7 @@ public sealed class PublicDirectorySnapshot
 public sealed class PublicDirectoryCache
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RebuildTimeout = TimeSpan.FromSeconds(30);
 
     private readonly SemaphoreSlim _rebuild = new(1, 1);
     private PublicDirectorySnapshot? _snapshot;
@@ -330,7 +350,10 @@ public sealed class PublicDirectoryCache
             current = Volatile.Read(ref _snapshot);
             if (IsFresh(current, utcNow))
                 return current!;
-            current = await build(utcNow, cancellationToken);
+            // Its own time limit, not the request's: every request waiting shares it, and a customer who leaves (or
+            // changes the search) does not throw away a rebuild half done.
+            using var limit = new CancellationTokenSource(RebuildTimeout);
+            current = await build(utcNow, limit.Token);
             Volatile.Write(ref _snapshot, current);
             return current;
         }
@@ -340,6 +363,10 @@ public sealed class PublicDirectoryCache
         }
     }
 
+    /// <summary>
+    /// Built less than <see cref="Lifetime"/> before or after this instant: a request that read the clock an instant
+    /// before the one that rebuilt it uses it too, and a clock that goes back further rebuilds it.
+    /// </summary>
     private static bool IsFresh(PublicDirectorySnapshot? snapshot, DateTimeOffset utcNow)
-        => snapshot is not null && utcNow >= snapshot.BuiltAt && utcNow - snapshot.BuiltAt < Lifetime;
+        => snapshot is not null && (utcNow - snapshot.BuiltAt).Duration() < Lifetime;
 }

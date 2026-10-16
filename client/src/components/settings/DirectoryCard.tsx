@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../../api/errors';
 import { publicDirectoryApi, type DirectoryProfile } from '../../api/publicDirectoryApi';
-import type { BusinessCategory, DirectoryVisibility } from '../../api/generated/enums';
+import { DirectoryVisibility, type BusinessCategory } from '../../api/generated/enums';
 import DirectoryBusinessCard from '../explore/DirectoryBusinessCard';
 import { useTenant } from '../../hooks/useTenant';
 import { useToast } from '../../hooks/useToast';
 import { OnlineMenuMode } from '../../types';
-import { BUSINESS_CATEGORIES, DIRECTORY_VISIBILITY, categoryInfo } from '../../utils/businessCategories';
+import { BUSINESS_CATEGORIES, categoryInfo } from '../../utils/businessCategories';
 
 // The same limit as the API (Tenant.MaxPublicDescriptionLength).
 const MAX_DESCRIPTION = 160;
@@ -16,7 +16,7 @@ const MAX_DESCRIPTION = 160;
 /** Whether Explorar lists the business, and the one thing to do when it does not. */
 function VisibilityNotice({ visibility, category }: { visibility: DirectoryVisibility; category: BusinessCategory }) {
   switch (visibility) {
-    case DIRECTORY_VISIBILITY.Shown:
+    case DirectoryVisibility.Shown:
       return (
         <div className="alert alert-success py-2 small">
           <i className="ri-checkbox-circle-line me-1" aria-hidden="true"></i>
@@ -24,15 +24,15 @@ function VisibilityNotice({ visibility, category }: { visibility: DirectoryVisib
           <Link to={`/explorar/${categoryInfo(category)?.slug ?? ''}`}>Ver cómo te encuentran</Link>
         </div>
       );
-    case DIRECTORY_VISIBILITY.HiddenByOwner:
+    case DirectoryVisibility.HiddenByOwner:
       return <div className="alert alert-secondary py-2 small">No apareces en Explorar: elegiste no aparecer.</div>;
-    case DIRECTORY_VISIBILITY.MenuOff:
+    case DirectoryVisibility.MenuOff:
       return (
         <div className="alert alert-warning py-2 small">
           No apareces en Explorar: publica tu menú en línea (Solo menú o Menú con pedidos) para aparecer.
         </div>
       );
-    case DIRECTORY_VISIBILITY.NoProducts:
+    case DirectoryVisibility.NoProducts:
       return (
         <div className="alert alert-warning py-2 small">
           No apareces en Explorar: tu menú todavía no muestra productos.{' '}
@@ -64,8 +64,8 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
     setSaving(true);
     try {
       const saved = await publicDirectoryApi.updateProfile({ category, description: description.trim() || null, listed });
-      queryClient.setQueryData(['directory-profile', tenant.onlineMenuMode], saved);
-      toast.success(saved.visibility === DIRECTORY_VISIBILITY.Shown
+      queryClient.setQueryData(['directory-profile', tenant.onlineMenuMode, tenant.industry ?? null], saved);
+      toast.success(saved.visibility === DirectoryVisibility.Shown
         ? 'Guardado: Explorar lo muestra en unos segundos.'
         : 'Guardado.');
     } catch (err: unknown) {
@@ -144,6 +144,7 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
             ordersPaused: false,
             statusLabel: null,
             statusDetail: null,
+            closed: false,
           }}
         />
       </div>
@@ -177,18 +178,20 @@ function DirectoryForm({ profile }: { profile: DirectoryProfile }) {
  */
 export default function DirectoryCard() {
   const { tenant } = useTenant();
-  // Publishing or turning off the menu changes whether it appears: asked again with each mode.
+  const titleId = useId();
+  // Publishing or turning off the menu changes whether it appears, and a new giro may move the category (while the
+  // owner has not picked another): asked again with each, so saving never sends back a category already replaced.
   const profile = useQuery({
-    queryKey: ['directory-profile', tenant?.onlineMenuMode],
+    queryKey: ['directory-profile', tenant?.onlineMenuMode, tenant?.industry ?? null],
     queryFn: () => publicDirectoryApi.getProfile(),
     enabled: !!tenant,
   });
   if (!tenant) return null;
 
   return (
-    <div className="card">
+    <section className="card" aria-labelledby={titleId}>
       <div className="card-body">
-        <h4 className="header-title mt-0 mb-1">Cómo te ven en TienditApp</h4>
+        <h4 id={titleId} className="header-title mt-0 mb-1">Cómo te ven en TienditApp</h4>
         <p className="text-muted small mb-3">
           En Explorar los clientes encuentran negocios por categoría, abren tu menú y piden cuando lo recibes en línea.
         </p>
@@ -203,6 +206,6 @@ export default function DirectoryCard() {
           />
         )}
       </div>
-    </div>
+    </section>
   );
 }
