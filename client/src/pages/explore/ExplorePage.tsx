@@ -1,0 +1,212 @@
+import { useEffect, useId, useState } from 'react';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { getApiErrorMessage } from '../../api/errors';
+import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from '../../api/publicDirectoryApi';
+import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
+import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
+import './ExplorePage.css';
+
+const PAGE_SIZE = 24;
+// The same limit as the API (GetPublicDirectoryQuery.MaxSearchLength).
+const MAX_SEARCH = 60;
+const SEARCH_DELAY_MS = 300;
+
+function countLabel(count: number): string {
+  return count === 1 ? '1 negocio' : `${count.toLocaleString('es-MX')} negocios`;
+}
+
+function BusinessList({ businesses }: { businesses: DirectoryBusiness[] }) {
+  return (
+    <ul className="ex-grid">
+      {businesses.map((business) => (
+        <li key={business.slug}>
+          <DirectoryBusinessCard business={business} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A page after the first, asked when the customer wants more. */
+function MoreBusinesses({ search, pageNumber }: { search: DirectorySearch; pageNumber: number }) {
+  const page = useQuery({
+    queryKey: ['directory', search, pageNumber],
+    queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber }, signal),
+  });
+  if (page.isLoading) return <p className="text-center text-muted mt-3">Cargando…</p>;
+  if (page.isError) {
+    return (
+      <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2 mt-3" role="alert">
+        <span className="me-auto">{getApiErrorMessage(page.error, 'No se pudieron cargar más negocios.')}</span>
+        <button type="button" className="btn btn-sm btn-light" onClick={() => void page.refetch()}>Reintentar</button>
+      </div>
+    );
+  }
+  const businesses = page.data?.businesses.items ?? [];
+  return businesses.length > 0 ? <div className="mt-3"><BusinessList businesses={businesses} /></div> : null;
+}
+
+/**
+ * Explorar (/explorar and /explorar/:categoria): the businesses that published their menu, those that take orders now
+ * first. A customer finds one by category or by words of its name or what it sells, and the card opens its menu, where
+ * it orders as it always did. The search lives in the address (?q=), so a search can be shared.
+ */
+export default function ExplorePage() {
+  const searchId = useId();
+  const { categoria } = useParams();
+  const [params, setParams] = useSearchParams();
+  const category = categoryBySlug(categoria);
+  const query = (params.get('q') ?? '').slice(0, MAX_SEARCH);
+  const [draft, setDraft] = useState(query);
+  // Back and forward change the address: the box shows its search again.
+  const [shownQuery, setShownQuery] = useState(query);
+  if (query !== shownQuery) {
+    setShownQuery(query);
+    if (draft.trim() !== query.trim()) setDraft(query);
+  }
+
+  // The address follows what is typed, a moment after the last key.
+  useEffect(() => {
+    const words = draft.trim();
+    if (words === query.trim()) return;
+    const timer = window.setTimeout(() => {
+      setParams(words ? { q: words } : {}, { replace: true });
+    }, SEARCH_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, query, setParams]);
+
+  useEffect(() => {
+    document.title = category ? `${category.label} · Explorar · TienditApp` : 'Explorar · TienditApp';
+  }, [category]);
+
+  const search: DirectorySearch = { category: category?.value, q: query.trim() || undefined, pageSize: PAGE_SIZE };
+  const directory = useQuery({
+    queryKey: ['directory', search, 1],
+    queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber: 1 }, signal),
+    enabled: !categoria || !!category,
+  });
+  // «Ver más» adds the next page under the ones shown; another category or search starts again at the first.
+  const searchKey = JSON.stringify(search);
+  const [more, setMore] = useState({ searchKey, pages: 1 });
+  const pagesShown = more.searchKey === searchKey ? more.pages : 1;
+
+  // An address with a category that does not exist goes to all of them.
+  if (categoria && !category) return <Navigate to="/explorar" replace />;
+
+  const first = directory.data;
+  const firstItems = first?.businesses.items ?? [];
+  const total = first?.businesses.totalCount ?? 0;
+  const counts = new Map((first?.categories ?? []).map((item) => [item.category, item.count]));
+  const anyListed = [...counts.values()].some((count) => count > 0);
+  const chips = BUSINESS_CATEGORIES.filter((item) => (counts.get(item.value) ?? 0) > 0 || item.value === category?.value);
+  const searchSuffix = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+  const hasMore = pagesShown < (first?.businesses.totalPages ?? 0);
+  const remaining = Math.max(0, total - pagesShown * PAGE_SIZE);
+
+  return (
+    <div className="ex-page">
+      <section className="ex-hero" aria-labelledby="explore-title">
+        <h1 id="explore-title" className="ex-title">{category ? category.label : 'Compra en los negocios de tu ciudad'}</h1>
+        <p className="ex-lead">Pide en línea a los que reciben pedidos ahora, o mira el menú de los demás.</p>
+        <form className="ex-search" role="search" onSubmit={(event) => event.preventDefault()}>
+          <label className="visually-hidden" htmlFor={searchId}>Buscar negocios</label>
+          <i className="ri-search-line ex-search-icon" aria-hidden="true"></i>
+          <input
+            id={searchId}
+            type="search"
+            className="form-control"
+            placeholder="Busca por nombre o por lo que vende"
+            maxLength={MAX_SEARCH}
+            autoComplete="off"
+            enterKeyHint="search"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </form>
+      </section>
+
+      {chips.length > 0 && (
+        <nav className="ex-chips" aria-label="Categorías">
+          <Link className={`ex-chip ${category ? '' : 'active'}`} to={`/explorar${searchSuffix}`} aria-current={category ? undefined : 'page'}>
+            Todos
+          </Link>
+          {chips.map((item) => (
+            <Link
+              key={item.value}
+              className={`ex-chip ${item.value === category?.value ? 'active' : ''}`}
+              to={`/explorar/${item.slug}${searchSuffix}`}
+              aria-current={item.value === category?.value ? 'page' : undefined}
+            >
+              <i className={item.icon} aria-hidden="true"></i>
+              {item.label}
+              {counts.has(item.value) && <span className="ex-chip-count">{counts.get(item.value)}</span>}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      <section className="ex-results" aria-labelledby="explore-results" aria-busy={directory.isLoading}>
+        <h2 id="explore-results" className="visually-hidden">Negocios</h2>
+        {directory.isSuccess && total > 0 && (
+          <p className="ex-count" aria-live="polite">{countLabel(total)}</p>
+        )}
+
+        {directory.isLoading && (
+          <ul className="ex-grid" aria-hidden="true">
+            {Array.from({ length: 6 }, (_, index) => (
+              <li key={index} className="ex-skeleton" />
+            ))}
+          </ul>
+        )}
+
+        {directory.isError && (
+          <div className="alert alert-danger d-flex flex-wrap align-items-center gap-2" role="alert">
+            <span className="me-auto">{getApiErrorMessage(directory.error, 'No se pudieron cargar los negocios.')}</span>
+            <button type="button" className="btn btn-sm btn-light" onClick={() => void directory.refetch()}>Reintentar</button>
+          </div>
+        )}
+
+        {directory.isSuccess && total === 0 && (
+          <div className="ex-empty">
+            <i className="ri-store-2-line" aria-hidden="true"></i>
+            {query.trim() ? (
+              <>
+                <h3 className="h5">No encontramos «{query.trim()}»</h3>
+                <p>Prueba con otra palabra{category ? ' o busca en todas las categorías' : ''}.</p>
+                <div className="d-flex flex-wrap justify-content-center gap-2">
+                  <button type="button" className="btn btn-light" onClick={() => setDraft('')}>Borrar la búsqueda</button>
+                  {category && <Link className="btn btn-light" to={`/explorar${searchSuffix}`}>Buscar en todas</Link>}
+                </div>
+              </>
+            ) : category && anyListed ? (
+              <>
+                <h3 className="h5">Aún no hay negocios de {category.label.toLowerCase()}</h3>
+                <p>Mira los de otras categorías mientras llegan.</p>
+                <Link className="btn btn-light" to="/explorar">Ver todos los negocios</Link>
+              </>
+            ) : (
+              <>
+                <h3 className="h5">Pronto verás aquí los negocios de tu ciudad</h3>
+                <p>Cuando publiquen su menú en línea, aparecerán en Explorar.</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {firstItems.length > 0 && <BusinessList businesses={firstItems} />}
+        {Array.from({ length: pagesShown - 1 }, (_, index) => (
+          <MoreBusinesses key={index + 2} search={search} pageNumber={index + 2} />
+        ))}
+
+        {hasMore && (
+          <div className="text-center mt-3">
+            <button type="button" className="btn btn-light" onClick={() => setMore({ searchKey, pages: pagesShown + 1 })}>
+              Ver más negocios ({remaining.toLocaleString('es-MX')})
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

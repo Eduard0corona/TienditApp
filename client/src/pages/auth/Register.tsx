@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
 import type { RegisterBusinessRequest, RegisterCustomerRequest } from '../../types';
 import { BusinessType } from '../../types';
@@ -35,7 +35,12 @@ const MX_STATES = [
 
 export default function Register() {
   const navigate = useNavigate();
-  const [accountType, setAccountType] = useState<AccountType>(null);
+  // Explorar opens it on the account a visitor asked for: ?cuenta=cliente or ?cuenta=negocio.
+  const [params] = useSearchParams();
+  const asked = params.get('cuenta');
+  const [accountType, setAccountType] = useState<AccountType>(
+    asked === 'cliente' ? 'customer' : asked === 'negocio' ? 'business' : null,
+  );
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showOptionalData, setShowOptionalData] = useState(false);

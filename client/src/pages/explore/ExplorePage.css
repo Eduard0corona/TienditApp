@@ -1,0 +1,152 @@
+/* Explorar: one column on a phone, cards side by side from a tablet on. */
+.ex-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.ex-hero {
+  max-width: 44rem;
+}
+
+.ex-title {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2.1rem);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.ex-lead {
+  margin: 0 0 1rem;
+  color: var(--ct-secondary-color);
+}
+
+.ex-search {
+  position: relative;
+}
+
+.ex-search .form-control {
+  min-height: var(--ta-touch);
+  padding-left: 2.5rem;
+  border-radius: 2rem;
+}
+
+.ex-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.95rem;
+  color: var(--ct-secondary-color);
+  font-size: 1.1rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* The categories scroll sideways on a phone and wrap on a wide screen. */
+.ex-chips {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.1rem -1rem 0;
+  padding: 0 1rem 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ex-chips::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .ex-chips {
+    flex-wrap: wrap;
+    margin: 1.1rem 0 0;
+    padding: 0;
+  }
+}
+
+.ex-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--ta-touch);
+  padding: 0 0.9rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: 2rem;
+  background: var(--ct-secondary-bg);
+  color: var(--ct-body-color);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ex-chip:hover {
+  border-color: var(--ct-primary-border-subtle);
+  color: var(--ct-body-color);
+}
+
+.ex-chip.active {
+  border-color: var(--ct-primary);
+  background: var(--ct-primary);
+  color: var(--ct-btn-color, #fff);
+}
+
+.ex-chip-count {
+  color: inherit;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.ex-results {
+  margin-top: 1.25rem;
+}
+
+.ex-count {
+  margin: 0 0 0.75rem;
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+}
+
+.ex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ex-skeleton {
+  height: 8.5rem;
+  border-radius: 0.75rem;
+  background: var(--ct-tertiary-bg);
+  animation: ex-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ex-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-skeleton {
+    animation: none;
+  }
+}
+
+.ex-empty {
+  max-width: 30rem;
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.ex-empty > i {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--ct-secondary-color);
+  font-size: 2.5rem;
+}
+
+.ex-empty p {
+  color: var(--ct-secondary-color);
+}

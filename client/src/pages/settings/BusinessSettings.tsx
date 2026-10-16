@@ -6,6 +6,7 @@ import PageTitle from '../../components/common/PageTitle';
 import UploadLoadingModal from '../../components/common/UploadLoadingModal';
 import SalesPolicyCard from '../../components/settings/SalesPolicyCard';
 import OnlineMenuCard from '../../components/settings/OnlineMenuCard';
+import DirectoryCard from '../../components/settings/DirectoryCard';
 import OpeningHoursCard from '../../components/settings/OpeningHoursCard';
 import SpecialDaysCard from '../../components/settings/SpecialDaysCard';
 import DeliveryPlatformsCard from '../../components/settings/DeliveryPlatformsCard';
@@ -329,6 +330,7 @@ export default function BusinessSettings() {
       <SubscriptionCard />
       <SalesPolicyCard />
       <OnlineMenuCard />
+      <DirectoryCard />
       <OpeningHoursCard
         upcomingSpecialDays={specialDays.data?.upcoming.length ?? 0}
         onSaved={() => void queryClient.invalidateQueries({ queryKey: queryKeys.specialDays })}

@@ -9,7 +9,8 @@ export default function HomeRedirect() {
   const { tenant, capabilities, isLoading: isTenantLoading } = useTenant();
 
   if (isLoading || (isAuthenticated && isTenantLoading)) return <LoadingSpinner />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  // Visitors and customers start in Explorar (ADR 0021); the team of a business, at its job.
+  if (!isAuthenticated || getAccess(user, capabilities).myOrders) return <Navigate to="/explorar" replace />;
 
   // A new business starts with the guided setup until its owner finishes or skips it.
   if (tenant && !tenant.onboardingCompletedAt && getAccess(user, capabilities).businessSettings) {
