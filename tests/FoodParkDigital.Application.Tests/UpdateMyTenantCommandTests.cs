@@ -1,4 +1,5 @@
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
@@ -76,6 +77,27 @@ public class UpdateMyTenantCommandTests
         Assert.Equal("America/Mexico_City", unchanged.Value!.TimeZone);
         Assert.Equal("America/Tijuana", moved.Value!.TimeZone);
         Assert.Equal("America/Tijuana", (await fixture.Context.TenantSettings.AsNoTracking().SingleAsync()).TimeZone);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldMoveTheCategoryWithTheGiro_UntilTheOwnerSavesHowTheBusinessShows()
+    {
+        await using var fixture = await TestFixture.CreateAsync(TenantCapability.Food);
+        var handler = new UpdateMyTenantCommandHandler(fixture.Context, fixture.CurrentUser, fixture.TenantService);
+        UpdateMyTenantCommand WithGiro(string giro) => new() { Name = "Tenant Demo", ContactEmail = "tenant@demo.com", Industry = giro };
+
+        // Untouched, the category follows the giro.
+        Assert.True((await handler.Handle(WithGiro("Abarrotes"), CancellationToken.None)).IsSuccess);
+        Assert.Equal(BusinessCategory.Groceries, (await fixture.Context.Tenants.SingleAsync()).DirectoryCategory);
+
+        // The owner saves the card keeping the category the giro gave, with a description.
+        var saved = await new UpdateDirectoryProfileCommandHandler(fixture.Context, fixture.TenantService, fixture.CurrentUser)
+            .Handle(new UpdateDirectoryProfileCommand(BusinessCategory.Groceries, "Abarrotes y cremería", true), CancellationToken.None);
+        Assert.True(saved.IsSuccess, saved.Error);
+
+        // From then on, a new giro only suggests another category.
+        Assert.True((await handler.Handle(WithGiro("Farmacia"), CancellationToken.None)).IsSuccess);
+        Assert.Equal(BusinessCategory.Groceries, (await fixture.Context.Tenants.SingleAsync()).DirectoryCategory);
     }
 
     [Theory]

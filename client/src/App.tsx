@@ -17,6 +17,8 @@ const AcceptInvitation = lazy(() => import('./pages/auth/AcceptInvitation'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/profile/Profile'));
 const MyOrders = lazy(() => import('./pages/account/MyOrders'));
+const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
+const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
 const ProductForm = lazy(() => import('./pages/products/ProductForm'));
 const CategoriesList = lazy(() => import('./pages/categories/CategoriesList'));
@@ -80,6 +82,22 @@ export default function App() {
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
 
+            {/* The customer's screens: Explorar (no sign-in) and the orders of a customer account. */}
+            <Route element={<CustomerLayout />}>
+              <Route path="/explorar" element={<ExplorePage />} />
+              <Route path="/explorar/:categoria" element={<ExplorePage />} />
+              <Route
+                path="/mis-pedidos"
+                element={(
+                  <ProtectedRoute>
+                    <AccessRoute area="myOrders">
+                      <MyOrders />
+                    </AccessRoute>
+                  </ProtectedRoute>
+                )}
+              />
+            </Route>
+
             {/* Protected routes */}
             <Route
               element={
@@ -97,14 +115,6 @@ export default function App() {
                 )}
               />
               <Route path="/profile" element={<Profile />} />
-              <Route
-                path="/mis-pedidos"
-                element={(
-                  <AccessRoute area="myOrders">
-                    <MyOrders />
-                  </AccessRoute>
-                )}
-              />
               <Route
                 path="/products"
                 element={(
@@ -371,7 +381,7 @@ export default function App() {
               />
             </Route>
 
-            {/* Default redirect: the first page the user can open */}
+            {/* Default redirect: Explorar for visitors and customers, the first page of their job for a team */}
             <Route path="*" element={<HomeRedirect />} />
           </Routes>
         </Suspense>

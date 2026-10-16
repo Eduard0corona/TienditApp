@@ -94,6 +94,12 @@ Migraciones recientes con notas operativas:
   - La cita carga su visita siempre (`AutoInclude`), y el pedido su cargo: es parte del total.
   - La versión anterior (`master` con la Fase 22D) no conoce las columnas ni las tablas y sigue agendando y guardando la configuración (`HomeVisitsSqlServerTests`).
   - Su `Down` se detiene con el error 50015 mientras haya visitas, cargos por visita o citas cobradas. El chequeo va en un `EXEC`, como el de la 22D. Sin ellos, quita lo que agregó, y el `rollback.sql` se puede ejecutar otra vez.
+- Fase 24A: `AddBusinessDirectory` agrega lo que necesita Explorar ([ADR 0021](../adr/0021-business-directory.md)).
+  - `TenantSettings` gana `ListedInDirectory` `bit` (encendido por omisión, también en las filas que ya existen).
+  - `Tenants` gana `DirectoryCategory` `int` (10, Otros, por omisión) con el CHECK `CK_Tenants_DirectoryCategory` (0 a 10), y `PublicDescription` `nvarchar(160)` con nulos y el CHECK `CK_Tenants_PublicDescription` (nula o no vacía).
+  - Un `UPDATE` da a cada negocio la categoría de su giro, comparado sin acentos ni mayúsculas (`Latin1_General_CI_AI`, con los giros escritos sin acentos para que el script se lea igual en cualquier página de códigos), o la de su tipo. Es la regla de `BusinessCategoryDefaults.Suggest`, y `BusinessDirectoryMigrationSqlServerTests` compara las dos para cada giro y tipo.
+  - La versión anterior (`master` con la Fase 23A) no conoce las columnas: abre y edita negocios, que toman los DEFAULT. Las pruebas de las migraciones anteriores siembran con el modelo sin ellas (`BeforeBusinessDirectory`).
+  - Su `Down` se detiene con el error 50016 en cuanto un dueño ocultó su negocio, escribió su descripción o hay un `DirectoryProfileUpdated` en la bitácora. El chequeo va en un `EXEC`, como el de la 22D. Sin ellos, quita lo que agregó, y el `rollback.sql` se puede ejecutar otra vez.
 
 ## Reglas
 

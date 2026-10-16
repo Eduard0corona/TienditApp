@@ -369,6 +369,32 @@ Servicios a domicilio (Fase 22E, [ADR 0020](../adr/0020-home-visits.md)):
 - **Escenas:** `mocks/routes-p8.mjs` contesta la cotización, la ruta, una cita y el tiempo de traslado (30 minutos), con las zonas de `data.deliveryZones` (ninguna por omisión, como `GET /delivery-zones`). `scenes/agenda-domicilio.spec.ts` pone a Café La Esquina con zonas y visitas.
 - **Primera visita:** suma 79 B (de 176,728 a 176,807 B, contra `master` en `5aac2b7`): solo el mapa de módulos de las pantallas que bajan aparte, que comparten dos módulos nuevos (`api/homeVisits.ts` con sus utilidades y `appointmentsApi`). Su tamaño comprimido cambia unos bytes con los nombres de los archivos (llevan su hash), y pasaba el presupuesto (176,800 B) por unos bytes: sube a 176,900 B.
 
+Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
+
+- **Rutas:** `/explorar` y `/explorar/:categoria` (`pages/explore/ExplorePage`) y `/mis-pedidos`, dentro de `CustomerLayout`. Las tres bajan aparte.
+  - `HomeRedirect` lleva a Explorar a visitantes y clientes (`getAccess(...).myOrders`), y el comodín `*` también. `getLandingPath` da `/explorar` a un cliente.
+  - Una categoría que no existe va a `/explorar`.
+- **`CustomerLayout`:** el marco de TienditApp para los clientes. Mis pedidos va dentro de `.cl-page`, con el ancho y los márgenes de Explorar, y «Salir» deja al cliente en Explorar. Lleva la marca, «Explorar», «Mis pedidos» (cliente), «Mi negocio» (equipo), «Entrar» y «Crear cuenta» (`/register?cuenta=cliente`), el perfil, «Salir» y el tema claro u oscuro (desde una tableta: en el teléfono, la marca y la cuenta caben en un renglón).
+  - Pinta los colores de TienditApp (`previewBusinessTheme(Nopal)`, antes del primer pintado) y no los del último negocio del dispositivo.
+  - El pie invita a los negocios (`/register?cuenta=negocio`). `Register` abre en la cuenta pedida.
+- **`ExplorePage`:**
+  - La búsqueda escribe `?q=` 300 ms después de la última tecla y se lee otra vez al ir atrás o adelante. Las categorías con negocios salen como enlaces con su número (`aria-current` en la actual).
+  - Las tarjetas (`components/explore/DirectoryBusinessCard`) llevan el logo o la inicial en los colores del tema de cada negocio (`--dc-tint`, claro y oscuro), nombre, descripción, categoría y ciudad o «Solo a domicilio», y lo que responde su menú (`orderStatus`, con `closed` del servidor: «Pide en línea», en pausa, cerrado y cuándo abre, solo menú). La tarjeta entera abre `/m/{slug}`.
+  - La fila de categorías se desliza en el teléfono con `useScrollFade` y `.ta-scroll-fade`. El chip activo usa `--ta-on-accent`.
+  - El título de la pestaña dice la categoría y vuelve al anterior al salir.
+  - «Ver más negocios (n)» suma la página siguiente con su propio `useQuery`, para no traer `useInfiniteQuery` a la primera visita. Otra categoría u otra búsqueda vuelven a la primera.
+  - Tiene estados vacíos (sin negocios todavía, una categoría vacía, una búsqueda sin resultados) y de error con «Reintentar».
+- **`utils/businessCategories.ts`:** etiqueta, ruta e ícono de las once categorías (con `BusinessCategory` del contrato) y `orderStatus`.
+- **Configuración › Negocio › «Cómo te ven en TienditApp»** (`components/settings/DirectoryCard`):
+  - Elige la categoría, con la que sugiere el giro, escribe una descripción de un renglón (con contador; los saltos de línea se vuelven espacios) y enciende o apaga «Aparecer en Explorar».
+  - Muestra la vista previa de la tarjeta y dice por qué no aparece y qué hacer.
+  - Pide el perfil otra vez cuando cambia el modo del menú en línea o el giro (`['directory-profile', onlineMenuMode, industry]`): guardar nunca devuelve una categoría que el giro ya movió.
+- **`Topbar`:** «Abrir otro negocio» y la campana de avisos (`AttentionBell`, solo para el equipo de un negocio) se comparan con `getAccess` (`myOrders`, `platform`). Antes comparaban el rol con `'CUSTOMER'` y `'SUPER_ADMIN'`, que el perfil nunca trae (`Customer`, `SuperAdmin`), así que ofrecían «Abrir otro negocio» a clientes y a la plataforma, y la campana salía en la consola de plataforma.
+- **Escenas:**
+  - `mocks/routes-p9.mjs` contesta el directorio (siete negocios de la ciudad de las escenas) y el perfil de Explorar. En las escenas de Mi negocio, Café La Esquina tiene el menú apagado, así que su tarjeta pide publicarlo; la escena de la tarjeta lo publica con pedidos (`MENU_CON_PEDIDOS`). El directorio es la vista del visitante y no sigue a esos datos.
+  - `scenes/explorar.spec.ts` tiene Explorar en tres vistas, una categoría, una búsqueda sin resultados, sin negocios, como cliente y la tarjeta del dueño.
+- **Primera visita:** suma 330 B (de 176,806 a 177,136 B, contra `master` en `c3c1a00`): las dos rutas, la redirección, el marco que baja aparte y los enums `BusinessCategory` y `DirectoryVisibility`, que viven con los demás enums del contrato en el primer chunk. El presupuesto sube de 176,900 a 177,200 B.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

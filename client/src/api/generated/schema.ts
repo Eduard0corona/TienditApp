@@ -7326,6 +7326,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    category?: components["schemas"]["BusinessCategory"];
+                    q?: string;
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicDirectoryDto"];
+                        "application/json": components["schemas"]["PublicDirectoryDto"];
+                        "text/json": components["schemas"]["PublicDirectoryDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/menu/{slug}": {
         parameters: {
             query?: never;
@@ -8651,6 +8693,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/my-tenant/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DirectoryProfileDto"];
+                        "application/json": components["schemas"]["DirectoryProfileDto"];
+                        "text/json": components["schemas"]["DirectoryProfileDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateDirectoryProfileRequest"];
+                    "text/json": components["schemas"]["UpdateDirectoryProfileRequest"];
+                    "application/*+json": components["schemas"]["UpdateDirectoryProfileRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["DirectoryProfileDto"];
+                        "application/json": components["schemas"]["DirectoryProfileDto"];
+                        "text/json": components["schemas"]["DirectoryProfileDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/my-tenant/opening-hours": {
         parameters: {
             query?: never;
@@ -9508,6 +9614,11 @@ export interface components {
          * @enum {integer}
          */
         BranchServiceMode: 0 | 1;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        BusinessCategory: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
         /**
          * Format: int32
          * @enum {integer}
@@ -10689,6 +10800,18 @@ export interface components {
             isActive: boolean;
             openTab?: components["schemas"]["OpenTabSummaryDto"];
         };
+        DirectoryProfileDto: {
+            category: components["schemas"]["BusinessCategory"];
+            suggestedCategory: components["schemas"]["BusinessCategory"];
+            description?: string | null;
+            listed: boolean;
+            visibility: components["schemas"]["DirectoryVisibility"];
+        };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        DirectoryVisibility: 0 | 1 | 2 | 3 | 4;
         Disable2FARequest: {
             code: string;
             useRecoveryCode: boolean;
@@ -12072,6 +12195,42 @@ export interface components {
             /** Format: double */
             freeDeliveryFrom?: number | null;
         };
+        PublicDirectoryBusinessDto: {
+            name: string;
+            slug: string;
+            logoUrl?: string | null;
+            category: components["schemas"]["BusinessCategory"];
+            description?: string | null;
+            theme: components["schemas"]["BusinessTheme"];
+            city?: string | null;
+            deliveryOnly: boolean;
+            deliveryAvailable: boolean;
+            acceptsOrders: boolean;
+            ordersPaused: boolean;
+            statusLabel?: string | null;
+            statusDetail?: string | null;
+            closed: boolean;
+        };
+        PublicDirectoryBusinessDtoPaginatedList: {
+            items: components["schemas"]["PublicDirectoryBusinessDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
+        PublicDirectoryCategoryDto: {
+            category: components["schemas"]["BusinessCategory"];
+            /** Format: int32 */
+            count: number;
+        };
+        PublicDirectoryDto: {
+            categories: components["schemas"]["PublicDirectoryCategoryDto"][];
+            businesses: components["schemas"]["PublicDirectoryBusinessDtoPaginatedList"];
+        };
         PublicMenuCategoryDto: {
             /** Format: uuid */
             id: string;
@@ -12995,6 +13154,11 @@ export interface components {
             /** Format: int32 */
             sortOrder: number;
             isActive: boolean;
+        };
+        UpdateDirectoryProfileRequest: {
+            category: components["schemas"]["BusinessCategory"];
+            description?: string | null;
+            listed: boolean;
         };
         UpdateEmployeeCommand: {
             /** Format: uuid */

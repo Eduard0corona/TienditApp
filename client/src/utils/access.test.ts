@@ -87,7 +87,7 @@ describe('getLandingPath', () => {
     expect(getLandingPath(user('TENANT_ADMIN'), FOOD_WITH_KITCHEN)).toBe('/dashboard');
     expect(getLandingPath(user('STAFF', ['ManageOrders']), FOOD_WITH_KITCHEN)).toBe('/sell');
     expect(getLandingPath(user('KITCHEN', ['ManageServiceBoard']), FOOD_WITH_KITCHEN)).toBe('/kitchen');
-    expect(getLandingPath(user('CUSTOMER'), null)).toBe('/mis-pedidos');
+    expect(getLandingPath(user('CUSTOMER'), null)).toBe('/explorar');
     expect(getLandingPath(user('STAFF', []), FOOD_WITH_KITCHEN)).toBe('/profile');
   });
 });

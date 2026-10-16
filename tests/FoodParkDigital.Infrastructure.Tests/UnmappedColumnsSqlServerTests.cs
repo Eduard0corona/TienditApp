@@ -211,7 +211,8 @@ public class UnmappedColumnsSqlServerTests
             IsActive = true
         };
 
-        await using var context = database.CreateContext(tenant.Id);
+        // Without what Fase 24A added: the database is migrated to an earlier migration.
+        await using var context = BeforeBusinessDirectory.CreateContext(database, tenant.Id);
         context.AddRange(tenant, category, product);
         context.Users.Add(user);
         context.CustomerProfiles.Add(new CustomerProfile(user.Id, "5512345678", "Ana", "Ana", null));

@@ -120,6 +120,6 @@ export function getLandingPath(user: UserProfileDto | null, capabilities: number
   if (access.appointments) return '/appointments';
   if (access.inventory) return '/inventory';
   if (access.dashboard) return '/dashboard';
-  if (access.myOrders) return '/mis-pedidos';
+  if (access.myOrders) return '/explorar';
   return '/profile';
 }

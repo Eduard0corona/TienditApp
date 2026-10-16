@@ -1,0 +1,104 @@
+/* The customer's frame: the brand and where to go, on one row; the nav wraps under it on a narrow phone. */
+.cl-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--ct-body-bg);
+}
+
+.cl-skip {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1100;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--ct-secondary-bg);
+}
+
+.cl-header {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  border-bottom: 1px solid var(--ct-border-color);
+  background: var(--ct-secondary-bg);
+}
+
+.cl-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0.5rem 1rem;
+}
+
+.cl-brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--ta-touch);
+  text-decoration: none;
+}
+
+.cl-nav {
+  display: flex;
+  order: 3;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.cl-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+@media (min-width: 640px) {
+  .cl-nav {
+    order: 0;
+    width: auto;
+  }
+}
+
+.cl-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: var(--ta-touch);
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  color: var(--ct-body-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cl-link:hover {
+  background: var(--ct-tertiary-bg);
+  color: var(--ct-body-color);
+}
+
+.cl-link.active {
+  background: var(--ct-primary-bg-subtle);
+  color: var(--ct-primary-text-emphasis);
+}
+
+.cl-main {
+  flex: 1 0 auto;
+}
+
+/* A page of the frame without layout of its own (Mis pedidos): the width and margins of Explorar. */
+.cl-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.cl-footer {
+  padding: 1.25rem 1rem;
+  border-top: 1px solid var(--ct-border-color);
+  color: var(--ct-secondary-color);
+  font-size: 0.9rem;
+  text-align: center;
+}

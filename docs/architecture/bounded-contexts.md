@@ -4,7 +4,7 @@ Los límites son módulos lógicos dentro de un monolito y una base compartida; 
 
 | Contexto | Evidencia actual | Responsabilidad actual y límites |
 |---|---|---|
-| Tenant y negocio | `Tenants`, `TenantSettings`, `TenantUser`, `WhatsAppConfig` | Alta/configuración del negocio, tipo, capabilities y membresía. |
+| Tenant y negocio | `Tenants`, `TenantSettings`, `TenantUser`, `WhatsAppConfig` | Alta/configuración del negocio, tipo, capabilities y membresía. Desde la Fase 24A, cómo se ve en Explorar (categoría, descripción y «Aparecer en Explorar»). Explorar lee de cada negocio lo que su menú ya muestra, con la regla del menú para los pedidos ([ADR 0021](../adr/0021-business-directory.md)). |
 | Identity y acceso | `ApplicationUser`, `ApplicationRole`, JWT, refresh token, 2FA | Autenticación global, tenant activo, roles y tokens. |
 | Sucursales y empleados | `Branch`, módulo `Employees` | Desde la Fase 3 la sucursal es un agregado propio (`Branch`): ventas (`Order.BranchId`), cajas (`CashSession.BranchId`) y ubicaciones de inventario (`InventoryLocation.BranchId`) le pertenecen. Desde la Fase 22A dice cómo atiende (`ServiceMode`): una sucursal solo a domicilio no publica su dirección ([ADR 0016](../adr/0016-delivery-only-branches.md)). Empleados como `TenantUser` + Identity. Ver [sucursales y reportes](../domain/branches-and-reporting.md). |
 | Catálogo | `Category`, `Product`, templates; desde la Fase 22F-2, `ProductPlatformPrice` y `ProductOptionPlatformPrice` | Productos/servicios, unidades, disponibilidad, imágenes y agenda de disponibilidad. El precio de cada producto y opción en la app de cada plataforma de reparto, que solo usan los pedidos de esa plataforma ([ADR 0014](../adr/0014-delivery-platform-prices.md)). |

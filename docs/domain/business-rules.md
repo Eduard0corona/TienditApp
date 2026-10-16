@@ -163,6 +163,22 @@ Una cita puede ser en la casa del cliente, con el cargo por visita de su zona, y
   - El borrador de CFDI lleva el concepto «Cargo por visita a domicilio» con la clave del SAT del primer servicio de la venta (o 01010101), la unidad E48 y el aviso de confirmarla con el contador.
   - `OrderCreated` guarda el cargo por visita.
 
+## Explorar (Fase 24A)
+
+Los clientes encuentran los negocios por categoría y compran en el menú de cada uno ([ADR 0021](../adr/0021-business-directory.md)).
+
+- **Quién aparece:** un negocio activo, con el menú en línea publicado (Solo menú o Menú con pedidos), con «Aparecer en Explorar» encendido (empieza así) y con al menos un producto que su menú muestra: disponible, que no sea un servicio y en una categoría activa del negocio.
+- **Si recibe pedidos ahora:** la misma regla del menú y de su pedido (`OnlineOrderAvailability`). El menú tiene pedidos, el negocio está abierto por su horario y sus días especiales, y hay una caja abierta en su sucursal principal. La tarjeta dice «Pide en línea», «Pedidos en línea en pausa» (abierto sin caja), «Cerrado · abre …» o «Solo menú». Explorar no tiene mesa: un negocio cerrado sale cerrado. El menú y su pedido responden al momento; Explorar, sobre una foto de hasta 30 segundos.
+- **Qué dice de cada negocio:** nombre, logo, categoría, descripción, ciudad de la sucursal principal (nunca la calle), si entrega a domicilio y si está cerrado. Nunca lleva el contacto ni los datos fiscales, y una cocina que solo entrega dice «Solo a domicilio» en lugar de su ciudad.
+- **Orden:** primero los que reciben pedidos, luego los abiertos y al final los cerrados, cada grupo por nombre. Se busca por palabras del nombre, la descripción o la ciudad (nunca la de una cocina que solo entrega), sin acentos ni mayúsculas, hasta 60 letras («Busca con 60 letras como máximo.»), y se pagina de 24 en 24 (hasta 48).
+- **Categorías:** once fijas (Comida, Abarrotes, Farmacia y salud, Ropa y accesorios, Electrónica, Ferretería y hogar, Papelería, Belleza y bienestar, Autos, Servicios, Otros). Cada negocio tiene una, que el dueño elige. Empieza con la de su giro, comparado sin acentos ni mayúsculas, o la de su tipo: comida va a Comida, un servicio a Servicios y una tienda a Otros. Sigue al giro mientras el dueño no la decida: cuando elige otra o guarda su tarjeta, aunque la deje igual, un giro nuevo solo la sugiere.
+- **Lo decide el dueño** (o un admin) en Configuración › Negocio › «Cómo te ven en TienditApp»:
+  - Elige la categoría y escribe una descripción de un renglón (sin saltos ni separadores de línea), de hasta 160 caracteres. Al guardar se recorta, y vacía se borra. Los mensajes de error son «La descripción admite como máximo 160 caracteres.», «La descripción va en un solo renglón.» y «La categoría no existe.».
+  - Enciende o apaga «Aparecer en Explorar». Ocultarse no apaga el menú: el enlace y el QR siguen abriéndolo.
+  - La tarjeta dice si aparece y, si no, por qué: ocultó el negocio, no ha publicado el menú, el menú no muestra productos o el negocio no está activo.
+  - Cada cambio queda en la bitácora (`DirectoryProfileUpdated`) con la categoría y «Aparecer» de antes y de después, y si la descripción cambió, sin el texto.
+- **Quién entra por `/`:** los visitantes y los clientes llegan a Explorar. El equipo de un negocio entra a su trabajo, y desde Explorar regresa con «Mi negocio».
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

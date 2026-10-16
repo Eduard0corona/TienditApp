@@ -12,6 +12,7 @@ using FoodParkDigital.Application.Finance;
 using FoodParkDigital.Application.Identity.Services;
 using FoodParkDigital.Application.Inventory;
 using FoodParkDigital.Application.Messaging;
+using FoodParkDigital.Application.PublicDirectory;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,6 +62,9 @@ public static class DependencyInjection
         services.AddScoped<ICustomerLookupService, CustomerLookupService>();
         services.AddScoped<ITemporaryCustomerClaimService, TemporaryCustomerClaimService>();
         services.AddScoped<IAiAgentAutoReplyService, AiAgentAutoReplyService>();
+
+        // Explorar: one snapshot of the businesses it lists per instance, rebuilt at most every 30 seconds.
+        services.AddSingleton<PublicDirectoryCache>();
 
         // Durable handlers of domain events, run by the outbox dispatcher (one registration per event type).
         foreach (var type in assembly.GetTypes().Where(t => t is { IsClass: true, IsAbstract: false }))

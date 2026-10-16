@@ -36,6 +36,13 @@ public class TenantSettingsConfiguration : IEntityTypeConfiguration<TenantSettin
             .HasDefaultValue(HomeVisitRules.DefaultTravelMinutes)
             .ValueGeneratedNever()
             .IsRequired();
+        // Fase 24A (ADR 0021): every business starts listed in Explorar while its menu is published; the database default
+        // fills the rows that exist and those the previous version saves while this one is published. EF always writes the
+        // value.
+        builder.Property(s => s.ListedInDirectory)
+            .HasDefaultValue(true)
+            .ValueGeneratedNever()
+            .IsRequired();
         // Null until the owner sets the hours: the version this one replaces does not map it.
         builder.Property(s => s.OpeningHours)
             .HasConversion(OpeningHoursStorage.Converter)

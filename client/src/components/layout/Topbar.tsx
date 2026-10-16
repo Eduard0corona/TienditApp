@@ -55,8 +55,8 @@ export default function Topbar({ onToggleSidebar, isMobileMenuOpen, onOpenSearch
   const [autoSwitchAttempted, setAutoSwitchAttempted] = useState(false);
   const [creatingBusiness, setCreatingBusiness] = useState(false);
   // Employees and owners may open a business of their own; a customer account is customer everywhere.
-  const canOpenBusiness = !!user && user.role !== 'CUSTOMER' && user.role !== 'SUPER_ADMIN';
-  const isBusinessMember = !!tenant && !!user && user.role !== 'CUSTOMER' && user.role !== 'SUPER_ADMIN';
+  const canOpenBusiness = !!user && !access.myOrders && !access.platform;
+  const isBusinessMember = !!tenant && canOpenBusiness;
 
   const selectedTenantId = useMemo(
     () => tenant?.id ?? user?.tenantId ?? '',

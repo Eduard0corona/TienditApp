@@ -52,16 +52,23 @@ public static class BusinessHours
         DateTimeOffset utcNow,
         CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(utcNow, timeZone));
-        // Yesterday's opening may still run tonight, and no date can be marked further ahead than this.
-        var since = today.AddDays(-1);
-        var until = today.AddDays(SpecialDay.MaxDaysAhead);
+        var (since, until) = SpecialDaysWindow(timeZone, utcNow);
         var specialDays = await context.SpecialDays
             .AsNoTracking()
             .Where(day => day.TenantId == tenantId && day.Date >= since && day.Date <= until)
             .OrderBy(day => day.Date)
             .ToListAsync(cancellationToken);
         return At(weekly, specialDays, TenantDateTimeResolver.Resolve(timeZone), utcNow);
+    }
+
+    /// <summary>
+    /// The dates of the special days the hours of a business need at an instant, in its time zone: from yesterday, whose
+    /// opening may still run tonight, to the furthest a date can be marked ahead.
+    /// </summary>
+    public static (DateOnly Since, DateOnly Until) SpecialDaysWindow(string? timeZone, DateTimeOffset utcNow)
+    {
+        var today = DateOnly.FromDateTime(TenantDateTimeResolver.LocalNow(utcNow, timeZone));
+        return (today.AddDays(-1), today.AddDays(SpecialDay.MaxDaysAhead));
     }
 
     /// <summary>The hours of a business at an instant, from its special days from yesterday on.</summary>

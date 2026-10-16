@@ -20,8 +20,9 @@ export default function MyOrders() {
   });
   const orders = ordersQuery.data?.items ?? [];
 
+  // Inside the customer's frame (CustomerLayout), which has no margins of its own.
   return (
-    <>
+    <div className="cl-page">
       <PageTitle title="Mis pedidos" />
 
       {ordersQuery.isLoading && (
@@ -97,6 +98,6 @@ export default function MyOrders() {
           </button>
         </div>
       )}
-    </>
+    </div>
   );
 }

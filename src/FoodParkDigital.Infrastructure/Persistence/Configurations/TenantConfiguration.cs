@@ -1,4 +1,5 @@
 using FoodParkDigital.Domain.Tenants.Entities;
+using FoodParkDigital.Domain.Tenants.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,7 +9,11 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 {
     public void Configure(EntityTypeBuilder<Tenant> builder)
     {
-        builder.ToTable("Tenants");
+        builder.ToTable("Tenants", table =>
+        {
+            table.HasCheckConstraint("CK_Tenants_DirectoryCategory", "[DirectoryCategory] >= 0 AND [DirectoryCategory] <= 10");
+            table.HasCheckConstraint("CK_Tenants_PublicDescription", "[PublicDescription] IS NULL OR LEN([PublicDescription]) > 0");
+        });
         builder.HasKey(t => t.Id);
 
         builder.Property(t => t.Name).HasMaxLength(200).IsRequired();
@@ -18,6 +23,15 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.ContactEmail).HasMaxLength(256).IsRequired();
         builder.Property(t => t.ContactPhone).HasMaxLength(20);
         builder.Property(t => t.LogoUrl).HasMaxLength(500);
+        // Fase 24A (ADR 0021): the migration gives each existing business the category of its giro or its type; the
+        // database default fills the businesses the previous version opens while this one is published. EF always writes
+        // the value.
+        builder.Property(t => t.DirectoryCategory)
+            .HasConversion<int>()
+            .HasDefaultValue(BusinessCategory.Other)
+            .ValueGeneratedNever()
+            .IsRequired();
+        builder.Property(t => t.PublicDescription).HasMaxLength(Tenant.MaxPublicDescriptionLength);
 
         // MX Business fields
         builder.Property(t => t.Rfc).HasMaxLength(13);
