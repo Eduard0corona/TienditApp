@@ -10,8 +10,9 @@ namespace FoodParkDigital.Infrastructure.Tests.Support;
 
 /// <summary>
 /// The model without what Fase 22E added (the travel time of the settings; the visit, the sale and the version of an
-/// appointment; the visit charge of an order): the app as deployed before it, and what a test needs to seed or read those
-/// tables on a database migrated to an earlier migration, where those columns and tables do not exist yet.
+/// appointment; the visit charge of an order) nor what came after it (<see cref="BeforeBusinessDirectory"/>): the app as
+/// deployed before it, and what a test needs to seed or read those tables on a database migrated to an earlier migration,
+/// where those columns and tables do not exist yet.
 /// </summary>
 internal static class BeforeHomeVisits
 {
@@ -28,6 +29,7 @@ internal static class BeforeHomeVisits
         modelBuilder.Ignore<AppointmentVisit>();
         modelBuilder.Ignore<OrderVisitCharge>();
         modelBuilder.Entity<TenantSettings>().Ignore(s => s.HomeVisitTravelMinutes);
+        BeforeBusinessDirectory.Ignore(modelBuilder);
     }
 
     private sealed class Context(

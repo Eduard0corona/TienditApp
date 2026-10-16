@@ -4153,6 +4153,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("DirectoryCategory")
+                        .HasColumnType("int")
+                        .HasDefaultValue(10);
+
                     b.Property<string>("Industry")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
@@ -4169,6 +4173,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PublicDescription")
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
 
                     b.Property<string>("Rfc")
                         .HasMaxLength(13)
@@ -4197,7 +4205,12 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("Slug")
                         .IsUnique();
 
-                    b.ToTable("Tenants", (string)null);
+                    b.ToTable("Tenants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Tenants_DirectoryCategory", "[DirectoryCategory] >= 0 AND [DirectoryCategory] <= 10");
+
+                            t.HasCheckConstraint("CK_Tenants_PublicDescription", "[PublicDescription] IS NULL OR LEN([PublicDescription]) > 0");
+                        });
                 });
 
             modelBuilder.Entity("FoodParkDigital.Domain.Tenants.Entities.TenantSettings", b =>
@@ -4237,6 +4250,10 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("InsufficientStockPolicy")
                         .HasColumnType("int");
+
+                    b.Property<bool>("ListedInDirectory")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("MaxConcurrentOrders")
                         .HasColumnType("int");

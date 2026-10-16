@@ -325,7 +325,7 @@ public class HomeVisitsSqlServerTests
         // Rolling back again does nothing, and forward again the tables are back, empty, and the settings start at 30.
         await MigrateAsync(database, MigrationBefore);
         await MigrateAsync(database, Migration);
-        await using var forward = database.CreateContext(tenant.Id);
+        await using var forward = BeforeBusinessDirectory.CreateContext(database, tenant.Id);
         Assert.Empty(await forward.AppointmentVisits.ToListAsync());
         Assert.Empty(await forward.OrderVisitCharges.ToListAsync());
         Assert.Null((await forward.Appointments.SingleAsync()).SaleOrderId);
@@ -384,7 +384,8 @@ public class HomeVisitsSqlServerTests
         var tenant = NewTenant("Barbería de Luis");
         var other = NewTenant("Estética vecina");
         const TenantCapability Capabilities = TenantCapability.Service | TenantCapability.Appointments;
-        await using var seed = database.CreateContext();
+        // Without what Fase 24A added: a test seeds a database migrated to this migration.
+        await using var seed = BeforeBusinessDirectory.CreateContext(database);
         seed.AddRange(tenant, other, new TenantSettings(tenant.Id, Capabilities), new TenantSettings(other.Id, Capabilities));
         await seed.SaveChangesAsync();
         return (tenant, other);

@@ -156,6 +156,17 @@ public class TenantSettings : BaseEntity, ITenantScoped
         OnlineMenuMode = mode;
     }
 
+    /// <summary>
+    /// Whether Explorar lists the business while its menu is published (ADR 0021): on until the owner hides it. A menu
+    /// that is off is never listed, whatever this says.
+    /// </summary>
+    public bool ListedInDirectory { get; private set; } = true;
+
+    public void SetDirectoryListing(bool listed)
+    {
+        ListedInDirectory = listed;
+    }
+
     /// <summary>The colors of the business in its team's app and its public menu: TienditApp's until the owner picks one.</summary>
     public BusinessTheme Theme { get; private set; } = BusinessTheme.Nopal;
 
