@@ -370,11 +370,11 @@ public class GetPublicMenuQueryHandler : IRequestHandler<GetPublicMenuQuery, Pub
         var drawerOpen = ordersOn && await OrderCashService.HasOpenDrawerAtBranchAsync(
             _context, tenant.Id, mainBranch?.Id, cancellationToken);
         // Closed, it takes no pickup or delivery orders; a customer at one of its tables still orders, except on a closed
-        // special day.
-        var acceptsOrders = drawerOpen
-            && (!closed
-                || (PublicOrderRules.TableOverridesClosure(hours!.Status)
-                    && await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken)));
+        // special day. The same rule as its orders and Explorar.
+        var seated = drawerOpen
+            && OnlineOrderAvailability.TableMayOrderWhileClosed(hours)
+            && await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.Table, cancellationToken);
+        var acceptsOrders = OnlineOrderAvailability.Gate(settings.OnlineMenuMode, hours, drawerOpen, seated) == OnlineOrderGate.Open;
 
         return new PublicMenuDto
         {
@@ -538,19 +538,22 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         _tenantService.SetTenant(tenant.Id);
 
         // Closed, the business takes no pickup or delivery orders; a customer at one of its tables is already there,
-        // except on a closed special day. The same rule as the menu (GetPublicMenuQuery).
+        // except on a closed special day. Online orders arrive at the default branch of the business, and only while a
+        // drawer is open there. The same rule as the menu and Explorar.
         var now = _dateTimeProvider.UtcNow;
         var hours = await BusinessHours.ReadAsync(
             _context, tenant.Id, tenant.Settings.OpeningHours, tenant.Settings.TimeZone, now, cancellationToken);
-        if (hours is { Status.IsOpen: false }
-            && (!PublicOrderRules.TableOverridesClosure(hours.Status)
-                || !await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken)))
-            return Result.Failure<PublicOrderReceiptDto>(BusinessHoursText.ClosedMessage(hours));
-
-        // Online orders arrive at the default branch of the business, and only while a drawer is open there.
+        var seated = OnlineOrderAvailability.TableMayOrderWhileClosed(hours)
+            && await PublicMenuTables.IsSeatedAsync(_context, tenant.Id, request.TableLabel, cancellationToken);
         var branchId = await BranchRules.DefaultBranchIdAsync(_context, tenant.Id, cancellationToken);
-        if (!await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken))
-            return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
+        var drawerOpen = await OrderCashService.HasOpenDrawerAtBranchAsync(_context, tenant.Id, branchId, cancellationToken);
+        switch (OnlineOrderAvailability.Gate(tenant.Settings.OnlineMenuMode, hours, drawerOpen, seated))
+        {
+            case OnlineOrderGate.Closed:
+                return Result.Failure<PublicOrderReceiptDto>(BusinessHoursText.ClosedMessage(hours!));
+            case OnlineOrderGate.Paused:
+                return Result.Failure<PublicOrderReceiptDto>(OrdersPausedMessage);
+        }
 
         // A kitchen without premises that delivers has nowhere to pick an order up: it goes to an address, or to a table
         // of the business in use (anyone can type a table into the link). Without delivery zones, orders arrive as before

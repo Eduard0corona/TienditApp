@@ -79,6 +79,11 @@ public class Tenant : AuditableEntity
         string? taxRegime,
         Address? address)
     {
+        // The category in Explorar follows the giro while it is still the one the giro gave: the owner has not picked
+        // another (the sign-up and the guided setup write the giro after the business exists).
+        if (DirectoryCategory == BusinessCategoryDefaults.Suggest(Industry, BusinessType))
+            DirectoryCategory = BusinessCategoryDefaults.Suggest(industry, BusinessType);
+
         Rfc = rfc;
         LegalName = legalName;
         Industry = industry;

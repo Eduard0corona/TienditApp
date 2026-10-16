@@ -78,6 +78,25 @@ public class BusinessDirectoryTests
     }
 
     [Fact]
+    public void Giro_ShouldGiveTheCategory_UntilTheOwnerPicksAnother()
+    {
+        var tenant = new Tenant("Ferretería Don Beto", "don-beto", BusinessType.Retail, "a@b.mx");
+
+        // The sign-up and the guided setup write the giro after the business exists.
+        tenant.SetBusinessInfo(null, null, "Ferretería", null, null);
+        Assert.Equal(BusinessCategory.Hardware, tenant.DirectoryCategory);
+        tenant.SetBusinessInfo(null, null, "Papelería", null, null);
+        Assert.Equal(BusinessCategory.Stationery, tenant.DirectoryCategory);
+        tenant.SetBusinessInfo(null, null, null, null, null);
+        Assert.Equal(BusinessCategory.Other, tenant.DirectoryCategory);
+
+        // Once the owner picks another, the giro no longer moves it.
+        tenant.SetDirectoryProfile(BusinessCategory.Groceries, null);
+        tenant.SetBusinessInfo(null, null, "Ferretería", null, null);
+        Assert.Equal(BusinessCategory.Groceries, tenant.DirectoryCategory);
+    }
+
+    [Fact]
     public void SetDirectoryProfile_ShouldKeepTheCategoryAndTheTrimmedDescription()
     {
         var tenant = new Tenant("Taquería El Güero", "el-guero", BusinessType.Food, "a@b.mx");

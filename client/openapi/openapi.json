@@ -8956,6 +8956,69 @@
         }
       }
     },
+    "/api/v1/public/directory": {
+      "get": {
+        "tags": [
+          "PublicDirectory"
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/BusinessCategory"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 24
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDirectoryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDirectoryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDirectoryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/menu/{slug}": {
       "get": {
         "tags": [
@@ -10614,6 +10677,81 @@
         }
       }
     },
+    "/api/v1/auth/my-tenant/directory": {
+      "get": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryProfileDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryProfileDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryProfileDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "TenantSetup"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDirectoryProfileRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDirectoryProfileRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDirectoryProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryProfileDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryProfileDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryProfileDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/my-tenant/opening-hours": {
       "put": {
         "tags": [
@@ -12063,6 +12201,36 @@
         "x-enum-varnames": [
           "Premises",
           "DeliveryOnly"
+        ]
+      },
+      "BusinessCategory": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Food",
+          "Groceries",
+          "Health",
+          "Apparel",
+          "Electronics",
+          "Hardware",
+          "Stationery",
+          "Beauty",
+          "Automotive",
+          "Services",
+          "Other"
         ]
       },
       "BusinessTheme": {
@@ -16011,6 +16179,52 @@
           }
         },
         "additionalProperties": false
+      },
+      "DirectoryProfileDto": {
+        "required": [
+          "category",
+          "listed",
+          "suggestedCategory",
+          "visibility"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/BusinessCategory"
+          },
+          "suggestedCategory": {
+            "$ref": "#/components/schemas/BusinessCategory"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "listed": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/DirectoryVisibility"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DirectoryVisibility": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Shown",
+          "HiddenByOwner",
+          "MenuOff",
+          "NoProducts",
+          "Inactive"
+        ]
       },
       "Disable2FARequest": {
         "required": [
@@ -20655,6 +20869,144 @@
         },
         "additionalProperties": false
       },
+      "PublicDirectoryBusinessDto": {
+        "required": [
+          "acceptsOrders",
+          "category",
+          "deliveryAvailable",
+          "deliveryOnly",
+          "name",
+          "ordersPaused",
+          "slug",
+          "theme"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "$ref": "#/components/schemas/BusinessCategory"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "theme": {
+            "$ref": "#/components/schemas/BusinessTheme"
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "deliveryOnly": {
+            "type": "boolean"
+          },
+          "deliveryAvailable": {
+            "type": "boolean"
+          },
+          "acceptsOrders": {
+            "type": "boolean"
+          },
+          "ordersPaused": {
+            "type": "boolean"
+          },
+          "statusLabel": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusDetail": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDirectoryBusinessDtoPaginatedList": {
+        "required": [
+          "hasNextPage",
+          "hasPreviousPage",
+          "items",
+          "pageNumber",
+          "totalCount",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicDirectoryBusinessDto"
+            }
+          },
+          "pageNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "hasPreviousPage": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "hasNextPage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDirectoryCategoryDto": {
+        "required": [
+          "category",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/BusinessCategory"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDirectoryDto": {
+        "required": [
+          "businesses",
+          "categories"
+        ],
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicDirectoryCategoryDto"
+            }
+          },
+          "businesses": {
+            "$ref": "#/components/schemas/PublicDirectoryBusinessDtoPaginatedList"
+          }
+        },
+        "additionalProperties": false
+      },
       "PublicMenuCategoryDto": {
         "required": [
           "id",
@@ -23871,6 +24223,26 @@
             "format": "int32"
           },
           "isActive": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateDirectoryProfileRequest": {
+        "required": [
+          "category",
+          "listed"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/BusinessCategory"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "listed": {
             "type": "boolean"
           }
         },

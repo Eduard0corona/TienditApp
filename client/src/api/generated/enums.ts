@@ -17,6 +17,21 @@ export const BranchServiceMode = {
 } as const;
 export type BranchServiceMode = (typeof BranchServiceMode)[keyof typeof BranchServiceMode];
 
+export const BusinessCategory = {
+  Food: 0,
+  Groceries: 1,
+  Health: 2,
+  Apparel: 3,
+  Electronics: 4,
+  Hardware: 5,
+  Stationery: 6,
+  Beauty: 7,
+  Automotive: 8,
+  Services: 9,
+  Other: 10,
+} as const;
+export type BusinessCategory = (typeof BusinessCategory)[keyof typeof BusinessCategory];
+
 export const BusinessTheme = {
   Nopal: 0,
   Talavera: 1,
@@ -98,6 +113,15 @@ export const DeliveryCourier = {
   Paquetenvia: 1,
 } as const;
 export type DeliveryCourier = (typeof DeliveryCourier)[keyof typeof DeliveryCourier];
+
+export const DirectoryVisibility = {
+  Shown: 0,
+  HiddenByOwner: 1,
+  MenuOff: 2,
+  NoProducts: 3,
+  Inactive: 4,
+} as const;
+export type DirectoryVisibility = (typeof DirectoryVisibility)[keyof typeof DirectoryVisibility];
 
 export const InsufficientStockPolicy = {
   Block: 0,

@@ -45,7 +45,8 @@ public class AuthorizationBehaviorTests
         Assert.Equal(
         [
             "AcceptInvitationCommand", "ApplyWhatsAppStatusesCommand", "ChangeUnconfirmedPhoneCommand", "ConfirmEmailCommand", "ConfirmPhoneCommand",
-            "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicDeliveryQuoteQuery", "GetPublicMenuQuery",
+            "ForgotPasswordBySmsCommand", "ForgotPasswordCommand", "GetInvitationQuery", "GetPublicDeliveryQuoteQuery", "GetPublicDirectoryQuery",
+            "GetPublicMenuQuery",
             "Login2FACommand", "LoginCommand", "LogoutCommand", "PlacePublicOrderCommand", "ProcessInboundMessageCommand", "RefreshTokenCommand",
             "RegisterBusinessCommand", "RegisterCustomerCommand", "ResendConfirmationEmailCommand", "ResendPhoneConfirmationCommand",
             "ResetPasswordCommand", "ResetPasswordWithSmsCodeCommand", "VerifyWhatsAppWebhookTokenQuery"

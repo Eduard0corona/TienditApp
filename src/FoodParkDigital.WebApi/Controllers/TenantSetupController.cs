@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Billing;
 using FoodParkDigital.Application.Catalog.Commands;
 using FoodParkDigital.Application.OnlineMenu;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.Commands;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Application.Tenants.Queries;
@@ -81,6 +82,28 @@ public class TenantSetupController : ControllerBase
         return Ok(result.Value);
     }
 
+    /// <summary>«Cómo te ven en TienditApp»: its category, its description and whether it appears in Explorar.</summary>
+    [HttpGet("directory")]
+    public async Task<ActionResult<DirectoryProfileDto>> GetDirectoryProfile(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetDirectoryProfileQuery(), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status404NotFound, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Changes how the business shows in Explorar; Explorar shows it within 30 seconds.</summary>
+    [HttpPut("directory")]
+    public async Task<ActionResult<DirectoryProfileDto>> UpdateDirectoryProfile(
+        [FromBody] UpdateDirectoryProfileRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateDirectoryProfileCommand(request.Category, request.Description, request.Listed), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
     /// <summary>When the business attends: the public menu says whether it is open and when it opens or closes.</summary>
     [HttpPut("opening-hours")]
     public async Task<ActionResult<OpeningHoursDto>> UpdateOpeningHours([FromBody] UpdateOpeningHoursRequest request, CancellationToken cancellationToken)
@@ -151,6 +174,11 @@ public class TenantSetupController : ControllerBase
 }
 
 public record UpdateOnlineMenuRequest(OnlineMenuMode Mode);
+
+/// <param name="Category">Where Explorar lists the business.</param>
+/// <param name="Description">One line under its name; empty removes it.</param>
+/// <param name="Listed">Appear in Explorar while the menu is published.</param>
+public record UpdateDirectoryProfileRequest(BusinessCategory Category, string? Description, bool Listed);
 
 public record UpdateBusinessThemeRequest(BusinessTheme Theme);
 
