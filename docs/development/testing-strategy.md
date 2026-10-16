@@ -372,21 +372,23 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
 
 
 - Fase 24A, Explorar ([ADR 0021](../adr/0021-business-directory.md)):
-  - **Domain:** `BusinessDirectoryTests` (29 pruebas):
+  - **Domain:** `BusinessDirectoryTests` (32 pruebas):
     - los números guardados de las categorías y `BusinessCategoryDefaults.Suggest` para cada giro de la lista con cada tipo, sin acentos, mayúsculas ni espacios, y con el tipo cuando el giro no es de la lista;
-    - la categoría sigue al giro hasta que el dueño elige otra;
-    - la descripción se recorta, cabe en 160 caracteres y va en un solo renglón, y un error no cambia nada;
+    - la categoría sigue al giro hasta que el dueño elige otra o decide la suya, y entonces un giro nuevo (también uno escrito a mano) no la mueve;
+    - la descripción se recorta, cabe en 160 caracteres y va en un solo renglón (sin tabuladores, saltos ni separadores de línea o de párrafo), y un error no cambia nada;
     - «Aparecer en Explorar» empieza encendido.
-  - **Application:** `PublicDirectoryTests` (13 pruebas):
+  - **Application:** `PublicDirectoryTests` (15 pruebas):
     - quién aparece y quién no: oculto, menú apagado, sin productos, solo servicios, categoría inactiva y suspendido;
     - cada tarjeta responde lo mismo que el menú de su negocio, con la caja en la principal, en otra sucursal y de antes de las sucursales, y cerrado por horario;
     - el orden;
-    - la ciudad, salvo en una cocina que solo entrega;
+    - la ciudad, salvo en una cocina que solo entrega, también al buscarla;
     - la búsqueda sin acentos dentro de la categoría y por páginas, con conteos que no dependen de la búsqueda;
     - la foto de 30 segundos, también con el reloj que va hacia atrás;
     - la regla `OnlineOrderAvailability`, con la mesa fuera del horario y en un día cerrado;
     - el dueño: un cambio auditado sin el texto de la descripción, nada al guardar igual, y por qué no aparece;
-    - los validadores.
+    - los validadores, con la página 1001 y los separadores de línea.
+
+    `UpdateMyTenantCommandTests`: el giro mueve la categoría hasta que el dueño guarda su tarjeta, aunque la deje en la que el giro le dio; después, un giro nuevo solo la sugiere.
 
     Las pruebas del menú en línea (`OnlineMenuTests`, `SpecialDaysMenuTests`, `OpeningHoursFlowTests`, `HomeDeliveryFlowTests`) siguen iguales con la regla compartida. `AuthorizationBehaviorTests` suma `GetPublicDirectoryQuery` a los anónimos.
   - **SQL Server:**

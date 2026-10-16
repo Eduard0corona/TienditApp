@@ -97,6 +97,18 @@ public class BusinessDirectoryTests
     }
 
     [Fact]
+    public void Giro_ShouldNotMoveTheCategory_OnceTheOwnerDecidedIt()
+    {
+        var tenant = new Tenant("Ferretería Don Beto", "don-beto", BusinessType.Retail, "a@b.mx");
+        tenant.SetBusinessInfo(null, null, "Ferretería", null, null);
+
+        // The owner kept the category the giro gave: a new giro, here one written by hand, only suggests another.
+        tenant.SetBusinessInfo(null, null, "Ferretería y tlapalería", null, null, keepDirectoryCategory: true);
+        Assert.Equal(BusinessCategory.Hardware, tenant.DirectoryCategory);
+        Assert.Equal("Ferretería y tlapalería", tenant.Industry);
+    }
+
+    [Fact]
     public void SetDirectoryProfile_ShouldKeepTheCategoryAndTheTrimmedDescription()
     {
         var tenant = new Tenant("Taquería El Güero", "el-guero", BusinessType.Food, "a@b.mx");

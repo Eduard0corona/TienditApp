@@ -80,16 +80,21 @@ public class Tenant : AuditableEntity
         LogoUrl = logoUrl;
     }
 
+    /// <param name="keepDirectoryCategory">
+    /// The owner already decided how the business shows in Explorar: a new giro then only suggests a category, also when
+    /// the current one is the one the old giro gave.
+    /// </param>
     public void SetBusinessInfo(
         string? rfc,
         string? legalName,
         string? industry,
         string? taxRegime,
-        Address? address)
+        Address? address,
+        bool keepDirectoryCategory = false)
     {
-        // The category in Explorar follows the giro while it is still the one the giro gave: the owner has not picked
-        // another (the sign-up and the guided setup write the giro after the business exists).
-        if (DirectoryCategory == BusinessCategoryDefaults.Suggest(Industry, BusinessType))
+        // The category in Explorar follows the giro while it is still the one the giro gave and the owner has not
+        // decided it (the sign-up and the guided setup write the giro after the business exists).
+        if (!keepDirectoryCategory && DirectoryCategory == BusinessCategoryDefaults.Suggest(Industry, BusinessType))
             DirectoryCategory = BusinessCategoryDefaults.Suggest(industry, BusinessType);
 
         Rfc = rfc;

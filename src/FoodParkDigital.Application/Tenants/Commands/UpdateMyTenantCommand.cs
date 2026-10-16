@@ -6,9 +6,11 @@ using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Application.Tenants.DTOs;
 using FoodParkDigital.Domain.Audit.Entities;
 using FoodParkDigital.Domain.Common.ValueObjects;
+using FoodParkDigital.Domain.Tenants.Entities;
 using FoodParkDigital.Domain.Tenants.Enums;
 using FluentValidation;
 using MediatR;
@@ -129,7 +131,16 @@ public class UpdateMyTenantCommandHandler : IRequestHandler<UpdateMyTenantComman
                 request.State ?? "");
         }
 
-        tenant.SetBusinessInfo(request.Rfc, request.LegalName, request.Industry, request.TaxRegime, address);
+        // Once the owner saved how the business shows in Explorar, its category is theirs, also when it is the one the
+        // giro gives: a new giro only suggests another. It is the decision the rollback of AddBusinessDirectory keeps.
+        var tenantEntityId = tenant.Id.ToString();
+        var ownerDecidedDirectory = await _context.AuditLogs.AnyAsync(
+            a => a.TenantId == tenant.Id
+                && a.EntityName == nameof(Tenant)
+                && a.EntityId == tenantEntityId
+                && a.Action == UpdateDirectoryProfileCommandHandler.AuditAction,
+            cancellationToken);
+        tenant.SetBusinessInfo(request.Rfc, request.LegalName, request.Industry, request.TaxRegime, address, ownerDecidedDirectory);
 
         if (request.Capabilities is { } requestedModules)
         {
