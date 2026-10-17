@@ -23,6 +23,10 @@ public class AppointmentDto
     public Guid? SaleOrderId { get; set; }
     /// <summary>Its sale was cancelled: it is charged again with another one.</summary>
     public bool SaleCancelled { get; set; }
+    /// <summary>Who booked it (Fase 24D): the team, or the customer online.</summary>
+    public AppointmentChannel Channel { get; set; }
+    /// <summary>Its customer cancelled it from the account or the link (Fase 24D).</summary>
+    public bool CancelledByCustomer { get; set; }
 
     public static AppointmentDto From(Appointment appointment) => new()
     {
@@ -45,7 +49,9 @@ public class AppointmentDto
             ZoneName = appointment.Visit.ZoneName,
             Fee = appointment.Visit.Fee
         },
-        SaleOrderId = appointment.SaleOrderId
+        SaleOrderId = appointment.SaleOrderId,
+        Channel = appointment.Channel,
+        CancelledByCustomer = appointment.CancelledByCustomerAt != null
     };
 
     /// <summary><see cref="From"/> written for SQL, for the lists.</summary>
@@ -70,7 +76,9 @@ public class AppointmentDto
             ZoneName = x.Visit.ZoneName,
             Fee = x.Visit.Fee
         },
-        SaleOrderId = x.SaleOrderId
+        SaleOrderId = x.SaleOrderId,
+        Channel = x.Channel,
+        CancelledByCustomer = x.CancelledByCustomerAt != null
     };
 }
 

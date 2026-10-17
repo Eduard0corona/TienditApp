@@ -349,6 +349,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appointments/online-booking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineBookingSettingsDto"];
+                        "application/json": components["schemas"]["OnlineBookingSettingsDto"];
+                        "text/json": components["schemas"]["OnlineBookingSettingsDto"];
+                    };
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOnlineBookingSettingsCommand"];
+                    "text/json": components["schemas"]["UpdateOnlineBookingSettingsCommand"];
+                    "application/*+json": components["schemas"]["UpdateOnlineBookingSettingsCommand"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["OnlineBookingSettingsDto"];
+                        "application/json": components["schemas"]["OnlineBookingSettingsDto"];
+                        "text/json": components["schemas"]["OnlineBookingSettingsDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AppointmentDto"];
+                        "application/json": components["schemas"]["AppointmentDto"];
+                        "text/json": components["schemas"]["AppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appointments/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AppointmentDto"];
+                        "application/json": components["schemas"]["AppointmentDto"];
+                        "text/json": components["schemas"]["AppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/appointments/{id}": {
         parameters: {
             query?: never;
@@ -5010,6 +5152,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    scope?: components["schemas"]["MyAppointmentsScope"];
+                    pageNumber?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAppointmentDtoPaginatedList"];
+                        "application/json": components["schemas"]["CustomerAppointmentDtoPaginatedList"];
+                        "text/json": components["schemas"]["CustomerAppointmentDtoPaginatedList"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/appointments/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAppointmentDto"];
+                        "application/json": components["schemas"]["CustomerAppointmentDto"];
+                        "text/json": components["schemas"]["CustomerAppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/addresses": {
         parameters: {
             query?: never;
@@ -7598,6 +7820,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/appointments/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicAppointmentRequest"];
+                    "text/json": components["schemas"]["PublicAppointmentRequest"];
+                    "application/*+json": components["schemas"]["PublicAppointmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAppointmentDto"];
+                        "application/json": components["schemas"]["CustomerAppointmentDto"];
+                        "text/json": components["schemas"]["CustomerAppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/appointments/tracking/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PublicAppointmentRequest"];
+                    "text/json": components["schemas"]["PublicAppointmentRequest"];
+                    "application/*+json": components["schemas"]["PublicAppointmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CustomerAppointmentDto"];
+                        "application/json": components["schemas"]["CustomerAppointmentDto"];
+                        "text/json": components["schemas"]["CustomerAppointmentDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/directory": {
         parameters: {
             query?: never;
@@ -7717,6 +8025,132 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/booking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicBookingDto"];
+                        "application/json": components["schemas"]["PublicBookingDto"];
+                        "text/json": components["schemas"]["PublicBookingDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/booking/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    serviceId?: string;
+                    from?: string;
+                };
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicBookingSlotsDto"];
+                        "application/json": components["schemas"]["PublicBookingSlotsDto"];
+                        "text/json": components["schemas"]["PublicBookingSlotsDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/menu/{slug}/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    slug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RequestPublicAppointmentRequest"];
+                    "text/json": components["schemas"]["RequestPublicAppointmentRequest"];
+                    "application/*+json": components["schemas"]["RequestPublicAppointmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["PublicAppointmentReceiptDto"];
+                        "application/json": components["schemas"]["PublicAppointmentReceiptDto"];
+                        "text/json": components["schemas"]["PublicAppointmentReceiptDto"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -9813,6 +10247,11 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string | null;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        AppointmentChannel: 0 | 1;
         AppointmentDto: {
             /** Format: uuid */
             id: string;
@@ -9834,6 +10273,8 @@ export interface components {
             /** Format: uuid */
             saleOrderId?: string | null;
             saleCancelled: boolean;
+            channel: components["schemas"]["AppointmentChannel"];
+            cancelledByCustomer: boolean;
         };
         AppointmentDtoPaginatedList: {
             items: components["schemas"]["AppointmentDto"][];
@@ -10833,6 +11274,35 @@ export interface components {
             references?: string | null;
             isDefault: boolean;
         };
+        CustomerAppointmentDto: {
+            /** Format: uuid */
+            id: string;
+            serviceName: string;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            dateLabel: string;
+            timeLabel: string;
+            status: components["schemas"]["AppointmentStatus"];
+            statusLabel: string;
+            canCancel: boolean;
+            businessName: string;
+            businessSlug: string;
+            businessContactPhone?: string | null;
+            address?: string | null;
+        };
+        CustomerAppointmentDtoPaginatedList: {
+            items: components["schemas"]["CustomerAppointmentDto"][];
+            /** Format: int32 */
+            pageNumber: number;
+            /** Format: int32 */
+            readonly totalPages: number;
+            /** Format: int32 */
+            readonly totalCount: number;
+            readonly hasPreviousPage: boolean;
+            readonly hasNextPage: boolean;
+        };
         CustomerCardAppointmentDto: {
             /** Format: uuid */
             id: string;
@@ -11627,6 +12097,11 @@ export interface components {
             /** Format: int32 */
             capabilities: number;
         };
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        MyAppointmentsScope: 0 | 1;
         MyOrderDeliveryDto: {
             postalCode: string;
             addressLine: string;
@@ -11716,6 +12191,16 @@ export interface components {
             role: string;
             status: string;
             logoUrl?: string | null;
+        };
+        OnlineBookingSettingsDto: {
+            enabled: boolean;
+            /** Format: int32 */
+            capacity: number;
+            /** Format: int32 */
+            maxCapacity: number;
+            booksOnline: boolean;
+            missing: string[];
+            slug: string;
         };
         /**
          * Format: int32
@@ -12596,6 +13081,62 @@ export interface components {
             /** Format: double */
             onHand: number;
         };
+        PublicAppointmentReceiptDto: {
+            serviceName: string;
+            /** Format: date-time */
+            startAt: string;
+            /** Format: date-time */
+            endAt: string;
+            dateLabel: string;
+            timeLabel: string;
+            businessName: string;
+            contactPhone?: string | null;
+            address?: string | null;
+            linkedToAccount: boolean;
+            trackingToken: string;
+        };
+        PublicAppointmentRequest: {
+            token: string;
+        };
+        PublicBookingDayDto: {
+            /** Format: date */
+            date: string;
+            label: string;
+            slots: components["schemas"]["PublicBookingSlotDto"][];
+        };
+        PublicBookingDto: {
+            businessName: string;
+            slug: string;
+            logoUrl?: string | null;
+            contactPhone?: string | null;
+            theme: components["schemas"]["BusinessTheme"];
+            address?: string | null;
+            pricesIncludeTax: boolean;
+            /** Format: int32 */
+            daysAhead: number;
+            services: components["schemas"]["PublicBookingServiceDto"][];
+        };
+        PublicBookingServiceDto: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            /** Format: double */
+            price: number;
+            /** Format: int32 */
+            durationMinutes: number;
+            imageUrl?: string | null;
+        };
+        PublicBookingSlotDto: {
+            /** Format: date-time */
+            startAt: string;
+            label: string;
+        };
+        PublicBookingSlotsDto: {
+            days: components["schemas"]["PublicBookingDayDto"][];
+            /** Format: date */
+            nextFrom?: string | null;
+        };
         PublicDayHoursDto: {
             /** Format: date */
             date: string;
@@ -12630,6 +13171,7 @@ export interface components {
             statusDetail?: string | null;
             closed: boolean;
             pricesIncludeTax: boolean;
+            booksOnline: boolean;
             deliversToPostalCode?: boolean | null;
             /** Format: double */
             deliveryFee?: number | null;
@@ -12681,6 +13223,7 @@ export interface components {
             deliveryOnly: boolean;
             deliveryAvailable: boolean;
             openingHours?: components["schemas"]["PublicOpeningHoursDto"];
+            booksOnline: boolean;
             categories: components["schemas"]["PublicMenuCategoryDto"][];
         };
         PublicMenuProductDto: {
@@ -12927,6 +13470,17 @@ export interface components {
         RequestPhoneChangeCommand: {
             phoneNumber: string;
             currentPassword: string;
+        };
+        RequestPublicAppointmentRequest: {
+            /** Format: uuid */
+            serviceProductId: string;
+            /** Format: date-time */
+            startAt: string;
+            customerName: string;
+            customerPhone: string;
+            notes?: string | null;
+            /** Format: uuid */
+            idempotencyKey?: string | null;
         };
         ResendConfirmationEmailCommand: {
             email: string;
@@ -13704,6 +14258,11 @@ export interface components {
             state?: string | null;
             capabilities?: components["schemas"]["TenantCapability"];
             timeZone?: string | null;
+        };
+        UpdateOnlineBookingSettingsCommand: {
+            enabled: boolean;
+            /** Format: int32 */
+            capacity: number;
         };
         UpdateOnlineMenuRequest: {
             mode: components["schemas"]["OnlineMenuMode"];

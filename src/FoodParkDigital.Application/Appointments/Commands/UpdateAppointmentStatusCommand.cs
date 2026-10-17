@@ -33,15 +33,18 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
     private readonly IApplicationDbContext _context;
     private readonly AppointmentNotices _notices;
     private readonly IOutgoingMessageSignal? _signal;
+    private readonly IDateTimeProvider? _clock;
 
     public UpdateAppointmentStatusCommandHandler(
         IApplicationDbContext context,
         AppointmentNotices notices,
-        IOutgoingMessageSignal? signal = null)
+        IOutgoingMessageSignal? signal = null,
+        IDateTimeProvider? clock = null)
     {
         _context = context;
         _notices = notices;
         _signal = signal;
+        _clock = clock;
     }
 
     public async Task<Result<AppointmentDto>> Handle(UpdateAppointmentStatusCommand request, CancellationToken cancellationToken)
@@ -51,8 +54,23 @@ public class UpdateAppointmentStatusCommandHandler : IRequestHandler<UpdateAppoi
             ?? throw new EntityNotFoundException("Appointment", request.AppointmentId);
 
         var changed = entity.Status != request.NewStatus;
-        entity.ChangeStatus(request.NewStatus);
-        var noticeQueued = changed && await _notices.QueueStatusChangedAsync(entity, cancellationToken);
+        bool noticeQueued;
+        if (entity.IsRequest && request.NewStatus == AppointmentStatus.Scheduled)
+        {
+            // A request made online (Fase 24D) is agendada by accepting it, and cancelled by declining it.
+            entity.Accept(_clock?.UtcNow ?? DateTimeOffset.UtcNow);
+            noticeQueued = await _notices.QueueScheduledAsync(entity, cancellationToken);
+        }
+        else if (entity.IsRequest && request.NewStatus == AppointmentStatus.Cancelled)
+        {
+            entity.Decline();
+            noticeQueued = await _notices.QueueDeclinedAsync(entity, cancellationToken);
+        }
+        else
+        {
+            entity.ChangeStatus(request.NewStatus);
+            noticeQueued = changed && await _notices.QueueStatusChangedAsync(entity, cancellationToken);
+        }
         await _context.SaveChangesAsync(cancellationToken);
         if (noticeQueued)
             _signal?.Notify();

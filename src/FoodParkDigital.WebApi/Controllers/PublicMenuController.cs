@@ -1,3 +1,5 @@
+using FoodParkDigital.Application.Appointments.OnlineBooking;
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.OnlineMenu;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +12,7 @@ namespace FoodParkDigital.WebApi.Controllers;
 /// <summary>
 /// The public menu of a business (/m/{slug} in the app): no sign-in, only what the business published, and
 /// orders only when it turned them on. Rate limited per IP. A customer account that sends its session orders with it
-/// (Fase 24B).
+/// (Fase 24B). Its booking page (/m/{slug}/agendar, Fase 24D) asks for appointments the same way.
 /// </summary>
 [ApiController]
 [Route("api/v1/public/menu/{slug}")]
@@ -46,6 +48,54 @@ public class PublicMenuController : ControllerBase
     {
         var quote = await _mediator.Send(new GetPublicDeliveryQuoteQuery(slug, postalCode), cancellationToken);
         return quote is null ? this.ApiError(StatusCodes.Status404NotFound, "Este negocio no tiene menú en línea.") : Ok(quote);
+    }
+
+    /// <summary>The services a customer books online with the business (Fase 24D); not found when it does not book online.</summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("booking")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicBookingDto>> GetBooking(string slug, CancellationToken cancellationToken)
+    {
+        var booking = await _mediator.Send(new GetPublicBookingQuery(slug), cancellationToken);
+        return booking is null ? this.ApiError(StatusCodes.Status404NotFound, OnlineBookingAvailability.NotBookingMessage) : Ok(booking);
+    }
+
+    /// <summary>The free times of a service, a week from <paramref name="from"/> (today when omitted), in the business's time.</summary>
+    /// <param name="slug">The business of the menu.</param>
+    /// <param name="serviceId">A service the business books online.</param>
+    /// <param name="from">The first day of the week asked for.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    [HttpGet("booking/slots")]
+    [EnableRateLimiting("public-menu")]
+    public async Task<ActionResult<PublicBookingSlotsDto>> GetBookingSlots(
+        string slug, [FromQuery] Guid serviceId, [FromQuery] DateOnly? from, CancellationToken cancellationToken)
+    {
+        var slots = await _mediator.Send(new GetPublicBookingSlotsQuery(slug, serviceId, from), cancellationToken);
+        return slots is null
+            ? this.ApiError(StatusCodes.Status404NotFound, RequestPublicAppointmentCommandHandler.ServiceNotBookedMessage)
+            : Ok(slots);
+    }
+
+    /// <summary>Asks for an appointment at one of the free times (Fase 24D): it waits for the business to accept it.</summary>
+    [HttpPost("appointments")]
+    [EnableRateLimiting("public-order")]
+    public async Task<ActionResult<PublicAppointmentReceiptDto>> RequestAppointment(
+        string slug, [FromBody] RequestPublicAppointmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new RequestPublicAppointmentCommand
+        {
+            Slug = slug,
+            ServiceProductId = request.ServiceProductId,
+            StartAt = request.StartAt,
+            CustomerName = request.CustomerName,
+            CustomerPhone = request.CustomerPhone,
+            Notes = request.Notes,
+            IdempotencyKey = request.IdempotencyKey
+        }, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
     }
 
     [HttpPost("orders")]
@@ -87,4 +137,15 @@ public class PlacePublicOrderRequest
     /// <summary>Keep the delivery address in the signed-in customer account, named <see cref="AddressLabel"/> (Fase 24B).</summary>
     public bool SaveAddress { get; init; }
     public string? AddressLabel { get; init; }
+}
+
+public class RequestPublicAppointmentRequest
+{
+    public Guid ServiceProductId { get; init; }
+    public DateTimeOffset StartAt { get; init; }
+    public string CustomerName { get; init; } = null!;
+    public string CustomerPhone { get; init; } = null!;
+    public string? Notes { get; init; }
+    /// <summary>The booking page's key for this request: sent again, it answers the appointment already requested.</summary>
+    public Guid? IdempotencyKey { get; init; }
 }

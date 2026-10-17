@@ -37,6 +37,23 @@ public sealed class AppointmentNotices
         => QueueAsync(appointment, (service, place, date, time) =>
             $"quedó agendada tu cita de {service} el {date} a las {time} {place}.", withVisitFee: true, cancellationToken);
 
+    /// <summary>
+    /// A customer booked online (Fase 24D): the business still has to accept it. When it does, the notice of an appointment
+    /// agendada follows (<see cref="QueueScheduledAsync"/>).
+    /// </summary>
+    /// <inheritdoc cref="QueueScheduledAsync"/>
+    public Task<bool> QueueRequestedAsync(Appointment appointment, CancellationToken cancellationToken)
+        => QueueAsync(appointment, (service, place, date, time) =>
+            $"recibimos tu solicitud de cita de {service} el {date} a las {time} {place}. Te avisamos en cuanto la confirmen.",
+            withVisitFee: false, cancellationToken);
+
+    /// <summary>The business declined a request made online (Fase 24D): its time is free again.</summary>
+    /// <inheritdoc cref="QueueScheduledAsync"/>
+    public Task<bool> QueueDeclinedAsync(Appointment appointment, CancellationToken cancellationToken)
+        => QueueAsync(appointment, (service, place, date, time) =>
+            $"no pudimos confirmar tu cita de {service} del {date} a las {time} {place}. "
+            + "Elige otro horario en su menú en línea o respóndenos.", withVisitFee: false, cancellationToken);
+
     /// <inheritdoc cref="QueueScheduledAsync"/>
     public Task<bool> QueueRescheduledAsync(Appointment appointment, CancellationToken cancellationToken)
         => QueueAsync(appointment, (service, place, date, time) =>

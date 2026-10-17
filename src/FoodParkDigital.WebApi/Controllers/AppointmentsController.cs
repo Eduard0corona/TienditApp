@@ -1,6 +1,7 @@
 using FoodParkDigital.Application.Appointments.Commands;
 using FoodParkDigital.Application.Appointments.DTOs;
 using FoodParkDigital.Application.Appointments.HomeVisits;
+using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Appointments.Queries;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Domain.Appointments.Enums;
@@ -63,6 +64,42 @@ public class AppointmentsController : ControllerBase
     public async Task<ActionResult<VisitQuoteDto>> GetVisitQuote([FromQuery] string postalCode, CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetVisitQuoteQuery(postalCode), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Whether customers book appointments online, how many the business attends at once and what is missing (Fase 24D).</summary>
+    [HttpGet("online-booking")]
+    public async Task<ActionResult<OnlineBookingSettingsDto>> GetOnlineBooking(CancellationToken cancellationToken)
+        => Ok(await _mediator.Send(new GetOnlineBookingSettingsQuery(), cancellationToken));
+
+    /// <summary>Turns online appointments on or off and sets how many the business attends at once (owners and admins).</summary>
+    [HttpPut("online-booking")]
+    public async Task<ActionResult<OnlineBookingSettingsDto>> UpdateOnlineBooking(
+        [FromBody] UpdateOnlineBookingSettingsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Accepts an appointment a customer requested online (Fase 24D): it is agendada and the customer hears it.</summary>
+    [HttpPost("{id:guid}/accept")]
+    public async Task<ActionResult<AppointmentDto>> Accept(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new AcceptAppointmentRequestCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
+    }
+
+    /// <summary>Declines an appointment a customer requested online (Fase 24D): its time is free and the customer hears it.</summary>
+    [HttpPost("{id:guid}/decline")]
+    public async Task<ActionResult<AppointmentDto>> Decline(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new DeclineAppointmentRequestCommand(id), cancellationToken);
         if (result.IsFailure)
             return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
         return Ok(result.Value);

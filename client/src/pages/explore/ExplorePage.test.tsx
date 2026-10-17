@@ -23,6 +23,7 @@ function business(overrides: Partial<DirectoryBusiness>): DirectoryBusiness {
     deliveryOnly: false,
     deliveryAvailable: false,
     pricesIncludeTax: true,
+    booksOnline: false,
     acceptsOrders: false,
     ordersPaused: false,
     closed: false,

@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text;
+using FoodParkDigital.Application.Appointments.OnlineBooking;
 using FoodParkDigital.Application.Common.Interfaces;
 using FoodParkDigital.Application.Common.Models;
+using FoodParkDigital.Application.Common.Rules;
 using FoodParkDigital.Application.Common.Security;
 using FoodParkDigital.Application.Common.Utils;
 using FoodParkDigital.Application.OnlineMenu;
@@ -72,6 +74,8 @@ public class PublicDirectoryBusinessDto
     public bool Closed { get; set; }
     /// <summary>Its prices include IVA; a delivery fee is written like them («más IVA» when they do not).</summary>
     public bool PricesIncludeTax { get; set; }
+    /// <summary>Customers book appointments online with it now (Fase 24D): its booking page is /m/{slug}/agendar.</summary>
+    public bool BooksOnline { get; set; }
 
     /// <summary>
     /// With the customer's postal code (Fase 24B): whether its online orders go there, what its menu would answer. Null
@@ -260,6 +264,8 @@ public sealed class PublicDirectorySnapshot
     {
         // Explorar lists an active business whose menu is published and shows in Explorar, with a product its menu shows.
         var menuProducts = MenuProducts(context);
+        var bookableServices = OnlineBookingCalendar.BookableServices(context);
+        // A business that only sells services shows while it books them online (Fase 24D): its menu has nothing to order.
         var listed = context.Tenants
             .IgnoreQueryFilters()
             .AsNoTracking()
@@ -267,7 +273,8 @@ public sealed class PublicDirectorySnapshot
                 && t.Settings != null
                 && t.Settings.OnlineMenuMode != OnlineMenuMode.Off
                 && t.Settings.ListedInDirectory
-                && menuProducts.Any(p => p.TenantId == t.Id));
+                && (menuProducts.Any(p => p.TenantId == t.Id)
+                    || (t.Settings.OnlineBookingEnabled && bookableServices.Any(p => p.TenantId == t.Id))));
         var rows = await listed
             .OrderBy(t => t.Name).ThenBy(t => t.Id)
             .Take(MaxBusinesses + 1)
@@ -294,7 +301,11 @@ public sealed class PublicDirectorySnapshot
                     && (cs.BranchId == null
                         || !context.Branches.Any(b => b.TenantId == t.Id && b.IsDefault)
                         || context.Branches.Any(b => b.TenantId == t.Id && b.IsDefault && b.Id == cs.BranchId))),
-                context.DeliveryZones.Any(z => z.TenantId == t.Id && z.IsActive)))
+                context.DeliveryZones.Any(z => z.TenantId == t.Id && z.IsActive),
+                menuProducts.Any(p => p.TenantId == t.Id),
+                t.Settings.OnlineBookingEnabled && bookableServices.Any(p => p.TenantId == t.Id),
+                t.Settings.Capabilities,
+                t.BusinessType))
             .ToListAsync(cancellationToken);
         if (rows.Count > MaxBusinesses)
         {
@@ -317,6 +328,8 @@ public sealed class PublicDirectorySnapshot
 
         var entries = rows
             .Select(row => ToEntry(row, specialDays[row.Id], utcNow))
+            .Where(entry => entry is not null)
+            .Select(entry => entry!)
             .OrderBy(entry => entry.Rank)
             .ThenBy(entry => entry.Business.Name, Names)
             .ToList();
@@ -332,7 +345,8 @@ public sealed class PublicDirectorySnapshot
             && p.Unit != UnitType.Hour && p.Unit != UnitType.Session && p.Unit != UnitType.Service
             && context.Categories.Any(c => c.Id == p.CategoryId && c.TenantId == p.TenantId && c.IsActive));
 
-    private static Entry ToEntry(Row row, IEnumerable<SpecialDay> specialDays, DateTimeOffset utcNow)
+    /// <summary>The card of a business; null for one listed for its services that does not book them online after all.</summary>
+    private static Entry? ToEntry(Row row, IEnumerable<SpecialDay> specialDays, DateTimeOffset utcNow)
     {
         var (since, until) = BusinessHours.SpecialDaysWindow(row.TimeZone, utcNow);
         var hours = BusinessHours.At(
@@ -344,6 +358,15 @@ public sealed class PublicDirectorySnapshot
         // Explorar has no table: a closed business takes no orders here, whatever its tables.
         var acceptsOrders = OnlineOrderAvailability.Gate(row.Mode, hours, row.DrawerOpen) == OnlineOrderGate.Open;
         var deliveryOnly = row.MainBranch is { ServiceMode: BranchServiceMode.DeliveryOnly };
+        // The rule of its booking page (OnlineBookingAvailability), with its services already counted.
+        var booksOnline = row.BooksServices && OnlineBookingAvailability.BooksOnline(
+            enabled: true,
+            TenantCapabilityRules.NormalizeCapabilities(row.Capabilities, row.BusinessType),
+            row.Mode,
+            row.MainBranch?.ServiceMode,
+            row.OpeningHours is not null);
+        if (!row.HasMenu && !booksOnline)
+            return null;
         var business = new PublicDirectoryBusinessDto
         {
             Name = row.Name,
@@ -360,9 +383,10 @@ public sealed class PublicDirectorySnapshot
             StatusLabel = hours is null ? null : BusinessHoursText.StatusLabel(hours),
             StatusDetail = hours is null ? null : BusinessHoursText.StatusDetail(hours, seatedOverride: false),
             Closed = hours is { Status.IsOpen: false },
-            PricesIncludeTax = row.PricesIncludeTax
+            PricesIncludeTax = row.PricesIncludeTax,
+            BooksOnline = booksOnline
         };
-        var rank = acceptsOrders ? 0 : business.Closed ? 2 : 1;
+        var rank = acceptsOrders || booksOnline ? 0 : business.Closed ? 2 : 1;
         // Its city too, when the card shows it: never the one of a kitchen that only delivers.
         return new Entry(row.Id, business, Comparable($"{row.Name} {row.Description} {business.City}"), rank);
     }
@@ -393,7 +417,11 @@ public sealed class PublicDirectorySnapshot
         bool PricesIncludeTax,
         MainBranch? MainBranch,
         bool DrawerOpen,
-        bool Delivers);
+        bool Delivers,
+        bool HasMenu,
+        bool BooksServices,
+        TenantCapability Capabilities,
+        BusinessType BusinessType);
 }
 
 /// <summary>

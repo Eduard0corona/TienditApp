@@ -1,3 +1,4 @@
+using FoodParkDigital.Application.OnlineBooking;
 using FoodParkDigital.Application.Identity.DTOs;
 using FoodParkDigital.Application.Common.Models;
 using FoodParkDigital.Application.Customers;
@@ -50,6 +51,25 @@ public class MeController : ControllerBase
     {
         var order = await _mediator.Send(new GetMyOrderQuery(id), cancellationToken);
         return order is null ? this.ApiError(StatusCodes.Status404NotFound, "No encontramos ese pedido en tu cuenta.") : Ok(order);
+    }
+
+    /// <summary>The customer account's appointments booked online, in every business (Fase 24D): coming or before.</summary>
+    [HttpGet("appointments")]
+    public async Task<ActionResult<PaginatedList<CustomerAppointmentDto>>> GetMyAppointments(
+        [FromQuery] MyAppointmentsScope scope = MyAppointmentsScope.Upcoming,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(new GetMyAppointmentsQuery { Scope = scope, PageNumber = pageNumber, PageSize = pageSize }, cancellationToken));
+
+    /// <summary>Cancels one of the account's appointments before it starts (Fase 24D); any other is not found.</summary>
+    [HttpPost("appointments/{id:guid}/cancel")]
+    public async Task<ActionResult<CustomerAppointmentDto>> CancelMyAppointment(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CancelMyAppointmentCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return this.ApiError(StatusCodes.Status400BadRequest, result.Error);
+        return Ok(result.Value);
     }
 
     /// <summary>The addresses the customer account keeps for its orders (Fase 24B), the last one used first.</summary>

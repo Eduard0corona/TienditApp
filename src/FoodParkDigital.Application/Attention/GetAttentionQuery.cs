@@ -38,6 +38,8 @@ public static class AttentionKeys
     public const string UnreadChats = "unreadChats";
     public const string LateServices = "lateServices";
     public const string AppointmentsToConfirm = "appointmentsToConfirm";
+    /// <summary>Appointments customers requested online that the business has not accepted nor declined (Fase 24D).</summary>
+    public const string AppointmentRequests = "appointmentRequests";
 }
 
 public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, AttentionDto>
@@ -146,6 +148,12 @@ public class GetAttentionQueryHandler : IRequestHandler<GetAttentionQuery, Atten
         {
             Add(AttentionKeys.AppointmentsToConfirm, await _context.Appointments.AsNoTracking()
                 .CountAsync(a => a.Status == AppointmentStatus.Scheduled && a.StartAt >= now && a.StartAt <= endOfToday, cancellationToken));
+            // Every request still ahead waits for an answer; those of today are urgent.
+            var requests = await _context.Appointments.AsNoTracking()
+                .Where(a => a.Status == AppointmentStatus.Requested && a.StartAt > now)
+                .Select(a => a.StartAt)
+                .ToListAsync(cancellationToken);
+            Add(AttentionKeys.AppointmentRequests, requests.Count, requests.Count(startAt => startAt <= endOfToday));
         }
 
         return new AttentionDto { Items = items };
