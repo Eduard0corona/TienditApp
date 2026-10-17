@@ -16,7 +16,7 @@ import CustomerCardModal from '../../components/customers/CustomerCardModal';
 import { ordersApi } from '../../api/ordersApi';
 import { queryKeys, useDeliveryPlatformChannels } from '../../api/queries';
 import { useArrivalChime } from '../../hooks/useArrivalChime';
-import { getServicePriorityLabel, parseChecklist, parsePhotos } from '../../utils/serviceDetail';
+import { getServicePriorityLabel, parseChecklist } from '../../utils/serviceDetail';
 import { useOrderSignalR } from '../../hooks/useOrderSignalR';
 import { useAuth } from '../../hooks/useAuth';
 import { useTenant } from '../../hooks/useTenant';
@@ -33,7 +33,7 @@ import {
 } from '../../types';
 import { toPrivateFilePath } from '../../utils/privateFiles';
 import PrivateFileLink from '../../components/common/PrivateFileLink';
-import PrivatePhoto from '../../components/common/PrivatePhoto';
+import ServicePhotosPanel from '../../components/services/ServicePhotosPanel';
 import { getAccess } from '../../utils/access';
 import { hasAnyCapability, hasCapability } from '../../utils/tenantCapabilities';
 import { formatMoney } from '../../utils/money';
@@ -238,14 +238,6 @@ export default function OrdersList() {
   );
   const selectedOrderIntakeChecklist = useMemo(
     () => parseChecklist(selectedOrder?.serviceDetail?.intakeChecklistJson),
-    [selectedOrder],
-  );
-  const selectedOrderBeforePhotos = useMemo(
-    () => parsePhotos(selectedOrder?.serviceDetail?.beforePhotosJson),
-    [selectedOrder],
-  );
-  const selectedOrderAfterPhotos = useMemo(
-    () => parsePhotos(selectedOrder?.serviceDetail?.afterPhotosJson),
     [selectedOrder],
   );
   // A silent reload (realtime event, reconnection) keeps the table on screen: no spinner, no lost scroll.
@@ -985,49 +977,13 @@ export default function OrdersList() {
                       </ul>
                     </div>
                   )}
+                </div>
+              )}
 
-                  {(selectedOrderBeforePhotos.length > 0 || selectedOrderAfterPhotos.length > 0) && (
-                    <div className="row g-2 mt-2">
-                      <div className="col-md-6">
-                        <strong>Fotos antes</strong>
-                        {selectedOrderBeforePhotos.length === 0 ? (
-                          <div className="text-muted small">Sin fotos.</div>
-                        ) : (
-                          <div className="d-flex flex-wrap gap-2 mt-1">
-                            {selectedOrderBeforePhotos.map((photo, index) => (
-                              <PrivatePhoto
-                                key={`${photo.path}-${index}`}
-                                path={photo.path}
-                                alt={photo.fileName || 'Foto antes'}
-                                linked
-                                className="border rounded"
-                                style={{ width: 64, height: 64 }}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-md-6">
-                        <strong>Fotos después</strong>
-                        {selectedOrderAfterPhotos.length === 0 ? (
-                          <div className="text-muted small">Sin fotos.</div>
-                        ) : (
-                          <div className="d-flex flex-wrap gap-2 mt-1">
-                            {selectedOrderAfterPhotos.map((photo, index) => (
-                              <PrivatePhoto
-                                key={`${photo.path}-${index}`}
-                                path={photo.path}
-                                alt={photo.fileName || 'Foto después'}
-                                linked
-                                className="border rounded"
-                                style={{ width: 64, height: 64 }}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+              {selectedOrder.orderType === OrderTypeConst.Service && (
+                <div className="mt-3">
+                  <h5 className="mb-2">Fotos del servicio</h5>
+                  <ServicePhotosPanel orderId={selectedOrder.id} thumbnailSize={72} />
                 </div>
               )}
 

@@ -26,6 +26,7 @@ import type {
   PlatformCollectedBy,
   PurchaseOrderStatus,
   ServiceOrderPieceStatus,
+  ServicePhotoStage,
   TenantCapability,
   UnitType,
 } from '../api/generated/enums';
@@ -1374,6 +1375,9 @@ export { OrderPaymentMethod } from '../api/generated/enums';
 
 export { ServiceOrderPieceStatus } from '../api/generated/enums';
 
+/** The photos of a service (Fase 25): before (0) or after (1). */
+export { ServicePhotoStage } from '../api/generated/enums';
+
 /** How a customer follows an order (Fase 24C): its steps and the account's orders in progress or before. */
 export { OrderTrackingStep, OrderTrackingStepState, MyOrdersScope } from '../api/generated/enums';
 
@@ -1470,6 +1474,37 @@ export interface ServiceOrderDetailDto {
   intakeChecklistJson?: string;
   beforePhotosJson?: string;
   afterPhotosJson?: string;
+}
+
+/** A photo of a service for the business's team (Fase 25): taken when the order was received, or added later. */
+export interface ServiceOrderPhotoDto {
+  /** None for a photo taken when the order was received. */
+  id?: string;
+  stage: ServicePhotoStage;
+  /** Private file path ("/files/orders/..."). */
+  url: string;
+  fileName?: string;
+  note?: string;
+  atIntake: boolean;
+  takenAt?: string;
+  takenBy?: string;
+  /** Whether this person may remove it: while the order is open, whoever took it or a manager. */
+  canRemove: boolean;
+}
+
+export interface ServiceOrderPhotosDto {
+  orderId: string;
+  /** Every service order takes photos but a cancelled one. */
+  canAdd: boolean;
+  photos: ServiceOrderPhotoDto[];
+}
+
+export interface AddServiceOrderPhotoRequest {
+  stage: ServicePhotoStage;
+  /** What the upload returned. */
+  fileUrl: string;
+  fileName?: string;
+  note?: string;
 }
 
 export interface ServiceOrderPieceDto {
