@@ -63,7 +63,7 @@ public class OrderTrackingStepsTests
     }
 
     [Fact]
-    public void StoreOrder_DeliveredStraightAway_ShouldShowTheSkippedSteps_DoneWithoutATime()
+    public void StoreOrder_DeliveredStraightAway_ShouldShowEveryStepDone_TheSkippedOnesWithoutATime()
     {
         var steps = OrderTracking.Steps(BusinessType.Retail, OrderType.Retail, OrderStatus.Delivered, T0,
             [Change(OrderStatus.Pending, OrderStatus.Delivered, 30)], hasDelivery: true, dispatchedAt: null);
@@ -73,7 +73,7 @@ public class OrderTrackingStepsTests
             ("Recibido", OrderTrackingStepState.Done, T0),
             ("Confirmado", OrderTrackingStepState.Done, (DateTimeOffset?)null),
             ("En camino", OrderTrackingStepState.Done, null),
-            ("Entregado", OrderTrackingStepState.Current, T0.AddMinutes(30))
+            ("Entregado", OrderTrackingStepState.Done, T0.AddMinutes(30))
         ], Shape(steps));
     }
 
@@ -92,8 +92,10 @@ public class OrderTrackingStepsTests
             ("Recibido", OrderTrackingStepState.Done, T0),
             ("Aceptado", OrderTrackingStepState.Done, T0.AddMinutes(10)),
             ("En proceso", OrderTrackingStepState.Done, T0.AddMinutes(60)),
-            ("Terminado", OrderTrackingStepState.Current, (DateTimeOffset?)T0.AddMinutes(180))
+            ("Terminado", OrderTrackingStepState.Done, (DateTimeOffset?)T0.AddMinutes(180))
         ], Shape(steps));
+        // Finished, nothing is left to happen: no step is the current one.
+        Assert.DoesNotContain(steps, s => s.State == OrderTrackingStepState.Current);
     }
 
     [Fact]

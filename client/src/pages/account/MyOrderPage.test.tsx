@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
 import { OrderStatus, OrderTrackingStep, OrderTrackingStepState, OrderType } from '../../types';
 import { readCart } from '../../utils/savedCart';
@@ -68,10 +68,42 @@ function renderPage() {
   );
 }
 
+const notFound = { isAxiosError: true, response: { status: 404, data: { detail: 'No encontramos ese pedido en tu cuenta.' } } };
+
 describe('MyOrderPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('asks again every 20 seconds while in progress, and stops once the server says the order is gone', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    request.mockResolvedValueOnce(detail() as never).mockRejectedValue(notFound);
+
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Mis pedidos › Pedido T-1042' })).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    // What it read before stays, saying it is the last thing it saw; and it asks no more.
+    expect(await screen.findByText(/No encontramos ese pedido en tu cuenta\. Lo de abajo es lo último que vimos\./)).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Seguimiento del pedido' })).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask again for an order that is over', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    request.mockResolvedValue(detail({ inProgress: false }) as never);
+
+    renderPage();
+    await screen.findByRole('heading', { name: 'Mis pedidos › Pedido T-1042' });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it('shows where the order is, what it carries and where it goes', async () => {

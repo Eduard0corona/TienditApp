@@ -132,18 +132,23 @@ export function phase4Routes(data, { ok, notFound, paginate, createMockOrder }) 
     ['GET', /^\/me\/access$/, () => (data.profile.role === 'Customer'
       ? ok({ userId: data.USER_ID, role: 'CUSTOMER', tenantRole: null, tenantId: null, isMember: false, isTenantManager: false, isPlatformAdmin: false, permissions: [], capabilities: 0 })
       : null)],
-    // MyOrderDto: each line with its product and options, as «Pedir otra vez» puts them back in the store's cart.
+    // MyOrderDto: each line with its product and options, as «Pedir otra vez» puts them back in the store's cart, and the
+    // step of each order (Fase 24C): the tortas on their way and the laundry accepted are in progress, the latte is before.
     ['GET', /^\/me\/orders$/, (m, q) => {
       const productId = (name) => data.products.find((p) => p.name === name)?.id ?? `otro-negocio:${name}`;
       const item = (productName, quantity, optionIds = [], product = productName) => ({ productId: productId(product), productName, quantity, optionIds });
-      return ok(paginate([
-        { id: 'my-1', orderNumber: 'ORD-000412', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 3, orderType: 0, total: 232, paidAmount: 232, createdAt: NOW_ISO,
+      const orders = [
+        { id: 'my-1', orderNumber: 'ORD-000412', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 3, orderType: 0, step: 4, stepLabel: 'En camino', total: 235, paidAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 40 * 60_000).toISOString(),
           items: [item('Torta de jamón', 2), item('Agua de jamaica', 2)] },
-        { id: 'my-2', orderNumber: 'ORD-000088', businessName: 'Lavandería Burbujas', businessSlug: 'lavanderia-burbujas', canOrderAgain: false, status: 1, orderType: 1, total: 180, paidAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 2 * 86400_000).toISOString(),
+        { id: 'my-2', orderNumber: 'ORD-000088', businessName: 'Lavandería Burbujas', businessSlug: 'lavanderia-burbujas', canOrderAgain: false, status: 1, orderType: 1, step: 1, stepLabel: 'Aceptado', total: 180, paidAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 2 * 86400_000).toISOString(),
           items: [item('Lavado por kilo', 4.5)] },
-        { id: 'my-3', orderNumber: 'ORD-000390', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 7, orderType: 0, total: 95, paidAmount: 95, createdAt: new Date(new Date(NOW_ISO).getTime() - 9 * 86400_000).toISOString(),
+        { id: 'my-3', orderNumber: 'ORD-000390', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 7, orderType: 0, step: 5, stepLabel: 'Entregado', total: 95, paidAmount: 95, createdAt: new Date(new Date(NOW_ISO).getTime() - 9 * 86400_000).toISOString(),
           items: [item('Latte', 1, ['o-gr']), item('Croissant', 1, [], 'Croissant de mantequilla')] },
-      ], q, 10));
+      ];
+      // MyOrdersScope: 1 in progress, 2 before, 0 all.
+      const finished = (order) => [6, 7, 99].includes(order.status);
+      const scope = Number(q.get('scope') ?? 0);
+      return ok(paginate(scope === 1 ? orders.filter((o) => !finished(o)) : scope === 2 ? orders.filter(finished) : orders, q, 10));
     }],
     ['PUT', /^\/auth\/my-tenant\/sales-policy$/, (m, q, body) => {
       Object.assign(data.tenant, body);

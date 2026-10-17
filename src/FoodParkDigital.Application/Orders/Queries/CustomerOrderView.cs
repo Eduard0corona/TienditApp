@@ -47,6 +47,7 @@ internal sealed class CustomerOrderView
     public string? TableNumber { get; init; }
     public bool HasDelivery { get; init; }
     public decimal? DeliveryFee { get; init; }
+    public decimal? VisitFee { get; init; }
     public string? PostalCode { get; init; }
     public string? AddressLine { get; init; }
     public string? References { get; init; }
@@ -92,6 +93,7 @@ internal sealed class CustomerOrderView
                 TableNumber = order.TableNumber,
                 HasDelivery = order.Delivery != null,
                 DeliveryFee = order.Delivery != null ? order.Delivery.Fee : (decimal?)null,
+                VisitFee = order.VisitCharge != null ? order.VisitCharge.Fee : (decimal?)null,
                 PostalCode = order.Delivery != null ? order.Delivery.PostalCode : null,
                 AddressLine = order.Delivery != null ? order.Delivery.AddressLine : null,
                 References = order.Delivery != null ? order.Delivery.References : null,

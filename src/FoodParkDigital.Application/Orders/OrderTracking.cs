@@ -73,8 +73,8 @@ public static class OrderTracking
 
     /// <summary>
     /// The steps of the order, in order. Those before where it is are done, with the first time it reached each one (a step
-    /// the business skipped is done without a time); the one where it is, current; the rest, to come. A cancelled order
-    /// shows the steps it reached and then «Cancelado», with its time.
+    /// the business skipped is done without a time); the one where it is, current; the rest, to come. A delivered or
+    /// finished order has every step done. A cancelled order shows the steps it reached and then «Cancelado», with its time.
     /// </summary>
     /// <param name="hasDelivery">It goes to the customer's address: «En camino» is one of its steps.</param>
     public static List<OrderTrackingStepDto> Steps(
@@ -119,11 +119,13 @@ public static class OrderTracking
             return steps;
         }
 
+        // Delivered or finished, the last step is done too: nothing is left to happen.
         var at = Index(flow, CurrentIn(flow, status, dispatchedAt));
+        var finished = Finished.Contains(status);
         return flow
             .Select((f, i) => Step(
                 f,
-                i < at ? OrderTrackingStepState.Done : i == at ? OrderTrackingStepState.Current : OrderTrackingStepState.Upcoming,
+                i < at || finished ? OrderTrackingStepState.Done : i == at ? OrderTrackingStepState.Current : OrderTrackingStepState.Upcoming,
                 reached))
             .ToList();
     }

@@ -40,6 +40,8 @@ public class MyOrderDetailDto
     public List<CustomerOrderItemDto> Items { get; set; } = [];
     /// <summary>What the delivery charged, inside <see cref="Total"/>; null for an order picked up or served.</summary>
     public decimal? DeliveryFee { get; set; }
+    /// <summary>The charge for the visit to the customer's address (Fase 22E), inside <see cref="Total"/>; null for any other order.</summary>
+    public decimal? VisitFee { get; set; }
     /// <summary>When false, the IVA (<see cref="Tax"/>) is added to the prices of the products.</summary>
     public bool PricesIncludeTax { get; set; }
     public decimal Tax { get; set; }
@@ -105,6 +107,7 @@ public class GetMyOrderQueryHandler : IRequestHandler<GetMyOrderQuery, MyOrderDe
             CourierTrackingUrl = order.CourierTrackingUrl,
             Items = order.Items,
             DeliveryFee = order.DeliveryFee,
+            VisitFee = order.VisitFee,
             PricesIncludeTax = order.PricesIncludeTax,
             Tax = order.Tax,
             Total = order.Total,

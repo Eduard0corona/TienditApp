@@ -6,6 +6,8 @@ type Item = Schemas['CustomerOrderItemDto'];
 interface OrderItemsSummaryProps {
   items: Item[];
   deliveryFee?: number | null;
+  /** The visit to the customer's address (Fase 22E). */
+  visitFee?: number | null;
   pricesIncludeTax: boolean;
   tax: number;
   total: number;
@@ -15,7 +17,7 @@ interface OrderItemsSummaryProps {
 }
 
 /** What the order carries and what it costs, as the server totals it (Fase 24C). */
-export default function OrderItemsSummary({ items, deliveryFee, pricesIncludeTax, tax, total, paidAmount, cancelled }: OrderItemsSummaryProps) {
+export default function OrderItemsSummary({ items, deliveryFee, visitFee, pricesIncludeTax, tax, total, paidAmount, cancelled }: OrderItemsSummaryProps) {
   const toPay = total - paidAmount;
   return (
     <>
@@ -36,6 +38,12 @@ export default function OrderItemsSummary({ items, deliveryFee, pricesIncludeTax
           <div className="d-flex justify-content-between">
             <dt className="fw-normal">Envío</dt>
             <dd className="mb-0 ta-money">{deliveryFee > 0 ? formatMoney(deliveryFee) : 'Gratis'}</dd>
+          </div>
+        )}
+        {visitFee != null && (
+          <div className="d-flex justify-content-between">
+            <dt className="fw-normal">Visita a domicilio</dt>
+            <dd className="mb-0 ta-money">{formatMoney(visitFee)}</dd>
           </div>
         )}
         {!pricesIncludeTax && tax > 0 && (

@@ -18319,6 +18319,11 @@
             "format": "double",
             "nullable": true
           },
+          "visitFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "pricesIncludeTax": {
             "type": "boolean"
           },
@@ -22010,6 +22015,11 @@
             }
           },
           "deliveryFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "visitFee": {
             "type": "number",
             "format": "double",
             "nullable": true

@@ -492,6 +492,7 @@ describe('PublicMenuPage', () => {
       expect(screen.getByRole('link', { name: 'Seguir tu pedido' }))
         .toHaveAttribute('href', '/seguimiento#AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE');
       expect(screen.getByText('Guarda el enlace de seguimiento para ver cómo va tu pedido.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Copiar enlace de seguimiento' })).toBeInTheDocument();
     });
 
     it('writes the account\'s name and phone, offers its last address and keeps a new one when asked', async () => {
@@ -503,7 +504,7 @@ describe('PublicMenuPage', () => {
         { id: 'a1', label: 'Casa', postalCode: '72000', addressLine: 'Av. Juárez 120', references: 'Portón verde', lastUsedAt: '2026-10-12T19:00:00Z' },
         { id: 'a2', label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null, lastUsedAt: null },
       ]);
-      api.placeOrder.mockResolvedValue(receipt({ linkedToAccount: true }) as never);
+      api.placeOrder.mockResolvedValue(receipt({ linkedToAccount: true, trackingToken: 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE' }) as never);
 
       renderPage('/m/cafe-luna', signedInAs('Customer'));
       await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
@@ -534,6 +535,9 @@ describe('PublicMenuPage', () => {
       }));
       expect(await screen.findByRole('link', { name: 'Ver mis pedidos' })).toHaveAttribute('href', '/mis-pedidos');
       expect(screen.queryByRole('link', { name: 'Crea tu cuenta' })).not.toBeInTheDocument();
+      // The account finds it in Mis pedidos: it follows it, with nothing to keep.
+      expect(screen.getByRole('link', { name: 'Seguir tu pedido' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Copiar enlace de seguimiento' })).not.toBeInTheDocument();
     });
 
     it('lets a business\'s team order as a guest, without its name or addresses', async () => {

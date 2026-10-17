@@ -6,6 +6,7 @@ import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress } from '../../ap
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import type { ProductOptionGroupDto } from '../../types';
@@ -408,8 +409,10 @@ export default function PublicMenuPage() {
                 <i className="ri-route-line me-1" aria-hidden="true"></i>Seguir tu pedido
               </Link>
             )}
+            {/* A guest keeps the link only if it saves it: an account finds the order in Mis pedidos. */}
+            {receipt.trackingToken && !receipt.linkedToAccount && <CopyTrackingLink token={receipt.trackingToken} />}
             {followUp && (
-              <a className="btn btn-success btn-touch" href={followUp} target="_blank" rel="noopener noreferrer">
+              <a className="btn btn-soft-success btn-touch" href={followUp} target="_blank" rel="noopener noreferrer">
                 <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Avisar por WhatsApp
               </a>
             )}

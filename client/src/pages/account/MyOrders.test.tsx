@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
 import { MyOrdersScope, OrderStatus, OrderTrackingStep, OrderType } from '../../types';
 import { readCart, saveCart } from '../../utils/savedCart';
@@ -69,6 +69,40 @@ describe('MyOrders', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('asks again for the ones before when an order leaves «En curso», and stops asking with none in progress', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const tacos = order([{ productId: 'tacos', productName: 'Tacos', quantity: 3, optionIds: [] }], {
+      id: 'o2', orderNumber: 'T-1050', status: OrderStatus.InPreparation, step: OrderTrackingStep.Preparing, stepLabel: 'En preparación',
+    });
+    const latte = order([{ productId: 'latte', productName: 'Latte', quantity: 1, optionIds: [] }]);
+    const delivered = { ...tacos, status: OrderStatus.Delivered, step: OrderTrackingStep.Delivered, stepLabel: 'Entregado' };
+    const calls = { inProgress: 0, past: 0 };
+    request.mockImplementation(((_method: string, _path: string, options: { query: { scope: number } }) => {
+      if (options.query.scope === MyOrdersScope.InProgress) {
+        calls.inProgress += 1;
+        return Promise.resolve(pageOf(calls.inProgress === 1 ? [tacos] : []));
+      }
+      calls.past += 1;
+      return Promise.resolve(pageOf(calls.past === 1 ? [latte] : [delivered, latte]));
+    }) as never);
+
+    renderOrders();
+    expect(await screen.findByRole('region', { name: 'En curso' })).toHaveTextContent('T-1050');
+    // The business delivers the tacos: the next ask finds nothing in progress.
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    await waitFor(() => expect(calls.past).toBe(2));
+    expect(await screen.findByText('T-1050', { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'En curso' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Anteriores' })).toHaveTextContent('T-1050');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(calls.inProgress).toBe(2);
   });
 
   it('fills the cart of the store with the order on «Pedir otra vez», and opens the store', async () => {

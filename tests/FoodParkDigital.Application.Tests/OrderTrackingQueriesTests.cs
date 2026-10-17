@@ -147,6 +147,31 @@ public class OrderTrackingQueriesTests
     }
 
     [Fact]
+    public async Task MyOrder_OfAHomeVisit_ShouldCarryTheVisitCharge_ThatTheTotalIncludes()
+    {
+        await using var fixture = SalesTestFixture.Create();
+        var salon = await fixture.AddTenantAsync(BusinessType.Service, TenantCapability.Service, pricesIncludeTax: true, slug: "salon");
+        var mariana = await AccountAsync(fixture, "mariana@demo.com");
+        // A haircut at her home, sold by the business to her account (Fase 22E): the visit is a charge of its own.
+        var order = new Order(salon.Id, mariana.Id, null, createdByBusiness: true, "ORD-000001", BusinessType.Service,
+            OrderType.Service, "Mariana Ortiz", "+525512345678", customerNotes: null, tableNumber: null, pricesIncludeTax: true);
+        order.AddItem(Guid.NewGuid(), "Corte de cabello", 1, 250m);
+        order.ChargeVisit(Guid.NewGuid(), "Roma", 80m, Domain.Common.ValueObjects.VatRate.Of(16m));
+        order.CreatedAt = fixture.Clock.UtcNow;
+        fixture.Context.Orders.Add(order);
+        await fixture.Context.SaveChangesAsync();
+        fixture.Context.ChangeTracker.Clear();
+        SignIn(fixture, mariana);
+
+        var detail = await MyOrderAsync(fixture, order.Id);
+
+        Assert.NotNull(detail);
+        Assert.Equal((80m, (decimal?)null, 330m), (detail.VisitFee, detail.DeliveryFee, detail.Total));
+        Assert.Equal(detail.Total, detail.Items.Sum(i => i.Amount) + detail.VisitFee);
+        Assert.Equal(["Recibido", "Aceptado", "En proceso", "Terminado"], detail.Steps.Select(s => s.Label));
+    }
+
+    [Fact]
     public async Task MyOrders_ShouldSplitTheOnesInProgress_FromTheOnesBefore()
     {
         await using var fixture = SalesTestFixture.Create();

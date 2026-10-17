@@ -7,7 +7,7 @@ import OrderItemsSummary from '../../components/tracking/OrderItemsSummary';
 import OrderTimeline, { OrderStepChip } from '../../components/tracking/OrderTimeline';
 import { OrderTrackingStep } from '../../types';
 import { formatDateTime } from '../../utils/dates';
-import { TRACKING_REFRESH_MS } from '../../utils/orderTracking';
+import { trackingRefresh } from '../../utils/orderTracking';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 /**
@@ -22,7 +22,7 @@ export default function OrderTrackingPage() {
     queryFn: ({ signal }) => publicMenuApi.trackOrder(token, signal),
     enabled: token.length > 0,
     retry: false,
-    refetchInterval: (query) => (query.state.data?.inProgress ? TRACKING_REFRESH_MS : false),
+    refetchInterval: (query) => trackingRefresh(!!query.state.data?.inProgress, query.state.error),
   });
   const order = trackingQuery.data;
   const contact = order && businessWhatsAppUrl(order.businessContactPhone, `Hola, les escribo por mi pedido ${order.orderNumber}.`);
@@ -43,8 +43,12 @@ export default function OrderTrackingPage() {
       {trackingQuery.isLoading && (
         <div className="text-center py-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Cargando</span></div></div>
       )}
-      {trackingQuery.error && !order && (
-        <div className="alert alert-warning">{getApiErrorMessage(trackingQuery.error, 'No se pudo cargar tu pedido.')}</div>
+      {trackingQuery.error && (
+        <div className="alert alert-warning">
+          {getApiErrorMessage(trackingQuery.error, 'No se pudo cargar tu pedido.')}
+          {/* A later request failed: what shows is what was read before. */}
+          {order && ' Lo de abajo es lo último que vimos.'}
+        </div>
       )}
 
       {order && (
@@ -78,6 +82,7 @@ export default function OrderTrackingPage() {
                 <OrderItemsSummary
                   items={order.items}
                   deliveryFee={order.deliveryFee}
+                  visitFee={order.visitFee}
                   pricesIncludeTax={order.pricesIncludeTax}
                   tax={order.tax}
                   total={order.total}

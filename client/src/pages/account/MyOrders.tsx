@@ -9,7 +9,7 @@ import { useOrderAgain } from '../../hooks/useOrderAgain';
 import { MyOrdersScope, OrderTrackingStep } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
-import { TRACKING_REFRESH_MS } from '../../utils/orderTracking';
+import { trackingRefresh } from '../../utils/orderTracking';
 
 const PAGE_SIZE = 10;
 /** The most the API gives in one page: orders in progress are few, and all of them show. */
@@ -79,7 +79,7 @@ export default function MyOrders() {
   const inProgressQuery = useQuery({
     queryKey: ['me', 'orders', 'in-progress'],
     queryFn: ({ signal }) => accountApi.getOrders(MyOrdersScope.InProgress, 1, IN_PROGRESS_PAGE_SIZE, signal),
-    refetchInterval: (query) => ((query.state.data?.items.length ?? 0) > 0 ? TRACKING_REFRESH_MS : false),
+    refetchInterval: (query) => trackingRefresh((query.state.data?.items.length ?? 0) > 0, query.state.error),
   });
   const pastQuery = useQuery({
     queryKey: ['me', 'orders', 'past', page],

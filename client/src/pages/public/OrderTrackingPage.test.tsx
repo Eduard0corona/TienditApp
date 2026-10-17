@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/typedClient';
 import { OrderTrackingStep, OrderTrackingStepState, OrderType } from '../../types';
 import OrderTrackingPage from './OrderTrackingPage';
@@ -57,6 +57,27 @@ function renderPage(url: string) {
 describe('OrderTrackingPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('says the link expired while the page was open, keeps what it saw, and asks no more', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    request.mockResolvedValueOnce(tracking() as never).mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 404, data: { detail: 'No encontramos ese pedido. El enlace pudo haber vencido.' } },
+    });
+
+    renderPage(`/seguimiento#${LINK}`);
+    await screen.findByRole('heading', { name: 'Café Luna' });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(await screen.findByText(/El enlace pudo haber vencido\. Lo de abajo es lo último que vimos\./)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Café Luna' })).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it('sends the link of the fragment in the body, and shows where the order is', async () => {

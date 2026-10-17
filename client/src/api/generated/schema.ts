@@ -11542,6 +11542,8 @@ export interface components {
             items: components["schemas"]["CustomerOrderItemDto"][];
             /** Format: double */
             deliveryFee?: number | null;
+            /** Format: double */
+            visitFee?: number | null;
             pricesIncludeTax: boolean;
             /** Format: double */
             tax: number;
@@ -12644,6 +12646,8 @@ export interface components {
             items: components["schemas"]["CustomerOrderItemDto"][];
             /** Format: double */
             deliveryFee?: number | null;
+            /** Format: double */
+            visitFee?: number | null;
             pricesIncludeTax: boolean;
             /** Format: double */
             tax: number;

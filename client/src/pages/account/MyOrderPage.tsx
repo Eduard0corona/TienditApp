@@ -8,7 +8,7 @@ import OrderTimeline, { OrderStepChip } from '../../components/tracking/OrderTim
 import { useOrderAgain } from '../../hooks/useOrderAgain';
 import { OrderTrackingStep } from '../../types';
 import { formatDateTime } from '../../utils/dates';
-import { TRACKING_REFRESH_MS } from '../../utils/orderTracking';
+import { trackingRefresh } from '../../utils/orderTracking';
 import { businessWhatsAppUrl } from '../../utils/whatsApp';
 
 /**
@@ -21,7 +21,7 @@ export default function MyOrderPage() {
   const orderQuery = useQuery({
     queryKey: ['me', 'orders', 'detail', id],
     queryFn: ({ signal }) => accountApi.getOrder(id, signal),
-    refetchInterval: (query) => (query.state.data?.inProgress ? TRACKING_REFRESH_MS : false),
+    refetchInterval: (query) => trackingRefresh(!!query.state.data?.inProgress, query.state.error),
   });
   const order = orderQuery.data;
   const contact = order && businessWhatsAppUrl(order.businessContactPhone, `Hola, les escribo por mi pedido ${order.orderNumber}.`);
@@ -36,6 +36,12 @@ export default function MyOrderPage() {
       {orderQuery.error && !order && (
         <div className="alert alert-danger">
           {getApiErrorMessage(orderQuery.error, 'No se pudo cargar tu pedido.')} <Link to="/mis-pedidos">Ver mis pedidos</Link>
+        </div>
+      )}
+      {/* A later request failed: what shows is what was read before, and it says so. */}
+      {orderQuery.error && order && (
+        <div className="alert alert-warning">
+          {getApiErrorMessage(orderQuery.error, 'No se pudo actualizar tu pedido.')} Lo de abajo es lo último que vimos.
         </div>
       )}
 
@@ -70,6 +76,7 @@ export default function MyOrderPage() {
                 <OrderItemsSummary
                   items={order.items}
                   deliveryFee={order.deliveryFee}
+                  visitFee={order.visitFee}
                   pricesIncludeTax={order.pricesIncludeTax}
                   tax={order.tax}
                   total={order.total}

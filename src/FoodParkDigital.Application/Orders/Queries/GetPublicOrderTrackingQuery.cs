@@ -12,7 +12,8 @@ namespace FoodParkDigital.Application.Orders.Queries;
 /// <summary>
 /// An online order followed with the link of its receipt (Fase 24C, ADR 0023), without an account: where it is, step by
 /// step, and what it carries, for <see cref="OrderTracking.Days"/> days after it was placed. Nothing of the customer (name,
-/// phone or address) is in the answer, and a link unknown, expired or of a business that no longer publishes answers the same.
+/// phone, address or notes) is in the answer, and a link unknown, changed, expired or of a business that is not active answers
+/// the same.
 /// </summary>
 [AllowAnonymousRequest("Seguimiento de un pedido en línea con el enlace imposible de adivinar de su recibo, sin datos del cliente.")]
 public record GetPublicOrderTrackingQuery(string Token) : IRequest<PublicOrderTrackingDto?>;
@@ -49,6 +50,8 @@ public class PublicOrderTrackingDto
     public List<CustomerOrderItemDto> Items { get; set; } = [];
     /// <summary>What the delivery charged, inside <see cref="Total"/>; null for an order picked up or served.</summary>
     public decimal? DeliveryFee { get; set; }
+    /// <summary>The charge for the visit to the customer's address (Fase 22E), inside <see cref="Total"/>; null for any other order.</summary>
+    public decimal? VisitFee { get; set; }
     /// <summary>When false, the IVA (<see cref="Tax"/>) is added to the prices of the products.</summary>
     public bool PricesIncludeTax { get; set; }
     public decimal Tax { get; set; }
@@ -116,6 +119,7 @@ public class GetPublicOrderTrackingQueryHandler : IRequestHandler<GetPublicOrder
             CourierTrackingUrl = view.CourierTrackingUrl,
             Items = view.Items,
             DeliveryFee = view.DeliveryFee,
+            VisitFee = view.VisitFee,
             PricesIncludeTax = view.PricesIncludeTax,
             Tax = view.Tax,
             Total = view.Total,
