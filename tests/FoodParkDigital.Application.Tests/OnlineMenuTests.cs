@@ -249,6 +249,6 @@ public class OnlineMenuTests
             phones,
             NullLogger<CustomerLookupService>.Instance);
         return new PlacePublicOrderCommandHandler(
-            fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance, new FolioGenerator(fixture.Context));
+            fixture.Context, fixture.TenantService, lookup, phones, fixture.Clock, NoOpOrderInventoryService.Instance, new FolioGenerator(fixture.Context), fixture.CurrentUser);
     }
 }

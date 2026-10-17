@@ -1,6 +1,6 @@
 # Deuda técnica
 
-Actualizada el 2026-10-16 con la Fase 24A y antes con la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
+Actualizada el 2026-10-17 con la Fase 24B y antes con la 24A, la 23A y con las Fases 22F, 22F-2, 22G, 22A, 22B, 22C, 22D y 22E, después de las Fases 0 a 21 del roadmap de producto (la auditoría y sus correcciones son del 2026-10-01).
 
 ## Crítica antes de producción
 
@@ -34,7 +34,7 @@ Actualizada el 2026-10-16 con la Fase 24A y antes con la 23A y con las Fases 22F
 - Resuelto en la Fase 9: las contraseñas nuevas tienen al menos 8 caracteres con mayúscula, minúscula y dígito, y se rechazan las comunes y las que contienen el correo o el nombre. Pendiente: las actuales valen hasta que se cambien y no se consulta una lista de contraseñas filtradas.
 - Resuelto en la Fase 10: `GlobalExceptionHandlerMiddleware` registra los rechazos esperados (400, 401, 403, 404, 409 y 422) como advertencia, sin la traza de pila; solo los 500 quedan como error con la excepción.
 - Activación por correo (2026-10-06): el registro de negocio y de cliente ya no abre sesión ni manda código por SMS; la cuenta se activa con el enlace del correo y después inicia sesión ([identidad](../architecture/identity-permissions-capabilities.md)). Resuelto en la Fase 23A: el registro responde lo mismo si el correo ya tiene cuenta (su dueño recibe el aviso por correo), y los correos de las cuentas salen del outbox con reintentos, el de la activación guardado con la cuenta. Pendiente:
-   - sin un proveedor de correo configurado (`EmailSettings`) nadie que se registre puede activar su cuenta. Desde la Fase 23A los valores de ejemplo de `appsettings.json` cuentan como no configurados (no se intenta enviar con ellos), `/health/ready` lo dice (`email-provider`, Degraded) y la prueba de humo avisa; falta configurarlo en producción;
+   - sin un proveedor de correo configurado (`EmailSettings`) nadie que se registre puede activar su cuenta. Desde la Fase 23A los valores de ejemplo de `appsettings.json` cuentan como no configurados (no se intenta enviar con ellos), `/health/ready` lo dice (`email-provider`, Degraded) y la prueba de humo avisa. En producción ya está configurado y los correos llegan;
    - el registro de cliente todavía responde «Ya existe una cuenta de cliente con este teléfono» cuando una cuenta confirmó ese teléfono (antes de buscar el correo, así que no dice nada del correo); crear una cuenta escribe más filas que no crearla, una diferencia de milisegundos que la respuesta puede mostrar (probar un correo libre así lo registra, así que cada correo se prueba una vez); y dos registros simultáneos con el mismo correo pueden dar al segundo el error de Identity «Ya existe una cuenta con ese correo»;
    - un correo con cuenta puede recibir el aviso cada vez que alguien se registra con él: lo acota el límite de peticiones por IP, sin límite por cuenta.
 
@@ -42,11 +42,19 @@ Actualizada el 2026-10-16 con la Fase 24A y antes con la 23A y con las Fases 22F
 
 - Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
   - La foto de cada instancia lee hasta 1,000 negocios (los primeros por nombre) y se rehace cada 30 segundos con una consulta sobre todos. El siguiente paso es una tabla del directorio mantenida con eventos de caja, menú y horario, que hoy no existen. Con varias instancias, dos peticiones pueden ver estados distintos durante esos 30 segundos.
-  - No hay ubicación ni distancia: la búsqueda encuentra la ciudad de la tarjeta. Tampoco hay mapa, favoritos, «pedir otra vez» desde Explorar ni carrito entre negocios.
+  - No hay ubicación ni distancia: la búsqueda encuentra la ciudad de la tarjeta. Tampoco hay mapa, favoritos ni carrito entre negocios. Desde la 24B, Explorar dice qué negocio llega al código postal del cliente, y «Pedir otra vez» está en Mis pedidos.
   - Las categorías son fijas y una por negocio. Agregar una necesita migración (la CHECK), enum, cliente y la lista del registro.
   - El perfil de un cliente (`/profile`) sigue en el marco del equipo, con «Mis pedidos» en el menú. Explorar y Mis pedidos ya tienen el suyo.
   - «Ver más» pide cada página por separado sobre una foto que puede rehacerse entre una y otra: un negocio que cambia de grupo puede repetirse u omitirse entre páginas.
   - La 24A suma 330 B a la primera visita (de 176,806 a 177,136 B, contra `master` en `c3c1a00`) y sube el presupuesto a 177,200 B. Una parte son los enums del contrato, que viven en el primer chunk aunque solo los usen pantallas que bajan aparte.
+- Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account.md)):
+  - El carrito guardado y el código postal de Explorar viven en el dispositivo (`localStorage`): no siguen a la cuenta a otro teléfono ni a otra computadora, y un navegador que bloquea el almacenamiento los pierde al recargar.
+  - Las direcciones de la cuenta (hasta 10) no se validan contra un mapa: el código postal decide la zona, como en la 22B. No hay una dirección predeterminada: la tienda ofrece primero la última usada.
+  - El tope de 10 y «una por lugar» se revisan antes de guardar, sin restricción en la base: dos guardados a la vez de la misma cuenta pueden dejar una de más o repetida. Se borra en Cuenta.
+  - La tarjeta de Explorar da el envío de la zona, no el total: el pedido mínimo y el envío gratis los aplica el menú al pedir.
+  - «Pedir otra vez» solo regresa cantidades enteras: un producto por kilo o en fracciones no regresa, porque la tienda pide por pieza.
+  - Un cliente anterior, sin llave del pedido, todavía puede registrar dos veces el mismo pedido.
+  - La 24B suma 125 B a la primera visita (de 177,136 a 177,261 B, contra `master` en `d7e54f5`) y sube el presupuesto a 177,400 B.
 
 - Resuelto en la Fase 14: `AuthController` (440 líneas, 33 acciones) se dividió en cinco controllers con exactamente las mismas rutas, acceso y límite de peticiones: sesión (`AuthController`), registro y confirmaciones (`RegistrationController`), recuperación de contraseña (`PasswordRecoveryController`), perfil (`ProfileController`) y el negocio de la sesión (`MyTenantController`). `AccountEndpointsTests` fija las 33 rutas con quién puede llamarlas y su límite; el contrato OpenAPI es el mismo (solo cambia el orden en que lista 24 rutas de la cuenta). El webhook de WhatsApp ya no usa el DbContext: verifica con `VerifyWhatsAppWebhookTokenQuery`, deja la entrega en la bandeja y los estados de entrega se aplican con `ApplyWhatsAppStatusesCommand` (Fase 7).
 - Componentes frontend de 700–1,500 líneas (Vender, Pedidos, Nuevo pedido) y `types/index.ts` monolítico. Inventario se dividió por pestaña y diálogo en la Fase 7 y sirve de patrón.

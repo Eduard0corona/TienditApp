@@ -41,6 +41,33 @@
   pointer-events: none;
 }
 
+/* «Entregar en…» under the search (Fase 24B). */
+.ex-postal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+}
+
+.ex-postal-input {
+  width: 6.5rem;
+}
+
+/* A cart left without sending, in another store. */
+.ex-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius-sm);
+  background: var(--ct-secondary-bg);
+}
+
 /* The categories scroll sideways on a phone and wrap on a wide screen. */
 .ex-chips {
   display: flex;

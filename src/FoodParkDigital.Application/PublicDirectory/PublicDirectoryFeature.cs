@@ -9,6 +9,7 @@ using FoodParkDigital.Application.Tenants.Hours;
 using FoodParkDigital.Domain.Branches.Enums;
 using FoodParkDigital.Domain.Catalog.Entities;
 using FoodParkDigital.Domain.Catalog.Enums;
+using FoodParkDigital.Domain.Delivery;
 using FoodParkDigital.Domain.Finance.Enums;
 using FoodParkDigital.Domain.Tenants;
 using FoodParkDigital.Domain.Tenants.Entities;
@@ -28,6 +29,9 @@ public class PublicDirectoryDto
 
     /// <summary>The businesses of the category and search asked: those that take orders now first, then those open.</summary>
     public PaginatedList<PublicDirectoryBusinessDto> Businesses { get; set; } = null!;
+
+    /// <summary>The customer's postal code the cards answer for (Fase 24B), as read; null without one.</summary>
+    public string? PostalCode { get; set; }
 }
 
 public class PublicDirectoryCategoryDto
@@ -66,6 +70,22 @@ public class PublicDirectoryBusinessDto
     public string? StatusDetail { get; set; }
     /// <summary>Closed now by its hours or a special day; false without hours (it never closes).</summary>
     public bool Closed { get; set; }
+    /// <summary>Its prices include IVA; a delivery fee is written like them («más IVA» when they do not).</summary>
+    public bool PricesIncludeTax { get; set; }
+
+    /// <summary>
+    /// With the customer's postal code (Fase 24B): whether its online orders go there, what its menu would answer. Null
+    /// without a postal code, or when it takes no orders to an address (<see cref="DeliveryAvailable"/>).
+    /// </summary>
+    public bool? DeliversToPostalCode { get; set; }
+    /// <summary>What the delivery there costs, as its prices are written; null when it does not go there. Never the zone.</summary>
+    public decimal? DeliveryFee { get; set; }
+    /// <summary>The smallest order in products it takes there; 0 is none. Null when it does not go there.</summary>
+    public decimal? MinimumOrder { get; set; }
+    /// <summary>From what order in products the delivery there is free, when it is.</summary>
+    public decimal? FreeDeliveryFrom { get; set; }
+
+    internal PublicDirectoryBusinessDto Copy() => (PublicDirectoryBusinessDto)MemberwiseClone();
 }
 
 /// <summary>
@@ -76,12 +96,17 @@ public class PublicDirectoryBusinessDto
 /// </summary>
 /// <param name="Category">Only the businesses of this category; all without one.</param>
 /// <param name="Search">Words of the name, the description or the city, without accents or capitals.</param>
+/// <param name="PostalCode">
+/// The customer's postal code (Fase 24B): each card of the page says whether the business delivers there and what it
+/// costs, as its menu would. The order of the list does not change.
+/// </param>
 [AllowAnonymousRequest("Explorar: los negocios que publicaron su menú y aparecen en el directorio, solo con lo que su menú ya muestra.")]
 public record GetPublicDirectoryQuery(
     BusinessCategory? Category = null,
     string? Search = null,
     int PageNumber = 1,
-    int PageSize = GetPublicDirectoryQuery.DefaultPageSize) : IRequest<PublicDirectoryDto>
+    int PageSize = GetPublicDirectoryQuery.DefaultPageSize,
+    string? PostalCode = null) : IRequest<PublicDirectoryDto>
 {
     public const int DefaultPageSize = 24;
     public const int MaxPageSize = 48;
@@ -98,6 +123,10 @@ public class GetPublicDirectoryQueryValidator : AbstractValidator<GetPublicDirec
         // No snapshot holds more pages than businesses.
         RuleFor(x => x.PageNumber).InclusiveBetween(1, PublicDirectorySnapshot.MaxBusinesses);
         RuleFor(x => x.PageSize).InclusiveBetween(1, GetPublicDirectoryQuery.MaxPageSize);
+        RuleFor(x => x.PostalCode)
+            .Must(code => DeliveryZone.NormalizePostalCode(code) is not { } postalCode || DeliveryZone.IsPostalCode(postalCode))
+            // Without what was written: a validation message reaches the log (ADR 0017 keeps postal codes out of it).
+            .WithMessage(GetPublicDeliveryQuoteQueryValidator.PostalCodeMessage);
     }
 }
 
@@ -130,17 +159,59 @@ public class GetPublicDirectoryQueryHandler : IRequestHandler<GetPublicDirectory
         var found = snapshot.Entries
             .Where(entry => request.Category is null || entry.Business.Category == request.Category)
             .Where(entry => words.All(entry.SearchText.Contains))
-            .Select(entry => entry.Business)
             .ToList();
         var pageSize = Math.Clamp(request.PageSize, 1, GetPublicDirectoryQuery.MaxPageSize);
         var pageNumber = Math.Max(1, request.PageNumber);
         var page = found.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+        var postalCode = DeliveryZone.NormalizePostalCode(request.PostalCode);
+        var businesses = postalCode is null
+            ? page.Select(entry => entry.Business).ToList()
+            : await WithDeliveryToAsync(page, postalCode, cancellationToken);
 
         return new PublicDirectoryDto
         {
             Categories = snapshot.Categories.ToList(),
-            Businesses = new PaginatedList<PublicDirectoryBusinessDto>(page, found.Count, pageNumber, pageSize)
+            Businesses = new PaginatedList<PublicDirectoryBusinessDto>(businesses, found.Count, pageNumber, pageSize),
+            PostalCode = postalCode
         };
+    }
+
+    /// <summary>
+    /// The cards of the page, each saying whether the business delivers to <paramref name="postalCode"/> and what it costs:
+    /// copies, because the snapshot is shared by every request. A business without delivery says nothing about it.
+    /// </summary>
+    private async Task<List<PublicDirectoryBusinessDto>> WithDeliveryToAsync(
+        IReadOnlyList<PublicDirectorySnapshot.Entry> page, string postalCode, CancellationToken cancellationToken)
+    {
+        // Only the businesses of the page that deliver ask; a page without one reads nothing.
+        var delivering = page.Where(entry => entry.Business.DeliveryAvailable).Select(entry => entry.TenantId).ToList();
+        if (delivering.Count == 0)
+            return page.Select(entry => entry.Business).ToList();
+
+        // A public request has no business: the active zones of those businesses that reach the postal code, in one read
+        // (each zone with its own business, IX_DeliveryZonePostalCodes_PostalCode); a business has one at most.
+        var zones = await _context.DeliveryZonePostalCodes
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(code => code.PostalCode == postalCode && delivering.Contains(code.TenantId))
+            .Join(_context.DeliveryZones, code => code.DeliveryZoneId, zone => zone.Id, (code, zone) => new { code.TenantId, Zone = zone })
+            .Where(row => row.Zone.IsActive && row.Zone.TenantId == row.TenantId)
+            .Select(row => new { row.TenantId, row.Zone.Fee, row.Zone.MinimumOrder, row.Zone.FreeDeliveryFrom })
+            .ToListAsync(cancellationToken);
+        var byBusiness = zones.ToDictionary(zone => zone.TenantId);
+
+        return page.Select(entry =>
+        {
+            var card = entry.Business.Copy();
+            if (!card.DeliveryAvailable)
+                return card;
+            var zone = byBusiness.GetValueOrDefault(entry.TenantId);
+            card.DeliversToPostalCode = zone is not null;
+            card.DeliveryFee = zone?.Fee;
+            card.MinimumOrder = zone?.MinimumOrder;
+            card.FreeDeliveryFrom = zone?.FreeDeliveryFrom;
+            return card;
+        }).ToList();
     }
 }
 
@@ -174,9 +245,10 @@ public sealed class PublicDirectorySnapshot
 
     internal IReadOnlyList<PublicDirectoryCategoryDto> Categories { get; }
 
+    /// <param name="TenantId">Its business, to look up its delivery to a postal code; never in the card.</param>
     /// <param name="SearchText">Its name, description and city as a search compares them.</param>
     /// <param name="Rank">0 while it takes orders, 1 open (its menu, or its orders paused), 2 closed.</param>
-    internal sealed record Entry(PublicDirectoryBusinessDto Business, string SearchText, int Rank);
+    internal sealed record Entry(Guid TenantId, PublicDirectoryBusinessDto Business, string SearchText, int Rank);
 
     /// <summary>
     /// Reads every business Explorar lists: a public request has no business, so these reads span all of them, each
@@ -210,6 +282,7 @@ public sealed class PublicDirectorySnapshot
                 t.Settings.Theme,
                 t.Settings.TimeZone,
                 t.Settings.OpeningHours,
+                t.Settings.PricesIncludeTax,
                 context.Branches
                     .Where(b => b.TenantId == t.Id && b.IsDefault)
                     .Select(b => new MainBranch(b.Id, b.City, b.ServiceMode))
@@ -286,11 +359,12 @@ public sealed class PublicDirectorySnapshot
             OrdersPaused = ordersOn && !acceptsOrders,
             StatusLabel = hours is null ? null : BusinessHoursText.StatusLabel(hours),
             StatusDetail = hours is null ? null : BusinessHoursText.StatusDetail(hours, seatedOverride: false),
-            Closed = hours is { Status.IsOpen: false }
+            Closed = hours is { Status.IsOpen: false },
+            PricesIncludeTax = row.PricesIncludeTax
         };
         var rank = acceptsOrders ? 0 : business.Closed ? 2 : 1;
         // Its city too, when the card shows it: never the one of a kitchen that only delivers.
-        return new Entry(business, Comparable($"{row.Name} {row.Description} {business.City}"), rank);
+        return new Entry(row.Id, business, Comparable($"{row.Name} {row.Description} {business.City}"), rank);
     }
 
     /// <summary>Lowercase, without accents and with single spaces: «Taquería  EL Güero» and «taqueria el guero» match.</summary>
@@ -316,6 +390,7 @@ public sealed class PublicDirectorySnapshot
         BusinessTheme Theme,
         string TimeZone,
         OpeningHours? OpeningHours,
+        bool PricesIncludeTax,
         MainBranch? MainBranch,
         bool DrawerOpen,
         bool Delivers);
@@ -362,6 +437,9 @@ public sealed class PublicDirectoryCache
             _rebuild.Release();
         }
     }
+
+    /// <summary>Forgets the snapshot: the next request reads every business again (a test that has just changed them).</summary>
+    public void Invalidate() => Volatile.Write(ref _snapshot, null);
 
     /// <summary>
     /// Built less than <see cref="Lifetime"/> before or after this instant: a request that read the clock an instant

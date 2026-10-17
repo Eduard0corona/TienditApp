@@ -5949,6 +5949,170 @@
         }
       }
     },
+    "/api/v1/me/addresses": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountAddressDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountAddressDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountAddressDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Me"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountAddressRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountAddressRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountAddressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAddressDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAddressDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAddressDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/addresses/{id}": {
+      "put": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountAddressRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountAddressRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountAddressRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAddressDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAddressDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAddressDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/messaging/templates": {
       "get": {
         "tags": [
@@ -8977,6 +9141,13 @@
             }
           },
           {
+            "name": "postalCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "pageNumber",
             "in": "query",
             "schema": {
@@ -11493,6 +11664,64 @@
           },
           "newPassword": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AccountAddressDto": {
+        "required": [
+          "addressLine",
+          "id",
+          "label",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AccountAddressRequest": {
+        "required": [
+          "addressLine",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -17950,17 +18179,30 @@
       },
       "MyOrderItemDto": {
         "required": [
+          "optionIds",
+          "productId",
           "productName",
           "quantity"
         ],
         "type": "object",
         "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "productName": {
             "type": "string"
           },
           "quantity": {
             "type": "number",
             "format": "double"
+          },
+          "optionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "additionalProperties": false
@@ -19341,7 +19583,8 @@
         "required": [
           "customerName",
           "customerPhone",
-          "items"
+          "items",
+          "saveAddress"
         ],
         "type": "object",
         "properties": {
@@ -19372,6 +19615,18 @@
           },
           "delivery": {
             "$ref": "#/components/schemas/OrderDeliveryInput"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "saveAddress": {
+            "type": "boolean"
+          },
+          "addressLabel": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -20878,6 +21133,7 @@
           "deliveryOnly",
           "name",
           "ordersPaused",
+          "pricesIncludeTax",
           "slug",
           "theme"
         ],
@@ -20929,6 +21185,28 @@
           },
           "closed": {
             "type": "boolean"
+          },
+          "pricesIncludeTax": {
+            "type": "boolean"
+          },
+          "deliversToPostalCode": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "deliveryFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "minimumOrder": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "freeDeliveryFrom": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -21007,6 +21285,10 @@
           },
           "businesses": {
             "$ref": "#/components/schemas/PublicDirectoryBusinessDtoPaginatedList"
+          },
+          "postalCode": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -21266,6 +21548,7 @@
         "required": [
           "businessName",
           "confirmed",
+          "linkedToAccount",
           "orderNumber",
           "total"
         ],
@@ -21292,6 +21575,9 @@
           "contactPhone": {
             "type": "string",
             "nullable": true
+          },
+          "linkedToAccount": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false

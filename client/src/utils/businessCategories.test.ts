@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DirectoryBusiness } from '../api/publicDirectoryApi';
 import { BusinessCategory } from '../api/generated/enums';
-import { BUSINESS_CATEGORIES, categoryBySlug, categoryInfo, orderStatus } from './businessCategories';
+import { BUSINESS_CATEGORIES, categoryBySlug, categoryInfo, deliveryToPostalCode, orderStatus } from './businessCategories';
 
 const business = (overrides: Partial<DirectoryBusiness> = {}): DirectoryBusiness => ({
   name: 'Café Luna',
@@ -10,6 +10,7 @@ const business = (overrides: Partial<DirectoryBusiness> = {}): DirectoryBusiness
   theme: 0,
   deliveryOnly: false,
   deliveryAvailable: false,
+  pricesIncludeTax: true,
   acceptsOrders: false,
   ordersPaused: false,
   closed: false,
@@ -29,6 +30,19 @@ describe('businessCategories', () => {
     expect(categoryBySlug('ferreteria')?.label).toBe('Ferretería y hogar');
     expect(categoryBySlug('no-existe')).toBeUndefined();
     expect(categoryInfo(BusinessCategory.Beauty)?.slug).toBe('belleza');
+  });
+
+  it('says what the delivery to the customer\'s postal code costs, written like the prices of the business', () => {
+    expect(deliveryToPostalCode(business())).toBeNull();
+    expect(deliveryToPostalCode(business({ deliveryAvailable: true }))).toEqual({ reaches: true, text: 'Envío a domicilio' });
+    expect(deliveryToPostalCode(business({ deliveryAvailable: true, deliversToPostalCode: true, deliveryFee: 25 })))
+      .toEqual({ reaches: true, text: 'Envío $25.00' });
+    expect(deliveryToPostalCode(business({ deliveryAvailable: true, deliversToPostalCode: true, deliveryFee: 25, pricesIncludeTax: false })))
+      .toEqual({ reaches: true, text: 'Envío $25.00 más IVA' });
+    expect(deliveryToPostalCode(business({ deliveryAvailable: true, deliversToPostalCode: true, deliveryFee: 0 })))
+      .toEqual({ reaches: true, text: 'Envío gratis' });
+    expect(deliveryToPostalCode(business({ deliveryAvailable: true, deliversToPostalCode: false })))
+      .toEqual({ reaches: false, text: 'No llega a tu código postal' });
   });
 
   it('words whether a business takes orders as its menu does', () => {

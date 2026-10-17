@@ -132,14 +132,19 @@ export function phase4Routes(data, { ok, notFound, paginate, createMockOrder }) 
     ['GET', /^\/me\/access$/, () => (data.profile.role === 'Customer'
       ? ok({ userId: data.USER_ID, role: 'CUSTOMER', tenantRole: null, tenantId: null, isMember: false, isTenantManager: false, isPlatformAdmin: false, permissions: [], capabilities: 0 })
       : null)],
-    ['GET', /^\/me\/orders$/, (m, q) => ok(paginate([
-      { id: 'my-1', orderNumber: 'ORD-000412', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 3, orderType: 0, total: 232, paidAmount: 232, createdAt: NOW_ISO,
-        items: [{ productName: 'Torta de jamón', quantity: 2 }, { productName: 'Agua de jamaica', quantity: 2 }] },
-      { id: 'my-2', orderNumber: 'ORD-000088', businessName: 'Lavandería Burbujas', businessSlug: 'lavanderia-burbujas', canOrderAgain: false, status: 1, orderType: 1, total: 180, paidAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 2 * 86400_000).toISOString(),
-        items: [{ productName: 'Lavado por kilo', quantity: 4.5 }] },
-      { id: 'my-3', orderNumber: 'ORD-000390', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 7, orderType: 0, total: 95, paidAmount: 95, createdAt: new Date(new Date(NOW_ISO).getTime() - 9 * 86400_000).toISOString(),
-        items: [{ productName: 'Latte', quantity: 1 }, { productName: 'Croissant', quantity: 1 }] },
-    ], q, 10))],
+    // MyOrderDto: each line with its product and options, as «Pedir otra vez» puts them back in the store's cart.
+    ['GET', /^\/me\/orders$/, (m, q) => {
+      const productId = (name) => data.products.find((p) => p.name === name)?.id ?? `otro-negocio:${name}`;
+      const item = (productName, quantity, optionIds = [], product = productName) => ({ productId: productId(product), productName, quantity, optionIds });
+      return ok(paginate([
+        { id: 'my-1', orderNumber: 'ORD-000412', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 3, orderType: 0, total: 232, paidAmount: 232, createdAt: NOW_ISO,
+          items: [item('Torta de jamón', 2), item('Agua de jamaica', 2)] },
+        { id: 'my-2', orderNumber: 'ORD-000088', businessName: 'Lavandería Burbujas', businessSlug: 'lavanderia-burbujas', canOrderAgain: false, status: 1, orderType: 1, total: 180, paidAmount: 0, createdAt: new Date(new Date(NOW_ISO).getTime() - 2 * 86400_000).toISOString(),
+          items: [item('Lavado por kilo', 4.5)] },
+        { id: 'my-3', orderNumber: 'ORD-000390', businessName: 'Café La Esquina', businessSlug: 'cafe-la-esquina', canOrderAgain: true, status: 7, orderType: 0, total: 95, paidAmount: 95, createdAt: new Date(new Date(NOW_ISO).getTime() - 9 * 86400_000).toISOString(),
+          items: [item('Latte', 1, ['o-gr']), item('Croissant', 1, [], 'Croissant de mantequilla')] },
+      ], q, 10));
+    }],
     ['PUT', /^\/auth\/my-tenant\/sales-policy$/, (m, q, body) => {
       Object.assign(data.tenant, body);
       return ok(body);

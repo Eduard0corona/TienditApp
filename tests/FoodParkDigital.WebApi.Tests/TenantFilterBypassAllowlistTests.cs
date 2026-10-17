@@ -64,8 +64,9 @@ public class TenantFilterBypassAllowlistTests
         // enters that business.
         ["src/FoodParkDigital.Application/OnlineMenu/OnlineMenuFeature.cs"] = 1,
         // Explorar lists the businesses that published their menu and show in it, before any business is in context:
-        // each read filtered by its own business, only for what its menu already shows (ADR 0021).
-        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 2,
+        // each read filtered by its own business, only for what its menu already shows (ADR 0021); with the customer's
+        // postal code, the active zones of every business that reach it, never their names (Fase 24B).
+        ["src/FoodParkDigital.Application/PublicDirectory/PublicDirectoryFeature.cs"] = 3,
         // The memberships of the account itself (by its user id), in every business: its old avatars live in their folders.
         ["src/FoodParkDigital.Application/Identity/AvatarFiles.cs"] = 1,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).

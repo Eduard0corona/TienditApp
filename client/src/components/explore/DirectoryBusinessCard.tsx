@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type { DirectoryBusiness } from '../../api/publicDirectoryApi';
-import { categoryInfo, orderStatus } from '../../utils/businessCategories';
+import { categoryInfo, deliveryToPostalCode, orderStatus } from '../../utils/businessCategories';
 import { getBusinessTheme } from '../../utils/businessThemes';
 import PhotoOrInitial from '../common/PhotoOrInitial';
 import './DirectoryBusinessCard.css';
@@ -14,7 +14,8 @@ interface DirectoryBusinessCardProps {
 
 /**
  * A business in Explorar: its logo (or its initial in its colors), name, what it sells, its category and city, and
- * whether it takes orders now. The whole card opens its menu.
+ * whether it takes orders now. With the customer's postal code (Fase 24B) it says whether it delivers there and what it
+ * costs. The whole card opens its menu.
  */
 export default function DirectoryBusinessCard({ business, preview = false }: DirectoryBusinessCardProps) {
   const theme = getBusinessTheme(business.theme);
@@ -25,6 +26,7 @@ export default function DirectoryBusinessCard({ business, preview = false }: Dir
     '--dc-ink-dark': theme.dark.accentText,
   } as CSSProperties;
   const status = orderStatus(business);
+  const delivery = deliveryToPostalCode(business);
   const place = [categoryInfo(business.category)?.label, business.deliveryOnly ? 'Solo a domicilio' : business.city]
     .filter(Boolean)
     .join(' · ');
@@ -41,9 +43,9 @@ export default function DirectoryBusinessCard({ business, preview = false }: Dir
             {status.tone === 'taking' && <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>}
             {status.text}
           </span>
-          {business.deliveryAvailable && (
-            <span className="dc-badge dc-badge-info">
-              <i className="ri-e-bike-2-line" aria-hidden="true"></i>Envío a domicilio
+          {delivery && (
+            <span className={`dc-badge ${delivery.reaches ? 'dc-badge-info' : 'dc-badge-menu'}`}>
+              <i className={delivery.reaches ? 'ri-e-bike-2-line' : 'ri-map-pin-line'} aria-hidden="true"></i>{delivery.text}
             </span>
           )}
         </p>

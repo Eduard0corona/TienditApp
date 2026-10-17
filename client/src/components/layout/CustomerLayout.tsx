@@ -11,7 +11,7 @@ import './CustomerLayout.css';
 const navClass = ({ isActive }: { isActive: boolean }) => `cl-link${isActive ? ' active' : ''}`;
 
 /**
- * The frame of the customer's screens (Explorar, Mis pedidos): TienditApp's own, without the business menu. Whoever has
+ * The frame of the customer's screens (Explorar, Mis pedidos, Mi cuenta): TienditApp's own, without the business menu. Whoever has
  * no session enters or creates a customer account from here; the team of a business goes back to it.
  */
 export default function CustomerLayout() {
@@ -66,7 +66,7 @@ export default function CustomerLayout() {
             )}
             {customer && (
               <>
-                <Link to="/profile" className="btn btn-sm btn-light" aria-label="Mi perfil">
+                <Link to="/cuenta" className="btn btn-sm btn-light" aria-label="Mi cuenta">
                   <i className="ri-user-line" aria-hidden="true"></i>
                 </Link>
                 <button type="button" className="btn btn-sm btn-light" onClick={() => void signOut()}>Salir</button>

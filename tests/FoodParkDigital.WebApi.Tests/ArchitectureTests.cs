@@ -232,6 +232,8 @@ public class ArchitectureTests
             // Accounts (Identity), shared by the businesses of a person, and their sessions and customer profile.
             "ApplicationUser", "ApplicationRole", "IdentityUserRole`1", "IdentityUserClaim`1", "IdentityUserLogin`1",
             "IdentityRoleClaim`1", "IdentityUserToken`1", "RefreshToken", "CustomerProfile",
+            // The addresses a customer account keeps for its orders (Fase 24B): read only by the account's own id.
+            "AccountAddress",
             // A child of a tenant-scoped aggregate, filtered through it (its conversation's business).
             "WhatsAppMessage"
         };

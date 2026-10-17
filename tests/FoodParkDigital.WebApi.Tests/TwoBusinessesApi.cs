@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FoodParkDigital.Application.Common.Interfaces;
+using FoodParkDigital.Application.PublicDirectory;
 using FoodParkDigital.Domain.Identity.Entities;
 using FoodParkDigital.Domain.Identity.Enums;
 using FoodParkDigital.Infrastructure.BackgroundJobs.Inbox;
@@ -167,6 +168,32 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         return new SignedUp(signedIn.GetProperty("user").GetProperty("tenantId").GetGuid(), client, accessToken, refreshCookie, email);
     }
 
+    /// <summary>
+    /// Registers a customer account, activates it from the emailed link and signs it in: a client with its session, as
+    /// the store sends it (Fase 24B).
+    /// </summary>
+    public async Task<(Guid UserId, HttpClient Client, string Email)> SignUpCustomerAsync(string name)
+    {
+        var client = _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var email = $"cliente-{name}-{Guid.NewGuid().ToString("N")[..8]}@demo.com";
+        Assert.True((await client.PostAsJsonAsync("/api/v1/auth/register/customer", new
+        {
+            email,
+            password = Password,
+            firstName = "Cliente",
+            lastName = name.ToUpperInvariant(),
+            phoneNumber = "+52155" + Random.Shared.Next(10000000, 99999999)
+        })).IsSuccessStatusCode);
+
+        await DispatchOutboxAsync();
+        var (userId, token) = _emails.ConfirmationTo(email);
+        await ReadAsync(await client.GetAsync(
+            $"/api/v1/auth/confirm-email?userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}"));
+        var signedIn = await ReadAsync(await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = Password }));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", signedIn.GetProperty("accessToken").GetString());
+        return (Guid.Parse(userId), client, email);
+    }
+
     private static IEnumerable<string> SetCookies(HttpResponseMessage response)
         => response.Headers.TryGetValues("Set-Cookie", out var headers) ? headers.Select(header => header.Split(';')[0]) : [];
 
@@ -190,6 +217,12 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", signedIn.GetProperty("accessToken").GetString());
         return client;
     }
+
+    /// <summary>
+    /// Makes Explorar read every business again on its next request: its snapshot lasts 30 seconds and the tests of the
+    /// collection share it.
+    /// </summary>
+    public void ForgetDirectorySnapshot() => _factory!.Services.GetRequiredService<PublicDirectoryCache>().Invalidate();
 
     /// <summary>A client without a session: a customer on the public menu.</summary>
     public HttpClient AnonymousClient() => _factory!.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });

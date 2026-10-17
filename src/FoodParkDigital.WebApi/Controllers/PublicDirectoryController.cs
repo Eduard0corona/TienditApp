@@ -27,14 +27,16 @@ public class PublicDirectoryController : ControllerBase
     /// <param name="q">Words of the name or the description.</param>
     /// <param name="pageNumber">From 1.</param>
     /// <param name="pageSize">Up to 48.</param>
+    /// <param name="postalCode">The customer's postal code: each card says whether the business delivers there and what it costs.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     [HttpGet]
     [EnableRateLimiting("public-menu")]
     public async Task<ActionResult<PublicDirectoryDto>> GetDirectory(
         [FromQuery] BusinessCategory? category,
         [FromQuery] string? q,
+        [FromQuery] string? postalCode,
         CancellationToken cancellationToken,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = GetPublicDirectoryQuery.DefaultPageSize)
-        => Ok(await _mediator.Send(new GetPublicDirectoryQuery(category, q, pageNumber, pageSize), cancellationToken));
+        => Ok(await _mediator.Send(new GetPublicDirectoryQuery(category, q, pageNumber, pageSize, postalCode), cancellationToken));
 }

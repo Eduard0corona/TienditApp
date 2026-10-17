@@ -1,6 +1,7 @@
-// Phase 24A endpoints for the fake backend: Explorar, the directory of businesses (GET /public/directory), and how the
-// demo business shows there (GET and PUT /auth/my-tenant/directory). The directory is `data.directory`, in the order
-// the API answers it (taking orders first, then open, then closed); a scene file changes it in its `prepareData`.
+// Phase 24A endpoints for the fake backend: Explorar, the directory of businesses (GET /public/directory, with the
+// customer's postal code since the 24B), and how the demo business shows there (GET and PUT /auth/my-tenant/directory).
+// The directory is `data.directory`, in the order the API answers it (taking orders first, then open, then closed); a
+// scene file changes it in its `prepareData`.
 
 // BusinessCategory, BusinessTheme and DirectoryVisibility as the contract numbers them.
 const FOOD = 0;
@@ -18,8 +19,22 @@ const CATEGORIES = 11;
 const card = (name, slug, category, overrides = {}) => ({
   name, slug, logoUrl: null, category, description: null, theme: NOPAL, city: 'Ciudad de México', deliveryOnly: false,
   deliveryAvailable: false, acceptsOrders: false, ordersPaused: false, statusLabel: null, statusDetail: null, closed: false,
+  pricesIncludeTax: true,
   ...overrides,
 });
+
+/**
+ * Where each business that delivers reaches, by its slug (Fase 24B): Café La Esquina takes orders to Roma and Condesa.
+ * Explorar answers with them when the customer gives a postal code, never with the name of a zone.
+ */
+export function demoDeliveryZones() {
+  return {
+    'cafe-la-esquina': {
+      '06700': { fee: 35, minimumOrder: 150, freeDeliveryFrom: 400 },
+      '06140': { fee: 45, minimumOrder: 0, freeDeliveryFrom: null },
+    },
+  };
+}
 
 /** The businesses of the demo city, as Explorar lists them on Sunday at 13:25. */
 export function demoDirectory() {
@@ -51,7 +66,19 @@ export function demoDirectory() {
 const comparable = (text) => (text ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 export function phase24aRoutes(data, { ok, paginate }) {
+  /** Each card says whether its business delivers to the postal code, as the API does for a business that delivers. */
+  const withDeliveryTo = (businesses, postalCode) => (postalCode
+    ? businesses.map((business) => {
+      if (!business.deliveryAvailable) return business;
+      const zone = data.directoryZones[business.slug]?.[postalCode];
+      return {
+        ...business, deliversToPostalCode: !!zone, deliveryFee: zone?.fee ?? null,
+        minimumOrder: zone?.minimumOrder ?? null, freeDeliveryFrom: zone?.freeDeliveryFrom ?? null,
+      };
+    })
+    : businesses);
   data.directory ??= demoDirectory();
+  data.directoryZones ??= demoDeliveryZones();
   data.directoryProfile ??= {
     category: FOOD, suggestedCategory: FOOD, description: 'Café de especialidad, pan dulce y chilaquiles desde 2021.', listed: true,
   };
@@ -69,7 +96,8 @@ export function phase24aRoutes(data, { ok, paginate }) {
           category: value,
           count: data.directory.filter((business) => business.category === value).length,
         })),
-        businesses: paginate(found, q, 24),
+        businesses: paginate(withDeliveryTo(found, q.get('postalCode')), q, 24),
+        postalCode: q.get('postalCode') || null,
       });
     }],
     ['GET', /^\/auth\/my-tenant\/directory$/, () => ok({ ...data.directoryProfile, visibility: visibility() })],

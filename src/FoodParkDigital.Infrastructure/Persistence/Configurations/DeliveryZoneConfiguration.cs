@@ -57,5 +57,7 @@ public class DeliveryZonePostalCodeConfiguration : IEntityTypeConfiguration<Deli
         // A postal code is in one zone of the business at most, also when two saves add it at the same time; finding the
         // zone of a postal code reads this index.
         builder.HasIndex(x => new { x.TenantId, x.PostalCode }).IsUnique();
+        // Explorar asks which businesses reach a postal code, in all of them at once (Fase 24B).
+        builder.HasIndex(x => x.PostalCode).IncludeProperties(x => new { x.TenantId, x.DeliveryZoneId });
     }
 }

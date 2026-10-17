@@ -22,6 +22,8 @@ export interface DeliveryZoneTerms extends DeliveryTerms {
 
 export const ADDRESS_LINE_MAX_LENGTH = 300;
 export const REFERENCES_MAX_LENGTH = 500;
+/** The name of an address a customer account keeps (AccountAddress.MaxLabelLength). */
+export const ADDRESS_LABEL_MAX_LENGTH = 60;
 export const ADDRESS_LINE_REQUIRED_MESSAGE = 'Escribe a dónde va el pedido: calle, número y colonia.';
 /** The server's words (HomeDeliveryRules.OnlyProductsMessage). */
 export const DELIVERY_ONLY_PRODUCTS_MESSAGE = 'Solo los productos se mandan a domicilio.';

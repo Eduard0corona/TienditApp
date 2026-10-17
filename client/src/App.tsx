@@ -17,6 +17,7 @@ const AcceptInvitation = lazy(() => import('./pages/auth/AcceptInvitation'));
 const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/profile/Profile'));
 const MyOrders = lazy(() => import('./pages/account/MyOrders'));
+const AccountPage = lazy(() => import('./pages/account/AccountPage'));
 const CustomerLayout = lazy(() => import('./components/layout/CustomerLayout'));
 const ExplorePage = lazy(() => import('./pages/explore/ExplorePage'));
 const ProductsList = lazy(() => import('./pages/products/ProductsList'));
@@ -82,7 +83,7 @@ export default function App() {
             {/* The public menu of a business, opened from its link or QR (no sign-in). */}
             <Route path="/m/:slug" element={<PublicMenuPage />} />
 
-            {/* The customer's screens: Explorar (no sign-in) and the orders of a customer account. */}
+            {/* The customer's screens: Explorar (no sign-in), and the orders and the account of a customer account. */}
             <Route element={<CustomerLayout />}>
               <Route path="/explorar" element={<ExplorePage />} />
               <Route path="/explorar/:categoria" element={<ExplorePage />} />
@@ -92,6 +93,16 @@ export default function App() {
                   <ProtectedRoute>
                     <AccessRoute area="myOrders">
                       <MyOrders />
+                    </AccessRoute>
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/cuenta"
+                element={(
+                  <ProtectedRoute>
+                    <AccessRoute area="myOrders">
+                      <AccountPage />
                     </AccessRoute>
                   </ProtectedRoute>
                 )}
