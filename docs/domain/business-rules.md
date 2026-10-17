@@ -179,6 +179,23 @@ Los clientes encuentran los negocios por categoría y compran en el menú de cad
   - Cada cambio queda en la bitácora (`DirectoryProfileUpdated`) con la categoría y «Aparecer» de antes y de después, y si la descripción cambió, sin el texto.
 - **Quién entra por `/`:** los visitantes y los clientes llegan a Explorar. El equipo de un negocio entra a su trabajo, y desde Explorar regresa con «Mi negocio».
 
+## Comprar con tu cuenta (Fase 24B)
+
+Una cuenta de cliente compra sin escribir sus datos cada vez ([ADR 0022](../adr/0022-shopping-with-an-account.md)).
+
+- **De quién es el pedido:** un pedido del menú en línea enviado con la sesión de una cuenta de cliente activa queda en esa cuenta, sin confirmar el teléfono, y nadie lo reclama después por el teléfono. Sin sesión, o con la del equipo de un negocio, el teléfono decide, como antes. El recibo dice «Lo encuentras en tus pedidos.» y ofrece «Ver mis pedidos»; a un visitante le ofrece crear su cuenta.
+- **Datos escritos:** la tienda escribe el nombre y el teléfono de la cuenta (sin el +52), y se pueden cambiar en cada pedido.
+- **Direcciones de la cuenta:**
+  - Hasta 10 por cuenta, para cualquier negocio que entregue. Cada una tiene nombre (hasta 60 caracteres, en un renglón; «Dirección» si no se escribe), código postal, dirección y referencias, con los límites de la dirección de un pedido.
+  - La misma dirección (código postal y renglón, sin mayúsculas ni espacios de más) es una sola: guardarla otra vez cambia su nombre y sus referencias. Cambiar una a otra que ya está guardada responde «Ya guardaste esa dirección como «Casa».».
+  - Se agregan, cambian y borran en Cuenta (`/cuenta`). Borrar una no cambia los pedidos que ya se enviaron ahí.
+  - Al pedir a domicilio, la tienda ofrece primero la última usada, con «Otra dirección» para escribir una. Una dirección nueva se guarda al enviar si el cliente deja marcado «Guardar esta dirección en mi cuenta» (con nombre opcional) y le queda lugar; con 10, el pedido se envía igual.
+  - Mensajes: «Guardas hasta 10 direcciones: borra una para agregar otra.», «Solo una cuenta de cliente guarda direcciones.», «Esa dirección ya no está en tu cuenta.» y «El nombre de la dirección admite hasta 60 caracteres.» (un nombre de hasta 200 se recorta a 60).
+- **El mismo pedido, una vez:** la tienda manda una llave por pedido, la misma si se reintenta sin cambiar nada. Con la misma llave el servidor responde el pedido que ya registró, aunque el negocio haya cerrado desde entonces. Con otro teléfono responde «Ese pedido ya se envió.», y una llave vacía, «La clave del pedido no es válida.».
+- **Explorar por código postal:** con el código postal del cliente («Entregar en…»), cada negocio que entrega dice «Envío $35.00», «Envío gratis», «… más IVA» si sus precios no lo incluyen, o «No llega a tu código postal». Es la zona activa del negocio que lo incluye, sin su nombre. El mínimo y el envío gratis los aplica el menú al pedir. El código postal se recuerda en el dispositivo y la tienda lo toma la primera vez que el pedido va a domicilio si la cuenta no tiene direcciones.
+- **Carrito guardado:** el carrito de cada tienda se guarda en el dispositivo hasta que se envía o se vacía, por 7 días y en 10 tiendas como mucho. Guarda productos, opciones y cantidades, nunca precios: al volver se arma con el menú y los precios de ahora. Lo que no está disponible ahora, o tiene opciones que ya no existen o no forman una elección válida, se queda fuera, y la tienda dice cuántos productos («Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.»). Explorar ofrece «Seguir con el pedido».
+- **«Pedir otra vez»:** en Mis pedidos, llena el carrito de esa tienda con el pedido, con la misma regla del carrito guardado. Solo regresan cantidades enteras: un producto por kilo o en fracciones no regresa.
+
 ## Cancelación y trazabilidad
 
 El agregado conserva `CancellationReason`, agrega historial con estado anterior/nuevo/usuario y emite evento con estado anterior/motivo. Sin embargo, el motivo es opcional y `OrderStatusHistory` no guarda el motivo; es una brecha frente a la regla aprobada de conservar motivo, estado anterior, usuario y trazabilidad completa. Toda cancelación futura debe exigir/normalizar la evidencia necesaria sin reescribir historial.

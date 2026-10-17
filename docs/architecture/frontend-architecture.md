@@ -395,6 +395,26 @@ Explorar (Fase 24A, [ADR 0021](../adr/0021-business-directory.md)):
   - `scenes/explorar.spec.ts` tiene Explorar en tres vistas, una categoría, una búsqueda sin resultados, sin negocios, como cliente y la tarjeta del dueño.
 - **Primera visita:** suma 330 B (de 176,806 a 177,136 B, contra `master` en `c3c1a00`): las dos rutas, la redirección, el marco que baja aparte y los enums `BusinessCategory` y `DirectoryVisibility`, que viven con los demás enums del contrato en el primer chunk. El presupuesto sube de 176,900 a 177,200 B.
 
+Comprar con tu cuenta (Fase 24B, [ADR 0022](../adr/0022-shopping-with-an-account.md)):
+
+- **Quién compra:** `hooks/useCustomerAccount` da la cuenta de cliente de la sesión o ninguna. Lee `AuthContext` sin exigirlo, porque la tienda también se pinta sin el proveedor (sus pruebas). La sesión del equipo de un negocio compra como invitado, como decide el servidor.
+- **La tienda (`PublicMenuPage`):**
+  - Escribe el nombre y el teléfono de la cuenta (`utils/phones.localPhone`, sin el +52) una vez por cuenta, durante el render. Se pueden cambiar.
+  - Arma el carrito guardado una vez por tienda, durante el render, con el menú de ahora (`utils/savedCart.restoreLines`), y avisa cuántos productos quedaron fuera (`.pm-restored`). Un efecto guarda cada cambio del carrito (`saveCart`), y enviarlo o vaciarlo lo olvida.
+  - A domicilio, `PublicDeliveryFields` ofrece las direcciones de la cuenta (`['me', 'addresses']`) como `radiogroup` «¿A dónde?» con «Otra dirección»; con una guardada, los campos se ocultan. La primera vez elige la última usada o, sin direcciones, el código postal de Explorar (`utils/postalCodePreference`). Con «Otra dirección», «Guardar esta dirección en mi cuenta» (marcado) y su nombre.
+  - Manda la llave del pedido (`idempotencyKey`): la misma mientras el pedido sea igual (firma del cuerpo en un `ref`), y nueva cuando cambia algo.
+  - El recibo ofrece «Ver mis pedidos» si el pedido quedó en la cuenta (`linkedToAccount`), o «Crea tu cuenta» a un visitante. Al enviar, invalida las direcciones y Mis pedidos.
+- **`ExplorePage`:**
+  - «Entregar en…» (`PostalCodeChip`) pide el código postal una vez, lo recuerda en el dispositivo y lo manda como `postalCode` de la búsqueda. Las tarjetas dicen el envío (`deliveryToPostalCode` en `utils/businessCategories.ts`).
+  - Si hay un carrito sin enviar (`latestCart`), ofrece «Seguir con el pedido».
+- **`MyOrders`:** «Pedir otra vez» guarda el pedido como carrito de esa tienda (`linesOfOrder`, `reorderOf`) y la abre.
+- **Cuenta (`/cuenta`, `pages/account/AccountPage`):** dentro de `CustomerLayout` (`ProtectedRoute` y `AccessRoute` `myOrders`), con el ícono «Mi cuenta» del marco. Muestra los datos de la cuenta con el enlace al perfil y «Tus direcciones», que se agregan y cambian en un diálogo (`AddressDialog`) y se borran con `ConfirmDialog`. Con 10, «Agregar dirección» se apaga. `api/accountApi.ts` las pide.
+- **`utils/savedCart.ts`:** el carrito de cada tienda en `localStorage` (`tienditapp.carts`): sin precios, 7 días, 10 tiendas, 50 líneas y 99 piezas por línea, como el validador del pedido. Un valor que no se lee se ignora.
+- **Escenas:**
+  - `mocks/routes-p10.mjs` contesta las direcciones de la cuenta: Casa (Roma Norte, la última usada) y Oficina (Condesa). `mocks/routes-p9.mjs` responde el directorio con `postalCode` (las zonas de Café La Esquina: 06700 y 06140), y `mocks/routes-p4.mjs`, Mis pedidos con el producto y las opciones de cada línea.
+  - `scenes/cuenta-cliente.spec.ts` tiene Cuenta en tres vistas, agregar y borrar una dirección, sin direcciones, Explorar con código postal (escritorio y teléfono) y su formulario, la tienda con la cuenta (a domicilio, otra dirección y pedido enviado) y «Pedir otra vez» con un producto agotado.
+- **Primera visita:** suma 127 B (de 177,136 a 177,263 B, contra `master` en `d7e54f5`): la ruta `/cuenta` y el ícono del marco. La tienda, Explorar, Mis pedidos y Cuenta bajan aparte. El presupuesto sube de 177,200 a 177,400 B.
+
 Pantallas de la Fase 2: Caja en pestañas (Mi caja, Turnos, Corte), Reembolsar y Anular venta en el detalle de Pedidos, Campañas (campañas, plantillas, recordatorios y bajas), ficha del cliente (chat, Clientes y Pedidos) y Nuevo pedido desde el chat, que abre Vender con el cliente y el canal WhatsApp y envía el resumen al chat al guardar.
 
 Inventario (Fase 7D): `pages/inventory/InventoryManagement.tsx` es la pantalla y conserva el estado de las siete pestañas, así que filtros, página, búsqueda y la receta sin guardar siguen ahí al volver a una pestaña. Cada pestaña (`SuppliesTab`, `StocksTab`, `MovementsTab`, `LocationsTab`, `RecipesTab`, `KardexTab`, `AlertsTab`) y cada diálogo (`SupplyModal`, `LocationModal`, `MovementModal`, `MovementDetailModal`) viven en su archivo. `useServerList` lleva una lista paginada en el servidor, `useRecipeEditor` la receta en edición, `inventoryForms.ts` las reglas de los formularios (con pruebas) e `inventoryLabels.ts` las etiquetas de tipos, motivos y unidades. Los diálogos muestran sus errores dentro del diálogo.

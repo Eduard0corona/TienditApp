@@ -54,6 +54,14 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Rolling back deletes the addresses customers saved: they are theirs, not a business's (each order already
+            // copied its own), so once there is one there is only roll-forward. A missing table compiles (deferred name
+            // resolution): a second run of rollback.sql skips it.
+            migrationBuilder.Sql(@"
+IF EXISTS (SELECT 1 FROM [AccountAddresses])
+    THROW 50017, N'Customer accounts saved addresses; rolling back would delete them. Roll forward instead.', 1;
+");
+
             migrationBuilder.DropTable(
                 name: "AccountAddresses");
 

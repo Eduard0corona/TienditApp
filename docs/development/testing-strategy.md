@@ -416,6 +416,29 @@ Existen cuatro proyectos xUnit y las pruebas del cliente:
       - Mi negocio (10): la tarjeta «Cómo te ven en TienditApp» al final de Configuración › Negocio, en escritorio, teléfono y oscuro, al editar (también en el teléfono y en oscuro), con días especiales, la vista previa de un tema, el menú en línea y las plataformas de reparto.
       - La consola de plataforma y los planes, en escritorio, teléfono y oscuro (6): la campana de avisos ya no sale al administrador de la plataforma, que no es equipo de un negocio (`Topbar`).
     - **Resultado:** con esas capturas, las 411 escenas pasaron contra el mismo build, y las 8 de Explorar dos corridas seguidas. «Zonas de entrega: tiempo de traslado entre visitas» (`agenda-domicilio.spec.ts`) salió distinta en una de las dos corridas completas, como en la 23A, y la fase no toca esa pantalla. Repetida 15 veces sola falla 3, siempre con la barra superior y el menú unos 6 px más abajo que el contenido: la página queda desplazada al tomar la captura. Queda para un cambio propio de las escenas.
+- Fase 24B, Comprar con tu cuenta ([ADR 0022](../adr/0022-shopping-with-an-account.md)):
+  - **Domain:** `AccountAddressTests` (10 pruebas): la dirección con las reglas de la de un pedido y lo que falta o está mal; el nombre por omisión y en un renglón corto; la undécima y una sin cuenta se rechazan; cambiarla sigue las mismas reglas y un rechazo no cambia nada; el mismo lugar sin mayúsculas ni espacios de más; y marcarla usada guarda las referencias del pedido, solo para el mismo lugar.
+  - **Application:** `CustomerAccountShoppingTests` (8 pruebas):
+    - el pedido con la sesión de una cuenta de cliente es de la cuenta sin confirmar el teléfono, y nadie lo reclama; con la del equipo o de una cuenta inactiva es de invitado;
+    - la misma llave registra el pedido una vez, responde aunque el negocio ya cerró su caja y no responde a otro teléfono (una llave nueva sin caja se rechaza, como antes); el validador rechaza una llave vacía y un nombre de dirección largo;
+    - a domicilio con sesión, guarda la dirección cuando se pide y la ofrece primero; sin sesión no guarda nada;
+    - las direcciones son solo de su cuenta, una por lugar y hasta 10, con los límites de la dirección de un pedido.
+
+    `PublicDirectoryTests` (+2): con el código postal, cada tarjeta de un negocio que entrega dice si llega y cuánto cobra, con la zona activa y sin cambiar la lista ni la foto compartida; el código postal lleva 5 dígitos. Las pruebas del menú en línea pasan la sesión (`fixture.CurrentUser`). `AuthorizationBehaviorTests` cuenta los cuatro casos de uso de las direcciones (254).
+  - **SQL Server:** `AccountAddressesMigrationSqlServerTests` (2 pruebas): la CHECK del código postal y que las direcciones se van con la cuenta; revertir se detiene con el error 50017 sin cambiar nada mientras haya una dirección, y después quita solo la tabla y el índice, otra vez no hace nada y hacia adelante vuelven. `rollback.sql` es el que genera EF desde el `Down` de la migración.
+  - **WebApi:** `CrossTenantCustomerAccountsSqlServerTests` (3 pruebas), sobre la API real con dos negocios:
+    - una cuenta no lee, cambia ni borra las direcciones de otra; el equipo de un negocio no guarda direcciones y sin sesión responde 401;
+    - el pedido con sesión queda en la cuenta en los dos negocios y en ninguna otra; la misma llave es otro pedido en otro negocio; sin sesión, la misma llave responde «Ese pedido ya se envió.» sin el folio; Mis pedidos manda el producto de cada línea; no se crea cliente temporal; la dirección queda usada;
+    - Explorar con el código postal dice quién llega y cuánto cobra, sin el nombre de la zona, y rechaza un código postal de 4 dígitos.
+
+    `TenantFilterBypassAllowlistTests` cuenta el tercer `IgnoreQueryFilters()` de `PublicDirectoryFeature.cs`; `ArchitectureTests` lista `AccountAddress` entre las entidades sin negocio.
+  - **Cliente:**
+    - `savedCart.test.ts` (4): un carrito por tienda hasta enviarlo o vaciarlo, 7 días, lo que no se lee, las líneas de un pedido en piezas enteras, y lo que el menú de ahora puede tomar.
+    - `PublicMenuPage.test.tsx` (+4): el carrito guardado con el menú de ahora; la llave igual al reenviar y el carrito olvidado al registrar; los datos y la última dirección de la cuenta, y guardar una nueva; el equipo pide como invitado.
+    - `ExplorePage.test.tsx` (+2): el código postal se pide una vez y cada tarjeta dice si llega; el aviso del carrito sin enviar.
+    - `AccountPage.test.tsx` (3), `MyOrders.test.tsx` (1), `phones.test.ts` (1) y `businessCategories.test.ts` (+1, el envío como los precios del negocio). `CustomerLayout.test.tsx` pide el ícono «Mi cuenta».
+  - **Escenas visuales** (contra `master` en `d7e54f5`):
+    - **Nuevas (14, `cuenta-cliente.spec.ts`):** Cuenta en escritorio, teléfono y oscuro; agregar y borrar una dirección; sin direcciones; Explorar con código postal y un carrito sin enviar (escritorio y teléfono), el formulario del código postal y «Seguir con el pedido»; la tienda con la cuenta a domicilio, con otra dirección y con el pedido enviado; y «Pedir otra vez» con un producto agotado. Los datos simulados son `mocks/routes-p10.mjs` (direcciones), el directorio con `postalCode` (`mocks/routes-p9.mjs`) y Mis pedidos con el producto de cada línea (`mocks/routes-p4.mjs`). No salen de la línea base de `master` hasta que la fase entre a `master`.
 - Escenas estables, después de la 24A:
   - «Zonas de entrega: tiempo de traslado entre visitas» fallaba 3 de cada 15 veces. Bootstrap enciende `scroll-behavior: smooth`: al escribir en el campo de abajo, la página seguía bajando después de que `snap` la regresaba arriba, y la captura salía 2, 6 u 11 px abajo.
   - La init script de `client/visual/fixtures.ts`, que ya quitaba transiciones y animaciones, quita también el desplazamiento suave. La página vuelve a 0 y se queda ahí en 15 de 15.

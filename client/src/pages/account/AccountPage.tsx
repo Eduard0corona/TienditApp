@@ -14,6 +14,7 @@ import {
   ADDRESS_LINE_MAX_LENGTH,
   REFERENCES_MAX_LENGTH,
 } from '../../utils/homeDelivery';
+import { localPhone } from '../../utils/phones';
 import { isPostalCode } from '../../utils/postalCodes';
 
 const EMPTY: AccountAddressInput = { label: '', postalCode: '', addressLine: '', references: '' };
@@ -181,7 +182,7 @@ export default function AccountPage() {
             <dt className="col-sm-3 text-muted fw-normal">Correo</dt>
             <dd className="col-sm-9">{user?.email}</dd>
             <dt className="col-sm-3 text-muted fw-normal">Teléfono</dt>
-            <dd className="col-sm-9">{user?.phoneNumber || 'No registrado'}</dd>
+            <dd className="col-sm-9">{localPhone(user?.phoneNumber) || 'No registrado'}</dd>
           </dl>
           <p className="small text-muted mb-1">Al pedir en un negocio ya van escritos; puedes cambiarlos en cada pedido.</p>
           <Link className="small" to="/profile">Cambiar tu contraseña o tu teléfono</Link>

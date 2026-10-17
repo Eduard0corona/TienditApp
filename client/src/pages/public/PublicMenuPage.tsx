@@ -34,6 +34,7 @@ import {
   getPriceWithOptions,
   getSelectionError,
 } from '../../utils/productOptions';
+import { localPhone } from '../../utils/phones';
 import { readPostalCode } from '../../utils/postalCodePreference';
 import {
   MAX_CART_LINES,
@@ -153,7 +154,7 @@ export default function PublicMenuPage() {
   if (customer && prefilledFor !== customer.id) {
     setPrefilledFor(customer.id);
     setName((current) => current || `${customer.firstName} ${customer.lastName}`.trim());
-    setPhone((current) => current || customer.phoneNumber || '');
+    setPhone((current) => current || localPhone(customer.phoneNumber));
   }
 
   // The cart this device kept for this store, with what its menu has now (and «Pedir otra vez»), once per store.

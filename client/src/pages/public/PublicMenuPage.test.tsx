@@ -502,7 +502,7 @@ describe('PublicMenuPage', () => {
       const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
 
       expect(within(cart).getByLabelText('Tu nombre')).toHaveValue('Mariana Ortiz');
-      expect(within(cart).getByLabelText('Teléfono (WhatsApp)')).toHaveValue('+5212221234567');
+      expect(within(cart).getByLabelText('Teléfono (WhatsApp)')).toHaveValue('2221234567');
       await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
       expect(await within(cart).findByRole('radio', { name: /^Casa/ })).toHaveAttribute('aria-checked', 'true');
       // A saved address needs nothing typed, and is never saved twice.

@@ -14,6 +14,7 @@ import { phase5aRoutes } from './routes-p6.mjs';
 import { phase5eRoutes } from './routes-p7.mjs';
 import { phase22eRoutes } from './routes-p8.mjs';
 import { phase24aRoutes } from './routes-p9.mjs';
+import { phase24bRoutes } from './routes-p10.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 export { NOW_ISO };
@@ -220,6 +221,7 @@ function buildRoutes(data, token) {
   const NOW_LOCAL = localHhmmss(NOW_ISO);
 
   return [
+    ...phase24bRoutes(data, { ok, notFound }),
     ...phase24aRoutes(data, { ok, paginate }),
     ...phase22eRoutes(data, { ok, notFound }),
     ...phase5eRoutes(data, { ok, notFound }),
