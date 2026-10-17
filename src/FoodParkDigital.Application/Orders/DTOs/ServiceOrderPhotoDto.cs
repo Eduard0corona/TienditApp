@@ -11,6 +11,8 @@ public class ServiceOrderPhotosDto
     public Guid OrderId { get; set; }
     /// <summary>Whether it still takes photos: every service order but a cancelled one.</summary>
     public bool CanAdd { get; set; }
+    /// <summary>Whether it still takes photos before: not once it is delivered or finished, when only the after goes.</summary>
+    public bool CanAddBefore { get; set; }
     /// <summary>Those taken when it was received first, then the added ones in the order they were taken.</summary>
     public List<ServiceOrderPhotoDto> Photos { get; set; } = [];
 }

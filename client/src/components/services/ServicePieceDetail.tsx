@@ -100,7 +100,7 @@ export default function ServicePieceDetail({ piece, onHide }: ServicePieceDetail
 
             {/* The photos open for whoever works the board, also when the rest of the order is not theirs to see. */}
             <h3 className="h6">Fotos del servicio</h3>
-            <ServicePhotosPanel orderId={piece.orderId} />
+            <ServicePhotosPanel key={piece.orderId} orderId={piece.orderId} />
 
             {error && <div className="alert alert-danger" role="alert">{error}</div>}
             {!order && !error && <div className="text-muted small mb-3">Cargando el pedido…</div>}

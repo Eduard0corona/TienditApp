@@ -15,8 +15,8 @@ namespace FoodParkDigital.Application.Orders.Commands;
 
 /// <summary>
 /// Adds a photo to a service order (Fase 25, ADR 0024): before or after, with an optional note. The file is one the
-/// business uploaded through the app (<see cref="UploadServiceIntakePhotoCommand"/>); who adds it and when come from the
-/// session and the clock.
+/// business uploaded through the app (<see cref="UploadServiceIntakePhotoCommand"/>) and is in its storage; who adds it and
+/// when come from the session and the clock.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders, TenantPermission.ManageServiceBoard)]
 [RequiresCapability(TenantCapability.Service)]
@@ -50,26 +50,35 @@ public class AddServiceOrderPhotoCommandHandler : IRequestHandler<AddServiceOrde
     private readonly ICurrentUserService _currentUser;
     private readonly CurrentAccessContext _access;
     private readonly IDateTimeProvider _clock;
+    private readonly IPrivateFileStorage _storage;
 
     public AddServiceOrderPhotoCommandHandler(
         IApplicationDbContext context,
         ICurrentTenantService tenant,
         ICurrentUserService currentUser,
         CurrentAccessContext access,
-        IDateTimeProvider clock)
+        IDateTimeProvider clock,
+        IPrivateFileStorage storage)
     {
         _context = context;
         _tenant = tenant;
         _currentUser = currentUser;
         _access = access;
         _clock = clock;
+        _storage = storage;
     }
 
     public async Task<Result<ServiceOrderPhotoDto>> Handle(AddServiceOrderPhotoCommand request, CancellationToken cancellationToken)
     {
-        // Only a photo uploaded through the app for this business, never a link to anything else.
+        // Only a photo uploaded through the app for this business, never a link to anything else, and one that is there:
+        // a made-up key of the right shape would stay as a broken photo, for good once the order is delivered.
         if (!OrderUploadRules.TryGetOwnFileKey(request.FileUrl, _tenant.TenantId, OrderUploadRules.ServiceIntakeArea, out var key))
             return Result.Failure<ServiceOrderPhotoDto>(OrderUploadRules.ServicePhotoError);
+        await using (var uploaded = await _storage.OpenReadAsync(key, cancellationToken))
+        {
+            if (uploaded is null)
+                return Result.Failure<ServiceOrderPhotoDto>(OrderUploadRules.ServicePhotoError);
+        }
 
         var remover = await ServiceOrderPhotoViews.RemoverAsync(_currentUser, _access, cancellationToken);
 
@@ -182,6 +191,10 @@ internal static class ServiceOrderPhotoChanges
             if (result.IsFailure)
                 return result;
 
+            // The order row is written even when its time did not change (two changes in the same tick), so its row
+            // version is always checked.
+            context.ChangeTracker.Entries<Order>().Single(entry => ReferenceEquals(entry.Entity, order))
+                .Property(o => o.UpdatedAt).IsModified = true;
             try
             {
                 await context.SaveChangesAsync(cancellationToken);
@@ -189,8 +202,7 @@ internal static class ServiceOrderPhotoChanges
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (context is DbContext dbContext)
-                    dbContext.ChangeTracker.Clear();
+                context.ChangeTracker.Clear();
             }
         }
 

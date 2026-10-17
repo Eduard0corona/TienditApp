@@ -157,10 +157,12 @@ public sealed class CrossTenantOperationsSqlServerTests
             .GetProperty("id").GetGuid();
         var before = await mine.Client.GetStringAsync($"/api/v1/orders/{order}/service-photos");
 
-        AssertRefused(await theirs.Client.GetAsync($"/api/v1/orders/{order}/service-photos"));
-        AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{order}/service-photos", new { stage = 1, fileUrl = myFile }));
-        AssertRefused(await theirs.Client.DeleteAsync($"/api/v1/orders/{order}/service-photos/{photo}"));
-        AssertRefused(await theirs.Client.GetAsync(myFile.Replace("/files/", "/api/v1/files/")));
+        // A's order answers as if it did not exist, also with a photo of B's own.
+        var theirFile = await UploadServicePhotoAsync(theirs.Client);
+        AssertNotFound(await theirs.Client.GetAsync($"/api/v1/orders/{order}/service-photos"));
+        AssertNotFound(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{order}/service-photos", new { stage = 1, fileUrl = theirFile }));
+        AssertNotFound(await theirs.Client.DeleteAsync($"/api/v1/orders/{order}/service-photos/{photo}"));
+        AssertNotFound(await theirs.Client.GetAsync(myFile.Replace("/files/", "/api/v1/files/")));
 
         // Their own order takes their own photos, and not the file of another business.
         var theirOrder = (await ServiceOrderAsync(
@@ -168,7 +170,7 @@ public sealed class CrossTenantOperationsSqlServerTests
             .GetProperty("id").GetGuid();
         AssertRefused(await theirs.Client.PostAsJsonAsync($"/api/v1/orders/{theirOrder}/service-photos", new { stage = 0, fileUrl = myFile }));
         var theirPhoto = (await TwoBusinessesApi.ReadAsync(await theirs.Client.PostAsJsonAsync(
-            $"/api/v1/orders/{theirOrder}/service-photos", new { stage = 0, fileUrl = await UploadServicePhotoAsync(theirs.Client) })))
+            $"/api/v1/orders/{theirOrder}/service-photos", new { stage = 0, fileUrl = theirFile })))
             .GetProperty("id").GetGuid();
         await AssertNoContentAsync(theirs.Client.DeleteAsync($"/api/v1/orders/{theirOrder}/service-photos/{theirPhoto}"));
 
@@ -334,6 +336,10 @@ public sealed class CrossTenantOperationsSqlServerTests
         return (await TwoBusinessesApi.ReadAsync(await client.PostAsync("/api/v1/orders/uploads/service-photo", form)))
             .GetProperty("url").GetString()!;
     }
+
+    private static void AssertNotFound(HttpResponseMessage response)
+        => Assert.True(response.StatusCode == HttpStatusCode.NotFound,
+            $"{response.RequestMessage?.Method} {response.RequestMessage?.RequestUri} answered {(int)response.StatusCode}");
 
     private static async Task AssertNoContentAsync(Task<HttpResponseMessage> request)
     {

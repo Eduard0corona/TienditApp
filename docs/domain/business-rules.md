@@ -223,13 +223,13 @@ El cliente ve en qué paso va su pedido, con o sin cuenta ([ADR 0023](../adr/002
 
 El negocio guarda fotos del antes y del después de cada servicio ([ADR 0024](../adr/0024-service-photos.md)).
 
-- **Dónde:** en el detalle de una orden de servicio en Pedidos y en el detalle de una pieza en el tablero (Taller). Se agrega una foto con su etapa (antes o después), una nota opcional de hasta 300 caracteres («Mancha en la manga») y la foto, que en el teléfono abre la cámara.
+- **Dónde:** en el detalle de una orden de servicio en Pedidos y en el detalle de una pieza en el tablero (Taller). Se agrega una foto con su etapa (antes o después), una nota opcional de hasta 300 caracteres («Mancha en la manga») y la foto: en el teléfono, con la cámara o una ya tomada.
 - **Quién y cuándo:** cada foto agregada guarda quién la tomó (el nombre de la sesión y su cuenta) y cuándo (el reloj del servidor). Las que se tomaron al recibir la orden se ven primero, «Al recibir la orden», sin nota ni autor.
 - **Cuántas:** hasta 20 fotos agregadas del antes y 20 del después, además de las de la recepción.
-- **Cuándo:** cualquier orden de servicio que no esté cancelada recibe fotos; una entregada o terminada también (la de la entrega).
+- **Cuándo:** cualquier orden de servicio que no esté cancelada recibe fotos. Una entregada o terminada solo recibe fotos del después (la de la entrega): «La orden ya se entregó: solo se le agregan fotos del después.».
 - **Quitar:** solo mientras la orden está abierta, y solo quien tomó la foto o un dueño o administrador, después de confirmar. Las fotos de una orden entregada, terminada o cancelada se conservan. Una foto quitada queda en la actividad de la orden.
 - **Quién las ve:** quien ve los pedidos (`ManageOrders`) o trabaja el tablero (`ManageServiceBoard`), con el módulo de servicios. El cliente no las recibe.
-- **Qué archivo:** solo una foto subida desde la app para el mismo negocio («Cada foto del servicio debe subirse desde TienditApp para este negocio.»).
+- **Qué archivo:** solo una foto subida desde la app para el mismo negocio y que esté guardada («Cada foto del servicio debe subirse desde TienditApp para este negocio.»). La misma foto entra una vez («Esa foto ya está en la orden.»).
 
 ## Cancelación y trazabilidad
 

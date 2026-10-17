@@ -57,7 +57,7 @@ public class UseCaseRulesTests
         { typeof(GetPaymentEvidenceFileQuery), "Permission(ManageOrders, ChargeOrders)" },
         { typeof(GetServicePhotoFileQuery), "Permission(ManageOrders, ManageServiceBoard)" },
         // The photos of a service (Fase 25): taken at the counter or at the board.
-        { typeof(UploadServiceIntakePhotoCommand), "Permission(ManageOrders, ManageServiceBoard)" },
+        { typeof(UploadServiceIntakePhotoCommand), "Permission(ManageOrders, ManageServiceBoard) Module(Service)" },
         { typeof(GetServiceOrderPhotosQuery), "Permission(ManageOrders, ManageServiceBoard) Module(Service)" },
         { typeof(AddServiceOrderPhotoCommand), "Permission(ManageOrders, ManageServiceBoard) Module(Service)" },
         { typeof(RemoveServiceOrderPhotoCommand), "Permission(ManageOrders, ManageServiceBoard) Module(Service)" },

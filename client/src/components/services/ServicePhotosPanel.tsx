@@ -5,7 +5,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../hooks/useToast';
 import PrivatePhoto from '../common/PrivatePhoto';
-import { ServicePhotoStage, type ServiceOrderPhotoDto } from '../../types';
+import { ServicePhotoStage, type OrderStatus, type ServiceOrderPhotoDto, type UploadedFileDto } from '../../types';
 import { describeServicePhoto, SERVICE_PHOTO_NOTE_MAX_LENGTH, servicePhotosQueryKey } from '../../utils/servicePhotos';
 
 const STAGES = [
@@ -15,15 +15,22 @@ const STAGES = [
 
 interface ServicePhotosPanelProps {
   orderId: string;
+  /**
+   * The status of the order as the screen shows it: when it changes (delivered, cancelled), the photos are asked for
+   * again, since what may be added or removed changes with it.
+   */
+  orderStatus?: OrderStatus;
   /** Side of each thumbnail, in pixels. */
   thumbnailSize?: number;
+  /** Level of the headings of each stage, below the heading of the section that holds the panel. */
+  headingLevel?: 4 | 5 | 6;
 }
 
 /**
  * The photos of a service for the business's team (Fase 25, ADR 0024): before and after, the ones taken when the order
  * was received and the ones added later, each with its note and who took it. The customer does not see them.
  */
-export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: ServicePhotosPanelProps) {
+export default function ServicePhotosPanel({ orderId, orderStatus, thumbnailSize = 72, headingLevel = 4 }: ServicePhotosPanelProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { confirm } = useConfirm();
@@ -32,28 +39,42 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
   const [stage, setStage] = useState<ServicePhotoStage>(ServicePhotoStage.After);
   const [note, setNote] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  // The upload of the chosen photo, kept so trying again after the server refused it does not upload it twice.
+  const [uploaded, setUploaded] = useState<{ file: File; upload: UploadedFileDto } | null>(null);
   const [formError, setFormError] = useState('');
+  const Heading = `h${headingLevel}` as const;
 
   const photosQuery = useQuery({
-    queryKey: servicePhotosQueryKey(orderId),
+    queryKey: [...servicePhotosQueryKey(orderId), orderStatus ?? null],
     queryFn: async () => (await ordersApi.getServicePhotos(orderId)).data,
+    // Opening the detail again shows what others added or removed meanwhile.
+    refetchOnMount: 'always',
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: servicePhotosQueryKey(orderId) });
 
+  const clearForm = () => {
+    setNote('');
+    setFile(null);
+    setUploaded(null);
+    if (fileInput.current) fileInput.current.value = '';
+  };
+
   const add = useMutation({
     mutationFn: async ({ photo, stage: photoStage, note: photoNote }: { photo: File; stage: ServicePhotoStage; note: string }) => {
-      const { data: uploaded } = await ordersApi.uploadServicePhoto(photo);
+      let upload = uploaded?.file === photo ? uploaded.upload : null;
+      if (!upload) {
+        upload = (await ordersApi.uploadServicePhoto(photo)).data;
+        setUploaded({ file: photo, upload });
+      }
       return (await ordersApi.addServicePhoto(orderId, {
         stage: photoStage,
-        fileUrl: uploaded.url,
-        fileName: uploaded.fileName,
+        fileUrl: upload.url,
+        fileName: upload.fileName,
         note: photoNote.trim() || undefined,
       })).data;
     },
     onSuccess: () => {
-      setNote('');
-      setFile(null);
-      if (fileInput.current) fileInput.current.value = '';
+      clearForm();
       toast.success('Foto agregada.');
     },
     onError: (error) => setFormError(getApiErrorMessage(error, 'No se pudo agregar la foto.')),
@@ -67,6 +88,10 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
     onSettled: refresh,
   });
 
+  const canAddBefore = photosQuery.data?.canAddBefore ?? false;
+  // Once delivered or finished only the after goes: the stage follows what the order takes.
+  const chosenStage = canAddBefore ? stage : ServicePhotoStage.After;
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setFormError('');
@@ -74,7 +99,7 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
       setFormError('Elige o toma una foto.');
       return;
     }
-    add.mutate({ photo: file, stage, note });
+    add.mutate({ photo: file, stage: chosenStage, note });
   };
 
   const askToRemove = async (photo: ServiceOrderPhotoDto) => {
@@ -91,26 +116,42 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
     if (accepted) remove.mutate(photo.id);
   };
 
+  const retry = (
+    <button type="button" className="btn btn-link btn-sm p-0 ms-2 align-baseline" onClick={() => void photosQuery.refetch()}>
+      Reintentar
+    </button>
+  );
+
   if (photosQuery.isPending) {
     return <div className="text-muted small mb-3" role="status">Cargando fotos…</div>;
   }
-  if (photosQuery.isError) {
+  if (!photosQuery.data) {
     return (
       <div className="alert alert-danger small" role="alert">
         {getApiErrorMessage(photosQuery.error, 'No se pudieron cargar las fotos.')}
+        {retry}
       </div>
     );
   }
 
   const { photos, canAdd } = photosQuery.data;
+  const stages = canAddBefore ? STAGES : STAGES.filter((option) => option.stage === ServicePhotoStage.After);
 
   return (
     <div className="mb-3">
+      {photosQuery.isError && (
+        // Asking again failed: what was read stays on screen, with a way to try again.
+        <div className="alert alert-warning small py-2" role="alert">
+          {getApiErrorMessage(photosQuery.error, 'No se pudieron actualizar las fotos.')}
+          {retry}
+        </div>
+      )}
+
       {STAGES.map(({ stage: section, title }) => {
         const ofStage = photos.filter((photo) => photo.stage === section);
         return (
           <section key={section} className="mb-3" aria-label={`Fotos de ${title.toLowerCase()}`}>
-            <h4 className="h6 mb-2">{title}</h4>
+            <Heading className="h6 mb-2">{title}</Heading>
             {ofStage.length === 0 ? (
               <div className="text-muted small">Sin fotos.</div>
             ) : (
@@ -158,10 +199,10 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
               <select
                 id={`${formId}-stage`}
                 className="form-select form-select-sm"
-                value={stage}
+                value={chosenStage}
                 onChange={(event) => setStage(Number(event.target.value) as ServicePhotoStage)}
               >
-                {STAGES.map((option) => (
+                {stages.map((option) => (
                   <option key={option.stage} value={option.stage}>{option.option}</option>
                 ))}
               </select>
@@ -179,13 +220,13 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
               />
             </div>
             <div className="col-12">
+              {/* No `capture`: the phone offers its camera or a photo already taken. */}
               <label htmlFor={`${formId}-file`} className="form-label small mb-1">Foto</label>
               <input
                 id={`${formId}-file`}
                 ref={fileInput}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="form-control form-control-sm"
                 onChange={(event) => {
                   setFormError('');
@@ -194,6 +235,9 @@ export default function ServicePhotosPanel({ orderId, thumbnailSize = 72 }: Serv
               />
             </div>
           </div>
+          {!canAddBefore && (
+            <div className="form-text">La orden ya se entregó: solo se le agregan fotos del después.</div>
+          )}
           {formError && <div className="text-danger small mt-2" role="alert">{formError}</div>}
           <button type="submit" className="btn btn-light btn-sm mt-2" disabled={add.isPending}>
             {add.isPending ? 'Subiendo…' : 'Agregar foto'}

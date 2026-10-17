@@ -88,7 +88,8 @@ public static class ServiceOrderPhotoViews
         return new ServiceOrderPhotosDto
         {
             OrderId = order.Id,
-            CanAdd = order.Status != OrderStatus.Cancelled,
+            CanAdd = order.TakesServicePhotos(ServicePhotoStage.After),
+            CanAddBefore = order.TakesServicePhotos(ServicePhotoStage.Before),
             Photos = atIntake
                 .Concat(order.ServicePhotos.OrderBy(p => p.TakenAt).ThenBy(p => p.Id).Select(p => Of(order, p, remover)))
                 .ToList()

@@ -980,10 +980,10 @@ export default function OrdersList() {
                 </div>
               )}
 
-              {selectedOrder.orderType === OrderTypeConst.Service && (
+              {selectedOrder.orderType === OrderTypeConst.Service && hasCapability(capabilities, TenantCapability.Service) && (
                 <div className="mt-3">
                   <h5 className="mb-2">Fotos del servicio</h5>
-                  <ServicePhotosPanel orderId={selectedOrder.id} />
+                  <ServicePhotosPanel key={selectedOrder.id} orderId={selectedOrder.id} orderStatus={selectedOrder.status} headingLevel={6} />
                 </div>
               )}
 

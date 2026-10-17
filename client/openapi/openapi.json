@@ -23447,6 +23447,7 @@
       "ServiceOrderPhotosDto": {
         "required": [
           "canAdd",
+          "canAddBefore",
           "orderId",
           "photos"
         ],
@@ -23457,6 +23458,9 @@
             "format": "uuid"
           },
           "canAdd": {
+            "type": "boolean"
+          },
+          "canAddBefore": {
             "type": "boolean"
           },
           "photos": {

@@ -13140,6 +13140,7 @@ export interface components {
             /** Format: uuid */
             orderId: string;
             canAdd: boolean;
+            canAddBefore: boolean;
             photos: components["schemas"]["ServiceOrderPhotoDto"][];
         };
         ServiceOrderPieceDto: {

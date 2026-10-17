@@ -54,7 +54,7 @@ export function phase25Routes(data, { ok, notFound }) {
       if (!order) return notFound('Orden');
       const open = !CLOSED.includes(order.status);
       const photos = (data.servicePhotos[order.id] ?? []).map((photo) => ({ ...photo, canRemove: photo.canRemove && open }));
-      return ok({ orderId: order.id, canAdd: order.status !== CANCELLED, photos });
+      return ok({ orderId: order.id, canAdd: order.status !== CANCELLED, canAddBefore: open, photos });
     }],
     ['POST', /^\/orders\/uploads\/service-photo$/, () => ok({
       url: fileOf(data, `5c0f8a3e-1d2b-4c5d-8e9f-${String(Object.values(data.servicePhotos).flat().length + 10).padStart(12, '0')}`),

@@ -78,7 +78,7 @@ public class ServiceOrderPhotosSqlServerTests
     }
 
     private static Task<Result<ServiceOrderPhotoDto>> AddAsync(ApplicationDbContext context, Guid tenantId, Guid orderId, ServicePhotoStage stage)
-        => new AddServiceOrderPhotoCommandHandler(context, Tenant(tenantId), Owner.Instance, Access(tenantId), new Clock())
+        => new AddServiceOrderPhotoCommandHandler(context, Tenant(tenantId), Owner.Instance, Access(tenantId), new Clock(), new Storage())
             .Handle(new AddServiceOrderPhotoCommand { OrderId = orderId, Stage = stage, FileUrl = File(tenantId), Note = "De Ana" },
                 CancellationToken.None);
 
@@ -158,6 +158,16 @@ public class ServiceOrderPhotosSqlServerTests
 
         public Task<bool> HasPermissionAsync(Guid userId, Guid tenantId, TenantPermission permission, CancellationToken cancellationToken)
             => Task.FromResult(true);
+    }
+
+    /// <summary>The private storage, where every photo of these tests was uploaded.</summary>
+    private sealed class Storage : IPrivateFileStorage
+    {
+        public Task SaveAsync(string key, Stream content, string contentType, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<Stream?> OpenReadAsync(string key, CancellationToken cancellationToken = default)
+            => Task.FromResult<Stream?>(new MemoryStream([1, 2, 3]));
     }
 
     private sealed class Clock : IDateTimeProvider

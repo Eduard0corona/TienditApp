@@ -30,7 +30,7 @@ function photo(overrides: Partial<ServiceOrderPhotoDto> = {}): ServiceOrderPhoto
 }
 
 function photos(overrides: Partial<ServiceOrderPhotosDto> = {}): ServiceOrderPhotosDto {
-  return { orderId: 'o1', canAdd: true, photos: [], ...overrides };
+  return { orderId: 'o1', canAdd: true, canAddBefore: true, photos: [], ...overrides };
 }
 
 function renderPanel() {
@@ -103,6 +103,18 @@ describe('ServicePhotosPanel', () => {
     await waitFor(() => expect(api.getServicePhotos).toHaveBeenCalledTimes(2));
   });
 
+  it('offers only the after once the order was delivered', async () => {
+    api.getServicePhotos.mockResolvedValue({ data: photos({ canAddBefore: false }) } as never);
+
+    renderPanel();
+
+    const stage = await screen.findByLabelText('Etapa');
+    expect(within(stage).getAllByRole('option').map((option) => option.textContent)).toEqual(['Después del servicio']);
+    expect(screen.getByText('La orden ya se entregó: solo se le agregan fotos del después.')).toBeInTheDocument();
+    // The phone may take the photo or pick one already taken.
+    expect(screen.getByLabelText('Foto')).not.toHaveAttribute('capture');
+  });
+
   it('asks for a photo before adding, and shows why the server refused one', async () => {
     api.getServicePhotos.mockResolvedValue({ data: photos() } as never);
     api.uploadServicePhoto.mockResolvedValue({ data: { url: file('nueva'), fileName: 'saco.jpg', contentType: 'image/webp' } } as never);
@@ -118,6 +130,35 @@ describe('ServicePhotosPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Agregar foto' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Una orden lleva hasta 20 fotos del después.');
+
+    // Trying again adds the same upload: the photo is not uploaded twice.
+    api.addServicePhoto.mockResolvedValue({ data: photo({ id: 'p9' }) } as never);
+    await user.click(screen.getByRole('button', { name: 'Agregar foto' }));
+    await waitFor(() => expect(api.addServicePhoto).toHaveBeenCalledTimes(2));
+    expect(api.uploadServicePhoto).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Foto agregada.'));
+  });
+
+  it('keeps the photos it read when asking again fails, with a way to try again', async () => {
+    api.getServicePhotos.mockResolvedValueOnce({ data: photos({ photos: [
+      photo({ id: 'p1', note: 'Equivocada', takenBy: 'Ana', canRemove: true }),
+    ] }) } as never);
+    api.removeServicePhoto.mockResolvedValue({} as never);
+    api.getServicePhotos.mockRejectedValueOnce({ isAxiosError: true, code: 'ERR_NETWORK' });
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: 'Quitar la foto Equivocada' }));
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Quitar foto' }));
+
+    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(screen.getByText('Equivocada')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar foto' })).toBeInTheDocument();
+
+    api.getServicePhotos.mockResolvedValue({ data: photos() } as never);
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+    await waitFor(() => expect(screen.queryByText('Equivocada')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).not.toBeInTheDocument();
   });
 
   it('removes a photo only after confirming', async () => {

@@ -15,6 +15,7 @@ namespace FoodParkDigital.Application.Orders.Commands;
 /// works the service board.
 /// </summary>
 [RequiresPermission(TenantPermission.ManageOrders, TenantPermission.ManageServiceBoard)]
+[RequiresCapability(TenantCapability.Service)]
 public record UploadServiceIntakePhotoCommand : IRequest<Result<UploadedFileDto>>
 {
     public Stream FileStream { get; init; } = null!;

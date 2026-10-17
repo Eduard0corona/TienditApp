@@ -1496,6 +1496,8 @@ export interface ServiceOrderPhotosDto {
   orderId: string;
   /** Every service order takes photos but a cancelled one. */
   canAdd: boolean;
+  /** Once delivered or finished, only photos after. */
+  canAddBefore: boolean;
   photos: ServiceOrderPhotoDto[];
 }
 

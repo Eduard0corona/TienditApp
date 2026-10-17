@@ -467,6 +467,8 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
     public const string PhotosOfCancelledOrderMessage = "La orden está cancelada: ya no se le agregan fotos.";
     public const string PhotoNotFoundMessage = "Esa foto ya no está en la orden.";
     public const string PhotosOfFinishedOrderMessage = "La orden ya se entregó o se canceló: sus fotos se conservan.";
+    public const string OnlyAfterPhotosMessage = "La orden ya se entregó: solo se le agregan fotos del después.";
+    public const string PhotoAlreadyAddedMessage = "Esa foto ya está en la orden.";
 
     public static string TooManyPhotosMessage(ServicePhotoStage stage)
         => $"Una orden lleva hasta {ServiceOrderPhoto.MaxPerStage} fotos {(stage == ServicePhotoStage.Before ? "del antes" : "del después")}.";
@@ -475,8 +477,9 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
     /// <summary>
     /// Adds a photo of the service (Fase 25): before or after, with an optional note, who took it and when. A cancelled
-    /// order takes no more photos; a delivered one still does (the photo of the delivery). The order row is marked as
-    /// changed, so two photos added at the same time check its row version and the limit holds.
+    /// order takes no more photos; a delivered or finished one only the photo of the delivery (after): it could not be
+    /// removed, so a photo «before» added then would stay as if taken at the intake. The same file goes once. The order
+    /// row is marked as changed, so two photos added at the same time check its row version and the limit holds.
     /// </summary>
     public ServiceOrderPhoto AddServicePhoto(
         ServicePhotoStage stage,
@@ -493,8 +496,12 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
             throw new DomainException(PhotosOfCancelledOrderMessage);
         if (!Enum.IsDefined(stage))
             throw new DomainException("La etapa de la foto no es válida.");
+        if (!TakesServicePhotos(stage))
+            throw new DomainException(OnlyAfterPhotosMessage);
         if (string.IsNullOrWhiteSpace(fileUrl) || fileUrl.Length > ServiceOrderPhoto.MaxFileUrlLength)
             throw new DomainException("La foto no es válida.");
+        if (_servicePhotos.Any(photo => photo.FileUrl == fileUrl))
+            throw new DomainException(PhotoAlreadyAddedMessage);
         if (_servicePhotos.Count(photo => photo.Stage == stage) >= ServiceOrderPhoto.MaxPerStage)
             throw new DomainException(TooManyPhotosMessage(stage));
 
@@ -511,7 +518,7 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
         var photo = new ServiceOrderPhoto(TenantId, Id, stage, fileUrl, trimmedName, trimmedNote, takenAt, author, takenByUserId);
         _servicePhotos.Add(photo);
         UpdatedAt = takenAt;
-        AddDomainEvent(new ServiceOrderPhotoAddedEvent(Id, TenantId, photo.Id, stage, trimmedName));
+        AddDomainEvent(new ServiceOrderPhotoAddedEvent(Id, TenantId, photo.Id, stage, fileUrl));
         return photo;
     }
 
@@ -528,11 +535,20 @@ public class Order : AuditableEntity, ITenantScoped, IAggregateRoot
 
         _servicePhotos.Remove(photo);
         UpdatedAt = removedAt;
-        AddDomainEvent(new ServiceOrderPhotoRemovedEvent(Id, TenantId, photo.Id, photo.Stage, photo.FileName, photo.TakenAt, photo.TakenBy));
+        AddDomainEvent(new ServiceOrderPhotoRemovedEvent(Id, TenantId, photo.Id, photo.Stage, photo.FileUrl, photo.TakenAt, photo.TakenBy));
     }
 
     /// <summary>Whether a photo added to it can still be removed: while the order is open.</summary>
     public bool ServicePhotosRemovable => !IsClosedStatus(Status);
+
+    /// <summary>
+    /// Whether it takes a photo of <paramref name="stage"/>: a service order that is not cancelled, and once delivered or
+    /// finished, only after.
+    /// </summary>
+    public bool TakesServicePhotos(ServicePhotoStage stage)
+        => OrderType == OrderType.Service
+            && Status != OrderStatus.Cancelled
+            && (stage == ServicePhotoStage.After || !IsClosedStatus(Status));
 
     public void TransitionTo(OrderStatus newStatus, IOrderStateMachine stateMachine, string? performedBy)
         => Transition(newStatus, stateMachine, performedBy, notifyCustomer: true);

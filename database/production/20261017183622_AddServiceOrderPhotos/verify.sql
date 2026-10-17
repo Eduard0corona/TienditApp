@@ -47,7 +47,7 @@ ORDER BY [Stage];');
 -- 4. Después: consistencia. Cada consulta debe dar 0 filas:
 --    a. fotos de una orden que no es de servicio ([OrderType] 1 es Service);
 --    b. fotos cuyo negocio no es el de su orden;
---    c. fotos que no apuntan a un archivo privado de su negocio (/files/orders/{negocio}/...).
+--    c. fotos que no apuntan a una foto privada de su negocio (/files/orders/{negocio}/service-intake/...).
 IF OBJECT_ID(N'dbo.ServiceOrderPhotos') IS NOT NULL
 BEGIN
     EXEC(N'SELECT p.[Id], p.[OrderId], o.[OrderType]
@@ -60,5 +60,5 @@ INNER JOIN [Orders] o ON o.[Id] = p.[OrderId]
 WHERE p.[TenantId] <> o.[TenantId];');
     EXEC(N'SELECT [Id], [OrderId], [TenantId]
 FROM [ServiceOrderPhotos]
-WHERE [FileUrl] NOT LIKE N''/files/orders/'' + LOWER(CONVERT(nvarchar(36), [TenantId])) + N''/%'';');
+WHERE [FileUrl] NOT LIKE N''/files/orders/'' + LOWER(CONVERT(nvarchar(36), [TenantId])) + N''/service-intake/%'';');
 END;

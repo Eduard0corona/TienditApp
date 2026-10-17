@@ -9,12 +9,16 @@ namespace FoodParkDigital.Domain.Tests;
 
 /// <summary>
 /// The photos of a service (Fase 25, ADR 0024): before or after, with an optional note, who took it and when; up to
-/// twenty of each; none for a cancelled order; and, once the order is delivered, finished or cancelled, they stay.
+/// twenty of each, each file once; none for a cancelled order and only after for a finished one; and, once the order is
+/// delivered, finished or cancelled, they stay.
 /// </summary>
 public class ServiceOrderPhotoTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 17, 18, 0, 0, TimeSpan.Zero);
     private const string File = "/files/orders/tenant/service-intake/202610/foto.webp";
+
+    /// <summary>Another file each time: the same file goes once on an order.</summary>
+    private static string NewFile() => $"/files/orders/tenant/service-intake/202610/{Guid.NewGuid()}.webp";
 
     [Fact]
     public void AddServicePhoto_ShouldKeepTheStage_TheNote_WhoAndWhen_AndTouchTheOrder()
@@ -32,8 +36,8 @@ public class ServiceOrderPhotoTests
         // The order row changes with its photos, so two added at once check its row version and the limit holds.
         Assert.Equal(Now, order.UpdatedAt);
         var added = Assert.IsType<ServiceOrderPhotoAddedEvent>(Assert.Single(order.DomainEvents));
-        Assert.Equal((order.Id, order.TenantId, photo.Id, ServicePhotoStage.After, "saco.jpg"),
-            (added.OrderId, added.TenantId, added.PhotoId, added.Stage, added.FileName));
+        Assert.Equal((order.Id, order.TenantId, photo.Id, ServicePhotoStage.After, File),
+            (added.OrderId, added.TenantId, added.PhotoId, added.Stage, added.FileUrl));
     }
 
     [Fact]
@@ -41,8 +45,8 @@ public class ServiceOrderPhotoTests
     {
         var order = NewServiceOrder();
 
-        var blank = order.AddServicePhoto(ServicePhotoStage.Before, File, "   ", "   ", Now, "  ");
-        var longOne = order.AddServicePhoto(ServicePhotoStage.Before, File, new string('n', 300), null, Now, new string('a', 300));
+        var blank = order.AddServicePhoto(ServicePhotoStage.Before, NewFile(), "   ", "   ", Now, "  ");
+        var longOne = order.AddServicePhoto(ServicePhotoStage.Before, NewFile(), new string('n', 300), null, Now, new string('a', 300));
 
         Assert.Equal(((string?)null, (string?)null, (string?)null, (Guid?)null), (blank.FileName, blank.Note, blank.TakenBy, blank.TakenByUserId));
         Assert.Equal(ServiceOrderPhoto.MaxFileNameLength, longOne.FileName!.Length);
@@ -54,9 +58,9 @@ public class ServiceOrderPhotoTests
     {
         var order = NewServiceOrder();
 
-        order.AddServicePhoto(ServicePhotoStage.Before, File, null, new string('a', ServiceOrderPhoto.MaxNoteLength), Now, null);
+        order.AddServicePhoto(ServicePhotoStage.Before, NewFile(), null, new string('a', ServiceOrderPhoto.MaxNoteLength), Now, null);
         var error = Assert.Throws<DomainException>(() =>
-            order.AddServicePhoto(ServicePhotoStage.Before, File, null, new string('a', ServiceOrderPhoto.MaxNoteLength + 1), Now, null));
+            order.AddServicePhoto(ServicePhotoStage.Before, NewFile(), null, new string('a', ServiceOrderPhoto.MaxNoteLength + 1), Now, null));
 
         Assert.Equal(Order.NoteTooLongMessage, error.Message);
         Assert.Single(order.ServicePhotos);
@@ -67,11 +71,11 @@ public class ServiceOrderPhotoTests
     {
         var order = NewServiceOrder();
         for (var i = 0; i < ServiceOrderPhoto.MaxPerStage; i++)
-            order.AddServicePhoto(ServicePhotoStage.Before, File, null, null, Now, null);
+            order.AddServicePhoto(ServicePhotoStage.Before, NewFile(), null, null, Now, null);
 
-        var error = Assert.Throws<DomainException>(() => order.AddServicePhoto(ServicePhotoStage.Before, File, null, null, Now, null));
+        var error = Assert.Throws<DomainException>(() => order.AddServicePhoto(ServicePhotoStage.Before, NewFile(), null, null, Now, null));
         // The after has its own twenty.
-        order.AddServicePhoto(ServicePhotoStage.After, File, null, null, Now, null);
+        order.AddServicePhoto(ServicePhotoStage.After, NewFile(), null, null, Now, null);
 
         Assert.Equal("Una orden lleva hasta 20 fotos del antes.", error.Message);
         Assert.Equal("Una orden lleva hasta 20 fotos del después.", Order.TooManyPhotosMessage(ServicePhotoStage.After));
@@ -90,6 +94,18 @@ public class ServiceOrderPhotoTests
         Assert.Equal("La foto no es válida.", Assert.Throws<DomainException>(() =>
             order.AddServicePhoto(ServicePhotoStage.Before, "/files/" + new string('a', ServiceOrderPhoto.MaxFileUrlLength), null, null, Now, null)).Message);
         Assert.Empty(order.ServicePhotos);
+    }
+
+    [Fact]
+    public void AddServicePhoto_ShouldTakeEachFileOnce()
+    {
+        var order = NewServiceOrder();
+        order.AddServicePhoto(ServicePhotoStage.Before, File, null, null, Now, null);
+
+        var error = Assert.Throws<DomainException>(() => order.AddServicePhoto(ServicePhotoStage.After, File, null, "Otra vez", Now, null));
+
+        Assert.Equal(Order.PhotoAlreadyAddedMessage, error.Message);
+        Assert.Single(order.ServicePhotos);
     }
 
     [Fact]
@@ -125,6 +141,23 @@ public class ServiceOrderPhotoTests
 
         Assert.Equal(Order.PhotosOfCancelledOrderMessage, error.Message);
         Assert.Single(finished.ServicePhotos);
+        Assert.False(cancelled.TakesServicePhotos(ServicePhotoStage.After));
+    }
+
+    [Fact]
+    public void AddServicePhoto_OfAFinishedOrder_ShouldTakeOnlyAfter_SinceItCouldNotBeRemoved()
+    {
+        var finished = NewServiceOrder();
+        finished.TransitionTo(OrderStatus.Completed, new ServiceOrderStateMachine(), "mostrador");
+        var open = NewServiceOrder();
+
+        var error = Assert.Throws<DomainException>(() => finished.AddServicePhoto(ServicePhotoStage.Before, File, null, "Daño", Now, "Ana"));
+
+        Assert.Equal(Order.OnlyAfterPhotosMessage, error.Message);
+        Assert.Empty(finished.ServicePhotos);
+        Assert.Equal((false, true), (finished.TakesServicePhotos(ServicePhotoStage.Before), finished.TakesServicePhotos(ServicePhotoStage.After)));
+        Assert.Equal((true, true), (open.TakesServicePhotos(ServicePhotoStage.Before), open.TakesServicePhotos(ServicePhotoStage.After)));
+        Assert.False(NewOrder(BusinessType.Retail, OrderType.Retail).TakesServicePhotos(ServicePhotoStage.After));
     }
 
     [Fact]
@@ -132,7 +165,8 @@ public class ServiceOrderPhotoTests
     {
         var order = NewServiceOrder();
         var kept = order.AddServicePhoto(ServicePhotoStage.Before, File, "antes.jpg", null, Now, "Ana");
-        var mistake = order.AddServicePhoto(ServicePhotoStage.After, File, "otra.jpg", "Equivocada", Now, "Luis");
+        var mistakeFile = NewFile();
+        var mistake = order.AddServicePhoto(ServicePhotoStage.After, mistakeFile, "otra.jpg", "Equivocada", Now, "Luis");
         order.ClearDomainEvents();
         var later = Now.AddMinutes(5);
 
@@ -142,8 +176,8 @@ public class ServiceOrderPhotoTests
         Assert.Same(kept, Assert.Single(order.ServicePhotos));
         Assert.Equal(later, order.UpdatedAt);
         var removed = Assert.IsType<ServiceOrderPhotoRemovedEvent>(Assert.Single(order.DomainEvents));
-        Assert.Equal((order.Id, order.TenantId, mistake.Id, ServicePhotoStage.After, "otra.jpg", Now, "Luis"),
-            (removed.OrderId, removed.TenantId, removed.PhotoId, removed.Stage, removed.FileName, removed.TakenAt, removed.TakenBy));
+        Assert.Equal((order.Id, order.TenantId, mistake.Id, ServicePhotoStage.After, mistakeFile, Now, "Luis"),
+            (removed.OrderId, removed.TenantId, removed.PhotoId, removed.Stage, removed.FileUrl, removed.TakenAt, removed.TakenBy));
     }
 
     [Fact]
