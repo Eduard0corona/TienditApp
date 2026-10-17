@@ -2634,6 +2634,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("Total")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("TrackingToken")
+                        .HasMaxLength(43)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(43)");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -2657,6 +2662,11 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.HasIndex("OpenTableId");
 
                     b.HasIndex("TemporaryCustomerId");
+
+                    b.HasIndex("TrackingToken")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Orders_TrackingToken")
+                        .HasFilter("[TrackingToken] IS NOT NULL");
 
                     b.HasIndex("TenantId", "ClientRequestId")
                         .IsUnique()
@@ -2687,6 +2697,8 @@ namespace FoodParkDigital.Infrastructure.Persistence.Migrations
                     b.ToTable("Orders", null, t =>
                         {
                             t.HasCheckConstraint("CK_Orders_CustomerLink", "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Orders_TrackingToken", "[TrackingToken] IS NULL OR LEN([TrackingToken]) = 43");
                         });
                 });
 

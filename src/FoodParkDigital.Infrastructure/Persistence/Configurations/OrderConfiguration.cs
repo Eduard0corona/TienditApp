@@ -17,6 +17,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_Orders_CustomerLink",
             "([CustomerUserId] IS NULL OR [TemporaryCustomerId] IS NULL) AND ([CreatedByBusiness] = 1 OR [CustomerUserId] IS NOT NULL OR [TemporaryCustomerId] IS NOT NULL)"));
+        // The tracking link (Fase 24C) has the length the domain gives it, also for a row written by hand.
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Orders_TrackingToken",
+            $"[TrackingToken] IS NULL OR LEN([TrackingToken]) = {Order.TrackingTokenLength}"));
         builder.HasKey(o => o.Id);
 
         builder.Property(o => o.OrderNumber).HasMaxLength(20).IsRequired();
@@ -29,6 +33,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.CustomerNotes).HasMaxLength(500);
         builder.Property(o => o.TableNumber).HasMaxLength(50);
         builder.Property(o => o.CancellationReason).HasMaxLength(500);
+        builder.Property(o => o.TrackingToken).HasMaxLength(Order.TrackingTokenLength).IsUnicode(false);
         builder.Property(o => o.CustomerUserId).IsRequired(false);
         builder.Property(o => o.TemporaryCustomerId).IsRequired(false);
         builder.Property(o => o.CreatedByBusiness).IsRequired().HasDefaultValue(true);
@@ -156,6 +161,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .IsUnique()
             .HasFilter("[ClientRequestId] IS NOT NULL")
             .HasDatabaseName("IX_Orders_TenantId_ClientRequestId");
+        // A tracking link opens one order of the whole platform: whoever follows it has no business yet.
+        builder.HasIndex(o => o.TrackingToken)
+            .IsUnique()
+            .HasFilter("[TrackingToken] IS NOT NULL")
+            .HasDatabaseName("IX_Orders_TrackingToken");
         builder.HasIndex(o => new { o.TenantId, o.OpenTableId })
             .IsUnique()
             .HasFilter("[OpenTableId] IS NOT NULL")
