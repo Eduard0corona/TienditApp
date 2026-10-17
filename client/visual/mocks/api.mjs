@@ -1,5 +1,6 @@
 // The TienditApp API as the visual scenes see it: answers from data.mjs through Playwright request interception.
-// - /api/v1/**  -> the routes below (and each scene file's own); a call without a route fails the scene
+// - /api/v1/**  -> the routes below (and each scene file's own); a call without a route fails the scene. A route answers
+//   JSON, or a file with `body` and `contentType` (the photos of a service, /api/v1/files/**)
 // - /hubs/**    -> 404 (SignalR does not connect; the screens work without live updates)
 // - /uploads/** -> 404, and /visual-img/** -> the demo pictures in ./img (product photos, logo)
 // - any other host -> aborted, so a run never depends on the network
@@ -15,6 +16,7 @@ import { phase5eRoutes } from './routes-p7.mjs';
 import { phase22eRoutes } from './routes-p8.mjs';
 import { phase24aRoutes } from './routes-p9.mjs';
 import { phase24bRoutes } from './routes-p10.mjs';
+import { phase25Routes } from './routes-p11.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 export { NOW_ISO };
@@ -221,6 +223,7 @@ function buildRoutes(data, token) {
   const NOW_LOCAL = localHhmmss(NOW_ISO);
 
   return [
+    ...phase25Routes(data, { ok, notFound }),
     ...phase24bRoutes(data, { ok, notFound }),
     ...phase24aRoutes(data, { ok, paginate }),
     ...phase22eRoutes(data, { ok, notFound }),
@@ -560,6 +563,10 @@ export async function installMocks(context, opts = {}) {
     if (!result) {
       unmocked.push(`${method} ${apiPath}${url.search}`);
       result = { status: 501, json: { message: 'Sin respuesta simulada en client/visual/mocks.' } };
+    }
+    if (result.body !== undefined) {
+      await route.fulfill({ status: result.status, contentType: result.contentType, body: result.body });
+      return;
     }
     await route.fulfill({ status: result.status, contentType: 'application/json; charset=utf-8', body: JSON.stringify(result.json) });
   });

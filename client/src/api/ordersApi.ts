@@ -1,6 +1,7 @@
 import api from './axios';
 import type {
   AddOrderPaymentRequest,
+  AddServiceOrderPhotoRequest,
   CancelTabItemRequest,
   CreateOrderItemRequest,
   CreateOrderRequest,
@@ -9,6 +10,8 @@ import type {
   OrderDto,
   OrderStatus,
   ServiceOrderPieceStatus,
+  ServiceOrderPhotoDto,
+  ServiceOrderPhotosDto,
   OrderType,
   PaginatedList,
   RefundOrderRequest,
@@ -79,6 +82,18 @@ export const ordersApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+
+  /** The photos of a service order: those taken when it was received and the added ones (Fase 25). */
+  getServicePhotos: (orderId: string) =>
+    api.get<ServiceOrderPhotosDto>(`/orders/${orderId}/service-photos`),
+
+  /** Adds a photo uploaded with uploadServicePhoto, before or after, with an optional note. */
+  addServicePhoto: (orderId: string, request: AddServiceOrderPhotoRequest) =>
+    api.post<ServiceOrderPhotoDto>(`/orders/${orderId}/service-photos`, request),
+
+  /** Removes a photo added by mistake, while the order is open. */
+  removeServicePhoto: (orderId: string, photoId: string) =>
+    api.delete(`/orders/${orderId}/service-photos/${photoId}`),
 
   updateServicePieceStatus: (orderId: string, pieceId: string, newStatus: ServiceOrderPieceStatus) =>
     api.put(`/orders/${orderId}/service-pieces/${pieceId}/status`, { newStatus }),

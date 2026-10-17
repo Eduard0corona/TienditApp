@@ -74,6 +74,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey(p => p.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(o => o.ServicePhotos)
+            .WithOne()
+            .HasForeignKey(p => p.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasOne(o => o.ServiceDetail)
             .WithOne(d => d.Order)
             .HasForeignKey<ServiceOrderDetail>(d => d.OrderId)
@@ -147,6 +152,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .OnDelete(DeleteBehavior.Cascade);
         builder.Navigation(o => o.Refunds).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(o => o.ServicePieces).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(o => o.ServicePhotos).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Indexes
         builder.HasIndex(o => new { o.TenantId, o.Status });

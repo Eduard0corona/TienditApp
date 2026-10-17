@@ -6335,6 +6335,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}/service-photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ServiceOrderPhotosDto"];
+                        "application/json": components["schemas"]["ServiceOrderPhotosDto"];
+                        "text/json": components["schemas"]["ServiceOrderPhotosDto"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AddServiceOrderPhotoRequest"];
+                    "text/json": components["schemas"]["AddServiceOrderPhotoRequest"];
+                    "application/*+json": components["schemas"]["AddServiceOrderPhotoRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ServiceOrderPhotoDto"];
+                        "application/json": components["schemas"]["ServiceOrderPhotoDto"];
+                        "text/json": components["schemas"]["ServiceOrderPhotoDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/service-photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    photoId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/uploads/service-photo": {
         parameters: {
             query?: never;
@@ -9667,6 +9771,12 @@ export interface components {
             tip: number;
             /** Format: double */
             cashReceived?: number | null;
+        };
+        AddServiceOrderPhotoRequest: {
+            stage: components["schemas"]["ServicePhotoStage"];
+            fileUrl: string;
+            fileName?: string | null;
+            note?: string | null;
         };
         AddTabRoundRequest: {
             items: components["schemas"]["CreateOrderItemDto"][];
@@ -13013,6 +13123,26 @@ export interface components {
             afterPhotosJson?: string | null;
             pieces: components["schemas"]["ServiceOrderPieceInput"][];
         };
+        ServiceOrderPhotoDto: {
+            /** Format: uuid */
+            id?: string | null;
+            stage: components["schemas"]["ServicePhotoStage"];
+            url: string;
+            fileName?: string | null;
+            note?: string | null;
+            atIntake: boolean;
+            /** Format: date-time */
+            takenAt?: string | null;
+            takenBy?: string | null;
+            canRemove: boolean;
+        };
+        ServiceOrderPhotosDto: {
+            /** Format: uuid */
+            orderId: string;
+            canAdd: boolean;
+            canAddBefore: boolean;
+            photos: components["schemas"]["ServiceOrderPhotoDto"][];
+        };
         ServiceOrderPieceDto: {
             /** Format: uuid */
             id: string;
@@ -13056,6 +13186,11 @@ export interface components {
          * @enum {integer}
          */
         ServiceOrderPieceStatus: 0 | 1 | 2 | 99;
+        /**
+         * Format: int32
+         * @enum {integer}
+         */
+        ServicePhotoStage: 0 | 1;
         SetAiAgentActiveRequest: {
             isActive: boolean;
         };

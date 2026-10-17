@@ -420,7 +420,7 @@ public sealed class TwoBusinessesApi : IAsyncLifetime
     }
 
     // A 1x1 PNG: the upload validates the real content and re-encodes it.
-    private static readonly byte[] TinyPng = Convert.FromBase64String(
+    internal static readonly byte[] TinyPng = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
 
     /// <summary>Signs up a business with <paramref name="email"/>, anonymously, and answers what the API answered.</summary>

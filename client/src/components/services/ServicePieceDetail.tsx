@@ -4,42 +4,18 @@ import { Offcanvas } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { ordersApi } from '../../api/ordersApi';
 import { getApiErrorMessage } from '../../api/errors';
-import PrivatePhoto from '../common/PrivatePhoto';
 import type { OrderDto, ServiceBoardPieceDto } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { getServicePieceStatusLabel } from '../../utils/labels';
-import { formatDuration, getServicePriorityLabel, parseChecklist, parsePhotos, type ServicePhoto } from '../../utils/serviceDetail';
+import { formatDuration, getServicePriorityLabel, parseChecklist } from '../../utils/serviceDetail';
+import ServicePhotosPanel from './ServicePhotosPanel';
 
 interface ServicePieceDetailProps {
   piece: ServiceBoardPieceDto | null;
   onHide: () => void;
 }
 
-function Photos({ title, photos }: { title: string; photos: ServicePhoto[] }) {
-  return (
-    <div className="mb-3">
-      <h3 className="h6">{title}</h3>
-      {photos.length === 0 ? (
-        <div className="text-muted small">Sin fotos.</div>
-      ) : (
-        <div className="d-flex flex-wrap gap-2">
-          {photos.map((photo, index) => (
-            <PrivatePhoto
-              key={`${photo.path}-${index}`}
-              path={photo.path}
-              alt={photo.fileName || title}
-              linked
-              className="border rounded"
-              style={{ width: 88, height: 88 }}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Everything a technician needs to take the next job: what came in, how, its photos and the rest of the order. */
+/** Everything a technician needs to take the next job: what came in, how, its photos (and the ones they add) and the rest of the order. */
 export default function ServicePieceDetail({ piece, onHide }: ServicePieceDetailProps) {
   const titleId = useId();
   const orderId = piece?.orderId;
@@ -122,6 +98,10 @@ export default function ServicePieceDetail({ piece, onHide }: ServicePieceDetail
             {piece.internalNotes && <div className="alert alert-light py-2 small"><strong>Nota interna:</strong> {piece.internalNotes}</div>}
             {detail?.intakeNotes && <div className="alert alert-light py-2 small"><strong>Al recibir:</strong> {detail.intakeNotes}</div>}
 
+            {/* The photos open for whoever works the board, also when the rest of the order is not theirs to see. */}
+            <h3 className="h6">Fotos del servicio</h3>
+            <ServicePhotosPanel key={piece.orderId} orderId={piece.orderId} />
+
             {error && <div className="alert alert-danger" role="alert">{error}</div>}
             {!order && !error && <div className="text-muted small mb-3">Cargando el pedido…</div>}
 
@@ -143,8 +123,6 @@ export default function ServicePieceDetail({ piece, onHide }: ServicePieceDetail
                     </ul>
                   )}
                 </div>
-                <Photos title="Fotos al recibir" photos={parsePhotos(detail?.beforePhotosJson)} />
-                <Photos title="Fotos al entregar" photos={parsePhotos(detail?.afterPhotosJson)} />
                 {order.servicePieces.length > 1 && (
                   <div className="mb-3">
                     <h3 className="h6">Otras piezas del pedido</h3>
