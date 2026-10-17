@@ -3,9 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { accountApi } from '../../api/accountApi';
 import { publicMenuApi, type PublicMenu } from '../../api/publicMenuApi';
+import { AuthContext, type AuthContextType } from '../../contexts/AuthContextDefinition';
 import { BusinessTheme, DayOfWeek, SpecialDayKind } from '../../types';
 import { getBusinessTheme } from '../../utils/businessThemes';
+import { readCart, saveCart } from '../../utils/savedCart';
 import { applyBusinessTheme } from '../../utils/theme';
 import PublicMenuPage from './PublicMenuPage';
 
@@ -17,7 +20,13 @@ vi.mock('../../api/publicMenuApi', () => ({
   },
 }));
 
+vi.mock('../../api/accountApi', () => ({
+  MAX_ACCOUNT_ADDRESSES: 10,
+  accountApi: { getAddresses: vi.fn(), saveAddress: vi.fn(), updateAddress: vi.fn(), deleteAddress: vi.fn() },
+}));
+
 const api = vi.mocked(publicMenuApi);
+const account = vi.mocked(accountApi);
 
 beforeAll(() => {
   // jsdom has no matchMedia, and the cart sheet (Offcanvas) asks it for the screen size.
@@ -80,22 +89,37 @@ const christmasDay = {
   ],
 };
 
-function renderPage(path = '/m/cafe-luna') {
+function renderPage(path = '/m/cafe-luna', auth?: Partial<AuthContextType>) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = (
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/m/:slug" element={<PublicMenuPage />} />
+      </Routes>
+    </MemoryRouter>
+  );
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/m/:slug" element={<PublicMenuPage />} />
-        </Routes>
-      </MemoryRouter>
+      {auth ? <AuthContext.Provider value={auth as AuthContextType}>{page}</AuthContext.Provider> : page}
     </QueryClientProvider>,
   );
 }
 
+/** Signed in with a customer account (Fase 24B), or with one of a business's team. */
+const signedInAs = (role: 'Customer' | 'TenantAdmin'): Partial<AuthContextType> => ({
+  isAuthenticated: true,
+  isLoading: false,
+  user: {
+    id: 'u1', email: 'mariana@demo.com', firstName: 'Mariana', lastName: 'Ortiz', fullName: 'Mariana Ortiz',
+    phoneNumber: '+5212221234567', phoneNumberConfirmed: false, emailConfirmed: true, role, permissions: [],
+  } as unknown as AuthContextType['user'],
+});
+
 describe('PublicMenuPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // The cart stays on the device (Fase 24B): each test starts without one.
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -411,6 +435,111 @@ describe('PublicMenuPage', () => {
     expect(container.querySelector('details')).toBeNull();
     expect(container.querySelector('.pm-hours-toggle')).toBeNull();
     expect(screen.getByRole('region', { name: 'Horario y ubicación' })).toContainElement(today);
+  });
+
+  describe('con cuenta y carrito guardado (Fase 24B)', () => {
+    const receipt = (overrides = {}) => ({
+      orderNumber: 'ORD-9', total: 110, deliveryFee: null, confirmed: false, businessName: 'Café Luna', contactPhone: null,
+      linkedToAccount: false, ...overrides,
+    });
+
+    it('keeps the cart on the device, and brings back only what the menu has now', async () => {
+      saveCart('cafe-luna', {
+        businessName: 'Café Luna',
+        lines: [{ productId: 'p1', optionIds: [], quantity: 2 }, { productId: 'ya-no', optionIds: [], quantity: 1 }],
+        reorderOf: 2,
+      });
+      api.getMenu.mockResolvedValue(menu());
+
+      renderPage();
+
+      expect(await screen.findByRole('button', { name: /^Ver pedido · 2/ })).toHaveTextContent('$110.00');
+      expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.');
+      // What is in the cart now replaces what came back, without the notice of «Pedir otra vez».
+      await userEvent.click(screen.getByRole('button', { name: /^Agregar Latte/ }));
+      expect(readCart('cafe-luna')).toEqual(expect.objectContaining({ lines: [{ productId: 'p1', optionIds: [], quantity: 3 }] }));
+      expect(readCart('cafe-luna')?.reorderOf).toBeUndefined();
+    });
+
+    it('sends the order with a key, the same one when it is sent again, and forgets the cart once it is placed', async () => {
+      api.getMenu.mockResolvedValue(menu());
+      api.placeOrder.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValue(receipt() as never);
+
+      renderPage();
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.type(within(cart).getByLabelText('Tu nombre'), 'Ana');
+      await userEvent.type(within(cart).getByLabelText('Teléfono (WhatsApp)'), '5512345678');
+      await userEvent.click(within(cart).getByRole('button', { name: /^Enviar pedido/ }));
+      expect(await within(cart).findByText(/No se pudo enviar el pedido/)).toBeInTheDocument();
+      await userEvent.click(within(cart).getByRole('button', { name: /^Enviar pedido/ }));
+
+      expect(await screen.findByText('¡Pedido enviado!')).toBeInTheDocument();
+      const [first, second] = api.placeOrder.mock.calls.map(([, body]) => body.idempotencyKey);
+      expect(first).toMatch(/^[0-9a-f-]{36}$/);
+      expect(second).toBe(first);
+      expect(readCart('cafe-luna')).toBeNull();
+      // A visitor is invited to create an account; nothing is said about «Mis pedidos».
+      expect(screen.getByRole('link', { name: 'Crea tu cuenta' })).toHaveAttribute('href', '/register?cuenta=cliente');
+      expect(screen.queryByRole('link', { name: 'Ver mis pedidos' })).not.toBeInTheDocument();
+    });
+
+    it('writes the account\'s name and phone, offers its last address and keeps a new one when asked', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
+      api.getDeliveryQuote.mockImplementation(async (_slug, postalCode) => ({
+        postalCode, covered: true, fee: 0, minimumOrder: 0, freeDeliveryFrom: null,
+      }));
+      account.getAddresses.mockResolvedValue([
+        { id: 'a1', label: 'Casa', postalCode: '72000', addressLine: 'Av. Juárez 120', references: 'Portón verde', lastUsedAt: '2026-10-12T19:00:00Z' },
+        { id: 'a2', label: 'Oficina', postalCode: '72160', addressLine: 'Calle 5 de Mayo 8', references: null, lastUsedAt: null },
+      ]);
+      api.placeOrder.mockResolvedValue(receipt({ linkedToAccount: true }) as never);
+
+      renderPage('/m/cafe-luna', signedInAs('Customer'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+
+      expect(within(cart).getByLabelText('Tu nombre')).toHaveValue('Mariana Ortiz');
+      expect(within(cart).getByLabelText('Teléfono (WhatsApp)')).toHaveValue('+5212221234567');
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+      expect(await within(cart).findByRole('radio', { name: /^Casa/ })).toHaveAttribute('aria-checked', 'true');
+      // A saved address needs nothing typed, and is never saved twice.
+      expect(within(cart).queryByLabelText('Dirección')).not.toBeInTheDocument();
+      expect(await within(cart).findByText('Envío gratis')).toBeInTheDocument();
+
+      // Another one, kept with a name.
+      await userEvent.click(within(cart).getByRole('radio', { name: 'Otra dirección' }));
+      await userEvent.type(within(cart).getByLabelText('Código postal'), '72100');
+      await userEvent.type(within(cart).getByLabelText('Dirección'), 'Calle Nueva 1');
+      expect(within(cart).getByLabelText('Guardar esta dirección en mi cuenta')).toBeChecked();
+      await userEvent.type(within(cart).getByLabelText('Nombre de la dirección'), 'Casa de mi mamá');
+      await userEvent.click(await within(cart).findByRole('button', { name: /^Enviar pedido/ }));
+
+      expect(api.placeOrder).toHaveBeenCalledWith('cafe-luna', expect.objectContaining({
+        customerName: 'Mariana Ortiz',
+        delivery: { postalCode: '72100', addressLine: 'Calle Nueva 1', references: null, paysWith: null },
+        saveAddress: true,
+        addressLabel: 'Casa de mi mamá',
+      }));
+      expect(await screen.findByRole('link', { name: 'Ver mis pedidos' })).toHaveAttribute('href', '/mis-pedidos');
+      expect(screen.queryByRole('link', { name: 'Crea tu cuenta' })).not.toBeInTheDocument();
+    });
+
+    it('lets a business\'s team order as a guest, without its name or addresses', async () => {
+      api.getMenu.mockResolvedValue(menu({ deliveryAvailable: true }));
+
+      renderPage('/m/cafe-luna', signedInAs('TenantAdmin'));
+      await userEvent.click(await screen.findByRole('button', { name: /^Agregar Latte/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Ver pedido/ }));
+      const cart = screen.getByRole('dialog', { name: 'Tu pedido' });
+      await userEvent.click(within(cart).getByRole('radio', { name: 'A domicilio' }));
+
+      expect(within(cart).getByLabelText('Tu nombre')).toHaveValue('');
+      expect(account.getAddresses).not.toHaveBeenCalled();
+      expect(within(cart).queryByLabelText('Guardar esta dirección en mi cuenta')).not.toBeInTheDocument();
+    });
   });
 
   describe('a domicilio', () => {

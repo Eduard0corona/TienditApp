@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicDirectoryApi, type DirectoryBusiness, type PublicDirectory } from '../../api/publicDirectoryApi';
 import { BusinessCategory } from '../../api/generated/enums';
+import { saveCart } from '../../utils/savedCart';
 import ExplorePage from './ExplorePage';
 
 vi.mock('../../api/publicDirectoryApi', () => ({
@@ -21,6 +22,7 @@ function business(overrides: Partial<DirectoryBusiness>): DirectoryBusiness {
     theme: 0,
     deliveryOnly: false,
     deliveryAvailable: false,
+    pricesIncludeTax: true,
     acceptsOrders: false,
     ordersPaused: false,
     closed: false,
@@ -65,6 +67,57 @@ function renderPage(path = '/explorar') {
 describe('ExplorePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The postal code and the carts stay on the device (Fase 24B): each test starts without them.
+    window.localStorage.clear();
+  });
+
+  it('asks the postal code once, remembers it, and each card says whether it delivers there', async () => {
+    api.getDirectory.mockImplementation(async (search) => directory([
+      business({
+        acceptsOrders: true,
+        deliveryAvailable: true,
+        deliversToPostalCode: search.postalCode ? true : null,
+        deliveryFee: search.postalCode ? 30 : null,
+      }),
+      business({
+        name: 'Café Luna',
+        slug: 'cafe-luna',
+        acceptsOrders: true,
+        deliveryAvailable: true,
+        pricesIncludeTax: false,
+        deliversToPostalCode: search.postalCode ? false : null,
+      }),
+    ]));
+
+    const { unmount } = renderPage();
+    expect(within(await screen.findByRole('link', { name: /Taquería El Güero/ })).getByText('Envío a domicilio')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Escribe tu código postal' }));
+    await userEvent.type(screen.getByLabelText('Código postal'), '72a000');
+    await userEvent.click(screen.getByRole('button', { name: 'Listo' }));
+
+    expect(await within(screen.getByRole('link', { name: /Taquería El Güero/ })).findByText('Envío $30.00')).toBeInTheDocument();
+    expect(within(screen.getByRole('link', { name: /Café Luna/ })).getByText('No llega a tu código postal')).toBeInTheDocument();
+    expect(screen.getByText('72000')).toBeInTheDocument();
+    expect(api.getDirectory).toHaveBeenLastCalledWith(expect.objectContaining({ postalCode: '72000' }), expect.anything());
+
+    // Next visit, the same postal code without asking; it can be taken away.
+    unmount();
+    renderPage();
+    expect(await screen.findByText('72000')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cambiar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar' }));
+    expect(screen.getByRole('button', { name: 'Escribe tu código postal' })).toBeInTheDocument();
+    expect(window.localStorage.getItem('tienditapp.postalCode')).toBeNull();
+  });
+
+  it('reminds a cart left without sending in a store', async () => {
+    saveCart('el-guero', { businessName: 'Taquería El Güero', lines: [{ productId: 'p1', optionIds: [], quantity: 3 }] });
+    api.getDirectory.mockResolvedValue(directory([business({})]));
+
+    renderPage();
+
+    expect(await screen.findByText(/Tienes un pedido sin enviar en/)).toHaveTextContent('Tienes un pedido sin enviar en Taquería El Güero (3 productos).');
+    expect(screen.getByRole('link', { name: 'Seguir con el pedido' })).toHaveAttribute('href', '/m/el-guero');
   });
 
   it('lists each business with what its menu answers, and opens its menu', async () => {

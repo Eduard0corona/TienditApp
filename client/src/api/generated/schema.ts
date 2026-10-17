@@ -4970,6 +4970,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AccountAddressDto"][];
+                        "application/json": components["schemas"]["AccountAddressDto"][];
+                        "text/json": components["schemas"]["AccountAddressDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AccountAddressRequest"];
+                    "text/json": components["schemas"]["AccountAddressRequest"];
+                    "application/*+json": components["schemas"]["AccountAddressRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AccountAddressDto"];
+                        "application/json": components["schemas"]["AccountAddressDto"];
+                        "text/json": components["schemas"]["AccountAddressDto"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/addresses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AccountAddressRequest"];
+                    "text/json": components["schemas"]["AccountAddressRequest"];
+                    "application/*+json": components["schemas"]["AccountAddressRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["AccountAddressDto"];
+                        "application/json": components["schemas"]["AccountAddressDto"];
+                        "text/json": components["schemas"]["AccountAddressDto"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/messaging/templates": {
         parameters: {
             query?: never;
@@ -7338,6 +7466,7 @@ export interface paths {
                 query?: {
                     category?: components["schemas"]["BusinessCategory"];
                     q?: string;
+                    postalCode?: string;
                     pageNumber?: number;
                     pageSize?: number;
                 };
@@ -9409,6 +9538,22 @@ export interface components {
             token: string;
             newPassword: string;
         };
+        AccountAddressDto: {
+            /** Format: uuid */
+            id: string;
+            label: string;
+            postalCode: string;
+            addressLine: string;
+            references?: string | null;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+        };
+        AccountAddressRequest: {
+            postalCode: string;
+            addressLine: string;
+            label?: string | null;
+            references?: string | null;
+        };
         AddCashTransactionRequest: {
             /** Format: uuid */
             cashSessionId: string;
@@ -11306,9 +11451,12 @@ export interface components {
             readonly hasNextPage: boolean;
         };
         MyOrderItemDto: {
+            /** Format: uuid */
+            productId: string;
             productName: string;
             /** Format: double */
             quantity: number;
+            optionIds: string[];
         };
         MyTenantDto: {
             /** Format: uuid */
@@ -11732,6 +11880,10 @@ export interface components {
             /** Format: double */
             expectedTotal?: number | null;
             delivery?: components["schemas"]["OrderDeliveryInput"];
+            /** Format: uuid */
+            idempotencyKey?: string | null;
+            saveAddress: boolean;
+            addressLabel?: string | null;
         };
         PlanDto: {
             /** Format: uuid */
@@ -12210,6 +12362,14 @@ export interface components {
             statusLabel?: string | null;
             statusDetail?: string | null;
             closed: boolean;
+            pricesIncludeTax: boolean;
+            deliversToPostalCode?: boolean | null;
+            /** Format: double */
+            deliveryFee?: number | null;
+            /** Format: double */
+            minimumOrder?: number | null;
+            /** Format: double */
+            freeDeliveryFrom?: number | null;
         };
         PublicDirectoryBusinessDtoPaginatedList: {
             items: components["schemas"]["PublicDirectoryBusinessDto"][];
@@ -12230,6 +12390,7 @@ export interface components {
         PublicDirectoryDto: {
             categories: components["schemas"]["PublicDirectoryCategoryDto"][];
             businesses: components["schemas"]["PublicDirectoryBusinessDtoPaginatedList"];
+            postalCode?: string | null;
         };
         PublicMenuCategoryDto: {
             /** Format: uuid */
@@ -12308,6 +12469,7 @@ export interface components {
             confirmed: boolean;
             businessName: string;
             contactPhone?: string | null;
+            linkedToAccount: boolean;
         };
         PublicSpecialDayDto: {
             /** Format: date */

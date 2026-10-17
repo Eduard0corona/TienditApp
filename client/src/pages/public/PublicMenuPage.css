@@ -219,6 +219,35 @@
   cursor: not-allowed;
 }
 
+/* The addresses of a customer account in the cart (Fase 24B): one per row, the chosen one marked like an option. */
+.pm-addresses {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.pm-address-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: var(--ta-touch);
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--ct-border-color);
+  border-radius: var(--ta-radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.pm-address-option.active {
+  border-color: var(--ct-primary);
+  background: var(--ct-primary-bg-subtle);
+}
+
+/* A cart brought back, or «Pedir otra vez»: what came back and what the menu no longer has. */
+.pm-restored {
+  margin: 0.75rem 1rem 0;
+}
+
 .pm-cart-bar {
   position: fixed;
   left: 50%;

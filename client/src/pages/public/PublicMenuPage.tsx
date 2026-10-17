@@ -1,10 +1,12 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal, Offcanvas } from 'react-bootstrap';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress } from '../../api/accountApi';
 import { getApiErrorMessage } from '../../api/errors';
-import { publicMenuApi, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
+import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import type { ProductOptionGroupDto } from '../../types';
 import { formatMoney } from '../../utils/money';
@@ -32,24 +34,23 @@ import {
   getPriceWithOptions,
   getSelectionError,
 } from '../../utils/productOptions';
+import { readPostalCode } from '../../utils/postalCodePreference';
+import {
+  MAX_CART_LINES,
+  MAX_LINE_QUANTITY,
+  readCart,
+  restoreLines,
+  saveCart,
+  type CartLine,
+} from '../../utils/savedCart';
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
+import { newUuid } from '../../utils/uuid';
 import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
 import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDeliveryFields';
 import './PublicMenuPage.css';
 
-interface MenuLine {
-  key: string;
-  product: PublicMenuProduct;
-  optionIds: string[];
-  optionsLabel: string;
-  unitPrice: number;
-  quantity: number;
-}
-
-// Same limits as the API (PlacePublicOrderCommandValidator).
-const MAX_LINES = 50;
-const MAX_QUANTITY = 99;
+type MenuLine = CartLine<PublicMenuProduct>;
 
 function whatsAppUrl(phone: string | null | undefined, text: string): string | null {
   const digits = (phone ?? '').replace(/\D/g, '');
@@ -69,9 +70,25 @@ function groupsOf(product: PublicMenuProduct): ProductOptionGroupDto[] {
 
 const NO_ADDRESS: PublicDeliveryAddress = { postalCode: '', addressLine: '', references: '', paysWith: '' };
 
+/** What came back of a saved cart, or of «Pedir otra vez»; '' when everything did. */
+function restoredMessage(kept: number, dropped: number, reorder: boolean): string {
+  if (dropped === 0) return '';
+  if (kept === 0) {
+    return reorder
+      ? 'Los productos de ese pedido ya no están disponibles ahora. Mira el menú de hoy.'
+      : 'Los productos que dejaste en tu pedido ya no están disponibles ahora.';
+  }
+  return dropped === 1
+    ? 'Agregamos lo que sigue disponible; 1 producto ya no está en el menú de ahora.'
+    : `Agregamos lo que sigue disponible; ${dropped} productos ya no están en el menú de ahora.`;
+}
+
 /**
  * The public menu of a business (/m/:slug), without signing in: the catalog the business published and, when
  * it takes orders, a cart that sends the order with the customer's name and phone. A table QR adds ?mesa=.
+ * The cart stays on this device until it is sent, and «Pedir otra vez» fills it with what the menu still has. With a
+ * customer account (Fase 24B) the name and phone are already written, its addresses are offered and the order is in
+ * its orders.
  * Its header says whether the business is open now (the API works it out in the business's time and writes the words),
  * its hours of the week, its special days ahead and its address with a map. A business with delivery zones takes the
  * order to the customer's address: the server says what it charges to their postal code, and the total adds it.
@@ -109,11 +126,65 @@ export default function PublicMenuPage() {
   const [receipt, setReceipt] = useState<PublicOrderReceipt | null>(null);
   const [toAddress, setToAddress] = useState(false);
   const [address, setAddress] = useState<PublicDeliveryAddress>(NO_ADDRESS);
+  const queryClient = useQueryClient();
+  const { customer, signedIn } = useCustomerAccount();
+  // The saved address chosen; null while another one is written; undefined until the cart first goes to an address.
+  const [addressChoice, setAddressChoice] = useState<string | null | undefined>(undefined);
+  const [keepAddress, setKeepAddress] = useState(true);
+  const [addressLabel, setAddressLabel] = useState('');
+  const [restoredFor, setRestoredFor] = useState<string | null>(null);
+  const [restoredNotice, setRestoredNotice] = useState('');
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
+  // The key of the order being sent: the same order sent again (an answer lost) keeps it, and the server places it once.
+  const attempt = useRef<{ signature: string; key: string } | null>(null);
 
   // At one of its tables the customer is already there; a kitchen without premises with zones only delivers.
   const deliveryOffered = !!data?.deliveryAvailable && !atTable;
   const deliveryRequired = deliveryOffered && !!data?.deliveryOnly;
   const delivering = deliveryOffered && (deliveryRequired || toAddress);
+  const addresses = useQuery({
+    queryKey: ['me', 'addresses'],
+    queryFn: ({ signal }) => accountApi.getAddresses(signal),
+    enabled: !!customer && deliveryOffered,
+  });
+  const savedAddresses = useMemo(() => (customer ? addresses.data ?? [] : []), [customer, addresses.data]);
+
+  // The customer account's name and phone, written once its session is known; they can still be changed.
+  if (customer && prefilledFor !== customer.id) {
+    setPrefilledFor(customer.id);
+    setName((current) => current || `${customer.firstName} ${customer.lastName}`.trim());
+    setPhone((current) => current || customer.phoneNumber || '');
+  }
+
+  // The cart this device kept for this store, with what its menu has now (and «Pedir otra vez»), once per store.
+  if (data && restoredFor !== slug) {
+    setRestoredFor(slug);
+    const saved = readCart(slug);
+    if (saved) {
+      const restored = restoreLines(saved.lines, data.categories.flatMap((item) => item.products));
+      setLines(restored.lines);
+      setRestoredNotice(restoredMessage(restored.lines.length, restored.dropped, saved.reorderOf !== undefined));
+    }
+  }
+
+  // The first time the order goes to an address: the account's last one used, or the postal code given in Explorar.
+  const chooseAddress = (saved: AccountAddress | null) => {
+    setAddressChoice(saved?.id ?? null);
+    setAddress((current) => (saved
+      ? { ...current, postalCode: saved.postalCode, addressLine: saved.addressLine, references: saved.references ?? '' }
+      : { ...current, postalCode: readPostalCode(), addressLine: '', references: '' }));
+  };
+  if (delivering && addressChoice === undefined && (!customer || !addresses.isPending)) {
+    if (savedAddresses[0]) {
+      chooseAddress(savedAddresses[0]);
+    } else {
+      setAddressChoice(null);
+      const remembered = readPostalCode();
+      if (remembered && !address.postalCode) setAddress((current) => ({ ...current, postalCode: remembered }));
+    }
+  }
+  const usingSavedAddress = savedAddresses.some((saved) => saved.id === addressChoice);
+  const canKeepAddress = !!customer && !usingSavedAddress && savedAddresses.length < MAX_ACCOUNT_ADDRESSES;
   const postalCode = normalizePostalCode(address.postalCode);
   const quote = useQuery({
     queryKey: ['public-delivery-quote', slug, postalCode],
@@ -156,13 +227,23 @@ export default function PublicMenuPage() {
   const visible = category === 'all' ? categories : categories.filter((item) => item.id === category);
   const { ref: chipsRef, fadeClass: chipsFade } = useScrollFade<HTMLDivElement>(categories.length);
 
+  // The cart stays on this device until it is sent or emptied.
+  const businessName = data?.businessName;
+  useEffect(() => {
+    if (restoredFor !== slug || !businessName) return;
+    saveCart(slug, {
+      businessName,
+      lines: lines.map((line) => ({ productId: line.product.id, optionIds: line.optionIds, quantity: line.quantity })),
+    });
+  }, [lines, restoredFor, slug, businessName]);
+
   const add = (product: PublicMenuProduct, optionIds: string[]) => {
     const key = getLineKey(product.id, optionIds);
     setLines((current) => {
       if (current.some((line) => line.key === key)) {
-        return current.map((line) => (line.key === key ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY) } : line));
+        return current.map((line) => (line.key === key ? { ...line, quantity: Math.min(line.quantity + 1, MAX_LINE_QUANTITY) } : line));
       }
-      if (current.length >= MAX_LINES) return current;
+      if (current.length >= MAX_CART_LINES) return current;
       const groups = groupsOf(product);
       return [...current, {
         key,
@@ -204,7 +285,7 @@ export default function PublicMenuPage() {
   };
 
   const changeQuantity = (key: string, delta: number) => setLines((current) => current
-    .map((line) => (line.key === key ? { ...line, quantity: Math.min(line.quantity + delta, MAX_QUANTITY) } : line))
+    .map((line) => (line.key === key ? { ...line, quantity: Math.min(line.quantity + delta, MAX_LINE_QUANTITY) } : line))
     .filter((line) => line.quantity > 0));
 
   const send = async (event: React.FormEvent) => {
@@ -212,31 +293,42 @@ export default function PublicMenuPage() {
     if (lines.length === 0 || sending || deliveryBlocked) return;
     setSending(true);
     setError('');
+    const keeping = delivering && canKeepAddress && keepAddress;
+    const order: PlacePublicOrder = {
+      customerName: name.trim(),
+      customerPhone: phone.trim(),
+      notes: notes.trim() || null,
+      tableLabel: tableLabel || null,
+      delivery: delivering
+        ? {
+          postalCode,
+          addressLine: address.addressLine.trim(),
+          references: address.references.trim() || null,
+          paysWith: typeof paysWithTyped === 'number' ? paysWithTyped : null,
+        }
+        : undefined,
+      items: lines.map((line) => ({
+        productId: line.product.id,
+        quantity: line.quantity,
+        optionIds: line.optionIds,
+        notes: null,
+      })),
+      expectedTotal: totals.total,
+      saveAddress: keeping,
+      addressLabel: keeping ? addressLabel.trim() || null : null,
+    };
+    // Another order (a product, the address or the total changed) gets another key.
+    const signature = JSON.stringify(order);
+    if (attempt.current?.signature !== signature) attempt.current = { signature, key: newUuid() };
     try {
-      const result = await publicMenuApi.placeOrder(slug, {
-        customerName: name.trim(),
-        customerPhone: phone.trim(),
-        notes: notes.trim() || null,
-        tableLabel: tableLabel || null,
-        delivery: delivering
-          ? {
-            postalCode,
-            addressLine: address.addressLine.trim(),
-            references: address.references.trim() || null,
-            paysWith: typeof paysWithTyped === 'number' ? paysWithTyped : null,
-          }
-          : undefined,
-        items: lines.map((line) => ({
-          productId: line.product.id,
-          quantity: line.quantity,
-          optionIds: line.optionIds,
-          notes: null,
-        })),
-        expectedTotal: totals.total,
-      });
+      const result = await publicMenuApi.placeOrder(slug, { ...order, idempotencyKey: attempt.current.key });
+      attempt.current = null;
       setReceipt(result);
       setLines([]);
       setCartOpen(false);
+      setRestoredNotice('');
+      if (customer && delivering) void queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
+      if (result.linkedToAccount) void queryClient.invalidateQueries({ queryKey: ['me', 'orders'] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'No se pudo enviar el pedido. Intenta de nuevo.'));
       void menu.refetch();
@@ -303,14 +395,21 @@ export default function PublicMenuPage() {
               ? `${receipt.businessName} ya lo está preparando.`
               : `${receipt.businessName} lo confirmará en unos minutos.`}
           </p>
+          {receipt.linkedToAccount && <p className="small mb-0">Lo encuentras en tus pedidos.</p>}
           <div className="d-grid gap-2 mt-3" style={{ maxWidth: '20rem', margin: '0 auto' }}>
             {followUp && (
               <a className="btn btn-success btn-touch" href={followUp} target="_blank" rel="noopener noreferrer">
                 <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Avisar por WhatsApp
               </a>
             )}
+            {receipt.linkedToAccount && <Link className="btn btn-light btn-touch" to="/mis-pedidos">Ver mis pedidos</Link>}
             <button type="button" className="btn btn-light btn-touch" onClick={() => setReceipt(null)}>Hacer otro pedido</button>
           </div>
+          {!signedIn && (
+            <p className="small text-muted mt-3 mb-0">
+              ¿Pides seguido? <Link to="/register?cuenta=cliente">Crea tu cuenta</Link> y tus datos quedan listos para la próxima vez.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -400,6 +499,13 @@ export default function PublicMenuPage() {
             </p>
           )}
         </section>
+      )}
+
+      {restoredNotice && (
+        <div className="alert alert-info pm-restored d-flex align-items-start gap-2" role="status">
+          <span className="flex-grow-1">{restoredNotice}</span>
+          <button type="button" className="btn-close" aria-label="Cerrar aviso" onClick={() => setRestoredNotice('')}></button>
+        </div>
       )}
 
       {closedByHours && closedNotice ? (
@@ -553,6 +659,12 @@ export default function PublicMenuPage() {
                 problem={deliveryProblem}
                 pricesIncludeTax={data.pricesIncludeTax}
                 total={terms ? totals.total : null}
+                savedAddresses={savedAddresses}
+                selectedAddressId={addressChoice ?? null}
+                onSelectAddress={chooseAddress}
+                save={canKeepAddress
+                  ? { checked: keepAddress, label: addressLabel, onCheckedChange: setKeepAddress, onLabelChange: setAddressLabel }
+                  : null}
               />
             )}
             {totals.fee !== null && totals.productsTotal !== null && (

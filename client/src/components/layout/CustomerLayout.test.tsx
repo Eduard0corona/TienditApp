@@ -54,7 +54,7 @@ describe('CustomerLayout', () => {
     renderLayout();
 
     expect(screen.getByRole('link', { name: /Mis pedidos/ })).toHaveAttribute('href', '/mis-pedidos');
-    expect(screen.getByRole('link', { name: 'Mi perfil' })).toHaveAttribute('href', '/profile');
+    expect(screen.getByRole('link', { name: 'Mi cuenta' })).toHaveAttribute('href', '/cuenta');
     expect(screen.queryByRole('link', { name: 'Entrar' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Salir' }));
     expect(logout).toHaveBeenCalled();

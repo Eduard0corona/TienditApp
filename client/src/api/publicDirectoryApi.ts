@@ -9,6 +9,8 @@ export type UpdateDirectoryProfile = Schemas['UpdateDirectoryProfileRequest'];
 export interface DirectorySearch {
   category?: BusinessCategory;
   q?: string;
+  /** The customer's postal code: each card says whether the business delivers there and what it costs (Fase 24B). */
+  postalCode?: string;
   pageNumber?: number;
   pageSize?: number;
 }

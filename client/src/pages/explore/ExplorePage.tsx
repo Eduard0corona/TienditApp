@@ -6,6 +6,9 @@ import { publicDirectoryApi, type DirectoryBusiness, type DirectorySearch } from
 import DirectoryBusinessCard from '../../components/explore/DirectoryBusinessCard';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import { BUSINESS_CATEGORIES, categoryBySlug } from '../../utils/businessCategories';
+import { readPostalCode, savePostalCode } from '../../utils/postalCodePreference';
+import { isPostalCode } from '../../utils/postalCodes';
+import { latestCart } from '../../utils/savedCart';
 import './ExplorePage.css';
 
 const PAGE_SIZE = 24;
@@ -49,12 +52,67 @@ function MoreBusinesses({ search, pageNumber }: { search: DirectorySearch; pageN
 }
 
 /**
+ * «Entregar en…» (Fase 24B): the postal code the cards answer for, asked once and remembered on this device. Never sent
+ * anywhere but to Explorar's own search.
+ */
+function PostalCodeChip({ postalCode, onChange }: { postalCode: string; onChange: (postalCode: string) => void }) {
+  const inputId = useId();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(postalCode);
+  const typed = draft.trim();
+
+  if (!editing) {
+    return (
+      <p className="ex-postal">
+        <i className="ri-e-bike-2-line" aria-hidden="true"></i>
+        {postalCode ? <span>Entregar en <strong>{postalCode}</strong></span> : <span>¿Te lo llevan a domicilio?</span>}
+        <button type="button" className="btn btn-link btn-sm p-0" onClick={() => { setDraft(postalCode); setEditing(true); }}>
+          {postalCode ? 'Cambiar' : 'Escribe tu código postal'}
+        </button>
+      </p>
+    );
+  }
+  return (
+    <form
+      className="ex-postal"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (typed && !isPostalCode(typed)) return;
+        onChange(typed);
+        setEditing(false);
+      }}
+    >
+      <label className="small" htmlFor={inputId}>Código postal</label>
+      <input
+        id={inputId}
+        className={`form-control form-control-sm ex-postal-input ${typed && !isPostalCode(typed) ? 'is-invalid' : ''}`}
+        inputMode="numeric"
+        autoComplete="postal-code"
+        maxLength={5}
+        pattern="\d{5}"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value.replace(/\D/g, ''))}
+        aria-describedby={`${inputId}-help`}
+      />
+      <button type="submit" className="btn btn-sm btn-primary" disabled={!!typed && !isPostalCode(typed)}>Listo</button>
+      {postalCode && (
+        <button type="button" className="btn btn-sm btn-light" onClick={() => { onChange(''); setEditing(false); }}>Quitar</button>
+      )}
+      <span id={`${inputId}-help`} className="small text-muted w-100">Cada negocio te dice si llega y cuánto cobra.</span>
+    </form>
+  );
+}
+
+/**
  * Explorar (/explorar and /explorar/:categoria): the businesses that published their menu, those that take orders now
  * first. A customer finds one by category or by words of its name or what it sells, and the card opens its menu, where
- * it orders as it always did. The search lives in the address (?q=), so a search can be shared.
+ * it orders as it always did. The search lives in the address (?q=), so a search can be shared. With the customer's
+ * postal code each card says whether it delivers there, and a cart left without sending is a tap away (Fase 24B).
  */
 export default function ExplorePage() {
   const searchId = useId();
+  const [postalCode, setPostalCode] = useState(readPostalCode);
+  const [pendingCart] = useState(() => latestCart());
   const { categoria } = useParams();
   const [params, setParams] = useSearchParams();
   const category = categoryBySlug(categoria);
@@ -85,7 +143,12 @@ export default function ExplorePage() {
     };
   }, [category]);
 
-  const search: DirectorySearch = { category: category?.value, q: query.trim() || undefined, pageSize: PAGE_SIZE };
+  const search: DirectorySearch = {
+    category: category?.value,
+    q: query.trim() || undefined,
+    postalCode: postalCode || undefined,
+    pageSize: PAGE_SIZE,
+  };
   const directory = useQuery({
     queryKey: ['directory', search, 1],
     queryFn: ({ signal }) => publicDirectoryApi.getDirectory({ ...search, pageNumber: 1 }, signal),
@@ -131,7 +194,25 @@ export default function ExplorePage() {
             onChange={(event) => setDraft(event.target.value)}
           />
         </form>
+        <PostalCodeChip
+          postalCode={postalCode}
+          onChange={(code) => {
+            savePostalCode(code);
+            setPostalCode(code);
+          }}
+        />
       </section>
+
+      {pendingCart && (
+        <p className="ex-pending" role="status">
+          <i className="ri-shopping-bag-3-line" aria-hidden="true"></i>
+          <span className="flex-grow-1">
+            Tienes un pedido sin enviar en <strong>{pendingCart.businessName}</strong>
+            {pendingCart.itemCount === 1 ? ' (1 producto)' : ` (${pendingCart.itemCount} productos)`}.
+          </span>
+          <Link className="btn btn-sm btn-primary" to={`/m/${pendingCart.slug}`}>Seguir con el pedido</Link>
+        </p>
+      )}
 
       {chips.length > 0 && (
         <nav ref={ref} className={`ex-chips ta-scroll-fade ${fadeClass}`} aria-label="Categorías">

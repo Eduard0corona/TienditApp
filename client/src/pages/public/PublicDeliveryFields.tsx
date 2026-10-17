@@ -1,5 +1,8 @@
 import { useId } from 'react';
+import type { AccountAddress } from '../../api/accountApi';
+import { describeAccountAddress } from '../../utils/accountAddresses';
 import {
+  ADDRESS_LABEL_MAX_LENGTH,
   ADDRESS_LINE_MAX_LENGTH,
   REFERENCES_MAX_LENGTH,
   describeDeliveryTerms,
@@ -33,18 +36,35 @@ interface PublicDeliveryFieldsProps {
   pricesIncludeTax: boolean;
   /** What the order adds up to with its delivery, once its fee is known: the change of «¿con cuánto pagas?». */
   total: number | null;
+  /** The addresses of the signed-in customer account (Fase 24B), the last one used first; none for a visitor. */
+  savedAddresses?: AccountAddress[];
+  /** The saved address chosen, or null while the customer writes another one. */
+  selectedAddressId?: string | null;
+  onSelectAddress?: (address: AccountAddress | null) => void;
+  /** «Guardar en mi cuenta» for an address written now: absent for a visitor or a full account. */
+  save?: SaveAddressChoice | null;
+}
+
+export interface SaveAddressChoice {
+  checked: boolean;
+  label: string;
+  onCheckedChange: (checked: boolean) => void;
+  onLabelChange: (label: string) => void;
 }
 
 /**
  * How the customer of the online menu gets the order (Fase 22C): to their address, with the postal code the business's
  * zones are checked by, or picked up. What the delivery costs is the server's answer for that postal code. To the address,
- * the customer may say what they pay with, for the courier's change (Fase 22D).
+ * the customer may say what they pay with, for the courier's change (Fase 22D). A customer account picks one of its
+ * addresses, or writes another and may keep it (Fase 24B).
  */
 export default function PublicDeliveryFields({
   required, toAddress, onToAddressChange, address, onAddressChange, terms, checking, problem, pricesIncludeTax, total,
+  savedAddresses = [], selectedAddressId = null, onSelectAddress, save = null,
 }: PublicDeliveryFieldsProps) {
   const id = useId();
   const delivering = required || toAddress;
+  const usingSaved = savedAddresses.some((saved) => saved.id === selectedAddressId);
   const paysWithIssue = total === null ? '' : paysWithProblem(address.paysWith, total);
   const bill = parsePaysWith(address.paysWith);
 
@@ -73,47 +93,107 @@ export default function PublicDeliveryFields({
           </div>
         </>
       )}
+      {delivering && savedAddresses.length > 0 && (
+        <>
+          <div id={`${id}-where`} className="small fw-semibold mb-1">¿A dónde?</div>
+          <div className="pm-addresses mb-2" role="radiogroup" aria-labelledby={`${id}-where`}>
+            {savedAddresses.map((saved) => (
+              <button
+                key={saved.id}
+                type="button"
+                role="radio"
+                aria-checked={saved.id === selectedAddressId}
+                className={`pm-address-option ${saved.id === selectedAddressId ? 'active' : ''}`}
+                onClick={() => onSelectAddress?.(saved)}
+              >
+                <span className="fw-semibold">{saved.label}</span>
+                <span className="small text-muted">{describeAccountAddress(saved)}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!usingSaved}
+              className={`pm-address-option ${usingSaved ? '' : 'active'}`}
+              onClick={() => onSelectAddress?.(null)}
+            >
+              <span className="fw-semibold">Otra dirección</span>
+            </button>
+          </div>
+        </>
+      )}
       {delivering && (
         <div className="row g-2">
-          <div className="col-6 col-sm-4">
-            <label className="form-label small mb-1" htmlFor={`${id}-postal-code`}>Código postal</label>
-            <input
-              id={`${id}-postal-code`}
-              className={`form-control ${problem && !checking ? 'is-invalid' : ''}`}
-              required
-              inputMode="numeric"
-              autoComplete="postal-code"
-              maxLength={5}
-              pattern="\d{5}"
-              value={address.postalCode}
-              onChange={(event) => onAddressChange({ postalCode: event.target.value.replace(/\D/g, '') })}
-              aria-describedby={`${id}-quote`}
-            />
-          </div>
-          <div className="col-12">
-            <label className="form-label small mb-1" htmlFor={`${id}-address`}>Dirección</label>
-            <input
-              id={`${id}-address`}
-              className="form-control"
-              required
-              maxLength={ADDRESS_LINE_MAX_LENGTH}
-              autoComplete="street-address"
-              placeholder="Calle, número y colonia"
-              value={address.addressLine}
-              onChange={(event) => onAddressChange({ addressLine: event.target.value })}
-            />
-          </div>
-          <div className="col-12">
-            <label className="form-label small mb-1" htmlFor={`${id}-references`}>Referencias (opcional)</label>
-            <input
-              id={`${id}-references`}
-              className="form-control"
-              maxLength={REFERENCES_MAX_LENGTH}
-              placeholder="Ej. portón verde, entre qué calles"
-              value={address.references}
-              onChange={(event) => onAddressChange({ references: event.target.value })}
-            />
-          </div>
+          {!usingSaved && (
+            <>
+              <div className="col-6 col-sm-4">
+                <label className="form-label small mb-1" htmlFor={`${id}-postal-code`}>Código postal</label>
+                <input
+                  id={`${id}-postal-code`}
+                  className={`form-control ${problem && !checking ? 'is-invalid' : ''}`}
+                  required
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={5}
+                  pattern="\d{5}"
+                  value={address.postalCode}
+                  onChange={(event) => onAddressChange({ postalCode: event.target.value.replace(/\D/g, '') })}
+                  aria-describedby={`${id}-quote`}
+                />
+              </div>
+              <div className="col-12">
+                <label className="form-label small mb-1" htmlFor={`${id}-address`}>Dirección</label>
+                <input
+                  id={`${id}-address`}
+                  className="form-control"
+                  required
+                  maxLength={ADDRESS_LINE_MAX_LENGTH}
+                  autoComplete="street-address"
+                  placeholder="Calle, número y colonia"
+                  value={address.addressLine}
+                  onChange={(event) => onAddressChange({ addressLine: event.target.value })}
+                />
+              </div>
+              <div className="col-12">
+                <label className="form-label small mb-1" htmlFor={`${id}-references`}>Referencias (opcional)</label>
+                <input
+                  id={`${id}-references`}
+                  className="form-control"
+                  maxLength={REFERENCES_MAX_LENGTH}
+                  placeholder="Ej. portón verde, entre qué calles"
+                  value={address.references}
+                  onChange={(event) => onAddressChange({ references: event.target.value })}
+                />
+              </div>
+              {save && (
+                <div className="col-12">
+                  <div className="form-check">
+                    <input
+                      id={`${id}-save`}
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={save.checked}
+                      onChange={(event) => save.onCheckedChange(event.target.checked)}
+                    />
+                    <label className="form-check-label small" htmlFor={`${id}-save`}>Guardar esta dirección en mi cuenta</label>
+                  </div>
+                  {save.checked && (
+                    <>
+                      <label className="visually-hidden" htmlFor={`${id}-label`}>Nombre de la dirección</label>
+                      <input
+                        id={`${id}-label`}
+                        className="form-control form-control-sm mt-1"
+                        maxLength={ADDRESS_LABEL_MAX_LENGTH}
+                        placeholder="Nombre: Casa, Oficina…"
+                        value={save.label}
+                        onChange={(event) => save.onLabelChange(event.target.value)}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )}
           <div className="col-6 col-sm-4">
             <label className="form-label small mb-1" htmlFor={`${id}-pays-with`}>¿Con cuánto pagas? (opcional)</label>
             <input

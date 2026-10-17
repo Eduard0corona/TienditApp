@@ -1,5 +1,6 @@
 import { BusinessCategory } from '../api/generated/enums';
 import type { DirectoryBusiness } from '../api/publicDirectoryApi';
+import { formatMoney } from './money';
 
 export interface BusinessCategoryInfo {
   value: BusinessCategory;
@@ -35,6 +36,19 @@ export function categoryBySlug(slug: string | null | undefined): BusinessCategor
 }
 
 /** What the card says about orders: the answer its menu gives, in the words of the menu. */
+/**
+ * What a card says about delivery (Fase 24B): with the customer's postal code, whether the business delivers there and
+ * what it costs (written like its prices: «más IVA» when they do not include it); without it, only that it delivers.
+ * Null for a business that takes no orders to an address.
+ */
+export function deliveryToPostalCode(business: DirectoryBusiness): { reaches: boolean; text: string } | null {
+  if (!business.deliveryAvailable) return null;
+  if (business.deliversToPostalCode === false) return { reaches: false, text: 'No llega a tu código postal' };
+  if (business.deliversToPostalCode !== true) return { reaches: true, text: 'Envío a domicilio' };
+  const fee = business.deliveryFee ?? 0;
+  return { reaches: true, text: fee > 0 ? `Envío ${formatMoney(fee)}${business.pricesIncludeTax ? '' : ' más IVA'}` : 'Envío gratis' };
+}
+
 export function orderStatus(business: DirectoryBusiness): { tone: 'taking' | 'paused' | 'closed' | 'menu'; text: string } {
   const { closed } = business;
   const hours = business.statusLabel

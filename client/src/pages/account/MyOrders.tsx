@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import type { MyOrder } from '../../api/accountApi';
 import PageTitle from '../../components/common/PageTitle';
 import StatusChip from '../../components/common/StatusChip';
 import { apiRequest } from '../../api/typedClient';
@@ -8,12 +9,22 @@ import { getApiErrorMessage } from '../../api/errors';
 import type { OrderStatus } from '../../types';
 import { formatDateTime } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
+import { linesOfOrder, saveCart } from '../../utils/savedCart';
 
 const PAGE_SIZE = 10;
 
-/** A customer account's orders in every business, newest first, with "Pedir otra vez" where the menu takes orders. */
+/**
+ * A customer account's orders in every business, newest first, with «Pedir otra vez» where the menu takes orders: it
+ * fills the store's cart with that order, and the store keeps what its menu still has (Fase 24B).
+ */
 export default function MyOrders() {
   const [page, setPage] = useState(1);
+  const navigate = useNavigate();
+  const orderAgain = (order: MyOrder) => {
+    const lines = linesOfOrder(order.items);
+    saveCart(order.businessSlug, { businessName: order.businessName, lines, reorderOf: order.items.length });
+    navigate(`/m/${order.businessSlug}`);
+  };
   const ordersQuery = useQuery({
     queryKey: ['me', 'orders', page],
     queryFn: ({ signal }) => apiRequest('get', '/api/v1/me/orders', { query: { pageNumber: page, pageSize: PAGE_SIZE }, signal }),
@@ -71,9 +82,14 @@ export default function MyOrders() {
                     )}
                   </span>
                   {order.canOrderAgain && (
-                    <Link className="btn btn-sm btn-primary" to={`/m/${order.businessSlug}`}>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      onClick={() => orderAgain(order)}
+                      aria-label={`Pedir otra vez ${order.orderNumber} de ${order.businessName}`}
+                    >
                       <i className="ri-restart-line me-1" aria-hidden="true"></i>Pedir otra vez
-                    </Link>
+                    </button>
                   )}
                 </div>
               </div>
