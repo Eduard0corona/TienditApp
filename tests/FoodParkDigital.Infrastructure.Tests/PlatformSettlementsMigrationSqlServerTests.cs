@@ -120,7 +120,8 @@ public class PlatformSettlementsMigrationSqlServerTests
     /// <summary>An order of Rappi of $1,000 charged by the platform: 30 % of commission on the total, expected net 561.48.</summary>
     private static async Task<Guid> SeedOrderAsync(SqlServerTestDatabase database, Guid tenantId)
     {
-        await using var context = database.CreateContext(tenantId);
+        // Also on a database migrated to an earlier migration, without the tracking link of Fase 24C.
+        await using var context = BeforeOrderTracking.CreateContext(database, tenantId);
         var setting = new DeliveryPlatformSetting(
             tenantId, OrderChannel.Rappi, isActive: true, new PlatformTerms(30m, PlatformCommissionBase.TotalWithTax, 16m, 2.5m, 50m));
         var order = new Order(

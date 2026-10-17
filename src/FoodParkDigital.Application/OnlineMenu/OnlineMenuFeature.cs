@@ -450,6 +450,11 @@ public class PublicOrderReceiptDto
     /// Placed with a customer session (Fase 24B): the order is in the account's orders, whatever phone it carries.
     /// </summary>
     public bool LinkedToAccount { get; set; }
+    /// <summary>
+    /// The link to follow the order without an account (Fase 24C, ADR 0023): the app opens it at /seguimiento#token, in
+    /// the fragment, which never reaches a server log. None for an order placed before the link existed.
+    /// </summary>
+    public string? TrackingToken { get; set; }
 }
 
 /// <summary>
@@ -680,6 +685,7 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
             await RememberAddressAsync(account.Id, request, now, cancellationToken);
         if (request.IdempotencyKey is { } requestKey)
             order.IdentifyClientRequest(requestKey, capturedOfflineAt: null);
+        order.IssueTrackingToken(OrderTracking.NewToken());
         order.MarkAsCreated();
         _context.Orders.Add(order);
         try
@@ -708,7 +714,8 @@ public class PlacePublicOrderCommandHandler : IRequestHandler<PlacePublicOrderCo
         Confirmed = confirmed,
         BusinessName = tenant.Name,
         ContactPhone = tenant.ContactPhone,
-        LinkedToAccount = account is not null && order.CustomerUserId == account.Id
+        LinkedToAccount = account is not null && order.CustomerUserId == account.Id,
+        TrackingToken = order.TrackingToken
     };
 
     /// <summary>

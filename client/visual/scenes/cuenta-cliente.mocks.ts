@@ -2,7 +2,7 @@ import { asOption, type DemoData, type SceneOptions } from '../fixtures';
 import { uuid } from '../mocks/data.mjs';
 import { demoDirectory } from '../mocks/routes-p9.mjs';
 import { CUSTOMER_PROFILE } from './vender-pedidos.mocks';
-import { deliveryQuote, publicRoutes } from './publico-cuenta-marco.mocks';
+import { TRACKING_LINK, deliveryQuote, publicRoutes } from './publico-cuenta-marco.mocks';
 
 type ExtraRoutes = NonNullable<SceneOptions['extraRoutes']>;
 
@@ -50,7 +50,7 @@ const accountStoreRoutes: ExtraRoutes = (data, helpers) => [
     orderNumber: 'ORD-000361', total: body?.expectedTotal ?? 0,
     deliveryFee: body?.delivery ? deliveryQuote(body.delivery.postalCode).fee : null,
     confirmed: false, businessName: data.tenant.name, contactPhone: '5512345678',
-    linkedToAccount: data.profile.role === 'Customer',
+    linkedToAccount: data.profile.role === 'Customer', trackingToken: TRACKING_LINK,
   })],
   ...publicRoutes(data, helpers),
 ];

@@ -1374,6 +1374,9 @@ export { OrderPaymentMethod } from '../api/generated/enums';
 
 export { ServiceOrderPieceStatus } from '../api/generated/enums';
 
+/** How a customer follows an order (Fase 24C): its steps and the account's orders in progress or before. */
+export { OrderTrackingStep, OrderTrackingStepState, MyOrdersScope } from '../api/generated/enums';
+
 export interface OrderItemDto {
   id: string;
   productId: string;

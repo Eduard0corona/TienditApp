@@ -6,6 +6,7 @@ import { accountApi, MAX_ACCOUNT_ADDRESSES, type AccountAddress } from '../../ap
 import { getApiErrorMessage } from '../../api/errors';
 import { publicMenuApi, type PlacePublicOrder, type PublicMenuProduct, type PublicOrderReceipt } from '../../api/publicMenuApi';
 import PhotoOrInitial from '../../components/common/PhotoOrInitial';
+import CopyTrackingLink from '../../components/tracking/CopyTrackingLink';
 import { useCustomerAccount } from '../../hooks/useCustomerAccount';
 import { useScrollFade } from '../../hooks/useScrollFade';
 import type { ProductOptionGroupDto } from '../../types';
@@ -47,18 +48,12 @@ import {
 import { previewBusinessTheme } from '../../utils/theme';
 import { lineAmount } from '../../utils/units';
 import { newUuid } from '../../utils/uuid';
+import { businessWhatsAppUrl } from '../../utils/whatsApp';
 import { parsePaysWith, paysWithProblem } from '../../utils/courierCash';
 import PublicDeliveryFields, { type PublicDeliveryAddress } from './PublicDeliveryFields';
 import './PublicMenuPage.css';
 
 type MenuLine = CartLine<PublicMenuProduct>;
-
-function whatsAppUrl(phone: string | null | undefined, text: string): string | null {
-  const digits = (phone ?? '').replace(/\D/g, '');
-  if (digits.length < 10) return null;
-  const target = digits.length === 10 ? `52${digits}` : digits;
-  return `https://wa.me/${target}?text=${encodeURIComponent(text)}`;
-}
 
 /** A map search of the address: opens the maps app on a phone. */
 function mapsUrl(address: string): string {
@@ -361,7 +356,7 @@ export default function PublicMenuPage() {
     );
   }
 
-  const contact = whatsAppUrl(data.contactPhone, `Hola ${data.businessName}, vi su menú en línea.`);
+  const contact = businessWhatsAppUrl(data.contactPhone, `Hola ${data.businessName}, vi su menú en línea.`);
   const hours = data.openingHours;
   // The API writes what the menu says about its hours (todayDate tells); an older one sends only the times.
   const fromServer = hours?.todayDate != null;
@@ -387,7 +382,7 @@ export default function PublicMenuPage() {
   const withPhotos = categories.some((item) => item.products.some((product) => product.imageUrl));
 
   if (receipt) {
-    const followUp = whatsAppUrl(receipt.contactPhone, `Hola, hice el pedido ${receipt.orderNumber} en su menú en línea.`);
+    const followUp = businessWhatsAppUrl(receipt.contactPhone, `Hola, hice el pedido ${receipt.orderNumber} en su menú en línea.`);
     return (
       <div className="pm-page">
         <div className="pm-empty">
@@ -405,9 +400,19 @@ export default function PublicMenuPage() {
               : `${receipt.businessName} lo confirmará en unos minutos.`}
           </p>
           {receipt.linkedToAccount && <p className="small mb-0">Lo encuentras en tus pedidos.</p>}
+          {receipt.trackingToken && !receipt.linkedToAccount && (
+            <p className="small mb-0">Guarda el enlace de seguimiento para ver cómo va tu pedido.</p>
+          )}
           <div className="d-grid gap-2 mt-3" style={{ maxWidth: '20rem', margin: '0 auto' }}>
+            {receipt.trackingToken && (
+              <Link className="btn btn-primary btn-touch" to={`/seguimiento#${receipt.trackingToken}`}>
+                <i className="ri-route-line me-1" aria-hidden="true"></i>Seguir tu pedido
+              </Link>
+            )}
+            {/* A guest keeps the link only if it saves it: an account finds the order in Mis pedidos. */}
+            {receipt.trackingToken && !receipt.linkedToAccount && <CopyTrackingLink token={receipt.trackingToken} />}
             {followUp && (
-              <a className="btn btn-success btn-touch" href={followUp} target="_blank" rel="noopener noreferrer">
+              <a className="btn btn-soft-success btn-touch" href={followUp} target="_blank" rel="noopener noreferrer">
                 <i className="ri-whatsapp-line me-1" aria-hidden="true"></i>Avisar por WhatsApp
               </a>
             )}

@@ -312,7 +312,8 @@ public class CourierSettlementsSqlServerTests
     /// <summary>A WhatsApp order of $100 in products, sent to 72000 by a zone that charges $35, confirmed.</summary>
     private static async Task<Guid> SeedDeliveryOrderAsync(SqlServerTestDatabase database, Guid tenantId, decimal? paysWith = null)
     {
-        await using var context = database.CreateContext(tenantId);
+        // Also on a database migrated to an earlier migration, without the tracking link of Fase 24C.
+        await using var context = BeforeOrderTracking.CreateContext(database, tenantId);
         var order = NewOrder(tenantId);
         order.ArrangeDelivery(Address, Zone(tenantId), VatRate.General, paysWith);
         order.TransitionTo(OrderStatus.Confirmed, OrderStateMachineFactory.Create(BusinessType.Food, OrderType.Retail), "caja");

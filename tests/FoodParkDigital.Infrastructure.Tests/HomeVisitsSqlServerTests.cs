@@ -347,7 +347,8 @@ public class HomeVisitsSqlServerTests
     /// <summary>The sale of the appointment: the haircut of $400 and its visit charge, saved with the appointment done.</summary>
     private static async Task<Guid> ChargeAsync(SqlServerTestDatabase database, Guid tenantId, Guid appointmentId)
     {
-        await using var context = database.CreateContext(tenantId);
+        // Also on a database migrated to an earlier migration, without the tracking link of Fase 24C.
+        await using var context = BeforeOrderTracking.CreateContext(database, tenantId);
         var appointment = await context.Appointments.SingleAsync(a => a.Id == appointmentId);
         var order = NewSale(tenantId);
         order.ChargeVisit(appointmentId, appointment.Visit!.ZoneName, appointment.Visit.Fee, VatRate.General);
@@ -359,7 +360,8 @@ public class HomeVisitsSqlServerTests
 
     private static async Task<Guid> SeedSaleAsync(SqlServerTestDatabase database, Guid tenantId)
     {
-        await using var context = database.CreateContext(tenantId);
+        // Also on a database migrated to an earlier migration, without the tracking link of Fase 24C.
+        await using var context = BeforeOrderTracking.CreateContext(database, tenantId);
         var order = NewSale(tenantId);
         context.Orders.Add(order);
         await context.SaveChangesAsync();

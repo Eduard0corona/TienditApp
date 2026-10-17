@@ -5923,6 +5923,13 @@
               "format": "int32",
               "default": 10
             }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/MyOrdersScope"
+            }
           }
         ],
         "responses": {
@@ -5942,6 +5949,46 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MyOrderDtoPaginatedList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/orders/{id}": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyOrderDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyOrderDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyOrderDetailDto"
                 }
               }
             }
@@ -9333,6 +9380,54 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicOrderReceiptDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/orders/tracking": {
+      "post": {
+        "tags": [
+          "PublicOrderTracking"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicOrderTrackingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicOrderTrackingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicOrderTrackingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderTrackingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderTrackingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicOrderTrackingDto"
                 }
               }
             }
@@ -15731,6 +15826,52 @@
         },
         "additionalProperties": false
       },
+      "CustomerOrderItemDto": {
+        "required": [
+          "amount",
+          "optionIds",
+          "options",
+          "productId",
+          "productName",
+          "quantity"
+        ],
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productName": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "optionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "DailyCashCutByBranchDto": {
         "required": [
           "branchName",
@@ -18076,6 +18217,142 @@
         },
         "additionalProperties": false
       },
+      "MyOrderDeliveryDto": {
+        "required": [
+          "addressLine",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "addressLine": {
+            "type": "string"
+          },
+          "references": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MyOrderDetailDto": {
+        "required": [
+          "businessName",
+          "businessSlug",
+          "canOrderAgain",
+          "createdAt",
+          "id",
+          "inProgress",
+          "items",
+          "orderNumber",
+          "orderType",
+          "paidAmount",
+          "pricesIncludeTax",
+          "status",
+          "step",
+          "stepLabel",
+          "steps",
+          "tax",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "businessSlug": {
+            "type": "string"
+          },
+          "businessContactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "canOrderAgain": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "orderType": {
+            "$ref": "#/components/schemas/OrderType"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "step": {
+            "$ref": "#/components/schemas/OrderTrackingStep"
+          },
+          "stepLabel": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderTrackingStepDto"
+            }
+          },
+          "inProgress": {
+            "type": "boolean"
+          },
+          "courierTrackingUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerOrderItemDto"
+            }
+          },
+          "deliveryFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "visitFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "pricesIncludeTax": {
+            "type": "boolean"
+          },
+          "tax": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "paidAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "tableNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "delivery": {
+            "$ref": "#/components/schemas/MyOrderDeliveryDto"
+          }
+        },
+        "additionalProperties": false
+      },
       "MyOrderDto": {
         "required": [
           "businessName",
@@ -18088,6 +18365,8 @@
           "orderType",
           "paidAmount",
           "status",
+          "step",
+          "stepLabel",
           "total"
         ],
         "type": "object",
@@ -18113,6 +18392,12 @@
           },
           "orderType": {
             "$ref": "#/components/schemas/OrderType"
+          },
+          "step": {
+            "$ref": "#/components/schemas/OrderTrackingStep"
+          },
+          "stepLabel": {
+            "type": "string"
           },
           "total": {
             "type": "number",
@@ -18206,6 +18491,20 @@
           }
         },
         "additionalProperties": false
+      },
+      "MyOrdersScope": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "All",
+          "InProgress",
+          "Past"
+        ]
       },
       "MyTenantDto": {
         "required": [
@@ -19302,6 +19601,67 @@
           }
         },
         "additionalProperties": false
+      },
+      "OrderTrackingStep": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Received",
+          "Confirmed",
+          "Preparing",
+          "Ready",
+          "OnTheWay",
+          "Delivered",
+          "Cancelled"
+        ]
+      },
+      "OrderTrackingStepDto": {
+        "required": [
+          "label",
+          "state",
+          "step"
+        ],
+        "type": "object",
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/OrderTrackingStep"
+          },
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/OrderTrackingStepState"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "OrderTrackingStepState": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "format": "int32",
+        "x-enum-varnames": [
+          "Done",
+          "Current",
+          "Upcoming"
+        ]
       },
       "OrderType": {
         "enum": [
@@ -21578,6 +21938,122 @@
           },
           "linkedToAccount": {
             "type": "boolean"
+          },
+          "trackingToken": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicOrderTrackingDto": {
+        "required": [
+          "businessName",
+          "businessSlug",
+          "createdAt",
+          "inProgress",
+          "items",
+          "orderNumber",
+          "orderType",
+          "paidAmount",
+          "pricesIncludeTax",
+          "step",
+          "stepLabel",
+          "steps",
+          "tax",
+          "toAddress",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "orderNumber": {
+            "type": "string"
+          },
+          "businessName": {
+            "type": "string"
+          },
+          "businessSlug": {
+            "type": "string"
+          },
+          "businessContactPhone": {
+            "type": "string",
+            "nullable": true
+          },
+          "orderType": {
+            "$ref": "#/components/schemas/OrderType"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "step": {
+            "$ref": "#/components/schemas/OrderTrackingStep"
+          },
+          "stepLabel": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderTrackingStepDto"
+            }
+          },
+          "inProgress": {
+            "type": "boolean"
+          },
+          "toAddress": {
+            "type": "boolean"
+          },
+          "courierTrackingUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerOrderItemDto"
+            }
+          },
+          "deliveryFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "visitFee": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "pricesIncludeTax": {
+            "type": "boolean"
+          },
+          "tax": {
+            "type": "number",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "paidAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicOrderTrackingRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
           }
         },
         "additionalProperties": false
