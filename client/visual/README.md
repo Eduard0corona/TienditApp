@@ -35,6 +35,7 @@ npx playwright show-report visual/.work/report   # las diferencias, con la image
 - `scenes/coverage.spec.ts` falla si una ruta de `App.tsx` no tiene escena.
 - **Iguales en cada corrida:** con cero de tolerancia, una escena que cambia sola es una escena que miente. Por eso:
   - no hay transiciones ni animaciones CSS (`fixtures.ts`). Un menú que se desliza o un diálogo que aparece poco a poco se dibujaba a medio camino, y lo que quedaba en pantalla dependía de qué tan ocupada estaba la máquina. Cambia el camino, nunca a dónde llega;
+  - tampoco hay desplazamiento suave (`scroll-behavior`, que Bootstrap enciende). Al escribir en un campo de la parte de abajo, la página seguía bajando hacia él después de que `snap` la regresaba arriba, y la captura salía unos píxeles abajo: la barra superior y el menú, que son fijos, quedaban corridos sobre el contenido;
   - `settle` espera además a que terminen las animaciones finitas que queden (las de JavaScript);
   - Chromium repinta mosaicos completos (`--disable-partial-raster` en `playwright.config.ts`): al repintar solo la parte que cambió, los bordes de esa parte salían un tono distinto de una captura a otra;
   - el texto se suaviza en gris (`--disable-lcd-text`): con subpíxeles de color, Chromium elige uno u otro según la capa en que cae el texto, y las capas cambian con marcado que no dibuja nada (un contenedor de más o de menos), no con el diseño;

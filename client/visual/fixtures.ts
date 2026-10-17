@@ -75,12 +75,14 @@ export const test = base.extend<SceneOptions>({
         // Storage blocked: the app falls back to its defaults.
       }
     }, { signedIn, colorMode, businessTheme });
-    // No transitions or animations: a menu sliding in or a dialog fading in is painted while it moves, and what is left
-    // on screen after it stops depended on how busy the machine was. Only the way there changes, never where it ends.
+    // No transitions, animations or smooth scrolling: a menu sliding in or a dialog fading in is painted while it moves,
+    // and what is left on screen after it stops depended on how busy the machine was. Only the way there changes, never
+    // where it ends. Bootstrap scrolls smoothly: filling a field low on the page scrolled to it after `snap` had gone
+    // back to the top, and the page was shot a few pixels down, with the fixed top bar and menu drawn lower.
     await context.addInitScript(() => {
       const still = () => {
         const style = document.createElement('style');
-        style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+        style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }';
         document.head.appendChild(style);
       };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', still);
