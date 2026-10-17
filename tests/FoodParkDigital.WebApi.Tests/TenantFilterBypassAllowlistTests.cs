@@ -71,6 +71,10 @@ public class TenantFilterBypassAllowlistTests
         ["src/FoodParkDigital.Application/Identity/AvatarFiles.cs"] = 1,
         // Customers shared by businesses (registered accounts and temporary customers looked up by phone).
         ["src/FoodParkDigital.Application/Orders/Queries/GetMyOrdersQuery.cs"] = 1, // a customer account's own orders, filtered by its user id
+        ["src/FoodParkDigital.Application/Orders/Queries/GetMyOrderQuery.cs"] = 1, // one of them, by its id and the account's user id
+        // The tracking link of an online order names one order of the platform before any business is in context: only
+        // its business and date are read, and the order itself inside that business (ADR 0023).
+        ["src/FoodParkDigital.Application/Orders/Queries/GetPublicOrderTrackingQuery.cs"] = 1,
         ["src/FoodParkDigital.Application/Orders/Commands/CreateOrderCommand.cs"] = 1,
         ["src/FoodParkDigital.Application/Orders/Commands/CreateTenantOrderCommand.cs"] = 3,
         ["src/FoodParkDigital.Application/Customers/Services/CustomerLookupService.cs"] = 2,

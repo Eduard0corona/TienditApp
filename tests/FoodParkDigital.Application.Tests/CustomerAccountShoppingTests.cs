@@ -47,7 +47,7 @@ public class CustomerAccountShoppingTests
         Assert.Empty(await fixture.Context.TemporaryCustomers.IgnoreQueryFilters().ToListAsync());
 
         // «Pedir otra vez» knows the product it puts back in the cart.
-        var mine = await new GetMyOrdersQueryHandler(fixture.Context, fixture.CurrentUser).Handle(new GetMyOrdersQuery(), CancellationToken.None);
+        var mine = await new GetMyOrdersQueryHandler(fixture.Context, fixture.CurrentUser, fixture.Clock).Handle(new GetMyOrdersQuery(), CancellationToken.None);
         var item = Assert.Single(Assert.Single(mine.Items).Items);
         Assert.Equal((tacos.Id, "Orden de tacos", 1m), (item.ProductId, item.ProductName, item.Quantity));
         Assert.Empty(item.OptionIds);
